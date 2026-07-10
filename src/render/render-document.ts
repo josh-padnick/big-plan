@@ -1,7 +1,9 @@
-// The renderer's public entry point: composes the markdown pipeline and the
-// document shell into one markdown-in, complete-HTML-out function.
+// The renderer's public entry point: composes the markdown pipeline, the
+// review shell, and the page envelope into one markdown-in, complete-HTML-out
+// function.
 
 import { convertMarkdown } from "./markdown.js";
+import { renderPage } from "./page.js";
 import { renderShell } from "./shell.js";
 
 export type RenderedDocument = {
@@ -22,6 +24,13 @@ export const renderDocument = ({
   readonly title: string;
 }): RenderedDocument => {
   const { bodyHtml, sections } = convertMarkdown({ markdown });
-  const html = renderShell({ title, sections, bodyHtml });
+  const shell = renderShell({ sections, contentHtml: bodyHtml });
+  const html = renderPage({
+    title,
+    styles: shell.styles,
+    scripts: shell.scripts,
+    bodyClassName: shell.bodyClassName,
+    bodyHtml: shell.html,
+  });
   return { html, sectionCount: sections.length };
 };

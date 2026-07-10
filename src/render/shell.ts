@@ -1,20 +1,21 @@
-// Owns the viewer's page chrome: the inlined stylesheet, the sticky TOC, and
-// the scroll-spy enhancement, assembled around pre-rendered body HTML into a
-// complete self-contained document. Authored markup is styled with Tailwind
-// utilities; the compiled stylesheet (including the element-scoped prose
-// styles from shell.css) is inlined via the generated SHELL_CSS module.
+// Owns the review shell: the reading surface a rendered document lives in -
+// the layout grid, the sticky TOC with its scroll-spy enhancement, and the
+// content region. It produces body-level markup plus the styles and scripts
+// that markup needs, as data; packaging into a complete document is page.ts's
+// job. Authored markup is styled with Tailwind utilities; the compiled
+// stylesheet (including the element-scoped prose styles from shell.css) comes
+// from the generated SHELL_CSS module.
 
+import { escapeHtml } from "./escape-html.js";
 import type { Section } from "./markdown.js";
 import { SHELL_CSS } from "./shell.generated.js";
 
-// Escapes text destined for HTML attribute or element positions; body HTML
-// is already safely serialized by rehype-stringify.
-const escapeHtml = (value: string): string =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+export type ShellResult = {
+  readonly html: string;
+  readonly styles: string;
+  readonly scripts: ReadonlyArray<string>;
+  readonly bodyClassName: string;
+};
 
 // Progressive enhancement only: highlights the TOC entry for the section the
 // reader is in. The document reads fine with JavaScript disabled.
@@ -53,6 +54,9 @@ const SCROLL_SPY_SCRIPT = `
 })();
 `;
 
+const BODY_CLASSES =
+  "bg-paper font-sans text-base leading-[1.65] text-ink antialiased";
+
 // Stacked reading layout below the wide breakpoint; sidebar plus one reading
 // column (~70ch) above it. The no-TOC variant is always a single column.
 const LAYOUT_CLASSES =
@@ -81,38 +85,30 @@ ${items}
 };
 
 /**
- * Wraps rendered body HTML in the self-contained viewer shell: inlined CSS,
- * a sticky TOC when the document has sections, and the scroll-spy script.
+ * Wraps rendered content in the review shell: the layout grid, a sticky TOC
+ * when the document has sections, and the scroll-spy script. Returns markup
+ * plus the styles and scripts it needs; the caller packages them into a page.
  */
 export const renderShell = ({
-  title,
   sections,
-  bodyHtml,
+  contentHtml,
 }: {
-  readonly title: string;
   readonly sections: ReadonlyArray<Section>;
-  readonly bodyHtml: string;
-}): string => {
+  readonly contentHtml: string;
+}): ShellResult => {
   const hasToc = sections.length > 0;
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)}</title>
-<style>${SHELL_CSS}</style>
-</head>
-<body class="bg-paper font-sans text-base leading-[1.65] text-ink antialiased">
-<div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}">
+  const html = `<div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}">
 ${hasToc ? renderToc(sections) : ""}
 <main class="min-w-0">
 <article>
-${bodyHtml}
+${contentHtml}
 </article>
 </main>
-</div>
-${hasToc ? `<script>${SCROLL_SPY_SCRIPT}</script>` : ""}
-</body>
-</html>
-`;
+</div>`;
+  return {
+    html,
+    styles: SHELL_CSS,
+    scripts: hasToc ? [SCROLL_SPY_SCRIPT] : [],
+    bodyClassName: BODY_CLASSES,
+  };
 };
