@@ -1,7 +1,7 @@
 {
   "name": "grandplan",
   "version": "0.0.1",
-  "description": "Planning deserves a first-class experience: a rich local surface for reviewing and agreeing on AI agent plans before the agent acts. Pre-alpha placeholder release.",
+  "description": "Good AI output depends on a great plan. GrandPlan makes reviewing agent plans a first-class experience.",
   "license": "MIT",
   "author": "Josh Padnick",
   "repository": {
