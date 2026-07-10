@@ -35,8 +35,9 @@ It embeds all styling, makes no external requests, and includes a sticky table o
 
 ```sh
 bun install
-bun run build          # compile TypeScript to dist/
-bun run test               # vitest unit tests
+bun run build           # compile TypeScript to dist/
+bun run test            # vitest unit tests
+bun run lint            # ESLint conventions and architecture checks
 bunx playwright test    # browser test of the rendered viewer (build first)
 node bin/grandplan.mjs render examples/sample.md
 ```

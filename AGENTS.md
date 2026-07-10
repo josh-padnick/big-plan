@@ -50,6 +50,7 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 - **CLI framework**: `axi-sdk-js` (dispatch, help, structured errors, TOON output).
 - **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-stringify).
 - **Styling**: Tailwind v4, compiled at build time by `@tailwindcss/cli` into a generated module; no runtime CSS tooling.
+- **Linting**: ESLint v10 flat config with `typescript-eslint`, project conventions, architectural boundaries, and Playwright fixture enforcement.
 - **Tests**: vitest for units (colocated in `src/**`), Playwright (chromium) for browser journeys.
 
 ## Commands
@@ -57,6 +58,7 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 - Install: `bun install`
 - Build: `bun run build` (runs `bun run gen` - stylesheet and browser scripts - then tsc to `dist/`)
 - Unit tests: `bun run test` (vitest, colocated `src/**/*.test.ts`; regenerates assets first)
+- Lint: `bun run lint` (ESLint flat config; includes the fixtures-import guardrail and the layering rules below)
 - Generators only: `bun run gen` (stylesheet via `gen:css`, browser scripts via `gen:scroll-spy`; never edit `*.generated.ts` files)
 - Browser test: `bunx playwright test` (requires a prior build; renders the sample through the built CLI)
 - Render: `node bin/grandplan.mjs render examples/sample.md` (or `npx grandplan render <file.md>` once installed)
@@ -72,11 +74,13 @@ The conventions that matter most here:
 - Colocate code and tests by feature; kebab-case file names; comments explain why, not what.
 - Every authored file starts with a file-level comment saying what it owns or why it exists; every non-trivial function gets a concise description above it (trivial one-liners stay uncommented).
 - Generated files always carry `.generated.` in their name (for example `global.generated.ts`), are never edited by hand, and are never committed.
-- Keep logic in pure modules and unit-test it there; reserve Playwright for critical user journeys.
+- Keep logic in pure modules and unit-test it there; reserve Playwright for critical user journeys. Specs import `test`/`expect` from `test/fixtures` (lint-enforced) so every spec fails on console errors.
+- Layering is lint-enforced, allow-list and default-deny: information flows one way, `cli` -> `render-document` -> { `markdown/`, `shell/`, `page` } -> `escape-html`. Each layer declares what it `mayImport` (validated to point strictly downward); everything else is banned. A completeness guard fails lint if any `src/` file is not assigned to a layer, so new files and folders must be placed in the model before they build. See `LAYERS`/`TIERS` in `eslint.config.mjs`.
 - Tests are focused and user-oriented, use "should ... when ..." descriptions, and cover degenerate and boundary cases.
 
 ## Contribution workflow
 
 - Sign off every commit for DCO: `git commit -s`.
+- CI (GitHub Actions, `.github/workflows/ci.yml`) runs `bun run lint` on every pushed branch, including `main` and same-repository PR head branches; fork PRs are not triggered yet. Build and test jobs join the same workflow as the suite grows.
 - Work on feature branches and merge into `main`.
 - Keep PRs small and reviewable; one self-contained increment per commit where possible.
