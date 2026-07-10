@@ -6,8 +6,8 @@
 // stylesheet (including the element-scoped prose styles from global.css) comes
 // from the generated GLOBAL_CSS module.
 
-import { escapeHtml } from "./escape-html.js";
-import { GLOBAL_CSS } from "./global.generated.js";
+import { escapeHtml } from "../escape-html.js";
+import { GLOBAL_CSS } from "../global.generated.js";
 import { SCROLL_SPY_JS } from "./scroll-spy.generated.js";
 
 // The shell's own navigation contract: plain text in, so the shell owes

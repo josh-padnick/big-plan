@@ -5,7 +5,7 @@
 import type { Section } from "./markdown/convert.js";
 import { convertMarkdown } from "./markdown/convert.js";
 import { renderPage } from "./page.js";
-import { renderShell } from "./shell.js";
+import { renderShell } from "./shell/shell.js";
 
 export type RenderedDocument = {
   readonly html: string;
