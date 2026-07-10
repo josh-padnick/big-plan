@@ -43,13 +43,23 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 - `test/` - the Playwright browser spec for the rendered viewer.
 - `dist/` - build output (generated, not committed).
 
+## Tech stack
+
+- **Runtime target**: Node.js >= 22, ESM only. The published package runs under plain Node so `npx grandplan` works everywhere; Bun is a development-time choice, not a runtime requirement.
+- **Package manager and script runner**: Bun (`bun install`, `bun run <script>`, `bun.lock`). Note: use `bun run test`, not `bun test` - the latter invokes Bun's own test runner instead of vitest.
+- **Language**: TypeScript, strict, compiled with tsc; browser-side scripts type-check against `tsconfig.browser.json` (DOM lib) and are transpiled into generated modules.
+- **CLI framework**: `axi-sdk-js` (dispatch, help, structured errors, TOON output).
+- **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-stringify).
+- **Styling**: Tailwind v4, compiled at build time by `@tailwindcss/cli` into a generated module; no runtime CSS tooling.
+- **Tests**: vitest for units (colocated in `src/**`), Playwright (chromium) for browser journeys.
+
 ## Commands
 
-- Install: `npm install`
-- Build: `npm run build` (runs `npm run gen` - stylesheet and browser scripts - then tsc to `dist/`)
-- Unit tests: `npm test` (vitest, colocated `src/**/*.test.ts`; regenerates the stylesheet first)
-- Generators only: `npm run gen` (stylesheet via `gen:css`, browser scripts via `gen:scroll-spy`; never edit `*.generated.ts` files)
-- Browser test: `npx playwright test` (requires a prior build; renders the sample through the built CLI)
+- Install: `bun install`
+- Build: `bun run build` (runs `bun run gen` - stylesheet and browser scripts - then tsc to `dist/`)
+- Unit tests: `bun run test` (vitest, colocated `src/**/*.test.ts`; regenerates assets first)
+- Generators only: `bun run gen` (stylesheet via `gen:css`, browser scripts via `gen:scroll-spy`; never edit `*.generated.ts` files)
+- Browser test: `bunx playwright test` (requires a prior build; renders the sample through the built CLI)
 - Render: `node bin/grandplan.mjs render examples/sample.md` (or `npx grandplan render <file.md>` once installed)
 
 ## Engineering rules
