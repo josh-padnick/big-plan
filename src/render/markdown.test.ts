@@ -2,7 +2,9 @@
 // cases and the table scroll-container transform.
 
 import { describe, expect, it } from "vitest";
-import { convertMarkdown } from "./markdown.js";
+import { convertMarkdown, TABLE_WRAPPER_CLASSES } from "./markdown.js";
+
+const TABLE_WRAPPER_OPENING = `<div class="${TABLE_WRAPPER_CLASSES.join(" ")}"><table>`;
 
 describe("convertMarkdown sections", () => {
   it("should extract level-two headings as TOC sections when the document has h2s", () => {
@@ -71,14 +73,14 @@ describe("convertMarkdown tables", () => {
       markdown:
         "| a | b |\n| - | - |\n| 1 | 2 |\n\n| c |\n| - |\n| 3 |\n",
     });
-    const wrappers = bodyHtml.match(/<div class="table-scroll"><table>/g);
-    expect(wrappers).toHaveLength(2);
+    const wrappers = bodyHtml.split(TABLE_WRAPPER_OPENING).length - 1;
+    expect(wrappers).toBe(2);
   });
 
   it("should wrap a table nested inside a blockquote when tables are not top-level", () => {
     const { bodyHtml } = convertMarkdown({
       markdown: "> | a |\n> | - |\n> | 1 |\n",
     });
-    expect(bodyHtml).toContain('<div class="table-scroll"><table>');
+    expect(bodyHtml).toContain(TABLE_WRAPPER_OPENING);
   });
 });

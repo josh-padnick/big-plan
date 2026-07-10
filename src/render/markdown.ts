@@ -41,6 +41,16 @@ const textOf = (node: Element): string => {
 const isElement = (node: RootContent): node is Element =>
   node.type === "element";
 
+// Tailwind utilities for the table scroll container; exported so tests can
+// assert the wrapper without duplicating the class list.
+export const TABLE_WRAPPER_CLASSES = [
+  "mb-5",
+  "overflow-x-auto",
+  "rounded-md",
+  "border",
+  "border-edge",
+] as const;
+
 // Wraps each <table> in a scroll container so a wide table scrolls inside its
 // own box instead of widening the whole page. Mutating the tree in place is
 // the idiomatic shape for a rehype transform.
@@ -56,7 +66,7 @@ const wrapTables = (node: Root | Element): void => {
     const wrapper: Element = {
       type: "element",
       tagName: "div",
-      properties: { className: ["table-scroll"] },
+      properties: { className: [...TABLE_WRAPPER_CLASSES] },
       children: [child],
     };
     return wrapper;

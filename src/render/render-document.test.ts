@@ -2,7 +2,10 @@
 // self-containment guarantees, and degenerate inputs.
 
 import { describe, expect, it } from "vitest";
+import { TABLE_WRAPPER_CLASSES } from "./markdown.js";
 import { renderDocument } from "./render-document.js";
+
+const TABLE_WRAPPER_OPENING = `<div class="${TABLE_WRAPPER_CLASSES.join(" ")}"><table>`;
 
 // One fixture that exercises every GFM affordance the viewer must style.
 const FULL_FIXTURE = `# Plan title
@@ -69,7 +72,7 @@ describe("renderDocument affordances", () => {
       "<ul>",
       "<ol>",
       'input type="checkbox"',
-      '<div class="table-scroll"><table>',
+      TABLE_WRAPPER_OPENING,
       '<a href="https://example.com/docs">',
       '<img src="data:image/png;base64,',
       "<hr>",
@@ -81,8 +84,8 @@ describe("renderDocument affordances", () => {
   });
 
   it("should render a TOC nav linking to each h2 when the document has sections", () => {
-    expect(html).toContain('<nav class="toc" aria-label="Contents">');
-    expect(html).toContain('<a href="#first-section">First section</a>');
+    expect(html).toContain('aria-label="Contents"');
+    expect(html).toMatch(/<a[^>]* href="#first-section">First section<\/a>/);
   });
 
   it("should be self-contained when the document links to external sites", () => {
@@ -123,9 +126,10 @@ describe("renderDocument shell", () => {
     expect(sectionCount).toBe(0);
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("</html>");
-    expect(html).not.toContain('<nav class="toc"');
+    expect(html).not.toContain("<nav");
     expect(html).not.toContain("<script>");
-    expect(html).toContain('class="layout no-toc"');
+    // The reading column keeps its ~70ch measure even without a sidebar.
+    expect(html).toContain("wide:grid-cols-[minmax(0,70ch)]");
   });
 
   it("should omit the TOC when the document has headings but no h2s", () => {
@@ -134,7 +138,7 @@ describe("renderDocument shell", () => {
       title: "No sections",
     });
     expect(sectionCount).toBe(0);
-    expect(html).not.toContain('<nav class="toc"');
+    expect(html).not.toContain("<nav");
     expect(html).toContain("<h1");
   });
 });
