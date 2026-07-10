@@ -8,6 +8,7 @@
 
 import { escapeHtml } from "./escape-html.js";
 import { GLOBAL_CSS } from "./global.generated.js";
+import { SCROLL_SPY_JS } from "./scroll-spy.generated.js";
 
 // The shell's own navigation contract: plain text in, so the shell owes
 // nothing to whatever produced the document. Callers map their outline
@@ -23,43 +24,6 @@ export type ShellResult = {
   readonly scripts: ReadonlyArray<string>;
   readonly bodyClassName: string;
 };
-
-// Progressive enhancement only: highlights the TOC entry for the section the
-// reader is in. The document reads fine with JavaScript disabled.
-const SCROLL_SPY_SCRIPT = `
-(() => {
-  const links = Array.from(document.querySelectorAll('nav[aria-label="Contents"] a[href^="#"]'));
-  const headings = links
-    .map((link) => document.getElementById(decodeURIComponent(link.hash.slice(1))))
-    .filter((heading) => heading !== null);
-  if (headings.length === 0) return;
-  const setActive = (id) => {
-    for (const link of links) {
-      if (decodeURIComponent(link.hash.slice(1)) === id) {
-        link.setAttribute('aria-current', 'true');
-      } else {
-        link.removeAttribute('aria-current');
-      }
-    }
-  };
-  let queued = false;
-  const update = () => {
-    queued = false;
-    let current = headings[0];
-    for (const heading of headings) {
-      if (heading.getBoundingClientRect().top <= 96) current = heading;
-      else break;
-    }
-    setActive(current.id);
-  };
-  document.addEventListener('scroll', () => {
-    if (queued) return;
-    queued = true;
-    requestAnimationFrame(update);
-  }, { passive: true });
-  update();
-})();
-`;
 
 const BODY_CLASSES =
   "bg-paper font-sans text-base leading-[1.65] text-ink antialiased";
@@ -115,7 +79,7 @@ ${contentHtml}
   return {
     html,
     styles: GLOBAL_CSS,
-    scripts: hasToc ? [SCROLL_SPY_SCRIPT] : [],
+    scripts: hasToc ? [SCROLL_SPY_JS] : [],
     bodyClassName: BODY_CLASSES,
   };
 };

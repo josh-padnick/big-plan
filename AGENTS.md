@@ -28,6 +28,7 @@ The pipeline is deliberately small: CLI -> renderer -> self-contained HTML.
 - The renderer (`src/render/`) is pure: markdown source plus a title in, complete HTML out. It uses unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-stringify) plus a small rehype transform that wraps tables in scroll containers.
 - The review shell (`src/render/shell.ts`) owns the viewer's look: one reading column, warm paper-like light and dark palettes chosen via `prefers-color-scheme`, and a sticky section TOC. The page envelope (`src/render/page.ts`) separately owns how a document is packaged and delivered (doctype, head, inlined styles and scripts); future delivery modes swap the envelope while the shell stays the same.
 - Styles are authored with Tailwind v4 in `src/render/global.css`: design tokens and utility classes for the shell markup, plus element-scoped styles for markdown content, which carries no class attributes. `scripts/gen-css.mjs` compiles that file and embeds the result as a generated TypeScript module, so rendered documents inline the full stylesheet and stay self-contained.
+- Browser-side scripts are authored as real TypeScript in `src/browser/` (type-checked against `tsconfig.browser.json`, which adds the DOM lib) and compiled by `scripts/gen-scroll-spy.mjs` into generated modules the shell inlines. Shipped documents never reference external code.
 
 Future deliverables build outward from this core: a typed block registry, MDX plan documents, and a local server with a browser bridge for live agent chat and comments.
 
@@ -35,7 +36,8 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 
 - `bin/` - the executable entrypoint; a thin shim over `dist/cli/`.
 - `src/cli/` - command dispatch and the `render` command.
-- `src/render/` - the pure renderer, with colocated unit tests: `markdown/` (source to HTML plus the section outline), `shell.ts` (the reading surface), `page.ts` (the document envelope), and `render-document.ts` composing them.
+- `src/render/` - the pure renderer, with colocated unit tests: `markdown/` (source to HTML, the section outline, and the title), `shell.ts` (the reading surface with its own `NavEntry` contract), `page.ts` (the document envelope), and `render-document.ts` composing them.
+- `src/browser/` - browser-side scripts authored as TypeScript, compiled into generated modules at build time.
 - `scripts/` - build-time generators, currently the Tailwind CSS-to-module compiler.
 - `examples/` - sample plan documents used by tests and demos.
 - `test/` - the Playwright browser spec for the rendered viewer.
@@ -44,9 +46,9 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 ## Commands
 
 - Install: `npm install`
-- Build: `npm run build` (compiles the Tailwind stylesheet, then tsc to `dist/`)
+- Build: `npm run build` (runs `npm run gen` - stylesheet and browser scripts - then tsc to `dist/`)
 - Unit tests: `npm test` (vitest, colocated `src/**/*.test.ts`; regenerates the stylesheet first)
-- Stylesheet only: `npm run gen:css` (regenerates `src/render/global.generated.ts` from `global.css`; never edit the generated file)
+- Generators only: `npm run gen` (stylesheet via `gen:css`, browser scripts via `gen:scroll-spy`; never edit `*.generated.ts` files)
 - Browser test: `npx playwright test` (requires a prior build; renders the sample through the built CLI)
 - Render: `node bin/grandplan.mjs render examples/sample.md` (or `npx grandplan render <file.md>` once installed)
 

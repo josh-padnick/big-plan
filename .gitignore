@@ -1,6 +1,6 @@
 node_modules/
 dist/
-src/render/global.generated.ts
+src/**/*.generated.ts
 test-results/
 playwright-report/
 examples/*.html

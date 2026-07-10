@@ -22,9 +22,11 @@
     "node": ">=22"
   },
   "scripts": {
+    "gen": "npm run gen:css && npm run gen:scroll-spy",
     "gen:css": "node scripts/gen-css.mjs",
-    "build": "npm run gen:css && tsc",
-    "test": "npm run gen:css && vitest run",
+    "gen:scroll-spy": "node scripts/gen-scroll-spy.mjs",
+    "build": "npm run gen && tsc",
+    "test": "npm run gen && vitest run",
     "test:e2e": "playwright test"
   },
   "dependencies": {
