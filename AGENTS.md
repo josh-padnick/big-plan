@@ -27,7 +27,7 @@ The pipeline is deliberately small: CLI -> renderer -> self-contained HTML.
 - The CLI (`src/cli/`) is built on `runAxiCli()` from `axi-sdk-js`, which owns dispatch, help, structured errors, and output serialization. Keep the integration thin; business logic never lives in the CLI layer.
 - The renderer (`src/render/`) is pure: markdown source plus a title in, complete HTML out. It uses unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-stringify) plus a small rehype transform that wraps tables in scroll containers.
 - The review shell (`src/render/shell.ts`) owns the viewer's look: one reading column, warm paper-like light and dark palettes chosen via `prefers-color-scheme`, and a sticky section TOC. The page envelope (`src/render/page.ts`) separately owns how a document is packaged and delivered (doctype, head, inlined styles and scripts); future delivery modes swap the envelope while the shell stays the same.
-- Styles are authored with Tailwind v4 in `src/render/shell.css`: design tokens and utility classes for the shell markup, plus element-scoped styles for markdown content, which carries no class attributes. `scripts/gen-css.mjs` compiles that file and embeds the result as a generated TypeScript module, so rendered documents inline the full stylesheet and stay self-contained.
+- Styles are authored with Tailwind v4 in `src/render/global.css`: design tokens and utility classes for the shell markup, plus element-scoped styles for markdown content, which carries no class attributes. `scripts/gen-css.mjs` compiles that file and embeds the result as a generated TypeScript module, so rendered documents inline the full stylesheet and stay self-contained.
 
 Future deliverables build outward from this core: a typed block registry, MDX plan documents, and a local server with a browser bridge for live agent chat and comments.
 
@@ -46,7 +46,7 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 - Install: `npm install`
 - Build: `npm run build` (compiles the Tailwind stylesheet, then tsc to `dist/`)
 - Unit tests: `npm test` (vitest, colocated `src/**/*.test.ts`; regenerates the stylesheet first)
-- Stylesheet only: `npm run gen:css` (regenerates `src/render/shell.generated.ts` from `shell.css`; never edit the generated file)
+- Stylesheet only: `npm run gen:css` (regenerates `src/render/global.generated.ts` from `global.css`; never edit the generated file)
 - Browser test: `npx playwright test` (requires a prior build; renders the sample through the built CLI)
 - Render: `node bin/grandplan.mjs render examples/sample.md` (or `npx grandplan render <file.md>` once installed)
 
@@ -60,7 +60,7 @@ The conventions that matter most here:
 - Separate type imports; single-object args for multi-parameter functions; immutable data (`readonly`, `const`).
 - Colocate code and tests by feature; kebab-case file names; comments explain why, not what.
 - Every authored file starts with a file-level comment saying what it owns or why it exists; every non-trivial function gets a concise description above it (trivial one-liners stay uncommented).
-- Generated files always carry `.generated.` in their name (for example `shell.generated.ts`), are never edited by hand, and are never committed.
+- Generated files always carry `.generated.` in their name (for example `global.generated.ts`), are never edited by hand, and are never committed.
 - Keep logic in pure modules and unit-test it there; reserve Playwright for critical user journeys.
 - Tests are focused and user-oriented, use "should ... when ..." descriptions, and cover degenerate and boundary cases.
 

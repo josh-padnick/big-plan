@@ -3,12 +3,12 @@
 // content region. It produces body-level markup plus the styles and scripts
 // that markup needs, as data; packaging into a complete document is page.ts's
 // job. Authored markup is styled with Tailwind utilities; the compiled
-// stylesheet (including the element-scoped prose styles from shell.css) comes
-// from the generated SHELL_CSS module.
+// stylesheet (including the element-scoped prose styles from global.css) comes
+// from the generated GLOBAL_CSS module.
 
 import { escapeHtml } from "./escape-html.js";
 import type { Section } from "./markdown/convert.js";
-import { SHELL_CSS } from "./shell.generated.js";
+import { GLOBAL_CSS } from "./global.generated.js";
 
 export type ShellResult = {
   readonly html: string;
@@ -107,7 +107,7 @@ ${contentHtml}
 </div>`;
   return {
     html,
-    styles: SHELL_CSS,
+    styles: GLOBAL_CSS,
     scripts: hasToc ? [SCROLL_SPY_SCRIPT] : [],
     bodyClassName: BODY_CLASSES,
   };
