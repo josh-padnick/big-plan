@@ -74,7 +74,7 @@ The conventions that matter most here:
 - Every authored file starts with a file-level comment saying what it owns or why it exists; every non-trivial function gets a concise description above it (trivial one-liners stay uncommented).
 - Generated files always carry `.generated.` in their name (for example `global.generated.ts`), are never edited by hand, and are never committed.
 - Keep logic in pure modules and unit-test it there; reserve Playwright for critical user journeys. Specs import `test`/`expect` from `test/fixtures` (lint-enforced) so every spec fails on console errors.
-- Layering is lint-enforced: information flows one way, `cli` -> `render-document` -> { `markdown/`, `shell/`, `page` } -> `escape-html`. A layer knows what it calls and never what calls it; the CLI consumes the renderer only through `render-document`. See the layering blocks in `eslint.config.mjs`.
+- Layering is lint-enforced, allow-list and default-deny: information flows one way, `cli` -> `render-document` -> { `markdown/`, `shell/`, `page` } -> `escape-html`. Each layer declares what it `mayImport` (validated to point strictly downward); everything else is banned. A completeness guard fails lint if any `src/` file is not assigned to a layer, so new files and folders must be placed in the model before they build. See `LAYERS`/`TIERS` in `eslint.config.mjs`.
 - Tests are focused and user-oriented, use "should ... when ..." descriptions, and cover degenerate and boundary cases.
 
 ## Contribution workflow

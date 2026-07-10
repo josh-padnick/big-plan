@@ -4,6 +4,7 @@
 // importantly that Playwright specs use the extended test from test/fixtures
 // (which fails on console errors) instead of importing @playwright/test.
 
+import { readdirSync } from "node:fs";
 import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
@@ -39,43 +40,55 @@ export default tseslint.config(
   },
   // Architectural layering, declared as data and compiled to lint blocks.
   // Information flows one way: a layer knows what it calls and never what
-  // calls it. TIERS lists layers bottom to top; a layer may import lower
-  // tiers, never its own tier's siblings, never higher tiers. FACADES adds
-  // the entry-point rule: outside a feature, its internals are reached only
-  // through the named facade. Renaming or adding a folder means editing one
-  // LAYERS entry; the lint blocks are generated. (Generated scopes are
-  // non-overlapping, which flat config's last-match-wins requires.)
+  // calls it. The model is allow-list, default-deny: each layer names what it
+  // may import (validated to sit in a strictly lower tier), and everything
+  // else known is banned. A completeness guard walks src/ at lint startup and
+  // throws if any file is not claimed by a layer, so a new file or folder
+  // cannot silently join the codebase unmodeled - lint fails until it is
+  // assigned. (Generated scopes are non-overlapping, which flat config's
+  // last-match-wins on no-restricted-imports requires.)
   ...(() => {
-    // A layer: where its files live, and which import specifiers reach it.
+    // A layer: where its files live, which import specifiers reach it, and
+    // what it MAY import. Everything else known to the model is banned.
     const LAYERS = {
       escapeHtml: {
         files: ["src/render/escape-html.ts"],
         imports: ["**/escape-html.js"],
+        mayImport: [],
       },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
         imports: ["**/markdown/**"],
+        // Deliberately not escapeHtml: markdown escapes through
+        // rehype-stringify, never by hand.
+        mayImport: [],
       },
       shell: {
         files: ["src/render/shell/**/*.ts"],
         imports: ["**/shell/**"],
+        mayImport: ["escapeHtml"],
       },
       page: {
         files: ["src/render/page.ts"],
         imports: ["**/page.js"],
+        mayImport: ["escapeHtml"],
       },
       composer: {
         files: ["src/render/*.ts"],
         ignores: ["src/render/page.ts", "src/render/escape-html.ts"],
         imports: ["**/render-document.js"],
+        mayImport: ["markdown", "shell", "page"],
       },
       cli: {
         files: ["src/cli/**/*.ts"],
         imports: ["**/cli/**"],
+        // The composer is the renderer's public entry point; granting only it
+        // is what keeps the CLI out of the renderer's internals.
+        mayImport: ["composer"],
       },
     };
 
-    // Bottom to top. Inner arrays are tiers of mutually-isolated siblings.
+    // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
       ["escapeHtml"],
       ["markdown", "shell", "page"],
@@ -83,43 +96,79 @@ export default tseslint.config(
       ["cli"],
     ];
 
-    // Entry-point rules: these layers reach the listed internals only
-    // through the facade layer.
-    const FACADES = [
-      {
-        facade: "composer",
-        internals: ["markdown", "shell", "page", "escapeHtml"],
-        appliesTo: ["cli"],
-      },
-    ];
-
-    // Design facts the tier order cannot express, as named exceptions:
-    // markdown escapes through rehype-stringify, never by hand, so it may
-    // not reach the shared escaper even though it sits a tier below.
-    const EXTRA_BANS = [{ layer: "markdown", bans: ["escapeHtml"] }];
-
+    const names = Object.keys(LAYERS);
     const tierOf = (name) => TIERS.findIndex((tier) => tier.includes(name));
 
-    return Object.keys(LAYERS)
+    // Model validation: every layer is placed in a tier, and every grant
+    // points at a known layer in a strictly lower tier.
+    for (const name of names) {
+      if (tierOf(name) === -1) {
+        throw new Error(`eslint.config.mjs layering: "${name}" is not placed in TIERS.`);
+      }
+      for (const grant of LAYERS[name].mayImport) {
+        if (!names.includes(grant)) {
+          throw new Error(`eslint.config.mjs layering: "${name}" grants unknown layer "${grant}".`);
+        }
+        if (tierOf(grant) >= tierOf(name)) {
+          throw new Error(
+            `eslint.config.mjs layering: "${name}" may not import "${grant}" - grants must point strictly downward in TIERS.`,
+          );
+        }
+      }
+    }
+
+    // Minimal glob support for the patterns used above: **, *, and literals.
+    const globToRegExp = (glob) =>
+      new RegExp(
+        "^" +
+          glob
+            .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+            .replace(/\*\*\//g, "(?:.*/)?")
+            .replace(/\*\*/g, ".*")
+            .replace(/\*/g, "[^/]*") +
+          "$",
+      );
+    const matches = (path, globs) => globs.some((g) => globToRegExp(g).test(path));
+
+    // Completeness guard: every TypeScript file under src/ (generated files
+    // excepted - they are lint-ignored build artifacts) must belong to
+    // exactly one layer's file scope.
+    const srcRoot = `${import.meta.dirname}/src`;
+    const unclaimed = [];
+    const walk = (dir) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const absolute = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) {
+          walk(absolute);
+          continue;
+        }
+        const relative = absolute.slice(import.meta.dirname.length + 1);
+        if (!relative.endsWith(".ts") || relative.endsWith(".generated.ts")) {
+          continue;
+        }
+        const claimedBy = names.filter((name) => {
+          const { files, ignores = [] } = LAYERS[name];
+          return matches(relative, files) && !matches(relative, ignores);
+        });
+        if (claimedBy.length !== 1) {
+          unclaimed.push(`${relative} (claimed by: ${claimedBy.join(", ") || "no layer"})`);
+        }
+      }
+    };
+    walk(srcRoot);
+    if (unclaimed.length > 0) {
+      throw new Error(
+        `eslint.config.mjs layering: every src/ file must belong to exactly one layer. Fix LAYERS for:\n  ${unclaimed.join("\n  ")}`,
+      );
+    }
+
+    return names
       .map((name) => {
-        const { files, ignores } = LAYERS[name];
-        const banned = new Set(
-          Object.keys(LAYERS).filter(
-            (other) => other !== name && tierOf(other) >= tierOf(name),
-          ),
+        const { files, ignores, mayImport } = LAYERS[name];
+        const banned = names.filter(
+          (other) => other !== name && !mayImport.includes(other),
         );
-        for (const extra of EXTRA_BANS) {
-          if (extra.layer === name) {
-            for (const ban of extra.bans) banned.add(ban);
-          }
-        }
-        for (const { facade, internals, appliesTo } of FACADES) {
-          if (appliesTo.includes(name)) {
-            for (const internal of internals) banned.add(internal);
-            void facade;
-          }
-        }
-        if (banned.size === 0) {
+        if (banned.length === 0) {
           return null;
         }
         return {
@@ -131,10 +180,8 @@ export default tseslint.config(
               {
                 patterns: [
                   {
-                    group: [...banned].flatMap(
-                      (other) => LAYERS[other].imports,
-                    ),
-                    message: `Layering: ${name} may import only layers below itself; information flows one way, and a layer never knows what calls it. See TIERS, FACADES, and EXTRA_BANS in eslint.config.mjs.`,
+                    group: banned.flatMap((other) => LAYERS[other].imports),
+                    message: `Layering: ${name} may import only [${mayImport.join(", ") || "nothing project-local"}]. Information flows one way; grant access via mayImport in eslint.config.mjs only if the flow stays downward.`,
                   },
                 ],
               },
