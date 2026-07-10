@@ -3,8 +3,10 @@
 name: CI
 
 # Runs on every push to every branch; the run on a PR's head commit shows up
-# in the PR's checks. (PRs from forks would need a pull_request trigger; add
-# one when outside contributions start.)
+# in the PR's checks. Policy: trusted contributors only on the self-hosted
+# runner. Fork PRs deliberately get no pull_request trigger here - external
+# contributions must never execute workflows on the local machine. If outside
+# contributions arrive, add a separate GitHub-hosted workflow for them.
 on:
   push:
 
