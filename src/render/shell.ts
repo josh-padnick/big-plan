@@ -7,8 +7,15 @@
 // from the generated GLOBAL_CSS module.
 
 import { escapeHtml } from "./escape-html.js";
-import type { Section } from "./markdown/convert.js";
 import { GLOBAL_CSS } from "./global.generated.js";
+
+// The shell's own navigation contract: plain text in, so the shell owes
+// nothing to whatever produced the document. Callers map their outline
+// (markdown sections today, typed-plan sections later) into this shape.
+export type NavEntry = {
+  readonly id: string;
+  readonly label: string;
+};
 
 export type ShellResult = {
   readonly html: string;
@@ -69,11 +76,11 @@ const TOC_LINK_CLASSES =
 
 // Builds the sidebar nav; ids are URI-encoded because slugs may contain
 // characters that are not literal-safe inside href values.
-const renderToc = (sections: ReadonlyArray<Section>): string => {
-  const items = sections
+const renderToc = (nav: ReadonlyArray<NavEntry>): string => {
+  const items = nav
     .map(
-      (section) =>
-        `<li><a class="${TOC_LINK_CLASSES}" href="#${encodeURIComponent(section.id)}">${escapeHtml(section.text)}</a></li>`,
+      (entry) =>
+        `<li><a class="${TOC_LINK_CLASSES}" href="#${encodeURIComponent(entry.id)}">${escapeHtml(entry.label)}</a></li>`,
     )
     .join("\n");
   return `<nav class="border-b border-edge pb-6 text-sm leading-normal wide:sticky wide:top-12 wide:self-start wide:border-b-0 wide:pb-0" aria-label="Contents">
@@ -86,19 +93,19 @@ ${items}
 
 /**
  * Wraps rendered content in the review shell: the layout grid, a sticky TOC
- * when the document has sections, and the scroll-spy script. Returns markup
- * plus the styles and scripts it needs; the caller packages them into a page.
+ * when nav entries exist, and the scroll-spy script. Returns markup plus the
+ * styles and scripts it needs; the caller packages them into a page.
  */
 export const renderShell = ({
-  sections,
+  nav,
   contentHtml,
 }: {
-  readonly sections: ReadonlyArray<Section>;
+  readonly nav: ReadonlyArray<NavEntry>;
   readonly contentHtml: string;
 }): ShellResult => {
-  const hasToc = sections.length > 0;
+  const hasToc = nav.length > 0;
   const html = `<div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}">
-${hasToc ? renderToc(sections) : ""}
+${hasToc ? renderToc(nav) : ""}
 <main class="min-w-0">
 <article>
 ${contentHtml}

@@ -84,3 +84,31 @@ describe("convertMarkdown tables", () => {
     expect(bodyHtml).toContain(TABLE_WRAPPER_OPENING);
   });
 });
+
+describe("convertMarkdown title", () => {
+  it("should return the first h1 text when the document has one", () => {
+    const { title } = convertMarkdown({
+      markdown: "intro\n\n# Payments Plan\n\n## Section\n",
+    });
+    expect(title).toBe("Payments Plan");
+  });
+
+  it("should flatten inline markup when the h1 contains code or emphasis", () => {
+    const { title } = convertMarkdown({
+      markdown: "# The `retry` *pipeline*\n",
+    });
+    expect(title).toBe("The retry pipeline");
+  });
+
+  it("should return undefined when the document has no h1", () => {
+    const { title } = convertMarkdown({ markdown: "## Only sections\n" });
+    expect(title).toBeUndefined();
+  });
+
+  it("should ignore a # line inside a fenced code block when finding the title", () => {
+    const { title } = convertMarkdown({
+      markdown: "```sh\n# not a heading\n```\n\n# Real title\n",
+    });
+    expect(title).toBe("Real title");
+  });
+});

@@ -52,7 +52,7 @@ A footnote reference.[^1]
 `;
 
 describe("renderDocument affordances", () => {
-  const { html } = renderDocument({ markdown: FULL_FIXTURE, title: "Plan" });
+  const { html } = renderDocument({ markdown: FULL_FIXTURE, fallbackTitle: "Plan" });
 
   it("should emit markup for every GFM affordance when the fixture uses them all", () => {
     const expectedFragments = [
@@ -113,7 +113,7 @@ describe("renderDocument shell", () => {
   it("should escape the title when it contains HTML special characters", () => {
     const { html } = renderDocument({
       markdown: "hello",
-      title: '<script>"a & b"</script>',
+      fallbackTitle: '<script>"a & b"</script>',
     });
     expect(html).toContain(
       "<title>&lt;script&gt;&quot;a &amp; b&quot;&lt;/script&gt;</title>",
@@ -122,8 +122,8 @@ describe("renderDocument shell", () => {
   });
 
   it("should produce a complete document with no TOC when the markdown is empty", () => {
-    const { html, sectionCount } = renderDocument({ markdown: "", title: "Empty" });
-    expect(sectionCount).toBe(0);
+    const { html, sections } = renderDocument({ markdown: "", fallbackTitle: "Empty" });
+    expect(sections.length).toBe(0);
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("</html>");
     expect(html).not.toContain("<nav");
@@ -133,11 +133,11 @@ describe("renderDocument shell", () => {
   });
 
   it("should omit the TOC when the document has headings but no h2s", () => {
-    const { html, sectionCount } = renderDocument({
+    const { html, sections } = renderDocument({
       markdown: "# Only a title\n\n### And a subsection\n",
-      title: "No sections",
+      fallbackTitle: "No sections",
     });
-    expect(sectionCount).toBe(0);
+    expect(sections.length).toBe(0);
     expect(html).not.toContain("<nav");
     expect(html).toContain("<h1");
   });

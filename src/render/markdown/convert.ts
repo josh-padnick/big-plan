@@ -18,6 +18,7 @@ export type Section = {
 export type ConvertedMarkdown = {
   readonly bodyHtml: string;
   readonly sections: ReadonlyArray<Section>;
+  readonly title: string | undefined;
 };
 
 // remark-rehype emits the GFM footnotes block with this heading id; it is a
@@ -77,6 +78,25 @@ const rehypeWrapTables = () => (tree: Root) => {
   wrapTables(tree);
 };
 
+// Finds the document title: the text of the first h1 in the rendered tree.
+// Walking the parsed tree (rather than regexing the source) means a "# line"
+// inside a fenced code block can never masquerade as the title.
+const findTitle = (node: Root | Element): string | undefined => {
+  for (const child of node.children) {
+    if (!isElement(child)) {
+      continue;
+    }
+    if (child.tagName === "h1") {
+      return textOf(child);
+    }
+    const nested = findTitle(child);
+    if (nested !== undefined) {
+      return nested;
+    }
+  }
+  return undefined;
+};
+
 // Gathers every slugged h2 in document order, at any nesting depth, so
 // sections inside containers such as blockquotes still reach the TOC.
 const collectSections = (
@@ -100,8 +120,9 @@ const collectSections = (
 };
 
 /**
- * Converts GFM markdown into body HTML plus the level-two heading outline
- * used for the table of contents. Pure: same input, same output.
+ * Converts GFM markdown into body HTML, the level-two heading outline used
+ * for the table of contents, and the document title (first h1, if any).
+ * Pure: same input, same output.
  */
 export const convertMarkdown = ({
   markdown,
@@ -120,5 +141,5 @@ export const convertMarkdown = ({
   collectSections(tree, sections);
 
   const bodyHtml = unified().use(rehypeStringify).stringify(tree);
-  return { bodyHtml, sections };
+  return { bodyHtml, sections, title: findTitle(tree) };
 };

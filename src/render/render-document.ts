@@ -2,35 +2,42 @@
 // review shell, and the page envelope into one markdown-in, complete-HTML-out
 // function.
 
+import type { Section } from "./markdown/convert.js";
 import { convertMarkdown } from "./markdown/convert.js";
 import { renderPage } from "./page.js";
 import { renderShell } from "./shell.js";
 
 export type RenderedDocument = {
   readonly html: string;
-  readonly sectionCount: number;
+  readonly title: string;
+  readonly sections: ReadonlyArray<Section>;
 };
 
 /**
  * Renders GFM markdown into a complete, self-contained HTML review document.
- * Pure: no I/O, so callers own where the markdown comes from and where the
- * HTML goes.
+ * The title is the document's first h1 when present, otherwise the caller's
+ * fallback. Pure: no I/O, so callers own where the markdown comes from and
+ * where the HTML goes.
  */
 export const renderDocument = ({
   markdown,
-  title,
+  fallbackTitle,
 }: {
   readonly markdown: string;
-  readonly title: string;
+  readonly fallbackTitle: string;
 }): RenderedDocument => {
-  const { bodyHtml, sections } = convertMarkdown({ markdown });
-  const shell = renderShell({ sections, contentHtml: bodyHtml });
+  const { bodyHtml, sections, title } = convertMarkdown({ markdown });
+  const resolvedTitle = title ?? fallbackTitle;
+  const shell = renderShell({
+    nav: sections.map((section) => ({ id: section.id, label: section.text })),
+    contentHtml: bodyHtml,
+  });
   const html = renderPage({
-    title,
+    title: resolvedTitle,
     styles: shell.styles,
     scripts: shell.scripts,
     bodyClassName: shell.bodyClassName,
     bodyHtml: shell.html,
   });
-  return { html, sectionCount: sections.length };
+  return { html, title: resolvedTitle, sections };
 };

@@ -1,6 +1,7 @@
 // Implements `grandplan render <input.md> [output.html]`: the I/O boundary
 // around the pure renderer, owning argument validation, file reads/writes,
-// and the structured result runAxiCli() prints.
+// and the structured result runAxiCli() prints. Content decisions, including
+// the document title, belong to the renderer.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
@@ -9,30 +10,11 @@ import { renderDocument } from "../render/render-document.js";
 
 const USAGE = "Usage: grandplan render <input.md> [output.html]";
 
-// Derives the browser-tab title. The document h1 already comes from the
-// markdown body, so the first h1 line (or the file name) is enough.
-export const deriveTitle = ({
-  markdown,
-  inputPath,
-}: {
-  readonly markdown: string;
-  readonly inputPath: string;
-}): string => {
-  const heading = markdown.match(/^#\s+(.+)$/m);
-  const headingText = heading?.[1]?.trim();
-  if (headingText !== undefined && headingText.length > 0) {
-    return headingText;
-  }
-  return basename(inputPath, extname(inputPath));
-};
-
 // Defaults the output to sit next to the input: <input>.html.
 const defaultOutputPath = (inputPath: string): string => {
   const extension = extname(inputPath);
   const withoutExtension =
-    extension.length > 0
-      ? inputPath.slice(0, -extension.length)
-      : inputPath;
+    extension.length > 0 ? inputPath.slice(0, -extension.length) : inputPath;
   return `${withoutExtension}.html`;
 };
 
@@ -53,14 +35,18 @@ export const renderCommand = async (
   try {
     markdown = await readFile(inputPath, "utf8");
   } catch {
-    throw new AxiError(`Cannot read input file: ${inputPath}`, "INPUT_NOT_FOUND", [
-      USAGE,
-    ]);
+    throw new AxiError(
+      `Cannot read input file: ${inputPath}`,
+      "INPUT_NOT_FOUND",
+      [USAGE],
+    );
   }
 
   const outputPath = resolve(args[1] ?? defaultOutputPath(inputPath));
-  const title = deriveTitle({ markdown, inputPath });
-  const { html, sectionCount } = renderDocument({ markdown, title });
+  const { html, title, sections } = renderDocument({
+    markdown,
+    fallbackTitle: basename(inputPath, extname(inputPath)),
+  });
 
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, html, "utf8");
@@ -68,7 +54,7 @@ export const renderCommand = async (
   return {
     rendered: outputPath,
     title,
-    sections: sectionCount,
+    sections: sections.length,
     help: [`Open ${outputPath} in your browser to review the document`],
   };
 };
