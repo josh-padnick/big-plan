@@ -1,0 +1,30 @@
+{
+  "name": "grandplan",
+  "version": "0.0.1",
+  "description": "Planning deserves a first-class experience: a rich local surface for reviewing and agreeing on AI agent plans before the agent acts. Pre-alpha placeholder release.",
+  "license": "MIT",
+  "author": "Josh Padnick",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/josh-padnick/grandplan.git"
+  },
+  "homepage": "https://github.com/josh-padnick/grandplan#readme",
+  "bugs": "https://github.com/josh-padnick/grandplan/issues",
+  "type": "module",
+  "bin": {
+    "grandplan": "bin/grandplan.mjs"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "agent",
+    "plan",
+    "review",
+    "mdx",
+    "axi"
+  ]
+}
