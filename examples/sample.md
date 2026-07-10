@@ -101,6 +101,17 @@ If a schedule is cancelled and later force-retried by an operator, the attempt c
 ##### Operator notes
 
 Force-retry is a new attempt, not a replay of the last one.
+Each force-retry incident gets a runbook entry from this markdown template, which itself contains a fenced code block:
+
+`````md
+## Force-retry: {payment_id}
+
+Reason: {one line}
+
+```sh
+admin-cli retry force --schedule {schedule_id}
+```
+`````
 
 ###### Audit trail
 
