@@ -79,5 +79,6 @@ The conventions that matter most here:
 ## Contribution workflow
 
 - Sign off every commit for DCO: `git commit -s`.
+- CI (GitHub Actions, `.github/workflows/ci.yml`) runs `bun run lint` on every PR and on `main`; build and test jobs join the same workflow as the suite grows.
 - Work on feature branches and merge into `main`.
 - Keep PRs small and reviewable; one self-contained increment per commit where possible.
