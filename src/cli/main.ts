@@ -2,8 +2,10 @@ import { readFile } from "node:fs/promises";
 import { runAxiCli } from "axi-sdk-js";
 import { renderCommand } from "./render-command.js";
 
+// Mirrors the README positioning: GrandPlan is about reviewing a plan and
+// reaching agreement on it before an agent acts, not generic markdown tooling.
 const DESCRIPTION =
-  "Render AI-agent-authored plans into calm, self-contained HTML review documents";
+  "Review an agent's plan and reach agreement on it, before the agent acts: render plans into calm, self-contained HTML review documents";
 
 const TOP_LEVEL_HELP = `grandplan - ${DESCRIPTION}
 
