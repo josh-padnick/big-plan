@@ -5,7 +5,7 @@ Read the product orientation first, then follow the linked references for detail
 
 ## What GrandPlan is
 
-Good AI output depends on a great plan, and GrandPlan makes reviewing an agent's plan a first-class experience.
+Good AI output depends on a great plan, and GrandPlan makes reviewing agent plans a first-class experience.
 Planning is an essential part of effective development with AI, and it deserves a first-class experience.
 GrandPlan is built around one question: what is the best way to review a plan and reach agreement on it, before an agent acts?
 

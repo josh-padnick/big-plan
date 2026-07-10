@@ -7,9 +7,9 @@ import { runAxiCli } from "axi-sdk-js";
 import { renderCommand } from "./render-command.js";
 
 // Mirrors the README tagline: good AI output depends on a great plan, and
-// GrandPlan makes reviewing an agent's plan a first-class experience.
+// GrandPlan makes reviewing agent plans a first-class experience.
 const DESCRIPTION =
-  "Make reviewing an agent's plan a first-class experience: render markdown plans into calm, self-contained HTML review documents";
+  "Make reviewing agent plans a first-class experience: render markdown plans into calm, self-contained HTML review documents";
 
 const TOP_LEVEL_HELP = `grandplan - ${DESCRIPTION}
 

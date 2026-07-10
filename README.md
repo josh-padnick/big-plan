@@ -1,7 +1,7 @@
 # GrandPlan
 
 **Good AI output depends on a great plan.**
-GrandPlan makes reviewing an agent's plan a first-class experience.
+GrandPlan makes reviewing agent plans a first-class experience.
 
 > [!WARNING]
 > **Pre-alpha.** GrandPlan is under active development.
