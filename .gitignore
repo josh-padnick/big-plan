@@ -1,0 +1,6 @@
+node_modules/
+dist/
+src/**/*.generated.ts
+test-results/
+playwright-report/
+examples/*.html

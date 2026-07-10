@@ -1,0 +1,149 @@
+// Converts GFM markdown into body HTML plus the h2 outline the viewer's TOC
+// is built from. This is the unified-pipeline half of the renderer; the page
+// chrome around it lives in shell.ts.
+
+import type { Element, Root, RootContent } from "hast";
+import rehypeSlug from "rehype-slug";
+import rehypeStringify from "rehype-stringify";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import remarkRehype from "remark-rehype";
+import { unified } from "unified";
+
+export type Section = {
+  readonly id: string;
+  readonly text: string;
+};
+
+export type ConvertedMarkdown = {
+  readonly bodyHtml: string;
+  readonly sections: ReadonlyArray<Section>;
+  readonly title: string | undefined;
+};
+
+// remark-rehype emits the GFM footnotes block with this heading id; it is a
+// screen-reader label, not an authored section, so it stays out of the TOC.
+const FOOTNOTE_LABEL_ID = "footnote-label";
+
+// Flattens a heading to plain text so TOC entries keep their visible words
+// but drop inline markup such as code spans or emphasis.
+const textOf = (node: Element): string => {
+  let text = "";
+  for (const child of node.children) {
+    if (child.type === "text") {
+      text += child.value;
+    } else if (child.type === "element") {
+      text += textOf(child);
+    }
+  }
+  return text;
+};
+
+const isElement = (node: RootContent): node is Element =>
+  node.type === "element";
+
+// Tailwind utilities for the table scroll container; exported so tests can
+// assert the wrapper without duplicating the class list.
+export const TABLE_WRAPPER_CLASSES = [
+  "mb-5",
+  "overflow-x-auto",
+  "rounded-md",
+  "border",
+  "border-edge",
+] as const;
+
+// Wraps each <table> in a scroll container so a wide table scrolls inside its
+// own box instead of widening the whole page. Mutating the tree in place is
+// the idiomatic shape for a rehype transform.
+const wrapTables = (node: Root | Element): void => {
+  node.children = node.children.map((child) => {
+    if (!isElement(child)) {
+      return child;
+    }
+    wrapTables(child);
+    if (child.tagName !== "table") {
+      return child;
+    }
+    const wrapper: Element = {
+      type: "element",
+      tagName: "div",
+      properties: { className: [...TABLE_WRAPPER_CLASSES] },
+      children: [child],
+    };
+    return wrapper;
+  });
+};
+
+const rehypeWrapTables = () => (tree: Root) => {
+  wrapTables(tree);
+};
+
+// Finds the document title: the text of the first h1 in the rendered tree.
+// Walking the parsed tree (rather than regexing the source) means a "# line"
+// inside a fenced code block can never masquerade as the title.
+const findTitle = (node: Root | Element): string | undefined => {
+  for (const child of node.children) {
+    if (!isElement(child)) {
+      continue;
+    }
+    if (child.tagName === "h1") {
+      return textOf(child);
+    }
+    const nested = findTitle(child);
+    if (nested !== undefined) {
+      return nested;
+    }
+  }
+  return undefined;
+};
+
+// Gathers every slugged h2 in document order, at any nesting depth, so
+// sections inside containers such as blockquotes still reach the TOC.
+const collectSections = (
+  node: Root | Element,
+  sections: Array<Section>,
+): void => {
+  for (const child of node.children) {
+    if (!isElement(child)) {
+      continue;
+    }
+    const id = child.properties.id;
+    if (
+      child.tagName === "h2" &&
+      typeof id === "string" &&
+      id !== FOOTNOTE_LABEL_ID
+    ) {
+      sections.push({ id, text: textOf(child) });
+    }
+    collectSections(child, sections);
+  }
+};
+
+/**
+ * Converts GFM markdown into body HTML, the level-two heading outline used
+ * for the table of contents, and the document title (first h1, if any).
+ * Pure: same input, same output.
+ */
+export const convertMarkdown = ({
+  markdown,
+}: {
+  readonly markdown: string;
+}): ConvertedMarkdown => {
+  const processor = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkRehype, {
+      // The GFM footnotes label ships visible as a small section heading;
+      // without this option remark-rehype hides it behind class="sr-only".
+      footnoteLabelProperties: { className: ["footnotes-heading"] },
+    })
+    .use(rehypeSlug)
+    .use(rehypeWrapTables);
+  const tree = processor.runSync(processor.parse(markdown));
+
+  const sections: Array<Section> = [];
+  collectSections(tree, sections);
+
+  const bodyHtml = unified().use(rehypeStringify).stringify(tree);
+  return { bodyHtml, sections, title: findTitle(tree) };
+};
