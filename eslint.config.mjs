@@ -23,13 +23,155 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     rules: {
-      "@typescript-eslint/consistent-type-imports": "error",
+      "@typescript-eslint/consistent-type-imports": [
+        "error",
+        { prefer: "type-imports", fixStyle: "separate-type-imports" },
+      ],
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-non-null-assertion": "error",
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
       // Playwright fixture signatures destructure an empty object by design.
       "no-empty-pattern": ["error", { allowObjectPatternsAsParameters: true }],
+    },
+  },
+  // Architectural layering: information flows one way, cli -> render-document
+  // -> { markdown/, shell/, page } -> escape-html. A layer knows what it
+  // calls and never what calls it. Flat config does not merge
+  // no-restricted-imports across overlapping blocks (last match wins), so the
+  // scopes below are non-overlapping and each block lists its full pattern set.
+  {
+    // The CLI consumes the renderer only through its public entry point.
+    files: ["src/cli/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/render/markdown/**",
+                "**/render/shell/**",
+                "**/render/page.js",
+                "**/render/escape-html.js",
+              ],
+              message:
+                "The CLI consumes the renderer through render-document.js, its public entry point - never the renderer's internals.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // The composer (and its test) may import every render part; the render
+    // layer as a whole sits below the CLI.
+    files: ["src/render/*.ts"],
+    ignores: ["src/render/page.ts", "src/render/escape-html.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/cli/**"],
+              message:
+                "The render layer sits below the CLI and must never import from it.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // markdown/ is self-contained: pipeline dependencies only.
+    files: ["src/render/markdown/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/cli/**",
+                "**/shell/**",
+                "**/page.js",
+                "**/escape-html.js",
+                "**/render-document.js",
+              ],
+              message:
+                "markdown/ produces content and knows nothing about the shell, the page, the composer, or the CLI. Escaping is rehype-stringify's job here.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // shell/ presents content handed to it as data; it may use escape-html
+    // and its own generated modules.
+    files: ["src/render/shell/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/cli/**",
+                "**/markdown/**",
+                "**/page.js",
+                "**/render-document.js",
+              ],
+              message:
+                "shell/ owns the reading surface and knows nothing about markdown, the page envelope, the composer, or the CLI. Content arrives as data (NavEntry, contentHtml).",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // page.ts packages what it is handed; escape-html is its only local import.
+    files: ["src/render/page.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/cli/**",
+                "**/markdown/**",
+                "**/shell/**",
+                "**/render-document.js",
+              ],
+              message:
+                "page.ts is the envelope: it packages styles, scripts, and markup handed to it as data, and knows nothing about who produced them.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // escape-html.ts is the bottom layer: no project-local imports at all.
+    files: ["src/render/escape-html.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["./*", "./**", "../*", "../**"],
+              message:
+                "escape-html.ts is the lowest layer and imports nothing project-local.",
+            },
+          ],
+        },
+      ],
     },
   },
   {

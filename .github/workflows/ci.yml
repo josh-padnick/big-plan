@@ -2,10 +2,11 @@
 # suite grows; lint is the first enforced gate.
 name: CI
 
+# Runs on every push to every branch; the run on a PR's head commit shows up
+# in the PR's checks. (PRs from forks would need a pull_request trigger; add
+# one when outside contributions start.)
 on:
-  pull_request:
   push:
-    branches: [main]
 
 jobs:
   lint:

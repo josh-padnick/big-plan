@@ -57,7 +57,7 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 - Install: `bun install`
 - Build: `bun run build` (runs `bun run gen` - stylesheet and browser scripts - then tsc to `dist/`)
 - Unit tests: `bun run test` (vitest, colocated `src/**/*.test.ts`; regenerates assets first)
-- Lint: `bun run lint` (ESLint flat config; includes the guardrail that Playwright specs import from `test/fixtures`, never `@playwright/test`)
+- Lint: `bun run lint` (ESLint flat config; includes the fixtures-import guardrail and the layering rules below)
 - Generators only: `bun run gen` (stylesheet via `gen:css`, browser scripts via `gen:scroll-spy`; never edit `*.generated.ts` files)
 - Browser test: `bunx playwright test` (requires a prior build; renders the sample through the built CLI)
 - Render: `node bin/grandplan.mjs render examples/sample.md` (or `npx grandplan render <file.md>` once installed)
@@ -74,6 +74,7 @@ The conventions that matter most here:
 - Every authored file starts with a file-level comment saying what it owns or why it exists; every non-trivial function gets a concise description above it (trivial one-liners stay uncommented).
 - Generated files always carry `.generated.` in their name (for example `global.generated.ts`), are never edited by hand, and are never committed.
 - Keep logic in pure modules and unit-test it there; reserve Playwright for critical user journeys. Specs import `test`/`expect` from `test/fixtures` (lint-enforced) so every spec fails on console errors.
+- Layering is lint-enforced: information flows one way, `cli` -> `render-document` -> { `markdown/`, `shell/`, `page` } -> `escape-html`. A layer knows what it calls and never what calls it; the CLI consumes the renderer only through `render-document`. See the layering blocks in `eslint.config.mjs`.
 - Tests are focused and user-oriented, use "should ... when ..." descriptions, and cover degenerate and boundary cases.
 
 ## Contribution workflow
