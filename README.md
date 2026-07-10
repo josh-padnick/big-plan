@@ -1,5 +1,8 @@
 # GrandPlan
 
+**Good AI output depends on a great plan.**
+GrandPlan makes reviewing an agent's plan a first-class experience.
+
 > [!WARNING]
 > **Pre-alpha.** GrandPlan is under active development.
 > The static markdown viewer works today; the rest of the review experience is still being built.
