@@ -118,14 +118,16 @@ export default tseslint.config(
     }
 
     // Minimal glob support for the patterns used above: **, *, and literals.
+    // Tokens are translated in one pass so a replacement fragment can never
+    // be rescanned and mangled by a later replacement.
     const globToRegExp = (glob) =>
       new RegExp(
         "^" +
           glob
             .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-            .replace(/\*\*\//g, "(?:.*/)?")
-            .replace(/\*\*/g, ".*")
-            .replace(/\*/g, "[^/]*") +
+            .replace(/\*\*\/|\*\*|\*/g, (token) =>
+              token === "**/" ? "(?:.*/)?" : token === "**" ? ".*" : "[^/]*",
+            ) +
           "$",
       );
     const matches = (path, globs) => globs.some((g) => globToRegExp(g).test(path));
@@ -143,7 +145,9 @@ export default tseslint.config(
           continue;
         }
         const relative = absolute.slice(import.meta.dirname.length + 1);
-        if (!relative.endsWith(".ts") || relative.endsWith(".generated.ts")) {
+        // All TypeScript source flavors are guarded; generated build
+        // artifacts are lint-ignored and exempt.
+        if (!/\.(?:ts|tsx|mts|cts)$/.test(relative) || relative.includes(".generated.")) {
           continue;
         }
         const claimedBy = names.filter((name) => {
