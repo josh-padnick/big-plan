@@ -1,5 +1,11 @@
+// Owns the viewer's page chrome: the inlined stylesheet, the sticky TOC, and
+// the scroll-spy enhancement, assembled around pre-rendered body HTML into a
+// complete self-contained document.
+
 import type { Section } from "./markdown.js";
 
+// Escapes text destined for HTML attribute or element positions; body HTML
+// is already safely serialized by rehype-stringify.
 const escapeHtml = (value: string): string =>
   value
     .replaceAll("&", "&amp;")
@@ -276,6 +282,8 @@ const SCROLL_SPY_SCRIPT = `
 })();
 `;
 
+// Builds the sidebar nav; ids are URI-encoded because slugs may contain
+// characters that are not literal-safe inside href values.
 const renderToc = (sections: ReadonlyArray<Section>): string => {
   const items = sections
     .map(

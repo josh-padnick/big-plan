@@ -1,3 +1,6 @@
+// Unit tests for the assembled document: every GFM affordance's markup,
+// self-containment guarantees, and degenerate inputs.
+
 import { describe, expect, it } from "vitest";
 import { renderDocument } from "./render-document.js";
 

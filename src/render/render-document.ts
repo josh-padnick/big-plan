@@ -1,3 +1,6 @@
+// The renderer's public entry point: composes the markdown pipeline and the
+// document shell into one markdown-in, complete-HTML-out function.
+
 import { convertMarkdown } from "./markdown.js";
 import { renderShell } from "./shell.js";
 

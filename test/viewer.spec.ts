@@ -1,3 +1,6 @@
+// Browser test of the critical journey: render the sample plan through the
+// built CLI, open it via file://, and review it through the TOC.
+
 import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";

@@ -1,3 +1,7 @@
+// Wires the grandplan CLI onto runAxiCli(), which owns dispatch, help,
+// structured errors, and output serialization. Command behavior lives in the
+// sibling *-command modules; this file stays thin glue.
+
 import { readFile } from "node:fs/promises";
 import { runAxiCli } from "axi-sdk-js";
 import { renderCommand } from "./render-command.js";
@@ -10,11 +14,13 @@ const DESCRIPTION =
 const TOP_LEVEL_HELP = `grandplan - ${DESCRIPTION}
 
 Usage:
-  grandplan render <input.md> [output.html]   Render a GFM markdown plan to a
+  grandplan render <input.md> [output.html]   Render a markdown plan to a
                                               single self-contained HTML file
                                               (defaults to <input>.html)
 `;
 
+// Reads this package's own version for --version output, tolerating a missing
+// or malformed package.json rather than crashing the CLI.
 const readOwnVersion = async (): Promise<string | undefined> => {
   // dist/cli/main.js -> repo root package.json
   const packageJsonUrl = new URL("../../package.json", import.meta.url);
@@ -34,6 +40,7 @@ const readOwnVersion = async (): Promise<string | undefined> => {
   return undefined;
 };
 
+/** Runs the grandplan CLI: dispatches argv to commands via runAxiCli(). */
 export const main = async (): Promise<void> => {
   const version = await readOwnVersion();
   await runAxiCli({

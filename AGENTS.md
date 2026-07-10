@@ -55,6 +55,7 @@ The conventions that matter most here:
 - `unknown` over `any`; no type assertions (`as`) or non-null assertions (`!`).
 - Separate type imports; single-object args for multi-parameter functions; immutable data (`readonly`, `const`).
 - Colocate code and tests by feature; kebab-case file names; comments explain why, not what.
+- Every authored file starts with a file-level comment saying what it owns or why it exists; every non-trivial function gets a concise description above it (trivial one-liners stay uncommented).
 - Keep logic in pure modules and unit-test it there; reserve Playwright for critical user journeys.
 - Tests are focused and user-oriented, use "should ... when ..." descriptions, and cover degenerate and boundary cases.
 

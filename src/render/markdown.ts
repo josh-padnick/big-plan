@@ -1,3 +1,7 @@
+// Converts GFM markdown into body HTML plus the h2 outline the viewer's TOC
+// is built from. This is the unified-pipeline half of the renderer; the page
+// chrome around it lives in shell.ts.
+
 import type { Element, Root, RootContent } from "hast";
 import rehypeSlug from "rehype-slug";
 import rehypeStringify from "rehype-stringify";
@@ -20,6 +24,8 @@ export type ConvertedMarkdown = {
 // screen-reader label, not an authored section, so it stays out of the TOC.
 const FOOTNOTE_LABEL_ID = "footnote-label";
 
+// Flattens a heading to plain text so TOC entries keep their visible words
+// but drop inline markup such as code spans or emphasis.
 const textOf = (node: Element): string => {
   let text = "";
   for (const child of node.children) {
@@ -61,6 +67,8 @@ const rehypeWrapTables = () => (tree: Root) => {
   wrapTables(tree);
 };
 
+// Gathers every slugged h2 in document order, at any nesting depth, so
+// sections inside containers such as blockquotes still reach the TOC.
 const collectSections = (
   node: Root | Element,
   sections: Array<Section>,

@@ -1,3 +1,6 @@
+// Unit tests for the markdown-to-HTML conversion: section extraction edge
+// cases and the table scroll-container transform.
+
 import { describe, expect, it } from "vitest";
 import { convertMarkdown } from "./markdown.js";
 

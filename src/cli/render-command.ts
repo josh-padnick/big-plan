@@ -1,3 +1,7 @@
+// Implements `grandplan render <input.md> [output.html]`: the I/O boundary
+// around the pure renderer, owning argument validation, file reads/writes,
+// and the structured result runAxiCli() prints.
+
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 import { AxiError } from "axi-sdk-js";
@@ -5,8 +9,8 @@ import { renderDocument } from "../render/render-document.js";
 
 const USAGE = "Usage: grandplan render <input.md> [output.html]";
 
-// The document h1 already comes from the markdown body; this title only
-// names the browser tab, so the first h1 line (or the file name) is enough.
+// Derives the browser-tab title. The document h1 already comes from the
+// markdown body, so the first h1 line (or the file name) is enough.
 export const deriveTitle = ({
   markdown,
   inputPath,
@@ -22,6 +26,7 @@ export const deriveTitle = ({
   return basename(inputPath, extname(inputPath));
 };
 
+// Defaults the output to sit next to the input: <input>.html.
 const defaultOutputPath = (inputPath: string): string => {
   const extension = extname(inputPath);
   const withoutExtension =
@@ -31,6 +36,8 @@ const defaultOutputPath = (inputPath: string): string => {
   return `${withoutExtension}.html`;
 };
 
+// Reads the input markdown, renders the viewer HTML, writes it out, and
+// returns the structured summary runAxiCli() serializes for the caller.
 export const renderCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
