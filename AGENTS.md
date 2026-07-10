@@ -50,6 +50,7 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 - **CLI framework**: `axi-sdk-js` (dispatch, help, structured errors, TOON output).
 - **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-stringify).
 - **Styling**: Tailwind v4, compiled at build time by `@tailwindcss/cli` into a generated module; no runtime CSS tooling.
+- **Linting**: ESLint v10 flat config with `typescript-eslint`, project conventions, architectural boundaries, and Playwright fixture enforcement.
 - **Tests**: vitest for units (colocated in `src/**`), Playwright (chromium) for browser journeys.
 
 ## Commands
@@ -80,6 +81,6 @@ The conventions that matter most here:
 ## Contribution workflow
 
 - Sign off every commit for DCO: `git commit -s`.
-- CI (GitHub Actions, `.github/workflows/ci.yml`) runs `bun run lint` on every PR and on `main`; build and test jobs join the same workflow as the suite grows.
+- CI (GitHub Actions, `.github/workflows/ci.yml`) runs `bun run lint` on every pushed branch, including `main` and same-repository PR head branches; fork PRs are not triggered yet. Build and test jobs join the same workflow as the suite grows.
 - Work on feature branches and merge into `main`.
 - Keep PRs small and reviewable; one self-contained increment per commit where possible.
