@@ -11,10 +11,6 @@ Light and dark are chosen by the reader's OS via prefers-color-scheme.
 /* Only authored source emits utility candidates; examples and docs do not. */
 @source "../";
 
-/* remark-rehype emits class="sr-only" on the footnotes label, which the
-   source scanner cannot see, so that utility is included explicitly. */
-@source inline("sr-only");
-
 :root {
   --bg: #f7f5f0;
   --ink-c: #211e1a;
@@ -220,6 +216,18 @@ Light and dark are chosen by the reader's OS via prefers-color-scheme.
     border-top: 1px solid var(--color-edge);
     padding-top: 1rem;
     font-size: 0.875rem;
+    color: var(--color-muted);
+  }
+  /* The section's label, styled like the TOC's "Contents" eyebrow rather
+     than a prose heading; it stays out of the TOC by id. */
+  article .footnotes-heading {
+    margin: 0 0 0.75rem;
+    border-bottom: 0;
+    padding-bottom: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: var(--color-muted);
   }
 }

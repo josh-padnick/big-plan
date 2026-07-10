@@ -132,7 +132,11 @@ export const convertMarkdown = ({
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
-    .use(remarkRehype)
+    .use(remarkRehype, {
+      // The GFM footnotes label ships visible as a small section heading;
+      // without this option remark-rehype hides it behind class="sr-only".
+      footnoteLabelProperties: { className: ["footnotes-heading"] },
+    })
     .use(rehypeSlug)
     .use(rehypeWrapTables);
   const tree = processor.runSync(processor.parse(markdown));

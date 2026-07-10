@@ -112,3 +112,14 @@ describe("convertMarkdown title", () => {
     expect(title).toBe("Real title");
   });
 });
+
+describe("convertMarkdown footnotes", () => {
+  it("should render a visible Footnotes heading when the document has footnotes", () => {
+    const { bodyHtml } = convertMarkdown({
+      markdown: "text[^1]\n\n[^1]: the note\n",
+    });
+    expect(bodyHtml).toContain('class="footnotes-heading"');
+    expect(bodyHtml).toContain(">Footnotes</h2>");
+    expect(bodyHtml).not.toContain("sr-only");
+  });
+});
