@@ -1,0 +1,149 @@
+# Payments Retry Architecture Plan
+
+This plan proposes a durable retry pipeline for failed payment captures.
+Today a failed capture is retried inline by the API server, which couples checkout latency to processor health and silently drops retries when a pod restarts.
+The proposal moves retries into a persistent queue with explicit state, bounded backoff, and an operator-facing audit trail.[^1]
+
+> **Review goal:** agree on the retry state machine, the schema, and the rollout order before any code is written.
+> Everything else in this document is supporting detail.
+
+## Background
+
+Roughly 2.1% of captures fail transiently: processor timeouts, `429` throttles, and brief network partitions.
+About ~~half~~ two thirds of those succeed on a later attempt, so retries are worth real revenue.
+The current inline retry loop has three problems:
+
+1. Retries block the checkout request, adding up to 9 seconds of tail latency.
+2. Retry state lives in process memory, so a deploy or crash loses it.
+3. There is no record of *why* a payment eventually failed, which makes support escalations expensive.
+
+The proposal draws on the classic exponential backoff guidance[^2] and on our own incident review from `INC-2214`.
+
+## Goals and non-goals
+
+**Goals:**
+
+- Durable, at-least-once retry execution that survives restarts and deploys.
+- Bounded, jittered exponential backoff with a hard cap on attempts.
+- Full audit trail: every attempt, its outcome, and the processor response code.
+- Operator controls: pause a merchant, force a retry, cancel a schedule.
+
+**Non-goals:**
+
+- Changing the processor integration itself (`ProcessorClient` stays as is).
+- Real-time retry status in the merchant dashboard (a later milestone).
+- Multi-region queue failover.
+
+## Retry state machine
+
+Each failed capture becomes a `retry_schedule` row that moves through a small state machine.
+States are deliberately few; anything more granular belongs in the attempt log, not the schedule.
+
+- `pending` - waiting for the next attempt time.
+  - Transitions to `running` when a worker claims it.
+  - Transitions to `cancelled` if an operator intervenes.
+- `running` - a worker owns the schedule and is calling the processor.
+  - Transitions to `succeeded` on capture success.
+  - Transitions back to `pending` on a retryable failure with attempts remaining.
+  - Transitions to `exhausted` when the attempt cap is reached.
+- Terminal states: `succeeded`, `exhausted`, `cancelled`.
+  - Terminal rows are retained for 90 days, then archived.
+
+The worker claims schedules with `FOR UPDATE SKIP LOCKED`, so horizontal scaling needs no coordinator.
+
+## Schema changes
+
+Two new tables, no changes to existing ones.
+
+```sql
+CREATE TABLE retry_schedules (
+  id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  payment_id      bigint NOT NULL REFERENCES payments (id),
+  state           text   NOT NULL DEFAULT 'pending',
+  attempt_count   int    NOT NULL DEFAULT 0,
+  max_attempts    int    NOT NULL DEFAULT 6,
+  next_attempt_at timestamptz NOT NULL,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT retry_schedules_state_check CHECK (
+    state IN ('pending', 'running', 'succeeded', 'exhausted', 'cancelled')
+  )
+);
+
+CREATE INDEX retry_schedules_claim_idx
+  ON retry_schedules (next_attempt_at)
+  WHERE state = 'pending';
+
+CREATE TABLE retry_attempts (
+  id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  schedule_id  bigint NOT NULL REFERENCES retry_schedules (id),
+  attempt_no   int    NOT NULL,
+  outcome      text   NOT NULL,
+  processor_code text,
+  latency_ms   int,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+```
+
+### Backoff policy
+
+Base delay 30 seconds, doubling per attempt, full jitter, capped at 4 hours.
+The sixth failure marks the schedule `exhausted`.
+
+### Idempotency
+
+Every processor call sends an idempotency key of the form `retry-{schedule_id}-{attempt_no}`, so an at-least-once worker never double-captures.
+
+#### Key rotation edge case
+
+If a schedule is cancelled and later force-retried by an operator, the attempt counter keeps increasing; keys never repeat.
+
+##### Operator notes
+
+Force-retry is a new attempt, not a replay of the last one.
+
+###### Audit trail
+
+Operator actions land in `retry_attempts` with outcome `operator_forced`.
+
+## Failure classification
+
+The worker classifies processor responses into retryable and terminal outcomes.
+The wide reference table below is the exhaustive mapping we will encode; it intentionally lists more columns than fit a narrow screen.
+
+| Processor code | HTTP status | Category | Retryable | Max extra attempts | Operator alert | Merchant visible | Notes |
+| -------------- | ----------- | -------- | --------- | ------------------ | -------------- | ---------------- | ----- |
+| `timeout` | 504 | transient | yes | default | no | no | Most common; full backoff applies |
+| `rate_limited` | 429 | throttle | yes | default | no | no | Honor `Retry-After` when present |
+| `processor_down` | 503 | outage | yes | default | page after 3 | no | Circuit breaker opens at 50% failure rate |
+| `insufficient_funds` | 402 | terminal | no | 0 | no | yes | Schedule marked `exhausted` immediately |
+| `card_expired` | 402 | terminal | no | 0 | no | yes | Prompt card update via lifecycle email |
+| `fraud_block` | 403 | terminal | no | 0 | yes | no | Routed to risk review queue |
+| `unknown` | 5xx | transient | yes | 2 | page after 1 | no | Conservative cap until classified |
+
+## Rollout plan
+
+Work lands in three reviewable slices, each behind the `durable-retries` flag.
+
+- [x] Slice 0: schema migration and dark-launched writes (shipped to staging).
+- [ ] Slice 1: worker with claim loop, backoff, and attempt logging.
+- [ ] Slice 2: cut checkout over to enqueue-only; delete the inline retry loop.
+- [ ] Slice 3: operator controls (`pause`, `force-retry`, `cancel`) in the admin CLI.
+
+Rollout gates between slices:
+
+1. Slice 1 soaks in staging for one week.
+   1. Zero double-captures across 10k synthetic failures.
+   2. p99 claim-to-attempt latency under 5 seconds.
+2. Slice 2 ramps by merchant cohort: internal, then 1%, 10%, 100%.
+
+---
+
+The pipeline shape, end to end:
+
+![Pipeline: checkout enqueues, worker retries, processor settles](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==)
+
+See the [incident review](https://example.com/incidents/INC-2214) and the [processor API reference](https://example.com/docs/processor) for supporting material.
+
+[^1]: Audit requirements come from the Q3 compliance review; finance needs attempt-level detail for chargeback disputes.
+[^2]: Exponential backoff with full jitter, as described in the AWS Architecture Blog's "Exponential Backoff and Jitter".
