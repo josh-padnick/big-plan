@@ -2,7 +2,7 @@
 // review shell, and the page envelope into one markdown-in, complete-HTML-out
 // function.
 
-import { convertMarkdown } from "./markdown.js";
+import { convertMarkdown } from "./markdown/convert.js";
 import { renderPage } from "./page.js";
 import { renderShell } from "./shell.js";
 

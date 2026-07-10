@@ -2,7 +2,7 @@
 // cases and the table scroll-container transform.
 
 import { describe, expect, it } from "vitest";
-import { convertMarkdown, TABLE_WRAPPER_CLASSES } from "./markdown.js";
+import { convertMarkdown, TABLE_WRAPPER_CLASSES } from "./convert.js";
 
 const TABLE_WRAPPER_OPENING = `<div class="${TABLE_WRAPPER_CLASSES.join(" ")}"><table>`;
 

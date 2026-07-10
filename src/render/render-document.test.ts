@@ -2,7 +2,7 @@
 // self-containment guarantees, and degenerate inputs.
 
 import { describe, expect, it } from "vitest";
-import { TABLE_WRAPPER_CLASSES } from "./markdown.js";
+import { TABLE_WRAPPER_CLASSES } from "./markdown/convert.js";
 import { renderDocument } from "./render-document.js";
 
 const TABLE_WRAPPER_OPENING = `<div class="${TABLE_WRAPPER_CLASSES.join(" ")}"><table>`;

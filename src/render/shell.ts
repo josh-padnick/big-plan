@@ -7,7 +7,7 @@
 // from the generated SHELL_CSS module.
 
 import { escapeHtml } from "./escape-html.js";
-import type { Section } from "./markdown.js";
+import type { Section } from "./markdown/convert.js";
 import { SHELL_CSS } from "./shell.generated.js";
 
 export type ShellResult = {

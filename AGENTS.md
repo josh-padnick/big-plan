@@ -35,7 +35,7 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 
 - `bin/` - the executable entrypoint; a thin shim over `dist/cli/`.
 - `src/cli/` - command dispatch and the `render` command.
-- `src/render/` - the pure markdown-to-HTML renderer and document shell, with colocated unit tests.
+- `src/render/` - the pure renderer, with colocated unit tests: `markdown/` (source to HTML plus the section outline), `shell.ts` (the reading surface), `page.ts` (the document envelope), and `render-document.ts` composing them.
 - `scripts/` - build-time generators, currently the Tailwind CSS-to-module compiler.
 - `examples/` - sample plan documents used by tests and demos.
 - `test/` - the Playwright browser spec for the rendered viewer.
