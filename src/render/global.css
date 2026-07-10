@@ -17,7 +17,7 @@ Light and dark are chosen by the reader's OS via prefers-color-scheme.
   --muted-c: #6f695c;
   --edge-c: #e2ddd1;
   --surface-c: #efece3;
-  --accent-c: #99502d;
+  --accent-c: #166534;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -27,7 +27,7 @@ Light and dark are chosen by the reader's OS via prefers-color-scheme.
     --muted-c: #a49c8b;
     --edge-c: #35312a;
     --surface-c: #242119;
-    --accent-c: #d59468;
+    --accent-c: #82c99a;
   }
 }
 
