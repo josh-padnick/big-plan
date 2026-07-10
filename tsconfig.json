@@ -24,6 +24,6 @@
   ],
   "exclude": [
     "src/**/*.test.ts",
-    "src/browser"
+    "src/**/*.browser.ts"
   ]
 }

@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "none",
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -9,5 +13,7 @@
     "noEmit": true,
     "types": []
   },
-  "include": ["src/browser"]
+  "include": [
+    "src/**/*.browser.ts"
+  ]
 }
