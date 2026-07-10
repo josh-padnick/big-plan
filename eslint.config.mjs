@@ -37,143 +37,113 @@ export default tseslint.config(
       "no-empty-pattern": ["error", { allowObjectPatternsAsParameters: true }],
     },
   },
-  // Architectural layering: information flows one way, cli -> render-document
-  // -> { markdown/, shell/, page } -> escape-html. A layer knows what it
-  // calls and never what calls it. Flat config does not merge
-  // no-restricted-imports across overlapping blocks (last match wins), so the
-  // scopes below are non-overlapping and each block lists its full pattern set.
-  {
-    // The CLI consumes the renderer only through its public entry point.
-    files: ["src/cli/**/*.ts"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              group: [
-                "**/render/markdown/**",
-                "**/render/shell/**",
-                "**/render/page.js",
-                "**/render/escape-html.js",
-              ],
-              message:
-                "The CLI consumes the renderer through render-document.js, its public entry point - never the renderer's internals.",
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    // The composer (and its test) may import every render part; the render
-    // layer as a whole sits below the CLI.
-    files: ["src/render/*.ts"],
-    ignores: ["src/render/page.ts", "src/render/escape-html.ts"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              group: ["**/cli/**"],
-              message:
-                "The render layer sits below the CLI and must never import from it.",
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    // markdown/ is self-contained: pipeline dependencies only.
-    files: ["src/render/markdown/**/*.ts"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              group: [
-                "**/cli/**",
-                "**/shell/**",
-                "**/page.js",
-                "**/escape-html.js",
-                "**/render-document.js",
-              ],
-              message:
-                "markdown/ produces content and knows nothing about the shell, the page, the composer, or the CLI. Escaping is rehype-stringify's job here.",
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    // shell/ presents content handed to it as data; it may use escape-html
-    // and its own generated modules.
-    files: ["src/render/shell/**/*.ts"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              group: [
-                "**/cli/**",
-                "**/markdown/**",
-                "**/page.js",
-                "**/render-document.js",
-              ],
-              message:
-                "shell/ owns the reading surface and knows nothing about markdown, the page envelope, the composer, or the CLI. Content arrives as data (NavEntry, contentHtml).",
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    // page.ts packages what it is handed; escape-html is its only local import.
-    files: ["src/render/page.ts"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              group: [
-                "**/cli/**",
-                "**/markdown/**",
-                "**/shell/**",
-                "**/render-document.js",
-              ],
-              message:
-                "page.ts is the envelope: it packages styles, scripts, and markup handed to it as data, and knows nothing about who produced them.",
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    // escape-html.ts is the bottom layer: no project-local imports at all.
-    files: ["src/render/escape-html.ts"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              group: ["./*", "./**", "../*", "../**"],
-              message:
-                "escape-html.ts is the lowest layer and imports nothing project-local.",
-            },
-          ],
-        },
-      ],
-    },
-  },
+  // Architectural layering, declared as data and compiled to lint blocks.
+  // Information flows one way: a layer knows what it calls and never what
+  // calls it. TIERS lists layers bottom to top; a layer may import lower
+  // tiers, never its own tier's siblings, never higher tiers. FACADES adds
+  // the entry-point rule: outside a feature, its internals are reached only
+  // through the named facade. Renaming or adding a folder means editing one
+  // LAYERS entry; the lint blocks are generated. (Generated scopes are
+  // non-overlapping, which flat config's last-match-wins requires.)
+  ...(() => {
+    // A layer: where its files live, and which import specifiers reach it.
+    const LAYERS = {
+      escapeHtml: {
+        files: ["src/render/escape-html.ts"],
+        imports: ["**/escape-html.js"],
+      },
+      markdown: {
+        files: ["src/render/markdown/**/*.ts"],
+        imports: ["**/markdown/**"],
+      },
+      shell: {
+        files: ["src/render/shell/**/*.ts"],
+        imports: ["**/shell/**"],
+      },
+      page: {
+        files: ["src/render/page.ts"],
+        imports: ["**/page.js"],
+      },
+      composer: {
+        files: ["src/render/*.ts"],
+        ignores: ["src/render/page.ts", "src/render/escape-html.ts"],
+        imports: ["**/render-document.js"],
+      },
+      cli: {
+        files: ["src/cli/**/*.ts"],
+        imports: ["**/cli/**"],
+      },
+    };
+
+    // Bottom to top. Inner arrays are tiers of mutually-isolated siblings.
+    const TIERS = [
+      ["escapeHtml"],
+      ["markdown", "shell", "page"],
+      ["composer"],
+      ["cli"],
+    ];
+
+    // Entry-point rules: these layers reach the listed internals only
+    // through the facade layer.
+    const FACADES = [
+      {
+        facade: "composer",
+        internals: ["markdown", "shell", "page", "escapeHtml"],
+        appliesTo: ["cli"],
+      },
+    ];
+
+    // Design facts the tier order cannot express, as named exceptions:
+    // markdown escapes through rehype-stringify, never by hand, so it may
+    // not reach the shared escaper even though it sits a tier below.
+    const EXTRA_BANS = [{ layer: "markdown", bans: ["escapeHtml"] }];
+
+    const tierOf = (name) => TIERS.findIndex((tier) => tier.includes(name));
+
+    return Object.keys(LAYERS)
+      .map((name) => {
+        const { files, ignores } = LAYERS[name];
+        const banned = new Set(
+          Object.keys(LAYERS).filter(
+            (other) => other !== name && tierOf(other) >= tierOf(name),
+          ),
+        );
+        for (const extra of EXTRA_BANS) {
+          if (extra.layer === name) {
+            for (const ban of extra.bans) banned.add(ban);
+          }
+        }
+        for (const { facade, internals, appliesTo } of FACADES) {
+          if (appliesTo.includes(name)) {
+            for (const internal of internals) banned.add(internal);
+            void facade;
+          }
+        }
+        if (banned.size === 0) {
+          return null;
+        }
+        return {
+          files,
+          ...(ignores === undefined ? {} : { ignores }),
+          rules: {
+            "no-restricted-imports": [
+              "error",
+              {
+                patterns: [
+                  {
+                    group: [...banned].flatMap(
+                      (other) => LAYERS[other].imports,
+                    ),
+                    message: `Layering: ${name} may import only layers below itself; information flows one way, and a layer never knows what calls it. See TIERS, FACADES, and EXTRA_BANS in eslint.config.mjs.`,
+                  },
+                ],
+              },
+            ],
+          },
+        };
+      })
+      .filter((block) => block !== null);
+  })(),
   {
     // Browser-side scripts run in the viewer, not Node.
     files: ["src/**/*.browser.ts"],
