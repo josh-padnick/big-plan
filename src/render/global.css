@@ -37,6 +37,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --diff-add-bg: #e8f2e9;
   --diff-remove-c: #9a493f;
   --diff-remove-bg: #f6e8e4;
+  --diff-content-bg: #ffffff;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -59,6 +60,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
     --diff-add-bg: #1e2b21;
     --diff-remove-c: #df9184;
     --diff-remove-bg: #30211f;
+    --diff-content-bg: #1b1916;
   }
 }
 
@@ -85,6 +87,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --diff-add-bg: #1e2b21;
   --diff-remove-c: #df9184;
   --diff-remove-bg: #30211f;
+  --diff-content-bg: #1b1916;
   color-scheme: dark;
 }
 
@@ -179,12 +182,15 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   }
 
   article [data-code-diff] {
-    background: var(--color-surface);
+    /* Content sits on its own background so red/green line tints read
+       cleanly; the tan surface stays on the header and hunk rows. */
+    background: var(--diff-content-bg);
     font-family: var(--font-mono);
     font-size: 0.8125rem;
     line-height: 1.5;
   }
   article .code-diff-header {
+    background: var(--color-surface);
     display: flex;
     min-width: 0;
     align-items: center;
@@ -247,6 +253,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
     display: block;
   }
   article .code-diff-hunk-header {
+    background: var(--color-surface);
     min-width: max-content;
     border-top: 1px solid var(--color-edge);
     border-bottom: 1px solid var(--color-edge);
