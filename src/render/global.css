@@ -3,10 +3,11 @@ The viewer's stylesheet, authored for Tailwind v4 and compiled by
 scripts/gen-css.mjs into an inlined <style> block, so rendered documents stay
 fully self-contained. The viewer is a document, not an app: one reading
 column, paper-like palettes, a modest type scale, and restrained borders.
-Light and dark are chosen by the reader's OS via prefers-color-scheme.
+Light and dark follow the reader's OS unless the theme control overrides it.
 */
 
 @import "tailwindcss" source(none);
+@import "./markdown/code-block/syntax-highlighting.css";
 
 /* Only authored source emits utility candidates; examples and docs do not. */
 @source "../";
@@ -21,7 +22,7 @@ Light and dark are chosen by the reader's OS via prefers-color-scheme.
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #1b1916;
     --ink-c: #ebe6da;
     --muted-c: #a49c8b;
@@ -29,6 +30,20 @@ Light and dark are chosen by the reader's OS via prefers-color-scheme.
     --surface-c: #242119;
     --accent-c: #82c99a;
   }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #1b1916;
+  --ink-c: #ebe6da;
+  --muted-c: #a49c8b;
+  --edge-c: #35312a;
+  --surface-c: #242119;
+  --accent-c: #82c99a;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -51,9 +66,9 @@ Light and dark are chosen by the reader's OS via prefers-color-scheme.
   scroll-margin-top: 1.5rem;
 }
 
-/* Markdown-generated elements carry no class attributes for utilities to
-   target, so the reading column is styled with element selectors scoped to
-   <article>, using the same design tokens as the shell's utility classes. */
+/* Plain Markdown elements carry no class attributes for utilities to target,
+   so the reading column uses element selectors scoped to <article>. Enhanced
+   elements such as highlighted tokens and controls use emitted classes. */
 @layer components {
   article h1,
   article h2,
@@ -139,6 +154,54 @@ Light and dark are chosen by the reader's OS via prefers-color-scheme.
     background: none;
     border: 0;
     padding: 0;
+  }
+
+  article .code-block {
+    position: relative;
+    margin: 0 0 1.25em;
+  }
+  article .code-block pre {
+    margin: 0;
+    padding-right: 3rem;
+  }
+  article .code-copy-button {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    cursor: pointer;
+  }
+  article .code-copy-button:hover {
+    background: var(--color-edge);
+  }
+  article .code-copy-button:disabled {
+    pointer-events: none;
+    opacity: 0.5;
+  }
+  article .code-copy-button svg {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+  article .code-copy-button svg[hidden] {
+    display: none;
+  }
+  article .code-copy-button [data-lucide="check"] {
+    color: var(--color-accent);
+  }
+  article .code-copy-message {
+    position: absolute;
+    top: 0.5rem;
+    right: 2.5rem;
+    display: flex;
+    height: 1.5rem;
+    align-items: center;
+    color: var(--color-muted);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+  article .code-copy-message[hidden] {
+    display: none;
   }
 
   article blockquote {

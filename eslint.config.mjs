@@ -56,17 +56,30 @@ export default tseslint.config(
         imports: ["**/escape-html.js"],
         mayImport: [],
       },
+      icons: {
+        files: ["src/render/icons/**/*.ts"],
+        imports: ["**/icons/**"],
+        mayImport: [],
+      },
+      codeBlock: {
+        files: ["src/render/markdown/code-block/**/*.ts"],
+        imports: ["**/markdown/code-block/**"],
+        mayImport: ["icons"],
+      },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
-        imports: ["**/markdown/**"],
+        ignores: ["src/render/markdown/code-block/**/*.ts"],
+        // Direct Markdown files only; the nested code-block concern has its
+        // own dependency contract so shell can consume its generated script.
+        imports: ["**/markdown/*.js"],
         // Deliberately not escapeHtml: markdown escapes through
         // rehype-stringify, never by hand.
-        mayImport: [],
+        mayImport: ["codeBlock"],
       },
       shell: {
         files: ["src/render/shell/**/*.ts"],
         imports: ["**/shell/**"],
-        mayImport: ["escapeHtml"],
+        mayImport: ["escapeHtml", "codeBlock"],
       },
       page: {
         files: ["src/render/page.ts"],
@@ -90,8 +103,9 @@ export default tseslint.config(
 
     // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
-      ["escapeHtml"],
-      ["markdown", "shell", "page"],
+      ["escapeHtml", "icons"],
+      ["codeBlock", "page"],
+      ["markdown", "shell"],
       ["composer"],
       ["cli"],
     ];

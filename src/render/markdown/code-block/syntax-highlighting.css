@@ -1,0 +1,120 @@
+/*
+The syntax-highlighting palette and highlight.js token styles emitted by
+rehype-highlight. Palette variables follow the viewer's OS preference or its
+explicit theme override while staying independent of the surrounding shell.
+*/
+
+:root {
+  --syntax-keyword-c: #cf222e;
+  --syntax-entity-c: #8250df;
+  --syntax-constant-c: #0550ae;
+  --syntax-string-c: #0a3069;
+  --syntax-variable-c: #953800;
+  --syntax-comment-c: #59636e;
+  --syntax-tag-c: #116329;
+  --syntax-addition-c: #116329;
+  --syntax-addition-bg: #dafbe1;
+  --syntax-deletion-c: #82071e;
+  --syntax-deletion-bg: #ffebe9;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --syntax-keyword-c: #ff7b72;
+    --syntax-entity-c: #d2a8ff;
+    --syntax-constant-c: #79c0ff;
+    --syntax-string-c: #a5d6ff;
+    --syntax-variable-c: #ffa657;
+    --syntax-comment-c: #8b949e;
+    --syntax-tag-c: #7ee787;
+    --syntax-addition-c: #aff5b4;
+    --syntax-addition-bg: #033a16;
+    --syntax-deletion-c: #ffdcd7;
+    --syntax-deletion-bg: #67060c;
+  }
+}
+
+:root[data-theme="dark"] {
+  --syntax-keyword-c: #ff7b72;
+  --syntax-entity-c: #d2a8ff;
+  --syntax-constant-c: #79c0ff;
+  --syntax-string-c: #a5d6ff;
+  --syntax-variable-c: #ffa657;
+  --syntax-comment-c: #8b949e;
+  --syntax-tag-c: #7ee787;
+  --syntax-addition-c: #aff5b4;
+  --syntax-addition-bg: #033a16;
+  --syntax-deletion-c: #ffdcd7;
+  --syntax-deletion-bg: #67060c;
+}
+
+@layer components {
+  article .hljs-doctag,
+  article .hljs-keyword,
+  article .hljs-meta .hljs-keyword,
+  article .hljs-template-tag,
+  article .hljs-template-variable,
+  article .hljs-type,
+  article .hljs-variable.language_ {
+    color: var(--syntax-keyword-c);
+  }
+  article .hljs-title,
+  article .hljs-title.class_,
+  article .hljs-title.class_.inherited__,
+  article .hljs-title.function_ {
+    color: var(--syntax-entity-c);
+  }
+  article .hljs-attr,
+  article .hljs-attribute,
+  article .hljs-literal,
+  article .hljs-meta,
+  article .hljs-number,
+  article .hljs-operator,
+  article .hljs-variable,
+  article .hljs-selector-attr,
+  article .hljs-selector-class,
+  article .hljs-selector-id {
+    color: var(--syntax-constant-c);
+  }
+  article .hljs-regexp,
+  article .hljs-string,
+  article .hljs-meta .hljs-string {
+    color: var(--syntax-string-c);
+  }
+  article .hljs-built_in,
+  article .hljs-symbol {
+    color: var(--syntax-variable-c);
+  }
+  article .hljs-comment,
+  article .hljs-code,
+  article .hljs-formula {
+    color: var(--syntax-comment-c);
+  }
+  article .hljs-name,
+  article .hljs-quote,
+  article .hljs-selector-tag,
+  article .hljs-selector-pseudo {
+    color: var(--syntax-tag-c);
+  }
+  article .hljs-section {
+    color: var(--syntax-constant-c);
+    font-weight: 600;
+  }
+  article .hljs-bullet {
+    color: var(--syntax-variable-c);
+  }
+  article .hljs-emphasis {
+    font-style: italic;
+  }
+  article .hljs-strong {
+    font-weight: 600;
+  }
+  article .hljs-addition {
+    color: var(--syntax-addition-c);
+    background: var(--syntax-addition-bg);
+  }
+  article .hljs-deletion {
+    color: var(--syntax-deletion-c);
+    background: var(--syntax-deletion-bg);
+  }
+}

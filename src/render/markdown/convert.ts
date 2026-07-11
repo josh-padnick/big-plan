@@ -3,12 +3,14 @@
 // The page chrome around that content lives in shell.ts.
 
 import type { Element, Root, RootContent } from "hast";
+import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
 import rehypeStringify from "rehype-stringify";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
+import { rehypeDecorateCodeBlocks } from "./code-block/decorate-code-blocks.js";
 
 export type Section = {
   readonly id: string;
@@ -141,6 +143,10 @@ export const compileMarkdown = ({
       footnoteLabelProperties: { className: ["footnotes-heading"] },
     })
     .use(rehypeSlug)
+    // Detection stays opt-in through the fence language: undeclared and
+    // unknown languages remain readable without guessed tokenization.
+    .use(rehypeHighlight)
+    .use(rehypeDecorateCodeBlocks)
     .use(rehypeWrapTables);
   const tree = processor.runSync(processor.parse(markdown));
 

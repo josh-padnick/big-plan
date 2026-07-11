@@ -1,5 +1,5 @@
 // The viewer's scroll-spy, authored as real TypeScript so the compiler and
-// lint see the only behavioral JavaScript we ship. scripts/gen-scroll-spy.mjs
+// lint can validate the browser behavior. scripts/gen-browser-scripts.mjs
 // type-checks this file against tsconfig.browser.json, strips the types, and
 // embeds the result as scroll-spy.generated.ts for the shell to inline. The
 // .browser.ts suffix marks code that runs in the viewer, not in Node.

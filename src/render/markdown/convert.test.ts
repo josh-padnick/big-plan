@@ -2,7 +2,11 @@
 // section extraction edge cases, and the table scroll-container transform.
 
 import { describe, expect, it } from "vitest";
-import { compileMarkdown, serializeMarkdown } from "./convert.js";
+import { CODE_BLOCK_SELECTOR } from "./code-block/decorate-code-blocks.js";
+import {
+  compileMarkdown,
+  serializeMarkdown,
+} from "./convert.js";
 
 const compileAndSerialize = (markdown: string): string => {
   const { root } = compileMarkdown({ markdown });
@@ -84,6 +88,49 @@ describe("compileMarkdown tables", () => {
   it("should wrap a table nested inside a blockquote when tables are not top-level", () => {
     const bodyHtml = compileAndSerialize("> | a |\n> | - |\n> | 1 |\n");
     expect(bodyHtml).toContain("data-table-scroll-container");
+  });
+});
+
+describe("compileMarkdown code highlighting", () => {
+  it("should highlight a fenced block when it declares a supported language", () => {
+    const bodyHtml = compileAndSerialize(
+      "```sql\nSELECT id FROM users WHERE active = true;\n```\n",
+    );
+    expect(bodyHtml).toContain('<code class="hljs language-sql">');
+    expect(bodyHtml).toContain('<span class="hljs-keyword">SELECT</span>');
+    expect(bodyHtml).toContain('<span class="hljs-keyword">FROM</span>');
+  });
+
+  it("should leave an undeclared code block unhighlighted", () => {
+    const bodyHtml = compileAndSerialize(
+      "```\nSELECT id FROM users;\n```\n",
+    );
+    expect(bodyHtml).toContain("<pre><code>SELECT id FROM users;\n</code></pre>");
+    expect(bodyHtml).not.toContain("class=\"hljs\"");
+  });
+
+  it("should preserve a block as plain code when its declared language is unknown", () => {
+    const bodyHtml = compileAndSerialize(
+      "```grandplan-example\nplain & safe\n```\n",
+    );
+    expect(bodyHtml).toContain(
+      '<pre><code class="hljs language-grandplan-example">plain &#x26; safe\n</code></pre>',
+    );
+  });
+
+  it("should add a shadcn copy button to every block code element", () => {
+    const bodyHtml = compileAndSerialize(
+      "```sql\nSELECT 1;\n```\n\n    plain block\n",
+    );
+    expect(bodyHtml.match(new RegExp(CODE_BLOCK_SELECTOR, "g"))).toHaveLength(2);
+    expect(bodyHtml.match(/data-copy-code/g)).toHaveLength(2);
+    expect(bodyHtml).toContain('data-slot="button"');
+    expect(bodyHtml).toContain('data-variant="ghost"');
+    expect(bodyHtml).toContain('data-size="xs"');
+    expect(bodyHtml).toContain('aria-label="Copy code"');
+    expect(bodyHtml).toContain('data-lucide="copy"');
+    expect(bodyHtml).toContain('data-lucide="check" hidden');
+    expect(bodyHtml).toContain('data-copy-message="" hidden>Copied!</span>');
   });
 });
 
