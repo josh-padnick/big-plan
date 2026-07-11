@@ -10,7 +10,14 @@ import { CHECK_ICON, COPY_ICON } from "./code-block-icons.js";
 export const CODE_BLOCK_SELECTOR = "data-code-block";
 
 const COPY_BUTTON_CLASSES =
-  "code-copy-button inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "absolute top-2 right-2 inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.5 [&_[data-lucide=check]]:text-accent";
+
+// The overlaid controls need room; the trailing padding keeps long code lines
+// from running beneath the copy button.
+const WRAPPED_PRE_CLASSES = "m-0 pr-12";
+
+const COPY_MESSAGE_CLASSES =
+  "absolute top-2 right-10 flex h-6 items-center text-[0.6875rem] leading-tight font-medium whitespace-nowrap text-muted";
 
 const isElement = (node: RootContent): node is Element =>
   node.type === "element";
@@ -31,6 +38,16 @@ const decorateCodeBlocks = (node: Root | Element): void => {
     if (!hasCodeChild) {
       return child;
     }
+    const existingPreClasses = Array.isArray(child.properties.className)
+      ? child.properties.className
+      : [];
+    const wrappedPre: Element = {
+      ...child,
+      properties: {
+        ...child.properties,
+        className: [...existingPreClasses, ...WRAPPED_PRE_CLASSES.split(" ")],
+      },
+    };
     const copyButton: Element = {
       type: "element",
       tagName: "button",
@@ -53,16 +70,16 @@ const decorateCodeBlocks = (node: Root | Element): void => {
       type: "element",
       tagName: "div",
       properties: {
-        className: ["code-block"],
+        className: ["relative", "mb-[1.25em]"],
         [CODE_BLOCK_SELECTOR]: "",
       },
       children: [
-        child,
+        wrappedPre,
         {
           type: "element",
           tagName: "span",
           properties: {
-            className: ["code-copy-message"],
+            className: COPY_MESSAGE_CLASSES.split(" "),
             ariaHidden: "true",
             "data-copy-message": "",
             hidden: true,

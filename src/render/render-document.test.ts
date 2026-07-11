@@ -66,7 +66,7 @@ describe("renderDocument affordances", () => {
       "<strong>",
       "<del>",
       "<code>",
-      "<pre>",
+      "<pre",
       "<blockquote>",
       "<ul>",
       "<ol>",
