@@ -2,10 +2,9 @@
 // self-containment guarantees, and degenerate inputs.
 
 import { describe, expect, it } from "vitest";
-import { TABLE_WRAPPER_CLASSES } from "./markdown/convert.js";
 import { renderDocument } from "./render-document.js";
 
-const TABLE_WRAPPER_OPENING = `<div class="${TABLE_WRAPPER_CLASSES.join(" ")}"><table>`;
+const TABLE_SCROLL_CONTAINER = "data-table-scroll-container";
 
 // One fixture that exercises every GFM affordance the viewer must style.
 const FULL_FIXTURE = `# Plan title
@@ -72,7 +71,7 @@ describe("renderDocument affordances", () => {
       "<ul>",
       "<ol>",
       'input type="checkbox"',
-      TABLE_WRAPPER_OPENING,
+      TABLE_SCROLL_CONTAINER,
       '<a href="https://example.com/docs">',
       '<img src="data:image/png;base64,',
       "<hr>",

@@ -34,16 +34,17 @@ test("should navigate the rendered sample plan through the TOC without errors", 
   ).toBeInViewport();
 
   // The wide classification table scrolls inside its own container instead of
-  // widening the page. The parentElement hop is the contract under test: the
-  // renderer wraps every table in a dedicated scroll container.
+  // widening the page. The stable data attribute is the behavior-bearing
+  // interface; utility classes and exact nesting stay implementation detail.
   const wideTable = page.getByRole("table");
+  const tableScrollContainer = page.locator("[data-table-scroll-container]");
   await expect(wideTable).toBeVisible();
+  await expect(tableScrollContainer).toHaveCount(1);
   await expect
     .poll(() =>
-      wideTable.evaluate((table) => {
-        const container = table.parentElement;
-        return container !== null && container.scrollWidth > container.clientWidth;
-      }),
+      tableScrollContainer.evaluate(
+        (container) => container.scrollWidth > container.clientWidth,
+      ),
     )
     .toBe(true);
   await expect

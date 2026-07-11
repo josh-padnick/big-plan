@@ -1,6 +1,6 @@
-// Converts GFM markdown into body HTML plus the h2 outline the viewer's TOC
-// is built from. This is the unified-pipeline half of the renderer; the page
-// chrome around it lives in shell.ts.
+// Compiles GFM markdown into a structured HAST review document plus its title
+// and h2 outline, then owns final HTML serialization after transforms finish.
+// The page chrome around that content lives in shell.ts.
 
 import type { Element, Root, RootContent } from "hast";
 import rehypeSlug from "rehype-slug";
@@ -15,8 +15,8 @@ export type Section = {
   readonly text: string;
 };
 
-export type ConvertedMarkdown = {
-  readonly bodyHtml: string;
+export type CompiledMarkdown = {
+  readonly root: Root;
   readonly sections: ReadonlyArray<Section>;
   readonly title: string | undefined;
 };
@@ -42,9 +42,9 @@ const textOf = (node: Element): string => {
 const isElement = (node: RootContent): node is Element =>
   node.type === "element";
 
-// Tailwind utilities for the table scroll container; exported so tests can
-// assert the wrapper without duplicating the class list.
-export const TABLE_WRAPPER_CLASSES = [
+// Tailwind utilities remain private styling implementation. The data
+// attribute is the stable behavior-bearing interface used by browser tests.
+const TABLE_WRAPPER_CLASSES = [
   "mb-5",
   "overflow-x-auto",
   "rounded-md",
@@ -67,7 +67,10 @@ const wrapTables = (node: Root | Element): void => {
     const wrapper: Element = {
       type: "element",
       tagName: "div",
-      properties: { className: [...TABLE_WRAPPER_CLASSES] },
+      properties: {
+        "data-table-scroll-container": "",
+        className: [...TABLE_WRAPPER_CLASSES],
+      },
       children: [child],
     };
     return wrapper;
@@ -120,15 +123,15 @@ const collectSections = (
 };
 
 /**
- * Converts GFM markdown into body HTML, the level-two heading outline used
- * for the table of contents, and the document title (first h1, if any).
- * Pure: same input, same output.
+ * Compiles GFM markdown into a structured review document plus its outline
+ * and title. The tree stays structured so future typed-block and annotation
+ * transforms can run before the final serialization step.
  */
-export const convertMarkdown = ({
+export const compileMarkdown = ({
   markdown,
 }: {
   readonly markdown: string;
-}): ConvertedMarkdown => {
+}): CompiledMarkdown => {
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -144,6 +147,9 @@ export const convertMarkdown = ({
   const sections: Array<Section> = [];
   collectSections(tree, sections);
 
-  const bodyHtml = unified().use(rehypeStringify).stringify(tree);
-  return { bodyHtml, sections, title: findTitle(tree) };
+  return { root: tree, sections, title: findTitle(tree) };
 };
+
+/** Serializes a compiled review document only after all transforms finish. */
+export const serializeMarkdown = ({ root }: { readonly root: Root }): string =>
+  unified().use(rehypeStringify).stringify(root);

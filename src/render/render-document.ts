@@ -3,7 +3,10 @@
 // function.
 
 import type { Section } from "./markdown/convert.js";
-import { convertMarkdown } from "./markdown/convert.js";
+import {
+  compileMarkdown,
+  serializeMarkdown,
+} from "./markdown/convert.js";
 import { renderPage } from "./page.js";
 import { renderShell } from "./shell/shell.js";
 
@@ -26,11 +29,11 @@ export const renderDocument = ({
   readonly markdown: string;
   readonly fallbackTitle: string;
 }): RenderedDocument => {
-  const { bodyHtml, sections, title } = convertMarkdown({ markdown });
+  const { root, sections, title } = compileMarkdown({ markdown });
   const resolvedTitle = title ?? fallbackTitle;
   const shell = renderShell({
     nav: sections.map((section) => ({ id: section.id, label: section.text })),
-    contentHtml: bodyHtml,
+    contentHtml: serializeMarkdown({ root }),
   });
   const html = renderPage({
     title: resolvedTitle,

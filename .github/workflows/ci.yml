@@ -1,5 +1,5 @@
-# CI: lint every pushed branch, including main and same-repository PR heads.
-# Build/test jobs join this workflow as the suite grows; lint is the first gate.
+# CI: lint, build, and unit-test every pushed branch, including main and
+# same-repository PR heads.
 name: CI
 
 # Runs on every push to every branch; the run on a PR's head commit shows up
@@ -12,7 +12,7 @@ on:
 
 jobs:
   lint:
-    # Matches fabricahq/app: CI runs on the local self-hosted runner.
+    # Runs on the local self-hosted runner.
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
@@ -22,3 +22,5 @@ jobs:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
       - run: bun run lint
+      - run: bun run build
+      - run: bun run test
