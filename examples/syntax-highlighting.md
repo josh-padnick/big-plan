@@ -1,6 +1,6 @@
 # Syntax Highlighting Preview
 
-Use the theme control in the top-right corner to compare the light and dark palettes.
+Use the theme control in the top-right corner to compare the light and dark palettes, and the control on any code block to copy its exact text.
 
 ## SQL
 

@@ -3,7 +3,7 @@ The viewer's stylesheet, authored for Tailwind v4 and compiled by
 scripts/gen-css.mjs into an inlined <style> block, so rendered documents stay
 fully self-contained. The viewer is a document, not an app: one reading
 column, paper-like palettes, a modest type scale, and restrained borders.
-Light and dark are chosen by the reader's OS via prefers-color-scheme.
+Light and dark follow the reader's OS unless the theme control overrides it.
 */
 
 @import "tailwindcss" source(none);
@@ -98,9 +98,9 @@ Light and dark are chosen by the reader's OS via prefers-color-scheme.
   scroll-margin-top: 1.5rem;
 }
 
-/* Markdown-generated elements carry no class attributes for utilities to
-   target, so the reading column is styled with element selectors scoped to
-   <article>, using the same design tokens as the shell's utility classes. */
+/* Plain Markdown elements carry no class attributes for utilities to target,
+   so the reading column uses element selectors scoped to <article>. Enhanced
+   elements such as highlighted tokens and controls use emitted classes. */
 @layer components {
   article h1,
   article h2,

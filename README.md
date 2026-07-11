@@ -29,7 +29,11 @@ npx grandplan render <file.md> [output.html]
 ```
 
 The output defaults to `<file>.html` next to the input.
-It embeds all styling, makes no external requests, and includes a sticky table of contents built from the document's level-two headings.
+It embeds all styling and behavior, makes no external requests, and includes a sticky table of contents built from the document's level-two headings.
+Fenced code blocks with a supported language identifier receive syntax highlighting; undeclared and unknown languages remain plain and readable.
+Every block code sample has a copy control, and the light/dark theme control follows the system preference until the reader chooses a theme, which is remembered locally.
+
+See [the syntax-highlighting source](examples/syntax-highlighting.md) and its committed [self-contained HTML preview](examples/syntax-highlighting.html) for examples of supported fences and both palettes.
 
 ## Development
 

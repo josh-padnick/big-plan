@@ -1,10 +1,10 @@
 // Owns the review shell: the reading surface a rendered document lives in -
-// the layout grid, the sticky TOC with its scroll-spy enhancement, and the
-// content region. It produces body-level markup plus the styles and scripts
-// that markup needs, as data; packaging into a complete document is page.ts's
-// job. Authored markup is styled with Tailwind utilities; the compiled
-// stylesheet (including the element-scoped prose styles from global.css) comes
-// from the generated GLOBAL_CSS module.
+// the layout grid, theme control, sticky TOC, and content region. It produces
+// body-level markup plus the styles and progressive-enhancement scripts that
+// markup needs, as data; packaging into a complete document is page.ts's job.
+// Authored markup is styled with Tailwind utilities; the compiled stylesheet
+// (including the element-scoped prose styles from global.css) comes from the
+// generated GLOBAL_CSS module.
 
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
@@ -61,9 +61,9 @@ ${items}
 };
 
 /**
- * Wraps rendered content in the review shell: the layout grid, a sticky TOC
- * when nav entries exist, and the scroll-spy script. Returns markup plus the
- * styles and scripts it needs; the caller packages them into a page.
+ * Wraps rendered content in the review shell: the layout grid, theme control,
+ * and a sticky TOC when nav entries exist. Returns markup plus the styles and
+ * progressive-enhancement scripts it needs for the caller to package.
  */
 export const renderShell = ({
   nav,

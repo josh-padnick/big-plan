@@ -18,17 +18,18 @@ Everything runs locally, and the file on disk is the source of truth.
 
 Deliverable 1 is shipped in this repo: a static markdown viewer.
 `grandplan render <input.md> [output.html]` converts a plain GFM markdown file into a single self-contained themed HTML document with a sticky table of contents built from level-two headings.
-The output makes no external requests and reads fine with JavaScript disabled; the only script is a small inline scroll-spy enhancement.
+Declared fenced-code languages receive syntax highlighting, every block code sample gets a copy control, and readers can override the OS light/dark preference with a locally persisted theme control.
+The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, and code-copy controls.
 
 ## Architecture at a glance
 
 The pipeline is deliberately small: CLI -> renderer -> self-contained HTML.
 
 - The CLI (`src/cli/`) is built on `runAxiCli()` from `axi-sdk-js`, which owns dispatch, help, structured errors, and output serialization. Keep the integration thin; business logic never lives in the CLI layer.
-- The renderer (`src/render/`) is pure: markdown source plus a title in, complete HTML out. It uses unified (remark-parse, remark-gfm, remark-rehype, rehype-slug) to compile markdown into a structured Hypertext Abstract Syntax Tree (HAST) review document, collects the title and section outline from that tree, applies rehype transforms such as table scroll-container wrapping, and serializes with rehype-stringify only after all transforms finish.
-- The review shell (`src/render/shell/`) owns the viewer's look: one reading column, warm paper-like light and dark palettes chosen via `prefers-color-scheme`, and a sticky section TOC. The page envelope (`src/render/page.ts`) separately owns how a document is packaged and delivered (doctype, head, inlined styles and scripts); future delivery modes swap the envelope while the shell stays the same.
-- Styles are authored with Tailwind v4 in `src/render/global.css`: design tokens and utility classes for the shell markup, plus element-scoped styles for markdown content, which carries no class attributes. `scripts/gen-css.mjs` compiles that file and embeds the result as a generated TypeScript module, so rendered documents inline the full stylesheet and stay self-contained.
-- Browser-side scripts are authored as real TypeScript in `*.browser.ts` files co-located with the concern they belong to (type-checked against `tsconfig.browser.json`, which adds the DOM lib) and compiled by `scripts/gen-scroll-spy.mjs` into generated modules the shell inlines. Shipped documents never reference external code.
+- The renderer (`src/render/`) is pure: markdown source plus a title in, complete HTML out. It uses unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-highlight) to compile markdown into a structured Hypertext Abstract Syntax Tree (HAST) review document, collects the title and section outline from that tree, applies rehype transforms such as syntax highlighting, code-copy controls, and table scroll-container wrapping, and serializes with rehype-stringify only after all transforms finish.
+- The review shell (`src/render/shell/`) owns the viewer's look: one reading column, warm paper-like light and dark palettes that follow `prefers-color-scheme` until explicitly toggled, code-block controls, and a sticky section TOC. The page envelope (`src/render/page.ts`) separately owns how a document is packaged and delivered (doctype, head, inlined styles and scripts); future delivery modes swap the envelope while the shell stays the same.
+- Styles are authored with Tailwind v4 in `src/render/global.css`: design tokens and utility classes for shell and transform-generated markup, plus element-scoped styles for plain markdown elements. `scripts/gen-css.mjs` compiles that file and embeds the result as a generated TypeScript module, so rendered documents inline the full stylesheet and stay self-contained.
+- Browser-side scripts are authored as real TypeScript in `*.browser.ts` files co-located with the concern they belong to (type-checked against `tsconfig.browser.json`, which adds the DOM lib) and compiled by `scripts/gen-browser-scripts.mjs` into generated modules the shell inlines. Shipped documents never reference external code.
 
 Future deliverables build outward from this core: a typed block registry, MDX plan documents, and a local server with a browser bridge for live agent chat and comments.
 
@@ -36,8 +37,8 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 
 - `bin/` - the executable entrypoint; a thin shim over `dist/cli/`.
 - `src/cli/` - command dispatch and the `render` command.
-- `src/render/` - the pure renderer, with colocated unit tests: `markdown/` (source to structured HAST, transforms, final serialization, the section outline, and the title), `shell/` (the reading surface: markup with its own `NavEntry` contract, plus its browser-side scroll-spy), `page.ts` (the document envelope), and `render-document.ts` composing them.
-- `scripts/` - build-time generators, currently the Tailwind CSS-to-module compiler.
+- `src/render/` - the pure renderer, with colocated unit tests: `markdown/` (source to structured HAST, transforms, final serialization, the section outline, and the title), `icons/` (small inline SVG assets for renderer controls), `shell/` (the reading surface: markup with its own `NavEntry` contract, plus browser-side theme, copy, and scroll-spy enhancements), `page.ts` (the document envelope), and `render-document.ts` composing them.
+- `scripts/` - build-time generators for the Tailwind CSS module and browser-script modules.
 - `examples/` - sample plan documents used by tests and demos.
 - `test/` - the Playwright browser spec for the rendered viewer.
 - `dist/` - build output (generated, not committed).
@@ -48,7 +49,7 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 - **Package manager and script runner**: Bun (`bun install`, `bun run <script>`, `bun.lock`). Note: use `bun run test`, not `bun test` - the latter invokes Bun's own test runner instead of vitest.
 - **Language**: TypeScript, strict, compiled with tsc; browser-side scripts type-check against `tsconfig.browser.json` (DOM lib) and are transpiled into generated modules.
 - **CLI framework**: `axi-sdk-js` (dispatch, help, structured errors, TOON output).
-- **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-stringify).
+- **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-highlight, rehype-stringify).
 - **Styling**: Tailwind v4, compiled at build time by `@tailwindcss/cli` into a generated module; no runtime CSS tooling.
 - **Linting**: ESLint v10 flat config with `typescript-eslint`, project conventions, architectural boundaries, and Playwright fixture enforcement.
 - **Tests**: vitest for units (colocated in `src/**`), Playwright (chromium) for browser journeys.
@@ -59,7 +60,7 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 - Build: `bun run build` (runs `bun run gen` - stylesheet and browser scripts - then tsc to `dist/`)
 - Unit tests: `bun run test` (vitest, colocated `src/**/*.test.ts`; regenerates assets first)
 - Lint: `bun run lint` (ESLint flat config; includes the fixtures-import guardrail and the layering rules below)
-- Generators only: `bun run gen` (stylesheet via `gen:css`, browser scripts via `gen:scroll-spy`; never edit `*.generated.ts` files)
+- Generators only: `bun run gen` (stylesheet via `gen:css`, browser scripts via `gen:browser-scripts`; never edit `*.generated.ts` files)
 - Browser test: `bunx playwright test` (requires a prior build; renders the sample through the built CLI)
 - Render: `node bin/grandplan.mjs render examples/sample.md` (or `npx grandplan render <file.md>` once installed)
 
