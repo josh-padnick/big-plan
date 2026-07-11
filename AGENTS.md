@@ -25,7 +25,7 @@ The output makes no external requests and reads fine with JavaScript disabled; t
 The pipeline is deliberately small: CLI -> renderer -> self-contained HTML.
 
 - The CLI (`src/cli/`) is built on `runAxiCli()` from `axi-sdk-js`, which owns dispatch, help, structured errors, and output serialization. Keep the integration thin; business logic never lives in the CLI layer.
-- The renderer (`src/render/`) is pure: markdown source plus a title in, complete HTML out. It uses unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-stringify) plus a small rehype transform that wraps tables in scroll containers.
+- The renderer (`src/render/`) is pure: markdown source plus a title in, complete HTML out. It uses unified (remark-parse, remark-gfm, remark-rehype, rehype-slug) to compile markdown into a structured Hypertext Abstract Syntax Tree (HAST) review document, collects the title and section outline from that tree, applies rehype transforms such as table scroll-container wrapping, and serializes with rehype-stringify only after all transforms finish.
 - The review shell (`src/render/shell/`) owns the viewer's look: one reading column, warm paper-like light and dark palettes chosen via `prefers-color-scheme`, and a sticky section TOC. The page envelope (`src/render/page.ts`) separately owns how a document is packaged and delivered (doctype, head, inlined styles and scripts); future delivery modes swap the envelope while the shell stays the same.
 - Styles are authored with Tailwind v4 in `src/render/global.css`: design tokens and utility classes for the shell markup, plus element-scoped styles for markdown content, which carries no class attributes. `scripts/gen-css.mjs` compiles that file and embeds the result as a generated TypeScript module, so rendered documents inline the full stylesheet and stay self-contained.
 - Browser-side scripts are authored as real TypeScript in `*.browser.ts` files co-located with the concern they belong to (type-checked against `tsconfig.browser.json`, which adds the DOM lib) and compiled by `scripts/gen-scroll-spy.mjs` into generated modules the shell inlines. Shipped documents never reference external code.
@@ -36,7 +36,7 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 
 - `bin/` - the executable entrypoint; a thin shim over `dist/cli/`.
 - `src/cli/` - command dispatch and the `render` command.
-- `src/render/` - the pure renderer, with colocated unit tests: `markdown/` (source to HTML, the section outline, and the title), `shell/` (the reading surface: markup with its own `NavEntry` contract, plus its browser-side scroll-spy), `page.ts` (the document envelope), and `render-document.ts` composing them.
+- `src/render/` - the pure renderer, with colocated unit tests: `markdown/` (source to structured HAST, transforms, final serialization, the section outline, and the title), `shell/` (the reading surface: markup with its own `NavEntry` contract, plus its browser-side scroll-spy), `page.ts` (the document envelope), and `render-document.ts` composing them.
 - `scripts/` - build-time generators, currently the Tailwind CSS-to-module compiler.
 - `examples/` - sample plan documents used by tests and demos.
 - `test/` - the Playwright browser spec for the rendered viewer.
@@ -81,6 +81,6 @@ The conventions that matter most here:
 ## Contribution workflow
 
 - Sign off every commit for DCO: `git commit -s`.
-- CI (GitHub Actions, `.github/workflows/ci.yml`) runs `bun run lint` on every pushed branch, including `main` and same-repository PR head branches; fork PRs are not triggered yet. Build and test jobs join the same workflow as the suite grows.
+- CI (GitHub Actions, `.github/workflows/ci.yml`) runs `bun run lint`, `bun run build`, and `bun run test` on every pushed branch, including `main` and same-repository PR head branches; fork PRs are not triggered yet.
 - Work on feature branches and merge into `main`.
 - Keep PRs small and reviewable; one self-contained increment per commit where possible.
