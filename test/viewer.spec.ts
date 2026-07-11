@@ -217,20 +217,24 @@ test("should provide a compact sticky table of contents on mobile", async ({
   await expect(page.getByText("Grimm 10.0", { exact: true })).toBeVisible();
   const toc = page.getByRole("navigation", { name: "Contents" });
   const disclosure = toc.locator("details");
-  const currentSection = toc.locator("[data-current-section]");
+  const overviewLink = toc.locator("[data-overview-link]");
+  const retryStateLink = toc.locator(
+    '[data-section-link][href="#retry-state-machine"]',
+  );
   await expect(disclosure).not.toHaveAttribute("open", "");
-  await expect(currentSection).toHaveText("Overview");
+  await expect(disclosure.locator("summary")).toContainText(/Sections\s+6/);
+  await expect(overviewLink).toHaveAttribute("aria-current", "true");
 
   await disclosure.locator("summary").click();
   await expect(disclosure).toHaveAttribute("open", "");
-  await toc.getByRole("link", { name: "Retry state machine" }).click();
+  await retryStateLink.click();
   await expect(page).toHaveURL(/#retry-state-machine$/);
   await expect(disclosure).not.toHaveAttribute("open", "");
   await expect(
     page.getByRole("heading", { level: 2, name: "Retry state machine" }),
   ).toBeInViewport();
-  await expect(currentSection).toHaveText("Retry state machine");
+  await expect(retryStateLink).toHaveAttribute("aria-current", "true");
 
   await page.evaluate(() => window.scrollTo({ top: 0 }));
-  await expect(currentSection).toHaveText("Overview");
+  await expect(overviewLink).toHaveAttribute("aria-current", "true");
 });

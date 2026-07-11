@@ -23,14 +23,11 @@
   }
 
   const mobileToc = document.querySelector<HTMLElement>("[data-mobile-toc]");
-  const currentSection = document.querySelector<HTMLElement>(
-    "[data-current-section]",
-  );
   const overviewLink = document.querySelector<HTMLAnchorElement>(
     "[data-overview-link]",
   );
 
-  // Keeps both navigation variants and the mobile summary in sync.
+  // Keeps both navigation variants in sync.
   const setActive = (id: string | undefined): void => {
     for (const link of links) {
       if (decodeURIComponent(link.hash.slice(1)) === id) {
@@ -45,12 +42,6 @@
       } else {
         overviewLink.removeAttribute("aria-current");
       }
-    }
-    if (currentSection !== null) {
-      const activeLink = links.find(
-        (link) => decodeURIComponent(link.hash.slice(1)) === id,
-      );
-      currentSection.textContent = activeLink?.textContent.trim() ?? "Overview";
     }
   };
 

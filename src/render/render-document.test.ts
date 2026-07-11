@@ -87,10 +87,9 @@ describe("renderDocument affordances", () => {
     expect(html).toMatch(/<a[^>]* href="#first-section">First section<\/a>/);
   });
 
-  it("should render the mobile environment header and current-section disclosure", () => {
+  it("should render the mobile environment header and section disclosure", () => {
     expect(html).toContain("Grimm 10.0");
-    expect(html).toContain("On this page");
-    expect(html).toContain("data-current-section");
+    expect(html).toContain(">Sections</span>");
     expect(html).toContain('data-overview-link href="#top"');
   });
 

@@ -94,8 +94,8 @@ const renderMobileChrome = ({
 <nav class="sticky top-0 z-10 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden" data-mobile-toc aria-label="Contents">
 <details class="group relative mx-auto max-w-[70ch]">
 <summary class="flex min-h-14 cursor-pointer list-none items-center gap-3 px-5 py-3 [&amp;::-webkit-details-marker]:hidden">
-<span class="shrink-0 font-semibold text-ink">On this page</span>
-<span class="ml-auto min-w-0 truncate text-right text-muted" data-current-section>Overview</span>
+<span class="font-semibold text-ink">Sections</span>
+<span class="flex min-w-6 items-center justify-center rounded-full bg-surface px-2 py-0.5 text-xs font-medium tabular-nums text-muted">${nav.length}</span>
 <svg class="size-4 shrink-0 text-muted transition-transform group-open:rotate-90" aria-hidden="true" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 4.96a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 1 1-1.06-1.06L11.18 10 7.21 6.02a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
 </summary>
 <div class="absolute inset-x-0 top-full max-h-[min(70vh,24rem)] overflow-y-auto overscroll-contain border-y border-edge bg-paper py-2 shadow-lg">
