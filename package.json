@@ -22,11 +22,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "gen": "bun run gen:css && bun run gen:scroll-spy && bun run gen:theme-toggle && bun run gen:copy-code",
+    "gen": "bun run gen:css && bun run gen:browser-scripts",
     "gen:css": "node scripts/gen-css.mjs",
-    "gen:scroll-spy": "node scripts/gen-scroll-spy.mjs",
-    "gen:theme-toggle": "node scripts/gen-theme-toggle.mjs",
-    "gen:copy-code": "node scripts/gen-copy-code.mjs",
+    "gen:browser-scripts": "node scripts/gen-browser-scripts.mjs",
     "build": "bun run gen && tsc",
     "test": "bun run gen && vitest run",
     "test:e2e": "playwright test",

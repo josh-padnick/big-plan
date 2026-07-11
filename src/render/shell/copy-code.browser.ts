@@ -3,28 +3,33 @@
 // the browser behavior independent of either renderer.
 
 const COPY_RESET_MS = 2_000;
-const copyResetTimers = new WeakMap<HTMLButtonElement, number>();
+const copyStatusTimers = new WeakMap<HTMLButtonElement, number>();
+type CopyStatus = "idle" | "success" | "failure";
 
-const setCopiedState = ({
+const setCopyStatus = ({
   button,
-  copied,
+  status,
 }: {
   readonly button: HTMLButtonElement;
-  readonly copied: boolean;
+  readonly status: CopyStatus;
 }): void => {
   const copyIcon = button.querySelector<SVGElement>('[data-lucide="copy"]');
   const checkIcon = button.querySelector<SVGElement>('[data-lucide="check"]');
   const message = button
     .closest("[data-code-block]")
     ?.querySelector<HTMLElement>("[data-copy-message]");
+  const succeeded = status === "success";
   if (copyIcon !== null) {
-    copyIcon.toggleAttribute("hidden", copied);
+    copyIcon.toggleAttribute("hidden", succeeded);
   }
   if (checkIcon !== null) {
-    checkIcon.toggleAttribute("hidden", !copied);
+    checkIcon.toggleAttribute("hidden", !succeeded);
   }
   if (message !== null && message !== undefined) {
-    message.hidden = !copied;
+    if (status !== "idle") {
+      message.textContent = status === "success" ? "Copied!" : "Could not copy";
+    }
+    message.hidden = status === "idle";
   }
 };
 
@@ -56,19 +61,28 @@ const writeClipboard = async (value: string): Promise<void> => {
 
 // Reports copy state in both visible and accessible text, then restores the
 // idle label so repeated copies remain clear.
-const showCopied = (button: HTMLButtonElement): void => {
-  const previousTimer = copyResetTimers.get(button);
+const showCopyStatus = ({
+  button,
+  status,
+}: {
+  readonly button: HTMLButtonElement;
+  readonly status: Exclude<CopyStatus, "idle">;
+}): void => {
+  const previousTimer = copyStatusTimers.get(button);
   if (previousTimer !== undefined) {
     window.clearTimeout(previousTimer);
   }
-  setCopiedState({ button, copied: true });
-  button.setAttribute("aria-label", "Code copied");
+  setCopyStatus({ button, status });
+  button.setAttribute(
+    "aria-label",
+    status === "success" ? "Code copied" : "Could not copy code",
+  );
   const timer = window.setTimeout(() => {
-    setCopiedState({ button, copied: false });
+    setCopyStatus({ button, status: "idle" });
     button.setAttribute("aria-label", "Copy code");
-    copyResetTimers.delete(button);
+    copyStatusTimers.delete(button);
   }, COPY_RESET_MS);
-  copyResetTimers.set(button, timer);
+  copyStatusTimers.set(button, timer);
 };
 
 for (const button of document.querySelectorAll<HTMLButtonElement>(
@@ -82,9 +96,9 @@ for (const button of document.querySelectorAll<HTMLButtonElement>(
     }
     try {
       await writeClipboard(code.textContent ?? "");
-      showCopied(button);
+      showCopyStatus({ button, status: "success" });
     } catch {
-      button.setAttribute("aria-label", "Could not copy code");
+      showCopyStatus({ button, status: "failure" });
     }
     if (event.detail === 0) {
       button.focus();

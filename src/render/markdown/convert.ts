@@ -3,7 +3,6 @@
 // The page chrome around that content lives in shell.ts.
 
 import type { Element, Root, RootContent } from "hast";
-import { Check, Copy } from "lucide";
 import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
 import rehypeStringify from "rehype-stringify";
@@ -11,6 +10,7 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
+import { CHECK_ICON, COPY_ICON } from "../icons/code-block-icons.js";
 import { renderLucideIcon } from "../icons/lucide-icon.js";
 
 export type Section = {
@@ -121,8 +121,8 @@ const wrapCodeBlocks = (node: Root | Element): void => {
         "data-variant": "ghost",
       },
       children: [
-        renderLucideIcon({ icon: Copy, name: "copy", hidden: false }),
-        renderLucideIcon({ icon: Check, name: "check", hidden: true }),
+        renderLucideIcon({ icon: COPY_ICON, name: "copy", hidden: false }),
+        renderLucideIcon({ icon: CHECK_ICON, name: "check", hidden: true }),
       ],
     };
     const wrapper: Element = {

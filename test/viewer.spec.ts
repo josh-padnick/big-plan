@@ -157,3 +157,33 @@ test("should copy the exact code-block text", async ({
   });
   expect(copiedStateFits).toBe(true);
 });
+
+test("should show and reset a visible message when copying fails", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.goto(sampleViewerUrl);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: () => Promise.reject(new Error("denied")) },
+    });
+    document.execCommand = () => false;
+  });
+
+  const copyButton = page.locator("[data-copy-code]").first();
+  const copyMessage = copyButton
+    .locator("xpath=ancestor::*[@data-code-block]")
+    .locator("[data-copy-message]");
+
+  await copyButton.click();
+
+  await expect(copyButton).toHaveAccessibleName("Could not copy code");
+  await expect(copyMessage).toBeVisible();
+  await expect(copyMessage).toHaveText("Could not copy");
+  await expect(copyButton.locator('[data-lucide="copy"]')).toBeVisible();
+  await expect(copyButton.locator('[data-lucide="check"]')).toBeHidden();
+
+  await expect(copyButton).toHaveAccessibleName("Copy code", { timeout: 3_000 });
+  await expect(copyMessage).toBeHidden();
+});
