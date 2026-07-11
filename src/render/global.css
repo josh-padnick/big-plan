@@ -69,6 +69,14 @@ Light and dark follow the reader's OS unless the theme control overrides it.
 /* Plain Markdown elements carry no class attributes for utilities to target,
    so the reading column uses element selectors scoped to <article>. Enhanced
    elements such as highlighted tokens and controls use emitted classes. */
+
+/* Mobile section links land below the sticky TOC rather than beneath it. */
+@media (width < 56rem) {
+  :target {
+    scroll-margin-top: 5rem;
+  }
+}
+
 @layer components {
   article h1,
   article h2,

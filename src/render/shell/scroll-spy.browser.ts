@@ -10,7 +10,7 @@
 (() => {
   const links = Array.from(
     document.querySelectorAll<HTMLAnchorElement>(
-      'nav[aria-label="Contents"] a[href^="#"]',
+      'nav[aria-label="Contents"] a[data-section-link]',
     ),
   );
   const headings = links
@@ -20,7 +20,16 @@
     return;
   }
 
-  const setActive = (id: string): void => {
+  const mobileToc = document.querySelector<HTMLElement>("[data-mobile-toc]");
+  const currentSection = document.querySelector<HTMLElement>(
+    "[data-current-section]",
+  );
+  const overviewLink = document.querySelector<HTMLAnchorElement>(
+    "[data-overview-link]",
+  );
+
+  // Keeps both navigation variants and the mobile summary in sync.
+  const setActive = (id: string | undefined): void => {
     for (const link of links) {
       if (decodeURIComponent(link.hash.slice(1)) === id) {
         link.setAttribute("aria-current", "true");
@@ -28,23 +37,46 @@
         link.removeAttribute("aria-current");
       }
     }
+    if (overviewLink !== null) {
+      if (id === undefined) {
+        overviewLink.setAttribute("aria-current", "true");
+      } else {
+        overviewLink.removeAttribute("aria-current");
+      }
+    }
+    if (currentSection !== null) {
+      const activeLink = links.find(
+        (link) => decodeURIComponent(link.hash.slice(1)) === id,
+      );
+      currentSection.textContent = activeLink?.textContent.trim() ?? "Overview";
+    }
   };
 
   let queued = false;
   const update = (): void => {
     queued = false;
-    let current = headings[0];
+    const mobileTocBottom = mobileToc?.getBoundingClientRect().bottom ?? 0;
+    // The extra breathing room matches the mobile target scroll margin, so a
+    // section becomes current as soon as its anchored heading settles in view.
+    const threshold = mobileTocBottom > 0 ? mobileTocBottom + 32 : 96;
+    let current: HTMLElement | undefined;
     for (const heading of headings) {
-      if (heading.getBoundingClientRect().top <= 96) {
+      if (heading.getBoundingClientRect().top <= threshold) {
         current = heading;
       } else {
         break;
       }
     }
-    if (current !== undefined) {
-      setActive(current.id);
-    }
+    setActive(current?.id);
   };
+
+  const mobileDetails = mobileToc?.querySelector("details");
+  mobileDetails?.addEventListener("click", (event) => {
+    const target = event.target;
+    if (target instanceof HTMLAnchorElement) {
+      mobileDetails.removeAttribute("open");
+    }
+  });
 
   document.addEventListener(
     "scroll",

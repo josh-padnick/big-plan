@@ -87,6 +87,23 @@ describe("renderDocument affordances", () => {
     expect(html).toMatch(/<a[^>]* href="#first-section">First section<\/a>/);
   });
 
+  it("should render the mobile environment header and current-section disclosure", () => {
+    expect(html).toContain("Grimm 10.0");
+    expect(html).toContain("On this page");
+    expect(html).toContain("data-current-section");
+    expect(html).toContain('data-overview-link href="#top"');
+  });
+
+  it("should escape a custom environment label", () => {
+    const { html: customHtml } = renderDocument({
+      markdown: FULL_FIXTURE,
+      fallbackTitle: "Fallback",
+      environmentLabel: '<script>"unsafe"</script>',
+    });
+    expect(customHtml).toContain("&lt;script&gt;&quot;unsafe&quot;&lt;/script&gt;");
+    expect(customHtml).not.toContain('<script>"unsafe"</script>');
+  });
+
   it("should be self-contained when the document links to external sites", () => {
     // The browser only fetches src/link/script resources; <a href> is inert
     // navigation, so external content links do not break self-containment.

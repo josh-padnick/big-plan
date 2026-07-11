@@ -39,24 +39,71 @@ const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,70ch)]`;
 
 const TOC_LINK_CLASSES =
   "block border-l-2 border-edge px-3 py-[0.3rem] text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:font-semibold aria-[current=true]:text-accent";
+const MOBILE_TOC_LINK_CLASSES =
+  "block border-l-2 border-transparent px-5 py-2.5 text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:font-semibold aria-[current=true]:text-accent";
 
 const THEME_TOGGLE_CLASSES =
   "fixed top-3 right-3 z-10 rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted shadow-sm hover:text-ink focus:outline-2 focus:outline-offset-2 focus:outline-accent";
 
 // Builds the sidebar nav; ids are URI-encoded because slugs may contain
 // characters that are not literal-safe inside href values.
-const renderToc = (nav: ReadonlyArray<NavEntry>): string => {
-  const items = nav
+const renderTocItems = ({
+  nav,
+  linkClasses,
+}: {
+  readonly nav: ReadonlyArray<NavEntry>;
+  readonly linkClasses: string;
+}): string =>
+  nav
     .map(
       (entry) =>
-        `<li><a class="${TOC_LINK_CLASSES}" href="#${encodeURIComponent(entry.id)}">${escapeHtml(entry.label)}</a></li>`,
+        `<li><a class="${linkClasses}" data-section-link href="#${encodeURIComponent(entry.id)}">${escapeHtml(entry.label)}</a></li>`,
     )
     .join("\n");
-  return `<nav class="border-b border-edge pb-6 text-sm leading-normal wide:sticky wide:top-12 wide:self-start wide:border-b-0 wide:pb-0" aria-label="Contents">
+
+// Builds the desktop sidebar navigation.
+const renderDesktopToc = (nav: ReadonlyArray<NavEntry>): string => {
+  const items = renderTocItems({ nav, linkClasses: TOC_LINK_CLASSES });
+  return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-12 wide:block wide:self-start" aria-label="Contents">
 <p class="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-muted">Contents</p>
 <ol>
 ${items}
 </ol>
+</nav>`;
+};
+
+// Builds the compact mobile header and sticky, progressively enhanced TOC.
+const renderMobileChrome = ({
+  nav,
+  environmentLabel,
+}: {
+  readonly nav: ReadonlyArray<NavEntry>;
+  readonly environmentLabel: string;
+}): string => {
+  const items = renderTocItems({ nav, linkClasses: MOBILE_TOC_LINK_CLASSES });
+  return `<header class="border-b border-edge px-5 py-4 wide:hidden">
+<div class="mx-auto flex max-w-[70ch] items-center gap-3">
+<span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-accent text-sm font-bold text-paper" aria-hidden="true">G</span>
+<div class="min-w-0">
+<p class="truncate text-sm font-semibold leading-tight text-ink">${escapeHtml(environmentLabel)}</p>
+<p class="mt-0.5 text-xs leading-tight text-muted">Plan review</p>
+</div>
+</div>
+</header>
+<nav class="sticky top-0 z-10 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden" data-mobile-toc aria-label="Contents">
+<details class="group relative mx-auto max-w-[70ch]">
+<summary class="flex min-h-14 cursor-pointer list-none items-center gap-3 px-5 py-3 [&amp;::-webkit-details-marker]:hidden">
+<span class="shrink-0 font-semibold text-ink">On this page</span>
+<span class="ml-auto min-w-0 truncate text-right text-muted" data-current-section>Overview</span>
+<svg class="size-4 shrink-0 text-muted transition-transform group-open:rotate-90" aria-hidden="true" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 4.96a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 1 1-1.06-1.06L11.18 10 7.21 6.02a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
+</summary>
+<div class="absolute inset-x-0 top-full max-h-[min(70vh,24rem)] overflow-y-auto overscroll-contain border-y border-edge bg-paper py-2 shadow-lg">
+<ol>
+<li><a class="${MOBILE_TOC_LINK_CLASSES}" data-overview-link href="#top">Overview</a></li>
+${items}
+</ol>
+</div>
+</details>
 </nav>`;
 };
 
@@ -68,15 +115,18 @@ ${items}
 export const renderShell = ({
   nav,
   contentHtml,
+  environmentLabel,
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
   readonly contentHtml: string;
+  readonly environmentLabel: string;
 }): ShellResult => {
   const hasToc = nav.length > 0;
   const html = `<button class="${THEME_TOGGLE_CLASSES}" type="button" data-theme-toggle aria-label="Toggle color theme">Theme</button>
+${hasToc ? renderMobileChrome({ nav, environmentLabel }) : ""}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}">
-${hasToc ? renderToc(nav) : ""}
-<main class="min-w-0">
+${hasToc ? renderDesktopToc(nav) : ""}
+<main class="min-w-0" id="top">
 <article>
 ${contentHtml}
 </article>

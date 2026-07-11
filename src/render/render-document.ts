@@ -16,6 +16,8 @@ export type RenderedDocument = {
   readonly sections: ReadonlyArray<Section>;
 };
 
+const DEFAULT_ENVIRONMENT_LABEL = "Grimm 10.0";
+
 /**
  * Renders GFM markdown into a complete, self-contained HTML review document.
  * The title is the document's first h1 when present, otherwise the caller's
@@ -25,15 +27,18 @@ export type RenderedDocument = {
 export const renderDocument = ({
   markdown,
   fallbackTitle,
+  environmentLabel = DEFAULT_ENVIRONMENT_LABEL,
 }: {
   readonly markdown: string;
   readonly fallbackTitle: string;
+  readonly environmentLabel?: string;
 }): RenderedDocument => {
   const { root, sections, title } = compileMarkdown({ markdown });
   const resolvedTitle = title ?? fallbackTitle;
   const shell = renderShell({
     nav: sections.map((section) => ({ id: section.id, label: section.text })),
     contentHtml: serializeMarkdown({ root }),
+    environmentLabel,
   });
   const html = renderPage({
     title: resolvedTitle,

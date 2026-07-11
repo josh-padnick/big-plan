@@ -206,3 +206,31 @@ test("should show and reset a visible message when copying fails", async ({
   await expect(copyButton).toHaveAccessibleName("Copy code", { timeout: 3_000 });
   await expect(copyMessage).toBeHidden();
 });
+
+test("should provide a compact sticky table of contents on mobile", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(sampleViewerUrl);
+
+  await expect(page.getByText("Grimm 10.0", { exact: true })).toBeVisible();
+  const toc = page.getByRole("navigation", { name: "Contents" });
+  const disclosure = toc.locator("details");
+  const currentSection = toc.locator("[data-current-section]");
+  await expect(disclosure).not.toHaveAttribute("open", "");
+  await expect(currentSection).toHaveText("Overview");
+
+  await disclosure.locator("summary").click();
+  await expect(disclosure).toHaveAttribute("open", "");
+  await toc.getByRole("link", { name: "Retry state machine" }).click();
+  await expect(page).toHaveURL(/#retry-state-machine$/);
+  await expect(disclosure).not.toHaveAttribute("open", "");
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Retry state machine" }),
+  ).toBeInViewport();
+  await expect(currentSection).toHaveText("Retry state machine");
+
+  await page.evaluate(() => window.scrollTo({ top: 0 }));
+  await expect(currentSection).toHaveText("Overview");
+});
