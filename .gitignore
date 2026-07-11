@@ -4,3 +4,4 @@ src/**/*.generated.ts
 test-results/
 playwright-report/
 examples/*.html
+!examples/syntax-highlighting.html
