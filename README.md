@@ -29,7 +29,9 @@ npx grandplan render <file.md> [output.html]
 ```
 
 The output defaults to `<file>.html` next to the input.
-It embeds all styling and behavior, makes no external requests, and includes a sticky table of contents built from the document's level-two headings.
+It embeds all styling and behavior, makes no external requests, and builds its table of contents from the document's level-two headings.
+On wide screens the contents stay in a sticky sidebar; on narrower screens a sticky `Sections` menu shows the section count beneath a compact `Grimm 10.0` plan-review header.
+Both variants track the current section as the reader scrolls, and section links scroll smoothly unless the reader has requested reduced motion.
 Fenced code blocks with a supported language identifier receive syntax highlighting; undeclared and unknown languages remain plain and readable.
 Every block code sample has a copy control, and the light/dark theme control follows the system preference until the reader chooses a theme, which is remembered locally.
 

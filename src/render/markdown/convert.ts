@@ -1,6 +1,6 @@
-// Compiles GFM markdown into a structured HAST review document plus its title
-// and h2 outline, then owns final HTML serialization after transforms finish.
-// The page chrome around that content lives in shell.ts.
+// Compiles GFM markdown into a structured HAST review document plus its title,
+// h2 outline, and element ids, then owns final HTML serialization after
+// transforms finish. The page chrome around that content lives in shell.ts.
 
 import type { Element, Root, RootContent } from "hast";
 import rehypeHighlight from "rehype-highlight";
@@ -20,6 +20,7 @@ export type Section = {
 export type CompiledMarkdown = {
   readonly root: Root;
   readonly sections: ReadonlyArray<Section>;
+  readonly elementIds: ReadonlyArray<string>;
   readonly title: string | undefined;
 };
 
@@ -124,10 +125,28 @@ const collectSections = (
   }
 };
 
+// Gathers ids from rendered elements for page-shell namespace allocation.
+const collectElementIds = (
+  node: Root | Element,
+  elementIds: Array<string>,
+): void => {
+  for (const child of node.children) {
+    if (!isElement(child)) {
+      continue;
+    }
+    const id = child.properties.id;
+    if (typeof id === "string") {
+      elementIds.push(id);
+    }
+    collectElementIds(child, elementIds);
+  }
+};
+
 /**
- * Compiles GFM markdown into a structured review document plus its outline
- * and title. The tree stays structured so future typed-block and annotation
- * transforms can run before the final serialization step.
+ * Compiles GFM markdown into a structured review document plus its outline,
+ * title, and element ids for collision-free shell anchors. The tree stays
+ * structured so future typed-block and annotation transforms can run before
+ * the final serialization step.
  */
 export const compileMarkdown = ({
   markdown,
@@ -152,8 +171,10 @@ export const compileMarkdown = ({
 
   const sections: Array<Section> = [];
   collectSections(tree, sections);
+  const elementIds: Array<string> = [];
+  collectElementIds(tree, elementIds);
 
-  return { root: tree, sections, title: findTitle(tree) };
+  return { root: tree, sections, elementIds, title: findTitle(tree) };
 };
 
 /** Serializes a compiled review document only after all transforms finish. */

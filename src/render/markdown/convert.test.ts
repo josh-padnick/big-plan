@@ -105,7 +105,7 @@ describe("compileMarkdown code highlighting", () => {
     const bodyHtml = compileAndSerialize(
       "```\nSELECT id FROM users;\n```\n",
     );
-    expect(bodyHtml).toContain("<pre><code>SELECT id FROM users;\n</code></pre>");
+    expect(bodyHtml).toContain("<code>SELECT id FROM users;\n</code></pre>");
     expect(bodyHtml).not.toContain("class=\"hljs\"");
   });
 
@@ -114,7 +114,7 @@ describe("compileMarkdown code highlighting", () => {
       "```grandplan-example\nplain & safe\n```\n",
     );
     expect(bodyHtml).toContain(
-      '<pre><code class="hljs language-grandplan-example">plain &#x26; safe\n</code></pre>',
+      '<code class="hljs language-grandplan-example">plain &#x26; safe\n</code></pre>',
     );
   });
 

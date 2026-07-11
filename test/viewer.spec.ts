@@ -26,12 +26,27 @@ test("should navigate the rendered sample plan through the TOC without errors", 
     "Rollout plan",
   ]);
 
-  // Clicking a TOC entry navigates to that section.
+  // Clicking a TOC entry glides to that section (reduced motion keeps jumps).
+  expect(
+    await page.evaluate(
+      () => getComputedStyle(document.documentElement).scrollBehavior,
+    ),
+  ).toBe("smooth");
   await toc.getByRole("link", { name: "Rollout plan" }).click();
   await expect(page).toHaveURL(/#rollout-plan$/);
   await expect(
     page.getByRole("heading", { level: 2, name: "Rollout plan" }),
   ).toBeInViewport();
+
+  // The short final section can never lift its heading past the spy
+  // threshold, so reaching the bottom must still mark it current.
+  await page.evaluate(() =>
+    window.scrollTo({ top: document.documentElement.scrollHeight }),
+  );
+  await expect(toc.getByRole("link", { name: "Rollout plan" })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
 
   // The wide classification table scrolls inside its own container instead of
   // widening the page. The stable data attribute is the behavior-bearing
@@ -205,4 +220,48 @@ test("should show and reset a visible message when copying fails", async ({
 
   await expect(copyButton).toHaveAccessibleName("Copy code", { timeout: 3_000 });
   await expect(copyMessage).toBeHidden();
+});
+
+test("should provide a compact sticky table of contents on mobile", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(sampleViewerUrl);
+
+  await expect(page.getByText("Grimm 10.0", { exact: true })).toBeVisible();
+  const toc = page.getByRole("navigation", { name: "Contents" });
+  const disclosure = toc.locator("details");
+  const overviewLink = toc.locator("[data-overview-link]");
+  const retryStateLink = toc.locator(
+    '[data-section-link][href="#retry-state-machine"]',
+  );
+  await expect(disclosure).not.toHaveAttribute("open", "");
+  await expect(disclosure.locator("summary")).toContainText(/Sections\s+6/);
+  await expect(overviewLink).toHaveAttribute("aria-current", "true");
+
+  await disclosure.locator("summary").click();
+  await expect(disclosure).toHaveAttribute("open", "");
+  await retryStateLink.click();
+  await expect(page).toHaveURL(/#retry-state-machine$/);
+  await expect(disclosure).not.toHaveAttribute("open", "");
+  await expect(disclosure.locator("summary")).toBeFocused();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Retry state machine" }),
+  ).toBeInViewport();
+  await expect(retryStateLink).toHaveAttribute("aria-current", "true");
+
+  const themeToggle = page.getByRole("button", {
+    name: /Use (?:light|dark) theme/,
+  });
+  const requestedTheme = (await themeToggle.getAttribute("aria-label"))?.includes(
+    "dark",
+  )
+    ? "dark"
+    : "light";
+  await themeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", requestedTheme);
+
+  await page.evaluate(() => window.scrollTo({ top: 0 }));
+  await expect(overviewLink).toHaveAttribute("aria-current", "true");
 });

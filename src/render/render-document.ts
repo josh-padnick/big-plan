@@ -16,24 +16,31 @@ export type RenderedDocument = {
   readonly sections: ReadonlyArray<Section>;
 };
 
+const DEFAULT_ENVIRONMENT_LABEL = "Grimm 10.0";
+
 /**
  * Renders GFM markdown into a complete, self-contained HTML review document.
  * The title is the document's first h1 when present, otherwise the caller's
- * fallback. Pure: no I/O, so callers own where the markdown comes from and
- * where the HTML goes.
+ * fallback. The optional environment label identifies the plan in the mobile
+ * header and defaults to Grimm 10.0. Pure: no I/O, so callers own where the
+ * markdown comes from and where the HTML goes.
  */
 export const renderDocument = ({
   markdown,
   fallbackTitle,
+  environmentLabel = DEFAULT_ENVIRONMENT_LABEL,
 }: {
   readonly markdown: string;
   readonly fallbackTitle: string;
+  readonly environmentLabel?: string;
 }): RenderedDocument => {
-  const { root, sections, title } = compileMarkdown({ markdown });
+  const { root, sections, elementIds, title } = compileMarkdown({ markdown });
   const resolvedTitle = title ?? fallbackTitle;
   const shell = renderShell({
     nav: sections.map((section) => ({ id: section.id, label: section.text })),
+    contentIds: elementIds,
     contentHtml: serializeMarkdown({ root }),
+    environmentLabel,
   });
   const html = renderPage({
     title: resolvedTitle,
