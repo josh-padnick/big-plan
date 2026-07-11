@@ -44,7 +44,7 @@ const MOBILE_TOC_LINK_CLASSES =
   "block border-l-2 border-transparent px-5 py-2.5 text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:font-semibold aria-[current=true]:text-accent";
 
 const THEME_TOGGLE_CLASSES =
-  "fixed top-3 right-3 z-10 rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted shadow-sm hover:text-ink focus:outline-2 focus:outline-offset-2 focus:outline-accent";
+  "fixed top-3 right-3 z-20 rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted shadow-sm hover:text-ink focus:outline-2 focus:outline-offset-2 focus:outline-accent";
 
 // Builds links shared by both TOCs; ids are URI-encoded because slugs may
 // contain characters that are not literal-safe inside href values.

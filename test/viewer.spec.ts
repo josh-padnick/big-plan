@@ -230,10 +230,22 @@ test("should provide a compact sticky table of contents on mobile", async ({
   await retryStateLink.click();
   await expect(page).toHaveURL(/#retry-state-machine$/);
   await expect(disclosure).not.toHaveAttribute("open", "");
+  await expect(disclosure.locator("summary")).toBeFocused();
   await expect(
     page.getByRole("heading", { level: 2, name: "Retry state machine" }),
   ).toBeInViewport();
   await expect(retryStateLink).toHaveAttribute("aria-current", "true");
+
+  const themeToggle = page.getByRole("button", {
+    name: /Use (?:light|dark) theme/,
+  });
+  const requestedTheme = (await themeToggle.getAttribute("aria-label"))?.includes(
+    "dark",
+  )
+    ? "dark"
+    : "light";
+  await themeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", requestedTheme);
 
   await page.evaluate(() => window.scrollTo({ top: 0 }));
   await expect(overviewLink).toHaveAttribute("aria-current", "true");
