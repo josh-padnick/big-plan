@@ -1,10 +1,11 @@
 // Owns the review shell: the reading surface a rendered document lives in -
-// the layout grid, theme control, sticky TOC, and content region. It produces
-// body-level markup plus the styles and progressive-enhancement scripts that
-// markup needs, as data; packaging into a complete document is page.ts's job.
-// Authored markup is styled with Tailwind utilities; the compiled stylesheet
-// (including the element-scoped prose styles from global.css) comes from the
-// generated GLOBAL_CSS module.
+// the layout grid, theme control, responsive desktop and mobile navigation,
+// code-block controls, and content region. It produces body-level markup plus
+// the styles and progressive-enhancement scripts that markup needs, as data;
+// packaging into a complete document is page.ts's job. Authored markup is
+// styled with Tailwind utilities; the compiled stylesheet (including the
+// element-scoped prose styles from global.css) comes from the generated
+// GLOBAL_CSS module.
 
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
@@ -45,8 +46,8 @@ const MOBILE_TOC_LINK_CLASSES =
 const THEME_TOGGLE_CLASSES =
   "fixed top-3 right-3 z-10 rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted shadow-sm hover:text-ink focus:outline-2 focus:outline-offset-2 focus:outline-accent";
 
-// Builds the sidebar nav; ids are URI-encoded because slugs may contain
-// characters that are not literal-safe inside href values.
+// Builds links shared by both TOCs; ids are URI-encoded because slugs may
+// contain characters that are not literal-safe inside href values.
 const renderTocItems = ({
   nav,
   linkClasses,
@@ -108,9 +109,11 @@ ${items}
 };
 
 /**
- * Wraps rendered content in the review shell: the layout grid, theme control,
- * and a sticky TOC when nav entries exist. Returns markup plus the styles and
- * progressive-enhancement scripts it needs for the caller to package.
+ * Wraps rendered content in the review shell: the layout grid, responsive
+ * desktop and mobile navigation when nav entries exist, theme control, and
+ * code-block controls. The environment label identifies the plan in the mobile
+ * header. Returns markup plus the styles and progressive-enhancement scripts
+ * the caller packages into a page.
  */
 export const renderShell = ({
   nav,

@@ -21,8 +21,9 @@ const DEFAULT_ENVIRONMENT_LABEL = "Grimm 10.0";
 /**
  * Renders GFM markdown into a complete, self-contained HTML review document.
  * The title is the document's first h1 when present, otherwise the caller's
- * fallback. Pure: no I/O, so callers own where the markdown comes from and
- * where the HTML goes.
+ * fallback. The optional environment label identifies the plan in the mobile
+ * header and defaults to Grimm 10.0. Pure: no I/O, so callers own where the
+ * markdown comes from and where the HTML goes.
  */
 export const renderDocument = ({
   markdown,

@@ -3,9 +3,11 @@
 // type-checks this file against tsconfig.browser.json, strips the types, and
 // embeds the result as scroll-spy.generated.ts for the shell to inline. The
 // .browser.ts suffix marks code that runs in the viewer, not in Node.
-// Progressive enhancement only: the document reads fine without it. This file
-// is a script, not a module - no imports or exports - so the emitted output
-// can be inlined directly into a <script> tag.
+// Progressive enhancement only: it synchronizes both TOCs, updates the mobile
+// current-section summary, and closes the mobile disclosure after navigation;
+// the document still reads fine without it. This file is a script, not a
+// module - no imports or exports - so the emitted output can be inlined
+// directly into a <script> tag.
 
 (() => {
   const links = Array.from(
