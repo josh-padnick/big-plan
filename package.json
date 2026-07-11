@@ -22,7 +22,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "gen": "bun run gen:css && bun run gen:browser-scripts",
+    "gen": "bun run gen:css && bun run gen:browser-scripts && bun run gen:assets",
+    "gen:assets": "node scripts/gen-assets.mjs",
     "gen:css": "node scripts/gen-css.mjs",
     "gen:browser-scripts": "node scripts/gen-browser-scripts.mjs",
     "build": "bun run gen && tsc",
