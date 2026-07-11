@@ -69,7 +69,7 @@ export default tseslint.config(
       blocks: {
         files: ["src/render/markdown/blocks/**/*.ts"],
         imports: ["**/markdown/blocks/**"],
-        mayImport: [],
+        mayImport: ["icons", "codeBlock"],
       },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
@@ -111,8 +111,9 @@ export default tseslint.config(
 
     // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
-      ["escapeHtml", "icons", "blocks"],
+      ["escapeHtml", "icons"],
       ["codeBlock", "page"],
+      ["blocks"],
       ["markdown", "shell"],
       ["composer"],
       ["cli"],

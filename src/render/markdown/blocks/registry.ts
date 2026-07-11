@@ -2,6 +2,7 @@
 // converted to HAST: validation, dispatch, and removal of every MDX node.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
+import { renderCallout } from "./callout/callout.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
 
 type MdxJsxFlowElement = Extract<
@@ -19,7 +20,9 @@ export type BlockRenderer = (input: {
   readonly diagnostics: DiagnosticCollector;
 }) => Element;
 
-export const BLOCK_REGISTRY: Readonly<Record<string, BlockRenderer>> = {};
+export const BLOCK_REGISTRY: Readonly<Record<string, BlockRenderer>> = {
+  Callout: renderCallout,
+};
 
 const isMdxNodeType = (type: string): boolean => type.startsWith("mdx");
 

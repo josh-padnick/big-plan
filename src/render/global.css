@@ -107,3 +107,37 @@ Light and dark follow the reader's OS unless the theme control overrides it.
     scroll-margin-top: 7rem;
   }
 }
+
+@layer components {
+  article [data-callout] {
+    background: var(--callout-bg);
+    border-left-color: var(--callout-accent);
+  }
+  article [data-callout="note"] {
+    --callout-accent: var(--callout-note-c);
+    --callout-bg: var(--callout-note-bg);
+  }
+  article [data-callout="tip"] {
+    --callout-accent: var(--callout-tip-c);
+    --callout-bg: var(--callout-tip-bg);
+  }
+  article [data-callout="warning"] {
+    --callout-accent: var(--callout-warning-c);
+    --callout-bg: var(--callout-warning-bg);
+  }
+  article [data-callout="danger"] {
+    --callout-accent: var(--callout-danger-c);
+    --callout-bg: var(--callout-danger-bg);
+  }
+  article .callout-header {
+    color: var(--callout-accent);
+  }
+  article .callout-header svg {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+  }
+  article .callout-body > :last-child {
+    margin-bottom: 0;
+  }
+}

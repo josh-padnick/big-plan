@@ -60,22 +60,22 @@ describe("compileMarkdown static MDX validation", () => {
     ]);
   });
 
-  it("should reject an unknown component when the registry is empty", () => {
-    expect(diagnosticsFor("<Callout />\n")).toEqual([
-      { line: 1, column: 1, message: "Unknown block \"Callout\"" },
+  it("should reject an unknown component when it is absent from the registry", () => {
+    expect(diagnosticsFor("<Unknown />\n")).toEqual([
+      { line: 1, column: 1, message: "Unknown block \"Unknown\"" },
     ]);
   });
 
   it("should reject a spread attribute when a block uses one", () => {
-    expect(diagnosticsFor("<Callout {...props} />\n")).toEqual([
-      { line: 1, column: 1, message: "Unknown block \"Callout\"" },
+    expect(diagnosticsFor("<Unknown {...props} />\n")).toEqual([
+      { line: 1, column: 1, message: "Unknown block \"Unknown\"" },
       { line: 1, column: 10, message: "Spread attributes are not supported" },
     ]);
   });
 
   it("should reject an expression attribute when a block uses one", () => {
-    expect(diagnosticsFor("<Callout tone={tone} />\n")).toEqual([
-      { line: 1, column: 1, message: "Unknown block \"Callout\"" },
+    expect(diagnosticsFor("<Unknown tone={tone} />\n")).toEqual([
+      { line: 1, column: 1, message: "Unknown block \"Unknown\"" },
       {
         line: 1,
         column: 10,
@@ -85,15 +85,15 @@ describe("compileMarkdown static MDX validation", () => {
   });
 
   it("should reject a duplicate attribute when a name repeats", () => {
-    expect(diagnosticsFor('<Callout tone="a" tone="b" />\n')).toEqual([
-      { line: 1, column: 1, message: "Unknown block \"Callout\"" },
+    expect(diagnosticsFor('<Unknown tone="a" tone="b" />\n')).toEqual([
+      { line: 1, column: 1, message: "Unknown block \"Unknown\"" },
       { line: 1, column: 19, message: "Duplicate attribute \"tone\"" },
     ]);
   });
 
   it("should accept shorthand attributes at validation when a value is omitted", () => {
-    expect(diagnosticsFor("<Callout flag />\n")).toEqual([
-      { line: 1, column: 1, message: "Unknown block \"Callout\"" },
+    expect(diagnosticsFor("<Unknown flag />\n")).toEqual([
+      { line: 1, column: 1, message: "Unknown block \"Unknown\"" },
     ]);
   });
 
@@ -247,6 +247,24 @@ describe("compileMarkdown code highlighting", () => {
     expect(bodyHtml).toContain('data-lucide="copy"');
     expect(bodyHtml).toContain('data-lucide="check" hidden');
     expect(bodyHtml).toContain('data-copy-message="" hidden>Copied!</span>');
+  });
+});
+
+describe("compileMarkdown Callout blocks", () => {
+  it("should run downstream transforms when a callout contains fenced code", () => {
+    const bodyHtml = compileAndSerialize(
+      '<Callout type="warning" title="Review goal">\n### Retry state\n\n- pending\n- failed\n\n```sql\nSELECT id FROM retries;\n```\n</Callout>\n',
+    );
+    expect(bodyHtml).toContain('<aside data-callout="warning"');
+    expect(bodyHtml).toContain('data-lucide="triangle-alert"');
+    expect(bodyHtml).toContain("<span");
+    expect(bodyHtml).toContain(">Review goal</span>");
+    expect(bodyHtml).toContain('<h3 id="retry-state">Retry state</h3>');
+    expect(bodyHtml).toContain("<li>pending</li>");
+    expect(bodyHtml).toContain('<code class="hljs language-sql">');
+    expect(bodyHtml).toContain('<span class="hljs-keyword">SELECT</span>');
+    expect(bodyHtml).toContain(CODE_BLOCK_SELECTOR);
+    expect(bodyHtml).toContain("data-copy-code");
   });
 });
 
