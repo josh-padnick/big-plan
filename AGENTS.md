@@ -19,6 +19,7 @@ Everything runs locally, and the file on disk is the source of truth.
 Deliverable 1 is shipped in this repo: a static markdown viewer.
 `grandplan render <input.md> [output.html]` converts a plain GFM markdown file into a single self-contained themed HTML document with a responsive table of contents built from level-two headings.
 Wide screens use a sticky sidebar; narrower screens use a compact `Grimm 10.0` plan-review header and a sticky `Sections` disclosure showing the section count.
+Both navigation variants track the current section while the reader scrolls, including short final sections at the bottom of the page, and section links scroll smoothly unless the reader has requested reduced motion.
 Declared fenced-code languages receive syntax highlighting, every block code sample gets a copy control, and readers can override the OS light/dark preference with a locally persisted theme control.
 The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, and code-copy controls.
 
