@@ -41,12 +41,15 @@ To inspect examples of supported fences and both palettes, render the [syntax-hi
 
 ```sh
 bun install
-bun run build           # compile TypeScript to dist/
-bun run test            # vitest unit tests
+bun run build           # regenerate assets, then compile TypeScript to dist/
+bun run test            # vitest unit tests (regenerates assets first)
 bun run lint            # ESLint conventions and architecture checks
+bun run gen             # regenerate the CSS and browser-script modules only
 bunx playwright test    # browser test of the rendered viewer (build first)
 node bin/grandplan.mjs render examples/sample.md
 ```
+
+Use `bun run test`, not `bun test` - the latter invokes Bun's own test runner instead of vitest.
 
 See [AGENTS.md](AGENTS.md) for architecture and engineering rules, and [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
 

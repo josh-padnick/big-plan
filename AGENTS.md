@@ -1,7 +1,7 @@
 # GrandPlan agent guide
 
 This is the entry point for agents working in GrandPlan.
-Read the product orientation first, then follow the linked references for detail.
+Read the product orientation first, then follow the documentation map and linked references for detail.
 
 ## What GrandPlan is
 
@@ -39,55 +39,72 @@ The pipeline is deliberately small: CLI -> renderer -> self-contained HTML.
 
 Future deliverables build outward from this core: a typed block registry, MDX plan documents, and a local server with a browser bridge for live agent chat and comments.
 
-## Repo layout
-
-- `bin/` - the executable entrypoint; a thin shim over `dist/cli/`.
-- `src/cli/` - command dispatch and the `render` command.
-- `src/render/` - the pure renderer, with colocated unit tests: `markdown/` (source to structured HAST, transforms, final serialization, the section outline, title, and element ids), `icons/` (small inline SVG assets for renderer controls), `shell/` (the reading surface: markup with its own `NavEntry` contract, plus browser-side theme, copy, and scroll-spy enhancements), `page.ts` (the document envelope), and `render-document.ts` composing them.
-- `scripts/` - build-time generators for the Tailwind CSS module and browser-script modules.
-- `examples/` - sample plan documents used by tests and demos.
-- `test/` - the Playwright browser spec for the rendered viewer.
-- `dist/` - build output (generated, not committed).
-
 ## Tech stack
 
 - **Runtime target**: Node.js >= 22, ESM only. The published package runs under plain Node so `npx grandplan` works everywhere; Bun is a development-time choice, not a runtime requirement.
-- **Package manager and script runner**: Bun (`bun install`, `bun run <script>`, `bun.lock`). Note: use `bun run test`, not `bun test` - the latter invokes Bun's own test runner instead of vitest.
+- **Package manager and script runner**: Bun (`bun install`, `bun run <script>`, `bun.lock`).
 - **Language**: TypeScript, strict, compiled with tsc; browser-side scripts type-check against `tsconfig.browser.json` (DOM lib) and are transpiled into generated modules.
 - **CLI framework**: `axi-sdk-js` (dispatch, help, structured errors, TOON output).
 - **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-highlight, rehype-stringify).
 - **Styling**: Tailwind v4, compiled at build time by `@tailwindcss/cli` into a generated module; no runtime CSS tooling.
-- **Linting**: ESLint v10 flat config with `typescript-eslint`, project conventions, architectural boundaries, and Playwright fixture enforcement.
+- **Linting**: ESLint v10 flat config with `typescript-eslint`; conventions and architectural guardrails live in `eslint.config.mjs`.
 - **Tests**: vitest for units (colocated in `src/**`), Playwright (chromium) for browser journeys.
 
-## Commands
+## Documentation map
 
-- Install: `bun install`
-- Build: `bun run build` (runs `bun run gen` - stylesheet and browser scripts - then tsc to `dist/`)
-- Unit tests: `bun run test` (vitest, colocated `src/**/*.test.ts`; regenerates assets first)
-- Lint: `bun run lint` (ESLint flat config; includes the fixtures-import guardrail and the layering rules below)
-- Generators only: `bun run gen` (stylesheet via `gen:css`, browser scripts via `gen:browser-scripts`; never edit `*.generated.ts` files)
-- Browser test: `bunx playwright test` (requires a prior build; renders the sample through the built CLI)
-- Render: `node bin/grandplan.mjs render examples/sample.md` (or `npx grandplan render <file.md>` once installed)
+Keep `AGENTS.md` as the entry point; `CLAUDE.md` is a harness shim (symlink) back to this guide.
+Satellite docs point back here before giving local guidance.
+
+### Where a fact lives
+
+Every guidance fact has exactly one owning layer; everywhere else points to the owner instead of restating it.
+Route by the kind of fact:
+
+- A fact about one file lives in that file's header comment; a fact a check enforces lives in the check and its error message (the architectural layering model, for example, lives in `eslint.config.mjs`).
+- A technology coding standard lives in `fabricahq/app/_rules`; because that repo is private, the [Engineering rules](#engineering-rules) section below carries the working set for this repo.
+- Setup, build, run, and usage procedures live in the root [README.md](./README.md).
+- The contribution workflow (DCO, branches, PR expectations, CI) lives in [CONTRIBUTING.md](./CONTRIBUTING.md).
+- A directory-scoped, multi-file, unenforced boundary lives in that directory's `README.md` local map.
+- Product orientation, architecture, and cross-cutting conventions with no deeper owner live in this guide.
+
+Layers this repo does not need yet (skills, ADRs, long-form reference docs, planning artifacts) are added only when demand appears, following the same one-owner rule.
+
+### README principles
+
+`README.md` files are local maps at decision points, the directory levels where an agent chooses where code belongs; they are never policy.
+A local map is a pointer line (this guide plus the single most useful parent map), an ownership paragraph (what the directory owns, and which owners hold what is not here), and at most a few boundary bullets.
+Hold every sentence to these five principles:
+
+1. **Earn existence.** A README exists only at a decision point.
+   If, after applying the other four principles, nothing remains beyond an ownership statement obvious from the path plus the parent's conventions, delete the whole file.
+   Test: could the parent map's conventions plus `ls` answer every placement question this README answers? Then the file should not exist.
+2. **One fact, deepest owner.** Every fact lives at the deepest layer that owns it, exactly once, per the routing list above.
+   The README keeps only what has no deeper owner: directory-scoped, multi-file, unenforced boundaries.
+   Test: open the file, check, or rule the sentence is about. Is the fact already there (or should it be)? Move it down and delete the README copy.
+3. **Nothing derivable.** Cut any sentence that is an instance of a convention stated by a parent map or `AGENTS.md`, a rephrase of the README's own ownership paragraph, or reconstructible from `ls` and the path.
+   Test: is this sentence true of most sibling directories too? Then it belongs to the parent, not here.
+4. **Point, never restate.** Routing is one sentence naming the owner: a doc, check, rule, or external repo.
+   No summaries of what the owner says, no reading lists another layer already carries, no duplicated command sequences.
+   Test: if the pointed-at owner changed its content tomorrow, would this README need an edit? Then it restated instead of pointed.
+5. **No inventories, no now.** Never list files or subfolders with descriptions, never count things, and never describe current state: no "currently", "temporary", "until X graduates", "the only Y so far".
+   The tree describes itself; state changes without warning.
+   Test: would adding, renaming, or finishing one file make this sentence false? Cut it.
+
+Guidance is demand-driven: add a doc, rule, or map entry only when an agent observably failed or had to ask something it should not have needed to, never speculatively.
 
 ## Engineering rules
 
-GrandPlan follows the technology rules maintained in `fabricahq/app/_rules` (see the TypeScript and Playwright aggregates there); that repo is the source of truth.
-The conventions that matter most here:
+GrandPlan follows the technology rules maintained in `fabricahq/app/_rules` (see the TypeScript and Playwright aggregates there).
+That repo is the source of truth, and because it is private, this section carries the working set of conventions for this repo.
 
-- Named exports only; type aliases over interfaces; literal unions over enums.
-- `unknown` over `any`; no type assertions (`as`) or non-null assertions (`!`).
-- Separate type imports; single-object args for multi-parameter functions; immutable data (`readonly`, `const`).
-- Colocate code and tests by feature; kebab-case file names; comments explain why, not what.
-- Every authored file starts with a file-level comment saying what it owns or why it exists; every non-trivial function gets a concise description above it (trivial one-liners stay uncommented).
+Facts a check enforces live in the check: separate type imports, the `any` and non-null-assertion bans, the allow-list architectural layering model (`LAYERS`/`TIERS`), and the Playwright fixtures requirement are all lint-enforced and documented in place in `eslint.config.mjs`.
+
+The unenforced conventions to hold by hand:
+
+- Named exports only; type aliases over interfaces; literal unions over enums; no type assertions (`as`).
+- Single-object args for multi-parameter functions; immutable data (`readonly`, `const`).
+- Colocate code and tests by feature; kebab-case file names.
+- Every authored file starts with a file-level comment saying what it owns or why it exists; every non-trivial function gets a concise description above it (trivial one-liners stay uncommented); comments explain why, not what.
 - Generated files always carry `.generated.` in their name (for example `global.generated.ts`), are never edited by hand, and are never committed.
-- Keep logic in pure modules and unit-test it there; reserve Playwright for critical user journeys. Specs import `test`/`expect` from `test/fixtures` (lint-enforced) so every spec fails on console errors.
-- Layering is lint-enforced, allow-list and default-deny: information flows one way, `cli` -> `render-document` -> { `markdown/`, `shell/`, `page` } -> { `icons/`, `escape-html` }. Each layer declares what it `mayImport` (validated to point strictly downward); everything else is banned. A completeness guard fails lint if any `src/` file is not assigned to a layer, so new files and folders must be placed in the model before they build. See `LAYERS`/`TIERS` in `eslint.config.mjs`.
+- Keep logic in pure modules and unit-test it there; reserve Playwright for critical user journeys.
 - Tests are focused and user-oriented, use "should ... when ..." descriptions, and cover degenerate and boundary cases.
-
-## Contribution workflow
-
-- Sign off every commit for DCO: `git commit -s`.
-- CI (GitHub Actions, `.github/workflows/ci.yml`) runs `bun run lint`, `bun run build`, and `bun run test` on every pushed branch, including `main` and same-repository PR head branches; fork PRs are not triggered yet.
-- Work on feature branches and merge into `main`.
-- Keep PRs small and reviewable; one self-contained increment per commit where possible.
