@@ -49,7 +49,9 @@ const configForType = (value: string | boolean | undefined): CalloutConfig | und
 };
 
 const CALLOUT_CLASSES =
-  "callout mb-5 rounded-md border border-edge border-l-4 px-4 py-3";
+  // Border colors come from the stylesheet's [data-callout] rules; a
+  // border-edge utility here would win the cascade and flatten the accent.
+  "callout mb-5 rounded-md border border-l-4 px-4 py-3";
 const HEADER_CLASSES =
   "callout-header mb-2 flex items-center gap-2 font-semibold";
 const TITLE_CLASSES = "callout-title text-sm leading-5";

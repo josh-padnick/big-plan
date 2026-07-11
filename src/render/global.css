@@ -147,6 +147,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
 @layer components {
   article [data-callout] {
     background: var(--callout-bg);
+    border-color: var(--edge-c);
     border-left-color: var(--callout-accent);
   }
   article [data-callout="note"] {
