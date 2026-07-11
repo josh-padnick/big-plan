@@ -146,8 +146,8 @@ export const renderShell = ({
   const html = `<button class="${THEME_TOGGLE_CLASSES}" type="button" data-theme-toggle aria-label="Toggle color theme">Theme</button>
 <header class="sticky top-0 z-10 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="flex h-14 items-center px-5 wide:px-6">
-<img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="GrandPlan" width="324" height="123">
-<img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="GrandPlan" width="324" height="123">
+<img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="GrandPlan" width="324" height="101">
+<img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="GrandPlan" width="324" height="101">
 </div>
 </header>
 ${hasToc ? renderMobileChrome({ nav, environmentLabel, overviewId }) : ""}
