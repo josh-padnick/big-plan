@@ -2,7 +2,10 @@
 // features can inline real Lucide SVGs without adding browser dependencies.
 
 import type { Element } from "hast";
-import type { IconNode } from "lucide";
+
+export type IconNode = ReadonlyArray<
+  readonly [tagName: string, properties: Readonly<Record<string, string>>]
+>;
 
 // Builds one decorative Lucide SVG; the button or other owning control keeps
 // responsibility for the accessible name.
