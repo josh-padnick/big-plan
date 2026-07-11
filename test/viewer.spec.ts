@@ -4,6 +4,30 @@
 
 import { expect, test } from "./fixtures";
 
+const RAW_GIT_DIFF = [
+  "diff --git a/src/catalog/read-through-cache.ts b/src/catalog/read-through-cache.ts",
+  "index 23ad911..890ce42 100644",
+  "--- a/src/catalog/read-through-cache.ts",
+  "+++ b/src/catalog/read-through-cache.ts",
+  "@@ -18,7 +18,10 @@ export const readCatalog = async (key: string) => {",
+  "   const cached = await cache.get(key);",
+  "-  if (cached !== null && cached.ageSeconds <= 60) {",
+  "+  if (cached !== null && cached.ageSeconds <= 150) {",
+  "+    if (cached.ageSeconds > 60) {",
+  "+      await refreshQueue.enqueueOnce(key);",
+  "+    }",
+  "     return cached.value;",
+  "   }",
+  " ",
+  "@@ -31,4 +34,5 @@ export const readCatalog = async (key: string) => {",
+  "   const value = await catalogOrigin.read(key);",
+  "   await cache.put(key, value, { ttlSeconds: 300 });",
+  "+  metrics.increment(\"catalog_cache.origin_fallback\");",
+  "   return value;",
+  " };",
+  "",
+].join("\n");
+
 test("should navigate the rendered sample plan through the TOC without errors", async ({
   page,
   sampleViewerUrl,
@@ -303,4 +327,97 @@ test("should provide a compact sticky table of contents on mobile", async ({
 
   await page.evaluate(() => window.scrollTo({ top: 0 }));
   await expect(overviewLink).toHaveAttribute("aria-current", "true");
+});
+
+test("should distinguish every callout type when the typed-block plan renders", async ({
+  page,
+  mdxBlocksViewerUrl,
+}) => {
+  await page.goto(mdxBlocksViewerUrl);
+
+  const calloutTypes = ["note", "tip", "warning", "danger"];
+  for (const type of calloutTypes) {
+    await expect(page.locator(`[data-callout="${type}"]`)).toBeVisible();
+  }
+  const accents = await page.locator("[data-callout]").evaluateAll((callouts) =>
+    callouts.map((callout) => getComputedStyle(callout).borderLeftColor),
+  );
+  expect(new Set(accents).size).toBe(calloutTypes.length);
+});
+
+test("should remember the selected diff view when the page reloads", async ({
+  page,
+  mdxBlocksViewerUrl,
+}) => {
+  await page.goto(mdxBlocksViewerUrl);
+
+  const diff = page.locator("[data-code-diff]").filter({
+    hasText: "src/catalog/read-through-cache.ts",
+  });
+  const unified = diff.locator('[data-diff-content="unified"]');
+  const split = diff.locator('[data-diff-content="split"]');
+  const toggle = diff.getByRole("button", { name: "Use side-by-side diff view" });
+  await expect(unified).toBeVisible();
+  await expect(split).toBeHidden();
+
+  await toggle.click();
+
+  await expect(diff).toHaveAttribute("data-diff-view", "split");
+  await expect(unified).toBeHidden();
+  await expect(split).toBeVisible();
+  await page.reload();
+  await expect(diff).toHaveAttribute("data-diff-view", "split");
+  await expect(diff.locator("[data-diff-toggle]")).toHaveAccessibleName(
+    "Use unified diff view",
+  );
+});
+
+test("should copy the exact raw git diff when its copy control is used", async ({
+  page,
+  mdxBlocksViewerUrl,
+}) => {
+  await page.goto(mdxBlocksViewerUrl);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: (value: string) => {
+          document.body.dataset.copiedDiff = value;
+          return Promise.resolve();
+        },
+      },
+    });
+  });
+
+  const diff = page.locator("[data-code-diff]").filter({
+    hasText: "src/catalog/read-through-cache.ts",
+  });
+  await diff.getByRole("button", { name: "Copy diff" }).click();
+
+  expect(await page.locator("body").getAttribute("data-copied-diff")).toBe(
+    RAW_GIT_DIFF,
+  );
+});
+
+test("should preserve typed-block content without controls when JavaScript is disabled", async ({
+  browser,
+  mdxBlocksViewerUrl,
+}) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto(mdxBlocksViewerUrl);
+
+  await expect(page.locator("[data-callout]")).toHaveCount(4);
+  await expect(page.locator("[data-callout]").first()).toBeVisible();
+  const diffs = page.locator("[data-code-diff]");
+  await expect(diffs).toHaveCount(2);
+  await expect(diffs.first().locator('[data-diff-content="unified"]')).toBeVisible();
+  await expect(diffs.first().locator('[data-diff-content="split"]')).toBeHidden();
+  const controls = page.locator("[data-diff-toggle], [data-diff-copy]");
+  await expect(controls).toHaveCount(4);
+  for (const control of await controls.all()) {
+    await expect(control).toBeHidden();
+  }
+
+  await context.close();
 });

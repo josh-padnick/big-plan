@@ -22,7 +22,7 @@ The first deliverable, a static markdown viewer, is available now.
 
 ## Usage
 
-Render a static-subset MDX file into a single self-contained themed HTML document:
+Render a GFM or static-subset MDX plan document into a single self-contained themed HTML document:
 
 ```sh
 npx big-plan render <file.mdx> [output.html]
@@ -36,7 +36,39 @@ Both variants track the current section as the reader scrolls, and section links
 Fenced code blocks with a supported language identifier receive syntax highlighting; undeclared and unknown languages remain plain and readable.
 Every block code sample has a copy control, and the light/dark theme control follows the system preference until the reader chooses a theme, which is remembered locally.
 
-To inspect examples of supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.md) locally with `node bin/big-plan.mjs render examples/syntax-highlighting.md`, then open the generated `examples/syntax-highlighting.html`. The generated preview remains ignored by Git.
+MDX plans may use the built-in `Callout` and `CodeDiff` typed blocks, but they cannot contain imports, exports, `{}` expressions, or non-string attribute values; bare boolean attributes are supported only where a block schema allows them.
+Unsupported MDX syntax and invalid block attributes fail the render with diagnostics that include `line:column` positions.
+
+Use `Callout` with one of the four supported types and an optional custom title:
+
+```mdx
+<Callout type="warning" title="Deploy ordering">
+
+Enable the worker before stale reads.
+
+</Callout>
+```
+
+Use `CodeDiff` with a required file label, an optional bare `lineNumbers` attribute, and exactly one fenced `diff` child; line numbers require `@@` hunk headers:
+
+````mdx
+<CodeDiff file="src/cache.ts" lineNumbers>
+
+```diff
+@@ -12 +12 @@
+-const ttl = 30;
++const ttl = 60;
+```
+
+</CodeDiff>
+````
+
+Because `<` and `{` begin MDX syntax, write them carefully in prose or place literal examples in code spans or fences.
+HTML comments and angle-bracket `<url>` autolinks are not supported in plan documents.
+
+To preview typed blocks, render [the MDX blocks plan](examples/mdx-blocks.mdx) locally with `node bin/big-plan.mjs render examples/mdx-blocks.mdx`.
+To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.md) locally with `node bin/big-plan.mjs render examples/syntax-highlighting.md`, then open the generated `examples/syntax-highlighting.html`.
+Generated previews remain ignored by Git.
 
 ## Development
 

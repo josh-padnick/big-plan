@@ -16,10 +16,11 @@ Everything runs locally, and the file on disk is the source of truth.
 
 ## Current state
 
-Deliverable 1 is shipped in this repo: a static markdown viewer.
-`big-plan render <input.md> [output.html]` converts a plain GFM markdown file into a single self-contained themed HTML document with a responsive table of contents built from level-two headings.
-Wide screens use a sticky sidebar; narrower screens use a sticky `Sections` disclosure showing the section count.
+Deliverable 2 is shipped in this repo: MDX plan documents with typed blocks, building on the static markdown viewer from deliverable 1.
+`big-plan render <input.mdx> [output.html]` converts a GFM or static-subset MDX plan document into a single self-contained themed HTML document with a responsive table of contents built from level-two headings.
+Wide screens use a sticky sidebar; narrower screens use a compact `Grimm 10.0` plan-review header and a sticky `Sections` disclosure showing the section count.
 Both navigation variants track the current section while the reader scrolls, including short final sections at the bottom of the page, and section links scroll smoothly unless the reader has requested reduced motion.
+The static subset rejects imports, exports, expressions, and unsupported attributes with hard-fail diagnostics carrying line and column positions, while the built-in Callout and CodeDiff blocks provide validated plan-native presentation.
 Declared fenced-code languages receive syntax highlighting, every block code sample gets a copy control, and readers can override the OS light/dark preference with a locally persisted theme control.
 Every viewport has a sticky branding bar whose logo follows that active theme, while embedded light and dark favicons follow the OS preference.
 The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, and code-copy controls.
@@ -29,8 +30,8 @@ The output makes no external requests and remains readable with JavaScript disab
 The pipeline is deliberately small: CLI -> renderer -> self-contained HTML.
 
 - The CLI (`src/cli/`) is built on `runAxiCli()` from `axi-sdk-js`, which owns dispatch, help, structured errors, and output serialization. Keep the integration thin; business logic never lives in the CLI layer.
-- The renderer (`src/render/`) is pure: markdown source plus a fallback title in, complete HTML out. It uses unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-highlight) to compile markdown into a structured Hypertext Abstract Syntax Tree (HAST) review document, collects the title, section outline, and element ids from that tree, applies rehype transforms such as syntax highlighting, code-copy controls, and table scroll-container wrapping, and serializes with rehype-stringify only after all transforms finish. The shell uses those ids to allocate a collision-free mobile `Overview` anchor.
-- The review shell (`src/render/shell/`) owns the viewer's look: one reading column, warm paper-like light and dark palettes that follow `prefers-color-scheme` until explicitly toggled, a sticky branding bar whose logo art follows the active theme, code-block controls, a sticky desktop section sidebar, and a compact sticky mobile `Sections` disclosure. The page envelope (`src/render/page.ts`) separately owns how a document is packaged and delivered (doctype, head, inlined styles, favicon links, and scripts); future delivery modes swap the envelope while the shell stays the same.
+- The renderer (`src/render/`) is pure: MDX source, a fallback title, and an optional environment label in, complete HTML out. It uses unified (remark-parse, remark-gfm, remark-mdx, remark-rehype) to compile the static subset into a structured Hypertext Abstract Syntax Tree (HAST) review document, then runs the typed-block registry as the first rehype transform before slugs, syntax highlighting, code-copy controls, and table scroll-container wrapping. Parsing and block validation collect positional diagnostics and hard-fail before the title, section outline, and element ids are collected, and rehype-stringify serializes only after all transforms finish. The shell uses those ids to allocate a collision-free mobile `Overview` anchor. The environment label defaults to `Grimm 10.0` and is rendered in the mobile header when the document has TOC sections.
+- The review shell (`src/render/shell/`) owns the viewer's look: one reading column, warm paper-like light and dark palettes that follow `prefers-color-scheme` until explicitly toggled, a sticky branding bar whose logo art follows the active theme, code-block controls, a sticky desktop section sidebar, and compact mobile environment and `Sections` chrome. The page envelope (`src/render/page.ts`) separately owns how a document is packaged and delivered (doctype, head, inlined styles, favicon links, and scripts); future delivery modes swap the envelope while the shell stays the same.
 - Styles are authored with Tailwind v4.
   `src/render/global.css` is the entry point and owns only what is genuinely global: design tokens, the light and dark palettes and theme overrides, theme-aware branding logo visibility, the layout breakpoint, and target scroll margins.
   Feature styles live with the module that emits their markup: element-scoped styles for plain markdown elements in `src/render/markdown/prose.css`, and the syntax-token palette in `src/render/markdown/code-block/syntax-highlighting.css`.
@@ -39,7 +40,7 @@ The pipeline is deliberately small: CLI -> renderer -> self-contained HTML.
 - Browser-side scripts are authored as real TypeScript in `*.browser.ts` files co-located with the concern they belong to (type-checked against `tsconfig.browser.json`, which adds the DOM lib) and compiled by `scripts/gen-browser-scripts.mjs` into generated modules the shell inlines. Shipped documents never reference external code.
 - Branding assets (the logos and favicons in `assets/`) are embedded by `scripts/gen-assets.mjs` as a generated data-URI module, so the branding bar and favicon ship inside the document like everything else.
 
-Future deliverables build outward from this core: a typed block registry, MDX plan documents, and a local server with a browser bridge for live agent chat and comments.
+Future deliverables build outward from this core with a local server and browser bridge for live agent chat and comments.
 
 ## Tech stack
 

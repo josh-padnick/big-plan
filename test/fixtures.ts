@@ -16,10 +16,28 @@ const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 type WorkerFixtures = {
+  readonly mdxBlocksViewerUrl: string;
   readonly sampleViewerUrl: string;
 };
 
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
+  // The typed-block example has its own rendered artifact so the plain sample
+  // remains the baseline for the original viewer journeys.
+  mdxBlocksViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "grandplan-mdx-blocks-"));
+      const outputPath = join(outputDir, "mdx-blocks.html");
+      await execFileAsync(process.execPath, [
+        join(repoRoot, "bin", "grandplan.mjs"),
+        "render",
+        join(repoRoot, "examples", "mdx-blocks.mdx"),
+        outputPath,
+      ]);
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
   // Rendering through the built CLI (not the library) keeps specs aligned
   // with what a user actually runs: big-plan render <file.mdx>.
   sampleViewerUrl: [
