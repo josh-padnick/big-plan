@@ -117,14 +117,14 @@ describe("renderDocument affordances", () => {
   it("should be self-contained when the document links to external sites", () => {
     // The browser only fetches src/link/script resources; <a href> is inert
     // navigation, so external content links do not break self-containment.
-    const srcValues = [...html.matchAll(/\bsrc="([^"]*)"/g)].map(
-      (match) => match[1],
-    );
-    expect(srcValues.length).toBeGreaterThan(0);
-    for (const src of srcValues) {
-      expect(src).toMatch(/^data:/);
+    const fetchedValues = [
+      ...html.matchAll(/\b(?:src|srcset)="([^"]*)"/g),
+      ...html.matchAll(/<link\b[^>]*\bhref="([^"]*)"/g),
+    ].map((match) => match[1]);
+    expect(fetchedValues.length).toBeGreaterThan(0);
+    for (const value of fetchedValues) {
+      expect(value).toMatch(/^data:/);
     }
-    expect(html).not.toContain("<link");
     expect(html).not.toMatch(/<script\s+[^>]*src=/);
     expect(html).not.toContain("@import");
   });
@@ -134,6 +134,24 @@ describe("renderDocument affordances", () => {
     expect(html.match(/<script>/g)).toHaveLength(3);
     expect(html).toContain("data-theme-toggle");
     expect(html).toContain("data-copy-code");
+  });
+
+  it("should emit favicon links as embedded PNG data URIs when rendering", () => {
+    expect(html).toMatch(
+      /<link rel="icon" type="image\/png" sizes="32x32" href="data:image\/png;base64,[^"]+">/,
+    );
+    expect(html).toMatch(
+      /<link rel="icon" type="image\/png" sizes="16x16" href="data:image\/png;base64,[^"]+">/,
+    );
+  });
+
+  it("should render a theme-swapped branding banner when rendering", () => {
+    expect(html).toMatch(
+      /<img class="h-7 w-auto" data-logo-light src="data:image\/png;base64,[^"]+" alt="GrandPlan" width="229" height="96">/,
+    );
+    expect(html).toMatch(
+      /<img class="h-7 w-auto" data-logo-dark src="data:image\/png;base64,[^"]+" alt="GrandPlan" width="229" height="96">/,
+    );
   });
 });
 

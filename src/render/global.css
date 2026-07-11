@@ -51,6 +51,26 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   color-scheme: dark;
 }
 
+/* The branding bar swaps logo art with the theme, following the same
+   override order as the palette: OS preference unless data-theme wins. */
+[data-logo-dark] {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) [data-logo-light] {
+    display: none;
+  }
+  :root:not([data-theme]) [data-logo-dark] {
+    display: block;
+  }
+}
+:root[data-theme="dark"] [data-logo-light] {
+  display: none;
+}
+:root[data-theme="dark"] [data-logo-dark] {
+  display: block;
+}
+
 @theme inline {
   --color-paper: var(--bg);
   --color-ink: var(--ink-c);
@@ -76,12 +96,13 @@ Light and dark follow the reader's OS unless the theme control overrides it.
 }
 
 :target {
-  scroll-margin-top: 1.5rem;
+  scroll-margin-top: 4.75rem;
 }
 
-/* Mobile section links land below the sticky TOC rather than beneath it. */
+/* Mobile section links land below the branding bar plus the sticky TOC
+   rather than beneath them. */
 @media (width < 56rem) {
   :target {
-    scroll-margin-top: 5rem;
+    scroll-margin-top: 8.25rem;
   }
 }

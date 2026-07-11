@@ -11,6 +11,10 @@ test("should navigate the rendered sample plan through the TOC without errors", 
   await page.goto(sampleViewerUrl);
 
   await expect(page).toHaveTitle("Payments Retry Architecture Plan");
+  const banner = page.getByRole("banner");
+  const logo = banner.getByRole("img", { name: "GrandPlan" });
+  await expect(banner).toBeVisible();
+  await expect(logo).toBeVisible();
   await expect(
     page.getByRole("heading", { level: 1, name: "Payments Retry Architecture Plan" }),
   ).toBeVisible();
@@ -37,6 +41,20 @@ test("should navigate the rendered sample plan through the TOC without errors", 
   await expect(
     page.getByRole("heading", { level: 2, name: "Rollout plan" }),
   ).toBeInViewport();
+  const headerBox = await banner.boundingBox();
+  const targetBox = await page
+    .getByRole("heading", { level: 2, name: "Rollout plan" })
+    .boundingBox();
+  expect(headerBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+  if (headerBox !== null && targetBox !== null) {
+    expect(headerBox.y).toBeGreaterThanOrEqual(0);
+    expect(headerBox.y).toBeLessThanOrEqual(1);
+    expect(headerBox.y + headerBox.height).toBeLessThanOrEqual(
+      page.viewportSize()?.height ?? Number.POSITIVE_INFINITY,
+    );
+    expect(targetBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height);
+  }
 
   // The short final section can never lift its heading past the spy
   // threshold, so reaching the bottom must still mark it current.
