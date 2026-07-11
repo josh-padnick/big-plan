@@ -101,6 +101,7 @@ test("should copy the exact code-block text", async ({
   page,
   sampleViewerUrl,
 }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(sampleViewerUrl);
   await page.evaluate(() => {
     Object.defineProperty(navigator, "clipboard", {
@@ -124,6 +125,35 @@ test("should copy the exact code-block text", async ({
   expect(await page.locator("body").getAttribute("data-copied-text")).toBe(
     expectedText,
   );
-  await expect(copyButton).toHaveText("Copied!");
   await expect(copyButton).toHaveAccessibleName("Code copied");
+  await expect(copyButton.locator('[data-lucide="copy"]')).toBeHidden();
+  await expect(copyButton.locator('[data-lucide="check"]')).toBeVisible();
+  const copyMessage = copyButton
+    .locator("xpath=ancestor::*[@data-code-block]")
+    .locator("[data-copy-message]");
+  await expect(copyMessage).toBeVisible();
+  await expect(copyMessage).toHaveText("Copied!");
+  await expect(copyButton).not.toBeFocused();
+
+  const copiedStateFits = await page.evaluate(() => {
+    const wrapper = document.querySelector("[data-code-block]");
+    const message = wrapper?.querySelector("[data-copy-message]");
+    const button = wrapper?.querySelector("[data-copy-code]");
+    if (wrapper === null || wrapper === undefined || message === null ||
+        message === undefined || button === null || button === undefined) {
+      return false;
+    }
+    const wrapperBox = wrapper.getBoundingClientRect();
+    const messageBox = message.getBoundingClientRect();
+    const buttonBox = button.getBoundingClientRect();
+    const centerDelta = Math.abs(
+      messageBox.top + messageBox.height / 2 -
+        (buttonBox.top + buttonBox.height / 2),
+    );
+    return messageBox.left >= wrapperBox.left &&
+      messageBox.right <= buttonBox.left &&
+      centerDelta <= 0.5 &&
+      document.documentElement.scrollWidth === document.documentElement.clientWidth;
+  });
+  expect(copiedStateFits).toBe(true);
 });

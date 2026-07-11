@@ -125,9 +125,12 @@ describe("compileMarkdown code highlighting", () => {
     expect(bodyHtml.match(new RegExp(CODE_BLOCK_SELECTOR, "g"))).toHaveLength(2);
     expect(bodyHtml.match(/data-copy-code/g)).toHaveLength(2);
     expect(bodyHtml).toContain('data-slot="button"');
-    expect(bodyHtml).toContain('data-variant="outline"');
+    expect(bodyHtml).toContain('data-variant="ghost"');
     expect(bodyHtml).toContain('data-size="xs"');
     expect(bodyHtml).toContain('aria-label="Copy code"');
+    expect(bodyHtml).toContain('data-lucide="copy"');
+    expect(bodyHtml).toContain('data-lucide="check" hidden');
+    expect(bodyHtml).toContain('data-copy-message="" hidden>Copied!</span>');
   });
 });
 

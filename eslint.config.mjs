@@ -56,12 +56,17 @@ export default tseslint.config(
         imports: ["**/escape-html.js"],
         mayImport: [],
       },
+      icons: {
+        files: ["src/render/icons/**/*.ts"],
+        imports: ["**/icons/**"],
+        mayImport: [],
+      },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
         imports: ["**/markdown/**"],
         // Deliberately not escapeHtml: markdown escapes through
         // rehype-stringify, never by hand.
-        mayImport: [],
+        mayImport: ["icons"],
       },
       shell: {
         files: ["src/render/shell/**/*.ts"],
@@ -90,7 +95,7 @@ export default tseslint.config(
 
     // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
-      ["escapeHtml"],
+      ["escapeHtml", "icons"],
       ["markdown", "shell", "page"],
       ["composer"],
       ["cli"],

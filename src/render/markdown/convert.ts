@@ -3,6 +3,7 @@
 // The page chrome around that content lives in shell.ts.
 
 import type { Element, Root, RootContent } from "hast";
+import { Check, Copy } from "lucide";
 import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
 import rehypeStringify from "rehype-stringify";
@@ -10,6 +11,7 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
+import { renderLucideIcon } from "../icons/lucide-icon.js";
 
 export type Section = {
   readonly id: string;
@@ -58,7 +60,7 @@ const TABLE_WRAPPER_CLASSES = [
 export const CODE_BLOCK_SELECTOR = "data-code-block";
 
 const COPY_BUTTON_CLASSES =
-  "code-copy-button inline-flex items-center justify-center gap-1 rounded-md border border-edge bg-surface px-2 py-1 text-xs font-semibold whitespace-nowrap text-muted shadow-sm transition-colors hover:text-ink focus:outline-2 focus:outline-offset-2 focus:outline-accent";
+  "code-copy-button inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 // Wraps each <table> in a scroll container so a wide table scrolls inside its
 // own box instead of widening the whole page. Mutating the tree in place is
@@ -116,9 +118,12 @@ const wrapCodeBlocks = (node: Root | Element): void => {
         "data-copy-code": "",
         "data-size": "xs",
         "data-slot": "button",
-        "data-variant": "outline",
+        "data-variant": "ghost",
       },
-      children: [{ type: "text", value: "Copy" }],
+      children: [
+        renderLucideIcon({ icon: Copy, name: "copy", hidden: false }),
+        renderLucideIcon({ icon: Check, name: "check", hidden: true }),
+      ],
     };
     const wrapper: Element = {
       type: "element",
@@ -127,7 +132,21 @@ const wrapCodeBlocks = (node: Root | Element): void => {
         className: ["code-block"],
         [CODE_BLOCK_SELECTOR]: "",
       },
-      children: [child, copyButton],
+      children: [
+        child,
+        {
+          type: "element",
+          tagName: "span",
+          properties: {
+            className: ["code-copy-message"],
+            ariaHidden: "true",
+            "data-copy-message": "",
+            hidden: true,
+          },
+          children: [{ type: "text", value: "Copied!" }],
+        },
+        copyButton,
+      ],
     };
     return wrapper;
   });

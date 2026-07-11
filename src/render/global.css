@@ -194,7 +194,7 @@ Light and dark are chosen by the reader's OS via prefers-color-scheme.
   }
   article .code-block pre {
     margin: 0;
-    padding-top: 2.75rem;
+    padding-right: 3rem;
   }
   article .code-copy-button {
     position: absolute;
@@ -202,9 +202,38 @@ Light and dark are chosen by the reader's OS via prefers-color-scheme.
     right: 0.5rem;
     cursor: pointer;
   }
+  article .code-copy-button:hover {
+    background: var(--color-edge);
+  }
   article .code-copy-button:disabled {
     pointer-events: none;
     opacity: 0.5;
+  }
+  article .code-copy-button svg {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+  article .code-copy-button svg[hidden] {
+    display: none;
+  }
+  article .code-copy-button [data-lucide="check"] {
+    color: var(--color-accent);
+  }
+  article .code-copy-message {
+    position: absolute;
+    top: 0.5rem;
+    right: 2.5rem;
+    display: flex;
+    height: 1.5rem;
+    align-items: center;
+    color: var(--color-muted);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+  article .code-copy-message[hidden] {
+    display: none;
   }
 
   /* rehype-highlight emits highlight.js token classes at render time. These
