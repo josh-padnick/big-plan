@@ -1,4 +1,4 @@
-// Wires the grandplan CLI onto runAxiCli(), which owns dispatch, help,
+// Wires the big-plan CLI onto runAxiCli(), which owns dispatch, help,
 // structured errors, and output serialization. Command behavior lives in the
 // sibling *-command modules; this file stays thin glue.
 
@@ -8,14 +8,14 @@ import { renderCommand } from "./render-command.js";
 
 // The README tagline verbatim, so the CLI and the docs never drift apart.
 const DESCRIPTION =
-  "Good AI output depends on a great plan. GrandPlan makes reviewing agent plans a first-class experience.";
+  "Good AI output depends on a great plan. Big Plan makes reviewing agent plans a first-class experience.";
 
-const TOP_LEVEL_HELP = `grandplan - ${DESCRIPTION}
+const TOP_LEVEL_HELP = `big-plan - ${DESCRIPTION}
 
 Usage:
-  grandplan render <input.md> [output.html]   Render a markdown plan to a
-                                              single self-contained HTML file
-                                              (defaults to <input>.html)
+  big-plan render <input.md> [output.html]   Render a markdown plan to a
+                                             single self-contained HTML file
+                                             (defaults to <input>.html)
 `;
 
 // Reads this package's own version for --version output, tolerating a missing
@@ -39,7 +39,7 @@ const readOwnVersion = async (): Promise<string | undefined> => {
   return undefined;
 };
 
-/** Runs the grandplan CLI: dispatches argv to commands via runAxiCli(). */
+/** Runs the big-plan CLI: dispatches argv to commands via runAxiCli(). */
 export const main = async (): Promise<void> => {
   const version = await readOwnVersion();
   await runAxiCli({
@@ -47,8 +47,8 @@ export const main = async (): Promise<void> => {
     ...(version === undefined ? {} : { version }),
     topLevelHelp: TOP_LEVEL_HELP,
     home: () => ({
-      grandplan: DESCRIPTION,
-      next_step: "grandplan render <file.md>",
+      "big-plan": DESCRIPTION,
+      next_step: "big-plan render <file.md>",
     }),
     commands: {
       render: (args) => renderCommand(args),

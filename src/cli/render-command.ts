@@ -1,4 +1,4 @@
-// Implements `grandplan render <input.md> [output.html]`: the I/O boundary
+// Implements `big-plan render <input.md> [output.html]`: the I/O boundary
 // around the pure renderer, owning argument validation, file reads/writes,
 // and the structured result runAxiCli() prints. Content decisions, including
 // the document title, belong to the renderer.
@@ -8,7 +8,7 @@ import { basename, dirname, extname, resolve } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import { renderDocument } from "../render/render-document.js";
 
-const USAGE = "Usage: grandplan render <input.md> [output.html]";
+const USAGE = "Usage: big-plan render <input.md> [output.html]";
 
 // Defaults the output to sit next to the input: <input>.html.
 const defaultOutputPath = (inputPath: string): string => {

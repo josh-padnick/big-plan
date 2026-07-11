@@ -21,13 +21,13 @@ type WorkerFixtures = {
 
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
   // Rendering through the built CLI (not the library) keeps specs aligned
-  // with what a user actually runs: grandplan render <file.md>.
+  // with what a user actually runs: big-plan render <file.md>.
   sampleViewerUrl: [
     async ({}, use) => {
-      const outputDir = await mkdtemp(join(tmpdir(), "grandplan-viewer-"));
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-viewer-"));
       const outputPath = join(outputDir, "sample.html");
       await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "grandplan.mjs"),
+        join(repoRoot, "bin", "big-plan.mjs"),
         "render",
         join(repoRoot, "examples", "sample.md"),
         outputPath,

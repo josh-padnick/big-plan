@@ -13,7 +13,7 @@ const inputPath = join(repoRoot, "src", "render", "global.css");
 const outputPath = join(repoRoot, "src", "render", "global.generated.ts");
 const tailwindBin = join(repoRoot, "node_modules", ".bin", "tailwindcss");
 
-const tempDir = mkdtempSync(join(tmpdir(), "grandplan-css-"));
+const tempDir = mkdtempSync(join(tmpdir(), "big-plan-css-"));
 try {
   const compiledPath = join(tempDir, "global.css");
   execFileSync(tailwindBin, ["-i", inputPath, "-o", compiledPath, "--minify"], {
