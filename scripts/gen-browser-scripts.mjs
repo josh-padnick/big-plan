@@ -1,5 +1,13 @@
 // Compiles every authored browser script into a generated TypeScript module
 // the shell can inline, after one shared browser-side type-check.
+//
+// This deliberately fills the narrow browser-build role that a bundler such
+// as Vite normally owns: GrandPlan is currently a Node CLI whose output is one
+// self-contained HTML file, while tsc alone cannot hand the renderer browser
+// JavaScript as inlineable strings. Once a server owns a browser application,
+// its Vite build can become the canonical source for served assets; the static
+// render envelope will still need to consume and inline that build output to
+// preserve `grandplan render`'s single-file, offline-friendly contract.
 
 import { spawnSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
