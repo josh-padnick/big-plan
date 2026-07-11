@@ -78,7 +78,7 @@ const renderTocItems = ({
 // Builds the desktop sidebar navigation.
 const renderDesktopToc = (nav: ReadonlyArray<NavEntry>): string => {
   const items = renderTocItems({ nav, linkClasses: TOC_LINK_CLASSES });
-  return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[6.25rem] wide:block wide:self-start" aria-label="Contents">
+  return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[6.5rem] wide:block wide:self-start" aria-label="Contents">
 <p class="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-muted">Contents</p>
 <ol>
 ${items}
@@ -106,7 +106,7 @@ const renderMobileChrome = ({
 </div>
 </div>
 </header>
-<nav class="sticky top-13 z-10 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden" data-mobile-toc aria-label="Contents">
+<nav class="sticky top-14 z-10 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden" data-mobile-toc aria-label="Contents">
 <details class="group relative mx-auto max-w-[70ch]">
 <summary class="flex min-h-14 cursor-pointer list-none items-center gap-3 px-5 py-3 [&amp;::-webkit-details-marker]:hidden">
 <span class="font-semibold text-ink">Sections</span>
@@ -145,9 +145,9 @@ export const renderShell = ({
   const overviewId = createOverviewId(contentIds);
   const html = `<button class="${THEME_TOGGLE_CLASSES}" type="button" data-theme-toggle aria-label="Toggle color theme">Theme</button>
 <header class="sticky top-0 z-10 border-b border-edge bg-paper/90 backdrop-blur">
-<div class="flex h-13 items-center px-5 wide:px-6">
-<img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="GrandPlan" width="324" height="59">
-<img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="GrandPlan" width="324" height="59">
+<div class="flex h-14 items-center px-5 wide:px-6">
+<img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="GrandPlan" width="324" height="123">
+<img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="GrandPlan" width="324" height="123">
 </div>
 </header>
 ${hasToc ? renderMobileChrome({ nav, environmentLabel, overviewId }) : ""}

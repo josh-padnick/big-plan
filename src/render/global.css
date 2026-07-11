@@ -96,13 +96,13 @@ Light and dark follow the reader's OS unless the theme control overrides it.
 }
 
 :target {
-  scroll-margin-top: 4.75rem;
+  scroll-margin-top: 5rem;
 }
 
 /* Mobile section links land below the branding bar plus the sticky TOC
    rather than beneath them. */
 @media (width < 56rem) {
   :target {
-    scroll-margin-top: 8.25rem;
+    scroll-margin-top: 8.5rem;
   }
 }

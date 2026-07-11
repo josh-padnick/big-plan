@@ -147,10 +147,10 @@ describe("renderDocument affordances", () => {
 
   it("should render a theme-swapped branding banner when rendering", () => {
     expect(html).toMatch(
-      /<img class="w-27 h-auto" data-logo-light src="data:image\/png;base64,[^"]+" alt="GrandPlan" width="324" height="59">/,
+      /<img class="w-27 h-auto" data-logo-light src="data:image\/png;base64,[^"]+" alt="GrandPlan" width="324" height="123">/,
     );
     expect(html).toMatch(
-      /<img class="w-27 h-auto" data-logo-dark src="data:image\/png;base64,[^"]+" alt="GrandPlan" width="324" height="59">/,
+      /<img class="w-27 h-auto" data-logo-dark src="data:image\/png;base64,[^"]+" alt="GrandPlan" width="324" height="123">/,
     );
   });
 });
