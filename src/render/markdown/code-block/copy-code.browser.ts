@@ -1,6 +1,5 @@
-// Owns code-block clipboard behavior for the static viewer. Markdown fences
-// and the future CodeSnippet component opt in through data attributes, keeping
-// the browser behavior independent of either renderer.
+// Owns clipboard behavior for rendered code blocks. Markdown fences and the
+// future CodeSnippet component opt in through the same data attributes.
 
 const COPY_RESET_MS = 2_000;
 const copyStatusTimers = new WeakMap<HTMLButtonElement, number>();

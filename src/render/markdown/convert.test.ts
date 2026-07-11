@@ -2,8 +2,8 @@
 // section extraction edge cases, and the table scroll-container transform.
 
 import { describe, expect, it } from "vitest";
+import { CODE_BLOCK_SELECTOR } from "./code-block/decorate-code-blocks.js";
 import {
-  CODE_BLOCK_SELECTOR,
   compileMarkdown,
   serializeMarkdown,
 } from "./convert.js";

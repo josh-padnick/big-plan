@@ -1,7 +1,7 @@
-// Owns the small Lucide icon-node assets used by code-block controls without
-// loading the library's complete runtime icon catalog.
+// Owns the small Lucide icon-node assets used by rendered code-block controls
+// without loading the library's complete runtime icon catalog.
 
-import type { IconNode } from "./lucide-icon.js";
+import type { IconNode } from "../../icons/lucide-icon.js";
 
 export const COPY_ICON: IconNode = [
   ["rect", { width: "14", height: "14", x: "8", y: "8", rx: "2", ry: "2" }],
