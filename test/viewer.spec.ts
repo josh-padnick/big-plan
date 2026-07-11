@@ -38,6 +38,16 @@ test("should navigate the rendered sample plan through the TOC without errors", 
     page.getByRole("heading", { level: 2, name: "Rollout plan" }),
   ).toBeInViewport();
 
+  // The short final section can never lift its heading past the spy
+  // threshold, so reaching the bottom must still mark it current.
+  await page.evaluate(() =>
+    window.scrollTo({ top: document.documentElement.scrollHeight }),
+  );
+  await expect(toc.getByRole("link", { name: "Rollout plan" })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+
   // The wide classification table scrolls inside its own container instead of
   // widening the page. The stable data attribute is the behavior-bearing
   // interface; utility classes and exact nesting stay implementation detail.

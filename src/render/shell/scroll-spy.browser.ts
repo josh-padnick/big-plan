@@ -47,6 +47,15 @@
   let queued = false;
   const update = (): void => {
     queued = false;
+    // A short final section may never lift its heading past the threshold
+    // because the page runs out of scroll first, so reaching the bottom of a
+    // scrollable document always marks the last section current.
+    const scrollBottom = window.innerHeight + window.scrollY;
+    const pageHeight = document.documentElement.scrollHeight;
+    if (pageHeight > window.innerHeight && scrollBottom >= pageHeight - 2) {
+      setActive(headings[headings.length - 1]?.id);
+      return;
+    }
     const mobileTocBottom = mobileToc?.getBoundingClientRect().bottom ?? 0;
     // The extra breathing room matches the mobile target scroll margin, so a
     // section becomes current as soon as its anchored heading settles in view.
