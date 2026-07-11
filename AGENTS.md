@@ -47,7 +47,7 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 - **Package manager and script runner**: Bun (`bun install`, `bun run <script>`, `bun.lock`).
 - **Language**: TypeScript, strict, compiled with tsc; browser-side scripts type-check against `tsconfig.browser.json` (DOM lib) and are transpiled into generated modules.
 - **CLI framework**: `axi-sdk-js` (dispatch, help, structured errors, TOON output).
-- **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-highlight, rehype-stringify).
+- **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-mdx, remark-rehype, rehype-slug, rehype-highlight, rehype-stringify).
 - **Styling**: Tailwind v4, compiled at build time by `@tailwindcss/cli` into a generated module; no runtime CSS tooling.
 - **Linting**: ESLint v10 flat config with `typescript-eslint`; conventions and architectural guardrails live in `eslint.config.mjs`.
 - **Tests**: vitest for units (colocated in `src/**`), Playwright (chromium) for browser journeys.

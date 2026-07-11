@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { CODE_BLOCK_SELECTOR } from "./code-block/decorate-code-blocks.js";
 import {
   compileMarkdown,
+  MarkdownDiagnosticsError,
   serializeMarkdown,
 } from "./convert.js";
 
@@ -12,6 +13,121 @@ const compileAndSerialize = (markdown: string): string => {
   const { root } = compileMarkdown({ markdown });
   return serializeMarkdown({ root });
 };
+
+// Extracts the typed failure while preserving unexpected exceptions.
+const diagnosticsFor = (markdown: string) => {
+  try {
+    compileMarkdown({ markdown });
+  } catch (error: unknown) {
+    if (error instanceof MarkdownDiagnosticsError) {
+      return error.diagnostics;
+    }
+    throw error;
+  }
+  throw new Error("Expected markdown compilation to fail");
+};
+
+describe("compileMarkdown static MDX validation", () => {
+  it("should reject ESM when a document contains an export", () => {
+    expect(diagnosticsFor("export const plan = true\n")).toEqual([
+      {
+        line: 1,
+        column: 1,
+        message: "ESM import/export statements are not supported",
+      },
+    ]);
+  });
+
+  it("should reject a flow expression when an expression occupies a block", () => {
+    expect(diagnosticsFor("intro\n\n{plan}\n")).toEqual([
+      { line: 3, column: 1, message: "Flow expressions are not supported" },
+    ]);
+  });
+
+  it("should reject a text expression when an expression is inline", () => {
+    expect(diagnosticsFor("Copy {plan}\n")).toEqual([
+      { line: 1, column: 6, message: "Text expressions are not supported" },
+    ]);
+  });
+
+  it("should reject inline JSX when an element occurs inside text", () => {
+    expect(diagnosticsFor("Before <Badge /> after\n")).toEqual([
+      {
+        line: 1,
+        column: 8,
+        message: "Inline JSX is not supported; blocks must be flow-level",
+      },
+    ]);
+  });
+
+  it("should reject an unknown component when the registry is empty", () => {
+    expect(diagnosticsFor("<Callout />\n")).toEqual([
+      { line: 1, column: 1, message: "Unknown block \"Callout\"" },
+    ]);
+  });
+
+  it("should reject a spread attribute when a block uses one", () => {
+    expect(diagnosticsFor("<Callout {...props} />\n")).toEqual([
+      { line: 1, column: 1, message: "Unknown block \"Callout\"" },
+      { line: 1, column: 10, message: "Spread attributes are not supported" },
+    ]);
+  });
+
+  it("should reject an expression attribute when a block uses one", () => {
+    expect(diagnosticsFor("<Callout tone={tone} />\n")).toEqual([
+      { line: 1, column: 1, message: "Unknown block \"Callout\"" },
+      {
+        line: 1,
+        column: 10,
+        message: "Expression-valued attribute \"tone\" is not supported",
+      },
+    ]);
+  });
+
+  it("should reject a duplicate attribute when a name repeats", () => {
+    expect(diagnosticsFor('<Callout tone="a" tone="b" />\n')).toEqual([
+      { line: 1, column: 1, message: "Unknown block \"Callout\"" },
+      { line: 1, column: 19, message: "Duplicate attribute \"tone\"" },
+    ]);
+  });
+
+  it("should accept shorthand attributes at validation when a value is omitted", () => {
+    expect(diagnosticsFor("<Callout flag />\n")).toEqual([
+      { line: 1, column: 1, message: "Unknown block \"Callout\"" },
+    ]);
+  });
+
+  it("should normalize a parse failure with its line and column", () => {
+    expect(diagnosticsFor("# Plan\n\n<Callout>\n")).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: "Expected a closing tag for `<Callout>` (3:1-3:10)",
+      },
+    ]);
+  });
+
+  it("should collect every diagnostic when invalid constructs coexist", () => {
+    expect(
+      diagnosticsFor("export const plan = true\n\n{plan}\n\n<Unknown />\n"),
+    ).toEqual([
+      {
+        line: 1,
+        column: 1,
+        message: "ESM import/export statements are not supported",
+      },
+      { line: 3, column: 1, message: "Flow expressions are not supported" },
+      { line: 5, column: 1, message: "Unknown block \"Unknown\"" },
+    ]);
+  });
+
+  it("should render byte-identical HTML when a document uses only plain GFM", () => {
+    expect(compileAndSerialize("# Plan\n\nA **safe** [link](https://example.com).\n"))
+      .toBe(
+        '<h1 id="plan">Plan</h1>\n<p>A <strong>safe</strong> <a href="https://example.com">link</a>.</p>',
+      );
+  });
+});
 
 describe("compileMarkdown sections", () => {
   it("should extract level-two headings as TOC sections when the document has h2s", () => {
@@ -120,7 +236,7 @@ describe("compileMarkdown code highlighting", () => {
 
   it("should add a shadcn copy button to every block code element", () => {
     const bodyHtml = compileAndSerialize(
-      "```sql\nSELECT 1;\n```\n\n    plain block\n",
+      "```sql\nSELECT 1;\n```\n\n```\nplain block\n```\n",
     );
     expect(bodyHtml.match(new RegExp(CODE_BLOCK_SELECTOR, "g"))).toHaveLength(2);
     expect(bodyHtml.match(/data-copy-code/g)).toHaveLength(2);

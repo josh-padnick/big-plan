@@ -7,6 +7,7 @@ import {
   compileMarkdown,
   serializeMarkdown,
 } from "./markdown/convert.js";
+export { MarkdownDiagnosticsError } from "./markdown/convert.js";
 import { renderPage } from "./page.js";
 import { renderShell } from "./shell/shell.js";
 
@@ -17,7 +18,7 @@ export type RenderedDocument = {
 };
 
 /**
- * Renders GFM markdown into a complete, self-contained HTML review document.
+ * Renders static-subset MDX into a complete, self-contained HTML review document.
  * The title is the document's first h1 when present, otherwise the caller's
  * fallback. Pure: no I/O, so callers own where the markdown comes from and
  * where the HTML goes.

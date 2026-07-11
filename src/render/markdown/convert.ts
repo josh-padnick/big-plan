@@ -1,4 +1,4 @@
-// Compiles GFM markdown into a structured HAST review document plus its title,
+// Compiles static-subset MDX into a structured HAST review document plus its title,
 // h2 outline, and element ids, then owns final HTML serialization after
 // transforms finish. The page chrome around that content lives in shell.ts.
 
@@ -7,10 +7,17 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
 import rehypeStringify from "rehype-stringify";
 import remarkGfm from "remark-gfm";
+import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
 import { rehypeDecorateCodeBlocks } from "./code-block/decorate-code-blocks.js";
+import {
+  createDiagnosticCollector,
+  diagnosticFromParseError,
+} from "./blocks/diagnostics.js";
+import type { BlockDiagnostic } from "./blocks/diagnostics.js";
+import { rehypeRenderBlocks } from "./blocks/registry.js";
 
 export type Section = {
   readonly id: string;
@@ -23,6 +30,17 @@ export type CompiledMarkdown = {
   readonly elementIds: ReadonlyArray<string>;
   readonly title: string | undefined;
 };
+
+/** Carries every positional authoring diagnostic across renderer boundaries. */
+export class MarkdownDiagnosticsError extends Error {
+  readonly diagnostics: ReadonlyArray<BlockDiagnostic>;
+
+  constructor(diagnostics: ReadonlyArray<BlockDiagnostic>) {
+    super("The document contains invalid MDX");
+    this.name = "MarkdownDiagnosticsError";
+    this.diagnostics = diagnostics;
+  }
+}
 
 // remark-rehype emits the GFM footnotes block with this heading id; it is a
 // screen-reader label, not an authored section, so it stays out of the TOC.
@@ -143,7 +161,7 @@ const collectElementIds = (
 };
 
 /**
- * Compiles GFM markdown into a structured review document plus its outline,
+ * Compiles static-subset MDX into a structured review document plus its outline,
  * title, and element ids for collision-free shell anchors. The tree stays
  * structured so future typed-block and annotation transforms can run before
  * the final serialization step.
@@ -153,21 +171,40 @@ export const compileMarkdown = ({
 }: {
   readonly markdown: string;
 }): CompiledMarkdown => {
+  const diagnostics = createDiagnosticCollector();
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
+    .use(remarkMdx)
     .use(remarkRehype, {
       // The GFM footnotes label ships visible as a small section heading;
       // without this option remark-rehype hides it behind class="sr-only".
       footnoteLabelProperties: { className: ["footnotes-heading"] },
+      passThrough: [
+        "mdxjsEsm",
+        "mdxFlowExpression",
+        "mdxTextExpression",
+        "mdxJsxFlowElement",
+        "mdxJsxTextElement",
+      ],
     })
+    .use(rehypeRenderBlocks, { diagnostics })
     .use(rehypeSlug)
     // Detection stays opt-in through the fence language: undeclared and
     // unknown languages remain readable without guessed tokenization.
     .use(rehypeHighlight)
     .use(rehypeDecorateCodeBlocks)
     .use(rehypeWrapTables);
-  const tree = processor.runSync(processor.parse(markdown));
+  let tree: Root;
+  try {
+    tree = processor.runSync(processor.parse(markdown));
+  } catch (error: unknown) {
+    throw new MarkdownDiagnosticsError([diagnosticFromParseError(error)]);
+  }
+
+  if (diagnostics.diagnostics.length > 0) {
+    throw new MarkdownDiagnosticsError(diagnostics.diagnostics);
+  }
 
   const sections: Array<Section> = [];
   collectSections(tree, sections);

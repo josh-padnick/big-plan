@@ -22,10 +22,10 @@ The first deliverable, a static markdown viewer, is available now.
 
 ## Usage
 
-Render a GFM markdown file into a single self-contained themed HTML document:
+Render a static-subset MDX file into a single self-contained themed HTML document:
 
 ```sh
-npx big-plan render <file.md> [output.html]
+npx big-plan render <file.mdx> [output.html]
 ```
 
 The output defaults to `<file>.html` next to the input.
@@ -47,7 +47,7 @@ bun run test            # vitest unit tests (regenerates embedded modules first)
 bun run lint            # ESLint conventions and architecture checks
 bun run gen             # regenerate CSS, browser-script, and branding-asset modules
 bunx playwright test    # browser test of the rendered viewer (build first)
-node bin/big-plan.mjs render examples/sample.md
+node bin/big-plan.mjs render examples/sample.mdx
 ```
 
 Use `bun run test`, not `bun test` - the latter invokes Bun's own test runner instead of vitest.
