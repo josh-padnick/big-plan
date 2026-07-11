@@ -268,6 +268,24 @@ describe("compileMarkdown Callout blocks", () => {
   });
 });
 
+describe("compileMarkdown CodeDiff blocks", () => {
+  it("should render both views without highlighting or decorating the consumed fence", () => {
+    const bodyHtml = compileAndSerialize(
+      '<CodeDiff file="src/retry.ts" lineNumbers>\n```diff\n@@ -1 +1,2 @@\n-old\n+new\n+audit\n```\n</CodeDiff>\n',
+    );
+    expect(bodyHtml).toContain('data-code-diff="" data-diff-view="unified"');
+    expect(bodyHtml).toContain('data-diff-content="unified"');
+    expect(bodyHtml).toContain('data-diff-content="split"');
+    expect(bodyHtml).toContain('data-diff-number="old"');
+    expect(bodyHtml).toContain('data-diff-number="new"');
+    expect(bodyHtml).toContain('data-diff-line="remove"');
+    expect(bodyHtml).toContain('data-diff-line="add"');
+    expect(bodyHtml).toContain('<textarea hidden readonly data-diff-source="">');
+    expect(bodyHtml).not.toContain("hljs");
+    expect(bodyHtml).not.toContain(CODE_BLOCK_SELECTOR);
+  });
+});
+
 describe("compileMarkdown title", () => {
   it("should return the first h1 text when the document has one", () => {
     const { title } = compileMarkdown({

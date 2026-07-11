@@ -3,6 +3,7 @@
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 import { renderCallout } from "./callout/callout.js";
+import { renderCodeDiff } from "./code-diff/code-diff.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
 
 type MdxJsxFlowElement = Extract<
@@ -22,6 +23,7 @@ export type BlockRenderer = (input: {
 
 export const BLOCK_REGISTRY: Readonly<Record<string, BlockRenderer>> = {
   Callout: renderCallout,
+  CodeDiff: renderCodeDiff,
 };
 
 const isMdxNodeType = (type: string): boolean => type.startsWith("mdx");

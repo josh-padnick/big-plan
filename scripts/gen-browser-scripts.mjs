@@ -25,6 +25,11 @@ const browserScripts = [
     name: "copy-code",
     exportName: "COPY_CODE_JS",
   },
+  {
+    directory: "markdown/blocks/code-diff",
+    name: "diff-view",
+    exportName: "DIFF_VIEW_JS",
+  },
 ];
 
 const check = spawnSync(
