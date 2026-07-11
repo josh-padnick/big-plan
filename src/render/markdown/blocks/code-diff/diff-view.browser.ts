@@ -104,6 +104,59 @@ const showDiffCopyStatus = ({
   diffCopyTimers.set(button, timer);
 };
 
+// Mirrors the expanded state into the expand control's icon and label.
+const updateExpandControl = ({
+  block,
+}: {
+  readonly block: HTMLElement;
+}): void => {
+  const button = block.querySelector<HTMLButtonElement>("[data-diff-expand]");
+  if (button === null) {
+    return;
+  }
+  const expanded = block.dataset.diffExpanded !== undefined;
+  const label = expanded ? "Exit full screen" : "View diff full screen";
+  button.setAttribute("aria-label", label);
+  button.title = label;
+  button
+    .querySelector<SVGElement>('[data-lucide="maximize-2"]')
+    ?.toggleAttribute("hidden", expanded);
+  button
+    .querySelector<SVGElement>('[data-lucide="minimize-2"]')
+    ?.toggleAttribute("hidden", !expanded);
+};
+
+// Moves the block into a modal dialog rather than cloning it, so listeners
+// and the selected view survive; closing restores its original position.
+const openFullScreen = ({ block }: { readonly block: HTMLElement }): void => {
+  const article = block.closest("article");
+  if (article === null) {
+    return;
+  }
+  const placeholder = document.createElement("span");
+  placeholder.hidden = true;
+  block.before(placeholder);
+  const dialog = document.createElement("dialog");
+  dialog.className = "code-diff-dialog";
+  dialog.append(block);
+  article.append(dialog);
+  block.dataset.diffExpanded = "";
+  updateExpandControl({ block });
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) {
+      dialog.close();
+    }
+  });
+  dialog.addEventListener("close", () => {
+    placeholder.before(block);
+    placeholder.remove();
+    dialog.remove();
+    delete block.dataset.diffExpanded;
+    updateExpandControl({ block });
+  });
+  dialog.showModal();
+};
+
 let storedDiffView: CodeDiffView = "unified";
 try {
   const stored = window.localStorage.getItem(DIFF_VIEW_STORAGE_KEY);
@@ -117,9 +170,20 @@ try {
 for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) {
   const toggleGroup = block.querySelector<HTMLElement>("[data-diff-toggle-group]");
   const copy = block.querySelector<HTMLButtonElement>("[data-diff-copy]");
+  const expand = block.querySelector<HTMLButtonElement>("[data-diff-expand]");
   toggleGroup?.removeAttribute("hidden");
   copy?.removeAttribute("hidden");
+  expand?.removeAttribute("hidden");
   applyDiffView({ block, view: storedDiffView });
+
+  expand?.addEventListener("click", () => {
+    const openDialog = block.closest("dialog");
+    if (openDialog !== null) {
+      openDialog.close();
+      return;
+    }
+    openFullScreen({ block });
+  });
 
   for (const button of block.querySelectorAll<HTMLButtonElement>(
     "[data-diff-set-view]",

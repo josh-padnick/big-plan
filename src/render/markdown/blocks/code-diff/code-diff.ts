@@ -8,7 +8,12 @@ import {
   COPY_ICON,
 } from "../../code-block/code-block-icons.js";
 import type { BlockRenderer } from "../registry.js";
-import { COLUMNS_ICON, ROWS_ICON } from "./code-diff-icons.js";
+import {
+  COLUMNS_ICON,
+  MAXIMIZE_ICON,
+  MINIMIZE_ICON,
+  ROWS_ICON,
+} from "./code-diff-icons.js";
 import {
   pairDiffLines,
   parseUnifiedDiff,
@@ -284,6 +289,28 @@ const viewToggleButton = ({
   children: [renderLucideIcon({ icon, name: iconName, hidden: false })],
 });
 
+// Opens the block alone in a near-full-screen modal dialog; the browser
+// script moves the figure rather than cloning it, so state survives.
+const expandControlButton = (): Element => ({
+  type: "element",
+  tagName: "button",
+  properties: {
+    type: "button",
+    className: BUTTON_CLASSES.split(" "),
+    ariaLabel: "View diff full screen",
+    title: "View diff full screen",
+    hidden: true,
+    "data-diff-expand": "",
+    "data-size": "xs",
+    "data-slot": "button",
+    "data-variant": "ghost",
+  },
+  children: [
+    renderLucideIcon({ icon: MAXIMIZE_ICON, name: "maximize-2", hidden: false }),
+    renderLucideIcon({ icon: MINIMIZE_ICON, name: "minimize-2", hidden: true }),
+  ],
+});
+
 const viewToggleGroup = (): Element => ({
   type: "element",
   tagName: "span",
@@ -422,6 +449,7 @@ export const renderCodeDiff: BlockRenderer = ({
                 children: [text("Copied!")],
               },
               viewToggleGroup(),
+              expandControlButton(),
               copyButton,
             ],
           },

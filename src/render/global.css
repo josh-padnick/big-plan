@@ -223,6 +223,32 @@ Light and dark follow the reader's OS unless the theme control overrides it.
     position: static;
     height: 1.5rem;
   }
+  article .code-diff-dialog {
+    display: flex;
+    overflow: visible;
+    width: min(96vw, 100rem);
+    height: 92vh;
+    max-width: none;
+    max-height: none;
+    flex-direction: column;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  article .code-diff-dialog::backdrop {
+    background: rgb(20 17 12 / 0.5);
+  }
+  article .code-diff-dialog [data-code-diff] {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+  article .code-diff-dialog .code-diff-view {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+  }
   article .code-diff-toggle-group {
     display: inline-flex;
     overflow: hidden;

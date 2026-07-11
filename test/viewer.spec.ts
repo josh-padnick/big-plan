@@ -378,6 +378,35 @@ test("should remember the selected diff view when the page reloads", async ({
   );
 });
 
+test("should expand a diff to full screen and restore it when dismissed", async ({
+  page,
+  mdxBlocksViewerUrl,
+}) => {
+  await page.goto(mdxBlocksViewerUrl);
+
+  const diff = page.locator("[data-code-diff]").first();
+  await diff.getByRole("button", { name: "View diff full screen" }).click();
+
+  const dialog = page.locator("dialog.code-diff-dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator("[data-code-diff]")).toHaveAttribute(
+    "data-diff-expanded",
+    "",
+  );
+  await expect(
+    dialog.getByRole("button", { name: "Exit full screen" }),
+  ).toBeVisible();
+
+  await page.keyboard.press("Escape");
+
+  await expect(page.locator("dialog.code-diff-dialog")).toHaveCount(0);
+  await expect(diff).toBeVisible();
+  await expect(diff).not.toHaveAttribute("data-diff-expanded", "");
+  await expect(
+    diff.getByRole("button", { name: "View diff full screen" }),
+  ).toBeVisible();
+});
+
 test("should copy the exact raw git diff when its copy control is used", async ({
   page,
   mdxBlocksViewerUrl,
@@ -419,8 +448,10 @@ test("should preserve typed-block content without controls when JavaScript is di
   await expect(diffs).toHaveCount(2);
   await expect(diffs.first().locator('[data-diff-content="unified"]')).toBeVisible();
   await expect(diffs.first().locator('[data-diff-content="split"]')).toBeHidden();
-  const controls = page.locator("[data-diff-toggle-group], [data-diff-copy]");
-  await expect(controls).toHaveCount(4);
+  const controls = page.locator(
+    "[data-diff-toggle-group], [data-diff-copy], [data-diff-expand]",
+  );
+  await expect(controls).toHaveCount(6);
   for (const control of await controls.all()) {
     await expect(control).toBeHidden();
   }
