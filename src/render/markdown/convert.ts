@@ -20,6 +20,7 @@ export type Section = {
 export type CompiledMarkdown = {
   readonly root: Root;
   readonly sections: ReadonlyArray<Section>;
+  readonly elementIds: ReadonlyArray<string>;
   readonly title: string | undefined;
 };
 
@@ -124,6 +125,23 @@ const collectSections = (
   }
 };
 
+// Gathers ids from rendered elements for page-shell namespace allocation.
+const collectElementIds = (
+  node: Root | Element,
+  elementIds: Array<string>,
+): void => {
+  for (const child of node.children) {
+    if (!isElement(child)) {
+      continue;
+    }
+    const id = child.properties.id;
+    if (typeof id === "string") {
+      elementIds.push(id);
+    }
+    collectElementIds(child, elementIds);
+  }
+};
+
 /**
  * Compiles GFM markdown into a structured review document plus its outline
  * and title. The tree stays structured so future typed-block and annotation
@@ -152,8 +170,10 @@ export const compileMarkdown = ({
 
   const sections: Array<Section> = [];
   collectSections(tree, sections);
+  const elementIds: Array<string> = [];
+  collectElementIds(tree, elementIds);
 
-  return { root: tree, sections, title: findTitle(tree) };
+  return { root: tree, sections, elementIds, title: findTitle(tree) };
 };
 
 /** Serializes a compiled review document only after all transforms finish. */

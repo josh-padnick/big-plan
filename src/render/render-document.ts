@@ -34,10 +34,11 @@ export const renderDocument = ({
   readonly fallbackTitle: string;
   readonly environmentLabel?: string;
 }): RenderedDocument => {
-  const { root, sections, title } = compileMarkdown({ markdown });
+  const { root, sections, elementIds, title } = compileMarkdown({ markdown });
   const resolvedTitle = title ?? fallbackTitle;
   const shell = renderShell({
     nav: sections.map((section) => ({ id: section.id, label: section.text })),
+    contentIds: elementIds,
     contentHtml: serializeMarkdown({ root }),
     environmentLabel,
   });

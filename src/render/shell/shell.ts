@@ -46,6 +46,18 @@ const MOBILE_TOC_LINK_CLASSES =
 const THEME_TOGGLE_CLASSES =
   "fixed top-3 right-3 z-20 rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted shadow-sm hover:text-ink focus:outline-2 focus:outline-offset-2 focus:outline-accent";
 
+// Allocates the shell-owned overview anchor alongside document-owned ids.
+const createOverviewId = (contentIds: ReadonlyArray<string>): string => {
+  const documentIds = new Set(contentIds);
+  let candidate = "top";
+  let suffix = 2;
+  while (documentIds.has(candidate)) {
+    candidate = `top-${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+};
+
 // Builds links shared by both TOCs; ids are URI-encoded because slugs may
 // contain characters that are not literal-safe inside href values.
 const renderTocItems = ({
@@ -77,9 +89,11 @@ ${items}
 const renderMobileChrome = ({
   nav,
   environmentLabel,
+  overviewId,
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
   readonly environmentLabel: string;
+  readonly overviewId: string;
 }): string => {
   const items = renderTocItems({ nav, linkClasses: MOBILE_TOC_LINK_CLASSES });
   return `<header class="border-b border-edge px-5 py-4 wide:hidden">
@@ -100,7 +114,7 @@ const renderMobileChrome = ({
 </summary>
 <div class="absolute inset-x-0 top-full max-h-[min(70vh,24rem)] overflow-y-auto overscroll-contain border-y border-edge bg-paper py-2 shadow-lg">
 <ol>
-<li><a class="${MOBILE_TOC_LINK_CLASSES}" data-overview-link href="#top">Overview</a></li>
+<li><a class="${MOBILE_TOC_LINK_CLASSES}" data-overview-link href="#${encodeURIComponent(overviewId)}">Overview</a></li>
 ${items}
 </ol>
 </div>
@@ -117,19 +131,22 @@ ${items}
  */
 export const renderShell = ({
   nav,
+  contentIds,
   contentHtml,
   environmentLabel,
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
+  readonly contentIds: ReadonlyArray<string>;
   readonly contentHtml: string;
   readonly environmentLabel: string;
 }): ShellResult => {
   const hasToc = nav.length > 0;
+  const overviewId = createOverviewId(contentIds);
   const html = `<button class="${THEME_TOGGLE_CLASSES}" type="button" data-theme-toggle aria-label="Toggle color theme">Theme</button>
-${hasToc ? renderMobileChrome({ nav, environmentLabel }) : ""}
+${hasToc ? renderMobileChrome({ nav, environmentLabel, overviewId }) : ""}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}">
 ${hasToc ? renderDesktopToc(nav) : ""}
-<main class="min-w-0" id="top">
+<main class="min-w-0" id="${overviewId}">
 <article>
 ${contentHtml}
 </article>

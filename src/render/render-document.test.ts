@@ -93,6 +93,17 @@ describe("renderDocument affordances", () => {
     expect(html).toContain('data-overview-link href="#top"');
   });
 
+  it("should allocate a distinct overview anchor when content ids occupy candidates", () => {
+    const { html: collisionHtml } = renderDocument({
+      markdown: "# Top\n\n### Top 2\n\n## Section\n\nContent.\n",
+      fallbackTitle: "Collision",
+    });
+    expect(collisionHtml).toContain('data-overview-link href="#top-3"');
+    expect(collisionHtml).toContain('<main class="min-w-0" id="top-3">');
+    expect(collisionHtml.match(/id="top"/g)).toHaveLength(1);
+    expect(collisionHtml.match(/id="top-2"/g)).toHaveLength(1);
+  });
+
   it("should escape a custom environment label", () => {
     const { html: customHtml } = renderDocument({
       markdown: FULL_FIXTURE,
