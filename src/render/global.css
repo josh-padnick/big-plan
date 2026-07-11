@@ -217,6 +217,22 @@ Light and dark follow the reader's OS unless the theme control overrides it.
     position: static;
     height: 1.5rem;
   }
+  article .code-diff-toggle-group {
+    display: inline-flex;
+    overflow: hidden;
+    border: 1px solid var(--color-edge);
+    border-radius: 0.375rem;
+  }
+  article .code-diff-toggle-group[hidden] {
+    display: none;
+  }
+  article .code-diff-toggle-group .code-diff-button {
+    border-radius: 0;
+  }
+  article .code-diff-toggle-group [aria-pressed="true"] {
+    background: var(--color-edge);
+    color: var(--color-ink);
+  }
   article .code-diff-button {
     cursor: pointer;
   }

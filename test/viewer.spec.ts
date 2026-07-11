@@ -356,19 +356,25 @@ test("should remember the selected diff view when the page reloads", async ({
   });
   const unified = diff.locator('[data-diff-content="unified"]');
   const split = diff.locator('[data-diff-content="split"]');
-  const toggle = diff.getByRole("button", { name: "Use side-by-side diff view" });
+  const unifiedButton = diff.getByRole("button", { name: "Unified view" });
+  const splitButton = diff.getByRole("button", { name: "Side-by-side view" });
   await expect(unified).toBeVisible();
   await expect(split).toBeHidden();
+  await expect(unifiedButton).toHaveAttribute("aria-pressed", "true");
+  await expect(splitButton).toHaveAttribute("aria-pressed", "false");
 
-  await toggle.click();
+  await splitButton.click();
 
   await expect(diff).toHaveAttribute("data-diff-view", "split");
   await expect(unified).toBeHidden();
   await expect(split).toBeVisible();
+  await expect(splitButton).toHaveAttribute("aria-pressed", "true");
+  await expect(unifiedButton).toHaveAttribute("aria-pressed", "false");
   await page.reload();
   await expect(diff).toHaveAttribute("data-diff-view", "split");
-  await expect(diff.locator("[data-diff-toggle]")).toHaveAccessibleName(
-    "Use unified diff view",
+  await expect(diff.getByRole("button", { name: "Side-by-side view" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
   );
 });
 
@@ -413,7 +419,7 @@ test("should preserve typed-block content without controls when JavaScript is di
   await expect(diffs).toHaveCount(2);
   await expect(diffs.first().locator('[data-diff-content="unified"]')).toBeVisible();
   await expect(diffs.first().locator('[data-diff-content="split"]')).toBeHidden();
-  const controls = page.locator("[data-diff-toggle], [data-diff-copy]");
+  const controls = page.locator("[data-diff-toggle-group], [data-diff-copy]");
   await expect(controls).toHaveCount(4);
   for (const control of await controls.all()) {
     await expect(control).toBeHidden();

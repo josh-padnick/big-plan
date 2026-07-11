@@ -12,21 +12,24 @@ const diffCopyTimers = new WeakMap<HTMLButtonElement, number>();
 const isCodeDiffView = (value: string | null): value is CodeDiffView =>
   value === "unified" || value === "split";
 
-const updateDiffToggle = ({
+// Applies one view to a block and mirrors it into the segmented control's
+// pressed states so the active view is always visible in the header.
+const applyDiffView = ({
   block,
+  view,
 }: {
   readonly block: HTMLElement;
+  readonly view: CodeDiffView;
 }): void => {
-  const button = block.querySelector<HTMLButtonElement>("[data-diff-toggle]");
-  if (button === null) {
-    return;
+  block.dataset.diffView = view;
+  for (const button of block.querySelectorAll<HTMLButtonElement>(
+    "[data-diff-set-view]",
+  )) {
+    button.setAttribute(
+      "aria-pressed",
+      button.dataset.diffSetView === view ? "true" : "false",
+    );
   }
-  const nextView = block.dataset.diffView === "split" ? "unified" : "split";
-  const label = nextView === "split"
-    ? "Use side-by-side diff view"
-    : "Use unified diff view";
-  button.setAttribute("aria-label", label);
-  button.title = label;
 };
 
 const setDiffCopyStatus = ({
@@ -112,25 +115,28 @@ try {
 }
 
 for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) {
-  block.dataset.diffView = storedDiffView;
-  const toggle = block.querySelector<HTMLButtonElement>("[data-diff-toggle]");
+  const toggleGroup = block.querySelector<HTMLElement>("[data-diff-toggle-group]");
   const copy = block.querySelector<HTMLButtonElement>("[data-diff-copy]");
-  toggle?.removeAttribute("hidden");
+  toggleGroup?.removeAttribute("hidden");
   copy?.removeAttribute("hidden");
-  updateDiffToggle({ block });
+  applyDiffView({ block, view: storedDiffView });
 
-  toggle?.addEventListener("click", () => {
-    const nextView: CodeDiffView = block.dataset.diffView === "split"
-      ? "unified"
-      : "split";
-    block.dataset.diffView = nextView;
-    try {
-      window.localStorage.setItem(DIFF_VIEW_STORAGE_KEY, nextView);
-    } catch {
-      // Keep the block-local selection when persistence is unavailable.
-    }
-    updateDiffToggle({ block });
-  });
+  for (const button of block.querySelectorAll<HTMLButtonElement>(
+    "[data-diff-set-view]",
+  )) {
+    button.addEventListener("click", () => {
+      const view = button.dataset.diffSetView ?? null;
+      if (!isCodeDiffView(view)) {
+        return;
+      }
+      applyDiffView({ block, view });
+      try {
+        window.localStorage.setItem(DIFF_VIEW_STORAGE_KEY, view);
+      } catch {
+        // Keep the block-local selection when persistence is unavailable.
+      }
+    });
+  }
 
   copy?.addEventListener("click", async (event) => {
     const source = block.querySelector<HTMLTextAreaElement>("[data-diff-source]");

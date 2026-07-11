@@ -8,7 +8,7 @@ import {
   COPY_ICON,
 } from "../../code-block/code-block-icons.js";
 import type { BlockRenderer } from "../registry.js";
-import { COLUMNS_ICON } from "./code-diff-icons.js";
+import { COLUMNS_ICON, ROWS_ICON } from "./code-diff-icons.js";
 import {
   pairDiffLines,
   parseUnifiedDiff,
@@ -229,12 +229,10 @@ const renderView = ({
     : renderSplitHunk({ hunk, lineNumbers })),
 });
 
-const controlButton = ({
-  kind,
+const copyControlButton = ({
   label,
   children,
 }: {
-  readonly kind: "toggle" | "copy";
   readonly label: string;
   readonly children: ReadonlyArray<Element>;
 }): Element => ({
@@ -244,15 +242,74 @@ const controlButton = ({
     type: "button",
     className: BUTTON_CLASSES.split(" "),
     ariaLabel: label,
-    ...(kind === "copy" ? { ariaLive: "polite" } : {}),
+    ariaLive: "polite",
     title: label,
     hidden: true,
-    [`data-diff-${kind}`]: "",
+    "data-diff-copy": "",
     "data-size": "xs",
     "data-slot": "button",
     "data-variant": "ghost",
   },
   children: [...children],
+});
+
+// One pressed segment per view keeps the current state and the alternative
+// visible at once; a single flipping button hid which mode was active.
+const viewToggleButton = ({
+  view,
+  pressed,
+  label,
+  icon,
+  iconName,
+}: {
+  readonly view: "unified" | "split";
+  readonly pressed: boolean;
+  readonly label: string;
+  readonly icon: typeof COLUMNS_ICON;
+  readonly iconName: string;
+}): Element => ({
+  type: "element",
+  tagName: "button",
+  properties: {
+    type: "button",
+    className: BUTTON_CLASSES.split(" "),
+    ariaLabel: label,
+    ariaPressed: pressed ? "true" : "false",
+    title: label,
+    "data-diff-set-view": view,
+    "data-size": "xs",
+    "data-slot": "button",
+    "data-variant": "ghost",
+  },
+  children: [renderLucideIcon({ icon, name: iconName, hidden: false })],
+});
+
+const viewToggleGroup = (): Element => ({
+  type: "element",
+  tagName: "span",
+  properties: {
+    className: ["code-diff-toggle-group"],
+    role: "group",
+    ariaLabel: "Diff view",
+    hidden: true,
+    "data-diff-toggle-group": "",
+  },
+  children: [
+    viewToggleButton({
+      view: "unified",
+      pressed: true,
+      label: "Unified view",
+      icon: ROWS_ICON,
+      iconName: "rows-2",
+    }),
+    viewToggleButton({
+      view: "split",
+      pressed: false,
+      label: "Side-by-side view",
+      icon: COLUMNS_ICON,
+      iconName: "columns-2",
+    }),
+  ],
 });
 
 const emptyDiff: UnifiedDiff = {
@@ -320,8 +377,7 @@ export const renderCodeDiff: BlockRenderer = ({
     });
   }
 
-  const copyButton = controlButton({
-    kind: "copy",
+  const copyButton = copyControlButton({
     label: "Copy diff",
     children: [
       renderLucideIcon({ icon: COPY_ICON, name: "copy", hidden: false }),
@@ -365,15 +421,7 @@ export const renderCodeDiff: BlockRenderer = ({
                 },
                 children: [text("Copied!")],
               },
-              controlButton({
-                kind: "toggle",
-                label: "Use side-by-side diff view",
-                children: [renderLucideIcon({
-                  icon: COLUMNS_ICON,
-                  name: "columns-2",
-                  hidden: false,
-                })],
-              }),
+              viewToggleGroup(),
               copyButton,
             ],
           },
