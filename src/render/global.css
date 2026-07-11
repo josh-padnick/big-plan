@@ -222,8 +222,8 @@ Light and dark follow the reader's OS unless the theme control overrides it.
     margin-bottom: 0;
   }
 
-  /* Preflight strips list markers, so markdown lists restore them, including
-     the browser's default marker rotation for nested unordered lists. */
+  /* Preflight strips list markers, so markdown lists restore them, rotating
+     the marker scheme at each nesting depth for both list kinds. */
   article ul {
     list-style-type: disc;
   }
@@ -235,6 +235,12 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   }
   article ol {
     list-style-type: decimal;
+  }
+  article ol ol {
+    list-style-type: lower-alpha;
+  }
+  article ol ol ol {
+    list-style-type: lower-roman;
   }
   article ul,
   article ol {
