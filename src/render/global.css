@@ -67,6 +67,14 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --breakpoint-wide: 56rem;
 }
 
+/* Section navigation glides instead of jumping; readers who ask the OS for
+   reduced motion keep instant jumps. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 :target {
   scroll-margin-top: 1.5rem;
 }

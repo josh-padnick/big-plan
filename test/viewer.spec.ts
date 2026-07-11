@@ -26,7 +26,12 @@ test("should navigate the rendered sample plan through the TOC without errors", 
     "Rollout plan",
   ]);
 
-  // Clicking a TOC entry navigates to that section.
+  // Clicking a TOC entry glides to that section (reduced motion keeps jumps).
+  expect(
+    await page.evaluate(
+      () => getComputedStyle(document.documentElement).scrollBehavior,
+    ),
+  ).toBe("smooth");
   await toc.getByRole("link", { name: "Rollout plan" }).click();
   await expect(page).toHaveURL(/#rollout-plan$/);
   await expect(
