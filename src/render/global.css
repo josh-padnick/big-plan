@@ -2,11 +2,11 @@
 The stylesheet entry point, authored for Tailwind v4 and compiled by
 scripts/gen-css.mjs into an inlined <style> block, so rendered documents stay
 fully self-contained. This file owns what is genuinely global - the design
-tokens, the paper-like light and dark palettes, and the layout breakpoint -
-and imports the feature stylesheets that own the rest: markdown prose styles
-and the code-block control and token styles, each colocated with the module
-that emits its markup. Light and dark follow the reader's OS unless the theme
-control overrides it.
+tokens, the paper-like light and dark palettes and theme overrides, the layout
+breakpoint, and target scroll margins - and imports the feature stylesheets
+that own the rest: markdown prose styles and the code-block control and token
+styles, each colocated with the module that emits its markup. Light and dark
+follow the reader's OS unless the theme control overrides it.
 */
 
 @import "tailwindcss" source(none);

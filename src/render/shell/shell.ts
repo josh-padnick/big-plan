@@ -4,7 +4,7 @@
 // the styles and progressive-enhancement scripts that markup needs, as data;
 // packaging into a complete document is page.ts's job. Authored markup is
 // styled with Tailwind utilities; the compiled stylesheet (including the
-// element-scoped prose styles from global.css) comes from the generated
+// element-scoped styles from markdown/prose.css) comes from the generated
 // GLOBAL_CSS module.
 
 import { escapeHtml } from "../escape-html.js";
