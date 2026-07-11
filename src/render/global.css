@@ -253,10 +253,17 @@ Light and dark follow the reader's OS unless the theme control overrides it.
     list-style: none;
     padding-left: 0.5em;
   }
+  /* Hanging indent: the item reserves a gutter and the checkbox sits inside
+     it absolutely, so wrapped lines align with the text, not the checkbox. */
+  article .task-list-item {
+    position: relative;
+    padding-left: 1.5em;
+  }
   article .task-list-item input[type="checkbox"] {
     accent-color: var(--color-accent);
-    margin-right: 0.5em;
-    vertical-align: -0.1em;
+    position: absolute;
+    left: 0;
+    top: 0.4em;
   }
 
   article table {
