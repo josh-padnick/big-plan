@@ -1,18 +1,18 @@
 {
-  "name": "grandplan",
+  "name": "big-plan",
   "version": "0.0.1",
-  "description": "Good AI output depends on a great plan. GrandPlan makes reviewing agent plans a first-class experience.",
+  "description": "Good AI output depends on a great plan. Big Plan makes reviewing agent plans a first-class experience.",
   "license": "MIT",
   "author": "Josh Padnick",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/josh-padnick/grandplan.git"
+    "url": "git+https://github.com/josh-padnick/big-plan.git"
   },
-  "homepage": "https://github.com/josh-padnick/grandplan#readme",
-  "bugs": "https://github.com/josh-padnick/grandplan/issues",
+  "homepage": "https://github.com/josh-padnick/big-plan#readme",
+  "bugs": "https://github.com/josh-padnick/big-plan/issues",
   "type": "module",
   "bin": {
-    "grandplan": "bin/grandplan.mjs"
+    "big-plan": "bin/big-plan.mjs"
   },
   "files": [
     "bin",

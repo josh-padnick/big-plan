@@ -111,10 +111,10 @@ describe("compileMarkdown code highlighting", () => {
 
   it("should preserve a block as plain code when its declared language is unknown", () => {
     const bodyHtml = compileAndSerialize(
-      "```grandplan-example\nplain & safe\n```\n",
+      "```big-plan-example\nplain & safe\n```\n",
     );
     expect(bodyHtml).toContain(
-      '<code class="hljs language-grandplan-example">plain &#x26; safe\n</code></pre>',
+      '<code class="hljs language-big-plan-example">plain &#x26; safe\n</code></pre>',
     );
   });
 

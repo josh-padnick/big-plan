@@ -2,7 +2,7 @@
 // preference. The stylesheet remains responsible for following the OS when
 // the reader has not chosen a theme explicitly.
 
-const THEME_STORAGE_KEY = "grandplan-theme";
+const THEME_STORAGE_KEY = "big-plan-theme";
 
 type Theme = "light" | "dark";
 

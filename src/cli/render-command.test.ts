@@ -10,7 +10,7 @@ import { renderCommand } from "./render-command.js";
 let tempDirectory = "";
 
 beforeEach(async () => {
-  tempDirectory = await mkdtemp(join(tmpdir(), "grandplan-render-command-"));
+  tempDirectory = await mkdtemp(join(tmpdir(), "big-plan-render-command-"));
 });
 
 afterEach(async () => {
@@ -22,7 +22,7 @@ describe("renderCommand validation", () => {
     await expect(renderCommand([])).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
       message: "Missing input markdown file",
-      suggestions: ["Usage: grandplan render <input.md> [output.html]"],
+      suggestions: ["Usage: big-plan render <input.md> [output.html]"],
     });
   });
 

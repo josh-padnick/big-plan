@@ -1,23 +1,23 @@
-# GrandPlan agent guide
+# Big Plan agent guide
 
-This is the entry point for agents working in GrandPlan.
+This is the entry point for agents working in Big Plan.
 Read the product orientation first, then follow the documentation map and linked references for detail.
 
-## What GrandPlan is
+## What Big Plan is
 
-Good AI output depends on a great plan, and GrandPlan makes reviewing agent plans a first-class experience.
+Good AI output depends on a great plan, and Big Plan makes reviewing agent plans a first-class experience.
 Planning is an essential part of effective development with AI, and it deserves a first-class experience.
-GrandPlan is built around one question: what is the best way to review a plan and reach agreement on it, before an agent acts?
+Big Plan is built around one question: what is the best way to review a plan and reach agreement on it, before an agent acts?
 
-An agent writes its plan as a document on disk, and GrandPlan renders it into a rich local review surface.
+An agent writes its plan as a document on disk, and Big Plan renders it into a rich local review surface.
 The long-term shape includes section navigation, typed blocks for diagrams, schemas, API endpoints and code diffs, a live chat connection to the authoring agent, highlight-to-comment threads, and versioned change review.
-GrandPlan focuses exclusively on that upfront moment of agreement - not code review, not project management.
+Big Plan focuses exclusively on that upfront moment of agreement - not code review, not project management.
 Everything runs locally, and the file on disk is the source of truth.
 
 ## Current state
 
 Deliverable 1 is shipped in this repo: a static markdown viewer.
-`grandplan render <input.md> [output.html]` converts a plain GFM markdown file into a single self-contained themed HTML document with a responsive table of contents built from level-two headings.
+`big-plan render <input.md> [output.html]` converts a plain GFM markdown file into a single self-contained themed HTML document with a responsive table of contents built from level-two headings.
 Wide screens use a sticky sidebar; narrower screens use a compact `Grimm 10.0` plan-review header and a sticky `Sections` disclosure showing the section count.
 Both navigation variants track the current section while the reader scrolls, including short final sections at the bottom of the page, and section links scroll smoothly unless the reader has requested reduced motion.
 Declared fenced-code languages receive syntax highlighting, every block code sample gets a copy control, and readers can override the OS light/dark preference with a locally persisted theme control.
@@ -41,7 +41,7 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 
 ## Tech stack
 
-- **Runtime target**: Node.js >= 22, ESM only. The published package runs under plain Node so `npx grandplan` works everywhere; Bun is a development-time choice, not a runtime requirement.
+- **Runtime target**: Node.js >= 22, ESM only. The published package runs under plain Node so `npx big-plan` works everywhere; Bun is a development-time choice, not a runtime requirement.
 - **Package manager and script runner**: Bun (`bun install`, `bun run <script>`, `bun.lock`).
 - **Language**: TypeScript, strict, compiled with tsc; browser-side scripts type-check against `tsconfig.browser.json` (DOM lib) and are transpiled into generated modules.
 - **CLI framework**: `axi-sdk-js` (dispatch, help, structured errors, TOON output).
@@ -94,7 +94,7 @@ Guidance is demand-driven: add a doc, rule, or map entry only when an agent obse
 
 ## Engineering rules
 
-GrandPlan follows the technology rules maintained in `fabricahq/app/_rules` (see the TypeScript and Playwright aggregates there).
+Big Plan follows the technology rules maintained in `fabricahq/app/_rules` (see the TypeScript and Playwright aggregates there).
 That repo is the source of truth, and because it is private, this section carries the working set of conventions for this repo.
 
 Facts a check enforces live in the check: separate type imports, the `any` and non-null-assertion bans, the allow-list architectural layering model (`LAYERS`/`TIERS`), and the Playwright fixtures requirement are all lint-enforced and documented in place in `eslint.config.mjs`.

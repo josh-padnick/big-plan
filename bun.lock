@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "grandplan",
+      "name": "big-plan",
       "dependencies": {
         "axi-sdk-js": "^0.1.8",
         "rehype-highlight": "^7.0.2",

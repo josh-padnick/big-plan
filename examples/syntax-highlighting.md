@@ -32,7 +32,7 @@ export const summarize = (plan: Plan): string =>
 set -euo pipefail
 
 for plan in examples/*.md; do
-  node bin/grandplan.mjs render "$plan"
+  node bin/big-plan.mjs render "$plan"
 done
 ```
 
@@ -56,6 +56,6 @@ No language was declared here.
 
 An unknown language also degrades gracefully:
 
-```grandplan-example
+```big-plan-example
 This remains readable even without a matching grammar.
 ```
