@@ -1,6 +1,6 @@
-// Compiles GFM markdown into a structured HAST review document plus its title
-// and h2 outline, then owns final HTML serialization after transforms finish.
-// The page chrome around that content lives in shell.ts.
+// Compiles GFM markdown into a structured HAST review document plus its title,
+// h2 outline, and element ids, then owns final HTML serialization after
+// transforms finish. The page chrome around that content lives in shell.ts.
 
 import type { Element, Root, RootContent } from "hast";
 import rehypeHighlight from "rehype-highlight";
@@ -143,9 +143,10 @@ const collectElementIds = (
 };
 
 /**
- * Compiles GFM markdown into a structured review document plus its outline
- * and title. The tree stays structured so future typed-block and annotation
- * transforms can run before the final serialization step.
+ * Compiles GFM markdown into a structured review document plus its outline,
+ * title, and element ids for collision-free shell anchors. The tree stays
+ * structured so future typed-block and annotation transforms can run before
+ * the final serialization step.
  */
 export const compileMarkdown = ({
   markdown,
