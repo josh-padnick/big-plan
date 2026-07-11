@@ -33,7 +33,7 @@ It embeds all styling and behavior, makes no external requests, and includes a s
 Fenced code blocks with a supported language identifier receive syntax highlighting; undeclared and unknown languages remain plain and readable.
 Every block code sample has a copy control, and the light/dark theme control follows the system preference until the reader chooses a theme, which is remembered locally.
 
-See [the syntax-highlighting source](examples/syntax-highlighting.md) and its committed [self-contained HTML preview](examples/syntax-highlighting.html) for examples of supported fences and both palettes.
+To inspect examples of supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.md) locally with `node bin/grandplan.mjs render examples/syntax-highlighting.md`, then open the generated `examples/syntax-highlighting.html`. The generated preview remains ignored by Git.
 
 ## Development
 

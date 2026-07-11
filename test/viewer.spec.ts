@@ -97,6 +97,25 @@ test("should switch between light and dark themes", async ({
   expect(doesToggleClearTitle).toBe(true);
 });
 
+test("should track system theme changes until the reader chooses a theme", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto(sampleViewerUrl);
+
+  const toggle = page.locator("[data-theme-toggle]");
+  await expect(toggle).toHaveAccessibleName("Use dark theme");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(toggle).toHaveAccessibleName("Use light theme");
+
+  await toggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(toggle).toHaveAccessibleName("Use dark theme");
+});
+
 test("should copy the exact code-block text", async ({
   page,
   sampleViewerUrl,

@@ -6,11 +6,13 @@ const THEME_STORAGE_KEY = "grandplan-theme";
 
 type Theme = "light" | "dark";
 
+const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
 const isTheme = (value: string | null): value is Theme =>
   value === "light" || value === "dark";
 
 const systemTheme = (): Theme =>
-  window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  systemThemeQuery.matches ? "dark" : "light";
 
 const selectedTheme = (): Theme => {
   const theme = document.documentElement.dataset.theme ?? null;
@@ -39,6 +41,12 @@ if (button !== null) {
   }
 
   updateButton(button);
+  systemThemeQuery.addEventListener("change", () => {
+    const explicitTheme = document.documentElement.dataset.theme ?? null;
+    if (!isTheme(explicitTheme)) {
+      updateButton(button);
+    }
+  });
   button.addEventListener("click", () => {
     const nextTheme: Theme = selectedTheme() === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = nextTheme;
