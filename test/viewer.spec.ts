@@ -57,3 +57,73 @@ test("should navigate the rendered sample plan through the TOC without errors", 
     )
     .toBe(false);
 });
+
+test("should switch between light and dark themes", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(sampleViewerUrl);
+
+  const toggle = page.getByRole("button", { name: /Use (?:light|dark) theme/ });
+  const initialBackground = await page.locator("body").evaluate(
+    (body) => getComputedStyle(body).backgroundColor,
+  );
+  const requestedTheme = (await toggle.getAttribute("aria-label"))?.includes("dark")
+    ? "dark"
+    : "light";
+
+  await toggle.click();
+
+  await expect(page.locator("html")).toHaveAttribute("data-theme", requestedTheme);
+  await expect(toggle).toHaveAccessibleName(
+    requestedTheme === "dark" ? "Use light theme" : "Use dark theme",
+  );
+  await expect
+    .poll(() =>
+      page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor),
+    )
+    .not.toBe(initialBackground);
+
+  const doesToggleClearTitle = await page.evaluate(() => {
+    const toggleElement = document.querySelector("[data-theme-toggle]");
+    const titleElement = document.querySelector("h1");
+    if (toggleElement === null || titleElement === null) {
+      return false;
+    }
+    return toggleElement.getBoundingClientRect().bottom <=
+      titleElement.getBoundingClientRect().top;
+  });
+  expect(doesToggleClearTitle).toBe(true);
+});
+
+test("should copy the exact code-block text", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.goto(sampleViewerUrl);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: (value: string) => {
+          document.body.dataset.copiedText = value;
+          return Promise.resolve();
+        },
+      },
+    });
+  });
+
+  const firstCode = page.locator("pre code").first();
+  const expectedText = await firstCode.textContent();
+  const copyButton = page.locator("[data-copy-code]").first();
+  await expect(copyButton).toHaveAccessibleName("Copy code");
+
+  await copyButton.click();
+
+  expect(await page.locator("body").getAttribute("data-copied-text")).toBe(
+    expectedText,
+  );
+  await expect(copyButton).toHaveText("Copied!");
+  await expect(copyButton).toHaveAccessibleName("Code copied");
+});

@@ -18,17 +18,64 @@ Light and dark are chosen by the reader's OS via prefers-color-scheme.
   --edge-c: #e2ddd1;
   --surface-c: #efece3;
   --accent-c: #166534;
+  --syntax-keyword-c: #cf222e;
+  --syntax-entity-c: #8250df;
+  --syntax-constant-c: #0550ae;
+  --syntax-string-c: #0a3069;
+  --syntax-variable-c: #953800;
+  --syntax-comment-c: #59636e;
+  --syntax-tag-c: #116329;
+  --syntax-addition-c: #116329;
+  --syntax-addition-bg: #dafbe1;
+  --syntax-deletion-c: #82071e;
+  --syntax-deletion-bg: #ffebe9;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #1b1916;
     --ink-c: #ebe6da;
     --muted-c: #a49c8b;
     --edge-c: #35312a;
     --surface-c: #242119;
     --accent-c: #82c99a;
+    --syntax-keyword-c: #ff7b72;
+    --syntax-entity-c: #d2a8ff;
+    --syntax-constant-c: #79c0ff;
+    --syntax-string-c: #a5d6ff;
+    --syntax-variable-c: #ffa657;
+    --syntax-comment-c: #8b949e;
+    --syntax-tag-c: #7ee787;
+    --syntax-addition-c: #aff5b4;
+    --syntax-addition-bg: #033a16;
+    --syntax-deletion-c: #ffdcd7;
+    --syntax-deletion-bg: #67060c;
   }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #1b1916;
+  --ink-c: #ebe6da;
+  --muted-c: #a49c8b;
+  --edge-c: #35312a;
+  --surface-c: #242119;
+  --accent-c: #82c99a;
+  --syntax-keyword-c: #ff7b72;
+  --syntax-entity-c: #d2a8ff;
+  --syntax-constant-c: #79c0ff;
+  --syntax-string-c: #a5d6ff;
+  --syntax-variable-c: #ffa657;
+  --syntax-comment-c: #8b949e;
+  --syntax-tag-c: #7ee787;
+  --syntax-addition-c: #aff5b4;
+  --syntax-addition-bg: #033a16;
+  --syntax-deletion-c: #ffdcd7;
+  --syntax-deletion-bg: #67060c;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -139,6 +186,96 @@ Light and dark are chosen by the reader's OS via prefers-color-scheme.
     background: none;
     border: 0;
     padding: 0;
+  }
+
+  article .code-block {
+    position: relative;
+    margin: 0 0 1.25em;
+  }
+  article .code-block pre {
+    margin: 0;
+    padding-top: 2.75rem;
+  }
+  article .code-copy-button {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    cursor: pointer;
+  }
+  article .code-copy-button:disabled {
+    pointer-events: none;
+    opacity: 0.5;
+  }
+
+  /* rehype-highlight emits highlight.js token classes at render time. These
+     palette variables follow the viewer's OS preference or explicit toggle. */
+  article .hljs-doctag,
+  article .hljs-keyword,
+  article .hljs-meta .hljs-keyword,
+  article .hljs-template-tag,
+  article .hljs-template-variable,
+  article .hljs-type,
+  article .hljs-variable.language_ {
+    color: var(--syntax-keyword-c);
+  }
+  article .hljs-title,
+  article .hljs-title.class_,
+  article .hljs-title.class_.inherited__,
+  article .hljs-title.function_ {
+    color: var(--syntax-entity-c);
+  }
+  article .hljs-attr,
+  article .hljs-attribute,
+  article .hljs-literal,
+  article .hljs-meta,
+  article .hljs-number,
+  article .hljs-operator,
+  article .hljs-variable,
+  article .hljs-selector-attr,
+  article .hljs-selector-class,
+  article .hljs-selector-id {
+    color: var(--syntax-constant-c);
+  }
+  article .hljs-regexp,
+  article .hljs-string,
+  article .hljs-meta .hljs-string {
+    color: var(--syntax-string-c);
+  }
+  article .hljs-built_in,
+  article .hljs-symbol {
+    color: var(--syntax-variable-c);
+  }
+  article .hljs-comment,
+  article .hljs-code,
+  article .hljs-formula {
+    color: var(--syntax-comment-c);
+  }
+  article .hljs-name,
+  article .hljs-quote,
+  article .hljs-selector-tag,
+  article .hljs-selector-pseudo {
+    color: var(--syntax-tag-c);
+  }
+  article .hljs-section {
+    color: var(--syntax-constant-c);
+    font-weight: 600;
+  }
+  article .hljs-bullet {
+    color: var(--syntax-variable-c);
+  }
+  article .hljs-emphasis {
+    font-style: italic;
+  }
+  article .hljs-strong {
+    font-weight: 600;
+  }
+  article .hljs-addition {
+    color: var(--syntax-addition-c);
+    background: var(--syntax-addition-bg);
+  }
+  article .hljs-deletion {
+    color: var(--syntax-deletion-c);
+    background: var(--syntax-deletion-bg);
   }
 
   article blockquote {

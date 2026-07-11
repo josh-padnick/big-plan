@@ -3,6 +3,7 @@
 // The page chrome around that content lives in shell.ts.
 
 import type { Element, Root, RootContent } from "hast";
+import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
 import rehypeStringify from "rehype-stringify";
 import remarkGfm from "remark-gfm";
@@ -52,6 +53,13 @@ const TABLE_WRAPPER_CLASSES = [
   "border-edge",
 ] as const;
 
+// This data contract is shared with the browser copy behavior so a future
+// CodeSnippet component can opt in without depending on Markdown internals.
+export const CODE_BLOCK_SELECTOR = "data-code-block";
+
+const COPY_BUTTON_CLASSES =
+  "code-copy-button inline-flex items-center justify-center gap-1 rounded-md border border-edge bg-surface px-2 py-1 text-xs font-semibold whitespace-nowrap text-muted shadow-sm transition-colors hover:text-ink focus:outline-2 focus:outline-offset-2 focus:outline-accent";
+
 // Wraps each <table> in a scroll container so a wide table scrolls inside its
 // own box instead of widening the whole page. Mutating the tree in place is
 // the idiomatic shape for a rehype transform.
@@ -79,6 +87,54 @@ const wrapTables = (node: Root | Element): void => {
 
 const rehypeWrapTables = () => (tree: Root) => {
   wrapTables(tree);
+};
+
+// Adds framework-free shadcn Button markup to rendered code blocks. The
+// source remains in the sibling <code> element so copy behavior can read the
+// exact text after syntax highlighting has split it into token spans.
+const wrapCodeBlocks = (node: Root | Element): void => {
+  node.children = node.children.map((child) => {
+    if (!isElement(child)) {
+      return child;
+    }
+    wrapCodeBlocks(child);
+    const hasCodeChild = child.tagName === "pre" &&
+      child.children.some(
+        (codeChild) => isElement(codeChild) && codeChild.tagName === "code",
+      );
+    if (!hasCodeChild) {
+      return child;
+    }
+    const copyButton: Element = {
+      type: "element",
+      tagName: "button",
+      properties: {
+        type: "button",
+        className: COPY_BUTTON_CLASSES.split(" "),
+        ariaLabel: "Copy code",
+        ariaLive: "polite",
+        "data-copy-code": "",
+        "data-size": "xs",
+        "data-slot": "button",
+        "data-variant": "outline",
+      },
+      children: [{ type: "text", value: "Copy" }],
+    };
+    const wrapper: Element = {
+      type: "element",
+      tagName: "div",
+      properties: {
+        className: ["code-block"],
+        [CODE_BLOCK_SELECTOR]: "",
+      },
+      children: [child, copyButton],
+    };
+    return wrapper;
+  });
+};
+
+const rehypeWrapCodeBlocks = () => (tree: Root) => {
+  wrapCodeBlocks(tree);
 };
 
 // Finds the document title: the text of the first h1 in the rendered tree.
@@ -141,6 +197,10 @@ export const compileMarkdown = ({
       footnoteLabelProperties: { className: ["footnotes-heading"] },
     })
     .use(rehypeSlug)
+    // Detection stays opt-in through the fence language: undeclared and
+    // unknown languages remain readable without guessed tokenization.
+    .use(rehypeHighlight)
+    .use(rehypeWrapCodeBlocks)
     .use(rehypeWrapTables);
   const tree = processor.runSync(processor.parse(markdown));
 
