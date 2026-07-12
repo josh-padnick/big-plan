@@ -17,10 +17,11 @@ Everything runs locally, and the file on disk is the source of truth.
 ## Current state
 
 Deliverable 2 is shipped in this repo: MDX plan documents with typed blocks, building on the static markdown viewer from deliverable 1.
-`big-plan render <input.mdx> [output.html]` converts a GFM or static-subset MDX plan document into a single self-contained themed HTML document with a responsive table of contents built from level-two headings.
+`big-plan render <input.mdx> [output.html]` converts a static-subset MDX plan document into a single self-contained themed HTML document with a responsive table of contents built from level-two headings.
 Wide screens use a sticky sidebar; narrower screens use a sticky `Sections` disclosure showing the section count.
 Both navigation variants track the current section while the reader scrolls, including short final sections at the bottom of the page, and section links scroll smoothly unless the reader has requested reduced motion.
 The static subset rejects imports, exports, expressions, and unsupported attributes with hard-fail diagnostics carrying line and column positions, while the built-in Callout and CodeDiff blocks provide validated plan-native presentation.
+GFM tables, task lists, footnotes, and autolinks remain supported, but MDX does not support four-space indented code blocks; plans use fenced code blocks instead.
 Declared fenced-code languages receive syntax highlighting, every block code sample gets a copy control, and readers can override the OS light/dark preference with a locally persisted theme control.
 Every viewport has a sticky branding bar whose logo follows that active theme, while embedded light and dark favicons follow the OS preference.
 CodeDiff renders a no-JavaScript unified view plus progressively enhanced unified/split selection, exact-source copying, and full-screen viewing.

@@ -18,11 +18,11 @@ Everything runs locally, and the MDX file on your disk is the source of truth.
 ## Status
 
 The first working release is being built in the open in this repository.
-Deliverable 2 is available now: the static viewer accepts GFM and static-subset MDX plans with validated typed blocks.
+Deliverable 2 is available now: the static viewer accepts static-subset MDX plans with validated typed blocks.
 
 ## Usage
 
-Render a GFM or static-subset MDX plan document into a single self-contained themed HTML document:
+Render a static-subset MDX plan document into a single self-contained themed HTML document:
 
 ```sh
 npx big-plan render <file.mdx> [output.html]
@@ -38,6 +38,8 @@ Every block code sample has a copy control, and the light/dark theme control fol
 
 MDX plans may use the built-in `Callout` and `CodeDiff` typed blocks, but they cannot contain imports, exports, `{}` expressions, or non-string attribute values; bare boolean attributes are supported only where a block schema allows them.
 Unsupported MDX syntax and invalid block attributes fail the render with diagnostics that include `line:column` positions.
+GFM features including tables, task lists, footnotes, and autolinks remain available through the MDX pipeline.
+Four-space indented code blocks are not supported by MDX; use fenced code blocks instead.
 
 Use `Callout` with one of the four supported types and an optional custom title; without a title, the displayed title is `Note`, `Tip`, `Warning`, or `Danger` according to the type:
 
@@ -71,7 +73,7 @@ Because `<` and `{` begin MDX syntax, write them carefully in prose or place lit
 HTML comments and angle-bracket `<url>` autolinks are not supported in plan documents.
 
 To preview typed blocks, render [the MDX blocks plan](examples/mdx-blocks.mdx) locally with `node bin/big-plan.mjs render examples/mdx-blocks.mdx`.
-To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.md) locally with `node bin/big-plan.mjs render examples/syntax-highlighting.md`, then open the generated `examples/syntax-highlighting.html`.
+To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) locally with `node bin/big-plan.mjs render examples/syntax-highlighting.mdx`, then open the generated `examples/syntax-highlighting.html`.
 Generated previews remain ignored by Git.
 
 ## Development

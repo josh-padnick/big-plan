@@ -49,10 +49,15 @@ const showDiffMessage = ({
   if (previousTimer !== undefined) {
     window.clearTimeout(previousTimer);
   }
+  const menuButton = block.querySelector<HTMLButtonElement>(
+    "[data-diff-menu-button]",
+  );
   slot.textContent = message;
   slot.hidden = false;
+  menuButton?.setAttribute("aria-label", message);
   const timer = window.setTimeout(() => {
     slot.hidden = true;
+    menuButton?.setAttribute("aria-label", "More actions");
     diffMessageTimers.delete(slot);
   }, DIFF_MESSAGE_RESET_MS);
   diffMessageTimers.set(slot, timer);

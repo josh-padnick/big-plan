@@ -121,7 +121,7 @@ describe("compileMarkdown static MDX validation", () => {
     ]);
   });
 
-  it("should render byte-identical HTML when a document uses only plain GFM", () => {
+  it("should render MDX-compatible GFM features without changing their HTML", () => {
     expect(compileAndSerialize("# Plan\n\nA **safe** [link](https://example.com).\n"))
       .toBe(
         '<h1 id="plan">Plan</h1>\n<p>A <strong>safe</strong> <a href="https://example.com">link</a>.</p>',

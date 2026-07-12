@@ -443,9 +443,10 @@ test("should copy the raw diff and the file path from the actions menu", async (
   const diff = page.locator("[data-code-diff]").filter({
     hasText: "src/catalog/read-through-cache.ts",
   });
-  const menuButton = diff.getByRole("button", { name: "More actions" });
+  const menuButton = diff.locator("[data-diff-menu-button]");
   const menu = diff.getByRole("menu", { name: "Diff actions" });
 
+  await expect(menuButton).toHaveAccessibleName("More actions");
   await menuButton.click();
   await expect(menu).toBeVisible();
   await expect(menuButton).toHaveAttribute("aria-expanded", "true");
@@ -455,12 +456,45 @@ test("should copy the raw diff and the file path from the actions menu", async (
     RAW_GIT_DIFF,
   );
   await expect(menu).toBeHidden();
+  await expect(menuButton).toHaveAccessibleName("Diff copied!");
 
   await menuButton.click();
   await menu.getByRole("menuitem", { name: "Copy path" }).click();
   expect(await page.locator("body").getAttribute("data-copied-diff")).toBe(
     "src/catalog/read-through-cache.ts",
   );
+  await expect(menuButton).toHaveAccessibleName("Path copied!");
+});
+
+test("should let a short diff actions menu escape the figure", async ({
+  page,
+  mdxBlocksViewerUrl,
+}) => {
+  await page.goto(mdxBlocksViewerUrl);
+
+  const diff = page.locator("[data-code-diff]").last();
+  await diff.locator(".code-diff-view").evaluateAll((views) => {
+    for (const view of views) {
+      view.replaceChildren();
+    }
+  });
+  await diff.getByRole("button", { name: "More actions" }).click();
+
+  const copyDiff = diff.getByRole("menuitem", { name: "Copy diff" });
+  await expect(copyDiff).toBeVisible();
+  const bounds = await diff.evaluate((figure) => {
+    const item = figure.querySelector<HTMLElement>("[data-diff-copy]");
+    if (item === null) {
+      throw new Error("Missing Copy diff menu item");
+    }
+    return {
+      figureBottom: figure.getBoundingClientRect().bottom,
+      itemBottom: item.getBoundingClientRect().bottom,
+      figureOverflow: getComputedStyle(figure).overflow,
+    };
+  });
+  expect(bounds.itemBottom).toBeGreaterThan(bounds.figureBottom);
+  expect(bounds.figureOverflow).toBe("visible");
 });
 
 test("should preserve typed-block content without controls when JavaScript is disabled", async ({

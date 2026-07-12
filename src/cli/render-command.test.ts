@@ -21,7 +21,7 @@ describe("renderCommand validation", () => {
   it("should report usage when the input argument is missing", async () => {
     await expect(renderCommand([])).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
-      message: "Missing input markdown file",
+      message: "Missing input MDX file",
       suggestions: ["Usage: big-plan render <input.mdx> [output.html]"],
     });
   });

@@ -21,14 +21,14 @@ const defaultOutputPath = (inputPath: string): string => {
   return `${withoutExtension}.html`;
 };
 
-// Reads the input markdown, renders the viewer HTML, writes it out, and
+// Reads the input MDX, renders the viewer HTML, writes it out, and
 // returns the structured summary runAxiCli() serializes for the caller.
 export const renderCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
   const inputArg = args[0];
   if (inputArg === undefined) {
-    throw new AxiError("Missing input markdown file", "VALIDATION_ERROR", [
+    throw new AxiError("Missing input MDX file", "VALIDATION_ERROR", [
       USAGE,
     ]);
   }

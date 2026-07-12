@@ -27,7 +27,7 @@ type NodePosition = Root["position"];
 
 const BUTTON_CLASSES =
   "code-diff-button inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
-const FIGURE_CLASSES = "code-diff mb-5 min-w-0 overflow-hidden rounded-md border border-edge";
+const FIGURE_CLASSES = "code-diff mb-5 min-w-0 rounded-md border border-edge";
 
 const isElement = (node: ElementContent): node is Element =>
   node.type === "element";
