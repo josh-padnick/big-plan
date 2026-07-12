@@ -517,9 +517,16 @@ export const renderCodeDiff: BlockRenderer = ({
                 tagName: "span",
                 properties: {
                   className: ["code-diff-stats"],
-                  ariaLabel: `${addedCount} added, ${removedCount} removed`,
                 },
                 children: [
+                  {
+                    type: "element",
+                    tagName: "span",
+                    properties: { className: ["sr-only"] },
+                    children: [
+                      text(`${addedCount} added, ${removedCount} removed`),
+                    ],
+                  },
                   {
                     type: "element",
                     tagName: "span",

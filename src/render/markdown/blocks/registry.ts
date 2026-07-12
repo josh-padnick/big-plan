@@ -93,7 +93,9 @@ const renderFlowElement = ({
   readonly diagnostics: DiagnosticCollector;
 }): Element | undefined => {
   const name = node.name;
-  const renderer = name === null ? undefined : BLOCK_REGISTRY[name];
+  const renderer = name !== null && Object.hasOwn(BLOCK_REGISTRY, name)
+    ? BLOCK_REGISTRY[name]
+    : undefined;
   if (renderer === undefined) {
     diagnostics.add({
       message: `Unknown block "${name ?? "<fragment>"}"`,

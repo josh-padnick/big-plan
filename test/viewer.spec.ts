@@ -466,6 +466,36 @@ test("should copy the raw diff and the file path from the actions menu", async (
   await expect(menuButton).toHaveAccessibleName("Path copied!");
 });
 
+test("should support keyboard navigation in the diff actions menu", async ({
+  page,
+  mdxBlocksViewerUrl,
+}) => {
+  await page.goto(mdxBlocksViewerUrl);
+
+  const diff = page.locator("[data-code-diff]").filter({
+    hasText: "src/catalog/read-through-cache.ts",
+  });
+  const menuButton = diff.locator("[data-diff-menu-button]");
+  const copyPath = diff.getByRole("menuitem", { name: "Copy path" });
+  const copyDiff = diff.getByRole("menuitem", { name: "Copy diff" });
+
+  await menuButton.focus();
+  await menuButton.press("ArrowDown");
+  await expect(copyPath).toBeFocused();
+  await copyPath.press("ArrowUp");
+  await expect(copyDiff).toBeFocused();
+  await copyDiff.press("Home");
+  await expect(copyPath).toBeFocused();
+  await copyPath.press("End");
+  await expect(copyDiff).toBeFocused();
+  await copyDiff.press("Escape");
+  await expect(menuButton).toBeFocused();
+  await expect(diff.getByRole("menu", { name: "Diff actions" })).toBeHidden();
+
+  await menuButton.press("ArrowUp");
+  await expect(copyDiff).toBeFocused();
+});
+
 test("should let a short diff actions menu escape the figure", async ({
   page,
   mdxBlocksViewerUrl,

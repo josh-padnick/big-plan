@@ -173,16 +173,32 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
   menuButton?.removeAttribute("hidden");
   applyDiffView({ block, view: storedDiffView });
 
-  const setMenuOpen = (open: boolean): void => {
+  const menuItems = (): ReadonlyArray<HTMLButtonElement> =>
+    menuList === null
+      ? []
+      : [...menuList.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+
+  const setMenuOpen = ({
+    open,
+    focus,
+  }: {
+    readonly open: boolean;
+    readonly focus?: "first" | "last";
+  }): void => {
     if (menuButton === null || menuList === null) {
       return;
     }
     menuButton.setAttribute("aria-expanded", open ? "true" : "false");
     menuList.hidden = !open;
+    if (open && focus !== undefined) {
+      const items = menuItems();
+      items[focus === "first" ? 0 : items.length - 1]?.focus();
+    }
   };
 
   menuButton?.addEventListener("click", () => {
-    setMenuOpen(menuButton.getAttribute("aria-expanded") !== "true");
+    const open = menuButton.getAttribute("aria-expanded") !== "true";
+    setMenuOpen({ open, ...(open ? { focus: "first" } : {}) });
   });
 
   // Escape closes the menu without also dismissing an enclosing full-screen
@@ -190,13 +206,47 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
   block
     .querySelector<HTMLElement>("[data-diff-menu]")
     ?.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape" || menuList === null || menuList.hidden) {
+      if (menuList === null) {
         return;
       }
-      event.preventDefault();
-      event.stopPropagation();
-      setMenuOpen(false);
-      menuButton?.focus();
+      if (event.key === "Escape" && !menuList.hidden) {
+        event.preventDefault();
+        event.stopPropagation();
+        setMenuOpen({ open: false });
+        menuButton?.focus();
+        return;
+      }
+      if (event.target === menuButton && event.key === "ArrowDown") {
+        event.preventDefault();
+        setMenuOpen({ open: true, focus: "first" });
+        return;
+      }
+      if (event.target === menuButton && event.key === "ArrowUp") {
+        event.preventDefault();
+        setMenuOpen({ open: true, focus: "last" });
+        return;
+      }
+      if (menuList.hidden) {
+        return;
+      }
+      const items = menuItems();
+      const currentIndex = items.findIndex((item) => item === event.target);
+      if (currentIndex === -1) {
+        return;
+      }
+      const destination = event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? items.length - 1
+          : event.key === "ArrowDown"
+            ? (currentIndex + 1) % items.length
+            : event.key === "ArrowUp"
+              ? (currentIndex - 1 + items.length) % items.length
+              : undefined;
+      if (destination !== undefined) {
+        event.preventDefault();
+        items[destination]?.focus();
+      }
     });
 
   const copyToClipboard = async ({
@@ -206,7 +256,7 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
     readonly value: string;
     readonly successMessage: string;
   }): Promise<void> => {
-    setMenuOpen(false);
+    setMenuOpen({ open: false });
     menuButton?.focus();
     try {
       await writeDiffClipboard(value);

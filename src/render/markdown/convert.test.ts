@@ -66,6 +66,12 @@ describe("compileMarkdown static MDX validation", () => {
     ]);
   });
 
+  it("should reject an inherited object property when used as a component", () => {
+    expect(diagnosticsFor("<toString />\n")).toEqual([
+      { line: 1, column: 1, message: "Unknown block \"toString\"" },
+    ]);
+  });
+
   it("should reject a spread attribute when a block uses one", () => {
     expect(diagnosticsFor("<Unknown {...props} />\n")).toEqual([
       { line: 1, column: 1, message: "Unknown block \"Unknown\"" },
@@ -280,6 +286,9 @@ describe("compileMarkdown CodeDiff blocks", () => {
     expect(bodyHtml).toContain('data-diff-number="new"');
     expect(bodyHtml).toContain('data-diff-line="remove"');
     expect(bodyHtml).toContain('data-diff-line="add"');
+    expect(bodyHtml).toContain('<span class="sr-only">2 added, 1 removed</span>');
+    expect(bodyHtml).toContain('<span class="code-diff-stat-add" aria-hidden="true">+2</span>');
+    expect(bodyHtml).toContain('<span class="code-diff-stat-remove" aria-hidden="true">-1</span>');
     expect(bodyHtml).toContain('<textarea hidden readonly data-diff-source="">');
     expect(bodyHtml).not.toContain("hljs");
     expect(bodyHtml).not.toContain(CODE_BLOCK_SELECTOR);
