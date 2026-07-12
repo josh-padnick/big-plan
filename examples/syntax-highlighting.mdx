@@ -31,7 +31,7 @@ export const summarize = (plan: Plan): string =>
 #!/usr/bin/env bash
 set -euo pipefail
 
-for plan in examples/*.md; do
+for plan in examples/*.mdx; do
   node bin/big-plan.mjs render "$plan"
 done
 ```

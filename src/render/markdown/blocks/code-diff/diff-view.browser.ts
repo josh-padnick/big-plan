@@ -65,7 +65,13 @@ const showDiffMessage = ({
 
 // Mirrors fenced-code fallback behavior for local file previews where the
 // Clipboard API is unavailable or denied.
-const writeDiffClipboard = async (value: string): Promise<void> => {
+const writeDiffClipboard = async ({
+  container,
+  value,
+}: {
+  readonly container: HTMLElement;
+  readonly value: string;
+}): Promise<void> => {
   if (navigator.clipboard !== undefined) {
     try {
       await navigator.clipboard.writeText(value);
@@ -79,10 +85,21 @@ const writeDiffClipboard = async (value: string): Promise<void> => {
   textarea.setAttribute("readonly", "");
   textarea.style.position = "fixed";
   textarea.style.opacity = "0";
-  document.body.append(textarea);
-  textarea.select();
-  const copied = document.execCommand("copy");
-  textarea.remove();
+  const previousFocus = document.activeElement;
+  const activeDialog = document.querySelector<HTMLDialogElement>(
+    "dialog.code-diff-dialog[open]",
+  );
+  (activeDialog ?? container).append(textarea);
+  let copied: boolean;
+  try {
+    textarea.select();
+    copied = document.execCommand("copy");
+  } finally {
+    textarea.remove();
+    if (previousFocus instanceof HTMLElement) {
+      previousFocus.focus();
+    }
+  }
   if (!copied) {
     throw new Error("Clipboard copy was unavailable");
   }
@@ -276,7 +293,7 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
     setMenuOpen({ open: false });
     menuButton?.focus();
     try {
-      await writeDiffClipboard(value);
+      await writeDiffClipboard({ container: block, value });
       showDiffMessage({ block, message: successMessage });
     } catch {
       showDiffMessage({ block, message: "Could not copy" });

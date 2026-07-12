@@ -466,6 +466,46 @@ test("should copy the raw diff and the file path from the actions menu", async (
   await expect(menuButton).toHaveAccessibleName("Path copied!");
 });
 
+test("should fallback-copy within a full-screen diff", async ({
+  page,
+  mdxBlocksViewerUrl,
+}) => {
+  await page.goto(mdxBlocksViewerUrl);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+    document.execCommand = () => {
+      const textareas = document.querySelectorAll(
+        "textarea:not([data-diff-source])",
+      );
+      const textarea = textareas.item(textareas.length - 1);
+      document.body.dataset.fallbackCopy = textarea instanceof HTMLTextAreaElement
+        ? `${textarea.closest("dialog") === null ? "outside" : "dialog"}:${textarea.value}`
+        : "missing";
+      return textarea instanceof HTMLTextAreaElement;
+    };
+  });
+
+  const diff = page.locator("[data-code-diff]").first();
+  await diff.getByRole("button", { name: "View diff full screen" }).click();
+  const expandedDiff = page.locator("dialog [data-code-diff]");
+  const menuButton = expandedDiff.locator("[data-diff-menu-button]");
+  await expect(page.locator("dialog.code-diff-dialog[open]")).toHaveCount(1);
+  await expect(page.locator("textarea:not([data-diff-source])")).toHaveCount(0);
+  await menuButton.evaluate((button) => button.click());
+  await expandedDiff
+    .getByRole("menuitem", { name: "Copy path" })
+    .evaluate((button) => button.click());
+
+  expect(await page.locator("body").getAttribute("data-fallback-copy")).toBe(
+    "dialog:src/catalog/read-through-cache.ts",
+  );
+  await expect(menuButton).toBeFocused();
+  await expect(menuButton).toHaveAccessibleName("Path copied!");
+});
+
 test("should support keyboard navigation in the diff actions menu", async ({
   page,
   mdxBlocksViewerUrl,
