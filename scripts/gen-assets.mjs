@@ -16,6 +16,7 @@ const MIME_TYPES = {
   ".svg": "image/svg+xml",
 };
 
+// Reads a checked-in branding asset into the data URI form used by the renderer.
 const readDataUri = (fileName) => {
   const mime = MIME_TYPES[extname(fileName)];
   if (mime === undefined) {
