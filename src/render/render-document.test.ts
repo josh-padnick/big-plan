@@ -136,21 +136,21 @@ describe("renderDocument affordances", () => {
     expect(html).toContain("data-copy-code");
   });
 
-  it("should emit favicon links as embedded PNG data URIs when rendering", () => {
+  it("should emit theme-aware favicon links as embedded data URIs when rendering", () => {
     expect(html).toMatch(
-      /<link rel="icon" type="image\/png" sizes="32x32" href="data:image\/png;base64,[^"]+">/,
+      /<link rel="icon" type="image\/x-icon" href="data:image\/x-icon;base64,[^"]+">/,
     );
     expect(html).toMatch(
-      /<link rel="icon" type="image\/png" sizes="16x16" href="data:image\/png;base64,[^"]+">/,
+      /<link rel="icon" type="image\/x-icon" media="\(prefers-color-scheme: dark\)" href="data:image\/x-icon;base64,[^"]+">/,
     );
   });
 
   it("should render a theme-swapped branding banner when rendering", () => {
     expect(html).toMatch(
-      /<img class="w-27 h-auto" data-logo-light src="data:image\/png;base64,[^"]+" alt="GrandPlan" width="324" height="101">/,
+      /<img class="w-27 h-auto" data-logo-light src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
     );
     expect(html).toMatch(
-      /<img class="w-27 h-auto" data-logo-dark src="data:image\/png;base64,[^"]+" alt="GrandPlan" width="324" height="101">/,
+      /<img class="w-27 h-auto" data-logo-dark src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
     );
   });
 });

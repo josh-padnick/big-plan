@@ -12,7 +12,7 @@ test("should navigate the rendered sample plan through the TOC without errors", 
 
   await expect(page).toHaveTitle("Payments Retry Architecture Plan");
   const banner = page.getByRole("banner");
-  const logo = banner.getByRole("img", { name: "GrandPlan" });
+  const logo = banner.getByRole("img", { name: "Big Plan" });
   await expect(banner).toBeVisible();
   await expect(logo).toBeVisible();
   await expect(

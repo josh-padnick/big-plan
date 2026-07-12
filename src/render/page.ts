@@ -5,7 +5,7 @@
 // delivery modes (served output with a live-reload client, the SPA viewer)
 // swap this envelope while the shell stays the same.
 
-import { FAVICON_16_SRC, FAVICON_32_SRC } from "./branding.generated.js";
+import { FAVICON_DARK_SRC, FAVICON_LIGHT_SRC } from "./branding.generated.js";
 import { escapeHtml } from "./escape-html.js";
 
 /**
@@ -34,8 +34,8 @@ export const renderPage = ({
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
-<link rel="icon" type="image/png" sizes="32x32" href="${FAVICON_32_SRC}">
-<link rel="icon" type="image/png" sizes="16x16" href="${FAVICON_16_SRC}">
+<link rel="icon" type="image/x-icon" href="${FAVICON_LIGHT_SRC}">
+<link rel="icon" type="image/x-icon" media="(prefers-color-scheme: dark)" href="${FAVICON_DARK_SRC}">
 <style>${styles}</style>
 </head>
 <body class="${escapeHtml(bodyClassName)}">
