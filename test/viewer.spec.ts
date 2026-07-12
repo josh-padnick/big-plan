@@ -18,7 +18,9 @@ const RAW_GIT_DIFF = [
   "+    }",
   "     return cached.value;",
   "   }",
-  " ",
+  // The example's blank context line is whitespace-stripped on disk, and the
+  // copy action must reproduce the file's exact bytes.
+  "",
   "@@ -31,4 +34,5 @@ export const readCatalog = async (key: string) => {",
   "   const value = await catalogOrigin.read(key);",
   "   await cache.put(key, value, { ttlSeconds: 300 });",

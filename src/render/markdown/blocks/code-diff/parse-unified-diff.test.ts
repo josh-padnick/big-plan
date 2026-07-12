@@ -53,6 +53,19 @@ describe("parseUnifiedDiff", () => {
     expect(result.diff.hunks[0]?.lines).toHaveLength(2);
   });
 
+  it("should treat a whitespace-stripped blank line as empty context", () => {
+    const result = parseUnifiedDiff({
+      source: "@@ -1,3 +1,3 @@\n a\n\n-b\n+c\n",
+    });
+    expect(result.diagnostics).toEqual([]);
+    expect(result.diff.hunks[0]?.lines[1]).toEqual({
+      kind: "context",
+      text: "",
+      oldLineNumber: 2,
+      newLineNumber: 2,
+    });
+  });
+
   it("should accept verbatim git diff output by skipping its file preamble", () => {
     const result = parseUnifiedDiff({
       source: [

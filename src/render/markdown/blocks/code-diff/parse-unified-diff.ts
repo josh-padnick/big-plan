@@ -78,6 +78,16 @@ const parseContentLine = ({
   readonly nextOldLineNumber?: number;
   readonly nextNewLineNumber?: number;
 } => {
+  // Editors routinely strip trailing whitespace, turning a context line for
+  // an empty source line (a lone space) into an empty string; git tooling
+  // tolerates that, so this parser does too.
+  if (value === "") {
+    return {
+      line: { kind: "context", text: "", oldLineNumber, newLineNumber },
+      ...(oldLineNumber === undefined ? {} : { nextOldLineNumber: oldLineNumber + 1 }),
+      ...(newLineNumber === undefined ? {} : { nextNewLineNumber: newLineNumber + 1 }),
+    };
+  }
   const marker = value[0];
   const text = value.slice(1);
   if (marker === " ") {
