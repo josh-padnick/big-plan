@@ -27,8 +27,22 @@ import type {
 type NodePosition = Root["position"];
 
 const BUTTON_CLASSES =
-  "code-diff-button inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
-const FIGURE_CLASSES = "code-diff mb-5 min-w-0 rounded-md border border-edge";
+  "code-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+const FIGURE_CLASSES =
+  "code-diff mb-5 min-w-0 rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]";
+const HEADER_CLASSES =
+  "code-diff-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem]";
+const FILE_CLASSES =
+  "code-diff-file flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted";
+const STATS_CLASSES =
+  "code-diff-stats inline-flex shrink-0 gap-[0.4rem] text-xs font-semibold";
+const MENU_LIST_CLASSES =
+  "code-diff-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge p-1";
+const MENU_ITEM_CLASSES =
+  "code-diff-menu-item flex w-full cursor-pointer items-center gap-[0.45rem] whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-[0.3rem] text-left text-xs text-ink [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted";
+const HUNK_HEADER_CLASSES =
+  "code-diff-hunk-header min-w-max whitespace-pre px-[0.65rem] py-[0.4rem] text-xs";
+const LINE_CLASSES = "code-diff-line grid min-w-max whitespace-pre";
 
 const isElement = (node: ElementContent): node is Element =>
   node.type === "element";
@@ -84,7 +98,12 @@ const lineNumberCell = (value: number | undefined, side: "old" | "new"): Element
   type: "element",
   tagName: "span",
   properties: {
-    className: ["code-diff-line-number"],
+    className: [
+      "code-diff-line-number",
+      "select-none",
+      "px-[0.55rem]",
+      "text-right",
+    ],
     ariaHidden: "true",
     "data-diff-number": side,
   },
@@ -104,7 +123,15 @@ const accessibleLinePrefix = (line: DiffLine): ReadonlyArray<Element> =>
 const lineContent = (line: DiffLine): Element => ({
   type: "element",
   tagName: "span",
-  properties: { className: ["code-diff-line-content"] },
+  properties: {
+    className: [
+      "code-diff-line-content",
+      "inline-block",
+      "min-w-full",
+      "pr-3",
+      "pl-[0.45rem]",
+    ],
+  },
   children: [
     ...accessibleLinePrefix(line),
     text(line.text),
@@ -121,7 +148,7 @@ const unifiedLine = ({
   type: "element",
   tagName: "div",
   properties: {
-    className: ["code-diff-line", "code-diff-unified-line"],
+    className: [...LINE_CLASSES.split(" "), "code-diff-unified-line"],
     "data-diff-line": line.kind,
   },
   children: [
@@ -139,7 +166,7 @@ const hunkHeader = (value: string, view: "unified" | "split"): Element => ({
   type: "element",
   tagName: "div",
   properties: {
-    className: ["code-diff-hunk-header"],
+    className: HUNK_HEADER_CLASSES.split(" "),
     "data-diff-hunk-header": view,
   },
   children: [text(value)],
@@ -168,7 +195,7 @@ const splitLine = ({
   type: "element",
   tagName: "div",
   properties: {
-    className: ["code-diff-line", "code-diff-split-line"],
+    className: [...LINE_CLASSES.split(" "), "code-diff-split-line"],
     "data-diff-line": line?.kind ?? "empty",
   },
   children: [
@@ -194,7 +221,7 @@ const splitPane = ({
   type: "element",
   tagName: "div",
   properties: {
-    className: ["code-diff-pane"],
+    className: ["code-diff-pane", "min-w-0", "overflow-x-auto"],
     "data-diff-pane": side,
   },
   children: rows.map((row) => splitLine({
@@ -217,7 +244,14 @@ const renderSplitHunk = ({
     {
       type: "element",
       tagName: "div",
-      properties: { className: ["code-diff-split-hunk"] },
+      properties: {
+        className: [
+          "code-diff-split-hunk",
+          "grid",
+          "min-w-0",
+          "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]",
+        ],
+      },
       children: [
         splitPane({ rows, side: "old", lineNumbers }),
         splitPane({ rows, side: "new", lineNumbers }),
@@ -238,7 +272,7 @@ const renderView = ({
   type: "element",
   tagName: "div",
   properties: {
-    className: ["code-diff-view"],
+    className: ["code-diff-view", "min-w-0"],
     "data-diff-content": view,
   },
   children: diff.hunks.flatMap((hunk) => view === "unified"
@@ -257,7 +291,7 @@ const menuItemButton = ({
   tagName: "button",
   properties: {
     type: "button",
-    className: ["code-diff-menu-item"],
+    className: MENU_ITEM_CLASSES.split(" "),
     role: "menuitem",
     tabIndex: -1,
     [`data-diff-${action}`]: "",
@@ -280,7 +314,7 @@ const diffStats = ({
   type: "element",
   tagName: "span",
   properties: {
-    className: ["code-diff-stats"],
+    className: STATS_CLASSES.split(" "),
   },
   children: [
     {
@@ -316,7 +350,7 @@ const actionsMenu = (): Element => ({
   type: "element",
   tagName: "span",
   properties: {
-    className: ["code-diff-menu"],
+    className: ["code-diff-menu", "relative", "inline-flex"],
     "data-diff-menu": "",
   },
   children: [
@@ -344,7 +378,7 @@ const actionsMenu = (): Element => ({
       type: "element",
       tagName: "div",
       properties: {
-        className: ["code-diff-menu-list"],
+        className: MENU_LIST_CLASSES.split(" "),
         role: "menu",
         ariaLabel: "Diff actions",
         hidden: true,
@@ -415,7 +449,14 @@ const viewToggleGroup = (): Element => ({
   type: "element",
   tagName: "span",
   properties: {
-    className: ["code-diff-toggle-group"],
+    className: [
+      "code-diff-toggle-group",
+      "inline-flex",
+      "overflow-hidden",
+      "rounded-[0.375rem]",
+      "border",
+      "border-edge",
+    ],
     role: "group",
     ariaLabel: "Diff view",
     hidden: true,
@@ -537,7 +578,7 @@ export const renderCodeDiff: BlockRenderer = ({
       {
         type: "element",
         tagName: "figcaption",
-        properties: { className: ["code-diff-header"] },
+        properties: { className: HEADER_CLASSES.split(" ") },
         children: [
           {
             type: "element",
@@ -546,7 +587,7 @@ export const renderCodeDiff: BlockRenderer = ({
             // referenced by the full-screen dialog) the exact file path,
             // independent of the styled dir/name split below.
             properties: {
-              className: ["code-diff-file"],
+              className: FILE_CLASSES.split(" "),
               ariaLabel: filePath,
             },
             children: [
@@ -554,7 +595,9 @@ export const renderCodeDiff: BlockRenderer = ({
               {
                 type: "element",
                 tagName: "span",
-                properties: { className: ["code-diff-file-path"] },
+                properties: {
+                  className: ["code-diff-file-path", "min-w-0", "truncate"],
+                },
                 children: [
                   ...(fileDir === ""
                     ? []
@@ -562,14 +605,18 @@ export const renderCodeDiff: BlockRenderer = ({
                         {
                           type: "element" as const,
                           tagName: "span",
-                          properties: { className: ["code-diff-file-dir"] },
+                          properties: {
+                            className: ["code-diff-file-dir", "text-muted"],
+                          },
                           children: [text(fileDir)],
                         },
                       ]),
                   {
                     type: "element",
                     tagName: "span",
-                    properties: { className: ["code-diff-file-name"] },
+                    properties: {
+                      className: ["code-diff-file-name", "font-semibold", "text-ink"],
+                    },
                     children: [text(fileName)],
                   },
                 ],
@@ -579,7 +626,15 @@ export const renderCodeDiff: BlockRenderer = ({
           {
             type: "element",
             tagName: "span",
-            properties: { className: ["code-diff-controls"] },
+            properties: {
+              className: [
+                "code-diff-controls",
+                "flex",
+                "shrink-0",
+                "items-center",
+                "gap-1",
+              ],
+            },
             children: [
               ...(hideStatsValue === true
                 ? []
@@ -588,7 +643,7 @@ export const renderCodeDiff: BlockRenderer = ({
                 type: "element",
                 tagName: "span",
                 properties: {
-                  className: ["code-copy-message"],
+                  className: ["code-copy-message", "static", "h-6"],
                   ariaHidden: "true",
                   "data-diff-copy-message": "",
                   hidden: true,

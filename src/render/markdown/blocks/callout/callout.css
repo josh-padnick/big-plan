@@ -1,0 +1,32 @@
+/* Callout palette variants and child-content finishing, colocated with the
+   component that emits the panel markup. */
+
+@layer components {
+  article [data-callout] {
+    background: var(--callout-bg);
+    border-color: var(--edge-c);
+    border-left-color: var(--callout-accent);
+  }
+  article [data-callout="note"] {
+    --callout-accent: var(--callout-note-c);
+    --callout-bg: var(--callout-note-bg);
+  }
+  article [data-callout="tip"] {
+    --callout-accent: var(--callout-tip-c);
+    --callout-bg: var(--callout-tip-bg);
+  }
+  article [data-callout="warning"] {
+    --callout-accent: var(--callout-warning-c);
+    --callout-bg: var(--callout-warning-bg);
+  }
+  article [data-callout="danger"] {
+    --callout-accent: var(--callout-danger-c);
+    --callout-bg: var(--callout-danger-bg);
+  }
+  article .callout-header {
+    color: var(--callout-accent);
+  }
+  article .callout-body > :last-child {
+    margin-bottom: 0;
+  }
+}

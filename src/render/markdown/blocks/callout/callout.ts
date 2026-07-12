@@ -53,7 +53,7 @@ const CALLOUT_CLASSES =
   // border-edge utility here would win the cascade and flatten the accent.
   "callout mb-5 rounded-md border border-l-4 px-4 py-3";
 const HEADER_CLASSES =
-  "callout-header mb-2 flex items-center gap-2 font-semibold";
+  "callout-header mb-2 flex items-center gap-2 font-semibold [&_svg]:size-4 [&_svg]:shrink-0";
 const TITLE_CLASSES = "callout-title text-sm leading-5";
 const BODY_CLASSES = "callout-body text-ink";
 
