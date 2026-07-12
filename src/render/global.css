@@ -216,12 +216,78 @@ html:has(.code-diff-dialog[open]) {
     padding: 0.45rem 0.65rem;
   }
   article .code-diff-file {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  article .code-diff-file > svg {
+    width: 0.875rem;
+    height: 0.875rem;
+    flex: none;
+    color: var(--color-muted);
+  }
+  article .code-diff-file-path {
     min-width: 0;
     overflow: hidden;
-    color: var(--color-ink);
-    font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  article .code-diff-file-dir {
+    color: var(--color-muted);
+  }
+  article .code-diff-file-name {
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+  article .code-diff-stats {
+    display: inline-flex;
+    flex: none;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  article .code-diff-stat-add {
+    color: var(--diff-add-c);
+  }
+  article .code-diff-stat-remove {
+    color: var(--diff-remove-c);
+  }
+  article .code-diff-menu {
+    position: relative;
+    display: inline-flex;
+  }
+  article .code-diff-menu-list {
+    position: absolute;
+    z-index: 10;
+    top: calc(100% + 0.25rem);
+    right: 0;
+    min-width: 9rem;
+    padding: 0.25rem;
+    border: 1px solid var(--color-edge);
+    border-radius: 0.375rem;
+    background: var(--diff-header-bg);
+    box-shadow: 0 6px 18px rgb(12 10 8 / 0.18);
+  }
+  article .code-diff-menu-list[hidden] {
+    display: none;
+  }
+  article .code-diff-menu-item {
+    display: block;
+    width: 100%;
+    padding: 0.3rem 0.5rem;
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
+    color: var(--color-ink);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.75rem;
+    text-align: left;
+    white-space: nowrap;
+  }
+  article .code-diff-menu-item:hover {
+    background: var(--color-edge);
   }
   article .code-diff-controls {
     display: flex;

@@ -3,13 +3,11 @@
 
 import type { Element, ElementContent, Root, Text } from "hast";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
-import {
-  CHECK_ICON,
-  COPY_ICON,
-} from "../../code-block/code-block-icons.js";
 import type { BlockRenderer } from "../registry.js";
 import {
   COLUMNS_ICON,
+  ELLIPSIS_ICON,
+  FILE_ICON,
   MAXIMIZE_ICON,
   MINIMIZE_ICON,
   ROWS_ICON,
@@ -234,28 +232,70 @@ const renderView = ({
     : renderSplitHunk({ hunk, lineNumbers })),
 });
 
-const copyControlButton = ({
+const menuItemButton = ({
+  action,
   label,
-  children,
 }: {
+  readonly action: "copy-path" | "copy";
   readonly label: string;
-  readonly children: ReadonlyArray<Element>;
 }): Element => ({
   type: "element",
   tagName: "button",
   properties: {
     type: "button",
-    className: BUTTON_CLASSES.split(" "),
-    ariaLabel: label,
-    ariaLive: "polite",
-    title: label,
-    hidden: true,
-    "data-diff-copy": "",
-    "data-size": "xs",
-    "data-slot": "button",
-    "data-variant": "ghost",
+    className: ["code-diff-menu-item"],
+    role: "menuitem",
+    [`data-diff-${action}`]: "",
   },
-  children: [...children],
+  children: [text(label)],
+});
+
+// Copy actions live behind one overflow menu instead of dedicated buttons,
+// keeping the header calm as actions accumulate.
+const actionsMenu = (): Element => ({
+  type: "element",
+  tagName: "span",
+  properties: {
+    className: ["code-diff-menu"],
+    "data-diff-menu": "",
+  },
+  children: [
+    {
+      type: "element",
+      tagName: "button",
+      properties: {
+        type: "button",
+        className: BUTTON_CLASSES.split(" "),
+        ariaLabel: "More actions",
+        ariaHasPopup: "menu",
+        ariaExpanded: "false",
+        title: "More actions",
+        hidden: true,
+        "data-diff-menu-button": "",
+        "data-size": "xs",
+        "data-slot": "button",
+        "data-variant": "ghost",
+      },
+      children: [
+        renderLucideIcon({ icon: ELLIPSIS_ICON, name: "ellipsis", hidden: false }),
+      ],
+    },
+    {
+      type: "element",
+      tagName: "div",
+      properties: {
+        className: ["code-diff-menu-list"],
+        role: "menu",
+        ariaLabel: "Diff actions",
+        hidden: true,
+        "data-diff-menu-list": "",
+      },
+      children: [
+        menuItemButton({ action: "copy-path", label: "Copy path" }),
+        menuItemButton({ action: "copy", label: "Copy diff" }),
+      ],
+    },
+  ],
 });
 
 // One pressed segment per view keeps the current state and the alternative
@@ -404,13 +444,16 @@ export const renderCodeDiff: BlockRenderer = ({
     });
   }
 
-  const copyButton = copyControlButton({
-    label: "Copy diff",
-    children: [
-      renderLucideIcon({ icon: COPY_ICON, name: "copy", hidden: false }),
-      renderLucideIcon({ icon: CHECK_ICON, name: "check", hidden: true }),
-    ],
-  });
+  const filePath = typeof fileValue === "string" ? fileValue : "";
+  const lastSlashIndex = filePath.lastIndexOf("/");
+  const fileDir =
+    lastSlashIndex === -1 ? "" : filePath.slice(0, lastSlashIndex + 1);
+  const fileName =
+    lastSlashIndex === -1 ? filePath : filePath.slice(lastSlashIndex + 1);
+  const allLines = parsed.diff.hunks.flatMap((hunk) => hunk.lines);
+  const addedCount = allLines.filter((line) => line.kind === "add").length;
+  const removedCount = allLines.filter((line) => line.kind === "remove").length;
+
   return {
     type: "element",
     tagName: "figure",
@@ -418,6 +461,7 @@ export const renderCodeDiff: BlockRenderer = ({
       className: FIGURE_CLASSES.split(" "),
       "data-code-diff": "",
       "data-diff-view": "unified",
+      "data-diff-path": filePath,
       ...(lineNumbers ? { "data-line-numbers": "" } : {}),
     },
     children: [
@@ -429,14 +473,73 @@ export const renderCodeDiff: BlockRenderer = ({
           {
             type: "element",
             tagName: "span",
-            properties: { className: ["code-diff-file"] },
-            children: [text(typeof fileValue === "string" ? fileValue : "")],
+            // The explicit label keeps the block's accessible name (also
+            // referenced by the full-screen dialog) the exact file path,
+            // independent of the styled dir/name split below.
+            properties: {
+              className: ["code-diff-file"],
+              ariaLabel: filePath,
+            },
+            children: [
+              renderLucideIcon({ icon: FILE_ICON, name: "file", hidden: false }),
+              {
+                type: "element",
+                tagName: "span",
+                properties: { className: ["code-diff-file-path"] },
+                children: [
+                  ...(fileDir === ""
+                    ? []
+                    : [
+                        {
+                          type: "element" as const,
+                          tagName: "span",
+                          properties: { className: ["code-diff-file-dir"] },
+                          children: [text(fileDir)],
+                        },
+                      ]),
+                  {
+                    type: "element",
+                    tagName: "span",
+                    properties: { className: ["code-diff-file-name"] },
+                    children: [text(fileName)],
+                  },
+                ],
+              },
+            ],
           },
           {
             type: "element",
             tagName: "span",
             properties: { className: ["code-diff-controls"] },
             children: [
+              {
+                type: "element",
+                tagName: "span",
+                properties: {
+                  className: ["code-diff-stats"],
+                  ariaLabel: `${addedCount} added, ${removedCount} removed`,
+                },
+                children: [
+                  {
+                    type: "element",
+                    tagName: "span",
+                    properties: {
+                      className: ["code-diff-stat-add"],
+                      ariaHidden: "true",
+                    },
+                    children: [text(`+${addedCount}`)],
+                  },
+                  {
+                    type: "element",
+                    tagName: "span",
+                    properties: {
+                      className: ["code-diff-stat-remove"],
+                      ariaHidden: "true",
+                    },
+                    children: [text(`-${removedCount}`)],
+                  },
+                ],
+              },
               {
                 type: "element",
                 tagName: "span",
@@ -449,7 +552,7 @@ export const renderCodeDiff: BlockRenderer = ({
                 children: [text("Copied!")],
               },
               viewToggleGroup(),
-              copyButton,
+              actionsMenu(),
               // Far right so entering and leaving full screen live in the
               // same corner of the block.
               expandControlButton(),

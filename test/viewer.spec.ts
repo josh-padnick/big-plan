@@ -423,7 +423,7 @@ test("should expand a diff to full screen and restore it when dismissed", async 
   ).toBeVisible();
 });
 
-test("should copy the exact raw git diff when its copy control is used", async ({
+test("should copy the raw diff and the file path from the actions menu", async ({
   page,
   mdxBlocksViewerUrl,
 }) => {
@@ -443,10 +443,23 @@ test("should copy the exact raw git diff when its copy control is used", async (
   const diff = page.locator("[data-code-diff]").filter({
     hasText: "src/catalog/read-through-cache.ts",
   });
-  await diff.getByRole("button", { name: "Copy diff" }).click();
+  const menuButton = diff.getByRole("button", { name: "More actions" });
+  const menu = diff.getByRole("menu", { name: "Diff actions" });
+
+  await menuButton.click();
+  await expect(menu).toBeVisible();
+  await expect(menuButton).toHaveAttribute("aria-expanded", "true");
+  await menu.getByRole("menuitem", { name: "Copy diff" }).click();
 
   expect(await page.locator("body").getAttribute("data-copied-diff")).toBe(
     RAW_GIT_DIFF,
+  );
+  await expect(menu).toBeHidden();
+
+  await menuButton.click();
+  await menu.getByRole("menuitem", { name: "Copy path" }).click();
+  expect(await page.locator("body").getAttribute("data-copied-diff")).toBe(
+    "src/catalog/read-through-cache.ts",
   );
 });
 
@@ -465,7 +478,7 @@ test("should preserve typed-block content without controls when JavaScript is di
   await expect(diffs.first().locator('[data-diff-content="unified"]')).toBeVisible();
   await expect(diffs.first().locator('[data-diff-content="split"]')).toBeHidden();
   const controls = page.locator(
-    "[data-diff-toggle-group], [data-diff-copy], [data-diff-expand]",
+    "[data-diff-toggle-group], [data-diff-menu-button], [data-diff-expand]",
   );
   await expect(controls).toHaveCount(6);
   for (const control of await controls.all()) {

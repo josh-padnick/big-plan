@@ -1,15 +1,14 @@
-// Owns CodeDiff's progressively enhanced view preference, raw-source copy,
-// and full-screen dialog behavior; server-rendered unified content remains
-// the no-JavaScript default.
+// Owns CodeDiff's progressively enhanced view preference, overflow actions
+// menu, and full-screen dialog behavior; server-rendered unified content
+// remains the no-JavaScript default.
 
 const DIFF_VIEW_STORAGE_KEY = "big-plan-diff-view";
-const DIFF_COPY_RESET_MS = 2_000;
+const DIFF_MESSAGE_RESET_MS = 2_000;
 let nextDiffDialogLabelId = 1;
 
 type CodeDiffView = "unified" | "split";
-type DiffCopyStatus = "idle" | "success" | "failure";
 
-const diffCopyTimers = new WeakMap<HTMLButtonElement, number>();
+const diffMessageTimers = new WeakMap<HTMLElement, number>();
 
 const isCodeDiffView = (value: string | null): value is CodeDiffView =>
   value === "unified" || value === "split";
@@ -34,27 +33,29 @@ const applyDiffView = ({
   }
 };
 
-const setDiffCopyStatus = ({
-  button,
-  status,
+// Flashes transient action feedback in the header's message slot.
+const showDiffMessage = ({
+  block,
+  message,
 }: {
-  readonly button: HTMLButtonElement;
-  readonly status: DiffCopyStatus;
+  readonly block: HTMLElement;
+  readonly message: string;
 }): void => {
-  const copyIcon = button.querySelector<SVGElement>('[data-lucide="copy"]');
-  const checkIcon = button.querySelector<SVGElement>('[data-lucide="check"]');
-  const message = button
-    .closest("[data-code-diff]")
-    ?.querySelector<HTMLElement>("[data-diff-copy-message]");
-  const succeeded = status === "success";
-  copyIcon?.toggleAttribute("hidden", succeeded);
-  checkIcon?.toggleAttribute("hidden", !succeeded);
-  if (message !== null && message !== undefined) {
-    if (status !== "idle") {
-      message.textContent = status === "success" ? "Copied!" : "Could not copy";
-    }
-    message.hidden = status === "idle";
+  const slot = block.querySelector<HTMLElement>("[data-diff-copy-message]");
+  if (slot === null) {
+    return;
   }
+  const previousTimer = diffMessageTimers.get(slot);
+  if (previousTimer !== undefined) {
+    window.clearTimeout(previousTimer);
+  }
+  slot.textContent = message;
+  slot.hidden = false;
+  const timer = window.setTimeout(() => {
+    slot.hidden = true;
+    diffMessageTimers.delete(slot);
+  }, DIFF_MESSAGE_RESET_MS);
+  diffMessageTimers.set(slot, timer);
 };
 
 // Mirrors fenced-code fallback behavior for local file previews where the
@@ -80,30 +81,6 @@ const writeDiffClipboard = async (value: string): Promise<void> => {
   if (!copied) {
     throw new Error("Clipboard copy was unavailable");
   }
-};
-
-const showDiffCopyStatus = ({
-  button,
-  status,
-}: {
-  readonly button: HTMLButtonElement;
-  readonly status: Exclude<DiffCopyStatus, "idle">;
-}): void => {
-  const previousTimer = diffCopyTimers.get(button);
-  if (previousTimer !== undefined) {
-    window.clearTimeout(previousTimer);
-  }
-  setDiffCopyStatus({ button, status });
-  button.setAttribute(
-    "aria-label",
-    status === "success" ? "Diff copied" : "Could not copy diff",
-  );
-  const timer = window.setTimeout(() => {
-    setDiffCopyStatus({ button, status: "idle" });
-    button.setAttribute("aria-label", "Copy diff");
-    diffCopyTimers.delete(button);
-  }, DIFF_COPY_RESET_MS);
-  diffCopyTimers.set(button, timer);
 };
 
 // Mirrors the expanded state into the expand control's icon and label.
@@ -181,12 +158,82 @@ try {
 
 for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) {
   const toggleGroup = block.querySelector<HTMLElement>("[data-diff-toggle-group]");
-  const copy = block.querySelector<HTMLButtonElement>("[data-diff-copy]");
   const expand = block.querySelector<HTMLButtonElement>("[data-diff-expand]");
+  const menuButton = block.querySelector<HTMLButtonElement>(
+    "[data-diff-menu-button]",
+  );
+  const menuList = block.querySelector<HTMLElement>("[data-diff-menu-list]");
   toggleGroup?.removeAttribute("hidden");
-  copy?.removeAttribute("hidden");
   expand?.removeAttribute("hidden");
+  menuButton?.removeAttribute("hidden");
   applyDiffView({ block, view: storedDiffView });
+
+  const setMenuOpen = (open: boolean): void => {
+    if (menuButton === null || menuList === null) {
+      return;
+    }
+    menuButton.setAttribute("aria-expanded", open ? "true" : "false");
+    menuList.hidden = !open;
+  };
+
+  menuButton?.addEventListener("click", () => {
+    setMenuOpen(menuButton.getAttribute("aria-expanded") !== "true");
+  });
+
+  // Escape closes the menu without also dismissing an enclosing full-screen
+  // dialog; preventDefault stops the dialog's native cancel behavior.
+  block
+    .querySelector<HTMLElement>("[data-diff-menu]")
+    ?.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || menuList === null || menuList.hidden) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setMenuOpen(false);
+      menuButton?.focus();
+    });
+
+  const copyToClipboard = async ({
+    value,
+    successMessage,
+  }: {
+    readonly value: string;
+    readonly successMessage: string;
+  }): Promise<void> => {
+    setMenuOpen(false);
+    menuButton?.focus();
+    try {
+      await writeDiffClipboard(value);
+      showDiffMessage({ block, message: successMessage });
+    } catch {
+      showDiffMessage({ block, message: "Could not copy" });
+    }
+  };
+
+  block
+    .querySelector<HTMLButtonElement>("[data-diff-copy-path]")
+    ?.addEventListener("click", () => {
+      void copyToClipboard({
+        value: block.dataset.diffPath ?? "",
+        successMessage: "Path copied!",
+      });
+    });
+
+  block
+    .querySelector<HTMLButtonElement>("[data-diff-copy]")
+    ?.addEventListener("click", () => {
+      const source = block.querySelector<HTMLTextAreaElement>(
+        "[data-diff-source]",
+      );
+      if (source === null) {
+        return;
+      }
+      void copyToClipboard({
+        value: source.value,
+        successMessage: "Diff copied!",
+      });
+    });
 
   expand?.addEventListener("click", () => {
     const openDialog = block.closest("dialog");
@@ -213,22 +260,23 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
       }
     });
   }
-
-  copy?.addEventListener("click", async (event) => {
-    const source = block.querySelector<HTMLTextAreaElement>("[data-diff-source]");
-    if (source === null) {
-      return;
-    }
-    try {
-      await writeDiffClipboard(source.value);
-      showDiffCopyStatus({ button: copy, status: "success" });
-    } catch {
-      showDiffCopyStatus({ button: copy, status: "failure" });
-    }
-    if (event.detail === 0) {
-      copy.focus();
-    } else {
-      copy.blur();
-    }
-  });
 }
+
+// One document-level dismissal for every diff menu: clicking anywhere
+// outside an open menu closes it.
+document.addEventListener("click", (event) => {
+  for (const menu of document.querySelectorAll<HTMLElement>("[data-diff-menu]")) {
+    const button = menu.querySelector<HTMLButtonElement>(
+      "[data-diff-menu-button]",
+    );
+    const list = menu.querySelector<HTMLElement>("[data-diff-menu-list]");
+    if (button === null || list === null || list.hidden) {
+      continue;
+    }
+    if (event.target instanceof Node && menu.contains(event.target)) {
+      continue;
+    }
+    button.setAttribute("aria-expanded", "false");
+    list.hidden = true;
+  }
+});
