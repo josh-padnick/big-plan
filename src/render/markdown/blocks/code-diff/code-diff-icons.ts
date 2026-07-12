@@ -1,4 +1,4 @@
-// Owns the small Lucide icon-node assets used by CodeDiff's view toggle.
+// Owns the small Lucide icon-node assets used throughout CodeDiff's header.
 
 import type { IconNode } from "../../../icons/lucide-icon.js";
 

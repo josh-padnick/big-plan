@@ -51,7 +51,7 @@ Enable the worker before stale reads.
 </Callout>
 ```
 
-Use `CodeDiff` with a required file label, an optional bare `lineNumbers` attribute, and exactly one fenced `diff` child; line numbers require `@@` hunk headers:
+Use `CodeDiff` with a required non-empty file path, an optional bare `lineNumbers` attribute, and exactly one fenced `diff` child; line numbers require `@@` hunk headers:
 
 ````mdx
 <CodeDiff file="src/cache.ts" lineNumbers>
@@ -65,8 +65,8 @@ Use `CodeDiff` with a required file label, an optional bare `lineNumbers` attrib
 </CodeDiff>
 ````
 
-The diff opens in a readable unified view even without JavaScript.
-With JavaScript enabled, readers can switch between unified and side-by-side views, preserve that preference across reloads, copy the exact fenced diff source, or expand the diff into a full-screen dialog.
+The header shows the full file path and added and removed line counts, and the diff opens in a readable unified view even without JavaScript.
+With JavaScript enabled, readers can switch between unified and side-by-side views, preserve that preference across reloads, copy the file path or exact fenced diff source from the actions menu, or expand the diff into a full-screen dialog.
 Headerless `+`/`-` diffs are accepted when line numbers are omitted, and standard Git file preambles may appear before the first `@@` hunk.
 
 Because `<` and `{` begin MDX syntax, write them carefully in prose or place literal examples in code spans or fences.
