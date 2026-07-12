@@ -1,5 +1,6 @@
-// Owns CodeDiff's progressively enhanced view preference and raw-source copy
-// behavior; server-rendered unified content remains the no-JavaScript default.
+// Owns CodeDiff's progressively enhanced view preference, raw-source copy,
+// and full-screen dialog behavior; server-rendered unified content remains
+// the no-JavaScript default.
 
 const DIFF_VIEW_STORAGE_KEY = "grandplan-diff-view";
 const DIFF_COPY_RESET_MS = 2_000;
