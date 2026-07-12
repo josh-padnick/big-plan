@@ -45,7 +45,7 @@ const MOBILE_TOC_LINK_CLASSES =
   "block border-l-2 border-transparent px-5 py-2.5 text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:font-semibold aria-[current=true]:text-accent";
 
 const THEME_TOGGLE_CLASSES =
-  "fixed top-3 right-3 z-20 rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted shadow-sm hover:text-ink focus:outline-2 focus:outline-offset-2 focus:outline-accent";
+  "fixed top-1.5 right-3 z-20 rounded-md border border-edge bg-surface px-3 py-1.5 text-xs font-semibold text-muted shadow-sm hover:text-ink focus:outline-2 focus:outline-offset-2 focus:outline-accent";
 
 // Allocates the shell-owned overview anchor alongside document-owned ids.
 const createOverviewId = (contentIds: ReadonlyArray<string>): string => {
@@ -78,7 +78,7 @@ const renderTocItems = ({
 // Builds the desktop sidebar navigation.
 const renderDesktopToc = (nav: ReadonlyArray<NavEntry>): string => {
   const items = renderTocItems({ nav, linkClasses: TOC_LINK_CLASSES });
-  return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[6.5rem] wide:block wide:self-start" aria-label="Contents">
+  return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[5.75rem] wide:block wide:self-start" aria-label="Contents">
 <p class="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-muted">Contents</p>
 <ol>
 ${items}
@@ -95,9 +95,9 @@ const renderMobileToc = ({
   readonly overviewId: string;
 }): string => {
   const items = renderTocItems({ nav, linkClasses: MOBILE_TOC_LINK_CLASSES });
-  return `<nav class="sticky top-14 z-10 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden" data-mobile-toc aria-label="Contents">
+  return `<nav class="sticky top-11 z-10 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden" data-mobile-toc aria-label="Contents">
 <details class="group relative mx-auto max-w-[70ch]">
-<summary class="flex min-h-14 cursor-pointer list-none items-center gap-3 px-5 py-3 [&amp;::-webkit-details-marker]:hidden">
+<summary class="flex min-h-11 cursor-pointer list-none items-center gap-3 px-5 py-2 [&amp;::-webkit-details-marker]:hidden">
 <span class="font-semibold text-ink">Sections</span>
 <span class="flex min-w-6 items-center justify-center rounded-full bg-surface px-2 py-0.5 text-xs font-medium tabular-nums text-muted">${nav.length}</span>
 <svg class="size-4 shrink-0 text-muted transition-transform group-open:rotate-90" aria-hidden="true" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 4.96a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 1 1-1.06-1.06L11.18 10 7.21 6.02a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
@@ -131,7 +131,7 @@ export const renderShell = ({
   const overviewId = createOverviewId(contentIds);
   const html = `<button class="${THEME_TOGGLE_CLASSES}" type="button" data-theme-toggle aria-label="Toggle color theme">Theme</button>
 <header class="sticky top-0 z-10 border-b border-edge bg-paper/90 backdrop-blur">
-<div class="flex h-14 items-center px-5 wide:px-6">
+<div class="flex h-11 items-center px-5 wide:px-6">
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </div>
