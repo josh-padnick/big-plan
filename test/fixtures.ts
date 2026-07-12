@@ -25,10 +25,10 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
   // remains the baseline for the original viewer journeys.
   mdxBlocksViewerUrl: [
     async ({}, use) => {
-      const outputDir = await mkdtemp(join(tmpdir(), "grandplan-mdx-blocks-"));
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-mdx-blocks-"));
       const outputPath = join(outputDir, "mdx-blocks.html");
       await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "grandplan.mjs"),
+        join(repoRoot, "bin", "big-plan.mjs"),
         "render",
         join(repoRoot, "examples", "mdx-blocks.mdx"),
         outputPath,

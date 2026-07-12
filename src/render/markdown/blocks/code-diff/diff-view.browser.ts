@@ -3,6 +3,7 @@
 
 const DIFF_VIEW_STORAGE_KEY = "grandplan-diff-view";
 const DIFF_COPY_RESET_MS = 2_000;
+let nextDiffDialogLabelId = 1;
 
 type CodeDiffView = "unified" | "split";
 type DiffCopyStatus = "idle" | "success" | "failure";
@@ -130,14 +131,24 @@ const updateExpandControl = ({
 // and the selected view survive; closing restores its original position.
 const openFullScreen = ({ block }: { readonly block: HTMLElement }): void => {
   const article = block.closest("article");
-  if (article === null) {
+  const fileCaption = block.querySelector<HTMLElement>(".code-diff-file");
+  if (article === null || fileCaption === null) {
     return;
+  }
+  let labelId = fileCaption.id;
+  if (labelId === "" || document.getElementById(labelId) !== fileCaption) {
+    do {
+      labelId = `code-diff-dialog-label-${nextDiffDialogLabelId}`;
+      nextDiffDialogLabelId += 1;
+    } while (document.getElementById(labelId) !== null);
+    fileCaption.id = labelId;
   }
   const placeholder = document.createElement("span");
   placeholder.hidden = true;
   block.before(placeholder);
   const dialog = document.createElement("dialog");
   dialog.className = "code-diff-dialog";
+  dialog.setAttribute("aria-labelledby", labelId);
   dialog.append(block);
   article.append(dialog);
   block.dataset.diffExpanded = "";

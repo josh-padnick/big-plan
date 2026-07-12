@@ -389,6 +389,7 @@ test("should expand a diff to full screen and restore it when dismissed", async 
 
   const dialog = page.locator("dialog.code-diff-dialog");
   await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAccessibleName("src/catalog/read-through-cache.ts");
   await expect(dialog.locator("[data-code-diff]")).toHaveAttribute(
     "data-diff-expanded",
     "",
