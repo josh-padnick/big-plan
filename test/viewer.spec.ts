@@ -247,7 +247,6 @@ test("should provide a compact sticky table of contents on mobile", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(sampleViewerUrl);
 
-  await expect(page.getByText("Grimm 10.0", { exact: true })).toBeVisible();
   const toc = page.getByRole("navigation", { name: "Contents" });
   const disclosure = toc.locator("details");
   const overviewLink = toc.locator("[data-overview-link]");

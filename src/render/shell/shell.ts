@@ -86,27 +86,16 @@ ${items}
 </nav>`;
 };
 
-// Builds the compact mobile header and sticky, progressively enhanced TOC.
-const renderMobileChrome = ({
+// Builds the sticky, progressively enhanced mobile TOC.
+const renderMobileToc = ({
   nav,
-  environmentLabel,
   overviewId,
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
-  readonly environmentLabel: string;
   readonly overviewId: string;
 }): string => {
   const items = renderTocItems({ nav, linkClasses: MOBILE_TOC_LINK_CLASSES });
-  return `<header class="border-b border-edge px-5 py-4 wide:hidden">
-<div class="mx-auto flex max-w-[70ch] items-center gap-3">
-<span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-accent text-sm font-bold text-paper" aria-hidden="true">G</span>
-<div class="min-w-0">
-<p class="truncate text-sm font-semibold leading-tight text-ink">${escapeHtml(environmentLabel)}</p>
-<p class="mt-0.5 text-xs leading-tight text-muted">Plan review</p>
-</div>
-</div>
-</header>
-<nav class="sticky top-14 z-10 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden" data-mobile-toc aria-label="Contents">
+  return `<nav class="sticky top-14 z-10 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden" data-mobile-toc aria-label="Contents">
 <details class="group relative mx-auto max-w-[70ch]">
 <summary class="flex min-h-14 cursor-pointer list-none items-center gap-3 px-5 py-3 [&amp;::-webkit-details-marker]:hidden">
 <span class="font-semibold text-ink">Sections</span>
@@ -126,20 +115,17 @@ ${items}
 /**
  * Wraps rendered content in the review shell: the layout grid, responsive
  * desktop and mobile navigation when nav entries exist, theme control, and
- * code-block controls. The environment label identifies the plan in the mobile
- * header. Returns markup plus the styles and progressive-enhancement scripts
- * the caller packages into a page.
+ * code-block controls. Returns markup plus the styles and
+ * progressive-enhancement scripts the caller packages into a page.
  */
 export const renderShell = ({
   nav,
   contentIds,
   contentHtml,
-  environmentLabel,
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
   readonly contentIds: ReadonlyArray<string>;
   readonly contentHtml: string;
-  readonly environmentLabel: string;
 }): ShellResult => {
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
@@ -150,7 +136,7 @@ export const renderShell = ({
 <img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </div>
 </header>
-${hasToc ? renderMobileChrome({ nav, environmentLabel, overviewId }) : ""}
+${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}">
 ${hasToc ? renderDesktopToc(nav) : ""}
 <main class="min-w-0" id="${overviewId}">

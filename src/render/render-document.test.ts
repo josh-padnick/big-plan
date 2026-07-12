@@ -87,8 +87,7 @@ describe("renderDocument affordances", () => {
     expect(html).toMatch(/<a[^>]* href="#first-section">First section<\/a>/);
   });
 
-  it("should render the mobile environment header and section disclosure", () => {
-    expect(html).toContain("Grimm 10.0");
+  it("should render the mobile section disclosure", () => {
     expect(html).toContain(">Sections</span>");
     expect(html).toContain('data-overview-link href="#top"');
   });
@@ -102,16 +101,6 @@ describe("renderDocument affordances", () => {
     expect(collisionHtml).toContain('<main class="min-w-0" id="top-3">');
     expect(collisionHtml.match(/id="top"/g)).toHaveLength(1);
     expect(collisionHtml.match(/id="top-2"/g)).toHaveLength(1);
-  });
-
-  it("should escape a custom environment label", () => {
-    const { html: customHtml } = renderDocument({
-      markdown: FULL_FIXTURE,
-      fallbackTitle: "Fallback",
-      environmentLabel: '<script>"unsafe"</script>',
-    });
-    expect(customHtml).toContain("&lt;script&gt;&quot;unsafe&quot;&lt;/script&gt;");
-    expect(customHtml).not.toContain('<script>"unsafe"</script>');
   });
 
   it("should be self-contained when the document links to external sites", () => {
