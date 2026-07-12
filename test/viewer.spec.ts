@@ -257,6 +257,11 @@ test("should provide a compact sticky table of contents on mobile", async ({
   const retryStateLink = toc.locator(
     '[data-section-link][href="#retry-state-machine"]',
   );
+  const bannerBox = await page.getByRole("banner").boundingBox();
+  const tocBox = await toc.boundingBox();
+  expect(bannerBox?.height).toBe(44);
+  expect(tocBox?.y).toBe(44);
+  expect(tocBox?.height).toBe(44);
   await expect(disclosure).not.toHaveAttribute("open", "");
   await expect(disclosure.locator("summary")).toContainText(/Sections\s+6/);
   await expect(overviewLink).toHaveAttribute("aria-current", "true");
