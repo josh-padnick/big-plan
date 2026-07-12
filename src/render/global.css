@@ -38,7 +38,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --diff-remove-c: #9a493f;
   --diff-remove-bg: #f6e8e4;
   --diff-content-bg: #ffffff;
-  --diff-hunk-bg: #f2f1ee;
+  --diff-hunk-bg: #f6f5f2;
   --diff-hunk-c: #8a857c;
   --diff-header-bg: #efece3;
   color-scheme: light dark;
@@ -214,7 +214,7 @@ html:has(.code-diff-dialog[open]) {
     gap: 0.75rem;
     border-bottom: 1px solid var(--color-edge);
     border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0;
-    padding: 0.45rem 0.65rem;
+    padding: 0.3rem 0.55rem;
   }
   article .code-diff-file {
     display: flex;
@@ -274,8 +274,10 @@ html:has(.code-diff-dialog[open]) {
     display: none;
   }
   article .code-diff-menu-item {
-    display: block;
+    display: flex;
     width: 100%;
+    align-items: center;
+    gap: 0.45rem;
     padding: 0.3rem 0.5rem;
     border: 0;
     border-radius: 0.25rem;
@@ -286,6 +288,12 @@ html:has(.code-diff-dialog[open]) {
     font-size: 0.75rem;
     text-align: left;
     white-space: nowrap;
+  }
+  article .code-diff-menu-item svg {
+    width: 0.75rem;
+    height: 0.75rem;
+    flex: none;
+    color: var(--color-muted);
   }
   article .code-diff-menu-item:hover {
     background: var(--color-edge);

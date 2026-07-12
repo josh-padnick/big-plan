@@ -3,6 +3,7 @@
 
 import type { Element, ElementContent, Root, Text } from "hast";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import { COPY_ICON } from "../../code-block/code-block-icons.js";
 import type { BlockRenderer } from "../registry.js";
 import {
   COLUMNS_ICON,
@@ -261,7 +262,52 @@ const menuItemButton = ({
     tabIndex: -1,
     [`data-diff-${action}`]: "",
   },
-  children: [text(label)],
+  children: [
+    renderLucideIcon({ icon: COPY_ICON, name: "copy", hidden: false }),
+    text(label),
+  ],
+});
+
+// Header summary of the parsed diff; authors opt out per block via the
+// hideStats shorthand attribute.
+const diffStats = ({
+  addedCount,
+  removedCount,
+}: {
+  readonly addedCount: number;
+  readonly removedCount: number;
+}): Element => ({
+  type: "element",
+  tagName: "span",
+  properties: {
+    className: ["code-diff-stats"],
+  },
+  children: [
+    {
+      type: "element",
+      tagName: "span",
+      properties: { className: ["sr-only"] },
+      children: [text(`${addedCount} added, ${removedCount} removed`)],
+    },
+    {
+      type: "element",
+      tagName: "span",
+      properties: {
+        className: ["code-diff-stat-add"],
+        ariaHidden: "true",
+      },
+      children: [text(`+${addedCount}`)],
+    },
+    {
+      type: "element",
+      tagName: "span",
+      properties: {
+        className: ["code-diff-stat-remove"],
+        ariaHidden: "true",
+      },
+      children: [text(`-${removedCount}`)],
+    },
+  ],
 });
 
 // Copy actions live behind one overflow menu instead of dedicated buttons,
@@ -423,8 +469,15 @@ export const renderCodeDiff: BlockRenderer = ({
       position,
     });
   }
+  const hideStatsValue = attributes["hideStats"];
+  if (hideStatsValue !== undefined && hideStatsValue !== true) {
+    diagnostics.add({
+      message: 'Attribute "hideStats" is a shorthand boolean; use the bare form',
+      position,
+    });
+  }
   for (const name of Object.keys(attributes)) {
-    if (name !== "file" && name !== "lineNumbers") {
+    if (name !== "file" && name !== "lineNumbers" && name !== "hideStats") {
       diagnostics.add({ message: `Unknown attribute "${name}" on CodeDiff`, position });
     }
   }
@@ -528,41 +581,9 @@ export const renderCodeDiff: BlockRenderer = ({
             tagName: "span",
             properties: { className: ["code-diff-controls"] },
             children: [
-              {
-                type: "element",
-                tagName: "span",
-                properties: {
-                  className: ["code-diff-stats"],
-                },
-                children: [
-                  {
-                    type: "element",
-                    tagName: "span",
-                    properties: { className: ["sr-only"] },
-                    children: [
-                      text(`${addedCount} added, ${removedCount} removed`),
-                    ],
-                  },
-                  {
-                    type: "element",
-                    tagName: "span",
-                    properties: {
-                      className: ["code-diff-stat-add"],
-                      ariaHidden: "true",
-                    },
-                    children: [text(`+${addedCount}`)],
-                  },
-                  {
-                    type: "element",
-                    tagName: "span",
-                    properties: {
-                      className: ["code-diff-stat-remove"],
-                      ariaHidden: "true",
-                    },
-                    children: [text(`-${removedCount}`)],
-                  },
-                ],
-              },
+              ...(hideStatsValue === true
+                ? []
+                : [diffStats({ addedCount, removedCount })]),
               {
                 type: "element",
                 tagName: "span",
