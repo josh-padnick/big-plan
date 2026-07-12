@@ -21,6 +21,7 @@ Deliverable 1 is shipped in this repo: a static markdown viewer.
 Wide screens use a sticky sidebar; narrower screens use a sticky `Sections` disclosure showing the section count.
 Both navigation variants track the current section while the reader scrolls, including short final sections at the bottom of the page, and section links scroll smoothly unless the reader has requested reduced motion.
 Declared fenced-code languages receive syntax highlighting, every block code sample gets a copy control, and readers can override the OS light/dark preference with a locally persisted theme control.
+Every viewport has a sticky branding bar whose logo follows that active theme, while embedded light and dark favicons follow the OS preference.
 The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, and code-copy controls.
 
 ## Architecture at a glance

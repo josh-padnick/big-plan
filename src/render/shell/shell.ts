@@ -1,7 +1,8 @@
 // Owns the review shell: the reading surface a rendered document lives in -
-// the layout grid, theme control, responsive desktop and mobile navigation,
-// code-block controls, and content region. It produces body-level markup plus
-// the styles and progressive-enhancement scripts that markup needs, as data;
+// the branding bar, layout grid, theme control, responsive desktop and mobile
+// navigation, code-block controls, and content region. It produces body-level
+// markup plus the styles and progressive-enhancement scripts that markup needs,
+// as data;
 // packaging into a complete document is page.ts's job. Authored markup is
 // styled with Tailwind utilities; the compiled stylesheet (including the
 // element-scoped styles from markdown/prose.css) comes from the generated
@@ -113,8 +114,8 @@ ${items}
 };
 
 /**
- * Wraps rendered content in the review shell: the layout grid, responsive
- * desktop and mobile navigation when nav entries exist, theme control, and
+ * Wraps rendered content in the review shell: the layout grid and branding
+ * bar, responsive navigation when nav entries exist, theme control, and
  * code-block controls. Returns markup plus the styles and
  * progressive-enhancement scripts the caller packages into a page.
  */
