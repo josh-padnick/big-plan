@@ -1,5 +1,5 @@
-// The renderer's public entry point: composes the markdown pipeline, the
-// review shell, and the page envelope into one markdown-in, complete-HTML-out
+// The renderer's public entry point: composes the MDX pipeline, the review
+// shell, and the page envelope into one MDX-in, complete-HTML-out
 // function.
 
 import type { Section } from "./markdown/convert.js";
@@ -20,8 +20,8 @@ export type RenderedDocument = {
 /**
  * Renders static-subset MDX into a complete, self-contained HTML review document.
  * The title is the document's first h1 when present, otherwise the caller's
- * fallback. Pure: no I/O, so callers own where the markdown comes from and
- * where the HTML goes.
+ * fallback. Pure: no I/O, so callers own where the MDX comes from and where
+ * the HTML goes.
  */
 export const renderDocument = ({
   markdown,

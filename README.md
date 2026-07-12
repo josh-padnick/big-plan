@@ -5,7 +5,7 @@ Big Plan makes reviewing agent plans a first-class experience.
 
 > [!WARNING]
 > **Pre-alpha.** Big Plan is under active development.
-> The static markdown viewer works today; the rest of the review experience is still being built.
+> The static-subset MDX viewer and its first typed blocks work today; the rest of the review experience is still being built.
 
 Planning is an essential part of effective development with AI, and it deserves a first-class experience.
 Big Plan is built around one question: **what is the best way to review a plan and reach agreement on it, before an agent acts?**
@@ -18,7 +18,7 @@ Everything runs locally, and the MDX file on your disk is the source of truth.
 ## Status
 
 The first working release is being built in the open in this repository.
-The first deliverable, a static markdown viewer, is available now.
+Deliverable 2 is available now: the static viewer accepts GFM and static-subset MDX plans with validated typed blocks.
 
 ## Usage
 
@@ -39,7 +39,7 @@ Every block code sample has a copy control, and the light/dark theme control fol
 MDX plans may use the built-in `Callout` and `CodeDiff` typed blocks, but they cannot contain imports, exports, `{}` expressions, or non-string attribute values; bare boolean attributes are supported only where a block schema allows them.
 Unsupported MDX syntax and invalid block attributes fail the render with diagnostics that include `line:column` positions.
 
-Use `Callout` with one of the four supported types and an optional custom title:
+Use `Callout` with one of the four supported types and an optional custom title; without a title, the displayed title is `Note`, `Tip`, `Warning`, or `Danger` according to the type:
 
 ```mdx
 <Callout type="warning" title="Deploy ordering">
@@ -62,6 +62,10 @@ Use `CodeDiff` with a required file label, an optional bare `lineNumbers` attrib
 
 </CodeDiff>
 ````
+
+The diff opens in a readable unified view even without JavaScript.
+With JavaScript enabled, readers can switch between unified and side-by-side views, preserve that preference across reloads, copy the exact fenced diff source, or expand the diff into a full-screen dialog.
+Headerless `+`/`-` diffs are accepted when line numbers are omitted, and standard Git file preambles may appear before the first `@@` hunk.
 
 Because `<` and `{` begin MDX syntax, write them carefully in prose or place literal examples in code spans or fences.
 HTML comments and angle-bracket `<url>` autolinks are not supported in plan documents.
