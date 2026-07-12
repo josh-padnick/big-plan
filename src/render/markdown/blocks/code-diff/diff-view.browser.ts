@@ -190,9 +190,16 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
     }
     menuButton.setAttribute("aria-expanded", open ? "true" : "false");
     menuList.hidden = !open;
+    const items = menuItems();
+    for (const item of items) {
+      item.tabIndex = -1;
+    }
     if (open && focus !== undefined) {
-      const items = menuItems();
-      items[focus === "first" ? 0 : items.length - 1]?.focus();
+      const item = items[focus === "first" ? 0 : items.length - 1];
+      if (item !== undefined) {
+        item.tabIndex = 0;
+        item.focus();
+      }
     }
   };
 
@@ -229,6 +236,10 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
       if (menuList.hidden) {
         return;
       }
+      if (event.key === "Tab") {
+        setMenuOpen({ open: false });
+        return;
+      }
       const items = menuItems();
       const currentIndex = items.findIndex((item) => item === event.target);
       if (currentIndex === -1) {
@@ -245,7 +256,13 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
               : undefined;
       if (destination !== undefined) {
         event.preventDefault();
-        items[destination]?.focus();
+        const item = items[destination];
+        if (item !== undefined) {
+          for (const menuItem of items) {
+            menuItem.tabIndex = menuItem === item ? 0 : -1;
+          }
+          item.focus();
+        }
       }
     });
 

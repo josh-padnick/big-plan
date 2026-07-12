@@ -245,6 +245,7 @@ const menuItemButton = ({
     type: "button",
     className: ["code-diff-menu-item"],
     role: "menuitem",
+    tabIndex: -1,
     [`data-diff-${action}`]: "",
   },
   children: [text(label)],

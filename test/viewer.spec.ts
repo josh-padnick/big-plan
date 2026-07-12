@@ -494,6 +494,20 @@ test("should support keyboard navigation in the diff actions menu", async ({
 
   await menuButton.press("ArrowUp");
   await expect(copyDiff).toBeFocused();
+  await copyDiff.press("Tab");
+  await expect(diff.getByRole("menu", { name: "Diff actions" })).toBeHidden();
+  await expect(menuButton).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    diff.getByRole("button", { name: "View diff full screen" }),
+  ).toBeFocused();
+
+  await menuButton.focus();
+  await menuButton.press("ArrowDown");
+  await expect(copyPath).toHaveAttribute("tabindex", "0");
+  await expect(copyDiff).toHaveAttribute("tabindex", "-1");
+  await copyPath.press("Shift+Tab");
+  await expect(diff.getByRole("menu", { name: "Diff actions" })).toBeHidden();
+  await expect(menuButton).toBeFocused();
 });
 
 test("should let a short diff actions menu escape the figure", async ({
