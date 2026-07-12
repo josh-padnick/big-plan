@@ -66,7 +66,7 @@ index 23ad911..890ce42 100644
 +    }
      return cached.value;
    }
- 
+
 @@ -31,4 +34,5 @@ export const readCatalog = async (key: string) => {
    const value = await catalogOrigin.read(key);
    await cache.put(key, value, { ttlSeconds: 300 });
