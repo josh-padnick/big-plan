@@ -2,7 +2,7 @@
 // and full-screen dialog behavior; server-rendered unified content remains
 // the no-JavaScript default.
 
-const DIFF_VIEW_STORAGE_KEY = "grandplan-diff-view";
+const DIFF_VIEW_STORAGE_KEY = "big-plan-diff-view";
 const DIFF_COPY_RESET_MS = 2_000;
 let nextDiffDialogLabelId = 1;
 
