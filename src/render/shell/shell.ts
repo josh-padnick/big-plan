@@ -132,8 +132,10 @@ export const renderShell = ({
   const html = `<button class="${THEME_TOGGLE_CLASSES}" type="button" data-theme-toggle aria-label="Toggle color theme">Theme</button>
 <header class="sticky top-0 z-10 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="flex h-11 items-center px-5 wide:px-6">
+<a class="rounded-sm focus:outline-2 focus:outline-offset-2 focus:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
+</a>
 </div>
 </header>
 ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}

@@ -15,6 +15,10 @@ test("should navigate the rendered sample plan through the TOC without errors", 
   const logo = banner.getByRole("img", { name: "Big Plan" });
   await expect(banner).toBeVisible();
   await expect(logo).toBeVisible();
+  await expect(banner.getByRole("link", { name: "Big Plan" })).toHaveAttribute(
+    "href",
+    "https://big-plan.ai",
+  );
   await expect(
     page.getByRole("heading", { level: 1, name: "Payments Retry Architecture Plan" }),
   ).toBeVisible();

@@ -30,7 +30,7 @@ npx big-plan render <file.md> [output.html]
 
 The output defaults to `<file>.html` next to the input.
 It embeds all styling, behavior, and branding assets (including the favicon), makes no external requests, and builds its table of contents from the document's level-two headings.
-A sticky branding bar spans the top of the page on every screen size, and its logo art follows the active theme.
+A sticky branding bar spans the top of the page on every screen size; its logo art follows the active theme and links to [big-plan.ai](https://big-plan.ai) in a new tab.
 On wide screens the contents stay in a sticky sidebar; on narrower screens a sticky `Sections` menu shows the section count.
 Both variants track the current section as the reader scrolls, and section links scroll smoothly unless the reader has requested reduced motion.
 Fenced code blocks with a supported language identifier receive syntax highlighting; undeclared and unknown languages remain plain and readable.

@@ -136,6 +136,9 @@ describe("renderDocument affordances", () => {
 
   it("should render a theme-swapped branding banner when rendering", () => {
     expect(html).toMatch(
+      /<a [^>]*href="https:\/\/big-plan\.ai" target="_blank" rel="noreferrer">/,
+    );
+    expect(html).toMatch(
       /<img class="w-27 h-auto" data-logo-light src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
     );
     expect(html).toMatch(
