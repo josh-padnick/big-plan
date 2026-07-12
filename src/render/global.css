@@ -145,6 +145,11 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   scroll-margin-top: 4.25rem;
 }
 
+/* A modal diff owns the screen: the document behind it must not scroll. */
+html:has(.code-diff-dialog[open]) {
+  overflow: hidden;
+}
+
 /* Mobile section links land below the branding bar plus the sticky TOC
    rather than beneath them. */
 @media (width < 56rem) {
@@ -230,6 +235,9 @@ Light and dark follow the reader's OS unless the theme control overrides it.
     height: 92vh;
     max-width: none;
     max-height: none;
+    /* Preflight zeroes dialog margins, which pins the fixed-position modal
+       to the top-left; auto restores user-agent centering. */
+    margin: auto;
     flex-direction: column;
     padding: 0;
     border: 0;

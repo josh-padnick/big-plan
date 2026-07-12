@@ -449,8 +449,10 @@ export const renderCodeDiff: BlockRenderer = ({
                 children: [text("Copied!")],
               },
               viewToggleGroup(),
-              expandControlButton(),
               copyButton,
+              // Far right so entering and leaving full screen live in the
+              // same corner of the block.
+              expandControlButton(),
             ],
           },
         ],

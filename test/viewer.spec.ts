@@ -398,6 +398,21 @@ test("should expand a diff to full screen and restore it when dismissed", async 
     dialog.getByRole("button", { name: "Exit full screen" }),
   ).toBeVisible();
 
+  // The modal centers in the viewport and locks the page behind it.
+  const horizontalGaps = await dialog.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return { left: box.left, right: window.innerWidth - box.right };
+  });
+  expect(horizontalGaps.left).toBeGreaterThan(0);
+  expect(Math.abs(horizontalGaps.left - horizontalGaps.right)).toBeLessThan(2);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => getComputedStyle(document.documentElement).overflow,
+      ),
+    )
+    .toBe("hidden");
+
   await page.keyboard.press("Escape");
 
   await expect(page.locator("dialog.code-diff-dialog")).toHaveCount(0);
