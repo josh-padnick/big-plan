@@ -4,3 +4,4 @@ src/**/*.generated.ts
 test-results/
 playwright-report/
 examples/*.html
+.DS_Store
