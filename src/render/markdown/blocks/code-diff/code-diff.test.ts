@@ -57,6 +57,14 @@ describe("renderCodeDiff", () => {
     });
   });
 
+  it.each(["", "   "])("should diagnose an empty file attribute", (file) => {
+    expect(render({ attributes: { file } }).diagnostics).toContainEqual({
+      line: 3,
+      column: 1,
+      message: 'Attribute "file" must be a non-empty string',
+    });
+  });
+
   it("should diagnose a shorthand file and string-valued lineNumbers", () => {
     expect(render({ attributes: { file: true, lineNumbers: "true" } }).diagnostics).toEqual([
       { line: 3, column: 1, message: 'Attribute "file" must be a string' },
@@ -153,6 +161,8 @@ describe("renderCodeDiff", () => {
     expect(rendered).toContain('"data-diff-content":"split"');
     expect(rendered).toContain('"data-diff-line":"remove"');
     expect(rendered).toContain('"data-diff-line":"add"');
+    expect(rendered).toContain('"value":"Removed line: "');
+    expect(rendered).toContain('"value":"Added line: "');
     expect(rendered).toContain('"data-diff-number":"old"');
     expect(rendered).toContain('"data-diff-number":"new"');
     expect(rendered).toContain('"tagName":"textarea"');

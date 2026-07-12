@@ -90,11 +90,24 @@ const lineNumberCell = (value: number | undefined, side: "old" | "new"): Element
   children: [text(value === undefined ? "" : String(value))],
 });
 
+const accessibleLinePrefix = (line: DiffLine): ReadonlyArray<Element> =>
+  line.kind === "context"
+    ? []
+    : [{
+        type: "element",
+        tagName: "span",
+        properties: { className: ["sr-only"] },
+        children: [text(line.kind === "add" ? "Added line: " : "Removed line: ")],
+      }];
+
 const lineContent = (line: DiffLine): Element => ({
   type: "element",
   tagName: "span",
   properties: { className: ["code-diff-line-content"] },
-  children: [text(line.text)],
+  children: [
+    ...accessibleLinePrefix(line),
+    text(line.text),
+  ],
 });
 
 const unifiedLine = ({
@@ -393,11 +406,13 @@ export const renderCodeDiff: BlockRenderer = ({
   diagnostics,
 }): Element => {
   const fileValue = attributes["file"];
-  if (typeof fileValue !== "string") {
+  if (typeof fileValue !== "string" || fileValue.trim() === "") {
     diagnostics.add({
       message: fileValue === undefined
         ? 'Missing required attribute "file"; expected a string'
-        : 'Attribute "file" must be a string',
+        : typeof fileValue !== "string"
+          ? 'Attribute "file" must be a string'
+          : 'Attribute "file" must be a non-empty string',
       position,
     });
   }
