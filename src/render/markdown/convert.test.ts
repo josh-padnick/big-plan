@@ -277,7 +277,7 @@ describe("compileMarkdown Callout blocks", () => {
 describe("compileMarkdown CodeDiff blocks", () => {
   it("should render both views without highlighting or decorating the consumed fence", () => {
     const bodyHtml = compileAndSerialize(
-      '<CodeDiff file="src/retry.ts" lineNumbers>\n```diff\n@@ -1 +1,2 @@\n-old\n+new\n+audit\n```\n</CodeDiff>\n',
+      '<CodeDiff file="src/retry.ts" lineNumbers showStats>\n```diff\n@@ -1 +1,2 @@\n-old\n+new\n+audit\n```\n</CodeDiff>\n',
     );
     expect(bodyHtml).toContain('data-code-diff="" data-diff-view="unified"');
     expect(bodyHtml).toContain('data-diff-content="unified"');

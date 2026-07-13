@@ -66,7 +66,7 @@ Use `CodeDiff` with a required non-empty file path, an optional bare `lineNumber
 ````
 
 The header shows the full file path and added and removed line counts, and the diff opens in a readable unified view even without JavaScript.
-With JavaScript enabled, readers can switch between unified and side-by-side views, preserve that preference across reloads, copy the file path or exact fenced diff source from the actions menu, or expand the diff into a full-screen dialog.
+With JavaScript enabled, readers can switch between unified and side-by-side views, preserve that preference across reloads, copy the file path or the fenced diff source (as parsed: LF line endings with a trailing newline) from the actions menu, or expand the diff into a full-screen dialog.
 Headerless `+`/`-` diffs are accepted when line numbers are omitted, and standard Git file preambles may appear before the first `@@` hunk.
 
 Because `<` and `{` begin MDX syntax, write them carefully in prose or place literal examples in code spans or fences.

@@ -195,12 +195,16 @@ export const compileMarkdown = ({
     .use(rehypeHighlight)
     .use(rehypeDecorateCodeBlocks)
     .use(rehypeWrapTables);
-  let tree: Root;
+  // Only parsing reflects author mistakes; a transform that throws is a
+  // renderer defect and must surface as an internal error, not as a
+  // diagnostic blaming the document.
+  let parsed: ReturnType<typeof processor.parse>;
   try {
-    tree = processor.runSync(processor.parse(markdown));
+    parsed = processor.parse(markdown);
   } catch (error: unknown) {
     throw new MarkdownDiagnosticsError([diagnosticFromParseError(error)]);
   }
+  const tree: Root = processor.runSync(parsed);
 
   if (diagnostics.diagnostics.length > 0) {
     throw new MarkdownDiagnosticsError(diagnostics.diagnostics);

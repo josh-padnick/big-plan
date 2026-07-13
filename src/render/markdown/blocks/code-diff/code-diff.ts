@@ -302,8 +302,8 @@ const menuItemButton = ({
   ],
 });
 
-// Header summary of the parsed diff; authors opt out per block via the
-// hideStats shorthand attribute.
+// Header summary of the parsed diff; authors opt in per block via the
+// showStats shorthand attribute.
 const diffStats = ({
   addedCount,
   removedCount,
@@ -510,15 +510,15 @@ export const renderCodeDiff: BlockRenderer = ({
       position,
     });
   }
-  const hideStatsValue = attributes["hideStats"];
-  if (hideStatsValue !== undefined && hideStatsValue !== true) {
+  const showStatsValue = attributes["showStats"];
+  if (showStatsValue !== undefined && showStatsValue !== true) {
     diagnostics.add({
-      message: 'Attribute "hideStats" is a shorthand boolean; use the bare form',
+      message: 'Attribute "showStats" is a shorthand boolean; use the bare form',
       position,
     });
   }
   for (const name of Object.keys(attributes)) {
-    if (name !== "file" && name !== "lineNumbers" && name !== "hideStats") {
+    if (name !== "file" && name !== "lineNumbers" && name !== "showStats") {
       diagnostics.add({ message: `Unknown attribute "${name}" on CodeDiff`, position });
     }
   }
@@ -636,9 +636,9 @@ export const renderCodeDiff: BlockRenderer = ({
               ],
             },
             children: [
-              ...(hideStatsValue === true
-                ? []
-                : [diffStats({ addedCount, removedCount })]),
+              ...(showStatsValue === true
+                ? [diffStats({ addedCount, removedCount })]
+                : []),
               {
                 type: "element",
                 tagName: "span",

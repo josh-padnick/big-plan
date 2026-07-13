@@ -83,28 +83,28 @@ describe("renderCodeDiff", () => {
     ]);
   });
 
-  it("should render header stats by default", () => {
+  it("should omit the header stats by default", () => {
     const { element, diagnostics } = render();
-    expect(diagnostics).toEqual([]);
-    expect(JSON.stringify(element)).toContain("code-diff-stats");
-  });
-
-  it("should omit the header stats when hideStats is set", () => {
-    const { element, diagnostics } = render({
-      attributes: { file: "src/retry.ts", hideStats: true },
-    });
     expect(diagnostics).toEqual([]);
     expect(JSON.stringify(element)).not.toContain("code-diff-stats");
   });
 
-  it("should diagnose a string-valued hideStats", () => {
+  it("should render the header stats when showStats is set", () => {
+    const { element, diagnostics } = render({
+      attributes: { file: "src/retry.ts", showStats: true },
+    });
+    expect(diagnostics).toEqual([]);
+    expect(JSON.stringify(element)).toContain("code-diff-stats");
+  });
+
+  it("should diagnose a string-valued showStats", () => {
     expect(
-      render({ attributes: { file: "x", hideStats: "true" } }).diagnostics,
+      render({ attributes: { file: "x", showStats: "true" } }).diagnostics,
     ).toEqual([
       {
         line: 3,
         column: 1,
-        message: 'Attribute "hideStats" is a shorthand boolean; use the bare form',
+        message: 'Attribute "showStats" is a shorthand boolean; use the bare form',
       },
     ]);
   });
@@ -174,7 +174,7 @@ describe("renderCodeDiff", () => {
     ]);
   });
 
-  it("should render both numbered views and preserve the exact raw source", () => {
+  it("should render both numbered views and preserve the normalized fence source", () => {
     const source = "@@ -1 +1 @@\n-old\n+new\n";
     const { element, diagnostics } = render({
       attributes: { file: "src/retry.ts", lineNumbers: true },
