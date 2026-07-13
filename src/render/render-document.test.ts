@@ -87,8 +87,7 @@ describe("renderDocument affordances", () => {
     expect(html).toMatch(/<a[^>]* href="#first-section">First section<\/a>/);
   });
 
-  it("should render the mobile environment header and section disclosure", () => {
-    expect(html).toContain("Grimm 10.0");
+  it("should render the mobile section disclosure", () => {
     expect(html).toContain(">Sections</span>");
     expect(html).toContain('data-overview-link href="#top"');
   });
@@ -104,27 +103,17 @@ describe("renderDocument affordances", () => {
     expect(collisionHtml.match(/id="top-2"/g)).toHaveLength(1);
   });
 
-  it("should escape a custom environment label", () => {
-    const { html: customHtml } = renderDocument({
-      markdown: FULL_FIXTURE,
-      fallbackTitle: "Fallback",
-      environmentLabel: '<script>"unsafe"</script>',
-    });
-    expect(customHtml).toContain("&lt;script&gt;&quot;unsafe&quot;&lt;/script&gt;");
-    expect(customHtml).not.toContain('<script>"unsafe"</script>');
-  });
-
   it("should be self-contained when the document links to external sites", () => {
     // The browser only fetches src/link/script resources; <a href> is inert
     // navigation, so external content links do not break self-containment.
-    const srcValues = [...html.matchAll(/\bsrc="([^"]*)"/g)].map(
-      (match) => match[1],
-    );
-    expect(srcValues.length).toBeGreaterThan(0);
-    for (const src of srcValues) {
-      expect(src).toMatch(/^data:/);
+    const fetchedValues = [
+      ...html.matchAll(/\b(?:src|srcset)="([^"]*)"/g),
+      ...html.matchAll(/<link\b[^>]*\bhref="([^"]*)"/g),
+    ].map((match) => match[1]);
+    expect(fetchedValues.length).toBeGreaterThan(0);
+    for (const value of fetchedValues) {
+      expect(value).toMatch(/^data:/);
     }
-    expect(html).not.toContain("<link");
     expect(html).not.toMatch(/<script\s+[^>]*src=/);
     expect(html).not.toContain("@import");
   });
@@ -134,6 +123,27 @@ describe("renderDocument affordances", () => {
     expect(html.match(/<script>/g)).toHaveLength(3);
     expect(html).toContain("data-theme-toggle");
     expect(html).toContain("data-copy-code");
+  });
+
+  it("should emit theme-aware favicon links as embedded data URIs when rendering", () => {
+    expect(html).toMatch(
+      /<link rel="icon" type="image\/x-icon" href="data:image\/x-icon;base64,[^"]+">/,
+    );
+    expect(html).toMatch(
+      /<link rel="icon" type="image\/x-icon" media="\(prefers-color-scheme: dark\)" href="data:image\/x-icon;base64,[^"]+">/,
+    );
+  });
+
+  it("should render a theme-swapped branding banner when rendering", () => {
+    expect(html).toMatch(
+      /<a [^>]*href="https:\/\/big-plan\.ai" target="_blank" rel="noreferrer">/,
+    );
+    expect(html).toMatch(
+      /<img class="w-27 h-auto" data-logo-light src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
+    );
+    expect(html).toMatch(
+      /<img class="w-27 h-auto" data-logo-dark src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
+    );
   });
 });
 

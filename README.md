@@ -29,8 +29,9 @@ npx big-plan render <file.md> [output.html]
 ```
 
 The output defaults to `<file>.html` next to the input.
-It embeds all styling and behavior, makes no external requests, and builds its table of contents from the document's level-two headings.
-On wide screens the contents stay in a sticky sidebar; on narrower screens a sticky `Sections` menu shows the section count beneath a compact `Grimm 10.0` plan-review header.
+It embeds all styling, behavior, and branding assets (including light and dark favicons selected from the OS preference), makes no external requests, and builds its table of contents from the document's level-two headings.
+A sticky branding bar spans the top of the page on every screen size; its logo art follows the active theme and links to [big-plan.ai](https://big-plan.ai) in a new tab.
+On wide screens the contents stay in a sticky sidebar; on narrower screens a sticky `Sections` menu shows the section count.
 Both variants track the current section as the reader scrolls, and section links scroll smoothly unless the reader has requested reduced motion.
 Fenced code blocks with a supported language identifier receive syntax highlighting; undeclared and unknown languages remain plain and readable.
 Every block code sample has a copy control, and the light/dark theme control follows the system preference until the reader chooses a theme, which is remembered locally.
@@ -41,10 +42,10 @@ To inspect examples of supported fences and both palettes, render the [syntax-hi
 
 ```sh
 bun install
-bun run build           # regenerate assets, then compile TypeScript to dist/
-bun run test            # vitest unit tests (regenerates assets first)
+bun run build           # regenerate embedded modules, then compile TypeScript to dist/
+bun run test            # vitest unit tests (regenerates embedded modules first)
 bun run lint            # ESLint conventions and architecture checks
-bun run gen             # regenerate the CSS and browser-script modules only
+bun run gen             # regenerate CSS, browser-script, and branding-asset modules
 bunx playwright test    # browser test of the rendered viewer (build first)
 node bin/big-plan.mjs render examples/sample.md
 ```

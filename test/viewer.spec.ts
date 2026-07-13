@@ -11,6 +11,14 @@ test("should navigate the rendered sample plan through the TOC without errors", 
   await page.goto(sampleViewerUrl);
 
   await expect(page).toHaveTitle("Payments Retry Architecture Plan");
+  const banner = page.getByRole("banner");
+  const logo = banner.getByRole("img", { name: "Big Plan" });
+  await expect(banner).toBeVisible();
+  await expect(logo).toBeVisible();
+  await expect(banner.getByRole("link", { name: "Big Plan" })).toHaveAttribute(
+    "href",
+    "https://big-plan.ai",
+  );
   await expect(
     page.getByRole("heading", { level: 1, name: "Payments Retry Architecture Plan" }),
   ).toBeVisible();
@@ -37,6 +45,20 @@ test("should navigate the rendered sample plan through the TOC without errors", 
   await expect(
     page.getByRole("heading", { level: 2, name: "Rollout plan" }),
   ).toBeInViewport();
+  const headerBox = await banner.boundingBox();
+  const targetBox = await page
+    .getByRole("heading", { level: 2, name: "Rollout plan" })
+    .boundingBox();
+  expect(headerBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+  if (headerBox !== null && targetBox !== null) {
+    expect(headerBox.y).toBeGreaterThanOrEqual(0);
+    expect(headerBox.y).toBeLessThanOrEqual(1);
+    expect(headerBox.y + headerBox.height).toBeLessThanOrEqual(
+      page.viewportSize()?.height ?? Number.POSITIVE_INFINITY,
+    );
+    expect(targetBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height);
+  }
 
   // The short final section can never lift its heading past the spy
   // threshold, so reaching the bottom must still mark it current.
@@ -229,13 +251,17 @@ test("should provide a compact sticky table of contents on mobile", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(sampleViewerUrl);
 
-  await expect(page.getByText("Grimm 10.0", { exact: true })).toBeVisible();
   const toc = page.getByRole("navigation", { name: "Contents" });
   const disclosure = toc.locator("details");
   const overviewLink = toc.locator("[data-overview-link]");
   const retryStateLink = toc.locator(
     '[data-section-link][href="#retry-state-machine"]',
   );
+  const bannerBox = await page.getByRole("banner").boundingBox();
+  const tocBox = await toc.boundingBox();
+  expect(bannerBox?.height).toBe(44);
+  expect(tocBox?.y).toBe(44);
+  expect(tocBox?.height).toBe(44);
   await expect(disclosure).not.toHaveAttribute("open", "");
   await expect(disclosure.locator("summary")).toContainText(/Sections\s+6/);
   await expect(overviewLink).toHaveAttribute("aria-current", "true");
@@ -249,6 +275,19 @@ test("should provide a compact sticky table of contents on mobile", async ({
   await expect(
     page.getByRole("heading", { level: 2, name: "Retry state machine" }),
   ).toBeInViewport();
+  // In viewport is not enough: the jump must also land the heading clear of
+  // the translucent sticky stack (branding bar plus this TOC), not under it.
+  const stackedTocBox = await toc.boundingBox();
+  const targetHeadingBox = await page
+    .getByRole("heading", { level: 2, name: "Retry state machine" })
+    .boundingBox();
+  expect(stackedTocBox).not.toBeNull();
+  expect(targetHeadingBox).not.toBeNull();
+  if (stackedTocBox !== null && targetHeadingBox !== null) {
+    expect(targetHeadingBox.y).toBeGreaterThanOrEqual(
+      stackedTocBox.y + stackedTocBox.height,
+    );
+  }
   await expect(retryStateLink).toHaveAttribute("aria-current", "true");
 
   const themeToggle = page.getByRole("button", {
