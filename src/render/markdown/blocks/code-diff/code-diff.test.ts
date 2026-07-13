@@ -13,12 +13,16 @@ const POSITION = {
   end: { line: 9, column: 12, offset: 100 },
 };
 
-const fence = ({ language = "diff", source = "@@ -1 +1 @@\n-old\n+new\n" } = {}): Element => ({
+const fence = ({
+  language = "diff",
+  source = "@@ -1 +1 @@\n-old\n+new\n",
+  column = 1,
+} = {}): Element => ({
   type: "element",
   tagName: "pre",
   properties: {},
   position: {
-    start: { line: 4, column: 1, offset: 30 },
+    start: { line: 4, column, offset: 30 },
     end: { line: 8, column: 4, offset: 80 },
   },
   children: [{
@@ -26,7 +30,7 @@ const fence = ({ language = "diff", source = "@@ -1 +1 @@\n-old\n+new\n" } = {})
     tagName: "code",
     properties: { className: [`language-${language}`] },
     position: {
-      start: { line: 4, column: 1, offset: 30 },
+      start: { line: 4, column, offset: 30 },
       end: { line: 8, column: 4, offset: 80 },
     },
     children: [{ type: "text", value: source }],
@@ -70,6 +74,31 @@ const isElement = (node: ElementContent | undefined): node is Element =>
 const textOf = (element: Element): string => element.children.map((child) =>
   child.type === "text" ? child.value : isElement(child) ? textOf(child) : ""
 ).join("");
+
+// Finds the rendered container that directly owns a matching descendant.
+const parentOfMatchingChild = ({
+  element,
+  matches,
+}: {
+  readonly element: Element;
+  readonly matches: (candidate: Element) => boolean;
+}): Element | undefined => {
+  for (const child of element.children) {
+    if (isElement(child) && matches(child)) {
+      return element;
+    }
+  }
+  for (const child of element.children) {
+    if (!isElement(child)) {
+      continue;
+    }
+    const found = parentOfMatchingChild({ element: child, matches });
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return undefined;
+};
 
 const viewFrom = ({
   element,
@@ -312,6 +341,24 @@ describe("renderCodeDiff", () => {
     ]);
   });
 
+  it("should preserve the fence column for a nested malformed diff", () => {
+    expect(render({
+      children: [fence({ source: "@@ -1 +1 @@\nbad\n", column: 5 })],
+    }).diagnostics).toEqual([
+      {
+        line: 6,
+        column: 5,
+        message: "Invalid diff line 2: Expected a diff line beginning with space, +, or -",
+      },
+      {
+        line: 5,
+        column: 5,
+        message:
+          "Invalid diff line 1: Hunk declares 1 old and 1 new lines but contains 0 old and 0 new lines",
+      },
+    ]);
+  });
+
   it("should render both numbered views and preserve the normalized fence source", () => {
     const source = "@@ -1 +1 @@\n-old\n+new\n";
     const { element, diagnostics } = render({
@@ -373,16 +420,23 @@ describe("renderCodeDiff", () => {
     );
 
     const split = viewFrom({ element, view: "split" });
-    const splitAnnotationIndex = split.children.findIndex((child) =>
-      isElement(child) && child.properties["data-annotation"] === ""
-    );
-    const precedingSegment = split.children[splitAnnotationIndex - 1];
+    expect(JSON.stringify(split).match(/code-diff-split-hunk/gu)).toHaveLength(1);
+    const splitAnnotationParent = parentOfMatchingChild({
+      element: split,
+      matches: (candidate) =>
+        candidate.properties["data-annotation-row-lines"] === "13",
+    });
+    const splitAnnotationIndex = splitAnnotationParent?.children.findIndex((child) =>
+      isElement(child) && child.properties["data-annotation-row-lines"] === "13"
+    ) ?? -1;
+    const precedingSegment = splitAnnotationParent?.children[splitAnnotationIndex - 1];
     expect(splitAnnotationIndex).toBeGreaterThan(-1);
     expect(isElement(precedingSegment) ? textOf(precedingSegment) : "").toContain(
       'metrics.increment("ttl_change")',
     );
-    expect(isElement(split.children[splitAnnotationIndex])
-      ? textOf(split.children[splitAnnotationIndex])
+    const splitAnnotation = splitAnnotationParent?.children[splitAnnotationIndex];
+    expect(isElement(splitAnnotation)
+      ? textOf(splitAnnotation)
       : "").toContain("Use the catalog prefix.");
   });
 
@@ -399,16 +453,25 @@ describe("renderCodeDiff", () => {
 
     for (const view of ["unified", "split"] as const) {
       const renderedView = viewFrom({ element, view });
-      const annotationIndex = renderedView.children.findIndex((child) =>
-        isElement(child) && child.properties["data-annotation-lines"] === "12-14"
-      );
-      const precedingSegment = renderedView.children[annotationIndex - 1];
+      const annotationParent = parentOfMatchingChild({
+        element: renderedView,
+        matches: (candidate) => view === "unified"
+          ? candidate.properties["data-annotation-lines"] === "12-14"
+          : candidate.properties["data-annotation-row-lines"] === "12-14",
+      });
+      const annotationIndex = annotationParent?.children.findIndex((child) =>
+        isElement(child) && (view === "unified"
+          ? child.properties["data-annotation-lines"] === "12-14"
+          : child.properties["data-annotation-row-lines"] === "12-14")
+      ) ?? -1;
+      const precedingSegment = annotationParent?.children[annotationIndex - 1];
       expect(annotationIndex).toBeGreaterThan(-1);
       expect(isElement(precedingSegment) ? textOf(precedingSegment) : "").toContain(
         "audit();",
       );
-      expect(isElement(renderedView.children[annotationIndex])
-        ? textOf(renderedView.children[annotationIndex])
+      const renderedAnnotation = annotationParent?.children[annotationIndex];
+      expect(isElement(renderedAnnotation)
+        ? textOf(renderedAnnotation)
         : "").toContain("Lines 12-14");
     }
   });

@@ -96,15 +96,64 @@ test("should keep a range Annotation visible when switching diff views", async (
   const unifiedAnnotation = unified.getByRole("note", { name: "Lines 34-36" });
   const splitAnnotation = split.getByRole("note", { name: "Lines 34-36" });
 
-  await expect(unifiedAnnotation).toBeVisible();
-  await expect(unifiedAnnotation).toContainText(annotationText);
-  await expect(splitAnnotation).toBeHidden();
+  await test.step("the annotation follows the selected view", async () => {
+    await expect(unifiedAnnotation).toBeVisible();
+    await expect(unifiedAnnotation).toContainText(annotationText);
+    await expect(splitAnnotation).toBeHidden();
 
-  await diff.getByRole("button", { name: "Side-by-side view" }).click();
+    await diff.getByRole("button", { name: "Side-by-side view" }).click();
 
-  await expect(unifiedAnnotation).toBeHidden();
-  await expect(splitAnnotation).toBeVisible();
-  await expect(splitAnnotation).toContainText(annotationText);
+    await expect(unifiedAnnotation).toBeHidden();
+    await expect(splitAnnotation).toBeVisible();
+    await expect(splitAnnotation).toContainText(annotationText);
+  });
+
+  await test.step("each split hunk owns one horizontal scroller", async () => {
+    const scrollContexts = await split.locator("*").evaluateAll((elements) =>
+      elements
+        .filter((element) => {
+          const overflow = getComputedStyle(element).overflowX;
+          return overflow === "auto" || overflow === "scroll";
+        })
+        .map((element) => element.className),
+    );
+    expect(scrollContexts).toHaveLength(2);
+    expect(scrollContexts.every((classes) =>
+      typeof classes === "string" && classes.includes("code-diff-split-scroll")
+    )).toBe(true);
+  });
+
+  await test.step("the annotation stays pinned in both themes", async () => {
+    for (const theme of ["light", "dark"] as const) {
+      const layout = await splitAnnotation.evaluate((annotation, selectedTheme) => {
+        document.documentElement.dataset.theme = selectedTheme;
+        const scroller = annotation.closest<HTMLElement>(".code-diff-split-scroll");
+        if (scroller === null) {
+          throw new Error("Missing split hunk scroller");
+        }
+        scroller.scrollLeft = scroller.scrollWidth;
+        const annotationBox = annotation.getBoundingClientRect();
+        const scrollerBox = scroller.getBoundingClientRect();
+        const style = getComputedStyle(annotation);
+        return {
+          annotationLeft: annotationBox.left,
+          annotationRight: annotationBox.right,
+          background: style.backgroundColor,
+          color: style.color,
+          scrollerLeft: scrollerBox.left,
+          scrollerRight: scrollerBox.right,
+          scrollLeft: scroller.scrollLeft,
+        };
+      }, theme);
+      expect(layout.scrollLeft).toBeGreaterThan(0);
+      expect(
+        Math.abs(layout.annotationLeft - layout.scrollerLeft),
+        JSON.stringify(layout),
+      ).toBeLessThan(2);
+      expect(layout.annotationRight).toBeLessThanOrEqual(layout.scrollerRight + 1);
+      expect(layout.color).not.toBe(layout.background);
+    }
+  });
 });
 
 test("should expand a diff to full screen and restore it when dismissed", async ({

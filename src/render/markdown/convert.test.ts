@@ -314,6 +314,64 @@ describe("compileMarkdown CodeDiff blocks", () => {
       message: 'Unknown block "Annotation"',
     }]);
   });
+
+  it.each([1, 2, 3, 4, 5, 6])(
+    "should reject a level-%s heading in an Annotation body",
+    (level) => {
+      const heading = `${"#".repeat(level)} Nested heading`;
+      expect(diagnosticsFor(
+        `<CodeDiff file="src/retry.ts">\n\`\`\`diff\n@@ -1 +1 @@\n-old\n+new\n\`\`\`\n<Annotation lines="1">\n${heading}\n</Annotation>\n</CodeDiff>\n`,
+      )).toEqual([{
+        line: 8,
+        column: 1,
+        message: "Annotation bodies cannot contain headings",
+      }]);
+    },
+  );
+
+  it("should reject footnote references and definitions in an Annotation body", () => {
+    expect(diagnosticsFor(
+      '<CodeDiff file="src/retry.ts">\n```diff\n@@ -1 +1 @@\n-old\n+new\n```\n<Annotation lines="1">\nRef[^retry].\n\n[^retry]: Retry note.\n</Annotation>\n</CodeDiff>\n',
+    )).toEqual([
+      {
+        line: 8,
+        column: 4,
+        message: "Annotation bodies cannot contain footnote references",
+      },
+      {
+        line: 10,
+        column: 1,
+        message: "Annotation bodies cannot contain footnote definitions",
+      },
+    ]);
+  });
+
+  it("should preserve supported rich content in an Annotation body", () => {
+    const bodyHtml = compileAndSerialize(
+      '<CodeDiff file="src/retry.ts">\n```diff\n@@ -1 +1 @@\n-old\n+new\n```\n<Annotation lines="1">\nReview the `retry` path.\n\n- Keep the fallback\n\n```ts\nretry();\n```\n</Annotation>\n</CodeDiff>\n',
+    );
+    expect(bodyHtml).toContain("Review the <code>retry</code> path.");
+    expect(bodyHtml).toContain("<li>Keep the fallback</li>");
+    expect(bodyHtml.match(new RegExp(CODE_BLOCK_SELECTOR, "gu"))).toHaveLength(2);
+  });
+
+  it("should position malformed diff diagnostics at a nested fence column", () => {
+    expect(diagnosticsFor(
+      '> <CodeDiff file="src/retry.ts">\n>\n> ```diff\n> @@ -1 +1 @@\n> bad\n> ```\n> </CodeDiff>\n',
+    )).toEqual([
+      {
+        line: 5,
+        column: 3,
+        message: "Invalid diff line 2: Expected a diff line beginning with space, +, or -",
+      },
+      {
+        line: 4,
+        column: 3,
+        message:
+          "Invalid diff line 1: Hunk declares 1 old and 1 new lines but contains 0 old and 0 new lines",
+      },
+    ]);
+  });
 });
 
 describe("compileMarkdown title", () => {

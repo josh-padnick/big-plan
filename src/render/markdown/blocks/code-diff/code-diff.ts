@@ -3,9 +3,11 @@
 // decoration.
 
 import type { Element, ElementContent, Root, Text } from "hast";
+import type { Nodes as MarkdownNode, Root as MarkdownRoot } from "mdast";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import { COPY_ICON } from "../../code-block/code-block-icons.js";
 import type { BlockRenderer, ScopedChild } from "../registry.js";
+import type { DiagnosticCollector } from "../diagnostics.js";
 import {
   COLUMNS_ICON,
   ELLIPSIS_ICON,
@@ -60,7 +62,67 @@ const HUNK_HEADER_CLASSES =
   "code-diff-hunk-header min-w-max whitespace-pre px-[0.65rem] py-[0.4rem] text-xs";
 const LINE_CLASSES = "code-diff-line grid min-w-max whitespace-pre";
 const ANNOTATION_CLASSES =
-  "code-diff-annotation flex w-full min-w-0 gap-2 border-l-4 px-3 py-2 font-sans text-sm leading-normal whitespace-normal [&>svg]:size-4 [&>svg]:shrink-0";
+  "code-diff-annotation flex min-w-0 gap-2 border-l-4 px-3 py-2 font-sans text-sm leading-normal whitespace-normal [&>svg]:size-4 [&>svg]:shrink-0";
+
+const markdownChildren = (
+  node: MarkdownRoot | MarkdownNode,
+): ReadonlyArray<MarkdownNode> => "children" in node ? node.children : [];
+
+// Reports semantic content that cannot be cloned safely into both diff views.
+const validateAnnotationBody = ({
+  node,
+  diagnostics,
+}: {
+  readonly node: MarkdownNode;
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const message = node.type === "heading"
+    ? "Annotation bodies cannot contain headings"
+    : node.type === "footnoteReference"
+      ? "Annotation bodies cannot contain footnote references"
+      : node.type === "footnoteDefinition"
+        ? "Annotation bodies cannot contain footnote definitions"
+        : undefined;
+  if (message !== undefined) {
+    diagnostics.add({ message, position: node.position });
+  }
+  for (const child of markdownChildren(node)) {
+    validateAnnotationBody({ node: child, diagnostics });
+  }
+};
+
+// Finds direct Annotation children under CodeDiff while preserving ordinary
+// Markdown nesting elsewhere in the document.
+const validateAnnotationBodies = ({
+  node,
+  diagnostics,
+}: {
+  readonly node: MarkdownRoot | MarkdownNode;
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  if (node.type === "mdxJsxFlowElement" && node.name === "CodeDiff") {
+    for (const child of node.children) {
+      if (child.type !== "mdxJsxFlowElement" || child.name !== "Annotation") {
+        continue;
+      }
+      for (const bodyChild of child.children) {
+        validateAnnotationBody({ node: bodyChild, diagnostics });
+      }
+    }
+  }
+  for (const child of markdownChildren(node)) {
+    validateAnnotationBodies({ node: child, diagnostics });
+  }
+};
+
+/** Creates the remark transform that validates Annotation body semantics. */
+export const remarkValidateCodeDiffAnnotations = ({
+  diagnostics,
+}: {
+  readonly diagnostics: DiagnosticCollector;
+}) => (tree: MarkdownRoot): void => {
+  validateAnnotationBodies({ node: tree, diagnostics });
+};
 
 const isElement = (node: ElementContent): node is Element =>
   node.type === "element";
@@ -242,6 +304,23 @@ const renderedAnnotation = (annotation: AnchoredAnnotation): Element => ({
   ],
 });
 
+const renderedSplitAnnotation = (annotation: AnchoredAnnotation): Element => {
+  const card = renderedAnnotation(annotation);
+  card.properties.className = [
+    ...ANNOTATION_CLASSES.split(" "),
+    "code-diff-split-annotation",
+  ];
+  return {
+    type: "element",
+    tagName: "div",
+    properties: {
+      className: ["code-diff-split-annotation-row"],
+      "data-annotation-row-lines": annotation.lines,
+    },
+    children: [card],
+  };
+};
+
 const annotationsForLine = ({
   line,
   annotations,
@@ -379,49 +458,66 @@ const splitLine = ({
   ],
 });
 
-const splitPane = ({
-  rows,
+const splitCell = ({
+  row,
   side,
   showLineNumbers,
 }: {
-  readonly rows: ReadonlyArray<SplitDiffRow>;
+  readonly row: SplitDiffRow;
   readonly side: "old" | "new";
   readonly showLineNumbers: boolean;
 }): Element => ({
   type: "element",
   tagName: "div",
   properties: {
-    className: ["code-diff-pane", "min-w-0", "overflow-x-auto"],
+    className: ["code-diff-pane", "min-w-0"],
     "data-diff-pane": side,
   },
-  children: rows.map((row) => splitLine({
+  children: [splitLine({
     line: side === "old" ? row.left : row.right,
     side,
     showLineNumbers,
-  })),
+  })],
 });
 
-const splitGrid = ({
+const splitHunk = ({
   rows,
   showLineNumbers,
+  annotations,
 }: {
   readonly rows: ReadonlyArray<SplitDiffRow>;
   readonly showLineNumbers: boolean;
+  readonly annotations: ReadonlyArray<AnchoredAnnotation>;
 }): Element => ({
   type: "element",
   tagName: "div",
   properties: {
-    className: [
-      "code-diff-split-hunk",
-      "grid",
-      "min-w-0",
-      "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]",
-    ],
+    className: ["code-diff-split-hunk", "min-w-0"],
   },
-  children: [
-    splitPane({ rows, side: "old", showLineNumbers }),
-    splitPane({ rows, side: "new", showLineNumbers }),
-  ],
+  children: [{
+    type: "element",
+    tagName: "div",
+    properties: {
+      className: ["code-diff-split-scroll", "overflow-x-auto"],
+    },
+    children: [{
+      type: "element",
+      tagName: "div",
+      properties: {
+        className: [
+          "code-diff-split-grid",
+          "grid",
+          "min-w-full",
+          "grid-cols-[minmax(max-content,1fr)_minmax(max-content,1fr)]",
+        ],
+      },
+      children: rows.flatMap((row) => [
+        splitCell({ row, side: "old", showLineNumbers }),
+        splitCell({ row, side: "new", showLineNumbers }),
+        ...annotationsForSplitRow({ row, annotations }).map(renderedSplitAnnotation),
+      ]),
+    }],
+  }],
 });
 
 const annotationsForSplitRow = ({
@@ -445,24 +541,10 @@ const renderSplitHunk = ({
   readonly annotations: ReadonlyArray<AnchoredAnnotation>;
 }): ReadonlyArray<Element> => {
   const rows = pairDiffLines({ lines: hunk.lines });
-  const children: Array<Element> = [
+  return [
     ...(hunk.header === undefined ? [] : [hunkHeader(hunk.header, "split")]),
+    splitHunk({ rows, showLineNumbers, annotations }),
   ];
-  let segment: Array<SplitDiffRow> = [];
-  for (const row of rows) {
-    segment.push(row);
-    const rowAnnotations = annotationsForSplitRow({ row, annotations });
-    if (rowAnnotations.length === 0) {
-      continue;
-    }
-    children.push(splitGrid({ rows: segment, showLineNumbers }));
-    children.push(...rowAnnotations.map(renderedAnnotation));
-    segment = [];
-  }
-  if (segment.length > 0 || rows.length === 0) {
-    children.push(splitGrid({ rows: segment, showLineNumbers }));
-  }
-  return children;
 };
 
 const renderView = ({
@@ -776,13 +858,14 @@ export const renderCodeDiff: BlockRenderer = ({
     : parseUnifiedDiff({ source });
   for (const diagnostic of parsed.diagnostics) {
     const fenceLine = extracted.codePosition?.start.line;
+    const fenceColumn = extracted.codePosition?.start.column;
     diagnostics.add({
       message: `Invalid diff line ${diagnostic.line}: ${diagnostic.message}`,
-      position: fenceLine === undefined
+      position: fenceLine === undefined || fenceColumn === undefined
         ? position
         : {
-            start: { line: fenceLine + diagnostic.line, column: 1 },
-            end: { line: fenceLine + diagnostic.line, column: 1 },
+            start: { line: fenceLine + diagnostic.line, column: fenceColumn },
+            end: { line: fenceLine + diagnostic.line, column: fenceColumn },
           },
     });
   }

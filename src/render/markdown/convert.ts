@@ -17,6 +17,7 @@ import {
   diagnosticFromParseError,
 } from "./blocks/diagnostics.js";
 import type { BlockDiagnostic } from "./blocks/diagnostics.js";
+import { remarkValidateCodeDiffAnnotations } from "./blocks/code-diff/code-diff.js";
 import { rehypeRenderBlocks } from "./blocks/registry.js";
 
 export type Section = {
@@ -176,6 +177,7 @@ export const compileMarkdown = ({
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkMdx)
+    .use(remarkValidateCodeDiffAnnotations, { diagnostics })
     .use(remarkRehype, {
       // The GFM footnotes label ships visible as a small section heading;
       // without this option remark-rehype hides it behind class="sr-only".

@@ -110,8 +110,19 @@ html:has(.code-diff-dialog[open]) {
     background: var(--diff-hunk-bg);
     color: var(--diff-hunk-c);
   }
-  article .code-diff-pane + .code-diff-pane {
+  article .code-diff-split-hunk {
+    container-type: inline-size;
+  }
+  article [data-diff-pane="new"] {
     border-left: 1px solid var(--color-edge);
+  }
+  article .code-diff-split-annotation-row {
+    grid-column: 1 / -1;
+  }
+  article .code-diff-split-annotation {
+    position: sticky;
+    left: 0;
+    width: 100cqw;
   }
   article .code-diff-unified-line {
     grid-template-columns: minmax(max-content, 1fr);
