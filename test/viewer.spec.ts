@@ -387,8 +387,14 @@ test("should expand a diff to full screen and restore it when dismissed", async 
 }) => {
   await page.goto(mdxBlocksViewerUrl);
 
-  const diff = page.locator("[data-code-diff]").first();
-  await diff.getByRole("button", { name: "View diff full screen" }).click();
+  const diff = page.locator("[data-code-diff]").filter({
+    hasText: "src/catalog/read-through-cache.ts",
+  });
+  const expand = diff.getByRole("button", { name: "View diff full screen" });
+  await expand.scrollIntoViewIfNeeded();
+  const scrollY = await page.evaluate(() => window.scrollY);
+  expect(scrollY).toBeGreaterThan(0);
+  await expand.click();
 
   const dialog = page.locator("dialog.code-diff-dialog");
   await expect(dialog).toBeVisible();
@@ -424,6 +430,7 @@ test("should expand a diff to full screen and restore it when dismissed", async 
   await expect(
     diff.getByRole("button", { name: "View diff full screen" }),
   ).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scrollY);
 });
 
 test("should copy the raw diff and the file path from the actions menu", async ({

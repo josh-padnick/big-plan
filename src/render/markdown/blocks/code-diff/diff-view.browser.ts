@@ -135,6 +135,7 @@ const openFullScreen = ({ block }: { readonly block: HTMLElement }): void => {
   if (article === null || fileCaption === null) {
     return;
   }
+  const scrollY = window.scrollY;
   let labelId = fileCaption.id;
   if (labelId === "" || document.getElementById(labelId) !== fileCaption) {
     do {
@@ -164,6 +165,7 @@ const openFullScreen = ({ block }: { readonly block: HTMLElement }): void => {
     dialog.remove();
     delete block.dataset.diffExpanded;
     updateExpandControl({ block });
+    window.scrollTo({ top: scrollY });
   });
   dialog.showModal();
 };
