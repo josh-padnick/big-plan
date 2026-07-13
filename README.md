@@ -46,7 +46,7 @@ bun run build           # regenerate embedded modules, then compile TypeScript t
 bun run test            # vitest unit tests (regenerates embedded modules first)
 bun run lint            # ESLint conventions and architecture checks
 bun run gen             # regenerate CSS, browser-script, and branding-asset modules
-bunx playwright test    # browser test of the rendered viewer (build first)
+bunx playwright test    # browser tests of the rendered viewer (build first)
 node bin/big-plan.mjs render examples/sample.md
 ```
 
