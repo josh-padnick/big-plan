@@ -1,5 +1,5 @@
 // Exercises the render command through its real filesystem adapter: argument
-// failures, default output placement, and creation of nested output paths.
+// and MDX validation failures, output placement, and nested directory creation.
 
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

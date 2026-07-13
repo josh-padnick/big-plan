@@ -1,7 +1,7 @@
 // The suite's extended Playwright test, per the render-health rule: every
 // spec fails on console errors or uncaught page errors automatically, and the
-// sample document is rendered once per worker through the built CLI so specs
-// exercise exactly what a user runs. Specs import test/expect from here,
+// example documents are rendered once per worker through the built CLI so
+// specs exercise exactly what a user runs. Specs import test/expect from here,
 // never from @playwright/test directly.
 
 import { execFile } from "node:child_process";

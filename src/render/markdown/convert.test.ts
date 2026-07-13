@@ -1,5 +1,5 @@
-// Unit tests for structured markdown compilation, final serialization,
-// section extraction edge cases, and the table scroll-container transform.
+// Unit tests for static-subset MDX validation and serialization, typed-block
+// integration, section extraction, and Markdown transforms.
 
 import { describe, expect, it } from "vitest";
 import { CODE_BLOCK_SELECTOR } from "./code-block/decorate-code-blocks.js";
