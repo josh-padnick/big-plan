@@ -394,6 +394,7 @@ const unifiedLine = ({
   properties: {
     className: [...LINE_CLASSES.split(" "), "code-diff-unified-line"],
     "data-diff-line": line.kind,
+    ...(showLineNumbers ? { "data-line-numbers": "" } : {}),
   },
   children: [
     ...(showLineNumbers
@@ -446,6 +447,7 @@ const splitLine = ({
   properties: {
     className: [...LINE_CLASSES.split(" "), "code-diff-split-line"],
     "data-diff-line": line?.kind ?? "empty",
+    ...(showLineNumbers ? { "data-line-numbers": "" } : {}),
   },
   children: [
     ...(showLineNumbers
@@ -481,10 +483,12 @@ const splitCell = ({
 });
 
 const splitHunk = ({
+  header,
   rows,
   showLineNumbers,
   annotations,
 }: {
+  readonly header: string | undefined;
   readonly rows: ReadonlyArray<SplitDiffRow>;
   readonly showLineNumbers: boolean;
   readonly annotations: ReadonlyArray<AnchoredAnnotation>;
@@ -500,23 +504,26 @@ const splitHunk = ({
     properties: {
       className: ["code-diff-split-scroll", "overflow-x-auto"],
     },
-    children: [{
-      type: "element",
-      tagName: "div",
-      properties: {
-        className: [
-          "code-diff-split-grid",
-          "grid",
-          "min-w-full",
-          "grid-cols-[minmax(max-content,1fr)_minmax(max-content,1fr)]",
-        ],
+    children: [
+      ...(header === undefined ? [] : [hunkHeader(header, "split")]),
+      {
+        type: "element",
+        tagName: "div",
+        properties: {
+          className: [
+            "code-diff-split-grid",
+            "grid",
+            "min-w-full",
+            "grid-cols-[minmax(max-content,1fr)_minmax(max-content,1fr)]",
+          ],
+        },
+        children: rows.flatMap((row) => [
+          splitCell({ row, side: "old", showLineNumbers }),
+          splitCell({ row, side: "new", showLineNumbers }),
+          ...annotationsForSplitRow({ row, annotations }).map(renderedSplitAnnotation),
+        ]),
       },
-      children: rows.flatMap((row) => [
-        splitCell({ row, side: "old", showLineNumbers }),
-        splitCell({ row, side: "new", showLineNumbers }),
-        ...annotationsForSplitRow({ row, annotations }).map(renderedSplitAnnotation),
-      ]),
-    }],
+    ],
   }],
 });
 
@@ -542,8 +549,7 @@ const renderSplitHunk = ({
 }): ReadonlyArray<Element> => {
   const rows = pairDiffLines({ lines: hunk.lines });
   return [
-    ...(hunk.header === undefined ? [] : [hunkHeader(hunk.header, "split")]),
-    splitHunk({ rows, showLineNumbers, annotations }),
+    splitHunk({ header: hunk.header, rows, showLineNumbers, annotations }),
   ];
 };
 

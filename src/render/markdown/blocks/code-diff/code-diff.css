@@ -11,6 +11,7 @@ html:has(.code-diff-dialog[open]) {
     /* Content sits on its own background so red/green line tints read
        cleanly; the tan surface stays on the header and hunk rows. */
     background: var(--diff-content-bg);
+    max-width: 100%;
   }
   article .code-diff-header {
     /* Header chrome sits one elevation step above hunk bands and two above
@@ -55,13 +56,13 @@ html:has(.code-diff-dialog[open]) {
     background: rgb(12 10 8 / 0.75);
     backdrop-filter: blur(3px);
   }
-  article .code-diff-dialog [data-code-diff] {
+  article .code-diff-dialog > [data-code-diff] {
     display: flex;
     min-height: 0;
     flex: 1;
     flex-direction: column;
   }
-  article .code-diff-dialog .code-diff-view {
+  article .code-diff-dialog > [data-code-diff] > .code-diff-view {
     min-height: 0;
     flex: 1;
     overflow-y: auto;
@@ -92,16 +93,17 @@ html:has(.code-diff-dialog[open]) {
     border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
   }
   article [data-diff-content="unified"] {
+    position: relative;
     overflow-x: auto;
   }
   article [data-diff-content="split"] {
     display: none;
     overflow-x: hidden;
   }
-  article [data-code-diff][data-diff-view="split"] [data-diff-content="unified"] {
+  article [data-code-diff][data-diff-view="split"] > [data-diff-content="unified"] {
     display: none;
   }
-  article [data-code-diff][data-diff-view="split"] [data-diff-content="split"] {
+  article [data-code-diff][data-diff-view="split"] > [data-diff-content="split"] {
     display: block;
   }
   article .code-diff-hunk-header {
@@ -112,6 +114,9 @@ html:has(.code-diff-dialog[open]) {
   }
   article .code-diff-split-hunk {
     container-type: inline-size;
+  }
+  article .code-diff-split-scroll {
+    position: relative;
   }
   article [data-diff-pane="new"] {
     border-left: 1px solid var(--color-edge);
@@ -127,13 +132,13 @@ html:has(.code-diff-dialog[open]) {
   article .code-diff-unified-line {
     grid-template-columns: minmax(max-content, 1fr);
   }
-  article [data-line-numbers] .code-diff-unified-line {
+  article .code-diff-unified-line[data-line-numbers] {
     grid-template-columns: 3.25rem 3.25rem minmax(max-content, 1fr);
   }
   article .code-diff-split-line {
     grid-template-columns: minmax(max-content, 1fr);
   }
-  article [data-line-numbers] .code-diff-split-line {
+  article .code-diff-split-line[data-line-numbers] {
     grid-template-columns: 3.25rem minmax(max-content, 1fr);
   }
   article .code-diff-line-number {

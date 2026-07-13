@@ -13,6 +13,26 @@ const diffMessageTimers = new WeakMap<HTMLElement, number>();
 const isCodeDiffView = (value: string | null): value is CodeDiffView =>
   value === "unified" || value === "split";
 
+const ownedCodeDiffElements = <ElementType extends Element>({
+  block,
+  selector,
+}: {
+  readonly block: HTMLElement;
+  readonly selector: string;
+}): ReadonlyArray<ElementType> =>
+  [...block.querySelectorAll<ElementType>(selector)].filter(
+    (element) => element.closest("[data-code-diff]") === block,
+  );
+
+const ownedCodeDiffElement = <ElementType extends Element>({
+  block,
+  selector,
+}: {
+  readonly block: HTMLElement;
+  readonly selector: string;
+}): ElementType | null =>
+  ownedCodeDiffElements<ElementType>({ block, selector })[0] ?? null;
+
 // Applies one view to a block and mirrors it into the segmented control's
 // pressed states so the active view is always visible in the header.
 const applyDiffView = ({
@@ -23,9 +43,10 @@ const applyDiffView = ({
   readonly view: CodeDiffView;
 }): void => {
   block.dataset.diffView = view;
-  for (const button of block.querySelectorAll<HTMLButtonElement>(
-    "[data-diff-set-view]",
-  )) {
+  for (const button of ownedCodeDiffElements<HTMLButtonElement>({
+    block,
+    selector: "[data-diff-set-view]",
+  })) {
     button.setAttribute(
       "aria-pressed",
       button.dataset.diffSetView === view ? "true" : "false",
@@ -42,7 +63,10 @@ const showDiffMessage = ({
   readonly block: HTMLElement;
   readonly message: string;
 }): void => {
-  const slot = block.querySelector<HTMLElement>("[data-diff-copy-message]");
+  const slot = ownedCodeDiffElement<HTMLElement>({
+    block,
+    selector: "[data-diff-copy-message]",
+  });
   if (slot === null) {
     return;
   }
@@ -50,9 +74,10 @@ const showDiffMessage = ({
   if (previousTimer !== undefined) {
     window.clearTimeout(previousTimer);
   }
-  const menuButton = block.querySelector<HTMLButtonElement>(
-    "[data-diff-menu-button]",
-  );
+  const menuButton = ownedCodeDiffElement<HTMLButtonElement>({
+    block,
+    selector: "[data-diff-menu-button]",
+  });
   slot.textContent = message;
   slot.hidden = false;
   menuButton?.setAttribute("aria-label", message);
@@ -112,7 +137,10 @@ const updateExpandControl = ({
 }: {
   readonly block: HTMLElement;
 }): void => {
-  const button = block.querySelector<HTMLButtonElement>("[data-diff-expand]");
+  const button = ownedCodeDiffElement<HTMLButtonElement>({
+    block,
+    selector: "[data-diff-expand]",
+  });
   if (button === null) {
     return;
   }
@@ -132,7 +160,10 @@ const updateExpandControl = ({
 // and the selected view survive; closing restores its DOM and page-scroll positions.
 const openFullScreen = ({ block }: { readonly block: HTMLElement }): void => {
   const article = block.closest("article");
-  const fileCaption = block.querySelector<HTMLElement>(".code-diff-file");
+  const fileCaption = ownedCodeDiffElement<HTMLElement>({
+    block,
+    selector: ".code-diff-file",
+  });
   if (article === null || fileCaption === null) {
     return;
   }
@@ -182,12 +213,22 @@ try {
 }
 
 for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) {
-  const toggleGroup = block.querySelector<HTMLElement>("[data-diff-toggle-group]");
-  const expand = block.querySelector<HTMLButtonElement>("[data-diff-expand]");
-  const menuButton = block.querySelector<HTMLButtonElement>(
-    "[data-diff-menu-button]",
-  );
-  const menuList = block.querySelector<HTMLElement>("[data-diff-menu-list]");
+  const toggleGroup = ownedCodeDiffElement<HTMLElement>({
+    block,
+    selector: "[data-diff-toggle-group]",
+  });
+  const expand = ownedCodeDiffElement<HTMLButtonElement>({
+    block,
+    selector: "[data-diff-expand]",
+  });
+  const menuButton = ownedCodeDiffElement<HTMLButtonElement>({
+    block,
+    selector: "[data-diff-menu-button]",
+  });
+  const menuList = ownedCodeDiffElement<HTMLElement>({
+    block,
+    selector: "[data-diff-menu-list]",
+  });
   toggleGroup?.removeAttribute("hidden");
   expand?.removeAttribute("hidden");
   menuButton?.removeAttribute("hidden");
@@ -196,7 +237,10 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
   const menuItems = (): ReadonlyArray<HTMLButtonElement> =>
     menuList === null
       ? []
-      : [...menuList.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+      : ownedCodeDiffElements<HTMLButtonElement>({
+          block,
+          selector: '[role="menuitem"]',
+        });
 
   const setMenuOpen = ({
     open,
@@ -230,8 +274,7 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
 
   // Escape closes the menu without also dismissing an enclosing full-screen
   // dialog; preventDefault stops the dialog's native cancel behavior.
-  block
-    .querySelector<HTMLElement>("[data-diff-menu]")
+  ownedCodeDiffElement<HTMLElement>({ block, selector: "[data-diff-menu]" })
     ?.addEventListener("keydown", (event) => {
       if (menuList === null) {
         return;
@@ -303,8 +346,10 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
     }
   };
 
-  block
-    .querySelector<HTMLButtonElement>("[data-diff-copy-path]")
+  ownedCodeDiffElement<HTMLButtonElement>({
+    block,
+    selector: "[data-diff-copy-path]",
+  })
     ?.addEventListener("click", () => {
       void copyToClipboard({
         value: block.dataset.diffPath ?? "",
@@ -312,12 +357,15 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
       });
     });
 
-  block
-    .querySelector<HTMLButtonElement>("[data-diff-copy]")
+  ownedCodeDiffElement<HTMLButtonElement>({
+    block,
+    selector: "[data-diff-copy]",
+  })
     ?.addEventListener("click", () => {
-      const source = block.querySelector<HTMLTextAreaElement>(
-        "[data-diff-source]",
-      );
+      const source = ownedCodeDiffElement<HTMLTextAreaElement>({
+        block,
+        selector: "[data-diff-source]",
+      });
       if (source === null) {
         return;
       }
@@ -336,9 +384,10 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
     openFullScreen({ block });
   });
 
-  for (const button of block.querySelectorAll<HTMLButtonElement>(
-    "[data-diff-set-view]",
-  )) {
+  for (const button of ownedCodeDiffElements<HTMLButtonElement>({
+    block,
+    selector: "[data-diff-set-view]",
+  })) {
     button.addEventListener("click", () => {
       const view = button.dataset.diffSetView ?? null;
       if (!isCodeDiffView(view)) {
@@ -358,10 +407,18 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
 // outside an open menu closes it.
 document.addEventListener("click", (event) => {
   for (const menu of document.querySelectorAll<HTMLElement>("[data-diff-menu]")) {
-    const button = menu.querySelector<HTMLButtonElement>(
-      "[data-diff-menu-button]",
-    );
-    const list = menu.querySelector<HTMLElement>("[data-diff-menu-list]");
+    const block = menu.closest<HTMLElement>("[data-code-diff]");
+    if (block === null) {
+      continue;
+    }
+    const button = ownedCodeDiffElement<HTMLButtonElement>({
+      block,
+      selector: "[data-diff-menu-button]",
+    });
+    const list = ownedCodeDiffElement<HTMLElement>({
+      block,
+      selector: "[data-diff-menu-list]",
+    });
     if (button === null || list === null || list.hidden) {
       continue;
     }

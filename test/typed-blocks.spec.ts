@@ -121,6 +121,12 @@ test("should keep a range Annotation visible when switching diff views", async (
     expect(scrollContexts.every((classes) =>
       typeof classes === "string" && classes.includes("code-diff-split-scroll")
     )).toBe(true);
+    const headerScrollers = await split
+      .locator('[data-diff-hunk-header="split"]')
+      .evaluateAll((headers) => headers.map((header) =>
+        header.parentElement?.classList.contains("code-diff-split-scroll") ?? false
+      ));
+    expect(headerScrollers).toEqual([true, true]);
   });
 
   await test.step("the annotation stays pinned in both themes", async () => {
@@ -154,6 +160,73 @@ test("should keep a range Annotation visible when switching diff views", async (
       expect(layout.color).not.toBe(layout.background);
     }
   });
+});
+
+test("should keep nested CodeDiff interactions instance-local", async ({
+  page,
+  nestedDiffViewerUrl,
+}) => {
+  await page.goto(nestedDiffViewerUrl);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: (value: string) => {
+          document.body.dataset.copiedDiff = value;
+          return Promise.resolve();
+        },
+      },
+    });
+  });
+
+  const outer = page.locator('[data-code-diff][data-diff-path="outer.ts"]');
+  const inner = page.locator(
+    '[data-code-diff][data-diff-path="inner.ts"]:visible',
+  );
+  const innerHeader = inner.locator(":scope > .code-diff-header");
+  const outerHeader = outer.locator(":scope > .code-diff-header");
+
+  await innerHeader.getByRole("button", { name: "Side-by-side view" }).click();
+  await expect(inner).toHaveAttribute("data-diff-view", "split");
+  await expect(outer).toHaveAttribute("data-diff-view", "unified");
+
+  await innerHeader.getByRole("button", { name: "More actions" }).click();
+  await innerHeader.getByRole("menuitem", { name: "Copy diff" }).click();
+  expect(await page.locator("body").getAttribute("data-copied-diff")).toContain(
+    "newInner();",
+  );
+  await expect(
+    outerHeader.getByRole("button", { name: "More actions" }),
+  ).toHaveAccessibleName("More actions");
+
+  await outerHeader.getByRole("button", { name: "More actions" }).click();
+  await outerHeader.getByRole("menuitem", { name: "Copy diff" }).click();
+  expect(await page.locator("body").getAttribute("data-copied-diff")).toContain(
+    "newOuter();",
+  );
+});
+
+test("should contain CodeDiff overflow without clipping the page", async ({
+  page,
+  mdxBlocksViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto(mdxBlocksViewerUrl);
+
+  const diff = page.locator("[data-code-diff]").filter({
+    hasText: "src/catalog/read-through-cache.ts",
+  });
+  await diff.getByRole("button", { name: "Side-by-side view" }).click();
+  const overflow = await page.evaluate(() => ({
+    bodyOverflowX: getComputedStyle(document.body).overflowX,
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(overflow.bodyOverflowX).toBe("visible");
+  expect(overflow.scrollWidth, JSON.stringify(overflow)).toBe(overflow.clientWidth);
+  expect(await diff.locator(".code-diff-split-scroll").first().evaluate(
+    (scroller) => scroller.scrollWidth > scroller.clientWidth,
+  )).toBe(true);
 });
 
 test("should expand a diff to full screen and restore it when dismissed", async ({

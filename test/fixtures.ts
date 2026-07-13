@@ -1,11 +1,11 @@
 // The suite's extended Playwright test, per the render-health rule: every
 // spec fails on console errors or uncaught page errors automatically, and the
-// example documents are rendered once per worker through the built CLI so
+// fixture documents are rendered once per worker through the built CLI so
 // specs exercise exactly what a user runs. Specs import test/expect from here,
 // never from @playwright/test directly.
 
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -18,8 +18,38 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 type WorkerFixtures = {
   readonly mdxBlocksViewerUrl: string;
+  readonly nestedDiffViewerUrl: string;
   readonly sampleViewerUrl: string;
 };
+
+const NESTED_DIFF_MDX = `# Nested diff
+
+<CodeDiff file="outer.ts">
+
+\`\`\`diff
+@@ -1 +1 @@
+-oldOuter();
++newOuter();
+\`\`\`
+
+<Annotation lines="1">
+
+Inspect the nested change.
+
+<CodeDiff file="inner.ts">
+
+\`\`\`diff
+@@ -2 +2 @@
+-oldInner();
++newInner();
+\`\`\`
+
+</CodeDiff>
+
+</Annotation>
+
+</CodeDiff>
+`;
 
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
   // The typed-block example has its own rendered artifact so the plain sample
@@ -32,6 +62,23 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         join(repoRoot, "bin", "big-plan.mjs"),
         "render",
         join(repoRoot, "examples", "mdx-blocks.mdx"),
+        outputPath,
+      ]);
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  nestedDiffViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-nested-diff-"));
+      const inputPath = join(outputDir, "nested-diff.mdx");
+      const outputPath = join(outputDir, "nested-diff.html");
+      await writeFile(inputPath, NESTED_DIFF_MDX, "utf8");
+      await execFileAsync(process.execPath, [
+        join(repoRoot, "bin", "big-plan.mjs"),
+        "render",
+        inputPath,
         outputPath,
       ]);
       await use(pathToFileURL(outputPath).href);

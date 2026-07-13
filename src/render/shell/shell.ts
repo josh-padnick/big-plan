@@ -32,7 +32,7 @@ export type ShellResult = {
 };
 
 const BODY_CLASSES =
-  "overflow-x-hidden bg-paper font-sans text-base leading-[1.65] text-ink antialiased";
+  "bg-paper font-sans text-base leading-[1.65] text-ink antialiased";
 
 // Stacked reading layout below the wide breakpoint; sidebar plus one reading
 // column (~70ch) above it. The no-TOC variant is always a single column.
