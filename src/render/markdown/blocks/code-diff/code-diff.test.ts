@@ -66,13 +66,13 @@ describe("renderCodeDiff", () => {
     });
   });
 
-  it("should diagnose a shorthand file and string-valued lineNumbers", () => {
-    expect(render({ attributes: { file: true, lineNumbers: "true" } }).diagnostics).toEqual([
+  it("should diagnose a shorthand file and string-valued showLineNumbers", () => {
+    expect(render({ attributes: { file: true, showLineNumbers: "true" } }).diagnostics).toEqual([
       { line: 3, column: 1, message: 'Attribute "file" must be a string' },
       {
         line: 3,
         column: 1,
-        message: 'Attribute "lineNumbers" is a shorthand boolean; use the bare form',
+        message: 'Attribute "showLineNumbers" is a shorthand boolean; use the bare form',
       },
     ]);
   });
@@ -89,22 +89,22 @@ describe("renderCodeDiff", () => {
     expect(JSON.stringify(element)).not.toContain("code-diff-stats");
   });
 
-  it("should render the header stats when showStats is set", () => {
+  it("should render the header stats when showLineCounts is set", () => {
     const { element, diagnostics } = render({
-      attributes: { file: "src/retry.ts", showStats: true },
+      attributes: { file: "src/retry.ts", showLineCounts: true },
     });
     expect(diagnostics).toEqual([]);
     expect(JSON.stringify(element)).toContain("code-diff-stats");
   });
 
-  it("should diagnose a string-valued showStats", () => {
+  it("should diagnose a string-valued showLineCounts", () => {
     expect(
-      render({ attributes: { file: "x", showStats: "true" } }).diagnostics,
+      render({ attributes: { file: "x", showLineCounts: "true" } }).diagnostics,
     ).toEqual([
       {
         line: 3,
         column: 1,
-        message: 'Attribute "showStats" is a shorthand boolean; use the bare form',
+        message: 'Attribute "showLineCounts" is a shorthand boolean; use the bare form',
       },
     ]);
   });
@@ -151,9 +151,9 @@ describe("renderCodeDiff", () => {
     ]);
   });
 
-  it("should diagnose lineNumbers when a headerless diff cannot supply numbers", () => {
+  it("should diagnose showLineNumbers when a headerless diff cannot supply numbers", () => {
     expect(render({
-      attributes: { file: "x", lineNumbers: true },
+      attributes: { file: "x", showLineNumbers: true },
       children: [fence({ source: "-old\n+new\n" })],
     }).diagnostics).toEqual([
       {
@@ -177,7 +177,7 @@ describe("renderCodeDiff", () => {
   it("should render both numbered views and preserve the normalized fence source", () => {
     const source = "@@ -1 +1 @@\n-old\n+new\n";
     const { element, diagnostics } = render({
-      attributes: { file: "src/retry.ts", lineNumbers: true },
+      attributes: { file: "src/retry.ts", showLineNumbers: true },
       children: [fence({ source })],
     });
     const rendered = JSON.stringify(element);

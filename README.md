@@ -52,10 +52,10 @@ Enable the worker before stale reads.
 </Callout>
 ```
 
-Use `CodeDiff` with a required non-empty file path, optional bare `lineNumbers` and `showStats` attributes, and exactly one fenced `diff` child; line numbers require `@@` hunk headers:
+Use `CodeDiff` with a required non-empty file path, optional bare `showLineNumbers` and `showLineCounts` attributes, and exactly one fenced `diff` child; line numbers require `@@` hunk headers:
 
 ````mdx
-<CodeDiff file="src/cache.ts" lineNumbers showStats>
+<CodeDiff file="src/cache.ts" showLineNumbers showLineCounts>
 
 ```diff
 @@ -12 +12 @@
@@ -66,7 +66,7 @@ Use `CodeDiff` with a required non-empty file path, optional bare `lineNumbers` 
 </CodeDiff>
 ````
 
-The header shows the full file path and, when `showStats` is set, added and removed line counts; the diff opens in a readable unified view even without JavaScript.
+The header shows the full file path and, when `showLineCounts` is set, added and removed line counts; the diff opens in a readable unified view even without JavaScript.
 With JavaScript enabled, readers can switch between unified and side-by-side views, preserve that preference across reloads, copy the file path or the fenced diff source (as parsed: LF line endings with a trailing newline) from the actions menu, or expand the diff into a full-screen dialog.
 Headerless `+`/`-` diffs are accepted when line numbers are omitted, and standard Git file preambles may appear before the first `@@` hunk.
 Inside a hunk, a blank line is accepted as empty context even when an editor has stripped its leading space.

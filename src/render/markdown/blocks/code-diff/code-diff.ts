@@ -140,10 +140,10 @@ const lineContent = (line: DiffLine): Element => ({
 
 const unifiedLine = ({
   line,
-  lineNumbers,
+  showLineNumbers,
 }: {
   readonly line: DiffLine;
-  readonly lineNumbers: boolean;
+  readonly showLineNumbers: boolean;
 }): Element => ({
   type: "element",
   tagName: "div",
@@ -152,7 +152,7 @@ const unifiedLine = ({
     "data-diff-line": line.kind,
   },
   children: [
-    ...(lineNumbers
+    ...(showLineNumbers
       ? [
           lineNumberCell(line.oldLineNumber, "old"),
           lineNumberCell(line.newLineNumber, "new"),
@@ -174,23 +174,23 @@ const hunkHeader = (value: string, view: "unified" | "split"): Element => ({
 
 const renderUnifiedHunk = ({
   hunk,
-  lineNumbers,
+  showLineNumbers,
 }: {
   readonly hunk: DiffHunk;
-  readonly lineNumbers: boolean;
+  readonly showLineNumbers: boolean;
 }): ReadonlyArray<Element> => [
   ...(hunk.header === undefined ? [] : [hunkHeader(hunk.header, "unified")]),
-  ...hunk.lines.map((line) => unifiedLine({ line, lineNumbers })),
+  ...hunk.lines.map((line) => unifiedLine({ line, showLineNumbers })),
 ];
 
 const splitLine = ({
   line,
   side,
-  lineNumbers,
+  showLineNumbers,
 }: {
   readonly line: DiffLine | undefined;
   readonly side: "old" | "new";
-  readonly lineNumbers: boolean;
+  readonly showLineNumbers: boolean;
 }): Element => ({
   type: "element",
   tagName: "div",
@@ -199,7 +199,7 @@ const splitLine = ({
     "data-diff-line": line?.kind ?? "empty",
   },
   children: [
-    ...(lineNumbers
+    ...(showLineNumbers
       ? [lineNumberCell(
           side === "old" ? line?.oldLineNumber : line?.newLineNumber,
           side,
@@ -212,11 +212,11 @@ const splitLine = ({
 const splitPane = ({
   rows,
   side,
-  lineNumbers,
+  showLineNumbers,
 }: {
   readonly rows: ReadonlyArray<SplitDiffRow>;
   readonly side: "old" | "new";
-  readonly lineNumbers: boolean;
+  readonly showLineNumbers: boolean;
 }): Element => ({
   type: "element",
   tagName: "div",
@@ -227,16 +227,16 @@ const splitPane = ({
   children: rows.map((row) => splitLine({
     line: side === "old" ? row.left : row.right,
     side,
-    lineNumbers,
+    showLineNumbers,
   })),
 });
 
 const renderSplitHunk = ({
   hunk,
-  lineNumbers,
+  showLineNumbers,
 }: {
   readonly hunk: DiffHunk;
-  readonly lineNumbers: boolean;
+  readonly showLineNumbers: boolean;
 }): ReadonlyArray<Element> => {
   const rows = pairDiffLines({ lines: hunk.lines });
   return [
@@ -253,8 +253,8 @@ const renderSplitHunk = ({
         ],
       },
       children: [
-        splitPane({ rows, side: "old", lineNumbers }),
-        splitPane({ rows, side: "new", lineNumbers }),
+        splitPane({ rows, side: "old", showLineNumbers }),
+        splitPane({ rows, side: "new", showLineNumbers }),
       ],
     },
   ];
@@ -263,11 +263,11 @@ const renderSplitHunk = ({
 const renderView = ({
   diff,
   view,
-  lineNumbers,
+  showLineNumbers,
 }: {
   readonly diff: UnifiedDiff;
   readonly view: "unified" | "split";
-  readonly lineNumbers: boolean;
+  readonly showLineNumbers: boolean;
 }): Element => ({
   type: "element",
   tagName: "div",
@@ -276,8 +276,8 @@ const renderView = ({
     "data-diff-content": view,
   },
   children: diff.hunks.flatMap((hunk) => view === "unified"
-    ? renderUnifiedHunk({ hunk, lineNumbers })
-    : renderSplitHunk({ hunk, lineNumbers })),
+    ? renderUnifiedHunk({ hunk, showLineNumbers })
+    : renderSplitHunk({ hunk, showLineNumbers })),
 });
 
 const menuItemButton = ({
@@ -303,7 +303,7 @@ const menuItemButton = ({
 });
 
 // Header summary of the parsed diff; authors opt in per block via the
-// showStats shorthand attribute.
+// showLineCounts shorthand attribute.
 const diffStats = ({
   addedCount,
   removedCount,
@@ -503,22 +503,22 @@ export const renderCodeDiff: BlockRenderer = ({
       position,
     });
   }
-  const lineNumbersValue = attributes["lineNumbers"];
+  const lineNumbersValue = attributes["showLineNumbers"];
   if (lineNumbersValue !== undefined && lineNumbersValue !== true) {
     diagnostics.add({
-      message: 'Attribute "lineNumbers" is a shorthand boolean; use the bare form',
+      message: 'Attribute "showLineNumbers" is a shorthand boolean; use the bare form',
       position,
     });
   }
-  const showStatsValue = attributes["showStats"];
+  const showStatsValue = attributes["showLineCounts"];
   if (showStatsValue !== undefined && showStatsValue !== true) {
     diagnostics.add({
-      message: 'Attribute "showStats" is a shorthand boolean; use the bare form',
+      message: 'Attribute "showLineCounts" is a shorthand boolean; use the bare form',
       position,
     });
   }
   for (const name of Object.keys(attributes)) {
-    if (name !== "file" && name !== "lineNumbers" && name !== "showStats") {
+    if (name !== "file" && name !== "showLineNumbers" && name !== "showLineCounts") {
       diagnostics.add({ message: `Unknown attribute "${name}" on CodeDiff`, position });
     }
   }
@@ -546,8 +546,8 @@ export const renderCodeDiff: BlockRenderer = ({
           },
     });
   }
-  const lineNumbers = lineNumbersValue === true;
-  if (lineNumbers && !parsed.diff.hasHunkHeaders) {
+  const showLineNumbers = lineNumbersValue === true;
+  if (showLineNumbers && !parsed.diff.hasHunkHeaders) {
     diagnostics.add({
       message: "CodeDiff cannot show line numbers without an @@ hunk header",
       position,
@@ -572,7 +572,7 @@ export const renderCodeDiff: BlockRenderer = ({
       "data-code-diff": "",
       "data-diff-view": "unified",
       "data-diff-path": filePath,
-      ...(lineNumbers ? { "data-line-numbers": "" } : {}),
+      ...(showLineNumbers ? { "data-line-numbers": "" } : {}),
     },
     children: [
       {
@@ -659,8 +659,8 @@ export const renderCodeDiff: BlockRenderer = ({
           },
         ],
       },
-      renderView({ diff: parsed.diff, view: "unified", lineNumbers }),
-      renderView({ diff: parsed.diff, view: "split", lineNumbers }),
+      renderView({ diff: parsed.diff, view: "unified", showLineNumbers }),
+      renderView({ diff: parsed.diff, view: "split", showLineNumbers }),
       {
         type: "element",
         tagName: "textarea",
