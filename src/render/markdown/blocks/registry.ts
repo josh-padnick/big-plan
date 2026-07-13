@@ -47,6 +47,10 @@ export const BLOCK_REGISTRY: Readonly<Record<string, BlockDefinition>> = {
   },
 };
 
+export const REGISTERED_BLOCK_NAMES: ReadonlySet<string> = new Set(
+  Object.keys(BLOCK_REGISTRY),
+);
+
 const isMdxNodeType = (type: string): boolean => type.startsWith("mdx");
 
 // Maps disallowed non-block MDX nodes to their author-facing explanation.

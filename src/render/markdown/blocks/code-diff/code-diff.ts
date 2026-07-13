@@ -68,26 +68,35 @@ const markdownChildren = (
   node: MarkdownRoot | MarkdownNode,
 ): ReadonlyArray<MarkdownNode> => "children" in node ? node.children : [];
 
-// Reports semantic content that cannot be cloned safely into both diff views.
+// Reports content that cannot be cloned safely into both diff views.
 const validateAnnotationBody = ({
   node,
   diagnostics,
+  registeredBlockNames,
 }: {
   readonly node: MarkdownNode;
   readonly diagnostics: DiagnosticCollector;
+  readonly registeredBlockNames: ReadonlySet<string>;
 }): void => {
+  const isTypedBlock = node.type === "mdxJsxFlowElement" &&
+    node.name !== null && registeredBlockNames.has(node.name);
   const message = node.type === "heading"
     ? "Annotation bodies cannot contain headings"
     : node.type === "footnoteReference"
       ? "Annotation bodies cannot contain footnote references"
       : node.type === "footnoteDefinition"
         ? "Annotation bodies cannot contain footnote definitions"
+        : isTypedBlock
+          ? "Annotation bodies cannot contain typed blocks"
         : undefined;
   if (message !== undefined) {
     diagnostics.add({ message, position: node.position });
   }
+  if (isTypedBlock) {
+    return;
+  }
   for (const child of markdownChildren(node)) {
-    validateAnnotationBody({ node: child, diagnostics });
+    validateAnnotationBody({ node: child, diagnostics, registeredBlockNames });
   }
 };
 
@@ -96,32 +105,50 @@ const validateAnnotationBody = ({
 const validateAnnotationBodies = ({
   node,
   diagnostics,
+  registeredBlockNames,
 }: {
   readonly node: MarkdownRoot | MarkdownNode;
   readonly diagnostics: DiagnosticCollector;
+  readonly registeredBlockNames: ReadonlySet<string>;
 }): void => {
   if (node.type === "mdxJsxFlowElement" && node.name === "CodeDiff") {
     for (const child of node.children) {
-      if (child.type !== "mdxJsxFlowElement" || child.name !== "Annotation") {
+      if (child.type === "mdxJsxFlowElement" && child.name === "Annotation") {
+        for (const bodyChild of child.children) {
+          validateAnnotationBody({
+            node: bodyChild,
+            diagnostics,
+            registeredBlockNames,
+          });
+        }
         continue;
       }
-      for (const bodyChild of child.children) {
-        validateAnnotationBody({ node: bodyChild, diagnostics });
-      }
+      validateAnnotationBodies({
+        node: child,
+        diagnostics,
+        registeredBlockNames,
+      });
     }
+    return;
   }
   for (const child of markdownChildren(node)) {
-    validateAnnotationBodies({ node: child, diagnostics });
+    validateAnnotationBodies({ node: child, diagnostics, registeredBlockNames });
   }
 };
 
 /** Creates the remark transform that validates Annotation body semantics. */
 export const remarkValidateCodeDiffAnnotations = ({
   diagnostics,
+  registeredBlockNames,
 }: {
   readonly diagnostics: DiagnosticCollector;
+  readonly registeredBlockNames: ReadonlySet<string>;
 }) => (tree: MarkdownRoot): void => {
-  validateAnnotationBodies({ node: tree, diagnostics });
+  validateAnnotationBodies({
+    node: tree,
+    diagnostics,
+    registeredBlockNames,
+  });
 };
 
 const isElement = (node: ElementContent): node is Element =>

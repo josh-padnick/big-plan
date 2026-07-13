@@ -1,5 +1,5 @@
 // Tests that scoped block names dispatch only for direct children of the
-// declaring global block while retaining ordinary recursion for their bodies.
+// declaring global block while preserving their supported Markdown bodies.
 
 import { describe, expect, it } from "vitest";
 import {
@@ -35,12 +35,11 @@ describe("scoped child dispatch", () => {
   it("should dispatch a direct child through its declaring parent", () => {
     const { root } = compileMarkdown({
       markdown:
-        '<CodeDiff file="src/retry.ts">\n```diff\n@@ -1 +1 @@\n-old\n+new\n```\n\n<Annotation lines="1">\nUse **bounded** retries.\n\n<Callout type="note">\nKeep the nested block.\n</Callout>\n</Annotation>\n</CodeDiff>\n',
+        '<CodeDiff file="src/retry.ts">\n```diff\n@@ -1 +1 @@\n-old\n+new\n```\n\n<Annotation lines="1">\nUse **bounded** retries.\n</Annotation>\n</CodeDiff>\n',
     });
     const html = serializeMarkdown({ root });
     expect(html).toContain('data-annotation-lines="1"');
     expect(html).toContain("Use <strong>bounded</strong> retries.");
-    expect(html).toContain('data-callout="note"');
   });
 
   it("should not dispatch a scoped name nested below a direct child", () => {

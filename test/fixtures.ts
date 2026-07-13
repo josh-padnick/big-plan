@@ -17,34 +17,28 @@ const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 type WorkerFixtures = {
+  readonly annotationCodeViewerUrl: string;
   readonly mdxBlocksViewerUrl: string;
-  readonly nestedDiffViewerUrl: string;
   readonly sampleViewerUrl: string;
 };
 
-const NESTED_DIFF_MDX = `# Nested diff
+const ANNOTATION_CODE_MDX = `# Annotation code
 
-<CodeDiff file="outer.ts">
+<CodeDiff file="src/retry.ts">
 
 \`\`\`diff
 @@ -1 +1 @@
--oldOuter();
-+newOuter();
+-oldRetry();
++newRetry();
 \`\`\`
 
 <Annotation lines="1">
 
-Inspect the nested change.
+Try the fallback locally:
 
-<CodeDiff file="inner.ts">
-
-\`\`\`diff
-@@ -2 +2 @@
--oldInner();
-+newInner();
+\`\`\`ts
+retry();
 \`\`\`
-
-</CodeDiff>
 
 </Annotation>
 
@@ -52,6 +46,23 @@ Inspect the nested change.
 `;
 
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
+  annotationCodeViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-annotation-code-"));
+      const inputPath = join(outputDir, "annotation-code.mdx");
+      const outputPath = join(outputDir, "annotation-code.html");
+      await writeFile(inputPath, ANNOTATION_CODE_MDX, "utf8");
+      await execFileAsync(process.execPath, [
+        join(repoRoot, "bin", "big-plan.mjs"),
+        "render",
+        inputPath,
+        outputPath,
+      ]);
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
   // The typed-block example has its own rendered artifact so the plain sample
   // remains the baseline for the original viewer journeys.
   mdxBlocksViewerUrl: [
@@ -62,23 +73,6 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         join(repoRoot, "bin", "big-plan.mjs"),
         "render",
         join(repoRoot, "examples", "mdx-blocks.mdx"),
-        outputPath,
-      ]);
-      await use(pathToFileURL(outputPath).href);
-      await rm(outputDir, { recursive: true, force: true });
-    },
-    { scope: "worker" },
-  ],
-  nestedDiffViewerUrl: [
-    async ({}, use) => {
-      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-nested-diff-"));
-      const inputPath = join(outputDir, "nested-diff.mdx");
-      const outputPath = join(outputDir, "nested-diff.html");
-      await writeFile(inputPath, NESTED_DIFF_MDX, "utf8");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        inputPath,
         outputPath,
       ]);
       await use(pathToFileURL(outputPath).href);

@@ -162,48 +162,36 @@ test("should keep a range Annotation visible when switching diff views", async (
   });
 });
 
-test("should keep nested CodeDiff interactions instance-local", async ({
+test("should fallback-copy Annotation code within a full-screen diff", async ({
+  annotationCodeViewerUrl,
   page,
-  nestedDiffViewerUrl,
 }) => {
-  await page.goto(nestedDiffViewerUrl);
+  await page.goto(annotationCodeViewerUrl);
   await page.evaluate(() => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
-      value: {
-        writeText: (value: string) => {
-          document.body.dataset.copiedDiff = value;
-          return Promise.resolve();
-        },
-      },
+      value: undefined,
     });
+    document.execCommand = () => {
+      const textarea = document.querySelector("textarea:not([data-diff-source])");
+      document.body.dataset.fallbackCopy = textarea instanceof HTMLTextAreaElement
+        ? `${textarea.closest("dialog") === null ? "outside" : "dialog"}:${textarea.value}`
+        : "missing";
+      return textarea instanceof HTMLTextAreaElement;
+    };
   });
 
-  const outer = page.locator('[data-code-diff][data-diff-path="outer.ts"]');
-  const inner = page.locator(
-    '[data-code-diff][data-diff-path="inner.ts"]:visible',
+  const diff = page.locator("[data-code-diff]");
+  await diff.getByRole("button", { name: "View diff full screen" }).click();
+  const copy = page.locator(
+    'dialog [data-diff-content="unified"] [data-code-block] [data-copy-code]',
   );
-  const innerHeader = inner.locator(":scope > .code-diff-header");
-  const outerHeader = outer.locator(":scope > .code-diff-header");
+  await copy.click();
 
-  await innerHeader.getByRole("button", { name: "Side-by-side view" }).click();
-  await expect(inner).toHaveAttribute("data-diff-view", "split");
-  await expect(outer).toHaveAttribute("data-diff-view", "unified");
-
-  await innerHeader.getByRole("button", { name: "More actions" }).click();
-  await innerHeader.getByRole("menuitem", { name: "Copy diff" }).click();
-  expect(await page.locator("body").getAttribute("data-copied-diff")).toContain(
-    "newInner();",
+  expect(await page.locator("body").getAttribute("data-fallback-copy")).toBe(
+    "dialog:retry();\n",
   );
-  await expect(
-    outerHeader.getByRole("button", { name: "More actions" }),
-  ).toHaveAccessibleName("More actions");
-
-  await outerHeader.getByRole("button", { name: "More actions" }).click();
-  await outerHeader.getByRole("menuitem", { name: "Copy diff" }).click();
-  expect(await page.locator("body").getAttribute("data-copied-diff")).toContain(
-    "newOuter();",
-  );
+  await expect(copy).toHaveAccessibleName("Code copied");
 });
 
 test("should contain CodeDiff overflow without clipping the page", async ({

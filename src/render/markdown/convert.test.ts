@@ -346,6 +346,22 @@ describe("compileMarkdown CodeDiff blocks", () => {
     ]);
   });
 
+  it.each([
+    ["Callout", '<Callout type="note">\nNested callout.\n</Callout>'],
+    [
+      "CodeDiff",
+      '<CodeDiff file="src/nested.ts">\n```diff\n@@ -1 +1 @@\n-old\n+new\n```\n</CodeDiff>',
+    ],
+  ])("should reject a %s block in an Annotation body", (_name, block) => {
+    expect(diagnosticsFor(
+      `<CodeDiff file="src/retry.ts">\n\`\`\`diff\n@@ -1 +1 @@\n-old\n+new\n\`\`\`\n<Annotation lines="1">\n${block}\n</Annotation>\n</CodeDiff>\n`,
+    )).toEqual([{
+      line: 8,
+      column: 1,
+      message: "Annotation bodies cannot contain typed blocks",
+    }]);
+  });
+
   it("should preserve supported rich content in an Annotation body", () => {
     const bodyHtml = compileAndSerialize(
       '<CodeDiff file="src/retry.ts">\n```diff\n@@ -1 +1 @@\n-old\n+new\n```\n<Annotation lines="1">\nReview the `retry` path.\n\n- Keep the fallback\n\n```ts\nretry();\n```\n</Annotation>\n</CodeDiff>\n',
