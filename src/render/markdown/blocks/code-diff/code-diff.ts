@@ -346,6 +346,35 @@ const diffStats = ({
 
 // Copy actions live behind one overflow menu instead of dedicated buttons,
 // keeping the header calm as actions accumulate.
+// Copy feedback floats as a chip above the control row, anchored beside the
+// menu that owns the copy actions, so appearing never shifts the buttons.
+const copyFeedbackChip = (): Element => ({
+  type: "element",
+  tagName: "span",
+  properties: {
+    className: [
+      "code-copy-message",
+      "absolute",
+      "right-0",
+      "bottom-[calc(100%+0.3rem)]",
+      "z-10",
+      "rounded-[0.375rem]",
+      "border",
+      "border-edge",
+      "bg-(--diff-header-bg)",
+      "px-2",
+      "py-1",
+      "text-xs",
+      "whitespace-nowrap",
+      "shadow-md",
+    ],
+    ariaHidden: "true",
+    "data-diff-copy-message": "",
+    hidden: true,
+  },
+  children: [text("Copied!")],
+});
+
 const actionsMenu = (): Element => ({
   type: "element",
   tagName: "span",
@@ -354,6 +383,7 @@ const actionsMenu = (): Element => ({
     "data-diff-menu": "",
   },
   children: [
+    copyFeedbackChip(),
     {
       type: "element",
       tagName: "button",
@@ -639,22 +669,6 @@ export const renderCodeDiff: BlockRenderer = ({
               ...(showLineCountsValue === true
                 ? [diffStats({ addedCount, removedCount })]
                 : []),
-              {
-                type: "element",
-                tagName: "span",
-                properties: {
-                  className: [
-                    "code-copy-message",
-                    "inline-flex",
-                    "h-6",
-                    "items-center",
-                  ],
-                  ariaHidden: "true",
-                  "data-diff-copy-message": "",
-                  hidden: true,
-                },
-                children: [text("Copied!")],
-              },
               viewToggleGroup(),
               actionsMenu(),
               // Far right so entering and leaving full screen live in the
