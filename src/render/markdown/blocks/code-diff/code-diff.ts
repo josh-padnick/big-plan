@@ -555,6 +555,8 @@ const diffStats = ({
 // keeping the header calm as actions accumulate.
 // Copy feedback floats as a chip above the control row, anchored beside the
 // menu that owns the copy actions, so appearing never shifts the buttons.
+// Feedback appears in the dropdown's own footprint - the spot the reader
+// just clicked - inside the block, and inverts the palette for contrast.
 const copyFeedbackChip = (): Element => ({
   type: "element",
   tagName: "span",
@@ -562,16 +564,15 @@ const copyFeedbackChip = (): Element => ({
     className: [
       "code-copy-message",
       "absolute",
+      "top-[calc(100%+0.25rem)]",
       "right-0",
-      "bottom-[calc(100%+0.3rem)]",
       "z-10",
       "rounded-[0.375rem]",
-      "border",
-      "border-edge",
-      "bg-(--diff-header-bg)",
+      "bg-ink",
       "px-2",
       "py-1",
       "text-xs",
+      "text-paper",
       "whitespace-nowrap",
       "shadow-md",
     ],
