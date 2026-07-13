@@ -103,6 +103,12 @@ describe("compileMarkdown static MDX validation", () => {
     ]);
   });
 
+  it("should preserve prototype-named attributes for typed-block validation", () => {
+    expect(diagnosticsFor('<Callout type="note" __proto__ />\n')).toEqual([
+      { line: 1, column: 1, message: 'Unknown attribute "__proto__" on Callout' },
+    ]);
+  });
+
   it("should normalize a parse failure with its line and column", () => {
     expect(diagnosticsFor("# Plan\n\n<Callout>\n")).toEqual([
       {

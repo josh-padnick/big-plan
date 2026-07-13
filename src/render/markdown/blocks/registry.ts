@@ -53,7 +53,7 @@ const normalizeAttributes = ({
   readonly node: MdxJsxFlowElement;
   readonly diagnostics: DiagnosticCollector;
 }): Readonly<Record<string, BlockAttributeValue>> => {
-  const attributes: Record<string, BlockAttributeValue> = {};
+  const attributes: Array<readonly [string, BlockAttributeValue]> = [];
   const names = new Set<string>();
   for (const attribute of node.attributes) {
     if (attribute.type === "mdxJsxExpressionAttribute") {
@@ -78,9 +78,9 @@ const normalizeAttributes = ({
       });
       continue;
     }
-    attributes[attribute.name] = attribute.value ?? true;
+    attributes.push([attribute.name, attribute.value ?? true]);
   }
-  return attributes;
+  return Object.fromEntries(attributes);
 };
 
 // Reports an unknown name, validates attributes, then dispatches registered

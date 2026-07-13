@@ -57,7 +57,7 @@ diff --git a/src/catalog/read-through-cache.ts b/src/catalog/read-through-cache.
 index 23ad911..890ce42 100644
 --- a/src/catalog/read-through-cache.ts
 +++ b/src/catalog/read-through-cache.ts
-@@ -18,7 +18,10 @@ export const readCatalog = async (key: string) => {
+@@ -18,5 +18,8 @@ export const readCatalog = async (key: string) => {
    const cached = await cache.get(key);
 -  if (cached !== null && cached.ageSeconds <= 60) {
 +  if (cached !== null && cached.ageSeconds <= 150) {

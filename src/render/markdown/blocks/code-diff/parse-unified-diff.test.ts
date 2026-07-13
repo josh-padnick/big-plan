@@ -13,15 +13,14 @@ describe("parseUnifiedDiff", () => {
   });
 
   it("should seed and advance both counters when a hunk has omitted counts", () => {
-    expect(parseUnifiedDiff({ source: "@@ -12 +20 @@\n same\n-old\n+new\n" })).toEqual({
+    expect(parseUnifiedDiff({ source: "@@ -12 +20 @@\n-old\n+new\n" })).toEqual({
       diff: {
         hasHunkHeaders: true,
         hunks: [{
           header: "@@ -12 +20 @@",
           lines: [
-            { kind: "context", text: "same", oldLineNumber: 12, newLineNumber: 20 },
-            { kind: "remove", text: "old", oldLineNumber: 13 },
-            { kind: "add", text: "new", newLineNumber: 21 },
+            { kind: "remove", text: "old", oldLineNumber: 12 },
+            { kind: "add", text: "new", newLineNumber: 20 },
           ],
         }],
       },
@@ -111,6 +110,21 @@ describe("parseUnifiedDiff", () => {
       {
         line: 2,
         message: "Expected a diff line beginning with space, +, or -",
+      },
+      {
+        line: 1,
+        message: "Hunk declares 1 old and 1 new lines but contains 0 old and 0 new lines",
+      },
+    ]);
+  });
+
+  it("should report declared and actual counts at a mismatched hunk header", () => {
+    expect(
+      parseUnifiedDiff({ source: "@@ -18,7 +18,10 @@\n same\n-old\n+new\n" }).diagnostics,
+    ).toEqual([
+      {
+        line: 1,
+        message: "Hunk declares 7 old and 10 new lines but contains 2 old and 2 new lines",
       },
     ]);
   });

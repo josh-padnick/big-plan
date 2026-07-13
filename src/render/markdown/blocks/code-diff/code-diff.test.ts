@@ -171,6 +171,12 @@ describe("renderCodeDiff", () => {
         column: 1,
         message: "Invalid diff line 2: Expected a diff line beginning with space, +, or -",
       },
+      {
+        line: 5,
+        column: 1,
+        message:
+          "Invalid diff line 1: Hunk declares 1 old and 1 new lines but contains 0 old and 0 new lines",
+      },
     ]);
   });
 

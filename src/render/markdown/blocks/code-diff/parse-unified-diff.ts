@@ -128,10 +128,30 @@ export const parseUnifiedDiff = ({
   let lines: Array<DiffLine> = [];
   let oldLineNumber: number | undefined;
   let newLineNumber: number | undefined;
+  let declaredOldCount: number | undefined;
+  let declaredNewCount: number | undefined;
+  let headerLine: number | undefined;
 
   const finishHunk = (): void => {
     if (header !== undefined || lines.length > 0 || (!hasHunkHeaders && hunks.length === 0)) {
       hunks.push({ ...(header === undefined ? {} : { header }), lines });
+    }
+    if (
+      declaredOldCount === undefined ||
+      declaredNewCount === undefined ||
+      headerLine === undefined
+    ) {
+      return;
+    }
+    const actualOldCount = lines.filter((line) => line.kind !== "add").length;
+    const actualNewCount = lines.filter((line) => line.kind !== "remove").length;
+    if (actualOldCount !== declaredOldCount || actualNewCount !== declaredNewCount) {
+      diagnostics.push({
+        line: headerLine,
+        message:
+          `Hunk declares ${declaredOldCount} old and ${declaredNewCount} new lines ` +
+          `but contains ${actualOldCount} old and ${actualNewCount} new lines`,
+      });
     }
   };
 
@@ -145,6 +165,9 @@ export const parseUnifiedDiff = ({
       const newStart = match[3];
       oldLineNumber = oldStart === undefined ? undefined : Number(oldStart);
       newLineNumber = newStart === undefined ? undefined : Number(newStart);
+      declaredOldCount = Number(match[2] ?? "1");
+      declaredNewCount = Number(match[4] ?? "1");
+      headerLine = index + 1;
       continue;
     }
     if (value === "\\ No newline at end of file") {
