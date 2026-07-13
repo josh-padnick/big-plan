@@ -510,8 +510,8 @@ export const renderCodeDiff: BlockRenderer = ({
       position,
     });
   }
-  const showStatsValue = attributes["showLineCounts"];
-  if (showStatsValue !== undefined && showStatsValue !== true) {
+  const showLineCountsValue = attributes["showLineCounts"];
+  if (showLineCountsValue !== undefined && showLineCountsValue !== true) {
     diagnostics.add({
       message: 'Attribute "showLineCounts" is a shorthand boolean; use the bare form',
       position,
@@ -636,14 +636,19 @@ export const renderCodeDiff: BlockRenderer = ({
               ],
             },
             children: [
-              ...(showStatsValue === true
+              ...(showLineCountsValue === true
                 ? [diffStats({ addedCount, removedCount })]
                 : []),
               {
                 type: "element",
                 tagName: "span",
                 properties: {
-                  className: ["code-copy-message", "static", "h-6"],
+                  className: [
+                    "code-copy-message",
+                    "inline-flex",
+                    "h-6",
+                    "items-center",
+                  ],
                   ariaHidden: "true",
                   "data-diff-copy-message": "",
                   hidden: true,
