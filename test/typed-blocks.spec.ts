@@ -95,10 +95,32 @@ test("should keep a range Annotation visible when switching diff views", async (
   const annotationText = "Should this counter use the catalog_cache prefix";
   const unifiedAnnotation = unified.getByRole("note", { name: "Lines 34-36" });
   const splitAnnotation = split.getByRole("note", { name: "Lines 34-36" });
+  const shortAnnotation = unified.getByRole("note", { name: "Line 19" });
 
-  await test.step("the annotation follows the selected view", async () => {
+  await test.step("long content clamps while short content stays complete", async () => {
     await expect(unifiedAnnotation).toBeVisible();
     await expect(unifiedAnnotation).toContainText(annotationText);
+    const body = unifiedAnnotation.locator(".code-diff-annotation-body");
+    const toggle = unifiedAnnotation.locator(".code-diff-annotation-toggle");
+    await expect(toggle).toHaveAccessibleName("View more…");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    const bodyId = await body.getAttribute("id");
+    expect(bodyId).not.toBeNull();
+    await expect(toggle).toHaveAttribute("aria-controls", bodyId ?? "");
+    expect(await body.evaluate((element) => element.scrollHeight > element.clientHeight))
+      .toBe(true);
+    await toggle.click();
+    await expect(toggle).toHaveAccessibleName("View less");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(await body.evaluate((element) => element.scrollHeight - element.clientHeight))
+      .toBeLessThanOrEqual(1);
+    await toggle.click();
+    await expect(toggle).toHaveAccessibleName("View more…");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(shortAnnotation.getByRole("button")).toHaveCount(0);
+  });
+
+  await test.step("the annotation follows the selected view and side", async () => {
     await expect(splitAnnotation).toBeHidden();
 
     await diff.getByRole("button", { name: "Side-by-side view" }).click();
@@ -106,6 +128,19 @@ test("should keep a range Annotation visible when switching diff views", async (
     await expect(unifiedAnnotation).toBeHidden();
     await expect(splitAnnotation).toBeVisible();
     await expect(splitAnnotation).toContainText(annotationText);
+    expect(await splitAnnotation.evaluate((annotation) =>
+      annotation.parentElement?.dataset.diffPane
+    )).toBe("new");
+    const oldAnnotation = split.getByRole("note", { name: "Line 19" });
+    expect(await oldAnnotation.evaluate((annotation) =>
+      annotation.parentElement?.dataset.diffPane
+    )).toBe("old");
+    await expect(
+      split.locator('[data-diff-pane="old"]').getByRole("note", { name: "Lines 34-36" }),
+    ).toHaveCount(0);
+    await expect(
+      split.locator('[data-diff-pane="new"]').getByRole("note", { name: "Line 19" }),
+    ).toHaveCount(0);
   });
 
   await test.step("each split hunk owns one horizontal scroller", async () => {
@@ -129,7 +164,7 @@ test("should keep a range Annotation visible when switching diff views", async (
     expect(headerScrollers).toEqual([true, true]);
   });
 
-  await test.step("the annotation stays pinned in both themes", async () => {
+  await test.step("the annotation stays pinned to the visible new pane in both themes", async () => {
     for (const theme of ["light", "dark"] as const) {
       const layout = await splitAnnotation.evaluate((annotation, selectedTheme) => {
         document.documentElement.dataset.theme = selectedTheme;
@@ -153,12 +188,28 @@ test("should keep a range Annotation visible when switching diff views", async (
       }, theme);
       expect(layout.scrollLeft).toBeGreaterThan(0);
       expect(
-        Math.abs(layout.annotationLeft - layout.scrollerLeft),
+        Math.abs(
+          layout.annotationLeft -
+            (layout.scrollerLeft + (layout.scrollerRight - layout.scrollerLeft) / 2),
+        ),
         JSON.stringify(layout),
       ).toBeLessThan(2);
       expect(layout.annotationRight).toBeLessThanOrEqual(layout.scrollerRight + 1);
       expect(layout.color).not.toBe(layout.background);
     }
+  });
+
+  await test.step("the disclosure still works in full screen", async () => {
+    await diff.getByRole("button", { name: "View diff full screen" }).click();
+    const dialog = page.locator("dialog.code-diff-dialog");
+    const dialogAnnotation = dialog.getByRole("note", { name: "Lines 34-36" });
+    const toggle = dialogAnnotation.locator(".code-diff-annotation-toggle");
+    await expect(toggle).toHaveAccessibleName("View more…");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(toggle).toHaveAccessibleName("View less");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
   });
 });
 
@@ -448,6 +499,11 @@ test("should preserve typed-block content without controls when JavaScript is di
   await expect(annotation).toContainText(
     "Should this counter use the catalog_cache prefix",
   );
+  await expect(annotation).toContainText(
+    "Add a dashboard query that isolates synchronous origin fallbacks.",
+  );
+  await expect(annotation.locator(".code-diff-annotation-body-clamped")).toHaveCount(0);
+  await expect(page.locator(".code-diff-annotation-toggle")).toHaveCount(0);
   const controls = page.locator(
     "[data-diff-toggle-group], [data-diff-menu-button], [data-diff-expand]",
   );

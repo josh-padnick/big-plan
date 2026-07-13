@@ -1,10 +1,12 @@
-// Owns CodeDiff's progressively enhanced view preference, overflow actions
-// menu, and full-screen dialog behavior; server-rendered unified content
-// remains the no-JavaScript default.
+// Owns CodeDiff's progressively enhanced view preference, annotation
+// clamping, overflow actions menu, and full-screen dialog behavior;
+// server-rendered unified content remains the no-JavaScript default.
 
 const DIFF_VIEW_STORAGE_KEY = "big-plan-diff-view";
 const DIFF_MESSAGE_RESET_MS = 2_000;
+const ANNOTATION_CLAMP_LINES = 3;
 let nextDiffDialogLabelId = 1;
+let nextAnnotationBodyId = 1;
 
 type CodeDiffView = "unified" | "split";
 
@@ -33,6 +35,51 @@ const ownedCodeDiffElement = <ElementType extends Element>({
 }): ElementType | null =>
   ownedCodeDiffElements<ElementType>({ block, selector })[0] ?? null;
 
+// Adds a disclosure only when the full body is taller than approximately
+// three lines. Hidden static views wait until selected so layout measurement
+// never mistakes display:none for short content.
+const enhanceVisibleAnnotations = ({
+  block,
+}: {
+  readonly block: HTMLElement;
+}): void => {
+  for (const body of ownedCodeDiffElements<HTMLElement>({
+    block,
+    selector: ".code-diff-annotation-body",
+  })) {
+    if (body.dataset.annotationEnhanced !== undefined || body.getClientRects().length === 0) {
+      continue;
+    }
+    body.dataset.annotationEnhanced = "";
+    const lineHeight = Number.parseFloat(getComputedStyle(body).lineHeight);
+    if (!Number.isFinite(lineHeight) || body.scrollHeight <= lineHeight * ANNOTATION_CLAMP_LINES + 1) {
+      continue;
+    }
+
+    let bodyId: string;
+    do {
+      bodyId = `code-diff-annotation-body-${nextAnnotationBodyId}`;
+      nextAnnotationBodyId += 1;
+    } while (document.getElementById(bodyId) !== null);
+    body.id = bodyId;
+    body.classList.add("code-diff-annotation-body-clamped");
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "code-diff-annotation-toggle";
+    button.textContent = "View more…";
+    button.setAttribute("aria-controls", bodyId);
+    button.setAttribute("aria-expanded", "false");
+    button.addEventListener("click", () => {
+      const expanded = button.getAttribute("aria-expanded") === "true";
+      button.setAttribute("aria-expanded", expanded ? "false" : "true");
+      button.textContent = expanded ? "View more…" : "View less";
+      body.classList.toggle("code-diff-annotation-body-clamped", expanded);
+    });
+    body.after(button);
+  }
+};
+
 // Applies one view to a block and mirrors it into the segmented control's
 // pressed states so the active view is always visible in the header.
 const applyDiffView = ({
@@ -52,9 +99,10 @@ const applyDiffView = ({
       button.dataset.diffSetView === view ? "true" : "false",
     );
   }
+  enhanceVisibleAnnotations({ block });
 };
 
-// Flashes transient copy feedback below the actions button in the menu's
+// Flashes transient copy feedback above the actions button in the menu's
 // footprint and mirrors the result into that button's accessible label.
 const showDiffMessage = ({
   block,

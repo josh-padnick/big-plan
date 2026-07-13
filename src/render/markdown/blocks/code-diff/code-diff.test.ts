@@ -424,10 +424,10 @@ describe("renderCodeDiff", () => {
     const splitAnnotationParent = parentOfMatchingChild({
       element: split,
       matches: (candidate) =>
-        candidate.properties["data-annotation-row-lines"] === "13",
+        candidate.properties["data-annotation-lines"] === "13",
     });
     const splitAnnotationIndex = splitAnnotationParent?.children.findIndex((child) =>
-      isElement(child) && child.properties["data-annotation-row-lines"] === "13"
+      isElement(child) && child.properties["data-annotation-lines"] === "13"
     ) ?? -1;
     const precedingSegment = splitAnnotationParent?.children[splitAnnotationIndex - 1];
     expect(splitAnnotationIndex).toBeGreaterThan(-1);
@@ -438,6 +438,48 @@ describe("renderCodeDiff", () => {
     expect(isElement(splitAnnotation)
       ? textOf(splitAnnotation)
       : "").toContain("Use the catalog prefix.");
+    expect(splitAnnotationParent?.properties["data-diff-pane"]).toBe("new");
+  });
+
+  it("should localize old and new split Annotations without changing unified placement", () => {
+    const { element, diagnostics } = render({
+      children: [fence({
+        source: "@@ -12,2 +12,2 @@\n-old();\n+new();\n shared();\n",
+      })],
+      scopedChildren: [
+        annotation({ lines: "12", side: "old", value: "Old-side note." }),
+        annotation({ lines: "12", side: "new", value: "New-side note." }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+
+    const unified = viewFrom({ element, view: "unified" });
+    for (const note of ["Old-side note.", "New-side note."]) {
+      expect(parentOfMatchingChild({
+        element: unified,
+        matches: (candidate) =>
+          candidate.properties["data-annotation"] === "" &&
+          textOf(candidate).includes(note),
+      })).toBe(unified);
+    }
+
+    const split = viewFrom({ element, view: "split" });
+    const oldPane = parentOfMatchingChild({
+      element: split,
+      matches: (candidate) =>
+        candidate.properties["data-annotation"] === "" &&
+        textOf(candidate).includes("Old-side note."),
+    });
+    const newPane = parentOfMatchingChild({
+      element: split,
+      matches: (candidate) =>
+        candidate.properties["data-annotation"] === "" &&
+        textOf(candidate).includes("New-side note."),
+    });
+    expect(oldPane?.properties["data-diff-pane"]).toBe("old");
+    expect(newPane?.properties["data-diff-pane"]).toBe("new");
+    expect(textOf(oldPane ?? split)).not.toContain("New-side note.");
+    expect(textOf(newPane ?? split)).not.toContain("Old-side note.");
   });
 
   it("should anchor a range spanning context and added lines after its last line", () => {
@@ -455,14 +497,11 @@ describe("renderCodeDiff", () => {
       const renderedView = viewFrom({ element, view });
       const annotationParent = parentOfMatchingChild({
         element: renderedView,
-        matches: (candidate) => view === "unified"
-          ? candidate.properties["data-annotation-lines"] === "12-14"
-          : candidate.properties["data-annotation-row-lines"] === "12-14",
+        matches: (candidate) =>
+          candidate.properties["data-annotation-lines"] === "12-14",
       });
       const annotationIndex = annotationParent?.children.findIndex((child) =>
-        isElement(child) && (view === "unified"
-          ? child.properties["data-annotation-lines"] === "12-14"
-          : child.properties["data-annotation-row-lines"] === "12-14")
+        isElement(child) && child.properties["data-annotation-lines"] === "12-14"
       ) ?? -1;
       const precedingSegment = annotationParent?.children[annotationIndex - 1];
       expect(annotationIndex).toBeGreaterThan(-1);
@@ -474,6 +513,8 @@ describe("renderCodeDiff", () => {
         ? textOf(renderedAnnotation)
         : "").toContain("Lines 12-14");
     }
+    expect(JSON.stringify(element).match(/"data-annotation-anchor":""/gu))
+      .toHaveLength(6);
   });
 
   it("should preserve authored order when multiple Annotations share a line", () => {

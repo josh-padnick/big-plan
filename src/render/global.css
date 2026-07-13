@@ -37,7 +37,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --diff-remove-c: #9a493f;
   --diff-remove-bg: #f6e8e4;
   --diff-annotation-c: #5965a8;
-  --diff-annotation-bg: #f0f1f9;
+  --diff-annotation-bg: #e4e8f7;
   --diff-content-bg: #ffffff;
   --diff-hunk-bg: #f6f5f2;
   --diff-hunk-c: #8a857c;
@@ -65,7 +65,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
     --diff-remove-c: #df9184;
     --diff-remove-bg: #30211f;
     --diff-annotation-c: #aab4f0;
-    --diff-annotation-bg: #222538;
+    --diff-annotation-bg: #2a2f4e;
     --diff-content-bg: #1b1916;
     --diff-hunk-bg: #21201d;
     --diff-hunk-c: #8d887e;
@@ -97,7 +97,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --diff-remove-c: #df9184;
   --diff-remove-bg: #30211f;
   --diff-annotation-c: #aab4f0;
-  --diff-annotation-bg: #222538;
+  --diff-annotation-bg: #2a2f4e;
   --diff-content-bg: #1b1916;
   --diff-hunk-bg: #21201d;
   --diff-hunk-c: #8d887e;

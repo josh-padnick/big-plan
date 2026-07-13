@@ -75,8 +75,23 @@ index 23ad911..890ce42 100644
  };
 ```
 
+<Annotation lines="20" side="new">
+Can `enqueueOnce` return after claiming deduplication so the request does not wait for the queue publish?
+</Annotation>
+
+<Annotation lines="19-22" side="new">
+This range quietly turns the cache-age check into a stale-while-revalidate policy boundary. Please extract the 60- and 150-second thresholds into named constants so the rollout flag, dashboards, and worker contract can refer to the same terms.
+</Annotation>
+
+<Annotation lines="19" side="old">
+Keep this cutoff named; rollout dashboards still key on it.
+</Annotation>
+
 <Annotation lines="34-36" side="new">
-Should this counter use the `catalog_cache` prefix shared by the existing dashboard queries?
+Should this counter use the `catalog_cache` prefix shared by the existing dashboard queries? Before merging, please confirm that the fallback signal remains distinct from refresh failures; otherwise the rollout panel will combine request-path origin reads with background-worker errors and hide the failure mode we need to watch.
+
+- Preserve the route and region tags already emitted by cache metrics.
+- Add a dashboard query that isolates synchronous origin fallbacks.
 </Annotation>
 
 </CodeDiff>

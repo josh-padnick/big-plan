@@ -337,15 +337,7 @@ const renderedSplitAnnotation = (annotation: AnchoredAnnotation): Element => {
     ...ANNOTATION_CLASSES.split(" "),
     "code-diff-split-annotation",
   ];
-  return {
-    type: "element",
-    tagName: "div",
-    properties: {
-      className: ["code-diff-split-annotation-row"],
-      "data-annotation-row-lines": annotation.lines,
-    },
-    children: [card],
-  };
+  return card;
 };
 
 const annotationsForLine = ({
@@ -364,6 +356,23 @@ const lineNumberForSide = ({
   readonly line: DiffLine;
   readonly side: DiffSide;
 }): number | undefined => side === "old" ? line.oldLineNumber : line.newLineNumber;
+
+// Range membership, rather than the final card target, drives the visual
+// spine and wash through every covered source row.
+const annotationCoversLine = ({
+  annotation,
+  line,
+}: {
+  readonly annotation: AnchoredAnnotation;
+  readonly line: DiffLine;
+}): boolean => {
+  const lineNumber = lineNumberForSide({ line, side: annotation.side });
+  if (lineNumber === undefined) {
+    return false;
+  }
+  const value = BigInt(lineNumber);
+  return value >= annotation.startLine && value <= annotation.endLine;
+};
 
 const lineNumberCell = (value: number | undefined, side: "old" | "new"): Element => ({
   type: "element",
@@ -412,15 +421,20 @@ const lineContent = (line: DiffLine): Element => ({
 const unifiedLine = ({
   line,
   showLineNumbers,
+  annotations,
 }: {
   readonly line: DiffLine;
   readonly showLineNumbers: boolean;
+  readonly annotations: ReadonlyArray<AnchoredAnnotation>;
 }): Element => ({
   type: "element",
   tagName: "div",
   properties: {
     className: [...LINE_CLASSES.split(" "), "code-diff-unified-line"],
     "data-diff-line": line.kind,
+    ...(annotations.some((annotation) => annotationCoversLine({ annotation, line }))
+      ? { "data-annotation-anchor": "" }
+      : {}),
     ...(showLineNumbers ? { "data-line-numbers": "" } : {}),
   },
   children: [
@@ -455,7 +469,7 @@ const renderUnifiedHunk = ({
 }): ReadonlyArray<Element> => [
   ...(hunk.header === undefined ? [] : [hunkHeader(hunk.header, "unified")]),
   ...hunk.lines.flatMap((line) => [
-    unifiedLine({ line, showLineNumbers }),
+    unifiedLine({ line, showLineNumbers, annotations }),
     ...annotationsForLine({ line, annotations }).map(renderedAnnotation),
   ]),
 ];
@@ -464,16 +478,23 @@ const splitLine = ({
   line,
   side,
   showLineNumbers,
+  annotations,
 }: {
   readonly line: DiffLine | undefined;
   readonly side: "old" | "new";
   readonly showLineNumbers: boolean;
+  readonly annotations: ReadonlyArray<AnchoredAnnotation>;
 }): Element => ({
   type: "element",
   tagName: "div",
   properties: {
     className: [...LINE_CLASSES.split(" "), "code-diff-split-line"],
     "data-diff-line": line?.kind ?? "empty",
+    ...(line !== undefined && annotations.some((annotation) =>
+        annotation.side === side && annotationCoversLine({ annotation, line })
+      )
+      ? { "data-annotation-anchor": "" }
+      : {}),
     ...(showLineNumbers ? { "data-line-numbers": "" } : {}),
   },
   children: [
@@ -491,10 +512,12 @@ const splitCell = ({
   row,
   side,
   showLineNumbers,
+  annotations,
 }: {
   readonly row: SplitDiffRow;
   readonly side: "old" | "new";
   readonly showLineNumbers: boolean;
+  readonly annotations: ReadonlyArray<AnchoredAnnotation>;
 }): Element => ({
   type: "element",
   tagName: "div",
@@ -502,11 +525,17 @@ const splitCell = ({
     className: ["code-diff-pane", "min-w-0"],
     "data-diff-pane": side,
   },
-  children: [splitLine({
-    line: side === "old" ? row.left : row.right,
-    side,
-    showLineNumbers,
-  })],
+  children: [
+    splitLine({
+      line: side === "old" ? row.left : row.right,
+      side,
+      showLineNumbers,
+      annotations,
+    }),
+    ...annotationsForSplitRow({ row, annotations })
+      .filter((annotation) => annotation.side === side)
+      .map(renderedSplitAnnotation),
+  ],
 });
 
 const splitHunk = ({
@@ -544,11 +573,15 @@ const splitHunk = ({
             "grid-cols-[minmax(max-content,1fr)_minmax(max-content,1fr)]",
           ],
         },
-        children: rows.flatMap((row) => [
-          splitCell({ row, side: "old", showLineNumbers }),
-          splitCell({ row, side: "new", showLineNumbers }),
-          ...annotationsForSplitRow({ row, annotations }).map(renderedSplitAnnotation),
-        ]),
+        children: rows.map((row) => ({
+          type: "element",
+          tagName: "div",
+          properties: { className: ["code-diff-split-row"] },
+          children: [
+            splitCell({ row, side: "old", showLineNumbers, annotations }),
+            splitCell({ row, side: "new", showLineNumbers, annotations }),
+          ],
+        })),
       },
     ],
   }],
@@ -668,9 +701,8 @@ const diffStats = ({
 
 // Copy actions live behind one overflow menu instead of dedicated buttons,
 // keeping the header calm as actions accumulate.
-// Feedback appears in the dropdown's own footprint - the spot the reader
-// just clicked - so it never covers surrounding prose or shifts the buttons,
-// and it inverts the palette for contrast.
+// Feedback appears above the actions button so it never covers the diff or
+// shifts the controls, and it inverts the palette for contrast.
 const copyFeedbackChip = (): Element => ({
   type: "element",
   tagName: "span",
@@ -678,7 +710,7 @@ const copyFeedbackChip = (): Element => ({
     className: [
       "code-copy-message",
       "absolute",
-      "top-[calc(100%+0.25rem)]",
+      "bottom-[calc(100%+0.25rem)]",
       "right-0",
       "z-10",
       "rounded-[0.375rem]",
