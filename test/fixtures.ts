@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import type { Locator } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
 
 const execFileAsync = promisify(execFile);
@@ -73,3 +74,17 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
 });
 
 export { expect };
+
+/**
+ * Returns the locator's bounding box, failing the test when the element has
+ * none, so geometry assertions read as arithmetic instead of null handling.
+ */
+export const boxOf = async (
+  locator: Locator,
+): Promise<{ x: number; y: number; width: number; height: number }> => {
+  const box = await locator.boundingBox();
+  if (box === null) {
+    throw new Error(`expected a bounding box for ${String(locator)}`);
+  }
+  return box;
+};

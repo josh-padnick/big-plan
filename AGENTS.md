@@ -115,3 +115,5 @@ The unenforced conventions to hold by hand:
 - `global.css` owns design tokens, palettes, and page-level rules only; component-specific styles are colocated with the component and imported from `global.css`; authored markup prefers Tailwind utilities, and stylesheet rules are reserved for variants, state, pseudo-elements, and script-created elements.
 - Keep logic in pure modules and unit-test it there; reserve Playwright for critical user journeys.
 - Tests are focused and user-oriented, use "should ... when ..." descriptions, and cover degenerate and boundary cases.
+- Long browser journeys narrate as named `test.step` phases - short present-tense claims such as "the jump lands the heading clear of the sticky bar" - so a test reads top to bottom as a story and a failure names its phase.
+  Setup locators shared across phases are declared once before the first step, and shared assertion plumbing (such as `boxOf`) lives in `test/fixtures.ts` rather than being repeated inline.
