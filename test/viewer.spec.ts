@@ -275,6 +275,19 @@ test("should provide a compact sticky table of contents on mobile", async ({
   await expect(
     page.getByRole("heading", { level: 2, name: "Retry state machine" }),
   ).toBeInViewport();
+  // In viewport is not enough: the jump must also land the heading clear of
+  // the translucent sticky stack (branding bar plus this TOC), not under it.
+  const stackedTocBox = await toc.boundingBox();
+  const targetHeadingBox = await page
+    .getByRole("heading", { level: 2, name: "Retry state machine" })
+    .boundingBox();
+  expect(stackedTocBox).not.toBeNull();
+  expect(targetHeadingBox).not.toBeNull();
+  if (stackedTocBox !== null && targetHeadingBox !== null) {
+    expect(targetHeadingBox.y).toBeGreaterThanOrEqual(
+      stackedTocBox.y + stackedTocBox.height,
+    );
+  }
   await expect(retryStateLink).toHaveAttribute("aria-current", "true");
 
   const themeToggle = page.getByRole("button", {
