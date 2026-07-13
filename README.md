@@ -36,7 +36,8 @@ Both variants track the current section as the reader scrolls, and section links
 Fenced code blocks with a supported language identifier receive syntax highlighting; undeclared and unknown languages remain plain and readable.
 Every block code sample has a copy control, and the light/dark theme control follows the system preference until the reader chooses a theme, which is remembered locally.
 
-MDX plans may use the built-in `Callout` and `CodeDiff` typed blocks, but they cannot contain imports, exports, `{}` expressions, or non-string attribute values; bare boolean attributes are supported only where a block schema allows them.
+MDX plans may use the built-in flow-level `Callout` and `CodeDiff` typed blocks; unknown blocks and inline JSX are rejected.
+Plans cannot contain imports, exports, `{}` expressions, or non-string attribute values; bare boolean attributes are supported only where a block schema allows them.
 Unsupported MDX syntax and invalid block attributes fail the render with diagnostics that include `line:column` positions.
 GFM features including tables, task lists, footnotes, and autolinks remain available through the MDX pipeline.
 Four-space indented code blocks are not supported by MDX; use fenced code blocks instead.
@@ -68,6 +69,7 @@ Use `CodeDiff` with a required non-empty file path, optional bare `lineNumbers` 
 The header shows the full file path and, when `showStats` is set, added and removed line counts; the diff opens in a readable unified view even without JavaScript.
 With JavaScript enabled, readers can switch between unified and side-by-side views, preserve that preference across reloads, copy the file path or the fenced diff source (as parsed: LF line endings with a trailing newline) from the actions menu, or expand the diff into a full-screen dialog.
 Headerless `+`/`-` diffs are accepted when line numbers are omitted, and standard Git file preambles may appear before the first `@@` hunk.
+Inside a hunk, a blank line is accepted as empty context even when an editor has stripped its leading space.
 
 Because `<` and `{` begin MDX syntax, write them carefully in prose or place literal examples in code spans or fences.
 HTML comments and angle-bracket `<url>` autolinks are not supported in plan documents.

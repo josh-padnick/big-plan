@@ -1,6 +1,6 @@
 // Tests CodeDiff's attribute and child diagnostics plus its dual-view HAST
-// shape, header metadata, raw copy source, accessible line semantics, line
-// gutters, and decorator-safe element choices.
+// shape, header metadata, normalized fence copy source, accessible line
+// semantics, line gutters, and decorator-safe element choices.
 
 import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";

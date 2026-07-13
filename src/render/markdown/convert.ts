@@ -163,7 +163,7 @@ const collectElementIds = (
 /**
  * Compiles static-subset MDX into a structured review document plus its outline,
  * title, and element ids for collision-free shell anchors. The tree stays
- * structured so future typed-block and annotation transforms can run before
+ * structured so typed-block and future annotation transforms can run before
  * the final serialization step.
  */
 export const compileMarkdown = ({

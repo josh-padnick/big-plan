@@ -128,7 +128,7 @@ const updateExpandControl = ({
 };
 
 // Moves the block into a modal dialog rather than cloning it, so listeners
-// and the selected view survive; closing restores its original position.
+// and the selected view survive; closing restores its DOM and page-scroll positions.
 const openFullScreen = ({ block }: { readonly block: HTMLElement }): void => {
   const article = block.closest("article");
   const fileCaption = block.querySelector<HTMLElement>(".code-diff-file");
