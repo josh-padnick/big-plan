@@ -111,3 +111,5 @@ The unenforced conventions to hold by hand:
   They are committed so the codebase is scannable without running the generators; after changing a generator or its inputs, run `bun run gen` and commit the regenerated output alongside (CI fails on drift).
 - Keep logic in pure modules and unit-test it there; reserve Playwright for critical user journeys.
 - Tests are focused and user-oriented, use "should ... when ..." descriptions, and cover degenerate and boundary cases.
+- Long browser journeys narrate as named `test.step` phases - short present-tense claims such as "the jump lands the heading clear of the sticky bar" - so a test reads top to bottom as a story and a failure names its phase.
+  Setup locators shared across phases are declared once before the first step, and shared assertion plumbing (such as `boxOf`) lives in `test/fixtures.ts` rather than being repeated inline.
