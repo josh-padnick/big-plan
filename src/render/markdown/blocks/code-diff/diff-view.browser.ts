@@ -33,7 +33,8 @@ const applyDiffView = ({
   }
 };
 
-// Flashes transient action feedback in the header's message slot.
+// Flashes transient copy feedback in the floating chip beside the actions
+// menu and mirrors the result into that menu button's accessible label.
 const showDiffMessage = ({
   block,
   message,

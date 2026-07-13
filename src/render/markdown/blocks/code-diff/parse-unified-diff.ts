@@ -1,5 +1,6 @@
 // Owns the small unified-diff model used by CodeDiff, including numbered
-// hunk parsing and deterministic side-by-side row pairing.
+// hunk parsing, declared-count validation, and deterministic side-by-side
+// row pairing.
 
 export type DiffLineKind = "context" | "remove" | "add";
 
@@ -114,7 +115,7 @@ const parseContentLine = ({
   return {};
 };
 
-/** Parses the supported unified-diff subset without reconstructing its text. */
+/** Parses and validates the supported unified-diff subset without reconstructing it. */
 export const parseUnifiedDiff = ({
   source,
 }: {

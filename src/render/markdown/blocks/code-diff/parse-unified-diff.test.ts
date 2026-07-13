@@ -1,5 +1,5 @@
-// Tests CodeDiff's unified-diff parsing, counter boundaries, malformed input,
-// headerless behavior, and side-by-side run pairing.
+// Tests CodeDiff's unified-diff parsing, counter and declared-count validation,
+// malformed input, headerless behavior, and side-by-side run pairing.
 
 import { describe, expect, it } from "vitest";
 import { pairDiffLines, parseUnifiedDiff } from "./parse-unified-diff.js";
