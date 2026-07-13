@@ -36,7 +36,7 @@ Both variants track the current section as the reader scrolls, and section links
 Fenced code blocks with a supported language identifier receive syntax highlighting; undeclared and unknown languages remain plain and readable.
 Every block code sample has a copy control, and the light/dark theme control follows the system preference until the reader chooses a theme, which is remembered locally.
 
-MDX plans may use the built-in flow-level `Callout` and `CodeDiff` typed blocks; unknown blocks and inline JSX are rejected.
+MDX plans may use the built-in flow-level `Callout` and `CodeDiff` typed blocks plus scoped `Annotation` children; unknown blocks and inline JSX are rejected.
 Plans cannot contain imports, exports, or `{}` expressions.
 Block attribute names must be unique; spreads and expression-valued attributes are rejected, bare boolean attributes are supported only where a block schema allows them, and all other values must be static strings.
 Unsupported MDX syntax and invalid block attributes fail the render with diagnostics that include `line:column` positions.
@@ -59,14 +59,25 @@ Use `CodeDiff` with a required non-empty file path, optional bare `showLineNumbe
 <CodeDiff file="src/cache.ts" showLineNumbers showLineCounts>
 
 ```diff
-@@ -12 +12 @@
+@@ -12 +12,2 @@
 -const ttl = 30;
 +const ttl = 60;
++metrics.increment("ttl_change");
 ```
+
+<Annotation lines="13" side="new">
+Use the catalog metric prefix documented in `metrics.md`.
+</Annotation>
 
 </CodeDiff>
 ````
 
+Nest `Annotation` directly inside `CodeDiff` with a required `lines` string and an optional `side` of `old` or `new`, which defaults to `new`.
+The `lines` value is either one canonical positive integer (`N`) or a strictly ascending inclusive range (`N-M`); zero and leading zeros are invalid.
+Annotation anchors require an `@@` hunk header, and every line in the range must exist on the selected side.
+The annotation card renders after the range's final line in unified and side-by-side views.
+Multiple annotations may target one line or range and render in authored order.
+An `Annotation` anywhere other than a direct `CodeDiff` child is an unknown block.
 The header shows the full file path and, when `showLineCounts` is set, added and removed line counts; the diff opens in a readable unified view even without JavaScript.
 With JavaScript enabled, readers can switch between unified and side-by-side views, preserve that preference across reloads, copy the file path or the fenced diff source (as parsed: LF line endings with a trailing newline) from the actions menu, or expand the diff into a full-screen dialog.
 Headerless `+`/`-` diffs are accepted when line numbers are omitted, and standard Git file preambles may appear before the first `@@` hunk.

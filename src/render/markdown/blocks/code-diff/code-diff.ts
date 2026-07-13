@@ -1,15 +1,17 @@
-// Validates CodeDiff's attributes and structural fence contract, then renders
-// complete unified and split HAST views without exposing a code decorator target.
+// Validates CodeDiff's fence and scoped Annotation contract, then renders
+// complete unified and split HAST views while consuming the source diff before
+// decoration.
 
 import type { Element, ElementContent, Root, Text } from "hast";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import { COPY_ICON } from "../../code-block/code-block-icons.js";
-import type { BlockRenderer } from "../registry.js";
+import type { BlockRenderer, ScopedChild } from "../registry.js";
 import {
   COLUMNS_ICON,
   ELLIPSIS_ICON,
   FILE_ICON,
   MAXIMIZE_ICON,
+  MESSAGE_SQUARE_ICON,
   MINIMIZE_ICON,
   ROWS_ICON,
 } from "./code-diff-icons.js";
@@ -25,6 +27,20 @@ import type {
 } from "./parse-unified-diff.js";
 
 type NodePosition = Root["position"];
+type DiffSide = "old" | "new";
+
+type Annotation = {
+  readonly lines: string;
+  readonly startLine: bigint;
+  readonly endLine: bigint;
+  readonly side: DiffSide;
+  readonly children: ReadonlyArray<ElementContent>;
+  readonly position: NodePosition;
+};
+
+type AnchoredAnnotation = Annotation & {
+  readonly target: DiffLine;
+};
 
 const BUTTON_CLASSES =
   "code-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
@@ -43,6 +59,8 @@ const MENU_ITEM_CLASSES =
 const HUNK_HEADER_CLASSES =
   "code-diff-hunk-header min-w-max whitespace-pre px-[0.65rem] py-[0.4rem] text-xs";
 const LINE_CLASSES = "code-diff-line grid min-w-max whitespace-pre";
+const ANNOTATION_CLASSES =
+  "code-diff-annotation flex w-full min-w-0 gap-2 border-l-4 px-3 py-2 font-sans text-sm leading-normal whitespace-normal [&>svg]:size-4 [&>svg]:shrink-0";
 
 const isElement = (node: ElementContent): node is Element =>
   node.type === "element";
@@ -59,16 +77,15 @@ const languageClasses = (element: Element): ReadonlyArray<string> => {
 };
 
 // Enforces the fence shape before syntax highlighting can split its raw text.
-const diffSource = ({
+const diffFenceSource = ({
   children,
 }: {
   readonly children: ReadonlyArray<ElementContent>;
 }): { readonly source?: string; readonly codePosition?: NodePosition } => {
-  const meaningful = children.filter((child) => !isWhitespace(child));
-  if (meaningful.length !== 1) {
+  if (children.length !== 1) {
     return {};
   }
-  const pre = meaningful[0];
+  const pre = children[0];
   if (pre === undefined || !isElement(pre) || pre.tagName !== "pre") {
     return {};
   }
@@ -92,7 +109,155 @@ const diffSource = ({
   return { source: text.value, codePosition: code.position };
 };
 
+type LineRange = {
+  readonly start: bigint;
+  readonly end: bigint;
+};
+
+// Accepts canonical positive integers and strictly ascending inclusive ranges.
+const parseLineRange = (value: string): LineRange | undefined => {
+  const match = /^(?<start>[1-9]\d*)(?:-(?<end>[1-9]\d*))?$/u.exec(value);
+  const startValue = match?.groups?.["start"];
+  const endValue = match?.groups?.["end"];
+  if (startValue === undefined) {
+    return undefined;
+  }
+  const start = BigInt(startValue);
+  const end = endValue === undefined ? start : BigInt(endValue);
+  if (endValue !== undefined && end <= start) {
+    return undefined;
+  }
+  return { start, end };
+};
+
+// CodeDiff owns Annotation's attribute vocabulary and values because the
+// scoped name has no meaning outside this parent contract.
+const annotationFromScopedChild = ({
+  child,
+  diagnostics,
+}: {
+  readonly child: ScopedChild;
+  readonly diagnostics: Parameters<BlockRenderer>[0]["diagnostics"];
+}): Annotation | undefined => {
+  const linesValue = child.attributes["lines"];
+  const range = typeof linesValue === "string"
+    ? parseLineRange(linesValue)
+    : undefined;
+  if (range === undefined) {
+    diagnostics.add({
+      message: linesValue === undefined
+        ? 'Missing required attribute "lines"; expected a positive-integer string or ascending range'
+        : 'Attribute "lines" must be a positive-integer string or ascending range',
+      position: child.position,
+    });
+  }
+
+  const sideValue = child.attributes["side"];
+  const validSide = sideValue === undefined || sideValue === "old" || sideValue === "new";
+  if (!validSide) {
+    diagnostics.add({
+      message: 'Invalid value for attribute "side"; expected one of: old, new',
+      position: child.position,
+    });
+  }
+
+  for (const name of Object.keys(child.attributes)) {
+    if (name !== "lines" && name !== "side") {
+      diagnostics.add({
+        message: `Unknown attribute "${name}" on Annotation`,
+        position: child.position,
+      });
+    }
+  }
+
+  if (range === undefined || !validSide || typeof linesValue !== "string") {
+    return undefined;
+  }
+  return {
+    lines: linesValue,
+    startLine: range.start,
+    endLine: range.end,
+    side: sideValue === "old" ? "old" : "new",
+    children: child.children,
+    position: child.position,
+  };
+};
+
 const text = (value: string): Text => ({ type: "text", value });
+
+const annotationLineLabel = (annotation: Annotation): string =>
+  annotation.startLine === annotation.endLine
+    ? `Line ${annotation.lines}`
+    : `Lines ${annotation.lines}`;
+
+// Each static view gets its own annotation body so downstream Markdown
+// transforms can decorate nested content without sharing mutations.
+const renderedAnnotation = (annotation: AnchoredAnnotation): Element => ({
+  type: "element",
+  tagName: "aside",
+  properties: {
+    className: ANNOTATION_CLASSES.split(" "),
+    role: "note",
+    ariaLabel: annotationLineLabel(annotation),
+    "data-annotation": "",
+    "data-annotation-lines": annotation.lines,
+    "data-annotation-side": annotation.side,
+  },
+  children: [
+    renderLucideIcon({
+      icon: MESSAGE_SQUARE_ICON,
+      name: "message-square",
+      hidden: false,
+    }),
+    {
+      type: "element",
+      tagName: "div",
+      properties: { className: ["code-diff-annotation-content", "min-w-0"] },
+      children: [
+        {
+          type: "element",
+          tagName: "span",
+          properties: {
+            className: [
+              "code-diff-annotation-badge",
+              "mb-1",
+              "inline-flex",
+              "rounded-sm",
+              "px-1.5",
+              "py-0.5",
+              "text-xs",
+              "font-semibold",
+            ],
+          },
+          children: [text(annotationLineLabel(annotation))],
+        },
+        {
+          type: "element",
+          tagName: "div",
+          properties: { className: ["code-diff-annotation-body"] },
+          children: [...structuredClone(annotation.children)],
+        },
+      ],
+    },
+  ],
+});
+
+const annotationsForLine = ({
+  line,
+  annotations,
+}: {
+  readonly line: DiffLine;
+  readonly annotations: ReadonlyArray<AnchoredAnnotation>;
+}): ReadonlyArray<AnchoredAnnotation> =>
+  annotations.filter((annotation) => annotation.target === line);
+
+const lineNumberForSide = ({
+  line,
+  side,
+}: {
+  readonly line: DiffLine;
+  readonly side: DiffSide;
+}): number | undefined => side === "old" ? line.oldLineNumber : line.newLineNumber;
 
 const lineNumberCell = (value: number | undefined, side: "old" | "new"): Element => ({
   type: "element",
@@ -175,12 +340,17 @@ const hunkHeader = (value: string, view: "unified" | "split"): Element => ({
 const renderUnifiedHunk = ({
   hunk,
   showLineNumbers,
+  annotations,
 }: {
   readonly hunk: DiffHunk;
   readonly showLineNumbers: boolean;
+  readonly annotations: ReadonlyArray<AnchoredAnnotation>;
 }): ReadonlyArray<Element> => [
   ...(hunk.header === undefined ? [] : [hunkHeader(hunk.header, "unified")]),
-  ...hunk.lines.map((line) => unifiedLine({ line, showLineNumbers })),
+  ...hunk.lines.flatMap((line) => [
+    unifiedLine({ line, showLineNumbers }),
+    ...annotationsForLine({ line, annotations }).map(renderedAnnotation),
+  ]),
 ];
 
 const splitLine = ({
@@ -231,43 +401,80 @@ const splitPane = ({
   })),
 });
 
+const splitGrid = ({
+  rows,
+  showLineNumbers,
+}: {
+  readonly rows: ReadonlyArray<SplitDiffRow>;
+  readonly showLineNumbers: boolean;
+}): Element => ({
+  type: "element",
+  tagName: "div",
+  properties: {
+    className: [
+      "code-diff-split-hunk",
+      "grid",
+      "min-w-0",
+      "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]",
+    ],
+  },
+  children: [
+    splitPane({ rows, side: "old", showLineNumbers }),
+    splitPane({ rows, side: "new", showLineNumbers }),
+  ],
+});
+
+const annotationsForSplitRow = ({
+  row,
+  annotations,
+}: {
+  readonly row: SplitDiffRow;
+  readonly annotations: ReadonlyArray<AnchoredAnnotation>;
+}): ReadonlyArray<AnchoredAnnotation> =>
+  annotations.filter((annotation) =>
+    annotation.target === row.left || annotation.target === row.right
+  );
+
 const renderSplitHunk = ({
   hunk,
   showLineNumbers,
+  annotations,
 }: {
   readonly hunk: DiffHunk;
   readonly showLineNumbers: boolean;
+  readonly annotations: ReadonlyArray<AnchoredAnnotation>;
 }): ReadonlyArray<Element> => {
   const rows = pairDiffLines({ lines: hunk.lines });
-  return [
+  const children: Array<Element> = [
     ...(hunk.header === undefined ? [] : [hunkHeader(hunk.header, "split")]),
-    {
-      type: "element",
-      tagName: "div",
-      properties: {
-        className: [
-          "code-diff-split-hunk",
-          "grid",
-          "min-w-0",
-          "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]",
-        ],
-      },
-      children: [
-        splitPane({ rows, side: "old", showLineNumbers }),
-        splitPane({ rows, side: "new", showLineNumbers }),
-      ],
-    },
   ];
+  let segment: Array<SplitDiffRow> = [];
+  for (const row of rows) {
+    segment.push(row);
+    const rowAnnotations = annotationsForSplitRow({ row, annotations });
+    if (rowAnnotations.length === 0) {
+      continue;
+    }
+    children.push(splitGrid({ rows: segment, showLineNumbers }));
+    children.push(...rowAnnotations.map(renderedAnnotation));
+    segment = [];
+  }
+  if (segment.length > 0 || rows.length === 0) {
+    children.push(splitGrid({ rows: segment, showLineNumbers }));
+  }
+  return children;
 };
 
 const renderView = ({
   diff,
   view,
   showLineNumbers,
+  annotations,
 }: {
   readonly diff: UnifiedDiff;
   readonly view: "unified" | "split";
   readonly showLineNumbers: boolean;
+  readonly annotations: ReadonlyArray<AnchoredAnnotation>;
 }): Element => ({
   type: "element",
   tagName: "div",
@@ -276,8 +483,8 @@ const renderView = ({
     "data-diff-content": view,
   },
   children: diff.hunks.flatMap((hunk) => view === "unified"
-    ? renderUnifiedHunk({ hunk, showLineNumbers })
-    : renderSplitHunk({ hunk, showLineNumbers })),
+    ? renderUnifiedHunk({ hunk, showLineNumbers, annotations })
+    : renderSplitHunk({ hunk, showLineNumbers, annotations })),
 });
 
 const menuItemButton = ({
@@ -519,6 +726,7 @@ const emptyDiff: UnifiedDiff = {
 export const renderCodeDiff: BlockRenderer = ({
   attributes,
   children,
+  scopedChildren,
   position,
   diagnostics,
 }): Element => {
@@ -553,7 +761,8 @@ export const renderCodeDiff: BlockRenderer = ({
     }
   }
 
-  const extracted = diffSource({ children });
+  const meaningfulChildren = children.filter((child) => !isWhitespace(child));
+  const extracted = diffFenceSource({ children: meaningfulChildren });
   if (extracted.source === undefined) {
     diagnostics.add({
       message: "CodeDiff expects exactly one fenced code block with language diff and no other content",
@@ -584,13 +793,52 @@ export const renderCodeDiff: BlockRenderer = ({
     });
   }
 
+  const allLines = parsed.diff.hunks.flatMap((hunk) => hunk.lines);
+  const annotations = scopedChildren
+    .map((child) => annotationFromScopedChild({ child, diagnostics }))
+    .filter((annotation): annotation is Annotation => annotation !== undefined);
+  const anchoredAnnotations: Array<AnchoredAnnotation> = [];
+  if (extracted.source !== undefined) {
+    for (const annotation of annotations) {
+      if (!parsed.diff.hasHunkHeaders) {
+        diagnostics.add({
+          message: "CodeDiff cannot anchor an Annotation without an @@ hunk header",
+          position: annotation.position,
+        });
+        continue;
+      }
+      const sideLines = new Map<string, DiffLine>();
+      for (const line of allLines) {
+        const lineNumber = lineNumberForSide({ line, side: annotation.side });
+        if (lineNumber !== undefined) {
+          sideLines.set(String(lineNumber), line);
+        }
+      }
+      const existingLines = [...sideLines.keys()].filter((line) => {
+        const lineNumber = BigInt(line);
+        return lineNumber >= annotation.startLine && lineNumber <= annotation.endLine;
+      });
+      const expectedLineCount = annotation.endLine - annotation.startLine + 1n;
+      const target = sideLines.get(String(annotation.endLine));
+      if (BigInt(existingLines.length) !== expectedLineCount || target === undefined) {
+        const lineWord = annotation.startLine === annotation.endLine ? "line" : "lines";
+        const verb = annotation.startLine === annotation.endLine ? "does" : "do";
+        diagnostics.add({
+          message: `Annotation ${lineWord} ${annotation.lines} ${verb} not exist on the ${annotation.side} side of the diff`,
+          position: annotation.position,
+        });
+        continue;
+      }
+      anchoredAnnotations.push({ ...annotation, target });
+    }
+  }
+
   const filePath = typeof fileValue === "string" ? fileValue : "";
   const lastSlashIndex = filePath.lastIndexOf("/");
   const fileDir =
     lastSlashIndex === -1 ? "" : filePath.slice(0, lastSlashIndex + 1);
   const fileName =
     lastSlashIndex === -1 ? filePath : filePath.slice(lastSlashIndex + 1);
-  const allLines = parsed.diff.hunks.flatMap((hunk) => hunk.lines);
   const addedCount = allLines.filter((line) => line.kind === "add").length;
   const removedCount = allLines.filter((line) => line.kind === "remove").length;
 
@@ -678,8 +926,18 @@ export const renderCodeDiff: BlockRenderer = ({
           },
         ],
       },
-      renderView({ diff: parsed.diff, view: "unified", showLineNumbers }),
-      renderView({ diff: parsed.diff, view: "split", showLineNumbers }),
+      renderView({
+        diff: parsed.diff,
+        view: "unified",
+        showLineNumbers,
+        annotations: anchoredAnnotations,
+      }),
+      renderView({
+        diff: parsed.diff,
+        view: "split",
+        showLineNumbers,
+        annotations: anchoredAnnotations,
+      }),
       {
         type: "element",
         tagName: "textarea",

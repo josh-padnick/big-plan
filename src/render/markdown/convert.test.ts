@@ -283,7 +283,7 @@ describe("compileMarkdown Callout blocks", () => {
 describe("compileMarkdown CodeDiff blocks", () => {
   it("should render both views without highlighting or decorating the consumed fence", () => {
     const bodyHtml = compileAndSerialize(
-      '<CodeDiff file="src/retry.ts" showLineNumbers showLineCounts>\n```diff\n@@ -1 +1,2 @@\n-old\n+new\n+audit\n```\n</CodeDiff>\n',
+      '<CodeDiff file="src/retry.ts" showLineNumbers showLineCounts>\n```diff\n@@ -1 +1,2 @@\n-old\n+new\n+audit\n```\n\n<Annotation lines="1-2">\nUse the `retry` metric prefix.\n</Annotation>\n\n</CodeDiff>\n',
     );
     expect(bodyHtml).toContain('data-code-diff="" data-diff-view="unified"');
     expect(bodyHtml).toContain('data-diff-content="unified"');
@@ -296,8 +296,23 @@ describe("compileMarkdown CodeDiff blocks", () => {
     expect(bodyHtml).toContain('<span class="code-diff-stat-add" aria-hidden="true">+2</span>');
     expect(bodyHtml).toContain('<span class="code-diff-stat-remove" aria-hidden="true">-1</span>');
     expect(bodyHtml).toContain('<textarea hidden readonly data-diff-source="">');
+    expect(bodyHtml.match(/role="note"/gu)).toHaveLength(2);
+    expect(bodyHtml).toContain('aria-label="Lines 1-2"');
+    expect(bodyHtml).toContain('data-annotation-lines="1-2"');
+    expect(bodyHtml).toContain('data-lucide="message-square"');
+    expect(bodyHtml).toContain("Use the <code>retry</code> metric prefix.");
     expect(bodyHtml).not.toContain("hljs");
     expect(bodyHtml).not.toContain(CODE_BLOCK_SELECTOR);
+  });
+
+  it("should diagnose a top-level Annotation as an unknown block", () => {
+    expect(diagnosticsFor(
+      '<Annotation lines="13">\nReview this line.\n</Annotation>\n',
+    )).toEqual([{
+      line: 1,
+      column: 1,
+      message: 'Unknown block "Annotation"',
+    }]);
   });
 });
 

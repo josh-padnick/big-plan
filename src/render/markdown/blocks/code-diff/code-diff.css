@@ -1,5 +1,5 @@
-/* CodeDiff palette, state, pseudo-element, and script-created dialog styles,
-   colocated with the component that owns the stable selector contracts. */
+/* CodeDiff line, annotation, state, pseudo-element, and script-created dialog
+   styles, colocated with the component that owns the stable selectors. */
 
 /* A modal diff owns the screen: the document behind it must not scroll. */
 html:has(.code-diff-dialog[open]) {
@@ -128,6 +128,21 @@ html:has(.code-diff-dialog[open]) {
   article .code-diff-line-number {
     border-right: 1px solid var(--color-edge);
     color: var(--color-muted);
+  }
+  article .code-diff-annotation {
+    border-left-color: var(--diff-annotation-c);
+    background: var(--diff-annotation-bg);
+  }
+  article .code-diff-annotation > svg {
+    margin-top: 0.125rem;
+    color: var(--diff-annotation-c);
+  }
+  article .code-diff-annotation-badge {
+    background: color-mix(in srgb, var(--diff-annotation-c) 14%, transparent);
+    color: var(--diff-annotation-c);
+  }
+  article .code-diff-annotation-body > :last-child {
+    margin-bottom: 0;
   }
   article .code-diff-line-content::before {
     display: inline-block;

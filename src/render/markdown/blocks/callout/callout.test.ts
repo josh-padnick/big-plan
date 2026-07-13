@@ -22,6 +22,7 @@ const render = ({
   const element = renderCallout({
     attributes,
     children,
+    scopedChildren: [],
     position: POSITION,
     diagnostics,
   });

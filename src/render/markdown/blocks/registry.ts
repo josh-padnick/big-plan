@@ -1,5 +1,6 @@
-// Owns the typed-block registry and the first rehype transform after MDX is
-// converted to HAST: validation, dispatch, and removal of every MDX node.
+// Owns typed-block registration and the first post-MDX rehype transform:
+// centralized form validation, scoped child collection, depth-first global
+// dispatch, and removal of every MDX node.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 import { renderCallout } from "./callout/callout.js";
@@ -14,16 +15,36 @@ type NodePosition = Root["position"];
 
 export type BlockAttributeValue = string | boolean;
 
+export type ScopedChild = {
+  readonly name: string;
+  readonly attributes: Readonly<Record<string, BlockAttributeValue>>;
+  readonly children: ReadonlyArray<ElementContent>;
+  readonly position: NodePosition;
+};
+
 export type BlockRenderer = (input: {
   readonly attributes: Readonly<Record<string, BlockAttributeValue>>;
   readonly children: ReadonlyArray<ElementContent>;
+  readonly scopedChildren: ReadonlyArray<ScopedChild>;
   readonly position: NodePosition;
   readonly diagnostics: DiagnosticCollector;
 }) => Element;
 
-export const BLOCK_REGISTRY: Readonly<Record<string, BlockRenderer>> = {
-  Callout: renderCallout,
-  CodeDiff: renderCodeDiff,
+export type ScopedChildDefinition = {
+  readonly kind: "scoped-child";
+};
+
+export type BlockDefinition = {
+  readonly render: BlockRenderer;
+  readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
+};
+
+export const BLOCK_REGISTRY: Readonly<Record<string, BlockDefinition>> = {
+  Callout: { render: renderCallout },
+  CodeDiff: {
+    render: renderCodeDiff,
+    scopedChildren: { Annotation: { kind: "scoped-child" } },
+  },
 };
 
 const isMdxNodeType = (type: string): boolean => type.startsWith("mdx");
@@ -83,8 +104,24 @@ const normalizeAttributes = ({
   return Object.fromEntries(attributes);
 };
 
-// Reports an unknown name, validates attributes, then dispatches registered
-// blocks with already-processed HAST children.
+const definitionFor = (name: string | null): BlockDefinition | undefined =>
+  name !== null && Object.hasOwn(BLOCK_REGISTRY, name)
+    ? BLOCK_REGISTRY[name]
+    : undefined;
+
+const declaresScopedChild = ({
+  definitions,
+  name,
+}: {
+  readonly definitions: BlockDefinition["scopedChildren"];
+  readonly name: string | null;
+}): boolean =>
+  name !== null && definitions !== undefined && Object.hasOwn(definitions, name);
+
+type ParentNode = Root | Element | MdxJsxFlowElement;
+
+// Reports an unknown name, validates attributes, recursively prepares direct
+// scoped children, then dispatches a registered global block.
 const renderFlowElement = ({
   node,
   diagnostics,
@@ -93,37 +130,42 @@ const renderFlowElement = ({
   readonly diagnostics: DiagnosticCollector;
 }): Element | undefined => {
   const name = node.name;
-  const renderer = name !== null && Object.hasOwn(BLOCK_REGISTRY, name)
-    ? BLOCK_REGISTRY[name]
-    : undefined;
-  if (renderer === undefined) {
+  const definition = definitionFor(name);
+  if (definition === undefined) {
     diagnostics.add({
       message: `Unknown block "${name ?? "<fragment>"}"`,
       position: node.position,
     });
   }
   const attributes = normalizeAttributes({ node, diagnostics });
-  if (renderer === undefined) {
+  const scopedChildren = renderChildren({
+    parent: node,
+    scopedDefinitions: definition?.scopedChildren,
+    diagnostics,
+  });
+  if (definition === undefined) {
     return undefined;
   }
-  return renderer({
+  return definition.render({
     attributes,
     children: node.children,
+    scopedChildren,
     position: node.position,
     diagnostics,
   });
 };
 
-type ParentNode = Root | Element | MdxJsxFlowElement;
-
-/** Rewrites or removes MDX children recursively while retaining HAST order. */
+/** Rewrites MDX children and returns direct scoped children in authored order. */
 const renderChildren = ({
   parent,
+  scopedDefinitions,
   diagnostics,
 }: {
   readonly parent: ParentNode;
+  readonly scopedDefinitions?: BlockDefinition["scopedChildren"];
   readonly diagnostics: DiagnosticCollector;
-}): void => {
+}): ReadonlyArray<ScopedChild> => {
+  const scopedChildren: Array<ScopedChild> = [];
   let index = 0;
   while (index < parent.children.length) {
     const child = parent.children[index];
@@ -131,7 +173,23 @@ const renderChildren = ({
       index += 1;
       continue;
     }
-    if (child.type === "element" || child.type === "mdxJsxFlowElement") {
+    const childName = child.type === "mdxJsxFlowElement" ? child.name : null;
+    if (
+      child.type === "mdxJsxFlowElement" &&
+      childName !== null &&
+      declaresScopedChild({ definitions: scopedDefinitions, name: childName })
+    ) {
+      renderChildren({ parent: child, diagnostics });
+      scopedChildren.push({
+        name: childName,
+        attributes: normalizeAttributes({ node: child, diagnostics }),
+        children: child.children,
+        position: child.position,
+      });
+      parent.children.splice(index, 1);
+      continue;
+    }
+    if (child.type === "element") {
       renderChildren({ parent: child, diagnostics });
     }
     if (child.type === "mdxJsxFlowElement") {
@@ -150,9 +208,10 @@ const renderChildren = ({
     }
     index += 1;
   }
+  return scopedChildren;
 };
 
-/** Finds an impossible post-transform MDX survivor as a defensive invariant. */
+/** Reports impossible post-transform MDX survivors. */
 const reportSurvivors = ({
   parent,
   diagnostics,

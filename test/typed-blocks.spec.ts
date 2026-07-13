@@ -1,6 +1,6 @@
-// Browser tests of the typed blocks: callout variants and the CodeDiff
-// views, actions menu, clipboard behavior, and full-screen dialog, plus the
-// no-JavaScript fallback. Render-health failures are enforced by fixtures.
+// Browser tests of the typed blocks: callout variants and the CodeDiff views,
+// line annotations, actions menu, clipboard behavior, and full-screen dialog,
+// plus the no-JavaScript fallback. Render-health failures are enforced by fixtures.
 
 import { expect, test } from "./fixtures";
 
@@ -79,6 +79,32 @@ test("should remember the selected diff view when the page reloads", async ({
     "aria-pressed",
     "true",
   );
+});
+
+test("should keep a range Annotation visible when switching diff views", async ({
+  page,
+  mdxBlocksViewerUrl,
+}) => {
+  await page.goto(mdxBlocksViewerUrl);
+
+  const diff = page.locator("[data-code-diff]").filter({
+    hasText: "src/catalog/read-through-cache.ts",
+  });
+  const unified = diff.locator('[data-diff-content="unified"]');
+  const split = diff.locator('[data-diff-content="split"]');
+  const annotationText = "Should this counter use the catalog_cache prefix";
+  const unifiedAnnotation = unified.getByRole("note", { name: "Lines 34-36" });
+  const splitAnnotation = split.getByRole("note", { name: "Lines 34-36" });
+
+  await expect(unifiedAnnotation).toBeVisible();
+  await expect(unifiedAnnotation).toContainText(annotationText);
+  await expect(splitAnnotation).toBeHidden();
+
+  await diff.getByRole("button", { name: "Side-by-side view" }).click();
+
+  await expect(unifiedAnnotation).toBeHidden();
+  await expect(splitAnnotation).toBeVisible();
+  await expect(splitAnnotation).toContainText(annotationText);
 });
 
 test("should expand a diff to full screen and restore it when dismissed", async ({
@@ -305,6 +331,13 @@ test("should preserve typed-block content without controls when JavaScript is di
   await expect(diffs).toHaveCount(2);
   await expect(diffs.first().locator('[data-diff-content="unified"]')).toBeVisible();
   await expect(diffs.first().locator('[data-diff-content="split"]')).toBeHidden();
+  const annotation = diffs.first()
+    .locator('[data-diff-content="unified"]')
+    .getByRole("note", { name: "Lines 34-36" });
+  await expect(annotation).toBeVisible();
+  await expect(annotation).toContainText(
+    "Should this counter use the catalog_cache prefix",
+  );
   const controls = page.locator(
     "[data-diff-toggle-group], [data-diff-menu-button], [data-diff-expand]",
   );
