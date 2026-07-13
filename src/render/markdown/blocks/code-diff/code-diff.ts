@@ -668,10 +668,9 @@ const diffStats = ({
 
 // Copy actions live behind one overflow menu instead of dedicated buttons,
 // keeping the header calm as actions accumulate.
-// Copy feedback floats as a chip above the control row, anchored beside the
-// menu that owns the copy actions, so appearing never shifts the buttons.
 // Feedback appears in the dropdown's own footprint - the spot the reader
-// just clicked - inside the block, and inverts the palette for contrast.
+// just clicked - so it never covers surrounding prose or shifts the buttons,
+// and it inverts the palette for contrast.
 const copyFeedbackChip = (): Element => ({
   type: "element",
   tagName: "span",

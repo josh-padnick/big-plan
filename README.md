@@ -53,7 +53,7 @@ Enable the worker before stale reads.
 </Callout>
 ```
 
-Use `CodeDiff` with a required non-empty file path, optional bare `showLineNumbers` and `showLineCounts` attributes, and exactly one fenced `diff` child; line numbers require `@@` hunk headers:
+Use `CodeDiff` with a required non-empty file path, optional bare `showLineNumbers` and `showLineCounts` attributes, and exactly one fenced `diff` child besides any annotations; line numbers require `@@` hunk headers:
 
 ````mdx
 <CodeDiff file="src/cache.ts" showLineNumbers showLineCounts>
@@ -77,6 +77,7 @@ The `lines` value is either one canonical positive integer (`N`) or a strictly a
 Annotation anchors require an `@@` hunk header, and every line in the range must exist on the selected side.
 The annotation card renders after the range's final line in unified and side-by-side views.
 Multiple annotations may target one line or range and render in authored order.
+Annotation bodies support ordinary rich Markdown such as lists and fenced code, but cannot contain headings, footnote references or definitions, or typed blocks.
 An `Annotation` anywhere other than a direct `CodeDiff` child is an unknown block.
 The header shows the full file path and, when `showLineCounts` is set, added and removed line counts; the diff opens in a readable unified view even without JavaScript.
 With JavaScript enabled, readers can switch between unified and side-by-side views, preserve that preference across reloads, copy the file path or the fenced diff source (as parsed: LF line endings with a trailing newline) from the actions menu, or expand the diff into a full-screen dialog.

@@ -17,8 +17,8 @@ import { SCROLL_SPY_JS } from "./scroll-spy.generated.js";
 import { THEME_TOGGLE_JS } from "./theme-toggle.generated.js";
 
 // The shell's own navigation contract: plain text in, so the shell owes
-// nothing to whatever produced the document. Callers map their outline
-// (markdown sections today, typed-plan sections later) into this shape.
+// nothing to whatever produced the document. Callers map their outline into
+// this shape.
 export type NavEntry = {
   readonly id: string;
   readonly label: string;

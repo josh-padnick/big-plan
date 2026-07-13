@@ -54,8 +54,8 @@ const applyDiffView = ({
   }
 };
 
-// Flashes transient copy feedback in the floating chip beside the actions
-// menu and mirrors the result into that menu button's accessible label.
+// Flashes transient copy feedback below the actions button in the menu's
+// footprint and mirrors the result into that button's accessible label.
 const showDiffMessage = ({
   block,
   message,
