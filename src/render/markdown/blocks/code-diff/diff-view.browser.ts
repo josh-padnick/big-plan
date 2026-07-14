@@ -35,9 +35,87 @@ const ownedCodeDiffElement = <ElementType extends Element>({
 }): ElementType | null =>
   ownedCodeDiffElements<ElementType>({ block, selector })[0] ?? null;
 
-// Adds a disclosure only when the full body is taller than approximately
-// three lines. Hidden static views wait until selected so layout measurement
-// never mistakes display:none for short content.
+// Finds a body's disclosure button when one is currently attached.
+const annotationToggleFor = (body: HTMLElement): HTMLButtonElement | null => {
+  const sibling = body.nextElementSibling;
+  return sibling instanceof HTMLButtonElement &&
+      sibling.classList.contains("code-diff-annotation-toggle")
+    ? sibling
+    : null;
+};
+
+// Adds or removes a body's disclosure to match its measured overflow at
+// roughly three lines. Re-run on size changes, so viewport, zoom, and font
+// shifts keep the decision honest; a reader's expanded choice survives.
+const evaluateAnnotationBody = (body: HTMLElement): void => {
+  if (body.getClientRects().length === 0) {
+    return;
+  }
+  const lineHeight = Number.parseFloat(getComputedStyle(body).lineHeight);
+  if (!Number.isFinite(lineHeight)) {
+    return;
+  }
+  const needsToggle =
+    body.scrollHeight > lineHeight * ANNOTATION_CLAMP_LINES + 1;
+  const existing = annotationToggleFor(body);
+  if (!needsToggle) {
+    if (existing !== null) {
+      existing.remove();
+      body.classList.remove("code-diff-annotation-body-clamped");
+      delete body.dataset.annotationExpanded;
+    }
+    return;
+  }
+  if (existing !== null) {
+    return;
+  }
+
+  let bodyId = body.id;
+  if (bodyId === "") {
+    do {
+      bodyId = `code-diff-annotation-body-${nextAnnotationBodyId}`;
+      nextAnnotationBodyId += 1;
+    } while (document.getElementById(bodyId) !== null);
+    body.id = bodyId;
+  }
+  const expanded = body.dataset.annotationExpanded !== undefined;
+  body.classList.toggle("code-diff-annotation-body-clamped", !expanded);
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "code-diff-annotation-toggle";
+  button.textContent = expanded ? "View less" : "View more…";
+  button.setAttribute("aria-controls", bodyId);
+  button.setAttribute("aria-expanded", expanded ? "true" : "false");
+  button.addEventListener("click", () => {
+    const wasExpanded = button.getAttribute("aria-expanded") === "true";
+    if (wasExpanded) {
+      delete body.dataset.annotationExpanded;
+    } else {
+      body.dataset.annotationExpanded = "";
+    }
+    button.setAttribute("aria-expanded", wasExpanded ? "false" : "true");
+    button.textContent = wasExpanded ? "View more…" : "View less";
+    body.classList.toggle("code-diff-annotation-body-clamped", wasExpanded);
+  });
+  body.after(button);
+};
+
+// One observer re-evaluates bodies as their boxes change; older engines
+// without ResizeObserver keep the load-time measurement.
+const annotationResizeObserver = typeof ResizeObserver === "undefined"
+  ? undefined
+  : new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target instanceof HTMLElement) {
+          evaluateAnnotationBody(entry.target);
+        }
+      }
+    });
+
+// Hidden static views wait until selected so layout measurement never
+// mistakes display:none for short content; the observer catches them when
+// they gain a box.
 const enhanceVisibleAnnotations = ({
   block,
 }: {
@@ -47,36 +125,11 @@ const enhanceVisibleAnnotations = ({
     block,
     selector: ".code-diff-annotation-body",
   })) {
-    if (body.dataset.annotationEnhanced !== undefined || body.getClientRects().length === 0) {
-      continue;
+    if (body.dataset.annotationObserved === undefined) {
+      body.dataset.annotationObserved = "";
+      annotationResizeObserver?.observe(body);
     }
-    body.dataset.annotationEnhanced = "";
-    const lineHeight = Number.parseFloat(getComputedStyle(body).lineHeight);
-    if (!Number.isFinite(lineHeight) || body.scrollHeight <= lineHeight * ANNOTATION_CLAMP_LINES + 1) {
-      continue;
-    }
-
-    let bodyId: string;
-    do {
-      bodyId = `code-diff-annotation-body-${nextAnnotationBodyId}`;
-      nextAnnotationBodyId += 1;
-    } while (document.getElementById(bodyId) !== null);
-    body.id = bodyId;
-    body.classList.add("code-diff-annotation-body-clamped");
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "code-diff-annotation-toggle";
-    button.textContent = "View more…";
-    button.setAttribute("aria-controls", bodyId);
-    button.setAttribute("aria-expanded", "false");
-    button.addEventListener("click", () => {
-      const expanded = button.getAttribute("aria-expanded") === "true";
-      button.setAttribute("aria-expanded", expanded ? "false" : "true");
-      button.textContent = expanded ? "View more…" : "View less";
-      body.classList.toggle("code-diff-annotation-body-clamped", expanded);
-    });
-    body.after(button);
+    evaluateAnnotationBody(body);
   }
 };
 
