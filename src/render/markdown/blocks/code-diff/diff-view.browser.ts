@@ -62,7 +62,6 @@ const evaluateAnnotationBody = (body: HTMLElement): void => {
     if (existing !== null) {
       existing.remove();
       body.classList.remove("code-diff-annotation-body-clamped");
-      delete body.dataset.annotationExpanded;
     }
     return;
   }

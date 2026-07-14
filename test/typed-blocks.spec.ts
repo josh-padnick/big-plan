@@ -114,6 +114,18 @@ test("should keep a range Annotation visible when switching diff views", async (
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(await body.evaluate((element) => element.scrollHeight - element.clientHeight))
       .toBeLessThanOrEqual(1);
+    const originalBody = await body.innerHTML();
+    await body.evaluate((element) => {
+      element.textContent = "Temporarily short.";
+    });
+    await expect(toggle).toHaveCount(0);
+    await body.evaluate((element, content) => {
+      element.innerHTML = content;
+    }, originalBody);
+    await expect(toggle).toHaveAccessibleName("View less");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(await body.evaluate((element) => element.scrollHeight - element.clientHeight))
+      .toBeLessThanOrEqual(1);
     await toggle.click();
     await expect(toggle).toHaveAccessibleName("View more…");
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
