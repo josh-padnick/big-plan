@@ -37,6 +37,43 @@ export type ParseUnifiedDiffResult = {
 };
 
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$/u;
+const MAX_SAFE_HUNK_VALUE = BigInt(Number.MAX_SAFE_INTEGER);
+
+type HunkCoordinates = {
+  readonly oldStart: number;
+  readonly newStart: number;
+  readonly oldCount: number;
+  readonly newCount: number;
+};
+
+// Parses hunk coordinates only when every declared line number remains exact.
+const hunkCoordinates = (match: RegExpExecArray): HunkCoordinates | undefined => {
+  const oldStartValue = match[1];
+  const newStartValue = match[3];
+  if (oldStartValue === undefined || newStartValue === undefined) {
+    return undefined;
+  }
+  const oldStart = BigInt(oldStartValue);
+  const newStart = BigInt(newStartValue);
+  const oldCount = BigInt(match[2] ?? "1");
+  const newCount = BigInt(match[4] ?? "1");
+  const oldEnd = oldCount === 0n ? oldStart : oldStart + oldCount - 1n;
+  const newEnd = newCount === 0n ? newStart : newStart + newCount - 1n;
+  if ([oldStart, newStart, oldCount, newCount, oldEnd, newEnd].some(
+    (value) => value > MAX_SAFE_HUNK_VALUE,
+  )) {
+    return undefined;
+  }
+  return {
+    oldStart: Number(oldStart),
+    newStart: Number(newStart),
+    oldCount: Number(oldCount),
+    newCount: Number(newCount),
+  };
+};
+
+const incrementLineNumber = (value: number): number | undefined =>
+  value === Number.MAX_SAFE_INTEGER ? undefined : value + 1;
 
 // git diff emits these file-header lines before the first hunk; accepting
 // them lets authors paste git output verbatim. After a hunk starts, `---`
@@ -85,8 +122,12 @@ const parseContentLine = ({
   if (value === "") {
     return {
       line: { kind: "context", text: "", oldLineNumber, newLineNumber },
-      ...(oldLineNumber === undefined ? {} : { nextOldLineNumber: oldLineNumber + 1 }),
-      ...(newLineNumber === undefined ? {} : { nextNewLineNumber: newLineNumber + 1 }),
+      ...(oldLineNumber === undefined
+        ? {}
+        : { nextOldLineNumber: incrementLineNumber(oldLineNumber) }),
+      ...(newLineNumber === undefined
+        ? {}
+        : { nextNewLineNumber: incrementLineNumber(newLineNumber) }),
     };
   }
   const marker = value[0];
@@ -94,14 +135,20 @@ const parseContentLine = ({
   if (marker === " ") {
     return {
       line: { kind: "context", text, oldLineNumber, newLineNumber },
-      ...(oldLineNumber === undefined ? {} : { nextOldLineNumber: oldLineNumber + 1 }),
-      ...(newLineNumber === undefined ? {} : { nextNewLineNumber: newLineNumber + 1 }),
+      ...(oldLineNumber === undefined
+        ? {}
+        : { nextOldLineNumber: incrementLineNumber(oldLineNumber) }),
+      ...(newLineNumber === undefined
+        ? {}
+        : { nextNewLineNumber: incrementLineNumber(newLineNumber) }),
     };
   }
   if (marker === "-") {
     return {
       line: { kind: "remove", text, oldLineNumber },
-      ...(oldLineNumber === undefined ? {} : { nextOldLineNumber: oldLineNumber + 1 }),
+      ...(oldLineNumber === undefined
+        ? {}
+        : { nextOldLineNumber: incrementLineNumber(oldLineNumber) }),
       ...(newLineNumber === undefined ? {} : { nextNewLineNumber: newLineNumber }),
     };
   }
@@ -109,7 +156,9 @@ const parseContentLine = ({
     return {
       line: { kind: "add", text, newLineNumber },
       ...(oldLineNumber === undefined ? {} : { nextOldLineNumber: oldLineNumber }),
-      ...(newLineNumber === undefined ? {} : { nextNewLineNumber: newLineNumber + 1 }),
+      ...(newLineNumber === undefined
+        ? {}
+        : { nextNewLineNumber: incrementLineNumber(newLineNumber) }),
     };
   }
   return {};
@@ -162,13 +211,19 @@ export const parseUnifiedDiff = ({
       finishHunk();
       header = value;
       lines = [];
-      const oldStart = match[1];
-      const newStart = match[3];
-      oldLineNumber = oldStart === undefined ? undefined : Number(oldStart);
-      newLineNumber = newStart === undefined ? undefined : Number(newStart);
-      declaredOldCount = Number(match[2] ?? "1");
-      declaredNewCount = Number(match[4] ?? "1");
       headerLine = index + 1;
+      const coordinates = hunkCoordinates(match);
+      oldLineNumber = coordinates?.oldStart;
+      newLineNumber = coordinates?.newStart;
+      declaredOldCount = coordinates?.oldCount;
+      declaredNewCount = coordinates?.newCount;
+      if (coordinates === undefined) {
+        diagnostics.push({
+          line: headerLine,
+          message:
+            `Hunk values and line-number ranges must not exceed ${Number.MAX_SAFE_INTEGER}`,
+        });
+      }
       continue;
     }
     if (value === "\\ No newline at end of file") {

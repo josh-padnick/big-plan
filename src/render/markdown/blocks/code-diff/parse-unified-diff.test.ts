@@ -129,6 +129,36 @@ describe("parseUnifiedDiff", () => {
     ]);
   });
 
+  it.each([
+    "@@ -9007199254740992 +1 @@\n-old\n+new\n",
+    "@@ -1 +9007199254740991,2 @@\n-old\n+new\n",
+    `@@ -${"9".repeat(400)} +1 @@\n-old\n+new\n`,
+  ])("should reject hunk coordinates that cannot remain exact", (source) => {
+    expect(parseUnifiedDiff({ source }).diagnostics).toEqual([{
+      line: 1,
+      message:
+        "Hunk values and line-number ranges must not exceed 9007199254740991",
+    }]);
+  });
+
+  it("should retain the largest exactly representable line number", () => {
+    expect(parseUnifiedDiff({
+      source: "@@ -9007199254740991 +9007199254740991 @@\n-old\n+new\n",
+    })).toEqual({
+      diff: {
+        hasHunkHeaders: true,
+        hunks: [{
+          header: "@@ -9007199254740991 +9007199254740991 @@",
+          lines: [
+            { kind: "remove", text: "old", oldLineNumber: 9007199254740991 },
+            { kind: "add", text: "new", newLineNumber: 9007199254740991 },
+          ],
+        }],
+      },
+      diagnostics: [],
+    });
+  });
+
   it("should retain headerless line kinds without fabricating line numbers", () => {
     expect(parseUnifiedDiff({ source: " before\n-old\n+new\n" })).toEqual({
       diff: {

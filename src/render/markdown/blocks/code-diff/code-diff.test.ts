@@ -359,6 +359,30 @@ describe("renderCodeDiff", () => {
     ]);
   });
 
+  it("should diagnose an unsafe hunk range before anchoring an Annotation", () => {
+    expect(render({
+      children: [fence({
+        source: "@@ -1 +999999999999999999999999999999999999999999 @@\n-old\n+new\n",
+      })],
+      scopedChildren: [annotation({
+        lines: "999999999999999999999999999999999999999999",
+      })],
+    }).diagnostics).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message:
+          "Invalid diff line 1: Hunk values and line-number ranges must not exceed 9007199254740991",
+      },
+      {
+        line: 10,
+        column: 1,
+        message:
+          "Annotation line 999999999999999999999999999999999999999999 does not exist on the new side of the diff",
+      },
+    ]);
+  });
+
   it("should render both numbered views and preserve the normalized fence source", () => {
     const source = "@@ -1 +1 @@\n-old\n+new\n";
     const { element, diagnostics } = render({
