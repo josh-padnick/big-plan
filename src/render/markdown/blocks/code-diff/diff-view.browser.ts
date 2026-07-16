@@ -1,6 +1,8 @@
 // Owns CodeDiff's progressively enhanced view preference, annotation
-// clamping, overflow actions menu, and full-screen dialog behavior;
-// server-rendered unified content remains the no-JavaScript default.
+// clamping and split-pane spacer syncing, overflow actions menu, and
+// full-screen dialog behavior; server-rendered unified content remains the
+// no-JavaScript default. Without JavaScript, split annotation spacers stay at
+// zero height, so rows below a card can drift out of alignment across panes.
 
 const DIFF_VIEW_STORAGE_KEY = "big-plan-diff-view";
 const DIFF_MESSAGE_RESET_MS = 2_000;
@@ -62,6 +64,8 @@ const evaluateAnnotationBody = (body: HTMLElement): void => {
     if (existing !== null) {
       existing.remove();
       body.classList.remove("code-diff-annotation-body-clamped");
+      // The expanded flag is a reader preference and survives fits/overflows
+      // cycles, so re-narrowing restores the card already expanded.
     }
     return;
   }
@@ -100,14 +104,44 @@ const evaluateAnnotationBody = (body: HTMLElement): void => {
   body.after(button);
 };
 
-// One observer re-evaluates bodies as their boxes change; older engines
-// without ResizeObserver keep the load-time measurement.
+// Mirrors a split card's rendered surround height into its opposite-pane
+// spacer. Card ids are block-local, so nested or sibling diffs cannot cross
+// wires while the block moves into and out of its full-screen dialog.
+const syncAnnotationSpacer = (card: HTMLElement): void => {
+  if (card.getClientRects().length === 0) {
+    return;
+  }
+  const id = card.dataset.annotationCard;
+  const block = card.closest<HTMLElement>("[data-code-diff]");
+  if (id === undefined || block === null) {
+    return;
+  }
+  const spacer = ownedCodeDiffElements<HTMLElement>({
+    block,
+    selector: "[data-annotation-spacer]",
+  }).find((candidate) => candidate.dataset.annotationSpacer === id);
+  if (spacer !== undefined) {
+    spacer.style.height = `${card.getBoundingClientRect().height}px`;
+  }
+};
+
+// One observer re-evaluates bodies and mirrors split card heights as their
+// boxes change; older engines keep the load-time measurements.
 const annotationResizeObserver = typeof ResizeObserver === "undefined"
   ? undefined
   : new ResizeObserver((entries) => {
       for (const entry of entries) {
-        if (entry.target instanceof HTMLElement) {
+        if (
+          entry.target instanceof HTMLElement &&
+          entry.target.classList.contains("code-diff-annotation-body")
+        ) {
           evaluateAnnotationBody(entry.target);
+        }
+        if (
+          entry.target instanceof HTMLElement &&
+          entry.target.dataset.annotationCard !== undefined
+        ) {
+          syncAnnotationSpacer(entry.target);
         }
       }
     });
@@ -120,6 +154,16 @@ const enhanceVisibleAnnotations = ({
 }: {
   readonly block: HTMLElement;
 }): void => {
+  for (const card of ownedCodeDiffElements<HTMLElement>({
+    block,
+    selector: "[data-annotation-card]",
+  })) {
+    if (card.dataset.annotationCardObserved === undefined) {
+      card.dataset.annotationCardObserved = "";
+      annotationResizeObserver?.observe(card);
+    }
+    syncAnnotationSpacer(card);
+  }
   for (const body of ownedCodeDiffElements<HTMLElement>({
     block,
     selector: ".code-diff-annotation-body",

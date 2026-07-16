@@ -41,6 +41,7 @@ type Annotation = {
 };
 
 type AnchoredAnnotation = Annotation & {
+  readonly id: string;
   readonly target: DiffLine;
 };
 
@@ -61,8 +62,10 @@ const MENU_ITEM_CLASSES =
 const HUNK_HEADER_CLASSES =
   "code-diff-hunk-header min-w-max whitespace-pre px-[0.65rem] py-[0.4rem] text-xs";
 const LINE_CLASSES = "code-diff-line grid min-w-max whitespace-pre";
+const ANNOTATION_SURROUND_CLASSES =
+  "code-diff-annotation-surround min-w-0 border-l-4 p-[0.35rem]";
 const ANNOTATION_CLASSES =
-  "code-diff-annotation flex min-w-0 gap-2 border-l-4 px-3 py-2 font-sans text-sm leading-normal whitespace-normal [&>svg]:size-4 [&>svg]:shrink-0";
+  "code-diff-annotation flex min-w-0 gap-2 px-3 py-2 font-sans text-sm leading-normal whitespace-normal [&>svg]:size-4 [&>svg]:shrink-0";
 
 const markdownChildren = (
   node: MarkdownRoot | MarkdownNode,
@@ -281,7 +284,7 @@ const annotationLineLabel = (annotation: Annotation): string =>
 
 // Each static view gets its own annotation body so downstream Markdown
 // transforms can decorate nested content without sharing mutations.
-const renderedAnnotation = (annotation: AnchoredAnnotation): Element => ({
+const annotationCard = (annotation: AnchoredAnnotation): Element => ({
   type: "element",
   tagName: "aside",
   properties: {
@@ -331,14 +334,35 @@ const renderedAnnotation = (annotation: AnchoredAnnotation): Element => ({
   ],
 });
 
+const renderedAnnotation = (annotation: AnchoredAnnotation): Element => ({
+  type: "element",
+  tagName: "div",
+  properties: {
+    className: ANNOTATION_SURROUND_CLASSES.split(" "),
+    "data-annotation-surround": "",
+  },
+  children: [annotationCard(annotation)],
+});
+
 const renderedSplitAnnotation = (annotation: AnchoredAnnotation): Element => {
-  const card = renderedAnnotation(annotation);
-  card.properties.className = [
-    ...ANNOTATION_CLASSES.split(" "),
-    "code-diff-split-annotation",
+  const surround = renderedAnnotation(annotation);
+  surround.properties.className = [
+    ...ANNOTATION_SURROUND_CLASSES.split(" "),
+    "code-diff-split-annotation-surround",
   ];
-  return card;
+  surround.properties["data-annotation-card"] = annotation.id;
+  return surround;
 };
+
+const annotationSpacer = (annotation: AnchoredAnnotation): Element => ({
+  type: "element",
+  tagName: "div",
+  properties: {
+    ariaHidden: "true",
+    "data-annotation-spacer": annotation.id,
+  },
+  children: [],
+});
 
 const annotationsForLine = ({
   line,
@@ -508,13 +532,13 @@ const splitLine = ({
   ],
 });
 
-const splitCell = ({
-  row,
+const splitPane = ({
+  rows,
   side,
   showLineNumbers,
   annotations,
 }: {
-  readonly row: SplitDiffRow;
+  readonly rows: ReadonlyArray<SplitDiffRow>;
   readonly side: "old" | "new";
   readonly showLineNumbers: boolean;
   readonly annotations: ReadonlyArray<AnchoredAnnotation>;
@@ -522,20 +546,36 @@ const splitCell = ({
   type: "element",
   tagName: "div",
   properties: {
-    className: ["code-diff-pane", "min-w-0"],
+    className: [
+      "code-diff-pane",
+      "min-w-0",
+      "overflow-x-auto",
+      "[container-type:inline-size]",
+    ],
     "data-diff-pane": side,
   },
-  children: [
+  children: rows.flatMap((row) => [
     splitLine({
       line: side === "old" ? row.left : row.right,
       side,
       showLineNumbers,
       annotations,
     }),
-    ...annotationsForSplitRow({ row, annotations })
-      .filter((annotation) => annotation.side === side)
-      .map(renderedSplitAnnotation),
-  ],
+    ...annotationsForSplitRow({ row, annotations }).map((annotation) =>
+      annotation.side === side
+        ? renderedSplitAnnotation(annotation)
+        : annotationSpacer(annotation)
+    ),
+  ]),
+});
+
+const splitHunkHeader = (header: string): Element => ({
+  type: "element",
+  tagName: "div",
+  properties: {
+    className: ["code-diff-split-header-scroll", "overflow-x-auto"],
+  },
+  children: [hunkHeader(header, "split")],
 });
 
 const splitHunk = ({
@@ -554,37 +594,27 @@ const splitHunk = ({
   properties: {
     className: ["code-diff-split-hunk", "min-w-0"],
   },
-  children: [{
-    type: "element",
-    tagName: "div",
-    properties: {
-      className: ["code-diff-split-scroll", "overflow-x-auto"],
-    },
-    children: [
-      ...(header === undefined ? [] : [hunkHeader(header, "split")]),
-      {
-        type: "element",
-        tagName: "div",
-        properties: {
-          className: [
-            "code-diff-split-grid",
-            "grid",
-            "min-w-full",
-            "grid-cols-[minmax(max-content,1fr)_minmax(max-content,1fr)]",
-          ],
-        },
-        children: rows.map((row) => ({
-          type: "element",
-          tagName: "div",
-          properties: { className: ["code-diff-split-row"] },
-          children: [
-            splitCell({ row, side: "old", showLineNumbers, annotations }),
-            splitCell({ row, side: "new", showLineNumbers, annotations }),
-          ],
-        })),
+  children: [
+    ...(header === undefined
+      ? []
+      : [splitHunkHeader(header)]),
+    {
+      type: "element",
+      tagName: "div",
+      properties: {
+        className: [
+          "code-diff-split-grid",
+          "grid",
+          "min-w-0",
+          "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]",
+        ],
       },
-    ],
-  }],
+      children: [
+        splitPane({ rows, side: "old", showLineNumbers, annotations }),
+        splitPane({ rows, side: "new", showLineNumbers, annotations }),
+      ],
+    },
+  ],
 });
 
 const annotationsForSplitRow = ({
@@ -977,7 +1007,11 @@ export const renderCodeDiff: BlockRenderer = ({
         });
         continue;
       }
-      anchoredAnnotations.push({ ...annotation, target });
+      anchoredAnnotations.push({
+        ...annotation,
+        id: `annotation-${anchoredAnnotations.length + 1}`,
+        target,
+      });
     }
   }
 

@@ -100,6 +100,29 @@ const parentOfMatchingChild = ({
   return undefined;
 };
 
+// Finds the first matching element in document order for structural checks.
+const findElement = ({
+  element,
+  matches,
+}: {
+  readonly element: Element;
+  readonly matches: (candidate: Element) => boolean;
+}): Element | undefined => {
+  if (matches(element)) {
+    return element;
+  }
+  for (const child of element.children) {
+    if (!isElement(child)) {
+      continue;
+    }
+    const found = findElement({ element: child, matches });
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return undefined;
+};
+
 const viewFrom = ({
   element,
   view,
@@ -424,8 +447,18 @@ describe("renderCodeDiff", () => {
     const unifiedTargetIndex = unified.children.findIndex((child) =>
       isElement(child) && textOf(child).includes('metrics.increment("ttl_change")')
     );
-    const unifiedAnnotation = unified.children[unifiedTargetIndex + 1];
+    const unifiedSurround = unified.children[unifiedTargetIndex + 1];
     expect(unifiedTargetIndex).toBeGreaterThan(-1);
+    expect(unifiedSurround).toMatchObject({
+      tagName: "div",
+      properties: { "data-annotation-surround": "" },
+    });
+    const unifiedAnnotation = isElement(unifiedSurround)
+      ? findElement({
+          element: unifiedSurround,
+          matches: (candidate) => candidate.properties["data-annotation"] === "",
+        })
+      : undefined;
     expect(unifiedAnnotation).toMatchObject({
       tagName: "aside",
       properties: {
@@ -436,10 +469,10 @@ describe("renderCodeDiff", () => {
         "data-annotation-side": "new",
       },
     });
-    expect(isElement(unifiedAnnotation) ? textOf(unifiedAnnotation) : "").toContain(
+    expect(unifiedAnnotation === undefined ? "" : textOf(unifiedAnnotation)).toContain(
       "Line 13",
     );
-    expect(isElement(unifiedAnnotation) ? textOf(unifiedAnnotation) : "").toContain(
+    expect(unifiedAnnotation === undefined ? "" : textOf(unifiedAnnotation)).toContain(
       "Use the catalog prefix.",
     );
 
@@ -448,10 +481,10 @@ describe("renderCodeDiff", () => {
     const splitAnnotationParent = parentOfMatchingChild({
       element: split,
       matches: (candidate) =>
-        candidate.properties["data-annotation-lines"] === "13",
+        candidate.properties["data-annotation-card"] === "annotation-1",
     });
     const splitAnnotationIndex = splitAnnotationParent?.children.findIndex((child) =>
-      isElement(child) && child.properties["data-annotation-lines"] === "13"
+      isElement(child) && child.properties["data-annotation-card"] === "annotation-1"
     ) ?? -1;
     const precedingSegment = splitAnnotationParent?.children[splitAnnotationIndex - 1];
     expect(splitAnnotationIndex).toBeGreaterThan(-1);
@@ -463,6 +496,11 @@ describe("renderCodeDiff", () => {
       ? textOf(splitAnnotation)
       : "").toContain("Use the catalog prefix.");
     expect(splitAnnotationParent?.properties["data-diff-pane"]).toBe("new");
+    const oldPane = findElement({
+      element: split,
+      matches: (candidate) => candidate.properties["data-diff-pane"] === "old",
+    });
+    expect(JSON.stringify(oldPane)).toContain('"data-annotation-spacer":"annotation-1"');
   });
 
   it("should localize old and new split Annotations without changing unified placement", () => {
@@ -482,7 +520,7 @@ describe("renderCodeDiff", () => {
       expect(parentOfMatchingChild({
         element: unified,
         matches: (candidate) =>
-          candidate.properties["data-annotation"] === "" &&
+          candidate.properties["data-annotation-surround"] === "" &&
           textOf(candidate).includes(note),
       })).toBe(unified);
     }
@@ -491,19 +529,21 @@ describe("renderCodeDiff", () => {
     const oldPane = parentOfMatchingChild({
       element: split,
       matches: (candidate) =>
-        candidate.properties["data-annotation"] === "" &&
+        candidate.properties["data-annotation-card"] !== undefined &&
         textOf(candidate).includes("Old-side note."),
     });
     const newPane = parentOfMatchingChild({
       element: split,
       matches: (candidate) =>
-        candidate.properties["data-annotation"] === "" &&
+        candidate.properties["data-annotation-card"] !== undefined &&
         textOf(candidate).includes("New-side note."),
     });
     expect(oldPane?.properties["data-diff-pane"]).toBe("old");
     expect(newPane?.properties["data-diff-pane"]).toBe("new");
     expect(textOf(oldPane ?? split)).not.toContain("New-side note.");
     expect(textOf(newPane ?? split)).not.toContain("Old-side note.");
+    expect(JSON.stringify(oldPane)).toContain('"data-annotation-spacer":"annotation-2"');
+    expect(JSON.stringify(newPane)).toContain('"data-annotation-spacer":"annotation-1"');
   });
 
   it("should anchor a range spanning context and added lines after its last line", () => {
@@ -522,10 +562,13 @@ describe("renderCodeDiff", () => {
       const annotationParent = parentOfMatchingChild({
         element: renderedView,
         matches: (candidate) =>
-          candidate.properties["data-annotation-lines"] === "12-14",
+          candidate.properties["data-annotation-surround"] === "" &&
+          textOf(candidate).includes("Lines 12-14"),
       });
       const annotationIndex = annotationParent?.children.findIndex((child) =>
-        isElement(child) && child.properties["data-annotation-lines"] === "12-14"
+        isElement(child) &&
+        child.properties["data-annotation-surround"] === "" &&
+        textOf(child).includes("Lines 12-14")
       ) ?? -1;
       const precedingSegment = annotationParent?.children[annotationIndex - 1];
       expect(annotationIndex).toBeGreaterThan(-1);

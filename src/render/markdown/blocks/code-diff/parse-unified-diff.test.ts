@@ -110,7 +110,7 @@ describe("parseUnifiedDiff", () => {
       parseUnifiedDiff({ source: "@@ -9007199254740993,2 +1,2 @@" }).diagnostics,
     ).toEqual([{
       line: 1,
-      message: "Hunk line numbers exceed the supported range",
+      message: "Hunk values and line-number ranges must not exceed 9007199254740991",
     }]);
   });
 

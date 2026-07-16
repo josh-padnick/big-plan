@@ -112,27 +112,13 @@ html:has(.code-diff-dialog[open]) {
     background: var(--diff-hunk-bg);
     color: var(--diff-hunk-c);
   }
-  article .code-diff-split-hunk {
-    container-type: inline-size;
-  }
-  article .code-diff-split-scroll {
-    position: relative;
-  }
   article [data-diff-pane="new"] {
     border-left: 1px solid var(--color-edge);
   }
-  article .code-diff-split-row {
-    display: contents;
-  }
-  article .code-diff-split-annotation {
+  article .code-diff-split-annotation-surround {
     position: sticky;
-    width: 50cqw;
-  }
-  article [data-diff-pane="old"] > .code-diff-split-annotation {
     left: 0;
-  }
-  article [data-diff-pane="new"] > .code-diff-split-annotation {
-    left: 50cqw;
+    width: 100cqw;
   }
   article .code-diff-unified-line {
     grid-template-columns: minmax(max-content, 1fr);
@@ -165,13 +151,11 @@ html:has(.code-diff-dialog[open]) {
   article [data-annotation-anchor][data-diff-line="remove"] {
     background: color-mix(in srgb, var(--diff-annotation-c) 10%, var(--diff-remove-bg));
   }
-  article [data-annotation] + [data-annotation] {
-    /* Adjacent cards get a breath of content background between them so
-       stacked annotations never fuse into one contiguous comment. */
-    margin-top: 0.3rem;
+  article .code-diff-annotation-surround {
+    border-left-color: var(--diff-annotation-c);
+    background: color-mix(in srgb, var(--diff-annotation-c) 8%, var(--diff-content-bg));
   }
   article .code-diff-annotation {
-    border-left-color: var(--diff-annotation-c);
     background: var(--diff-annotation-bg);
   }
   article .code-diff-annotation > svg {

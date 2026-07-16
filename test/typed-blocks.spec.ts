@@ -141,11 +141,11 @@ test("should keep a range Annotation visible when switching diff views", async (
     await expect(splitAnnotation).toBeVisible();
     await expect(splitAnnotation).toContainText(annotationText);
     expect(await splitAnnotation.evaluate((annotation) =>
-      annotation.parentElement?.dataset.diffPane
+      annotation.closest<HTMLElement>("[data-diff-pane]")?.dataset.diffPane
     )).toBe("new");
     const oldAnnotation = split.getByRole("note", { name: "Line 19" });
     expect(await oldAnnotation.evaluate((annotation) =>
-      annotation.parentElement?.dataset.diffPane
+      annotation.closest<HTMLElement>("[data-diff-pane]")?.dataset.diffPane
     )).toBe("old");
     await expect(
       split.locator('[data-diff-pane="old"]').getByRole("note", { name: "Lines 34-36" }),
@@ -155,44 +155,128 @@ test("should keep a range Annotation visible when switching diff views", async (
     ).toHaveCount(0);
   });
 
-  await test.step("each split hunk owns one horizontal scroller", async () => {
-    const scrollContexts = await split.locator("*").evaluateAll((elements) =>
-      elements
+  await test.step("each split hunk owns one header and two pane scrollers", async () => {
+    const scrollContexts = await split.locator(".code-diff-split-hunk").evaluateAll(
+      (hunks) => hunks.map((hunk) => [...hunk.querySelectorAll<HTMLElement>("*")]
         .filter((element) => {
           const overflow = getComputedStyle(element).overflowX;
           return overflow === "auto" || overflow === "scroll";
         })
-        .map((element) => element.className),
+        .map((element) => ({
+          header: element.classList.contains("code-diff-split-header-scroll"),
+          pane: element.dataset.diffPane ?? null,
+        }))),
     );
     expect(scrollContexts).toHaveLength(2);
-    expect(scrollContexts.every((classes) =>
-      typeof classes === "string" && classes.includes("code-diff-split-scroll")
-    )).toBe(true);
-    const headerScrollers = await split
-      .locator('[data-diff-hunk-header="split"]')
-      .evaluateAll((headers) => headers.map((header) =>
-        header.parentElement?.classList.contains("code-diff-split-scroll") ?? false
-      ));
-    expect(headerScrollers).toEqual([true, true]);
+    for (const hunkContexts of scrollContexts) {
+      expect(hunkContexts).toHaveLength(3);
+      expect(hunkContexts.filter((context) => context.header)).toHaveLength(1);
+      expect(hunkContexts.map((context) => context.pane).filter(Boolean).sort())
+        .toEqual(["new", "old"]);
+    }
+  });
+
+  await test.step("the opposite spacer tracks annotation height changes", async () => {
+    const heights = async () => splitAnnotation.evaluate((annotation) => {
+      const card = annotation.closest<HTMLElement>("[data-annotation-card]");
+      const block = annotation.closest<HTMLElement>("[data-code-diff]");
+      const id = card?.dataset.annotationCard;
+      const spacer = [...(block?.querySelectorAll<HTMLElement>(
+        "[data-annotation-spacer]",
+      ) ?? [])].find((candidate) => candidate.dataset.annotationSpacer === id);
+      if (card === null || card === undefined || spacer === undefined) {
+        throw new Error("Missing split annotation card or spacer");
+      }
+      return {
+        card: card.getBoundingClientRect().height,
+        spacer: spacer.getBoundingClientRect().height,
+      };
+    });
+    await expect.poll(heights).toEqual(expect.objectContaining({
+      card: expect.any(Number),
+      spacer: expect.any(Number),
+    }));
+    await expect.poll(async () => {
+      const measured = await heights();
+      return Math.abs(measured.card - measured.spacer);
+    }).toBeLessThan(1);
+
+    const toggle = splitAnnotation.locator(".code-diff-annotation-toggle");
+    await toggle.click();
+    await expect.poll(async () => {
+      const measured = await heights();
+      return Math.abs(measured.card - measured.spacer);
+    }).toBeLessThan(1);
+    await toggle.click();
+  });
+
+  await test.step("a long old line cannot push the new card offscreen at scroll zero", async () => {
+    const layout = await splitAnnotation.evaluate((annotation) => {
+      const surround = annotation.closest<HTMLElement>("[data-annotation-card]");
+      const hunk = annotation.closest<HTMLElement>(".code-diff-split-hunk");
+      const oldPane = hunk?.querySelector<HTMLElement>('[data-diff-pane="old"]');
+      const newPane = hunk?.querySelector<HTMLElement>('[data-diff-pane="new"]');
+      const oldLine = oldPane?.querySelector<HTMLElement>(".code-diff-line-content");
+      if (
+        surround === null || hunk === null || oldPane === null ||
+        newPane === null || oldLine === null
+      ) {
+        throw new Error("Missing split annotation regression fixture");
+      }
+      const originalLine = oldLine.textContent;
+      oldLine.textContent = `extremely-long-old-side-${"x".repeat(10_000)}`;
+      oldPane.scrollLeft = 0;
+      newPane.scrollLeft = 0;
+      const annotationBox = annotation.getBoundingClientRect();
+      const surroundBox = surround.getBoundingClientRect();
+      const oldPaneBox = oldPane.getBoundingClientRect();
+      const newPaneBox = newPane.getBoundingClientRect();
+      const result = {
+        annotationLeft: annotationBox.left,
+        annotationRight: annotationBox.right,
+        surroundLeft: surroundBox.left,
+        surroundRight: surroundBox.right,
+        viewportWidth: window.innerWidth,
+        oldPaneWidth: oldPaneBox.width,
+        newPaneWidth: newPaneBox.width,
+        oldScrollLeft: oldPane.scrollLeft,
+        newScrollLeft: newPane.scrollLeft,
+        oldScrollWidth: oldPane.scrollWidth,
+      };
+      oldLine.textContent = originalLine;
+      return result;
+    });
+    expect(layout.oldScrollWidth).toBeGreaterThan(layout.viewportWidth * 10);
+    expect(layout.oldScrollLeft).toBe(0);
+    expect(layout.newScrollLeft).toBe(0);
+    expect(Math.abs(layout.oldPaneWidth - layout.newPaneWidth)).toBeLessThan(2);
+    expect(layout.annotationLeft).toBeGreaterThanOrEqual(0);
+    expect(layout.annotationRight).toBeLessThanOrEqual(layout.viewportWidth);
+    expect(layout.surroundLeft).toBeGreaterThanOrEqual(0);
+    expect(layout.surroundRight).toBeLessThanOrEqual(layout.viewportWidth);
   });
 
   await test.step("the annotation stays pinned to the visible new pane in both themes", async () => {
     for (const theme of ["light", "dark"] as const) {
       const layout = await splitAnnotation.evaluate((annotation, selectedTheme) => {
         document.documentElement.dataset.theme = selectedTheme;
-        const scroller = annotation.closest<HTMLElement>(".code-diff-split-scroll");
-        if (scroller === null) {
-          throw new Error("Missing split hunk scroller");
+        const surround = annotation.closest<HTMLElement>("[data-annotation-card]");
+        const scroller = annotation.closest<HTMLElement>("[data-diff-pane]");
+        if (surround === null || scroller === null) {
+          throw new Error("Missing split annotation surround or pane scroller");
         }
         scroller.scrollLeft = scroller.scrollWidth;
-        const annotationBox = annotation.getBoundingClientRect();
+        const surroundBox = surround.getBoundingClientRect();
         const scrollerBox = scroller.getBoundingClientRect();
-        const style = getComputedStyle(annotation);
+        const cardStyle = getComputedStyle(annotation);
+        const surroundStyle = getComputedStyle(surround);
         return {
-          annotationLeft: annotationBox.left,
-          annotationRight: annotationBox.right,
-          background: style.backgroundColor,
-          color: style.color,
+          surroundLeft: surroundBox.left,
+          surroundRight: surroundBox.right,
+          cardBackground: cardStyle.backgroundColor,
+          cardColor: cardStyle.color,
+          surroundBackground: surroundStyle.backgroundColor,
+          surroundBorder: surroundStyle.borderLeftColor,
           scrollerLeft: scrollerBox.left,
           scrollerRight: scrollerBox.right,
           scrollLeft: scroller.scrollLeft,
@@ -200,14 +284,13 @@ test("should keep a range Annotation visible when switching diff views", async (
       }, theme);
       expect(layout.scrollLeft).toBeGreaterThan(0);
       expect(
-        Math.abs(
-          layout.annotationLeft -
-            (layout.scrollerLeft + (layout.scrollerRight - layout.scrollerLeft) / 2),
-        ),
+        Math.abs(layout.surroundLeft - layout.scrollerLeft),
         JSON.stringify(layout),
       ).toBeLessThan(2);
-      expect(layout.annotationRight).toBeLessThanOrEqual(layout.scrollerRight + 1);
-      expect(layout.color).not.toBe(layout.background);
+      expect(layout.surroundRight).toBeLessThanOrEqual(layout.scrollerRight + 1);
+      expect(layout.cardColor).not.toBe(layout.cardBackground);
+      expect(layout.surroundBackground).not.toBe(layout.cardBackground);
+      expect(layout.surroundBorder).not.toBe(layout.surroundBackground);
     }
   });
 
@@ -275,8 +358,8 @@ test("should contain CodeDiff overflow without clipping the page", async ({
   }));
   expect(overflow.bodyOverflowX).toBe("visible");
   expect(overflow.scrollWidth, JSON.stringify(overflow)).toBe(overflow.clientWidth);
-  expect(await diff.locator(".code-diff-split-scroll").first().evaluate(
-    (scroller) => scroller.scrollWidth > scroller.clientWidth,
+  expect(await diff.locator("[data-diff-pane]").evaluateAll((panes) =>
+    panes.some((pane) => pane.scrollWidth > pane.clientWidth)
   )).toBe(true);
 });
 
