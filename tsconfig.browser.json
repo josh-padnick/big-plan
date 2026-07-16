@@ -6,7 +6,6 @@
       "DOM",
       "DOM.Iterable"
     ],
-    "module": "none",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "forceConsistentCasingInFileNames": true,
