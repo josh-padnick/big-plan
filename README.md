@@ -75,14 +75,17 @@ Use the catalog metric prefix documented in `metrics.md`.
 Nest `Annotation` directly inside `CodeDiff` with a required `lines` string and an optional `side` of `old` or `new`, which defaults to `new`.
 The `lines` value is either one canonical positive integer (`N`) or a strictly ascending inclusive range (`N-M`); zero and leading zeros are invalid.
 Annotation anchors require an `@@` hunk header, and every line in the range must exist on the selected side.
-The annotation card renders after the range's final line in unified and side-by-side views.
+Covered lines receive an annotation spine and wash, and the card renders after the range's final line in both views.
+In side-by-side view, each annotation stays in its selected old or new pane while the opposite pane reserves matching space so later rows remain aligned; each equal-width pane and hunk header scrolls horizontally on its own.
 Multiple annotations may target one line or range and render in authored order.
 Annotation bodies support ordinary rich Markdown such as lists and fenced code, but cannot contain headings, footnote references or definitions, or typed blocks.
 An `Annotation` anywhere other than a direct `CodeDiff` child is an unknown block.
 The header shows the full file path and, when `showLineCounts` is set, added and removed line counts; the diff opens in a readable unified view even without JavaScript.
-With JavaScript enabled, readers can switch between unified and side-by-side views, preserve that preference across reloads, copy the file path or the fenced diff source (as parsed: LF line endings with a trailing newline) from the actions menu, or expand the diff into a full-screen dialog.
+With JavaScript enabled, long annotation bodies collapse to roughly three lines with `View more…` and `View less` controls, and the reader's expanded choice survives responsive layout changes; without JavaScript, their full contents remain visible.
+Readers can also switch between unified and side-by-side views, preserve that preference across reloads, copy the file path or the fenced diff source (as parsed: LF line endings with a trailing newline) from the actions menu, or expand the diff into a full-screen dialog.
 Headerless `+`/`-` diffs are accepted when line numbers are omitted, and standard Git file preambles may appear before the first `@@` hunk.
 Each `@@` hunk's declared old and new line counts must match its content.
+Hunk coordinates and their resulting line-number ranges must not exceed `9007199254740991`.
 Inside a hunk, a blank line is accepted as empty context even when an editor has stripped its leading space.
 
 Because `<` and `{` begin MDX syntax, write them carefully in prose or place literal examples in code spans or fences.
