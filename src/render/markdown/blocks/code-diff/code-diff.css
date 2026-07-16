@@ -156,6 +156,10 @@ html:has(.code-diff-dialog[open]) {
     background: color-mix(in srgb, var(--diff-annotation-c) 8%, var(--diff-content-bg));
   }
   article .code-diff-annotation {
+    /* A subtle tinted border gives each card a crisp edge inside the
+       shared surround wash. */
+    border: 1px solid color-mix(in srgb, var(--diff-annotation-c) 30%, transparent);
+    border-radius: 0.3rem;
     background: var(--diff-annotation-bg);
   }
   article .code-diff-annotation > svg {
