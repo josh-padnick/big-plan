@@ -105,6 +105,15 @@ describe("parseUnifiedDiff", () => {
     ]);
   });
 
+  it("should reject hunk line numbers beyond the supported range", () => {
+    expect(
+      parseUnifiedDiff({ source: "@@ -9007199254740993,2 +1,2 @@" }).diagnostics,
+    ).toEqual([{
+      line: 1,
+      message: "Hunk line numbers exceed the supported range",
+    }]);
+  });
+
   it("should report the fence-relative line when content is malformed", () => {
     expect(parseUnifiedDiff({ source: "@@ -1 +1 @@\nunchanged\n" }).diagnostics).toEqual([
       {
