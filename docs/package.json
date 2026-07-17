@@ -1,0 +1,22 @@
+{
+  "name": "big-plan-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "gen:demo": "node ../bin/big-plan.mjs render src/demo/example-plan.md public/demo/index.html && cp src/demo/example-plan.md public/demo/example-plan.md",
+    "predev": "bun run gen:demo",
+    "dev": "astro dev",
+    "prebuild": "bun run gen:demo",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.41.3",
+    "astro": "^7.0.7"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "typescript": "^6.0.3"
+  }
+}
