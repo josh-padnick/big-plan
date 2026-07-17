@@ -76,26 +76,26 @@ index 23ad911..890ce42 100644
 ```
 
 <Annotation lines="20" side="new">
-Can `enqueueOnce` return after claiming deduplication so the request does not wait for the queue publish?
+I kept the `await` here so a failed queue publish surfaces on the request path; if tail latency matters more than that visibility, flag it in review and I will make the enqueue fire-and-forget.
 </Annotation>
 
 <Annotation lines="20" side="new">
-Also worth a comment here: the queue publish is idempotent, so double enqueues are harmless.
+The queue publish is idempotent, so a double enqueue during a race is harmless by design.
 </Annotation>
 
 <Annotation lines="19-22" side="new">
-This range quietly turns the cache-age check into a stale-while-revalidate policy boundary. Please extract the 60- and 150-second thresholds into named constants so the rollout flag, dashboards, and worker contract can refer to the same terms.
+This range turns the cache-age check into a stale-while-revalidate policy: entries under 60 seconds serve directly, entries between 60 and 150 serve stale while a background refresh runs, and older entries fall through to the origin. I left both thresholds inline to keep this change narrow; tell me in review if you want them extracted into named constants shared with the rollout flag, dashboards, and worker contract.
 </Annotation>
 
 <Annotation lines="19" side="old">
-Keep this cutoff named; rollout dashboards still key on it.
+I removed the inline 60-second cutoff; it moves into the stale-window check above. Rollout dashboards still key on the old constant name, so I will repoint them in the rollout PR.
 </Annotation>
 
 <Annotation lines="34-36" side="new">
-Should this counter use the `catalog_cache` prefix shared by the existing dashboard queries? Before merging, please confirm that the fallback signal remains distinct from refresh failures; otherwise the rollout panel will combine request-path origin reads with background-worker errors and hide the failure mode we need to watch.
+I added this counter with the `catalog_cache` prefix so it lands on the dashboard the existing queries share. The fallback signal stays distinct from refresh failures; without that separation the rollout panel would combine request-path origin reads with background-worker errors and hide the failure mode we need to watch during rollout.
 
-- Preserve the route and region tags already emitted by cache metrics.
-- Add a dashboard query that isolates synchronous origin fallbacks.
+- I preserved the route and region tags already emitted by cache metrics.
+- I added a dashboard query that isolates synchronous origin fallbacks.
 </Annotation>
 
 </CodeDiff>

@@ -92,7 +92,7 @@ test("should keep a range Annotation visible when switching diff views", async (
   });
   const unified = diff.locator('[data-diff-content="unified"]');
   const split = diff.locator('[data-diff-content="split"]');
-  const annotationText = "Should this counter use the catalog_cache prefix";
+  const annotationText = "I added this counter with the catalog_cache prefix";
   const unifiedAnnotation = unified.getByRole("note", { name: "Lines 34-36" });
   const splitAnnotation = split.getByRole("note", { name: "Lines 34-36" });
   const shortAnnotation = unified.getByRole("note", { name: "Line 19" });
@@ -592,10 +592,10 @@ test("should preserve typed-block content without controls when JavaScript is di
     .getByRole("note", { name: "Lines 34-36" });
   await expect(annotation).toBeVisible();
   await expect(annotation).toContainText(
-    "Should this counter use the catalog_cache prefix",
+    "I added this counter with the catalog_cache prefix",
   );
   await expect(annotation).toContainText(
-    "Add a dashboard query that isolates synchronous origin fallbacks.",
+    "I added a dashboard query that isolates synchronous origin fallbacks.",
   );
   await expect(annotation.locator(".code-diff-annotation-body-clamped")).toHaveCount(0);
   await expect(page.locator(".code-diff-annotation-toggle")).toHaveCount(0);
