@@ -3,19 +3,47 @@ title: What is Big Plan?
 description: Big Plan turns your agent's markdown plan into a document built for review.
 ---
 
-Big Plan turns your agent's markdown plan into a document built for review.
-Your agent writes its plan to a file; you render it, read it, and reach real agreement before the agent acts.
+Big Plan turns your agent's standard text plan into a rich, interactive HTML document specially designed for human review.
 
-This is what a rendered plan looks like, in light mode:
+Run it in your favorite agent hardness (Claude Code, Codex, etc.) as a skill like this:
+
+```
+Give me a /big-plan for implementing the following feature...
+```
+
+
+
+## Let's see an example
+
+This is what a rendered plan looks like
+
+<!-- TODO: Show light mode and dark mode as optional tabs, not one after the other. -->
 
 ![The example plan rendered in the Big Plan viewer's light theme: a warm paper-like reading column with section navigation and a comparison table.](../../../assets/viewer-light.png)
+
+<!-- TODO: Update screenshot to show actual components -->
 
 And in dark mode:
 
 ![The example plan rendered in the Big Plan viewer's dark theme, with the same layout on a dark palette.](../../../assets/viewer-dark.png)
 
-The viewer follows your OS preference and remembers your choice when you override it.
-[See a rendered plan in your browser.](/demo/)
+Some parts of this plan are plain-old markdown.
+
+But take a look at the the **code diff** and **HTTP endpoint** sections. Those are examples of [big plan components](../components/index.md) that are specially designed to render common types of information in a first-class way. Big Plan ships today with over a dozen components, and because it's open source, we'll keep adding more as we find the need!
+
+But wait, there's more! You can comment on specific parts of a big-plan, track plan versions, navigate the plan with vim shortcuts, enforce plan templates, and it all runs locally without the need for any third-party service. To see it in action, [install it](./installation.md), or check out our [walkthrough](./walkthrough.md).
+
+## Why Big Plan?
+
+Agent plans are kind of a big deal.
+
+In a typical AI workflow, the more confident you are in the AI plan, the better your agent will perform at the execution step and the faster your final review will go.
+
+But by default, agent plans render as a wall of text that's painful to read. We think of these plans of limited ambition as "small plans." Surely we can do better! 
+
+If plans are so important for the human, they should present in a first-class way. We think of these plans of large abmbition as "big plans." And indeed we can do better!
+
+<!-- TODO: Put this content elsewhere, maybe a how it works? -->
 
 ## How it works
 
@@ -26,36 +54,8 @@ The viewer follows your OS preference and remembers your choice when you overrid
 
 Big Plan works with any agent that can write a file: Claude Code, Codex, Cursor, or your own.
 
-## What you can do
-
-### Read the whole plan without squinting
-
-Stop scrolling walls of markdown in a terminal.
-
-- One themed reading column, in light or dark.
-- Section navigation that follows you as you scroll.
-- Syntax highlighting and copy controls on every code sample.
-
-### Challenge decisions while they're cheap
-
-Push back on the approach before any code exists, when changing everything costs one comment.
-
-- Review the plan as a document, not a diff.
-- Send the agent back to revise, then render again.
-
-### Keep the whole workflow on your disk
-
-Review plans with nothing leaving your machine.
-
-- One self-contained HTML file: no server, no external requests.
-- The plan file on your disk stays the source of truth.
-- Readable even with JavaScript disabled.
-
-## Today and planned
-
-The static viewer is shipped; see [the viewer](/guides/the-viewer/) for the full reading experience.
-Planned: typed [components](/components/), live agent chat, comment threads, and versioned review ([roadmap](/intro/roadmap/)).
-
 ## Next step
+
+<!-- TODO: Update this to flow more naturally -->
 
 [Render your first plan in under a minute.](/intro/quickstart/)
