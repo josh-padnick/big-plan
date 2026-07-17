@@ -77,8 +77,8 @@ export default tseslint.config(
           "src/render/markdown/code-block/**/*.ts",
           "src/render/markdown/blocks/**/*.ts",
         ],
-        // Direct Markdown files only; the nested code-block concern has its
-        // own dependency contract so shell can consume its generated script.
+        // Direct Markdown-pipeline files only; the nested code-block and
+        // typed-block concerns have their own dependency contracts.
         imports: ["**/markdown/*.js"],
         // Deliberately not escapeHtml: markdown escapes through
         // rehype-stringify, never by hand.

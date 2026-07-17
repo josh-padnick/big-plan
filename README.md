@@ -66,7 +66,7 @@ Use `CodeDiff` with a required non-empty file path, optional bare `showLineNumbe
 ```
 
 <Annotation lines="13" side="new">
-Use the catalog metric prefix documented in `metrics.md`.
+I added this TTL-change metric; tell me in review if it should use the catalog prefix documented in `metrics.md`.
 </Annotation>
 
 </CodeDiff>
