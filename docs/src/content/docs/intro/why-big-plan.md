@@ -9,6 +9,16 @@ The big decisions happen in the plan, while they're still cheap to change.
 Plans are a big deal.
 Make yours a big plan.
 
+## Small plans and big plans
+
+In a typical AI workflow, the more confident you are in the plan, the better your agent performs at execution, and the faster your final review goes.
+That confidence comes from review, and review quality is set by how the plan presents itself.
+
+By default, an agent plan renders as a wall of text that's painful to read.
+We think of those plans of limited ambition as small plans.
+If plans matter this much to the human, they should present in a first-class way.
+We think of those plans of large ambition as big plans, and Big Plan exists to turn every small plan into one.
+
 ## The wall of text problem
 
 An agent's plan usually arrives as a wall of text: thousands of words of markdown, scrolled past in a terminal or skimmed in a raw diff.

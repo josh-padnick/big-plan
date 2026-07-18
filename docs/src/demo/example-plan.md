@@ -63,7 +63,40 @@ ALTER TABLE api_keys
   ADD COLUMN rate_limit_burst integer NOT NULL DEFAULT 100;
 ```
 
+## Code diff
+
+The gateway change is small; the middleware slots in right after key auth:
+
+```diff
+ // api-gateway/src/app.ts
+ app.addHook("preHandler", keyAuth);
++app.addHook("preHandler", rateLimit({
++  redis,
++  limits: limitsFromApiKey,
++  onDegraded: metrics.rateLimitDegraded,
++}));
+ app.register(publicRoutes);
+-app.setErrorHandler(defaultErrorHandler);
++app.setErrorHandler(rateLimitAwareErrorHandler);
+```
+
+## HTTP endpoint
+
 Rejected requests receive `429 Too Many Requests` with `Retry-After` and the standard `RateLimit-*` headers.
+Clients can also inspect their budget directly:
+
+| Method | Path | Auth | Returns |
+| --- | --- | --- | --- |
+| `GET` | `/v1/rate-limit` | API key | Current window usage and limits |
+
+```json
+{
+  "limit": 600,
+  "remaining": 483,
+  "resetSeconds": 21,
+  "burst": 100
+}
+```
 
 ## Rollout plan
 
