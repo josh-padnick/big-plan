@@ -5,7 +5,7 @@ description: Big Plan turns your agent's markdown plan into a document built for
 
 Big Plan turns your agent's standard text plan into a rich, interactive HTML document specially designed for human review.
 
-Run it in your favorite agent hardness (Claude Code, Codex, etc.) as a skill like this:
+Run it in your favorite agent harness (Claude Code, Codex, etc.) as a skill like this:
 
 ```
 Give me a /big-plan for implementing the following feature...
@@ -17,6 +17,7 @@ Give me a /big-plan for implementing the following feature...
 
 This is what a rendered plan looks like
 
+<!-- TODO: Update screenshot to show the full window, including the table of contents -->
 <!-- TODO: Show light mode and dark mode as optional tabs, not one after the other. -->
 
 ![The example plan rendered in the Big Plan viewer's light theme: a warm paper-like reading column with section navigation and a comparison table.](../../../assets/viewer-light.png)
@@ -29,9 +30,9 @@ And in dark mode:
 
 Some parts of this plan are plain-old markdown.
 
-But take a look at the the **code diff** and **HTTP endpoint** sections. Those are examples of [big plan components](../components/index.md) that are specially designed to render common types of information in a first-class way. Big Plan ships today with over a dozen components, and because it's open source, we'll keep adding more as we find the need!
+But take a look at the the **code diff** and **HTTP endpoint** sections. Those are examples of [big plan components](../components/index.md) that are specially designed to render common types of information in a first-class way. Big Plan ships today with over a dozen components, and because it's open source, it's easy to add more as we find the need.
 
-But wait, there's more! You can comment on specific parts of a big-plan, track plan versions, navigate the plan with vim shortcuts, enforce plan templates, and it all runs locally without the need for any third-party service. To see it in action, [install it](./installation.md), or check out our [walkthrough](./walkthrough.md).
+But wait, there's more! You can also comment on specific parts of a big-plan, track plan versions, navigate the plan with vim shortcuts,and enforce plan templates. Plus, it all runs locally without the need for any third-party service. To see it in action, [install it](./installation.md), or check out our [walkthrough](./walkthrough.md).
 
 ## Why Big Plan?
 
