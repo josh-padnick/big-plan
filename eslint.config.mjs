@@ -8,6 +8,7 @@ import { readdirSync } from "node:fs";
 import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import eslintConfigPrettier from "eslint-config-prettier";
 
 export default tseslint.config(
   {
@@ -254,4 +255,7 @@ export default tseslint.config(
     files: ["test/fixtures.ts"],
     rules: { "no-restricted-imports": "off" },
   },
+,
+  // Prettier owns formatting; disable any style rules that would fight it.
+  eslintConfigPrettier,
 );

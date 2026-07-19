@@ -1,0 +1,10 @@
+dist/
+node_modules/
+*.generated.ts
+examples/*.html
+docs/public/demo/
+playwright-report/
+test-results/
+bun.lock
+.copia/
+.astro/
