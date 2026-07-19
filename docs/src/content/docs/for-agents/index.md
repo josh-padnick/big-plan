@@ -34,5 +34,5 @@ https://big-plan.ai/reference/cli/            ->  https://big-plan.ai/reference/
 https://big-plan.ai/for-agents/render-a-plan/ ->  https://big-plan.ai/for-agents/render-a-plan.md
 ```
 
-Each `.md` response starts with frontmatter carrying `title`, `description`, and `canonical` (the page's HTML URL), followed by the page's untouched Markdown source.
+Each `.md` response starts with frontmatter carrying `title`, `description`, and `canonical` (the page's HTML URL), followed by a clean Markdown projection of the page that removes presentation-only MDX.
 Fetch [`/llms.txt`](/llms.txt) once to see the map, fetch the `.md` URLs your task needs, and fall back to [`/llms-full.txt`](/llms-full.txt) only when you genuinely need the whole corpus.

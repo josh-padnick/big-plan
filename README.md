@@ -83,6 +83,8 @@ From `docs/`, build the static site with:
 bun run build
 ```
 
+After building the root package, regenerate the docs' light/dark component screenshot pairs from `docs/` with `bun run screenshots`.
+
 ## License
 
 [MIT](LICENSE).
