@@ -3,7 +3,7 @@
 
 import type { IconNode } from "../lucide-icon.js";
 
-export const MAXIMIZE_ICON: IconNode = [
+export const MAXIMIZE_2_ICON: IconNode = [
   ["path", { d: "M15 3h6v6" }],
   ["path", { d: "m21 3-7 7" }],
   ["path", { d: "m3 21 7-7" }],

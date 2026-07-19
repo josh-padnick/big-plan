@@ -3,7 +3,7 @@
 
 import type { IconNode } from "../lucide-icon.js";
 
-export const COLUMNS_ICON: IconNode = [
+export const COLUMNS_2_ICON: IconNode = [
   ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2" }],
   ["path", { d: "M12 3v18" }],
 ];

@@ -2,13 +2,13 @@
 // actions, and full-screen control as one self-contained HAST header.
 
 import type { Element, Text } from "hast";
-import { COLUMNS_ICON } from "../../../icons/lucide/columns-2.js";
+import { COLUMNS_2_ICON } from "../../../icons/lucide/columns-2.js";
 import { COPY_ICON } from "../../../icons/lucide/copy.js";
 import { ELLIPSIS_ICON } from "../../../icons/lucide/ellipsis.js";
 import { FILE_ICON } from "../../../icons/lucide/file.js";
-import { MAXIMIZE_ICON } from "../../../icons/lucide/maximize-2.js";
-import { MINIMIZE_ICON } from "../../../icons/lucide/minimize-2.js";
-import { ROWS_ICON } from "../../../icons/lucide/rows-2.js";
+import { MAXIMIZE_2_ICON } from "../../../icons/lucide/maximize-2.js";
+import { MINIMIZE_2_ICON } from "../../../icons/lucide/minimize-2.js";
+import { ROWS_2_ICON } from "../../../icons/lucide/rows-2.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 
 const BUTTON_CLASSES =
@@ -183,7 +183,7 @@ const viewToggleButton = ({
   readonly view: "unified" | "split";
   readonly pressed: boolean;
   readonly label: string;
-  readonly icon: typeof COLUMNS_ICON;
+  readonly icon: typeof COLUMNS_2_ICON;
   readonly iconName: string;
 }): Element => ({
   type: "element",
@@ -220,11 +220,15 @@ const expandControlButton = (): Element => ({
   },
   children: [
     renderLucideIcon({
-      icon: MAXIMIZE_ICON,
+      icon: MAXIMIZE_2_ICON,
       name: "maximize-2",
       hidden: false,
     }),
-    renderLucideIcon({ icon: MINIMIZE_ICON, name: "minimize-2", hidden: true }),
+    renderLucideIcon({
+      icon: MINIMIZE_2_ICON,
+      name: "minimize-2",
+      hidden: true,
+    }),
   ],
 });
 
@@ -250,14 +254,14 @@ const viewToggleGroup = (): Element => ({
       view: "unified",
       pressed: true,
       label: "Unified view",
-      icon: ROWS_ICON,
+      icon: ROWS_2_ICON,
       iconName: "rows-2",
     }),
     viewToggleButton({
       view: "split",
       pressed: false,
       label: "Side-by-side view",
-      icon: COLUMNS_ICON,
+      icon: COLUMNS_2_ICON,
       iconName: "columns-2",
     }),
   ],
