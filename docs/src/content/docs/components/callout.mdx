@@ -1,0 +1,64 @@
+---
+title: Callout
+description: An accent-bordered panel with a typed icon and title, for the notes, tips, warnings, and dangers a plan reviewer must not miss.
+---
+
+import ThemeImage from "../../../components/ThemeImage.astro";
+import calloutTypesLight from "../../../assets/components/callout-types-light.png";
+import calloutTypesDark from "../../../assets/components/callout-types-dark.png";
+
+`Callout` highlights information that a reviewer must read even when skimming. Callouts can be used to share a `note`, `tip`, `warning` or `danger`.
+
+## When to use it
+
+See the [types](#types) for guidance on when to use the Callout.
+
+## Use cases
+
+There are countless use cases of when it's worth calling out information to a user, but here are some concrete ones:
+
+- Warn a user about data-loss dangers
+- Call out important sequencing
+
+## How it looks
+
+<ThemeImage
+  light={calloutTypesLight}
+  dark={calloutTypesDark}
+  alt="All four callout types rendered in the viewer"
+/>
+
+## Usage
+
+```mdx
+<Callout type="warning" title="Deploy ordering">
+
+Enable the worker before stale reads.
+
+</Callout>
+```
+
+## Authoring
+
+### Attributes
+
+| Attribute | Type                                       | Required | Behavior                                                                |
+| --------- | ------------------------------------------ | -------- | ----------------------------------------------------------------------- |
+| `type`    | `"note" \| "tip" \| "warning" \| "danger"` | Yes      | Selects the accent palette, the icon, and the default title.            |
+| `title`   | string                                     | No       | Header text; defaults to `Note`, `Tip`, `Warning`, or `Danger` by type. |
+
+Any other attribute is a positional authoring error.
+
+### Children
+
+Children are ordinary Markdown and keep every pipeline behavior: headings receive anchors, fenced code keeps syntax highlighting and its copy control, and tables keep their scroll containers.
+Level-two headings inside a callout still join the document's table of contents.
+
+## Types
+
+| Type      | Icon           | Intended use                                    |
+| --------- | -------------- | ----------------------------------------------- |
+| `note`    | info           | A relevant aside.                               |
+| `tip`     | lightbulb      | Information that may be of use.                 |
+| `warning` | triangle-alert | Something that will go wrong if ignored.        |
+| `danger`  | octagon-alert  | Irreversible or destructive consequences.       |

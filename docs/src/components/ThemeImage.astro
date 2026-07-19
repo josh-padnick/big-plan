@@ -1,0 +1,18 @@
+---
+// Renders a light and dark screenshot pair, showing only the image matching
+// the active docs theme via Starlight's theme-variant utility classes, so
+// readers always see the mode they are browsing in.
+import { Image } from "astro:assets";
+import type { ImageMetadata } from "astro";
+
+type Props = {
+  readonly light: ImageMetadata;
+  readonly dark: ImageMetadata;
+  readonly alt: string;
+};
+
+const { light, dark, alt } = Astro.props;
+---
+
+<Image src={light} alt={alt} class="dark:sl-hidden" />
+<Image src={dark} alt={alt} class="light:sl-hidden" />
