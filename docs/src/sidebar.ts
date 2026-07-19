@@ -33,6 +33,8 @@ export const SIDEBAR: readonly SidebarGroup[] = [
       { label: "Callout", slug: "components/callout" },
       { label: "CodeDiff", slug: "components/code-diff" },
       { label: "CodeSnippet", slug: "components/code-snippet" },
+      { label: "FileTree", slug: "components/file-tree" },
+      { label: "FileTreeDiff", slug: "components/file-tree-diff" },
     ],
   },
   {

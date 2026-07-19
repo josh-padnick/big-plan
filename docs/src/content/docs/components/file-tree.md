@@ -1,0 +1,66 @@
+---
+title: FileTree
+description: A component for a plain project file hierarchy, with directories, files, and optional per-entry notes.
+---
+
+`FileTree` renders a plain file hierarchy from an indented text outline: directories, files, and an optional note beside any entry.
+It shows where code lives without implying that anything changes.
+
+## When to use it
+
+Use `FileTree` to orient a reviewer in a directory structure - the shape of a module, the layout of a package, or where a plan's new files will sit - when no change is being proposed.
+
+### When not to use it
+
+- Proposed changes - showing files that are added, modified, removed, or renamed is [`FileTreeDiff`](/components/file-tree-diff/)'s job
+- A single path - inline code (`` `src/render/page.ts` ``) is enough when there is no hierarchy to show
+
+## Use cases
+
+- Sketch the layout a plan assumes before describing the work
+- Point out which directory owns a concern the reviewer will need to find
+
+## How it looks
+
+:::note[📸 Screenshot placeholder]
+A bordered tree with a title header, folder and file icons, connector lines between nested entries, and a muted note beside one file.
+:::
+
+## Usage
+
+````mdx
+<FileTree title="Worker pool layout">
+
+```tree
+worker-pool/
+  refresh-worker.ts - Consumes deduplicated catalog refresh jobs.
+  worker-config.ts - Owns concurrency and timeout settings.
+```
+
+</FileTree>
+````
+
+## Authoring
+
+### Attributes
+
+| Attribute | Type   | Required | Behavior                                                        |
+| --------- | ------ | -------- | --------------------------------------------------------------- |
+| `title`   | string | No       | Header caption above the tree; omitted, the tree has no header. |
+
+Any other attribute is a positional authoring error.
+
+### Children
+
+The component takes exactly one fenced code block with the `tree` language, and nothing else.
+
+### Tree grammar
+
+Each non-blank line is one entry, and blank lines are ignored:
+
+- Indent with multiples of two spaces; each two-space step is one level deeper, and a line cannot jump more than one level past its parent.
+- End a name with `/` to mark a directory; anything else is a file, and a file cannot have children.
+- Add an optional note after `-` (space-dash-space); it renders muted, after the name.
+
+Change badges (`[added]`, `[modified]`, `[removed]`, `[renamed]`) and rename arrows (`->`) are rejected with a pointer to `FileTreeDiff`.
+Every violation - odd indentation, an indentation jump, a file given children, an empty tree, or change syntax - reports a positional diagnostic pointing at the offending line.
