@@ -3,13 +3,28 @@ title: CodeSnippet
 description: A planned component for annotated code excerpts with a file association, real line numbers, and line-anchored notes.
 ---
 
-`CodeSnippet` is for code a reviewer must inspect line by line: a file association, real line numbers starting from the file's actual line, and `Annotation` cards anchored to the lines they explain.
-Plain samples should stay plain fences, which already ship syntax highlighting and a copy control; `CodeSnippet` earns its place through exactly the three things a fence cannot express.
+`CodeSnippet` shows an excerpt of existing code a reviewer must inspect line by line: a file association, real line numbers starting from the file's actual line, and `Annotation` cards anchored to the lines they explain.
 
 :::caution[In progress]
 `CodeSnippet` is a planned contract, not an available component yet.
 The current renderer rejects it as an unknown component.
 :::
+
+## When to use it
+
+Use `CodeSnippet` when the code under review already exists and the reviewer needs to see it in place - with its real file path and file-absolute line numbers - rather than as an anonymous sample.
+
+### When not to use it
+
+- Plain samples - a fenced code block already ships syntax highlighting and a copy control; `CodeSnippet` earns its place only through the file association, real line numbers, and anchored notes a fence cannot express
+- Proposed changes - showing an edit is [`CodeDiff`](/components/code-diff/)'s job
+
+## Use cases
+
+- Walk the reviewer through the exact lines a plan builds on, in their real location in the file
+- Explain load-bearing lines with annotations anchored to their file-absolute numbers
+
+## How it looks
 
 :::note[📸 Screenshot placeholder]
 An annotated snippet with the file header, file-absolute gutter, a tinted anchor line, and its annotation card.
@@ -42,7 +57,9 @@ const convertMarkdown = async ({ source, fallbackTitle }) => {
 </CodeSnippet>
 ````
 
-## Attributes
+## Authoring
+
+### Attributes
 
 | Attribute         | Type                     | Required           | Behavior                                                                                                                                    |
 | ----------------- | ------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -50,17 +67,28 @@ const convertMarkdown = async ({ source, fallbackTitle }) => {
 | `startLine`       | string, positive integer | No (default `"1"`) | The file line the first fenced line corresponds to; the gutter and all annotation anchors use this file-absolute numbering.                 |
 | `showLineNumbers` | bare boolean             | No                 | Renders the line-number gutter; required whenever `startLine` is set, since invisible numbering would make annotation anchors unverifiable. |
 
-## Annotations
-
-`Annotation` takes one required `lines` attribute: a single file-absolute line (`"47"`) or a strictly ascending inclusive range (`"47-52"`).
-Every referenced line must fall inside the snippet's range, and the body is ordinary markdown.
-Cards render immediately after the last line of their range with a `Line N` / `Lines N-M` badge; anchor lines are accent-tinted with a gutter marker in both themes.
-An `Annotation` outside a declaring parent stays an unknown component.
-
-## Fence contract and diagnostics
+### Children
 
 The component takes exactly one fenced code block, plus zero or more `Annotation` components, and nothing else.
-Every violation reports a positional diagnostic: a non-integer `startLine`, `startLine` without `showLineNumbers`, an out-of-range anchor (the message includes the valid range), and a bare snippet with no `file`, no `startLine`, and no annotations, which is rejected with a pointer to use a plain markdown fence.
+
+Every violation reports a positional diagnostic:
+
+- A non-integer `startLine`
+- `startLine` without `showLineNumbers`
+- An annotation anchor outside the snippet's range (the message includes the valid range)
+- A bare snippet with no `file`, no `startLine`, and no annotations, which is rejected with a pointer to use a plain markdown fence
+
+### Annotation
+
+Nest `Annotation` directly inside `CodeSnippet` to anchor a markdown note to specific lines.
+
+| Attribute | Type   | Required | Behavior                                                                                                                                              |
+| --------- | ------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lines`   | string | Yes      | A single file-absolute line (`"47"`) or a strictly ascending inclusive range (`"47-52"`); every referenced line must fall inside the snippet's range. |
+
+The body is ordinary markdown, and an `Annotation` outside a declaring parent stays an unknown component.
+
+An annotation renders as a prose card immediately after the last line of its range, with a `Line N` / `Lines N-M` badge; anchor lines are accent-tinted with a gutter marker in both themes.
 
 ## Copy behavior
 
