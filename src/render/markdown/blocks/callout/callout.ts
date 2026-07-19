@@ -4,7 +4,11 @@
 import type { Element } from "hast";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import type { IconNode } from "../../../icons/lucide-icon.js";
-import type { BlockRenderer } from "../registry.js";
+import {
+  validateBlockAttributes,
+  type BlockAttributeSchema,
+  type BlockRenderer,
+} from "../registry.js";
 import {
   INFO_ICON,
   LIGHTBULB_ICON,
@@ -12,53 +16,52 @@ import {
   TRIANGLE_ALERT_ICON,
 } from "./callout-icons.js";
 
-type CalloutType = "note" | "tip" | "warning" | "danger";
-
 type CalloutConfig = {
-  readonly type: CalloutType;
   readonly defaultTitle: string;
   readonly icon: IconNode;
   readonly iconName: string;
 };
 
-const ALLOWED_TYPES = "note, tip, warning, danger";
+const CALLOUT_CONFIGS = {
+  note: {
+    defaultTitle: "Note",
+    icon: INFO_ICON,
+    iconName: "info",
+  },
+  tip: {
+    defaultTitle: "Tip",
+    icon: LIGHTBULB_ICON,
+    iconName: "lightbulb",
+  },
+  warning: {
+    defaultTitle: "Warning",
+    icon: TRIANGLE_ALERT_ICON,
+    iconName: "triangle-alert",
+  },
+  danger: {
+    defaultTitle: "Danger",
+    icon: OCTAGON_ALERT_ICON,
+    iconName: "octagon-alert",
+  },
+} satisfies Readonly<Record<string, CalloutConfig>>;
 
-const configForType = (
-  value: string | boolean | undefined,
-): CalloutConfig | undefined => {
-  switch (value) {
-    case "note":
-      return {
-        type: "note",
-        defaultTitle: "Note",
-        icon: INFO_ICON,
-        iconName: "info",
-      };
-    case "tip":
-      return {
-        type: "tip",
-        defaultTitle: "Tip",
-        icon: LIGHTBULB_ICON,
-        iconName: "lightbulb",
-      };
-    case "warning":
-      return {
-        type: "warning",
-        defaultTitle: "Warning",
-        icon: TRIANGLE_ALERT_ICON,
-        iconName: "triangle-alert",
-      };
-    case "danger":
-      return {
-        type: "danger",
-        defaultTitle: "Danger",
-        icon: OCTAGON_ALERT_ICON,
-        iconName: "octagon-alert",
-      };
-    default:
-      return undefined;
-  }
-};
+type CalloutType = keyof typeof CALLOUT_CONFIGS;
+
+function objectKeys<const Value extends object>(
+  value: Value,
+): ReadonlyArray<Extract<keyof Value, string>>;
+function objectKeys(value: object): ReadonlyArray<string> {
+  return Object.keys(value);
+}
+
+const CALLOUT_TYPES = objectKeys(CALLOUT_CONFIGS);
+const CALLOUT_SCHEMA = {
+  type: { kind: "enum", values: CALLOUT_TYPES, required: true },
+  title: { kind: "string" },
+} satisfies BlockAttributeSchema;
+
+const configForType = (value: CalloutType): CalloutConfig | undefined =>
+  Object.hasOwn(CALLOUT_CONFIGS, value) ? CALLOUT_CONFIGS[value] : undefined;
 
 const CALLOUT_CLASSES =
   // Border colors come from the stylesheet's [data-callout] rules; a
@@ -76,46 +79,25 @@ export const renderCallout: BlockRenderer = ({
   position,
   diagnostics,
 }): Element => {
-  const configured = configForType(attributes["type"]);
-  if (configured === undefined) {
-    diagnostics.add({
-      message:
-        attributes["type"] === undefined
-          ? `Missing required attribute "type"; expected one of: ${ALLOWED_TYPES}`
-          : `Invalid value for attribute "type"; expected one of: ${ALLOWED_TYPES}`,
-      position,
-    });
-  }
-
-  const titleValue = attributes["title"];
-  if (titleValue !== undefined && typeof titleValue !== "string") {
-    diagnostics.add({
-      message: 'Attribute "title" must be a string',
-      position,
-    });
-  }
-
-  for (const name of Object.keys(attributes)) {
-    if (name !== "type" && name !== "title") {
-      diagnostics.add({
-        message: `Unknown attribute "${name}" on Callout`,
-        position,
-      });
-    }
-  }
-
-  const config = configured ?? configForType("note");
+  const validated = validateBlockAttributes({
+    block: "Callout",
+    attributes,
+    position,
+    diagnostics,
+    schema: CALLOUT_SCHEMA,
+  });
+  const type = validated.type ?? "note";
+  const config = configForType(type);
   if (config === undefined) {
-    throw new Error("Callout note configuration is missing");
+    throw new Error(`Callout ${type} configuration is missing`);
   }
-  const title =
-    typeof titleValue === "string" ? titleValue : config.defaultTitle;
+  const title = validated.title ?? config.defaultTitle;
 
   return {
     type: "element",
     tagName: "aside",
     properties: {
-      "data-callout": config.type,
+      "data-callout": type,
       className: CALLOUT_CLASSES.split(" "),
     },
     children: [

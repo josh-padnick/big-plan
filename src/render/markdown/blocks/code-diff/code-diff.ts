@@ -6,7 +6,12 @@ import type { Element, ElementContent, Root, Text } from "hast";
 import type { Nodes as MarkdownNode, Root as MarkdownRoot } from "mdast";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import { COPY_ICON } from "../../code-block/code-block-icons.js";
-import type { BlockRenderer, ScopedChild } from "../registry.js";
+import {
+  validateBlockAttributes,
+  type BlockAttributeSchema,
+  type BlockRenderer,
+  type ScopedChild,
+} from "../registry.js";
 import type { DiagnosticCollector } from "../diagnostics.js";
 import {
   COLUMNS_ICON,
@@ -27,6 +32,19 @@ import type {
 
 type NodePosition = Root["position"];
 type DiffSide = "old" | "new";
+
+const CODE_DIFF_SCHEMA = {
+  file: { kind: "string", required: true, nonEmpty: true },
+  showLineNumbers: { kind: "booleanShorthand" },
+  showLineCounts: { kind: "booleanShorthand" },
+} satisfies BlockAttributeSchema;
+
+const ANNOTATION_SCHEMA = {
+  side: {
+    kind: "enum",
+    values: ["old", "new"] satisfies ReadonlyArray<DiffSide>,
+  },
+} satisfies BlockAttributeSchema;
 
 type Annotation = {
   readonly lines: string;
@@ -252,33 +270,27 @@ const annotationFromScopedChild = ({
     });
   }
 
-  const sideValue = child.attributes["side"];
-  const validSide =
-    sideValue === undefined || sideValue === "old" || sideValue === "new";
-  if (!validSide) {
-    diagnostics.add({
-      message: 'Invalid value for attribute "side"; expected one of: old, new',
-      position: child.position,
-    });
-  }
+  const { lines: _lines, ...attributes } = child.attributes;
+  const validated = validateBlockAttributes({
+    block: "Annotation",
+    attributes,
+    position: child.position,
+    diagnostics,
+    schema: ANNOTATION_SCHEMA,
+  });
 
-  for (const name of Object.keys(child.attributes)) {
-    if (name !== "lines" && name !== "side") {
-      diagnostics.add({
-        message: `Unknown attribute "${name}" on Annotation`,
-        position: child.position,
-      });
-    }
-  }
-
-  if (range === undefined || !validSide || typeof linesValue !== "string") {
+  if (
+    range === undefined ||
+    typeof linesValue !== "string" ||
+    (child.attributes["side"] !== undefined && validated.side === undefined)
+  ) {
     return undefined;
   }
   return {
     lines: linesValue,
     startLine: range.start,
     endLine: range.end,
-    side: sideValue === "old" ? "old" : "new",
+    side: validated.side ?? "new",
     children: child.children,
     position: child.position,
   };
@@ -938,46 +950,13 @@ export const renderCodeDiff: BlockRenderer = ({
   position,
   diagnostics,
 }): Element => {
-  const fileValue = attributes["file"];
-  if (typeof fileValue !== "string" || fileValue.trim() === "") {
-    diagnostics.add({
-      message:
-        fileValue === undefined
-          ? 'Missing required attribute "file"; expected a string'
-          : typeof fileValue !== "string"
-            ? 'Attribute "file" must be a string'
-            : 'Attribute "file" must be a non-empty string',
-      position,
-    });
-  }
-  const lineNumbersValue = attributes["showLineNumbers"];
-  if (lineNumbersValue !== undefined && lineNumbersValue !== true) {
-    diagnostics.add({
-      message:
-        'Attribute "showLineNumbers" is a shorthand boolean; use the bare form',
-      position,
-    });
-  }
-  const showLineCountsValue = attributes["showLineCounts"];
-  if (showLineCountsValue !== undefined && showLineCountsValue !== true) {
-    diagnostics.add({
-      message:
-        'Attribute "showLineCounts" is a shorthand boolean; use the bare form',
-      position,
-    });
-  }
-  for (const name of Object.keys(attributes)) {
-    if (
-      name !== "file" &&
-      name !== "showLineNumbers" &&
-      name !== "showLineCounts"
-    ) {
-      diagnostics.add({
-        message: `Unknown attribute "${name}" on CodeDiff`,
-        position,
-      });
-    }
-  }
+  const validated = validateBlockAttributes({
+    block: "CodeDiff",
+    attributes,
+    position,
+    diagnostics,
+    schema: CODE_DIFF_SCHEMA,
+  });
 
   const meaningfulChildren = children.filter((child) => !isWhitespace(child));
   const extracted = diffFenceSource({ children: meaningfulChildren });
@@ -1007,7 +986,7 @@ export const renderCodeDiff: BlockRenderer = ({
             },
     });
   }
-  const showLineNumbers = lineNumbersValue === true;
+  const showLineNumbers = validated.showLineNumbers === true;
   if (showLineNumbers && !parsed.diff.hasHunkHeaders) {
     diagnostics.add({
       message: "CodeDiff cannot show line numbers without an @@ hunk header",
@@ -1067,7 +1046,7 @@ export const renderCodeDiff: BlockRenderer = ({
     }
   }
 
-  const filePath = typeof fileValue === "string" ? fileValue : "";
+  const filePath = validated.file ?? "";
   const lastSlashIndex = filePath.lastIndexOf("/");
   const fileDir =
     lastSlashIndex === -1 ? "" : filePath.slice(0, lastSlashIndex + 1);
@@ -1156,7 +1135,7 @@ export const renderCodeDiff: BlockRenderer = ({
               ],
             },
             children: [
-              ...(showLineCountsValue === true
+              ...(validated.showLineCounts === true
                 ? [diffStats({ addedCount, removedCount })]
                 : []),
               viewToggleGroup(),
