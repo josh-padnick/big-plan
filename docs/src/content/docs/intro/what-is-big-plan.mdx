@@ -40,48 +40,11 @@ A great agent plan should be:
 
 1. **Easy to update.** It's painful to reference a specific paragraph of prose. You should be able to instantly highlight a section and give the agent feedback.
 
-1. **Versioned.** Sometimes the plan updates and you're not sure what changed, or you accidentally ovewrite something. Versioning should allow you to easily see older plans.
+1. **Versioned.** Sometimes the plan updates and you're not sure what changed, or you accidentally overwrite something. Versioning should allow you to easily see older plans.
 
 1. **Local and private.** Your plan can contain sensitive information; it shouldn't be shared with anyone else without a good reason.
 
-## Let's see an example
-
-This is what a rendered plan looks like:
-
-<Tabs>
-  <TabItem label="Light mode">
-    ![The example plan rendered in the Big Plan viewer's light theme: branding bar, section navigation, and a reading column showing a highlighted code diff.](../../../assets/viewer-full-light.png)
-  </TabItem>
-  <TabItem label="Dark mode">
-    ![The example plan rendered in the Big Plan viewer's dark theme, with the same layout on a dark palette.](../../../assets/viewer-full-dark.png)
-  </TabItem>
-</Tabs>
-
-The viewer follows your OS preference and remembers your choice when you override it.
-[See the full rendered plan in your browser.](/demo/)
-
-Some parts of this plan are plain-old markdown.
-
-But take a look at the **code diff** and **HTTP endpoint** sections.
-Those are examples of [big plan components](/components/) that are specially designed to render common types of information in a first-class way.
-Big Plan ships today with over a dozen components, and because it's open source, it's easy to add more as we find the need.
-
-But wait, there's more!
-You can also comment on specific parts of a big-plan, track plan versions, navigate the plan with vim shortcuts, and enforce plan templates.
-Plus, it all runs locally without the need for any third-party service.
-To see it in action, [install it](/intro/installation/), or check out our [walkthrough](/guides/walkthrough/).
-
-## How it works
-
-1. Your agent writes its plan to a markdown file.
-2. You run `npx big-plan render plan.md`.
-3. You open the rendered document and review it.
-4. If you want changes, tell the agent; it revises the file, and you render again.
-
-Big Plan works with any agent that can write a file: Claude Code, Codex, Cursor, or your own.
-Curious why plan review deserves its own tool? That story is on [Why Big Plan?](/intro/why-big-plan/)
-
 ## Next step
 
-The fastest way to get a feel for Big Plan is to render something real.
-[Render your first plan in under a minute](/intro/installation/), then check the [features](/intro/features/) you just picked up for free.
+The fastest way to get a feel for Big Plan is to see one.
+[Check out the demo](/intro/demo/), then [render your own plan in under a minute](/intro/installation/).

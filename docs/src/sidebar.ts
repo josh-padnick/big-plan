@@ -16,6 +16,7 @@ export const SIDEBAR: readonly SidebarGroup[] = [
     label: "Intro",
     items: [
       { label: "What is Big Plan?", slug: "intro/what-is-big-plan" },
+      { label: "Demo", slug: "intro/demo" },
       { label: "Installation", slug: "intro/installation" },
       { label: "Features", slug: "intro/features" },
       { label: "Why Big Plan?", slug: "intro/why-big-plan" },
