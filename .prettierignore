@@ -1,3 +1,4 @@
+.agent-runs/
 dist/
 node_modules/
 *.generated.ts
