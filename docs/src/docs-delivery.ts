@@ -14,8 +14,125 @@ const SIDEBAR_SLUGS: readonly string[] = SIDEBAR.flatMap((group) =>
 // The landing page leads the concatenated document; sidebar order follows.
 const FULL_DOCUMENT_ORDER: readonly string[] = ["index", ...SIDEBAR_SLUGS];
 
-// Returns the raw canonical body retained by the Starlight docs loader.
-export const rawBody = (entry: DocsEntry): string => entry.body ?? "";
+const THEME_IMAGE = /<ThemeImage\b[\s\S]*?\/>/g;
+const TABS = /<Tabs>([\s\S]*?)<\/Tabs>/g;
+const TAB_ITEM =
+  /[ \t]*<TabItem\s+label=(?:"([^"]*)"|'([^']*)')>[ \t]*\r?\n([\s\S]*?)[ \t]*<\/TabItem>/g;
+const IMPORT_END = /(?:from\s+)?["'][^"']+["'];?[ \t]*$/;
+const FENCE = /^[ \t]*(`{3,}|~{3,})/;
+const CLOSING_FENCE = /^[ \t]*(`{3,}|~{3,})[ \t]*$/;
+
+// Removes the leading MDX import block without touching import examples later
+// in the document.
+const removeImports = (body: string): string => {
+  const lines = body.split("\n");
+  let index = 0;
+
+  while (lines[index]?.trim() === "") {
+    index += 1;
+  }
+  while (lines[index]?.trimStart().startsWith("import ") === true) {
+    do {
+      index += 1;
+    } while (
+      index < lines.length &&
+      IMPORT_END.test(lines[index - 1]?.trimEnd() ?? "") === false
+    );
+
+    while (lines[index]?.trim() === "") {
+      index += 1;
+    }
+  }
+
+  return lines.slice(index).join("\n");
+};
+
+// Removes indentation introduced solely by an enclosing presentation
+// component while preserving the Markdown nested inside it.
+const dedent = (body: string): string => {
+  const lines = body.replace(/^\r?\n|\r?\n$/g, "").split("\n");
+  const indents = lines.flatMap((line) => {
+    if (line.trim() === "") {
+      return [];
+    }
+    return [line.length - line.trimStart().length];
+  });
+  const indentation = indents.length === 0 ? 0 : Math.min(...indents);
+  return lines.map((line) => line.slice(indentation)).join("\n");
+};
+
+// Applies a transformation around protected fenced examples.
+const transformProse = (
+  body: string,
+  transform: (prose: string) => string,
+): string => {
+  const protectedLines: string[] = [];
+  let tokenPrefix = "\0big-plan-fence:";
+  let openFence: string | undefined;
+
+  while (body.includes(tokenPrefix)) {
+    tokenPrefix += ":";
+  }
+
+  const protectedBody = body
+    .split("\n")
+    .map((line) => {
+      if (openFence === undefined) {
+        const marker = FENCE.exec(line)?.[1];
+        if (marker === undefined) {
+          return line;
+        }
+        openFence = marker;
+      } else {
+        const marker = CLOSING_FENCE.exec(line)?.[1];
+        if (marker?.[0] === openFence[0] && marker.length >= openFence.length) {
+          openFence = undefined;
+        }
+      }
+
+      const indentation = line.slice(0, line.length - line.trimStart().length);
+      const token = `${tokenPrefix}${protectedLines.length}\0`;
+      protectedLines.push(line.slice(indentation.length));
+      return `${indentation}${token}`;
+    })
+    .join("\n");
+
+  return protectedLines.reduce(
+    (result, line, index) =>
+      result.replaceAll(`${tokenPrefix}${index}\0`, line),
+    transform(protectedBody),
+  );
+};
+
+// Converts the presentation-only MDX used by the docs site into portable
+// Markdown for agent-facing endpoints.
+export const serializeMarkdownBody = (body: string): string => {
+  return transformProse(removeImports(body), (prose) =>
+    prose
+      .replace(TABS, (_tabs, children: string) =>
+        children
+          .replace(
+            TAB_ITEM,
+            (
+              _item,
+              doubleQuotedLabel: string,
+              singleQuotedLabel: string,
+              content: string,
+            ) =>
+              `### ${doubleQuotedLabel || singleQuotedLabel}\n\n${dedent(content)}\n`,
+          )
+          .trim(),
+      )
+      .replace(THEME_IMAGE, (element) => {
+        const alt = /\balt=(?:"([^"]*)"|'([^']*)')/.exec(element);
+        return alt?.[1] ?? alt?.[2] ?? "";
+      }),
+  );
+};
+
+// Returns the canonical body in the agent-facing Markdown representation.
+export const markdownBody = (entry: DocsEntry): string =>
+  serializeMarkdownBody(entry.body ?? "");
 
 // Builds the public HTML path represented by a content collection entry.
 export const htmlPath = (entry: DocsEntry): string =>
@@ -24,7 +141,7 @@ export const htmlPath = (entry: DocsEntry): string =>
 // Builds the clean Markdown endpoint path represented by an entry.
 export const markdownPath = (entry: DocsEntry): string => `/${entry.id}.md`;
 
-// Serializes one entry with machine-readable frontmatter and its raw body.
+// Serializes one entry with machine-readable frontmatter and a clean body.
 export const markdownDocument = ({
   entry,
   site,
@@ -40,7 +157,7 @@ export const markdownDocument = ({
     `canonical: ${JSON.stringify(canonical)}`,
     "---",
     "",
-    rawBody(entry),
+    markdownBody(entry),
   ].join("\n");
 };
 
@@ -100,5 +217,5 @@ export const fullDocumentSection = (entry: DocsEntry): string =>
     "",
     `> ${entry.data.description ?? ""}`,
     "",
-    rawBody(entry),
+    markdownBody(entry),
   ].join("\n");
