@@ -34,4 +34,4 @@ What Big Plan offers now is the combination the others don't: structured, consis
 
 ## Next step
 
-[Render your first plan in under a minute.](/intro/quickstart/)
+[Render your first plan in under a minute.](/intro/installation/)

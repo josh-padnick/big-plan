@@ -1,27 +1,31 @@
 ---
 title: Roadmap
-description: Separate the static viewer that ships today from Big Plan's planned review experience.
+description: What has shipped, what is in progress, and the component and review capabilities coming next.
 ---
 
-Big Plan is pre-alpha and is being built in the open.
+Big Plan is pre-alpha and is being built in the open, one registry capability at a time.
 
-## Available today
+## Shipped
 
-Deliverable 1 is shipped: a static Markdown viewer.
-The `big-plan render <input.md> [output.html]` command converts a plain GFM Markdown file into one self-contained themed HTML review document.
+- **The static viewer.** `big-plan render` converts a plan into one self-contained themed HTML document: section navigation, syntax highlighting, copy controls, and light/dark themes, readable with JavaScript disabled.
+- **Typed blocks.** Plans parse as a static subset of MDX; a closed registry renders blocks server-side, and invalid documents fail loudly with every positional diagnostic at once. [`Callout`](/components/callout/) and [`CodeDiff`](/components/code-diff/) shipped first, including line-anchored `Annotation` notes on diffs.
 
-## Planned, not built
+## In progress
 
-Everything in this section describes the intended long-term review experience and is not available today.
+- [**`CodeSnippet`.**](/components/code-snippet/) Annotated code excerpts with a file association and real line numbers, reusing the same `Annotation` mechanism.
 
-- Structured MDX plan documents are planned.
-- Typed blocks for diagrams, schemas, API endpoints, and code diffs are planned.
-- Live chat with the authoring agent is planned.
-- Highlight-to-comment threads are planned.
-- Versioned change review is planned.
-- Full keyboard control is planned.
+## Planned components
 
-These planned capabilities build outward from the shipped static viewer.
+- **`Decision` + `FileTree`.** Options-considered cards with nested `Option` children, and styled file hierarchies with per-path change badges.
+- **`ApiEndpoint` + `DatabaseSchema`.** Structured cards from fenced YAML children.
+- **`Diagram`.** Diagram source rendered to inline SVG at build time, preserving the no-external-requests invariant.
+
+## Planned review experience
+
+- A local review server with a live bridge to the authoring agent.
+- Highlight-to-comment threads the agent replies to in place.
+- Versioned change review across plan revisions.
+- Full keyboard control, and interactive blocks such as forms once the live server exists.
 
 ## Follow along
 
@@ -29,4 +33,4 @@ Big Plan is built in the open at [github.com/josh-padnick/big-plan](https://gith
 
 ## Next step
 
-[Render your first plan in under a minute.](/intro/quickstart/)
+[Install Big Plan and render your first plan.](/intro/installation/)

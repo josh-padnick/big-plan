@@ -57,7 +57,7 @@ Do not scrape the HTML pages; fetch the Markdown endpoints instead.
 Replace a page's trailing slash with `.md`:
 
 ```text
-https://big-plan.ai/intro/quickstart/     ->  https://big-plan.ai/intro/quickstart.md
+https://big-plan.ai/intro/installation/     ->  https://big-plan.ai/intro/installation.md
 https://big-plan.ai/reference/cli/        ->  https://big-plan.ai/reference/cli.md
 https://big-plan.ai/for-agents/           ->  https://big-plan.ai/for-agents.md
 ```

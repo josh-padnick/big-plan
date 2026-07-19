@@ -36,4 +36,4 @@ See [the viewer](/guides/the-viewer/) for the full tour of the reading experienc
 
 ## Next step
 
-[Render your first plan in under a minute.](/intro/quickstart/)
+[Render your first plan in under a minute.](/intro/installation/)

@@ -55,4 +55,4 @@ Everything runs on your machine, the rendered file makes no external requests, a
 
 ## Next step
 
-[Render your first plan in under a minute.](/intro/quickstart/)
+[Render your first plan in under a minute.](/intro/installation/)

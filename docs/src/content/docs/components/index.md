@@ -1,23 +1,32 @@
 ---
 title: Components
-description: Typed blocks that turn plan sections into structured, reviewable content.
+description: The typed block library that renders each kind of plan information in a first-class way.
 ---
 
 Plans are more than prose.
 They contain decisions, code changes, schemas, and risks, and each of those deserves purpose-built review UI instead of another wall of text.
-Components are Big Plan's typed blocks: an agent marks a section of the plan as a specific kind of content, and the viewer renders it with controls made for reviewing that kind of content.
+Components are Big Plan's typed blocks: flow-level elements from a closed, built-in registry, rendered entirely server-side so documents stay self-contained and readable without JavaScript.
 
-:::caution[Planned]
-Components ship with the structured MDX plan format on the [roadmap](/intro/roadmap/).
-The current static viewer renders plain GFM markdown.
-:::
+The registry never evaluates code from a plan.
+A block's attributes are strings or bare booleans, structured data arrives as fenced children, and any authoring mistake fails the render with a positional diagnostic; see [Authoring plans](/guides/authoring-plans/) for the contract.
 
 ## The component library
 
 | Component | What it is for |
 | --- | --- |
-| [Callout](/components/callout/) | Surface a decision, risk, or open question so reviewers cannot miss it. |
-| [CodeDiff](/components/code-diff/) | Show a proposed code change as a reviewable before-and-after diff. |
-| [CodeSnippet](/components/code-snippet/) | Present a code sample with language, filename, and copy control. |
+| [Callout](/components/callout/) | Surface a note, tip, warning, or danger so reviewers cannot miss it. |
+| [CodeDiff](/components/code-diff/) | Review a verbatim `git diff` with switchable views, gutters, and line-anchored annotations. |
+| [CodeSnippet](/components/code-snippet/) | Inspect an annotated code excerpt with a file association and real line numbers. |
 
-Each component page documents its purpose, props, and authoring example as the component ships.
+`Annotation` is a scoped child block, valid only inside `CodeDiff` and `CodeSnippet`, sharing one `lines` range grammar.
+
+## Coming next
+
+The library grows one registry capability at a time; each pair below is sequenced in the [roadmap](/intro/roadmap/):
+
+- `Decision` renders options considered, the choice, and the rationale, with nested `Option` children.
+- `FileTree` renders a styled file hierarchy with per-path change badges.
+- `ApiEndpoint` and `DatabaseSchema` render structured cards from a fenced YAML child.
+- `Diagram` renders diagram source into inline SVG at build time, keeping documents free of external requests.
+
+Interactive blocks such as forms are deliberately deferred until the live review server exists; static documents should never contain dead controls.

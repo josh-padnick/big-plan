@@ -42,4 +42,4 @@ A markdown file goes in, one self-contained HTML file comes out, and nothing req
 
 ## Next step
 
-[Render your first plan in under a minute.](/intro/quickstart/)
+[Render your first plan in under a minute.](/intro/installation/)
