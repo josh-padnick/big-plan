@@ -104,6 +104,31 @@ I added this counter with the `catalog_cache` prefix so it lands on the dashboar
 
 Each job carries only the cache key and enqueue timestamp.
 The worker resolves current catalog data, writes it with the existing TTL, and acknowledges the job only after the cache write succeeds.
+The refresh routine itself already exists, so the plan reuses it unchanged.
+
+<CodeSnippet file="src/catalog/refresh-worker.ts" startLine="42" showLineNumbers>
+
+```ts
+export const refreshCatalog = async (key: string): Promise<void> => {
+  const current = await catalogOrigin.read(key);
+  await cache.put(key, current, { ttlSeconds: 300 });
+  metrics.increment("catalog_cache.refresh_success");
+};
+```
+
+<Annotation lines="43">
+
+Resolve through `catalogOrigin` so refreshes use the same retries and tracing as synchronous fallbacks.
+
+</Annotation>
+
+<Annotation lines="44-45">
+
+The cache write must complete before success is recorded; otherwise dashboards can report a refresh that readers cannot observe.
+
+</Annotation>
+
+</CodeSnippet>
 
 <CodeDiff file="config/catalog-cache-worker.env">
 

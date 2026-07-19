@@ -30,6 +30,11 @@ const browserScripts = [
     name: "code-diff",
     exportName: "CODE_DIFF_JS",
   },
+  {
+    directory: "markdown/components/code-snippet",
+    name: "code-snippet",
+    exportName: "CODE_SNIPPET_JS",
+  },
 ];
 
 const check = spawnSync(

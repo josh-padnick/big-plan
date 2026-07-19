@@ -4,6 +4,15 @@
 
 import { expect, test } from "./fixtures";
 
+const RAW_CODE_SNIPPET = [
+  "export const refreshCatalog = async (key: string): Promise<void> => {",
+  "  const current = await catalogOrigin.read(key);",
+  "  await cache.put(key, current, { ttlSeconds: 300 });",
+  '  metrics.increment("catalog_cache.refresh_success");',
+  "};",
+  "",
+].join("\n");
+
 const RAW_GIT_DIFF = [
   "diff --git a/src/catalog/read-through-cache.ts b/src/catalog/read-through-cache.ts",
   "index 23ad911..890ce42 100644",
@@ -47,6 +56,108 @@ test("should distinguish every callout type when the component plan renders", as
       callouts.map((callout) => getComputedStyle(callout).borderLeftColor),
     );
   expect(new Set(accents).size).toBe(calloutTypes.length);
+});
+
+test("should review an annotated file-absolute code snippet", async ({
+  browser,
+  page,
+  componentsViewerUrl,
+}) => {
+  await page.goto(componentsViewerUrl);
+  const snippet = page.locator("[data-code-snippet]").filter({
+    hasText: "src/catalog/refresh-worker.ts",
+  });
+  const annotation = snippet.locator('[data-snippet-annotation="44-45"]');
+
+  await test.step("the gutter starts at the file line", async () => {
+    await expect(snippet.locator("[data-snippet-line-number]")).toHaveText([
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+    ]);
+  });
+
+  await test.step("the annotation follows its anchor", async () => {
+    await expect(annotation).toContainText("Lines 44-45");
+    const positions = await snippet.evaluate((figure) => {
+      const row = figure.querySelector('[data-snippet-line="45"]');
+      const card = figure.querySelector('[data-snippet-annotation="44-45"]');
+      if (!(row instanceof HTMLElement) || !(card instanceof HTMLElement)) {
+        throw new Error("Missing annotation anchor geometry");
+      }
+      return {
+        adjacent: row.nextElementSibling === card,
+        rowBottom: row.getBoundingClientRect().bottom,
+        cardTop: card.getBoundingClientRect().top,
+      };
+    });
+    expect(positions.adjacent).toBe(true);
+    expect(positions.cardTop).toBeGreaterThanOrEqual(positions.rowBottom);
+  });
+
+  await test.step("the annotated lines carry the accent", async () => {
+    const colors = await snippet.evaluate((figure) => {
+      const plain = figure.querySelector('[data-snippet-line="42"]');
+      const marked = figure.querySelector('[data-snippet-line="44"]');
+      const gutter = marked?.querySelector(".code-snippet-line-number");
+      if (!(plain instanceof HTMLElement) || !(marked instanceof HTMLElement)) {
+        throw new Error("Missing snippet rows");
+      }
+      return {
+        plain: getComputedStyle(plain).backgroundColor,
+        marked: getComputedStyle(marked).backgroundColor,
+        marker:
+          gutter instanceof HTMLElement
+            ? getComputedStyle(gutter, "::before").backgroundColor
+            : "",
+      };
+    });
+    expect(colors.marked).not.toBe(colors.plain);
+    expect(colors.marker).not.toBe("");
+    await expect(snippet.locator("[data-snippet-annotated]")).toHaveCount(3);
+  });
+
+  await test.step("copy code excludes review chrome", async () => {
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: (value: string) => {
+            document.body.dataset.copiedSnippet = value;
+            return Promise.resolve();
+          },
+        },
+      });
+    });
+    await snippet.getByRole("button", { name: "More actions" }).click();
+    await snippet.getByRole("menuitem", { name: "Copy code" }).click();
+    expect(await page.locator("body").getAttribute("data-copied-snippet")).toBe(
+      RAW_CODE_SNIPPET,
+    );
+    await expect(
+      snippet.getByRole("button", { name: "Code copied!" }),
+    ).toBeVisible();
+  });
+
+  await test.step("the static block survives without JavaScript", async () => {
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    const staticPage = await context.newPage();
+    await staticPage.goto(componentsViewerUrl);
+    const staticSnippet = staticPage.locator("[data-code-snippet]");
+    await expect(staticSnippet).toBeVisible();
+    await expect(
+      staticSnippet.locator('[data-snippet-line="42"]'),
+    ).toContainText("export const refreshCatalog");
+    await expect(
+      staticSnippet.locator('[data-snippet-annotation="44-45"]'),
+    ).toContainText("cache write must complete");
+    await expect(
+      staticSnippet.locator("[data-snippet-menu-button]"),
+    ).toBeHidden();
+    await context.close();
+  });
 });
 
 test("should remember the selected diff view when the page reloads", async ({
@@ -378,7 +489,7 @@ test("should fallback-copy Annotation code within a full-screen diff", async ({
     });
     document.execCommand = () => {
       const textarea = document.querySelector(
-        "textarea:not([data-diff-source])",
+        "textarea:not([data-diff-source]):not([data-snippet-source])",
       );
       document.body.dataset.fallbackCopy =
         textarea instanceof HTMLTextAreaElement
@@ -537,7 +648,7 @@ test("should fallback-copy within a full-screen diff", async ({
     });
     document.execCommand = () => {
       const textareas = document.querySelectorAll(
-        "textarea:not([data-diff-source])",
+        "textarea:not([data-diff-source]):not([data-snippet-source])",
       );
       const textarea = textareas.item(textareas.length - 1);
       document.body.dataset.fallbackCopy =
@@ -553,7 +664,9 @@ test("should fallback-copy within a full-screen diff", async ({
   const expandedDiff = page.locator("dialog [data-code-diff]");
   const menuButton = expandedDiff.locator("[data-diff-menu-button]");
   await expect(page.locator("dialog.code-diff-dialog[open]")).toHaveCount(1);
-  await expect(page.locator("textarea:not([data-diff-source])")).toHaveCount(0);
+  await expect(
+    page.locator("textarea:not([data-diff-source]):not([data-snippet-source])"),
+  ).toHaveCount(0);
   await menuButton.evaluate((button) => button.click());
   await expandedDiff
     .getByRole("menuitem", { name: "Copy path" })
