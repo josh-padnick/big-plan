@@ -1,10 +1,10 @@
 ---
 title: CodeDiff
-description: A reviewable code diff from verbatim git output - unified and side-by-side views, line numbers, counts, an actions menu, and a full-screen mode.
+description: A reviewable single-file unified diff - unified and side-by-side views, line numbers, counts, an actions menu, and a full-screen mode.
 ---
 
 `CodeDiff` renders a unified diff as a first-class review surface: a file header, switchable unified and side-by-side views, optional line-number gutters and change counts, copy actions, and a full-screen dialog.
-Its authoring contract is deliberately the one agents already speak: paste `git diff` output into a fenced `diff` block.
+Its authoring contract is deliberately the one agents already speak: paste one file's unified `git diff` output into a fenced `diff` block.
 
 ![A CodeDiff component in side-by-side view with line numbers, header stats, and the actions menu open](../../../assets/components/code-diff-split.png)
 
@@ -36,7 +36,8 @@ Any other attribute, an empty `file`, or `showLineNumbers` on a diff without `@@
 ## The diff child
 
 The component takes exactly one fenced ` ```diff ` code block, plus zero or more direct `Annotation` children, and nothing else.
-Verbatim `git diff` output works: the file preamble (`diff --git`, `index`, `---`, `+++`, mode and rename lines) is accepted before the first hunk.
+Supported single-file `git diff` output works verbatim: the file preamble (`diff --git`, `index`, `---`, `+++`, mode, rename, and copy lines) is accepted before the first hunk.
+Combined and multi-file diffs are not supported; use one `CodeDiff` per file.
 Headerless diffs of bare `+`/`-`/context lines are legal when line numbers are not requested.
 Inside a hunk, a blank line counts as empty context even when an editor has stripped its leading space.
 Malformed lines fail the render with both the document position and the fence-relative line number.

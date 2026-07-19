@@ -25,10 +25,10 @@ Component attributes are strings (`title="Rollout"`) or bare shorthand booleans 
 
 Because `<` and `{` begin MDX syntax, write them in code spans or fences when you need them literally in prose.
 
-## Validation is all-at-once and positional
+## Validation is positional and aggregated when possible
 
 An invalid document never renders partially.
-The renderer collects every problem and fails with the complete list, each entry carrying a `line:column` position:
+After MDX parses, the renderer collects every recoverable problem and fails with the complete list, each entry carrying a `line:column` position:
 
 ```text
 error: Cannot render document with invalid MDX
@@ -38,4 +38,5 @@ help[3]: "3:1 ESM import/export statements are not supported",
 ```
 
 Agents authoring plans should treat this as the correction loop: render, read the positions, fix, render again.
+An MDX syntax error can stop parsing before component validation begins, so that render may report only the parse error.
 A silently degraded document would be worse than a failed one, because the entire product is trust in what the reviewer approves.

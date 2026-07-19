@@ -28,7 +28,7 @@ For what comes next, see the [roadmap](/intro/roadmap/).
 ## Plan authoring
 
 - A static subset of MDX: standard Markdown and GFM plus a closed component registry, without executable imports, exports, or expressions.
-- All-at-once positional diagnostics for unsupported syntax, unknown components, invalid attributes, and malformed component content.
+- Positional diagnostics that aggregate recoverable unsupported syntax, unknown components, invalid attributes, and malformed component content after MDX parses.
 - `Callout` components for notes, tips, warnings, and dangers.
 - `CodeDiff` components with optional line numbers and change counts, unified and side-by-side views, scoped line annotations, copy actions, and full-screen viewing.
 

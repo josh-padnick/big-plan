@@ -8,7 +8,7 @@ Big Plan is pre-alpha and is being built in the open, one registry capability at
 ## Shipped
 
 - **The static viewer.** `big-plan render` converts a plan into one self-contained themed HTML document: section navigation, syntax highlighting, copy controls, and light/dark themes, readable with JavaScript disabled.
-- **Components.** Plans parse as a static subset of MDX; a closed registry renders components server-side, and invalid documents fail loudly with every positional diagnostic at once. [`Callout`](/components/callout/) and [`CodeDiff`](/components/code-diff/) shipped first, including line-anchored `Annotation` notes on diffs.
+- **Components.** Plans parse as a static subset of MDX; a closed registry renders components server-side, and invalid documents fail loudly with positional diagnostics that aggregate recoverable problems. [`Callout`](/components/callout/) and [`CodeDiff`](/components/code-diff/) shipped first, including line-anchored `Annotation` notes on diffs.
 
 ## In progress
 

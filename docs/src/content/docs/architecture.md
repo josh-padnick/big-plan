@@ -41,7 +41,8 @@ flowchart TB
 ```
 
 An invalid document never renders partially.
-Validation collects every problem, unknown components, bad attributes, malformed fences, and fails with the complete list, each entry carrying a `line:column` position, so an agent can fix everything in one pass.
+Validation collects every recoverable problem, including unknown components, bad attributes, and malformed fences, and fails with the complete list, each entry carrying a `line:column` position, so an agent can fix those problems in one pass.
+An MDX syntax error can stop parsing before component validation begins, so fix that reported error and render again.
 
 ## One self-contained file
 
