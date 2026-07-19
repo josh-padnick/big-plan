@@ -7,11 +7,20 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 Big Plan turns your agent's standard text plan into a rich, interactive HTML document specially designed for human review.
 
-Run it in your favorite agent harness (Claude Code, Codex, etc.) as a skill like this:
+Run it in your favorite agent harness as a skill like this:
 
-```
-Give me a /big-plan for implementing the following feature...
-```
+<Tabs>
+  <TabItem label="Claude Code">
+    ```
+    Give me a /big-plan for implementing the following feature...
+    ```
+  </TabItem>
+  <TabItem label="Codex">
+    ```
+    Give me a $big-plan for implementing the following feature...
+    ```
+  </TabItem>
+</Tabs>
 
 ## Philosophy
 
