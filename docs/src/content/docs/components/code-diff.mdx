@@ -99,7 +99,7 @@ Nest `Annotation` directly inside `CodeDiff` to anchor a markdown note to specif
 Every referenced line must exist on the chosen side, and annotations require `@@` hunk headers.
 Annotation bodies accept prose, lists, inline formatting, and plain fenced code, but reject headings, footnotes, and typed components (each with a positional diagnostic).
 An `Annotation` anywhere other than a direct `CodeDiff` child is an unknown component.
-`Annotation` is a scoped child component; the planned `CodeSnippet` component will reuse the concept with the same `lines` grammar.
+`Annotation` is a scoped child component; [`CodeSnippet`](/components/code-snippet/) reuses the concept with the same `lines` grammar against file-absolute line numbers.
 
 An annotation renders as a prose card after the final line of its range, with a `Line N` / `Lines N-M` badge and `role="note"`:
 
