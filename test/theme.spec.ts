@@ -12,22 +12,29 @@ test("should switch between light and dark themes", async ({
   await page.goto(sampleViewerUrl);
 
   const toggle = page.getByRole("button", { name: /Use (?:light|dark) theme/ });
-  const initialBackground = await page.locator("body").evaluate(
-    (body) => getComputedStyle(body).backgroundColor,
-  );
-  const requestedTheme = (await toggle.getAttribute("aria-label"))?.includes("dark")
+  const initialBackground = await page
+    .locator("body")
+    .evaluate((body) => getComputedStyle(body).backgroundColor);
+  const requestedTheme = (await toggle.getAttribute("aria-label"))?.includes(
+    "dark",
+  )
     ? "dark"
     : "light";
 
   await toggle.click();
 
-  await expect(page.locator("html")).toHaveAttribute("data-theme", requestedTheme);
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-theme",
+    requestedTheme,
+  );
   await expect(toggle).toHaveAccessibleName(
     requestedTheme === "dark" ? "Use light theme" : "Use dark theme",
   );
   await expect
     .poll(() =>
-      page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor),
+      page
+        .locator("body")
+        .evaluate((body) => getComputedStyle(body).backgroundColor),
     )
     .not.toBe(initialBackground);
 
@@ -37,8 +44,10 @@ test("should switch between light and dark themes", async ({
     if (toggleElement === null || titleElement === null) {
       return false;
     }
-    return toggleElement.getBoundingClientRect().bottom <=
-      titleElement.getBoundingClientRect().top;
+    return (
+      toggleElement.getBoundingClientRect().bottom <=
+      titleElement.getBoundingClientRect().top
+    );
   });
   expect(doesToggleClearTitle).toBe(true);
 });

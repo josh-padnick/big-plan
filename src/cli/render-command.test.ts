@@ -1,5 +1,5 @@
 // Exercises the render command through its real filesystem adapter: argument
-// failures, default output placement, and creation of nested output paths.
+// and MDX validation failures, output placement, and nested directory creation.
 
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -21,8 +21,27 @@ describe("renderCommand validation", () => {
   it("should report usage when the input argument is missing", async () => {
     await expect(renderCommand([])).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
-      message: "Missing input markdown file",
-      suggestions: ["Usage: big-plan render <input.md> [output.html]"],
+      message: "Missing input MDX file",
+      suggestions: ["Usage: big-plan render <input.mdx> [output.html]"],
+    });
+  });
+
+  it("should list every positional diagnostic when the MDX is invalid", async () => {
+    const inputPath = join(tempDirectory, "invalid.mdx");
+    await writeFile(
+      inputPath,
+      "<Unknown first={value} />\n\nCopy {value}\n",
+      "utf8",
+    );
+
+    await expect(renderCommand([inputPath])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "Cannot render document with invalid MDX",
+      suggestions: [
+        '1:1 Unknown component "Unknown"',
+        '1:10 Expression-valued attribute "first" is not supported',
+        "3:6 Text expressions are not supported",
+      ],
     });
   });
 

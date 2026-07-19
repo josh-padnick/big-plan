@@ -13,9 +13,9 @@ const DESCRIPTION =
 const TOP_LEVEL_HELP = `big-plan - ${DESCRIPTION}
 
 Usage:
-  big-plan render <input.md> [output.html]   Render a markdown plan to a
-                                             single self-contained HTML file
-                                             (defaults to <input>.html)
+  big-plan render <input.mdx> [output.html]  Render an MDX plan to a
+                                            single self-contained HTML file
+                                            (defaults to <input>.html)
 `;
 
 // Reads this package's own version for --version output, tolerating a missing
@@ -48,7 +48,7 @@ export const main = async (): Promise<void> => {
     topLevelHelp: TOP_LEVEL_HELP,
     home: () => ({
       "big-plan": DESCRIPTION,
-      next_step: "big-plan render <file.md>",
+      next_step: "big-plan render <file.mdx>",
     }),
     commands: {
       render: (args) => renderCommand(args),

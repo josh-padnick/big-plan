@@ -52,21 +52,31 @@ test("should copy the exact code-block text", async ({
       const wrapper = document.querySelector("[data-code-block]");
       const message = wrapper?.querySelector("[data-copy-message]");
       const button = wrapper?.querySelector("[data-copy-code]");
-      if (wrapper === null || wrapper === undefined || message === null ||
-          message === undefined || button === null || button === undefined) {
+      if (
+        wrapper === null ||
+        wrapper === undefined ||
+        message === null ||
+        message === undefined ||
+        button === null ||
+        button === undefined
+      ) {
         return false;
       }
       const wrapperBox = wrapper.getBoundingClientRect();
       const messageBox = message.getBoundingClientRect();
       const buttonBox = button.getBoundingClientRect();
       const centerDelta = Math.abs(
-        messageBox.top + messageBox.height / 2 -
+        messageBox.top +
+          messageBox.height / 2 -
           (buttonBox.top + buttonBox.height / 2),
       );
-      return messageBox.left >= wrapperBox.left &&
+      return (
+        messageBox.left >= wrapperBox.left &&
         messageBox.right <= buttonBox.left &&
         centerDelta <= 0.5 &&
-        document.documentElement.scrollWidth === document.documentElement.clientWidth;
+        document.documentElement.scrollWidth ===
+          document.documentElement.clientWidth
+      );
     });
     expect(copiedStateFits).toBe(true);
   });
@@ -102,7 +112,9 @@ test("should show and reset a visible message when copying fails", async ({
   });
 
   await test.step("the failure state resets so the reader can retry", async () => {
-    await expect(copyButton).toHaveAccessibleName("Copy code", { timeout: 3_000 });
+    await expect(copyButton).toHaveAccessibleName("Copy code", {
+      timeout: 3_000,
+    });
     await expect(copyMessage).toBeHidden();
   });
 });

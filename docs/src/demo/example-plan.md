@@ -18,11 +18,11 @@ This plan adds per-key rate limiting with a fixed monthly quota and a burst allo
 
 ## Options considered
 
-| Option | Latency | Accuracy | Operational cost | Verdict |
-| --- | --- | --- | --- | --- |
-| In-process token bucket | ~0 ms | Poor across replicas | None | Rejected |
-| Redis sliding window | ~1 ms | Exact | One new dependency | **Chosen** |
-| API management vendor | ~5 ms | Exact | New vendor, new bill | Rejected |
+| Option                  | Latency | Accuracy             | Operational cost     | Verdict    |
+| ----------------------- | ------- | -------------------- | -------------------- | ---------- |
+| In-process token bucket | ~0 ms   | Poor across replicas | None                 | Rejected   |
+| Redis sliding window    | ~1 ms   | Exact                | One new dependency   | **Chosen** |
+| API management vendor   | ~5 ms   | Exact                | New vendor, new bill | Rejected   |
 
 The in-process bucket fails because the gateway runs six replicas and clients would get six independent budgets.
 The vendor option solves problems we do not have yet.
@@ -67,7 +67,10 @@ ALTER TABLE api_keys
 
 The gateway change is small; the middleware slots in right after key auth:
 
+<CodeDiff file="api-gateway/src/app.ts" showLineNumbers showLineCounts>
+
 ```diff
+@@ -41,4 +41,9 @@
  // api-gateway/src/app.ts
  app.addHook("preHandler", keyAuth);
 +app.addHook("preHandler", rateLimit({
@@ -80,14 +83,21 @@ The gateway change is small; the middleware slots in right after key auth:
 +app.setErrorHandler(rateLimitAwareErrorHandler);
 ```
 
+<Annotation lines="43-47" side="new">
+  Keep this hook immediately after authentication so the rate-limit key always
+  comes from a validated API key.
+</Annotation>
+
+</CodeDiff>
+
 ## HTTP endpoint
 
 Rejected requests receive `429 Too Many Requests` with `Retry-After` and the standard `RateLimit-*` headers.
 Clients can also inspect their budget directly:
 
-| Method | Path | Auth | Returns |
-| --- | --- | --- | --- |
-| `GET` | `/v1/rate-limit` | API key | Current window usage and limits |
+| Method | Path             | Auth    | Returns                         |
+| ------ | ---------------- | ------- | ------------------------------- |
+| `GET`  | `/v1/rate-limit` | API key | Current window usage and limits |
 
 ```json
 {
@@ -108,7 +118,12 @@ Clients can also inspect their budget directly:
 
 ## Risks and mitigations
 
-- **Redis becomes a single point of failure.** Fail open: if Redis is unreachable, allow the request and increment a `rate_limit_degraded` counter that pages on-call.
+<Callout type="warning" title="Fail-open dependency">
+
+If Redis is unreachable, allow the request and increment a `rate_limit_degraded` counter that pages on-call.
+
+</Callout>
+
 - **Clock skew between replicas.** The window uses Redis server time via `TIME`, not gateway clocks.
 - **Hot keys for very large customers.** Shard the sorted set by minute bucket if any single key exceeds 50k requests per minute; not built now, documented as the known upgrade path.
 

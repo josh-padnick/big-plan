@@ -1,8 +1,8 @@
 // Owns the review shell: the reading surface a rendered document lives in -
 // the branding bar, layout grid, theme control, responsive desktop and mobile
-// navigation, code-block controls, and content region. It produces body-level
-// markup plus the styles and progressive-enhancement scripts that markup needs,
-// as data;
+// navigation, code-block and component controls, and content region. It
+// produces body-level markup plus the styles and progressive-enhancement
+// scripts that markup needs, as data;
 // packaging into a complete document is page.ts's job. Authored markup is
 // styled with Tailwind utilities; the compiled stylesheet (including the
 // element-scoped styles from markdown/prose.css) comes from the generated
@@ -11,13 +11,14 @@
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
+import { CODE_DIFF_JS } from "../markdown/components/code-diff/code-diff.generated.js";
 import { COPY_CODE_JS } from "../markdown/code-block/copy-code.generated.js";
 import { SCROLL_SPY_JS } from "./scroll-spy.generated.js";
 import { THEME_TOGGLE_JS } from "./theme-toggle.generated.js";
 
 // The shell's own navigation contract: plain text in, so the shell owes
-// nothing to whatever produced the document. Callers map their outline
-// (markdown sections today, typed-plan sections later) into this shape.
+// nothing to whatever produced the document. Callers map their outline into
+// this shape.
 export type NavEntry = {
   readonly id: string;
   readonly label: string;
@@ -152,8 +153,8 @@ ${contentHtml}
     html,
     styles: GLOBAL_CSS,
     scripts: hasToc
-      ? [THEME_TOGGLE_JS, COPY_CODE_JS, SCROLL_SPY_JS]
-      : [THEME_TOGGLE_JS, COPY_CODE_JS],
+      ? [THEME_TOGGLE_JS, COPY_CODE_JS, CODE_DIFF_JS, SCROLL_SPY_JS]
+      : [THEME_TOGGLE_JS, COPY_CODE_JS, CODE_DIFF_JS],
     bodyClassName: BODY_CLASSES,
   };
 };

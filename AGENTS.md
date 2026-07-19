@@ -10,36 +10,39 @@ Planning is an essential part of effective development with AI, and it deserves 
 Big Plan is built around one question: what is the best way to review a plan and reach agreement on it, before an agent acts?
 
 An agent writes its plan as a document on disk, and Big Plan renders it into a rich local review surface.
-The long-term shape includes section navigation, typed blocks for diagrams, schemas, API endpoints and code diffs, a live chat connection to the authoring agent, highlight-to-comment threads, and versioned change review.
+The long-term shape includes components for diagrams, schemas, API endpoints and code diffs, a live chat connection to the authoring agent, highlight-to-comment threads, and versioned change review.
 Big Plan focuses exclusively on that upfront moment of agreement - not code review, not project management.
 Everything runs locally, and the file on disk is the source of truth.
 
 ## Current state
 
-Deliverable 1 is shipped in this repo: a static markdown viewer.
-`big-plan render <input.md> [output.html]` converts a plain GFM markdown file into a single self-contained themed HTML document with a responsive table of contents built from level-two headings.
+Deliverable 2 is shipped in this repo: MDX plan documents with components, building on the static markdown viewer from deliverable 1.
+`big-plan render <input.mdx> [output.html]` converts a static-subset MDX plan document into a single self-contained themed HTML document with a responsive table of contents built from level-two headings.
 Wide screens use a sticky sidebar; narrower screens use a sticky `Sections` disclosure showing the section count.
 Both navigation variants track the current section while the reader scrolls, including short final sections at the bottom of the page, and section links scroll smoothly unless the reader has requested reduced motion.
+The static subset rejects imports, exports, expressions, and unsupported attributes with hard-fail diagnostics carrying line and column positions, while the built-in Callout and CodeDiff components provide validated plan-native presentation.
+GFM tables, task lists, footnotes, and autolinks remain supported, but MDX does not support four-space indented code blocks; plans use fenced code blocks instead.
 Declared fenced-code languages receive syntax highlighting, every block code sample gets a copy control, and readers can override the OS light/dark preference with a locally persisted theme control.
 Every viewport has a sticky branding bar whose logo follows that active theme, while embedded light and dark favicons follow the OS preference.
-The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, and code-copy controls.
+CodeDiff renders a no-JavaScript unified view with full scoped line annotations, plus progressively enhanced unified/split selection, responsive annotation disclosures, aligned side-localized split annotations, file-path and fence-source copying (LF-normalized with a trailing newline, as MDX parses fences), and full-screen viewing.
+The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, code-copy controls, and CodeDiff controls.
 
 ## Architecture at a glance
 
 The pipeline is deliberately small: CLI -> renderer -> self-contained HTML.
 
 - The CLI (`src/cli/`) is built on `runAxiCli()` from `axi-sdk-js`, which owns dispatch, help, structured errors, and output serialization. Keep the integration thin; business logic never lives in the CLI layer.
-- The renderer (`src/render/`) is pure: markdown source plus a fallback title in, complete HTML out. It uses unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-highlight) to compile markdown into a structured Hypertext Abstract Syntax Tree (HAST) review document, collects the title, section outline, and element ids from that tree, applies rehype transforms such as syntax highlighting, code-copy controls, and table scroll-container wrapping, and serializes with rehype-stringify only after all transforms finish. The shell uses those ids to allocate a collision-free mobile `Overview` anchor.
+- The renderer (`src/render/`) is pure: MDX source plus a fallback title in, complete HTML out. It uses unified (remark-parse, remark-gfm, remark-mdx, remark-rehype) to compile the static subset into a structured Hypertext Abstract Syntax Tree (HAST) review document, then runs the component registry as the first rehype transform before slugs, syntax highlighting, code-copy controls, and table scroll-container wrapping. Parsing and component validation collect positional diagnostics and hard-fail before the title, section outline, and element ids are collected, and rehype-stringify serializes only after all transforms finish. The shell uses those ids to allocate a collision-free mobile `Overview` anchor.
 - The review shell (`src/render/shell/`) owns the viewer's look: one reading column, warm paper-like light and dark palettes that follow `prefers-color-scheme` until explicitly toggled, a sticky branding bar whose logo art follows the active theme, code-block controls, a sticky desktop section sidebar, and a compact sticky mobile `Sections` disclosure. The page envelope (`src/render/page.ts`) separately owns how a document is packaged and delivered (doctype, head, inlined styles, favicon links, and scripts); future delivery modes swap the envelope while the shell stays the same.
 - Styles are authored with Tailwind v4.
-  `src/render/global.css` is the entry point and owns only what is genuinely global: design tokens, the light and dark palettes and theme overrides, theme-aware branding logo visibility, the layout breakpoint, and target scroll margins.
-  Feature styles live with the module that emits their markup: element-scoped styles for plain markdown elements in `src/render/markdown/prose.css`, and the syntax-token palette in `src/render/markdown/code-block/syntax-highlighting.css`.
-  Authored markup - the shell and the code-block controls - carries Tailwind utility classes directly; only markup the renderer cannot attach classes to (plain markdown elements, highlighter token spans) gets stylesheet rules.
+  `src/render/global.css` is the entry point and owns design tokens, the light and dark palettes and theme overrides, the layout breakpoint, target scroll margins, and page-level rules.
+  Element-scoped styles for plain markdown elements live in `src/render/markdown/prose.css`, and the syntax-token palette lives in `src/render/markdown/code-block/syntax-highlighting.css`.
+  Authored markup carries Tailwind utility classes where practical; stylesheet rules handle plain markdown elements, highlighter token spans, palette-dependent component variants, and stateful diff layouts.
   `scripts/gen-css.mjs` compiles the entry point (inlining its imports) and embeds the result as a generated TypeScript module, so rendered documents inline the full stylesheet and stay self-contained.
 - Browser-side scripts are authored as real TypeScript in `*.browser.ts` files co-located with the concern they belong to (type-checked against `tsconfig.browser.json`, which adds the DOM lib) and compiled by `scripts/gen-browser-scripts.mjs` into generated modules the shell inlines. Shipped documents never reference external code.
 - Branding assets (the logos and favicons in `assets/`) are embedded by `scripts/gen-assets.mjs` as a generated data-URI module, so the branding bar and favicon ship inside the document like everything else.
 
-Future deliverables build outward from this core: a typed block registry, MDX plan documents, and a local server with a browser bridge for live agent chat and comments.
+Future deliverables build outward from this core with a local server and browser bridge for live agent chat and comments.
 
 ## Tech stack
 
@@ -47,7 +50,7 @@ Future deliverables build outward from this core: a typed block registry, MDX pl
 - **Package manager and script runner**: Bun (`bun install`, `bun run <script>`, `bun.lock`).
 - **Language**: TypeScript, strict, compiled with tsc; browser-side scripts type-check against `tsconfig.browser.json` (DOM lib) and are transpiled into generated modules.
 - **CLI framework**: `axi-sdk-js` (dispatch, help, structured errors, TOON output).
-- **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-rehype, rehype-slug, rehype-highlight, rehype-stringify).
+- **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-mdx, remark-rehype, rehype-slug, rehype-highlight, rehype-stringify).
 - **Styling**: Tailwind v4, compiled at build time by `@tailwindcss/cli` into a generated module; no runtime CSS tooling.
 - **Linting**: ESLint v10 flat config with `typescript-eslint`; conventions and architectural guardrails live in `eslint.config.mjs`.
 - **Tests**: vitest for units (colocated in `src/**`), Playwright (chromium) for browser journeys.
@@ -107,8 +110,10 @@ The unenforced conventions to hold by hand:
 - Single-object args for multi-parameter functions; immutable data (`readonly`, `const`).
 - Colocate code and tests by feature; kebab-case file names.
 - Every authored file starts with a file-level comment saying what it owns or why it exists; every non-trivial function gets a concise description above it (trivial one-liners stay uncommented); comments explain why, not what.
+- Icons all come from Lucide and live one file per icon in `src/render/icons/lucide/`, named by the Lucide catalog name; a component never defines icon path data locally.
 - Generated files always carry `.generated.` in their name (for example `global.generated.ts`) and are never edited by hand.
   They are committed so the codebase is scannable without running the generators; after changing a generator or its inputs, run `bun run gen` and commit the regenerated output alongside (CI fails on drift).
+- `global.css` owns design tokens, palettes, and page-level rules only; component-specific styles are colocated with the component and imported from `global.css`; authored markup prefers Tailwind utilities, and stylesheet rules are reserved for variants, state, pseudo-elements, and script-created elements.
 - Keep logic in pure modules and unit-test it there; reserve Playwright for critical user journeys.
 - Tests are focused and user-oriented, use "should ... when ..." descriptions, and cover degenerate and boundary cases.
 - Long browser journeys narrate as named `test.step` phases - short present-tense claims such as "the jump lands the heading clear of the sticky bar" - so a test reads top to bottom as a story and a failure names its phase.

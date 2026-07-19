@@ -1,0 +1,135 @@
+# Edge Cache Revalidation Plan
+
+This plan moves catalog-page cache revalidation out of request handlers and into a small background queue.
+Today an expired entry makes the first reader wait for an origin fetch, so traffic spikes amplify latency precisely when the cache should protect the service.
+The proposed stale-while-revalidate path keeps reads fast, bounds origin concurrency, and preserves the current cache key contract.
+
+<Callout type="note" title="Review decision">
+
+Approve the queue boundary, the 90-second stale window, and the rollout gates before implementation begins.
+
+</Callout>
+
+## Goals and constraints
+
+The change targets the 14 catalog routes that share `readThroughCache`.
+It does not alter pricing caches or the CDN configuration.
+
+- Serve a stale value immediately while one refresh is in flight.
+- Keep origin traffic below 40 requests per second per region.
+- Preserve the existing five-minute hard expiry as the final safety bound.
+- Emit enough state to distinguish fresh hits, stale hits, and origin fallbacks.
+
+<Callout type="tip">
+
+Use the existing `catalog-cache` worker pool rather than adding a new deployment.
+It already has regional concurrency controls and the required service account.
+
+</Callout>
+
+## Request path
+
+The handler will return fresh entries unchanged.
+For an entry between 60 and 150 seconds old, it returns the cached value and enqueues one deduplicated refresh; after 150 seconds it falls back to the current synchronous origin read.
+
+| Entry age | Response | Refresh behavior | Budget |
+| --- | --- | --- | ---: |
+| 0-60 seconds | cached value | none | under 10 ms |
+| 61-150 seconds | stale value | enqueue deduplicated job | under 15 ms |
+| over 150 seconds | origin value | synchronous fetch | under 800 ms |
+
+<Callout type="warning" title="Deploy ordering">
+
+Create the queue before enabling stale reads, and verify the worker can consume a synthetic refresh job:
+
+```sh
+admin-cli cache refresh --key catalog:demo --dry-run
+```
+
+</Callout>
+
+The primary implementation change is intentionally narrow and retains the synchronous fallback.
+
+<CodeDiff file="src/catalog/read-through-cache.ts" showLineNumbers showLineCounts>
+
+```diff
+diff --git a/src/catalog/read-through-cache.ts b/src/catalog/read-through-cache.ts
+index 23ad911..890ce42 100644
+--- a/src/catalog/read-through-cache.ts
++++ b/src/catalog/read-through-cache.ts
+@@ -18,5 +18,8 @@ export const readCatalog = async (key: string) => {
+   const cached = await cache.get(key);
+-  if (cached !== null && cached.ageSeconds <= 60) {
++  if (cached !== null && cached.ageSeconds <= 150) {
++    if (cached.ageSeconds > 60) {
++      await refreshQueue.enqueueOnce(key);
++    }
+     return cached.value;
+   }
+
+@@ -31,4 +34,5 @@ export const readCatalog = async (key: string) => {
+   const value = await catalogOrigin.read(key);
+   await cache.put(key, value, { ttlSeconds: 300 });
++  metrics.increment("catalog_cache.origin_fallback");
+   return value;
+ };
+```
+
+<Annotation lines="20" side="new">
+I kept the `await` here so a failed queue publish surfaces on the request path; if tail latency matters more than that visibility, flag it in review and I will make the enqueue fire-and-forget.
+</Annotation>
+
+<Annotation lines="20" side="new">
+The queue publish is idempotent, so a double enqueue during a race is harmless by design.
+</Annotation>
+
+<Annotation lines="19-22" side="new">
+This range turns the cache-age check into a stale-while-revalidate policy: entries under 60 seconds serve directly, entries between 60 and 150 serve stale while a background refresh runs, and older entries fall through to the origin. I left both thresholds inline to keep this change narrow; tell me in review if you want them extracted into named constants shared with the rollout flag, dashboards, and worker contract.
+</Annotation>
+
+<Annotation lines="19" side="old">
+I removed the inline 60-second cutoff; it moves into the stale-window check above. Rollout dashboards still key on the old constant name, so I will repoint them in the rollout PR.
+</Annotation>
+
+<Annotation lines="34-36" side="new">
+I added this counter with the `catalog_cache` prefix so it lands on the dashboard the existing queries share. The fallback signal stays distinct from refresh failures; without that separation the rollout panel would combine request-path origin reads with background-worker errors and hide the failure mode we need to watch during rollout.
+
+- I preserved the route and region tags already emitted by cache metrics.
+- I added a dashboard query that isolates synchronous origin fallbacks.
+</Annotation>
+
+</CodeDiff>
+
+## Worker contract
+
+Each job carries only the cache key and enqueue timestamp.
+The worker resolves current catalog data, writes it with the existing TTL, and acknowledges the job only after the cache write succeeds.
+
+<CodeDiff file="config/catalog-cache-worker.env">
+
+```diff
+-CATALOG_REFRESH_CONCURRENCY=8
+-CATALOG_REFRESH_TIMEOUT_MS=1000
++CATALOG_REFRESH_CONCURRENCY=12
++CATALOG_REFRESH_TIMEOUT_MS=750
+```
+
+</CodeDiff>
+
+<Callout type="danger">
+
+Do not enable the stale-read flag if deduplication is missing or the queue depth alarm is not green.
+Without those safeguards, a popular expired key can multiply origin load across every API instance.
+
+</Callout>
+
+## Rollout and validation
+
+The rollout uses three cohorts and advances only after a full peak-traffic window.
+
+1. Enable internal catalog routes for 24 hours.
+2. Expand to 10% of public traffic for 48 hours.
+3. Increase to 100% after the stale-hit ratio and origin request rate remain within budget.
+
+Success requires p95 catalog latency below 120 ms, fewer than 40 origin requests per second per region, and no increase in five-minute hard-expiry fallbacks.
+Rollback disables `catalog-stale-revalidate`; the queue and worker can remain deployed because producers stop immediately.

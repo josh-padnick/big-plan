@@ -1,0 +1,124 @@
+---
+title: CodeDiff
+description: A reviewable single-file unified diff - unified and side-by-side views, line numbers, counts, an actions menu, and a full-screen mode.
+---
+
+import ThemeImage from "../../../components/ThemeImage.astro";
+import splitLight from "../../../assets/components/code-diff-split-light.png";
+import splitDark from "../../../assets/components/code-diff-split-dark.png";
+import annotationLight from "../../../assets/components/annotation-card-light.png";
+import annotationDark from "../../../assets/components/annotation-card-dark.png";
+
+`CodeDiff` shows a proposed change to one file the way a code review tool would: removed lines tinted red, added lines tinted green, under a header naming the file.
+
+The plan author pastes ordinary `git diff` output for that file into the component, and the reader gets a full diff viewer: unified or side-by-side layout, optional line numbers and change counts, copy actions, and a full-screen mode.
+
+## When to use it
+
+Use `CodeDiff` whenever a plan proposes a concrete change to existing code, so the reviewer approves the exact lines rather than a prose description of them.
+
+### When not to use it
+
+- Code that is not a change - a plain fenced code block presents it without diff framing
+- Decisions that are architectural rather than line-level - prose or a diagram carries those better
+- Changes too large to read line by line - summarize them in prose and reserve `CodeDiff` for the risky excerpts
+
+## Use cases
+
+- Show the exact edit an agent intends to make before it touches the file
+- Explain a risky or subtle change with annotations anchored to the specific lines they discuss
+- Put the current and proposed versions of dense code side by side so the reviewer can compare them line by line
+
+## How it looks
+
+<ThemeImage
+  light={splitLight}
+  dark={splitDark}
+  alt="A CodeDiff component in side-by-side view with line numbers, header stats, and the actions menu open"
+/>
+
+## Usage
+
+````mdx
+<CodeDiff file="src/cache.ts" showLineNumbers showLineCounts>
+
+```diff
+@@ -12 +12 @@
+-const ttl = 30;
++const ttl = 60;
+```
+
+</CodeDiff>
+````
+
+## Authoring
+
+### Attributes
+
+| Attribute         | Type               | Required | Behavior                                                                                                                                       |
+| ----------------- | ------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `file`            | string (non-empty) | Yes      | Shown in the header (directory muted, filename bold), used by the Copy path action, and names the full-screen dialog for assistive technology. |
+| `showLineNumbers` | bare boolean       | No       | Renders old/new line-number gutters computed from `@@` hunk headers.                                                                           |
+| `showLineCounts`  | bare boolean       | No       | Shows the computed `+added -removed` summary in the header.                                                                                    |
+
+Attributes take the bare form (`showLineNumbers`, never `showLineNumbers="true"`).
+Any other attribute, an empty `file`, or `showLineNumbers` on a diff without `@@` headers is a positional authoring error.
+
+### Children
+
+The component takes exactly one fenced ` ```diff ` code block, plus zero or more direct `Annotation` children, and nothing else.
+
+The fenced `diff` block accepts:
+
+- One file's unified `git diff` output, verbatim - the file preamble (`diff --git`, `index`, `---`, `+++`, mode, rename, and copy lines) may appear before the first hunk
+- Headerless diffs of bare `+`/`-`/context lines, when line numbers are not requested
+- A blank line inside a hunk as empty context, even when an editor has stripped its leading space
+
+Combined and multi-file diffs are not supported; use one `CodeDiff` per file.
+
+Validation is strict, and a malformed line fails the render with both the document position and the fence-relative line number:
+
+- Each `@@` header's declared old and new line counts must match the hunk content
+- Hunk coordinates and the line-number ranges they produce cannot exceed `9007199254740991`
+
+### Annotation
+
+Nest `Annotation` directly inside `CodeDiff` to anchor a markdown note to specific lines:
+
+```mdx
+<Annotation lines="45-46" side="new">
+  Slug allocation must follow component rendering.
+</Annotation>
+```
+
+| Attribute | Type                | Required | Behavior                                                                                                                                                     |
+| --------- | ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lines`   | string              | Yes      | One canonical positive integer (`N`) or a strictly ascending inclusive range (`N-M`); zero and leading zeros are invalid.                                    |
+| `side`    | `"old" \| "new"`    | No       | Which side of the diff the range addresses; defaults to `new`.                                                                                               |
+
+Every referenced line must exist on the chosen side, and annotations require `@@` hunk headers.
+Annotation bodies accept prose, lists, inline formatting, and plain fenced code, but reject headings, footnotes, and typed components (each with a positional diagnostic).
+An `Annotation` anywhere other than a direct `CodeDiff` child is an unknown component.
+`Annotation` is a scoped child component; the planned `CodeSnippet` component will reuse the concept with the same `lines` grammar.
+
+An annotation renders as a prose card after the final line of its range, with a `Line N` / `Lines N-M` badge and `role="note"`:
+
+- In unified view the card spans the component; in side-by-side view it renders inside the pane of its `side`, pinned to the visible pane width while the code scrolls.
+- Covered lines carry the annotation accent as a left spine and a subtle wash blended over their add/remove tints, so ranges read at a glance.
+- Multiple annotations may target the same line or range and render in authored order.
+- Long cards gain a progressive `View more` / `View less` disclosure, and the reader's expanded choice survives responsive layout changes; without JavaScript the full content is always present.
+
+<ThemeImage
+  light={annotationLight}
+  dark={annotationDark}
+  alt="An annotation card beneath its line range, with the accent spine on the covered lines"
+/>
+
+## Views
+
+Both views are rendered into the document; switching between them only changes visibility.
+
+- **Unified** is the default, and the complete no-JavaScript experience: readers without JavaScript get the whole diff and no dangling controls.
+- **Side-by-side** becomes available with JavaScript through a two-segment toggle that shows the active view as pressed; the reader's last choice persists across documents via local storage.
+
+In both views, added and removed lines are tinted, carry `+`/`-` markers, and include visually hidden `Added line:` / `Removed line:` prefixes so the change kind survives without color.

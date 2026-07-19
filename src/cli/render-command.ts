@@ -1,4 +1,4 @@
-// Implements `big-plan render <input.md> [output.html]`: the I/O boundary
+// Implements `big-plan render <input.mdx> [output.html]`: the I/O boundary
 // around the pure renderer, owning argument validation, file reads/writes,
 // and the structured result runAxiCli() prints. Content decisions, including
 // the document title, belong to the renderer.
@@ -6,9 +6,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 import { AxiError } from "axi-sdk-js";
-import { renderDocument } from "../render/render-document.js";
+import {
+  MarkdownDiagnosticsError,
+  renderDocument,
+} from "../render/render-document.js";
 
-const USAGE = "Usage: big-plan render <input.md> [output.html]";
+const USAGE = "Usage: big-plan render <input.mdx> [output.html]";
 
 // Defaults the output to sit next to the input: <input>.html.
 const defaultOutputPath = (inputPath: string): string => {
@@ -18,16 +21,14 @@ const defaultOutputPath = (inputPath: string): string => {
   return `${withoutExtension}.html`;
 };
 
-// Reads the input markdown, renders the viewer HTML, writes it out, and
+// Reads the input MDX, renders the viewer HTML, writes it out, and
 // returns the structured summary runAxiCli() serializes for the caller.
 export const renderCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
   const inputArg = args[0];
   if (inputArg === undefined) {
-    throw new AxiError("Missing input markdown file", "VALIDATION_ERROR", [
-      USAGE,
-    ]);
+    throw new AxiError("Missing input MDX file", "VALIDATION_ERROR", [USAGE]);
   }
 
   const inputPath = resolve(inputArg);
@@ -43,10 +44,26 @@ export const renderCommand = async (
   }
 
   const outputPath = resolve(args[1] ?? defaultOutputPath(inputPath));
-  const { html, title, sections } = renderDocument({
-    markdown,
-    fallbackTitle: basename(inputPath, extname(inputPath)),
-  });
+  let renderedDocument;
+  try {
+    renderedDocument = renderDocument({
+      markdown,
+      fallbackTitle: basename(inputPath, extname(inputPath)),
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof MarkdownDiagnosticsError)) {
+      throw error;
+    }
+    throw new AxiError(
+      "Cannot render document with invalid MDX",
+      "VALIDATION_ERROR",
+      error.diagnostics.map(
+        ({ line, column, message }) =>
+          `${line ?? "?"}:${column ?? "?"} ${message}`,
+      ),
+    );
+  }
+  const { html, title, sections } = renderedDocument;
 
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, html, "utf8");

@@ -3,7 +3,8 @@
 
 import type { Element, Root, RootContent } from "hast";
 import { renderLucideIcon } from "../../icons/lucide-icon.js";
-import { CHECK_ICON, COPY_ICON } from "./code-block-icons.js";
+import { CHECK_ICON } from "../../icons/lucide/check.js";
+import { COPY_ICON } from "../../icons/lucide/copy.js";
 
 // This data contract is shared with the browser copy behavior so a future
 // CodeSnippet component can opt in without depending on Markdown conversion.
@@ -31,7 +32,8 @@ const decorateCodeBlocks = (node: Root | Element): void => {
       return child;
     }
     decorateCodeBlocks(child);
-    const hasCodeChild = child.tagName === "pre" &&
+    const hasCodeChild =
+      child.tagName === "pre" &&
       child.children.some(
         (codeChild) => isElement(codeChild) && codeChild.tagName === "code",
       );
@@ -62,8 +64,8 @@ const decorateCodeBlocks = (node: Root | Element): void => {
         "data-variant": "ghost",
       },
       children: [
-        renderLucideIcon({ icon: COPY_ICON, name: "copy", hidden: false }),
-        renderLucideIcon({ icon: CHECK_ICON, name: "check", hidden: true }),
+        renderLucideIcon({ icon: COPY_ICON, hidden: false }),
+        renderLucideIcon({ icon: CHECK_ICON, hidden: true }),
       ],
     };
     const wrapper: Element = {

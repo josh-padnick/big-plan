@@ -34,7 +34,13 @@ const setCopyStatus = ({
 
 // Supports file:// previews where the modern Clipboard API may be unavailable
 // or denied, while preferring it when the browser permits it.
-const writeClipboard = async (value: string): Promise<void> => {
+const writeClipboard = async ({
+  container,
+  value,
+}: {
+  readonly container: HTMLElement;
+  readonly value: string;
+}): Promise<void> => {
   if (navigator.clipboard !== undefined) {
     try {
       await navigator.clipboard.writeText(value);
@@ -49,7 +55,8 @@ const writeClipboard = async (value: string): Promise<void> => {
   textarea.setAttribute("readonly", "");
   textarea.style.position = "fixed";
   textarea.style.opacity = "0";
-  document.body.append(textarea);
+  const activeDialog = container.closest<HTMLDialogElement>("dialog[open]");
+  (activeDialog ?? document.body).append(textarea);
   textarea.select();
   const copied = document.execCommand("copy");
   textarea.remove();
@@ -88,13 +95,19 @@ for (const button of document.querySelectorAll<HTMLButtonElement>(
   "[data-copy-code]",
 )) {
   button.addEventListener("click", async (event) => {
-    const wrapper = button.closest("[data-code-block]");
-    const code = wrapper?.querySelector("pre code");
-    if (code === null || code === undefined) {
+    const wrapper = button.closest<HTMLElement>("[data-code-block]");
+    if (wrapper === null) {
+      return;
+    }
+    const code = wrapper.querySelector("pre code");
+    if (code === null) {
       return;
     }
     try {
-      await writeClipboard(code.textContent ?? "");
+      await writeClipboard({
+        container: wrapper,
+        value: code.textContent ?? "",
+      });
       showCopyStatus({ button, status: "success" });
     } catch {
       showCopyStatus({ button, status: "failure" });
