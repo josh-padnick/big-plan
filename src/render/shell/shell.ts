@@ -11,7 +11,7 @@
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
-import { DIFF_VIEW_JS } from "../markdown/blocks/code-diff/diff-view.generated.js";
+import { CODE_DIFF_JS } from "../markdown/blocks/code-diff/code-diff.generated.js";
 import { COPY_CODE_JS } from "../markdown/code-block/copy-code.generated.js";
 import { SCROLL_SPY_JS } from "./scroll-spy.generated.js";
 import { THEME_TOGGLE_JS } from "./theme-toggle.generated.js";
@@ -153,8 +153,8 @@ ${contentHtml}
     html,
     styles: GLOBAL_CSS,
     scripts: hasToc
-      ? [THEME_TOGGLE_JS, COPY_CODE_JS, DIFF_VIEW_JS, SCROLL_SPY_JS]
-      : [THEME_TOGGLE_JS, COPY_CODE_JS, DIFF_VIEW_JS],
+      ? [THEME_TOGGLE_JS, COPY_CODE_JS, CODE_DIFF_JS, SCROLL_SPY_JS]
+      : [THEME_TOGGLE_JS, COPY_CODE_JS, CODE_DIFF_JS],
     bodyClassName: BODY_CLASSES,
   };
 };

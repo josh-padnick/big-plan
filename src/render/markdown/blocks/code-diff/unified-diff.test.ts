@@ -2,7 +2,7 @@
 // malformed input, headerless behavior, and side-by-side run pairing.
 
 import { describe, expect, it } from "vitest";
-import { pairDiffLines, parseUnifiedDiff } from "./parse-unified-diff.js";
+import { pairDiffLines, parseUnifiedDiff } from "./unified-diff.js";
 
 describe("parseUnifiedDiff", () => {
   it("should parse an empty diff as one headerless empty hunk", () => {

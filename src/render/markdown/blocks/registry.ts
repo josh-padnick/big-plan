@@ -3,8 +3,12 @@
 // dispatch, and removal of every MDX node.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
+import type { Root as MarkdownRoot } from "mdast";
 import { renderCallout } from "./callout/callout.js";
-import { renderCodeDiff } from "./code-diff/code-diff.js";
+import {
+  renderCodeDiff,
+  validateCodeDiffMarkdown,
+} from "./code-diff/code-diff.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
 
 type MdxJsxFlowElement = Extract<
@@ -65,9 +69,16 @@ export type ScopedChildDefinition = {
   readonly kind: "scoped-child";
 };
 
+export type BlockMarkdownValidator = (input: {
+  readonly tree: MarkdownRoot;
+  readonly diagnostics: DiagnosticCollector;
+  readonly registeredBlockNames: ReadonlySet<string>;
+}) => void;
+
 export type BlockDefinition = {
   readonly render: BlockRenderer;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
+  readonly validateMarkdown?: BlockMarkdownValidator;
 };
 
 export const BLOCK_REGISTRY: Readonly<Record<string, BlockDefinition>> = {
@@ -75,12 +86,26 @@ export const BLOCK_REGISTRY: Readonly<Record<string, BlockDefinition>> = {
   CodeDiff: {
     render: (input) => renderCodeDiff(input),
     scopedChildren: { Annotation: { kind: "scoped-child" } },
+    validateMarkdown: validateCodeDiffMarkdown,
   },
 };
 
 export const REGISTERED_BLOCK_NAMES: ReadonlySet<string> = new Set(
   Object.keys(BLOCK_REGISTRY),
 );
+
+/** Runs every registered block's pre-HAST Markdown validation. */
+export const remarkValidateBlocks =
+  ({ diagnostics }: { readonly diagnostics: DiagnosticCollector }) =>
+  (tree: MarkdownRoot): void => {
+    for (const definition of Object.values(BLOCK_REGISTRY)) {
+      definition.validateMarkdown?.({
+        tree,
+        diagnostics,
+        registeredBlockNames: REGISTERED_BLOCK_NAMES,
+      });
+    }
+  };
 
 // Validates shared static attribute shapes in schema order, then reports every
 // attribute outside that schema in authored order.

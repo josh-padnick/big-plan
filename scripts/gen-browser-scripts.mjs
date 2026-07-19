@@ -27,8 +27,8 @@ const browserScripts = [
   },
   {
     directory: "markdown/blocks/code-diff",
-    name: "diff-view",
-    exportName: "DIFF_VIEW_JS",
+    name: "code-diff",
+    exportName: "CODE_DIFF_JS",
   },
 ];
 
