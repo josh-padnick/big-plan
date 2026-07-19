@@ -111,6 +111,23 @@ Use `bun run test`, not `bun test` - the latter invokes Bun's own test runner in
 
 See [AGENTS.md](AGENTS.md) for architecture and engineering rules, and [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
 
+## Documentation
+
+The documentation site lives in `docs/`.
+Install its standalone dependencies and start the development server with:
+
+```sh
+cd docs
+bun install
+bun run dev
+```
+
+From `docs/`, build the static site with:
+
+```sh
+bun run build
+```
+
 ## License
 
 [MIT](LICENSE).
