@@ -1,6 +1,6 @@
 ---
 title: CodeDiff
-description: A reviewable code diff from verbatim git output - unified and side-by-side views, line numbers, counts, an actions menu, and a full-screen mode.
+description: A reviewable single-file unified diff - unified and side-by-side views, line numbers, counts, an actions menu, and a full-screen mode.
 ---
 
 import ThemeImage from "../../../components/ThemeImage.astro";
@@ -70,9 +70,11 @@ The component takes exactly one fenced ` ```diff ` code block, plus zero or more
 
 The fenced `diff` block accepts:
 
-- Verbatim `git diff` output - the file preamble (`diff --git`, `index`, `---`, `+++`, mode and rename lines) may appear before the first hunk
+- One file's unified `git diff` output, verbatim - the file preamble (`diff --git`, `index`, `---`, `+++`, mode, rename, and copy lines) may appear before the first hunk
 - Headerless diffs of bare `+`/`-`/context lines, when line numbers are not requested
 - A blank line inside a hunk as empty context, even when an editor has stripped its leading space
+
+Combined and multi-file diffs are not supported; use one `CodeDiff` per file.
 
 Validation is strict, and a malformed line fails the render with both the document position and the fence-relative line number:
 

@@ -12,10 +12,10 @@ A component's attributes are strings or bare booleans, structured data arrives a
 
 ## Available today
 
-| Component                          | What it is for                                                                              |
-| ---------------------------------- | ------------------------------------------------------------------------------------------- |
-| [Callout](/components/callout/)    | Surface a note, tip, warning, or danger so reviewers cannot miss it.                        |
-| [CodeDiff](/components/code-diff/) | Review a verbatim `git diff` with switchable views, gutters, and line-anchored annotations. |
+| Component                          | What it is for                                                                                |
+| ---------------------------------- | --------------------------------------------------------------------------------------------- |
+| [Callout](/components/callout/)    | Surface a note, tip, warning, or danger so reviewers cannot miss it.                          |
+| [CodeDiff](/components/code-diff/) | Review one file's unified diff with switchable views, gutters, and line-anchored annotations. |
 
 `Annotation` is a scoped child component, valid only as a direct child of `CodeDiff`.
 
