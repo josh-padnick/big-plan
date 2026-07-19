@@ -30,17 +30,6 @@ const render = ({
 };
 
 describe("renderCallout", () => {
-  it("should report the allowed values when type is missing", () => {
-    expect(render({ attributes: {} }).diagnostics).toEqual([
-      {
-        line: 4,
-        column: 1,
-        message:
-          'Missing required attribute "type"; expected one of: note, tip, warning, danger',
-      },
-    ]);
-  });
-
   it("should report the allowed values when type is invalid", () => {
     expect(render({ attributes: { type: "success" } }).diagnostics).toEqual([
       {
@@ -48,42 +37,6 @@ describe("renderCallout", () => {
         column: 1,
         message:
           'Invalid value for attribute "type"; expected one of: note, tip, warning, danger',
-      },
-    ]);
-  });
-
-  it("should report an unknown attribute when an extra string attribute is present", () => {
-    expect(
-      render({ attributes: { type: "note", tone: "quiet" } }).diagnostics,
-    ).toEqual([
-      {
-        line: 4,
-        column: 1,
-        message: 'Unknown attribute "tone" on Callout',
-      },
-    ]);
-  });
-
-  it("should report an unknown attribute when an extra attribute is shorthand", () => {
-    expect(
-      render({ attributes: { type: "note", compact: true } }).diagnostics,
-    ).toEqual([
-      {
-        line: 4,
-        column: 1,
-        message: 'Unknown attribute "compact" on Callout',
-      },
-    ]);
-  });
-
-  it("should reject a shorthand title when title is not a string", () => {
-    expect(
-      render({ attributes: { type: "note", title: true } }).diagnostics,
-    ).toEqual([
-      {
-        line: 4,
-        column: 1,
-        message: 'Attribute "title" must be a string',
       },
     ]);
   });

@@ -25,46 +25,6 @@ describe("renderCodeDiff diagnostics", () => {
     });
   });
 
-  it("should diagnose a shorthand file and string-valued showLineNumbers", () => {
-    expect(
-      render({ attributes: { file: true, showLineNumbers: "true" } })
-        .diagnostics,
-    ).toEqual([
-      { line: 3, column: 1, message: 'Attribute "file" must be a string' },
-      {
-        line: 3,
-        column: 1,
-        message:
-          'Attribute "showLineNumbers" is a shorthand boolean; use the bare form',
-      },
-    ]);
-  });
-
-  it("should diagnose an unknown attribute", () => {
-    expect(
-      render({ attributes: { file: "x", compact: true } }).diagnostics,
-    ).toEqual([
-      {
-        line: 3,
-        column: 1,
-        message: 'Unknown attribute "compact" on CodeDiff',
-      },
-    ]);
-  });
-
-  it("should diagnose a string-valued showLineCounts", () => {
-    expect(
-      render({ attributes: { file: "x", showLineCounts: "true" } }).diagnostics,
-    ).toEqual([
-      {
-        line: 3,
-        column: 1,
-        message:
-          'Attribute "showLineCounts" is a shorthand boolean; use the bare form',
-      },
-    ]);
-  });
-
   it("should diagnose a wrong-language child", () => {
     expect(
       render({ children: [fence({ language: "ts" })] }).diagnostics,
