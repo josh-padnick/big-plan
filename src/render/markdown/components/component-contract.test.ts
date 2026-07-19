@@ -1,22 +1,22 @@
-// Tests the typed-block contract's centralized static attribute validation.
+// Tests the component contract's centralized static attribute validation.
 
 import { describe, expect, it } from "vitest";
 import { createDiagnosticCollector } from "./diagnostics.js";
-import { validateBlockAttributes } from "./block-contract.js";
+import { validateComponentAttributes } from "./component-contract.js";
 
 const POSITION = {
   start: { line: 3, column: 1, offset: 10 },
   end: { line: 9, column: 12, offset: 100 },
 };
 
-describe("validateBlockAttributes", () => {
+describe("validateComponentAttributes", () => {
   const validate = (
-    schema: Parameters<typeof validateBlockAttributes>[0]["schema"],
+    schema: Parameters<typeof validateComponentAttributes>[0]["schema"],
     attributes: Readonly<Record<string, string | boolean>>,
   ) => {
     const diagnostics = createDiagnosticCollector();
-    const values = validateBlockAttributes({
-      block: "Sample",
+    const values = validateComponentAttributes({
+      component: "Sample",
       attributes,
       position: POSITION,
       diagnostics,
@@ -100,7 +100,7 @@ describe("validateBlockAttributes", () => {
     ]);
   });
 
-  it("should sweep unknown attributes naming the block", () => {
+  it("should sweep unknown attributes naming the component", () => {
     const { messages } = validate(
       { tone: { kind: "enum", values: ["calm"], required: true } },
       { tone: "calm", compact: true },

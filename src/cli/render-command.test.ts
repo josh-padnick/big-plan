@@ -38,7 +38,7 @@ describe("renderCommand validation", () => {
       code: "VALIDATION_ERROR",
       message: "Cannot render document with invalid MDX",
       suggestions: [
-        '1:1 Unknown block "Unknown"',
+        '1:1 Unknown component "Unknown"',
         '1:10 Expression-valued attribute "first" is not supported',
         "3:6 Text expressions are not supported",
       ],

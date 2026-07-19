@@ -1,4 +1,4 @@
-// Owns the authored typed-block contract shared by feature renderers and the
+// Owns the authored component contract shared by feature renderers and the
 // registry: renderer inputs, scoped-child policies, and attribute validation.
 
 import type { Element, ElementContent, Root } from "hast";
@@ -6,9 +6,9 @@ import type { DiagnosticCollector } from "./diagnostics.js";
 
 type NodePosition = Root["position"];
 
-export type BlockAttributeValue = string | boolean;
+export type ComponentAttributeValue = string | boolean;
 
-export type BlockAttributeSchemaEntry =
+export type ComponentAttributeSchemaEntry =
   | {
       readonly kind: "enum";
       readonly values: ReadonlyArray<string>;
@@ -21,11 +21,11 @@ export type BlockAttributeSchemaEntry =
     }
   | { readonly kind: "booleanShorthand" };
 
-export type BlockAttributeSchema = Readonly<
-  Record<string, BlockAttributeSchemaEntry>
+export type ComponentAttributeSchema = Readonly<
+  Record<string, ComponentAttributeSchemaEntry>
 >;
 
-type ValidatedAttributeValue<Entry extends BlockAttributeSchemaEntry> =
+type ValidatedAttributeValue<Entry extends ComponentAttributeSchemaEntry> =
   Entry extends {
     readonly kind: "enum";
     readonly values: ReadonlyArray<infer Value extends string>;
@@ -35,19 +35,21 @@ type ValidatedAttributeValue<Entry extends BlockAttributeSchemaEntry> =
       ? string | undefined
       : true | undefined;
 
-export type ValidatedBlockAttributes<Schema extends BlockAttributeSchema> = {
+export type ValidatedComponentAttributes<
+  Schema extends ComponentAttributeSchema,
+> = {
   readonly [Name in keyof Schema]: ValidatedAttributeValue<Schema[Name]>;
 };
 
 export type ScopedChild = {
   readonly name: string;
-  readonly attributes: Readonly<Record<string, BlockAttributeValue>>;
+  readonly attributes: Readonly<Record<string, ComponentAttributeValue>>;
   readonly children: ReadonlyArray<ElementContent>;
   readonly position: NodePosition;
 };
 
-export type BlockRenderer = (input: {
-  readonly attributes: Readonly<Record<string, BlockAttributeValue>>;
+export type ComponentRenderer = (input: {
+  readonly attributes: Readonly<Record<string, ComponentAttributeValue>>;
   readonly children: ReadonlyArray<ElementContent>;
   readonly scopedChildren: ReadonlyArray<ScopedChild>;
   readonly position: NodePosition;
@@ -55,7 +57,10 @@ export type BlockRenderer = (input: {
 }) => Element;
 
 export type MarkdownBodyNodeKind =
-  "heading" | "footnoteReference" | "footnoteDefinition" | "registeredBlock";
+  | "heading"
+  | "footnoteReference"
+  | "footnoteDefinition"
+  | "registeredComponent";
 
 export type MarkdownBodyPolicy = {
   readonly prohibited: Readonly<Partial<Record<MarkdownBodyNodeKind, string>>>;
@@ -66,37 +71,38 @@ export type ScopedChildDefinition = {
   readonly markdownBody?: MarkdownBodyPolicy;
 };
 
-export type BlockDefinition = {
-  readonly render: BlockRenderer;
+export type ComponentDefinition = {
+  readonly render: ComponentRenderer;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
 };
 
 // Validates shared static attribute shapes in schema order, then reports every
 // attribute outside that schema in authored order.
-export function validateBlockAttributes<
-  const Schema extends BlockAttributeSchema,
+export function validateComponentAttributes<
+  const Schema extends ComponentAttributeSchema,
 >(input: {
-  readonly block: string;
-  readonly attributes: Readonly<Record<string, BlockAttributeValue>>;
+  readonly component: string;
+  readonly attributes: Readonly<Record<string, ComponentAttributeValue>>;
   readonly position: NodePosition;
   readonly diagnostics: DiagnosticCollector;
   readonly schema: Schema;
-}): ValidatedBlockAttributes<Schema>;
-export function validateBlockAttributes({
-  block,
+}): ValidatedComponentAttributes<Schema>;
+export function validateComponentAttributes({
+  component,
   attributes,
   position,
   diagnostics,
   schema,
 }: {
-  readonly block: string;
-  readonly attributes: Readonly<Record<string, BlockAttributeValue>>;
+  readonly component: string;
+  readonly attributes: Readonly<Record<string, ComponentAttributeValue>>;
   readonly position: NodePosition;
   readonly diagnostics: DiagnosticCollector;
-  readonly schema: BlockAttributeSchema;
-}): Readonly<Record<string, BlockAttributeValue | undefined>> {
-  const validated: Array<readonly [string, BlockAttributeValue | undefined]> =
-    [];
+  readonly schema: ComponentAttributeSchema;
+}): Readonly<Record<string, ComponentAttributeValue | undefined>> {
+  const validated: Array<
+    readonly [string, ComponentAttributeValue | undefined]
+  > = [];
   for (const [name, entry] of Object.entries(schema)) {
     const value = attributes[name];
     if (entry.kind === "enum") {
@@ -149,7 +155,7 @@ export function validateBlockAttributes({
   for (const name of Object.keys(attributes)) {
     if (!Object.hasOwn(schema, name)) {
       diagnostics.add({
-        message: `Unknown attribute "${name}" on ${block}`,
+        message: `Unknown attribute "${name}" on ${component}`,
         position,
       });
     }

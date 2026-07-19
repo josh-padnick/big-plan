@@ -5,11 +5,11 @@ import type { Element } from "hast";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import type { LucideIcon } from "../../../icons/lucide-icon.js";
 import {
-  validateBlockAttributes,
-  type BlockAttributeSchema,
-  type BlockDefinition,
-  type BlockRenderer,
-} from "../block-contract.js";
+  validateComponentAttributes,
+  type ComponentAttributeSchema,
+  type ComponentDefinition,
+  type ComponentRenderer,
+} from "../component-contract.js";
 import { INFO_ICON } from "../../../icons/lucide/info.js";
 import { LIGHTBULB_ICON } from "../../../icons/lucide/lightbulb.js";
 import { OCTAGON_ALERT_ICON } from "../../../icons/lucide/octagon-alert.js";
@@ -50,7 +50,7 @@ const CALLOUT_TYPES = objectKeys(CALLOUT_CONFIGS);
 const CALLOUT_SCHEMA = {
   type: { kind: "enum", values: CALLOUT_TYPES, required: true },
   title: { kind: "string" },
-} satisfies BlockAttributeSchema;
+} satisfies ComponentAttributeSchema;
 
 const CALLOUT_CLASSES =
   // Border colors come from the stylesheet's [data-callout] rules; a
@@ -61,15 +61,15 @@ const HEADER_CLASSES =
 const TITLE_CLASSES = "callout-title text-sm leading-5";
 const BODY_CLASSES = "callout-body text-ink";
 
-// Validates and renders one Callout behind the feature-owned block definition.
-const renderCallout: BlockRenderer = ({
+// Validates and renders one Callout behind its feature-owned definition.
+const renderCallout: ComponentRenderer = ({
   attributes,
   children,
   position,
   diagnostics,
 }): Element => {
-  const validated = validateBlockAttributes({
-    block: "Callout",
+  const validated = validateComponentAttributes({
+    component: "Callout",
     attributes,
     position,
     diagnostics,
@@ -114,7 +114,7 @@ const renderCallout: BlockRenderer = ({
   };
 };
 
-/** Declares Callout's complete typed-block integration contract. */
-export const CALLOUT_BLOCK_DEFINITION = {
+/** Declares Callout's complete component integration contract. */
+export const CALLOUT_COMPONENT_DEFINITION = {
   render: renderCallout,
-} satisfies BlockDefinition;
+} satisfies ComponentDefinition;

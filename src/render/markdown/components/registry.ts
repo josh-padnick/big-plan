@@ -1,18 +1,18 @@
-// Owns typed-block registration and the first post-MDX rehype transform:
+// Owns component registration and the first post-MDX rehype transform:
 // centralized form validation, scoped child collection, depth-first global
 // dispatch, and removal of every MDX node.
 
 import type { Element, Root, RootContent } from "hast";
 import type { Nodes as MarkdownNode, Root as MarkdownRoot } from "mdast";
 import type {
-  BlockAttributeValue,
-  BlockDefinition,
+  ComponentAttributeValue,
+  ComponentDefinition,
   MarkdownBodyNodeKind,
   MarkdownBodyPolicy,
   ScopedChild,
-} from "./block-contract.js";
-import { CALLOUT_BLOCK_DEFINITION } from "./callout/callout.js";
-import { CODE_DIFF_BLOCK_DEFINITION } from "./code-diff/code-diff.js";
+} from "./component-contract.js";
+import { CALLOUT_COMPONENT_DEFINITION } from "./callout/callout.js";
+import { CODE_DIFF_COMPONENT_DEFINITION } from "./code-diff/code-diff.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
 
 type MdxJsxFlowElement = Extract<
@@ -20,23 +20,24 @@ type MdxJsxFlowElement = Extract<
   { readonly type: "mdxJsxFlowElement" }
 >;
 
-export const BLOCK_REGISTRY: Readonly<Record<string, BlockDefinition>> = {
-  Callout: CALLOUT_BLOCK_DEFINITION,
-  CodeDiff: CODE_DIFF_BLOCK_DEFINITION,
-};
+export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
+  {
+    Callout: CALLOUT_COMPONENT_DEFINITION,
+    CodeDiff: CODE_DIFF_COMPONENT_DEFINITION,
+  };
 
-export const REGISTERED_BLOCK_NAMES: ReadonlySet<string> = new Set(
-  Object.keys(BLOCK_REGISTRY),
+export const REGISTERED_COMPONENT_NAMES: ReadonlySet<string> = new Set(
+  Object.keys(COMPONENT_REGISTRY),
 );
 
 const markdownChildren = (
   node: MarkdownRoot | MarkdownNode,
 ): ReadonlyArray<MarkdownNode> => ("children" in node ? node.children : []);
 
-const registeredBlockName = (node: MarkdownNode): string | undefined =>
+const registeredComponentName = (node: MarkdownNode): string | undefined =>
   node.type === "mdxJsxFlowElement" &&
   node.name !== null &&
-  REGISTERED_BLOCK_NAMES.has(node.name)
+  REGISTERED_COMPONENT_NAMES.has(node.name)
     ? node.name
     : undefined;
 
@@ -47,12 +48,12 @@ const prohibitedKind = (
   node.type === "footnoteReference" ||
   node.type === "footnoteDefinition"
     ? node.type
-    : registeredBlockName(node) === undefined
+    : registeredComponentName(node) === undefined
       ? undefined
-      : "registeredBlock";
+      : "registeredComponent";
 
 // Applies a scoped child's declared content policy recursively. Registered
-// blocks are opaque after a rejection so their internals do not add secondary
+// components are opaque after rejection so their internals add no secondary
 // diagnostics for content the parent contract already excludes.
 const validateMarkdownBody = ({
   node,
@@ -68,7 +69,7 @@ const validateMarkdownBody = ({
   if (message !== undefined) {
     diagnostics.add({ message, position: node.position });
   }
-  if (kind === "registeredBlock") {
+  if (kind === "registeredComponent") {
     return;
   }
   for (const child of markdownChildren(node)) {
@@ -78,17 +79,17 @@ const validateMarkdownBody = ({
 
 // Finds registered parents anywhere in Markdown and applies each direct
 // scoped child's declarative body policy before Markdown becomes HAST.
-const validateRegisteredBlockMarkdown = ({
+const validateRegisteredComponentMarkdown = ({
   node,
   diagnostics,
 }: {
   readonly node: MarkdownRoot | MarkdownNode;
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const blockName =
-    node.type === "root" ? undefined : registeredBlockName(node);
+  const componentName =
+    node.type === "root" ? undefined : registeredComponentName(node);
   const definition =
-    blockName === undefined ? undefined : BLOCK_REGISTRY[blockName];
+    componentName === undefined ? undefined : COMPONENT_REGISTRY[componentName];
   for (const child of markdownChildren(node)) {
     const scopedDefinition =
       child.type !== "mdxJsxFlowElement" || child.name === null
@@ -105,24 +106,24 @@ const validateRegisteredBlockMarkdown = ({
           });
         }
       }
-      if (policy?.prohibited.registeredBlock !== undefined) {
+      if (policy?.prohibited.registeredComponent !== undefined) {
         continue;
       }
     }
-    validateRegisteredBlockMarkdown({ node: child, diagnostics });
+    validateRegisteredComponentMarkdown({ node: child, diagnostics });
   }
 };
 
-/** Applies every registered block's declarative pre-HAST Markdown policy. */
-export const remarkValidateBlocks =
+/** Applies every component's declarative pre-HAST Markdown policy. */
+export const remarkValidateComponents =
   ({ diagnostics }: { readonly diagnostics: DiagnosticCollector }) =>
   (tree: MarkdownRoot): void => {
-    validateRegisteredBlockMarkdown({ node: tree, diagnostics });
+    validateRegisteredComponentMarkdown({ node: tree, diagnostics });
   };
 
 const isMdxNodeType = (type: string): boolean => type.startsWith("mdx");
 
-// Maps disallowed non-block MDX nodes to their author-facing explanation.
+// Maps disallowed non-component MDX nodes to their author-facing explanation.
 const diagnosticMessage = (node: RootContent): string | undefined => {
   switch (node.type) {
     case "mdxjsEsm":
@@ -132,7 +133,7 @@ const diagnosticMessage = (node: RootContent): string | undefined => {
     case "mdxTextExpression":
       return "Text expressions are not supported";
     case "mdxJsxTextElement":
-      return "Inline JSX is not supported; blocks must be flow-level";
+      return "Inline JSX is not supported; components must be flow-level";
     default:
       return undefined;
   }
@@ -146,8 +147,8 @@ const normalizeAttributes = ({
 }: {
   readonly node: MdxJsxFlowElement;
   readonly diagnostics: DiagnosticCollector;
-}): Readonly<Record<string, BlockAttributeValue>> => {
-  const attributes: Array<readonly [string, BlockAttributeValue]> = [];
+}): Readonly<Record<string, ComponentAttributeValue>> => {
+  const attributes: Array<readonly [string, ComponentAttributeValue]> = [];
   const names = new Set<string>();
   for (const attribute of node.attributes) {
     if (attribute.type === "mdxJsxExpressionAttribute") {
@@ -177,16 +178,16 @@ const normalizeAttributes = ({
   return Object.fromEntries(attributes);
 };
 
-const definitionFor = (name: string | null): BlockDefinition | undefined =>
-  name !== null && Object.hasOwn(BLOCK_REGISTRY, name)
-    ? BLOCK_REGISTRY[name]
+const definitionFor = (name: string | null): ComponentDefinition | undefined =>
+  name !== null && Object.hasOwn(COMPONENT_REGISTRY, name)
+    ? COMPONENT_REGISTRY[name]
     : undefined;
 
 const declaresScopedChild = ({
   definitions,
   name,
 }: {
-  readonly definitions: BlockDefinition["scopedChildren"];
+  readonly definitions: ComponentDefinition["scopedChildren"];
   readonly name: string | null;
 }): boolean =>
   name !== null &&
@@ -196,7 +197,7 @@ const declaresScopedChild = ({
 type ParentNode = Root | Element | MdxJsxFlowElement;
 
 // Reports an unknown name, validates attributes, recursively prepares direct
-// scoped children, then dispatches a registered global block.
+// scoped children, then dispatches a registered global component.
 const renderFlowElement = ({
   node,
   diagnostics,
@@ -208,7 +209,7 @@ const renderFlowElement = ({
   const definition = definitionFor(name);
   if (definition === undefined) {
     diagnostics.add({
-      message: `Unknown block "${name ?? "<fragment>"}"`,
+      message: `Unknown component "${name ?? "<fragment>"}"`,
       position: node.position,
     });
   }
@@ -237,7 +238,7 @@ const renderChildren = ({
   diagnostics,
 }: {
   readonly parent: ParentNode;
-  readonly scopedDefinitions?: BlockDefinition["scopedChildren"];
+  readonly scopedDefinitions?: ComponentDefinition["scopedChildren"];
   readonly diagnostics: DiagnosticCollector;
 }): ReadonlyArray<ScopedChild> => {
   const scopedChildren: Array<ScopedChild> = [];
@@ -301,7 +302,7 @@ const reportSurvivors = ({
   for (const child of parent.children) {
     if (isMdxNodeType(child.type)) {
       diagnostics.add({
-        message: `Internal error: MDX node "${child.type}" survived block rendering`,
+        message: `Internal error: MDX node "${child.type}" survived component rendering`,
         position: child.position,
       });
       continue;
@@ -312,8 +313,8 @@ const reportSurvivors = ({
   }
 };
 
-/** Creates the rehype transform that validates and dispatches typed blocks. */
-export const rehypeRenderBlocks =
+/** Creates the rehype transform that validates and dispatches components. */
+export const rehypeRenderComponents =
   ({ diagnostics }: { readonly diagnostics: DiagnosticCollector }) =>
   (tree: Root): void => {
     renderChildren({ parent: tree, diagnostics });

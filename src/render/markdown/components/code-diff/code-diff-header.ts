@@ -46,7 +46,7 @@ const menuItemButton = ({
   children: [renderLucideIcon({ icon: COPY_ICON, hidden: false }), text(label)],
 });
 
-// Header summary of the parsed diff; authors opt in per block via the
+// Header summary of the parsed diff; authors opt in per component via the
 // showLineCounts shorthand attribute.
 const diffStats = ({
   addedCount,
@@ -197,7 +197,7 @@ const viewToggleButton = ({
   children: [renderLucideIcon({ icon, hidden: false })],
 });
 
-// Opens the block alone in a near-full-screen modal dialog; the browser
+// Opens the component alone in a near-full-screen modal dialog; the browser
 // script moves the figure rather than cloning it, so state survives.
 const expandControlButton = (): Element => ({
   type: "element",
@@ -284,7 +284,7 @@ export const renderCodeDiffHeader = ({
       {
         type: "element",
         tagName: "span",
-        // The explicit label keeps the block's accessible name (also
+        // The explicit label keeps the component's accessible name (also
         // referenced by the full-screen dialog) the exact file path,
         // independent of the styled dir/name split below.
         properties: {
@@ -348,7 +348,7 @@ export const renderCodeDiffHeader = ({
           viewToggleGroup(),
           actionsMenu(),
           // Far right so entering and leaving full screen live in the same
-          // corner of the block.
+          // corner of the component.
           expandControlButton(),
         ],
       },

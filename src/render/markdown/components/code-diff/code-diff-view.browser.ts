@@ -16,15 +16,15 @@ const isCodeDiffView = (value: string | null): value is CodeDiffView =>
 
 // Applies a view and mirrors it into the segmented control's pressed states.
 const applyDiffView = ({
-  block,
+  component,
   view,
 }: {
-  readonly block: HTMLElement;
+  readonly component: HTMLElement;
   readonly view: CodeDiffView;
 }): void => {
-  block.dataset.diffView = view;
+  component.dataset.diffView = view;
   for (const button of ownedCodeDiffElements<HTMLButtonElement>({
-    block,
+    component,
     selector: "[data-diff-set-view]",
   })) {
     button.setAttribute(
@@ -32,23 +32,23 @@ const applyDiffView = ({
       button.dataset.diffSetView === view ? "true" : "false",
     );
   }
-  enhanceVisibleAnnotations({ block });
+  enhanceVisibleAnnotations({ component });
 };
 
 // Mirrors the expanded state into the expand control's icon and label.
 const updateExpandControl = ({
-  block,
+  component,
 }: {
-  readonly block: HTMLElement;
+  readonly component: HTMLElement;
 }): void => {
   const button = ownedCodeDiffElement<HTMLButtonElement>({
-    block,
+    component,
     selector: "[data-diff-expand]",
   });
   if (button === null) {
     return;
   }
-  const expanded = block.dataset.diffExpanded !== undefined;
+  const expanded = component.dataset.diffExpanded !== undefined;
   const label = expanded ? "Exit full screen" : "View diff full screen";
   button.setAttribute("aria-label", label);
   button.title = label;
@@ -60,12 +60,16 @@ const updateExpandControl = ({
     ?.toggleAttribute("hidden", !expanded);
 };
 
-// Moves the block into a modal rather than cloning it, preserving listeners
+// Moves the component into a modal rather than cloning it, preserving listeners
 // and the selected view, then restores its DOM and page-scroll positions.
-const openFullScreen = ({ block }: { readonly block: HTMLElement }): void => {
-  const article = block.closest("article");
+const openFullScreen = ({
+  component,
+}: {
+  readonly component: HTMLElement;
+}): void => {
+  const article = component.closest("article");
   const fileCaption = ownedCodeDiffElement<HTMLElement>({
-    block,
+    component,
     selector: ".code-diff-file",
   });
   if (article === null || fileCaption === null) {
@@ -82,25 +86,25 @@ const openFullScreen = ({ block }: { readonly block: HTMLElement }): void => {
   }
   const placeholder = document.createElement("span");
   placeholder.hidden = true;
-  block.before(placeholder);
+  component.before(placeholder);
   const dialog = document.createElement("dialog");
   dialog.className = "code-diff-dialog";
   dialog.setAttribute("aria-labelledby", labelId);
-  dialog.append(block);
+  dialog.append(component);
   article.append(dialog);
-  block.dataset.diffExpanded = "";
-  updateExpandControl({ block });
+  component.dataset.diffExpanded = "";
+  updateExpandControl({ component });
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) {
       dialog.close();
     }
   });
   dialog.addEventListener("close", () => {
-    placeholder.before(block);
+    placeholder.before(component);
     placeholder.remove();
     dialog.remove();
-    delete block.dataset.diffExpanded;
-    updateExpandControl({ block });
+    delete component.dataset.diffExpanded;
+    updateExpandControl({ component });
     window.scrollTo({ top: scrollY });
   });
   dialog.showModal();
@@ -121,35 +125,35 @@ export const readStoredCodeDiffView = (): CodeDiffView => {
 
 /** Reveals and wires one CodeDiff's view and full-screen controls. */
 export const enhanceCodeDiffView = ({
-  block,
+  component,
   initialView,
 }: {
-  readonly block: HTMLElement;
+  readonly component: HTMLElement;
   readonly initialView: CodeDiffView;
 }): void => {
   const toggleGroup = ownedCodeDiffElement<HTMLElement>({
-    block,
+    component,
     selector: "[data-diff-toggle-group]",
   });
   const expand = ownedCodeDiffElement<HTMLButtonElement>({
-    block,
+    component,
     selector: "[data-diff-expand]",
   });
   toggleGroup?.removeAttribute("hidden");
   expand?.removeAttribute("hidden");
-  applyDiffView({ block, view: initialView });
+  applyDiffView({ component, view: initialView });
 
   expand?.addEventListener("click", () => {
-    const openDialog = block.closest("dialog");
+    const openDialog = component.closest("dialog");
     if (openDialog !== null) {
       openDialog.close();
       return;
     }
-    openFullScreen({ block });
+    openFullScreen({ component });
   });
 
   for (const button of ownedCodeDiffElements<HTMLButtonElement>({
-    block,
+    component,
     selector: "[data-diff-set-view]",
   })) {
     button.addEventListener("click", () => {
@@ -157,11 +161,11 @@ export const enhanceCodeDiffView = ({
       if (!isCodeDiffView(view)) {
         return;
       }
-      applyDiffView({ block, view });
+      applyDiffView({ component, view });
       try {
         window.localStorage.setItem(DIFF_VIEW_STORAGE_KEY, view);
       } catch {
-        // Keep the block-local selection when persistence is unavailable.
+        // Keep the component-local selection when persistence is unavailable.
       }
     });
   }

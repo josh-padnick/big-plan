@@ -45,4 +45,4 @@ Level-two headings inside a callout still join the document's table of contents.
 
 Each type carries distinct accent and background tokens in both the light and dark palettes, and the four accents remain visually distinguishable from one another in each theme.
 The icon is decorative (`aria-hidden`); the visible title text carries the meaning, so screen readers announce it naturally.
-The block renders entirely server-side and needs no JavaScript.
+The component renders entirely server-side and needs no JavaScript.

@@ -18,7 +18,7 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
-  readonly mdxBlocksViewerUrl: string;
+  readonly componentsViewerUrl: string;
   readonly sampleViewerUrl: string;
 };
 
@@ -65,16 +65,16 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     },
     { scope: "worker" },
   ],
-  // The typed-block example has its own rendered artifact so the plain sample
+  // The component example has its own rendered artifact so the plain sample
   // remains the baseline for the original viewer journeys.
-  mdxBlocksViewerUrl: [
+  componentsViewerUrl: [
     async ({}, use) => {
-      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-mdx-blocks-"));
-      const outputPath = join(outputDir, "mdx-blocks.html");
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-components-"));
+      const outputPath = join(outputDir, "components.html");
       await execFileAsync(process.execPath, [
         join(repoRoot, "bin", "big-plan.mjs"),
         "render",
-        join(repoRoot, "examples", "mdx-blocks.mdx"),
+        join(repoRoot, "examples", "mdx-components.mdx"),
         outputPath,
       ]);
       await use(pathToFileURL(outputPath).href);

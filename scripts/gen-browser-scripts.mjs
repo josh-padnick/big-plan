@@ -26,7 +26,7 @@ const browserScripts = [
     exportName: "COPY_CODE_JS",
   },
   {
-    directory: "markdown/blocks/code-diff",
+    directory: "markdown/components/code-diff",
     name: "code-diff",
     exportName: "CODE_DIFF_JS",
   },

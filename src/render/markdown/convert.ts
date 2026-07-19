@@ -15,9 +15,12 @@ import { rehypeDecorateCodeBlocks } from "./code-block/decorate-code-blocks.js";
 import {
   createDiagnosticCollector,
   diagnosticFromParseError,
-} from "./blocks/diagnostics.js";
-import type { BlockDiagnostic } from "./blocks/diagnostics.js";
-import { rehypeRenderBlocks, remarkValidateBlocks } from "./blocks/registry.js";
+} from "./components/diagnostics.js";
+import type { ComponentDiagnostic } from "./components/diagnostics.js";
+import {
+  rehypeRenderComponents,
+  remarkValidateComponents,
+} from "./components/registry.js";
 
 export type Section = {
   readonly id: string;
@@ -33,9 +36,9 @@ export type CompiledMarkdown = {
 
 /** Carries every positional authoring diagnostic across renderer boundaries. */
 export class MarkdownDiagnosticsError extends Error {
-  readonly diagnostics: ReadonlyArray<BlockDiagnostic>;
+  readonly diagnostics: ReadonlyArray<ComponentDiagnostic>;
 
-  constructor(diagnostics: ReadonlyArray<BlockDiagnostic>) {
+  constructor(diagnostics: ReadonlyArray<ComponentDiagnostic>) {
     super("The document contains invalid MDX");
     this.name = "MarkdownDiagnosticsError";
     this.diagnostics = diagnostics;
@@ -163,7 +166,7 @@ const collectElementIds = (
 /**
  * Compiles static-subset MDX into a structured review document plus its outline,
  * title, and element ids for collision-free shell anchors. The tree stays
- * structured so typed-block and Annotation transforms can run before final
+ * structured so component and Annotation transforms can run before final
  * serialization.
  */
 export const compileMarkdown = ({
@@ -176,7 +179,7 @@ export const compileMarkdown = ({
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkMdx)
-    .use(remarkValidateBlocks, { diagnostics })
+    .use(remarkValidateComponents, { diagnostics })
     .use(remarkRehype, {
       // The GFM footnotes label ships visible as a small section heading;
       // without this option remark-rehype hides it behind class="sr-only".
@@ -189,7 +192,7 @@ export const compileMarkdown = ({
         "mdxJsxTextElement",
       ],
     })
-    .use(rehypeRenderBlocks, { diagnostics })
+    .use(rehypeRenderComponents, { diagnostics })
     .use(rehypeSlug)
     // Detection stays opt-in through the fence language: undeclared and
     // unknown languages remain readable without guessed tokenization.

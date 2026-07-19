@@ -11,10 +11,10 @@ import {
 } from "./code-diff-view.browser.js";
 
 const initialView = readStoredCodeDiffView();
-for (const block of document.querySelectorAll<HTMLElement>(
+for (const component of document.querySelectorAll<HTMLElement>(
   "[data-code-diff]",
 )) {
-  enhanceCodeDiffView({ block, initialView });
-  enhanceCodeDiffActions({ block });
+  enhanceCodeDiffView({ component, initialView });
+  enhanceCodeDiffActions({ component });
 }
 installCodeDiffMenuDismissal();

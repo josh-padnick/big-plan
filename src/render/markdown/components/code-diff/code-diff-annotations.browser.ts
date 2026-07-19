@@ -72,18 +72,18 @@ const evaluateAnnotationBody = (body: HTMLElement): void => {
 };
 
 // Mirrors a split card's rendered surround height into its opposite-pane
-// spacer while the block moves into and out of its full-screen dialog.
+// spacer while the component moves into and out of its full-screen dialog.
 const syncAnnotationSpacer = (card: HTMLElement): void => {
   if (card.getClientRects().length === 0) {
     return;
   }
   const id = card.dataset.annotationCard;
-  const block = card.closest<HTMLElement>("[data-code-diff]");
-  if (id === undefined || block === null) {
+  const component = card.closest<HTMLElement>("[data-code-diff]");
+  if (id === undefined || component === null) {
     return;
   }
   const spacer = ownedCodeDiffElements<HTMLElement>({
-    block,
+    component,
     selector: "[data-annotation-spacer]",
   }).find((candidate) => candidate.dataset.annotationSpacer === id);
   if (spacer !== undefined) {
@@ -115,12 +115,12 @@ const annotationResizeObserver =
 
 /** Measures annotations in whichever static diff view is now visible. */
 export const enhanceVisibleAnnotations = ({
-  block,
+  component,
 }: {
-  readonly block: HTMLElement;
+  readonly component: HTMLElement;
 }): void => {
   for (const card of ownedCodeDiffElements<HTMLElement>({
-    block,
+    component,
     selector: "[data-annotation-card]",
   })) {
     if (card.dataset.annotationCardObserved === undefined) {
@@ -130,7 +130,7 @@ export const enhanceVisibleAnnotations = ({
     syncAnnotationSpacer(card);
   }
   for (const body of ownedCodeDiffElements<HTMLElement>({
-    block,
+    component,
     selector: ".code-diff-annotation-body",
   })) {
     if (body.dataset.annotationObserved === undefined) {

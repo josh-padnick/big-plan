@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createDiagnosticCollector } from "../diagnostics.js";
-import { compileCodeDiffBlock } from "./compile-code-diff.js";
+import { compileCodeDiffComponent } from "./compile-code-diff.js";
 import { annotation, fence } from "./code-diff-test-fixtures.js";
 
 const POSITION = {
@@ -11,11 +11,11 @@ const POSITION = {
   end: { line: 9, column: 12, offset: 100 },
 };
 
-describe("compileCodeDiffBlock", () => {
+describe("compileCodeDiffComponent", () => {
   it("should expose one render-ready model for valid authored input", () => {
     const diagnostics = createDiagnosticCollector();
     const source = "@@ -7 +7,2 @@\n-old();\n+new();\n+audit();\n";
-    const model = compileCodeDiffBlock({
+    const model = compileCodeDiffComponent({
       attributes: {
         file: "src/retry.ts",
         showLineNumbers: true,

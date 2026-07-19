@@ -1,10 +1,13 @@
-// Exposes CodeDiff's typed-block definition: its scoped Annotation policy,
+// Exposes CodeDiff's component definition: its scoped Annotation policy,
 // authored-input compiler, and outer figure around focused render modules.
 
 import type { Element } from "hast";
-import { type BlockDefinition, type BlockRenderer } from "../block-contract.js";
 import {
-  compileCodeDiffBlock,
+  type ComponentDefinition,
+  type ComponentRenderer,
+} from "../component-contract.js";
+import {
+  compileCodeDiffComponent,
   type CompiledCodeDiff,
 } from "./compile-code-diff.js";
 import { renderCodeDiffHeader } from "./code-diff-header.js";
@@ -52,12 +55,12 @@ const renderCodeDiffFigure = ({
   ],
 });
 
-/** Compiles and renders one CodeDiff typed block. */
-export const renderCodeDiff: BlockRenderer = (input) =>
-  renderCodeDiffFigure({ model: compileCodeDiffBlock(input) });
+/** Compiles and renders one CodeDiff component. */
+export const renderCodeDiff: ComponentRenderer = (input) =>
+  renderCodeDiffFigure({ model: compileCodeDiffComponent(input) });
 
 /** Declares CodeDiff's renderer and direct-child Annotation contract. */
-export const CODE_DIFF_BLOCK_DEFINITION = {
+export const CODE_DIFF_COMPONENT_DEFINITION = {
   render: renderCodeDiff,
   scopedChildren: {
     Annotation: {
@@ -69,9 +72,10 @@ export const CODE_DIFF_BLOCK_DEFINITION = {
             "Annotation bodies cannot contain footnote references",
           footnoteDefinition:
             "Annotation bodies cannot contain footnote definitions",
-          registeredBlock: "Annotation bodies cannot contain typed blocks",
+          registeredComponent:
+            "Annotation bodies cannot contain typed components",
         },
       },
     },
   },
-} satisfies BlockDefinition;
+} satisfies ComponentDefinition;

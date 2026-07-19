@@ -3,7 +3,7 @@ The stylesheet entry point, authored for Tailwind v4 and compiled by
 scripts/gen-css.mjs into an inlined <style> block, so rendered documents stay
 fully self-contained. This file owns the design tokens, paper-like light and
 dark palettes and theme overrides, layout breakpoint, and page-level rules.
-It imports prose, syntax-token, and typed-block styles colocated with the
+It imports prose, syntax-token, and component styles colocated with the
 modules that emit their markup.
 Light and dark follow the reader's OS unless the theme control overrides it.
 */
@@ -11,8 +11,8 @@ Light and dark follow the reader's OS unless the theme control overrides it.
 @import "tailwindcss" source(none);
 @import "./markdown/prose.css";
 @import "./markdown/code-block/syntax-highlighting.css";
-@import "./markdown/blocks/callout/callout.css";
-@import "./markdown/blocks/code-diff/code-diff.css";
+@import "./markdown/components/callout/callout.css";
+@import "./markdown/components/code-diff/code-diff.css";
 
 /* Only authored source emits utility candidates; examples and docs do not. */
 @source "../";

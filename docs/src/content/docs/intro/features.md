@@ -27,10 +27,10 @@ For what comes next, see the [roadmap](/intro/roadmap/).
 
 ## Plan authoring
 
-- A static subset of MDX: standard Markdown and GFM plus a closed registry of typed blocks, without executable imports, exports, or expressions.
-- All-at-once positional diagnostics for unsupported syntax, unknown blocks, invalid attributes, and malformed block content.
-- `Callout` blocks for notes, tips, warnings, and dangers.
-- `CodeDiff` blocks with optional line numbers and change counts, unified and side-by-side views, scoped line annotations, copy actions, and full-screen viewing.
+- A static subset of MDX: standard Markdown and GFM plus a closed component registry, without executable imports, exports, or expressions.
+- All-at-once positional diagnostics for unsupported syntax, unknown components, invalid attributes, and malformed component content.
+- `Callout` components for notes, tips, warnings, and dangers.
+- `CodeDiff` components with optional line numbers and change counts, unified and side-by-side views, scoped line annotations, copy actions, and full-screen viewing.
 
 ## Output
 

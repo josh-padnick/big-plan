@@ -18,20 +18,20 @@ flowchart LR
 ## Plans are MDX
 
 A plan is an MDX document, but only a deliberately static subset of MDX is accepted: no imports, no exports, no expressions, and no inline JSX.
-A plan is prose plus typed blocks, nothing else.
+A plan is prose plus components, nothing else.
 That keeps every plan greppable and diffable, which the review workflow depends on, and it means the renderer never has to run code an agent wrote.
 The full contract lives in [Authoring plans](/for-agents/authoring-plans/).
 
 ## Components render to HTML
 
-Typed blocks like [`Callout`](/components/callout/) and [`CodeDiff`](/components/code-diff/) come from a closed, built-in registry.
-When the renderer meets a typed block, the registry renders it to plain HTML on the server: the component's markup and styles are baked into the output document, no plan-authored code is evaluated or shipped, and built-in scripts provide only progressive enhancement.
+Components like [`Callout`](/components/callout/) and [`CodeDiff`](/components/code-diff/) come from a closed, built-in registry.
+When the renderer meets a component, the registry renders it to plain HTML on the server: the component's markup and styles are baked into the output document, no plan-authored code is evaluated or shipped, and built-in scripts provide only progressive enhancement.
 Everything else renders as ordinary markdown prose.
 
 ```mermaid
 flowchart TB
   S["plan.mdx source"] --> P["Parse the static MDX subset"]
-  P --> Q{"Typed block?"}
+  P --> Q{"Component?"}
   Q -- "yes" --> R["Closed registry renders<br/>the component to HTML"]
   Q -- "no" --> M["Markdown renders as prose"]
   R --> H["One HTML document tree"]
@@ -41,7 +41,7 @@ flowchart TB
 ```
 
 An invalid document never renders partially.
-Validation collects every problem, unknown blocks, bad attributes, malformed fences, and fails with the complete list, each entry carrying a `line:column` position, so an agent can fix everything in one pass.
+Validation collects every problem, unknown components, bad attributes, malformed fences, and fails with the complete list, each entry carrying a `line:column` position, so an agent can fix everything in one pass.
 
 ## One self-contained file
 

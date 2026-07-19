@@ -60,7 +60,7 @@ Usage: big-plan render <input.mdx> [output.html]
 If the input cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
 The read error covers any failure to read the input file.
 
-If parsing or typed-block validation fails, the command raises a structured `VALIDATION_ERROR` with the message `Cannot render document with invalid MDX`.
+If parsing or component validation fails, the command raises a structured `VALIDATION_ERROR` with the message `Cannot render document with invalid MDX`.
 Its help entries contain every collected authoring diagnostic as `line:column message`, and no output file is written.
 
 ## Top-level help and version

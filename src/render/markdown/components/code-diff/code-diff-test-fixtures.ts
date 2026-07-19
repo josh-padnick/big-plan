@@ -3,7 +3,10 @@
 
 import type { Element, ElementContent } from "hast";
 import { createDiagnosticCollector } from "../diagnostics.js";
-import type { BlockAttributeValue, ScopedChild } from "../block-contract.js";
+import type {
+  ComponentAttributeValue,
+  ScopedChild,
+} from "../component-contract.js";
 import { renderCodeDiff } from "./code-diff.js";
 
 const POSITION = {
@@ -44,11 +47,11 @@ export const annotation = ({
   positionLine = 10,
   extraAttributes = {},
 }: {
-  readonly lines: BlockAttributeValue;
-  readonly side?: BlockAttributeValue;
+  readonly lines: ComponentAttributeValue;
+  readonly side?: ComponentAttributeValue;
   readonly value?: string;
   readonly positionLine?: number;
-  readonly extraAttributes?: Readonly<Record<string, BlockAttributeValue>>;
+  readonly extraAttributes?: Readonly<Record<string, ComponentAttributeValue>>;
 }): ScopedChild => ({
   name: "Annotation",
   attributes: {

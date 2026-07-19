@@ -1,5 +1,5 @@
-// Tests that scoped block names dispatch only for direct children of the
-// declaring global block while preserving their supported Markdown bodies.
+// Tests that scoped component names dispatch only for direct children of the
+// declaring global component while preserving supported Markdown bodies.
 
 import { describe, expect, it } from "vitest";
 import {
@@ -29,7 +29,7 @@ describe("scoped child dispatch", () => {
       {
         line: 1,
         column: 1,
-        message: 'Unknown block "Annotation"',
+        message: 'Unknown component "Annotation"',
       },
     ]);
   });
@@ -51,7 +51,7 @@ describe("scoped child dispatch", () => {
     expect(diagnostics).toContainEqual({
       line: 9,
       column: 1,
-      message: 'Unknown block "Annotation"',
+      message: 'Unknown component "Annotation"',
     });
   });
 

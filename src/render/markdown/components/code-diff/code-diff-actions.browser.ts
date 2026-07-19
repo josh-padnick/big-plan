@@ -12,14 +12,14 @@ const diffMessageTimers = new WeakMap<HTMLElement, number>();
 // Flashes transient copy feedback above the actions button and mirrors the
 // result into that button's accessible label.
 const showDiffMessage = ({
-  block,
+  component,
   message,
 }: {
-  readonly block: HTMLElement;
+  readonly component: HTMLElement;
   readonly message: string;
 }): void => {
   const slot = ownedCodeDiffElement<HTMLElement>({
-    block,
+    component,
     selector: "[data-diff-copy-message]",
   });
   if (slot === null) {
@@ -30,7 +30,7 @@ const showDiffMessage = ({
     window.clearTimeout(previousTimer);
   }
   const menuButton = ownedCodeDiffElement<HTMLButtonElement>({
-    block,
+    component,
     selector: "[data-diff-menu-button]",
   });
   slot.textContent = message;
@@ -88,16 +88,16 @@ const writeDiffClipboard = async ({
 
 /** Reveals and wires one CodeDiff overflow menu and its copy actions. */
 export const enhanceCodeDiffActions = ({
-  block,
+  component,
 }: {
-  readonly block: HTMLElement;
+  readonly component: HTMLElement;
 }): void => {
   const menuButton = ownedCodeDiffElement<HTMLButtonElement>({
-    block,
+    component,
     selector: "[data-diff-menu-button]",
   });
   const menuList = ownedCodeDiffElement<HTMLElement>({
-    block,
+    component,
     selector: "[data-diff-menu-list]",
   });
   menuButton?.removeAttribute("hidden");
@@ -106,7 +106,7 @@ export const enhanceCodeDiffActions = ({
     menuList === null
       ? []
       : ownedCodeDiffElements<HTMLButtonElement>({
-          block,
+          component,
           selector: '[role="menuitem"]',
         });
 
@@ -142,7 +142,7 @@ export const enhanceCodeDiffActions = ({
 
   // Escape closes only the menu when it is inside a full-screen dialog.
   ownedCodeDiffElement<HTMLElement>({
-    block,
+    component,
     selector: "[data-diff-menu]",
   })?.addEventListener("keydown", (event) => {
     if (menuList === null) {
@@ -209,29 +209,29 @@ export const enhanceCodeDiffActions = ({
     setMenuOpen({ open: false });
     menuButton?.focus();
     try {
-      await writeDiffClipboard({ container: block, value });
-      showDiffMessage({ block, message: successMessage });
+      await writeDiffClipboard({ container: component, value });
+      showDiffMessage({ component, message: successMessage });
     } catch {
-      showDiffMessage({ block, message: "Could not copy" });
+      showDiffMessage({ component, message: "Could not copy" });
     }
   };
 
   ownedCodeDiffElement<HTMLButtonElement>({
-    block,
+    component,
     selector: "[data-diff-copy-path]",
   })?.addEventListener("click", () => {
     void copyToClipboard({
-      value: block.dataset.diffPath ?? "",
+      value: component.dataset.diffPath ?? "",
       successMessage: "Path copied!",
     });
   });
 
   ownedCodeDiffElement<HTMLButtonElement>({
-    block,
+    component,
     selector: "[data-diff-copy]",
   })?.addEventListener("click", () => {
     const source = ownedCodeDiffElement<HTMLTextAreaElement>({
-      block,
+      component,
       selector: "[data-diff-source]",
     });
     if (source === null) {
@@ -250,16 +250,16 @@ export const installCodeDiffMenuDismissal = (): void => {
     for (const menu of document.querySelectorAll<HTMLElement>(
       "[data-diff-menu]",
     )) {
-      const block = menu.closest<HTMLElement>("[data-code-diff]");
-      if (block === null) {
+      const component = menu.closest<HTMLElement>("[data-code-diff]");
+      if (component === null) {
         continue;
       }
       const button = ownedCodeDiffElement<HTMLButtonElement>({
-        block,
+        component,
         selector: "[data-diff-menu-button]",
       });
       const list = ownedCodeDiffElement<HTMLElement>({
-        block,
+        component,
         selector: "[data-diff-menu-list]",
       });
       if (button === null || list === null || list.hidden) {

@@ -68,28 +68,28 @@ export default tseslint.config(
         imports: ["**/markdown/code-block/**"],
         mayImport: ["icons"],
       },
-      blocks: {
-        files: ["src/render/markdown/blocks/**/*.ts"],
-        imports: ["**/markdown/blocks/**"],
+      components: {
+        files: ["src/render/markdown/components/**/*.ts"],
+        imports: ["**/markdown/components/**"],
         mayImport: ["icons"],
       },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
         ignores: [
           "src/render/markdown/code-block/**/*.ts",
-          "src/render/markdown/blocks/**/*.ts",
+          "src/render/markdown/components/**/*.ts",
         ],
         // Direct Markdown-pipeline files only; the nested code-block and
-        // typed-block concerns have their own dependency contracts.
+        // typed-component concerns have their own dependency contracts.
         imports: ["**/markdown/*.js"],
         // Deliberately not escapeHtml: markdown escapes through
         // rehype-stringify, never by hand.
-        mayImport: ["codeBlock", "blocks"],
+        mayImport: ["codeBlock", "components"],
       },
       shell: {
         files: ["src/render/shell/**/*.ts"],
         imports: ["**/shell/**"],
-        mayImport: ["escapeHtml", "codeBlock", "blocks"],
+        mayImport: ["escapeHtml", "codeBlock", "components"],
       },
       page: {
         files: ["src/render/page.ts"],
@@ -115,7 +115,7 @@ export default tseslint.config(
     const TIERS = [
       ["escapeHtml", "icons"],
       ["codeBlock", "page"],
-      ["blocks"],
+      ["components"],
       ["markdown", "shell"],
       ["composer"],
       ["cli"],

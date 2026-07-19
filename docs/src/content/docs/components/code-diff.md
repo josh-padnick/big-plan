@@ -6,7 +6,7 @@ description: A reviewable code diff from verbatim git output - unified and side-
 `CodeDiff` renders a unified diff as a first-class review surface: a file header, switchable unified and side-by-side views, optional line-number gutters and change counts, copy actions, and a full-screen dialog.
 Its authoring contract is deliberately the one agents already speak: paste `git diff` output into a fenced `diff` block.
 
-![A CodeDiff block in side-by-side view with line numbers, header stats, and the actions menu open](../../../assets/components/code-diff-split.png)
+![A CodeDiff component in side-by-side view with line numbers, header stats, and the actions menu open](../../../assets/components/code-diff-split.png)
 
 ## Usage
 
@@ -35,7 +35,7 @@ Any other attribute, an empty `file`, or `showLineNumbers` on a diff without `@@
 
 ## The diff child
 
-The block takes exactly one fenced ` ```diff ` code block, plus zero or more direct `Annotation` children, and nothing else.
+The component takes exactly one fenced ` ```diff ` code block, plus zero or more direct `Annotation` children, and nothing else.
 Verbatim `git diff` output works: the file preamble (`diff --git`, `index`, `---`, `+++`, mode and rename lines) is accepted before the first hunk.
 Headerless diffs of bare `+`/`-`/context lines are legal when line numbers are not requested.
 Inside a hunk, a blank line counts as empty context even when an editor has stripped its leading space.
@@ -54,7 +54,7 @@ Added and removed lines are tinted, carry `+`/`-` markers, and include visually 
 The `...` menu holds `Copy path` and `Copy diff`.
 Copy diff reproduces the fence content as MDX parses it: LF line endings with a trailing newline, not the authored bytes.
 The menu follows the standard menu-button keyboard pattern: focus moves to the first item on open, arrows and Home/End navigate, Escape closes the menu (without dismissing an enclosing full-screen dialog), and Tab closes it while moving focus naturally.
-The expand control at the far right opens the diff alone in a near-viewport modal dialog: Escape or a backdrop click closes it, the page behind cannot scroll while it is open, and closing restores both the block's position and the reader's scroll position.
+The expand control at the far right opens the diff alone in a near-viewport modal dialog: Escape or a backdrop click closes it, the page behind cannot scroll while it is open, and closing restores both the component's position and the reader's scroll position.
 
 ## Annotations
 
@@ -62,7 +62,7 @@ Nest `Annotation` directly inside `CodeDiff` to anchor a markdown note to specif
 
 ```mdx
 <Annotation lines="45-46" side="new">
-  Slug allocation must follow block rendering.
+  Slug allocation must follow component rendering.
 </Annotation>
 ```
 
@@ -70,18 +70,18 @@ Nest `Annotation` directly inside `CodeDiff` to anchor a markdown note to specif
 `side` is `old` or `new`, defaulting to `new`.
 Every referenced line must exist on the chosen side, and annotations require `@@` hunk headers.
 The note renders as a prose card after the range's final line, statically, with a `Line N` / `Lines N-M` badge and `role="note"`.
-In unified view the card spans the block; in side-by-side view it renders inside the pane of its `side`, pinned to the visible pane width while the code scrolls.
+In unified view the card spans the component; in side-by-side view it renders inside the pane of its `side`, pinned to the visible pane width while the code scrolls.
 Covered lines carry the annotation accent as a left spine and a subtle wash blended over their add/remove tints, so ranges read at a glance.
 Multiple annotations may target the same line or range and render in authored order.
 Long cards gain a progressive `View more` / `View less` disclosure, and the reader's expanded choice survives responsive layout changes; without JavaScript the full content is always present.
-Annotation bodies accept prose, lists, inline formatting, and plain fenced code, but reject headings, footnotes, and typed blocks (each with a positional diagnostic).
-An `Annotation` anywhere other than a direct `CodeDiff` child is an unknown block.
-`Annotation` is a scoped child block; the planned `CodeSnippet` component will reuse the concept with the same `lines` grammar.
+Annotation bodies accept prose, lists, inline formatting, and plain fenced code, but reject headings, footnotes, and typed components (each with a positional diagnostic).
+An `Annotation` anywhere other than a direct `CodeDiff` child is an unknown component.
+`Annotation` is a scoped child component; the planned `CodeSnippet` component will reuse the concept with the same `lines` grammar.
 
 ![An annotation card beneath its line range, with the accent spine on the covered lines](../../../assets/components/annotation-card.png)
 
 ## Design notes
 
-Diff lines render as a grid rather than `pre`/`code`, so the block is never double-processed by syntax highlighting or the fenced-code copy decorator.
+Diff lines render as a grid rather than `pre`/`code`, so the component is never double-processed by syntax highlighting or the fenced-code copy decorator.
 The raw diff lives in a hidden `textarea` for the copy action, keeping the visible markup purely presentational.
-Wide diffs scroll horizontally inside the block; the page itself never scrolls sideways.
+Wide diffs scroll horizontally inside the component; the page itself never scrolls sideways.

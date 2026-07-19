@@ -5,13 +5,13 @@ Big Plan makes reviewing agent plans a first-class experience.
 
 > [!WARNING]
 > **Pre-alpha.** Big Plan is under active development.
-> The static-subset MDX viewer and its first typed blocks work today; the rest of the review experience is still being built.
+> The static-subset MDX viewer and its first components work today; the rest of the review experience is still being built.
 
 Planning is an essential part of effective development with AI, and it deserves a first-class experience.
 Big Plan is built around one question: **what is the best way to review a plan and reach agreement on it, before an agent acts?**
 
 An agent writes its plan as structured MDX, and Big Plan renders it into a rich local review document.
-Today that means section navigation and typed callouts and code diffs; the planned review experience adds more typed blocks, live agent chat, highlight-to-comment threads, versioned change review, and full keyboard control.
+Today that means section navigation and typed callout and code-diff components; the planned review experience adds more components, live agent chat, highlight-to-comment threads, versioned change review, and full keyboard control.
 
 Big Plan focuses exclusively on that upfront moment of agreement - not code review, not project management.
 Everything runs locally, and the MDX file on your disk is the source of truth.
@@ -19,7 +19,7 @@ Everything runs locally, and the MDX file on your disk is the source of truth.
 ## Status
 
 The first working release is being built in the open in this repository.
-Deliverable 2 is available now: the static viewer accepts static-subset MDX plans with validated typed blocks.
+Deliverable 2 is available now: the static viewer accepts static-subset MDX plans with validated components.
 
 ## Usage
 
@@ -37,10 +37,10 @@ Both variants track the current section as the reader scrolls, and section links
 Fenced code blocks with a supported language identifier receive syntax highlighting; undeclared and unknown languages remain plain and readable.
 Every block code sample has a copy control, and the light/dark theme control follows the system preference until the reader chooses a theme, which is remembered locally.
 
-MDX plans may use the built-in flow-level `Callout` and `CodeDiff` typed blocks plus scoped `Annotation` children; unknown blocks and inline JSX are rejected.
+MDX plans may use the built-in flow-level `Callout` and `CodeDiff` components plus scoped `Annotation` children; unknown components and inline JSX are rejected.
 Plans cannot contain imports, exports, or `{}` expressions.
-Block attribute names must be unique; spreads and expression-valued attributes are rejected, bare boolean attributes are supported only where a block schema allows them, and all other values must be static strings.
-Unsupported MDX syntax and invalid block attributes fail the render with diagnostics that include `line:column` positions.
+Component attribute names must be unique; spreads and expression-valued attributes are rejected, bare boolean attributes are supported only where a component schema allows them, and all other values must be static strings.
+Unsupported MDX syntax and invalid component attributes fail the render with diagnostics that include `line:column` positions.
 GFM features including tables, task lists, footnotes, and autolinks remain available through the MDX pipeline.
 Four-space indented code blocks are not supported by MDX; use fenced code blocks instead.
 
@@ -80,8 +80,8 @@ Annotation anchors require an `@@` hunk header, and every line in the range must
 Covered lines receive an annotation spine and wash, and the card renders after the range's final line in both views.
 In side-by-side view, each annotation stays in its selected old or new pane while the opposite pane reserves matching space so later rows remain aligned; each equal-width pane and hunk header scrolls horizontally on its own.
 Multiple annotations may target one line or range and render in authored order.
-Annotation bodies support ordinary rich Markdown such as lists and fenced code, but cannot contain headings, footnote references or definitions, or typed blocks.
-An `Annotation` anywhere other than a direct `CodeDiff` child is an unknown block.
+Annotation bodies support ordinary rich Markdown such as lists and fenced code, but cannot contain headings, footnote references or definitions, or typed components.
+An `Annotation` anywhere other than a direct `CodeDiff` child is an unknown component.
 The header shows the full file path and, when `showLineCounts` is set, added and removed line counts; the diff opens in a readable unified view even without JavaScript.
 With JavaScript enabled, long annotation bodies collapse to roughly three lines with `View more…` and `View less` controls, and the reader's expanded choice survives responsive layout changes; without JavaScript, their full contents remain visible.
 Readers can also switch between unified and side-by-side views, preserve that preference across reloads, copy the file path or the fenced diff source (as parsed: LF line endings with a trailing newline) from the actions menu, or expand the diff into a full-screen dialog.
@@ -93,7 +93,7 @@ Inside a hunk, a blank line is accepted as empty context even when an editor has
 Because `<` and `{` begin MDX syntax, write them carefully in prose or place literal examples in code spans or fences.
 HTML comments and angle-bracket `<url>` autolinks are not supported in plan documents.
 
-To preview typed blocks, render [the MDX blocks plan](examples/mdx-blocks.mdx) locally with `node bin/big-plan.mjs render examples/mdx-blocks.mdx`.
+To preview components, render [the MDX components plan](examples/mdx-components.mdx) locally with `node bin/big-plan.mjs render examples/mdx-components.mdx`.
 To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) locally with `node bin/big-plan.mjs render examples/syntax-highlighting.mdx`, then open the generated `examples/syntax-highlighting.html`.
 Generated previews remain ignored by Git.
 

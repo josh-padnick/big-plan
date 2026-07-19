@@ -4,7 +4,7 @@
 import type { ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
 import { createDiagnosticCollector } from "../diagnostics.js";
-import { CALLOUT_BLOCK_DEFINITION } from "./callout.js";
+import { CALLOUT_COMPONENT_DEFINITION } from "./callout.js";
 
 const POSITION = {
   start: { line: 4, column: 1, offset: 20 },
@@ -19,7 +19,7 @@ const render = ({
   readonly children?: ReadonlyArray<ElementContent>;
 }) => {
   const diagnostics = createDiagnosticCollector();
-  const element = CALLOUT_BLOCK_DEFINITION.render({
+  const element = CALLOUT_COMPONENT_DEFINITION.render({
     attributes,
     children,
     scopedChildren: [],
@@ -29,7 +29,7 @@ const render = ({
   return { element, diagnostics: diagnostics.diagnostics };
 };
 
-describe("CALLOUT_BLOCK_DEFINITION", () => {
+describe("CALLOUT_COMPONENT_DEFINITION", () => {
   it("should report the allowed values when type is invalid", () => {
     expect(render({ attributes: { type: "success" } }).diagnostics).toEqual([
       {

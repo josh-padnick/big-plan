@@ -1,18 +1,18 @@
 // Defines the positional diagnostic contract shared by MDX parsing and typed
-// block validation, plus collection and unknown-error normalization helpers.
+// component validation, plus collection and unknown-error normalization helpers.
 
 import type { Root } from "hast";
 
 type NodePosition = Root["position"];
 
-export type BlockDiagnostic = {
+export type ComponentDiagnostic = {
   readonly message: string;
   readonly line?: number;
   readonly column?: number;
 };
 
 export type DiagnosticCollector = {
-  readonly diagnostics: ReadonlyArray<BlockDiagnostic>;
+  readonly diagnostics: ReadonlyArray<ComponentDiagnostic>;
   readonly add: (input: {
     readonly message: string;
     readonly position?: NodePosition;
@@ -39,7 +39,7 @@ const numberProperty = ({
 
 /** Creates an ordered collector so compilation can report every diagnostic. */
 export const createDiagnosticCollector = (): DiagnosticCollector => {
-  const diagnostics: Array<BlockDiagnostic> = [];
+  const diagnostics: Array<ComponentDiagnostic> = [];
   return {
     diagnostics,
     add: ({ message, position }) => {
@@ -100,7 +100,9 @@ const pointFromError = (
 };
 
 /** Normalizes parser failures without depending on micromark error classes. */
-export const diagnosticFromParseError = (error: unknown): BlockDiagnostic => {
+export const diagnosticFromParseError = (
+  error: unknown,
+): ComponentDiagnostic => {
   if (!isRecord(error)) {
     return { message: "Unable to parse MDX" };
   }

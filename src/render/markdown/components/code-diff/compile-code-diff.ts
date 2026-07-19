@@ -4,11 +4,11 @@
 
 import type { Element, ElementContent, Root } from "hast";
 import {
-  validateBlockAttributes,
-  type BlockAttributeSchema,
-  type BlockRenderer,
+  validateComponentAttributes,
+  type ComponentAttributeSchema,
+  type ComponentRenderer,
   type ScopedChild,
-} from "../block-contract.js";
+} from "../component-contract.js";
 import type { DiagnosticCollector } from "../diagnostics.js";
 import { parseUnifiedDiff } from "./unified-diff.js";
 import type { DiffLine, UnifiedDiff } from "./unified-diff.js";
@@ -52,14 +52,14 @@ const CODE_DIFF_SCHEMA = {
   file: { kind: "string", required: true, nonEmpty: true },
   showLineNumbers: { kind: "booleanShorthand" },
   showLineCounts: { kind: "booleanShorthand" },
-} satisfies BlockAttributeSchema;
+} satisfies ComponentAttributeSchema;
 
 const ANNOTATION_SCHEMA = {
   side: {
     kind: "enum",
     values: ["old", "new"] satisfies ReadonlyArray<CodeDiffSide>,
   },
-} satisfies BlockAttributeSchema;
+} satisfies ComponentAttributeSchema;
 
 const EMPTY_DIFF: UnifiedDiff = {
   hunks: [{ lines: [] }],
@@ -116,7 +116,7 @@ const diffFenceSource = ({
 };
 
 // Parses the raw diff while translating its local diagnostics back to the
-// authored document coordinates owned by the typed block.
+// authored document coordinates owned by the component.
 const parseCodeDiffSource = ({
   children,
   position,
@@ -207,8 +207,8 @@ const annotationFromScopedChild = ({
   }
 
   const { lines: _lines, ...attributes } = child.attributes;
-  const validated = validateBlockAttributes({
-    block: "Annotation",
+  const validated = validateComponentAttributes({
+    component: "Annotation",
     attributes,
     position: child.position,
     diagnostics,
@@ -342,16 +342,16 @@ const resolveAnnotations = ({
   return resolved;
 };
 
-/** Compiles one CodeDiff block into the complete model consumed by renderers. */
-export const compileCodeDiffBlock = ({
+/** Compiles one CodeDiff component into the model consumed by renderers. */
+export const compileCodeDiffComponent = ({
   attributes,
   children,
   scopedChildren,
   position,
   diagnostics,
-}: Parameters<BlockRenderer>[0]): CompiledCodeDiff => {
-  const validated = validateBlockAttributes({
-    block: "CodeDiff",
+}: Parameters<ComponentRenderer>[0]): CompiledCodeDiff => {
+  const validated = validateComponentAttributes({
+    component: "CodeDiff",
     attributes,
     position,
     diagnostics,

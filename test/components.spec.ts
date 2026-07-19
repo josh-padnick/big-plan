@@ -1,4 +1,4 @@
-// Browser tests of the typed blocks: callout variants and the CodeDiff views,
+// Browser tests of the components: callout variants and the CodeDiff views,
 // line annotations, actions menu, clipboard behavior, and full-screen dialog,
 // plus the no-JavaScript fallback. Render-health failures are enforced by fixtures.
 
@@ -31,11 +31,11 @@ const RAW_GIT_DIFF = [
   "",
 ].join("\n");
 
-test("should distinguish every callout type when the typed-block plan renders", async ({
+test("should distinguish every callout type when the component plan renders", async ({
   page,
-  mdxBlocksViewerUrl,
+  componentsViewerUrl,
 }) => {
-  await page.goto(mdxBlocksViewerUrl);
+  await page.goto(componentsViewerUrl);
 
   const calloutTypes = ["note", "tip", "warning", "danger"];
   for (const type of calloutTypes) {
@@ -51,9 +51,9 @@ test("should distinguish every callout type when the typed-block plan renders", 
 
 test("should remember the selected diff view when the page reloads", async ({
   page,
-  mdxBlocksViewerUrl,
+  componentsViewerUrl,
 }) => {
-  await page.goto(mdxBlocksViewerUrl);
+  await page.goto(componentsViewerUrl);
 
   const diff = page.locator("[data-code-diff]").filter({
     hasText: "src/catalog/read-through-cache.ts",
@@ -83,9 +83,9 @@ test("should remember the selected diff view when the page reloads", async ({
 
 test("should keep a range Annotation visible when switching diff views", async ({
   page,
-  mdxBlocksViewerUrl,
+  componentsViewerUrl,
 }) => {
-  await page.goto(mdxBlocksViewerUrl);
+  await page.goto(componentsViewerUrl);
 
   const diff = page.locator("[data-code-diff]").filter({
     hasText: "src/catalog/read-through-cache.ts",
@@ -209,10 +209,10 @@ test("should keep a range Annotation visible when switching diff views", async (
     const heights = async () =>
       splitAnnotation.evaluate((annotation) => {
         const card = annotation.closest<HTMLElement>("[data-annotation-card]");
-        const block = annotation.closest<HTMLElement>("[data-code-diff]");
+        const component = annotation.closest<HTMLElement>("[data-code-diff]");
         const id = card?.dataset.annotationCard;
         const spacer = [
-          ...(block?.querySelectorAll<HTMLElement>(
+          ...(component?.querySelectorAll<HTMLElement>(
             "[data-annotation-spacer]",
           ) ?? []),
         ].find((candidate) => candidate.dataset.annotationSpacer === id);
@@ -403,10 +403,10 @@ test("should fallback-copy Annotation code within a full-screen diff", async ({
 
 test("should contain CodeDiff overflow without clipping the page", async ({
   page,
-  mdxBlocksViewerUrl,
+  componentsViewerUrl,
 }) => {
   await page.setViewportSize({ width: 320, height: 720 });
-  await page.goto(mdxBlocksViewerUrl);
+  await page.goto(componentsViewerUrl);
 
   const diff = page.locator("[data-code-diff]").filter({
     hasText: "src/catalog/read-through-cache.ts",
@@ -432,9 +432,9 @@ test("should contain CodeDiff overflow without clipping the page", async ({
 
 test("should expand a diff to full screen and restore it when dismissed", async ({
   page,
-  mdxBlocksViewerUrl,
+  componentsViewerUrl,
 }) => {
-  await page.goto(mdxBlocksViewerUrl);
+  await page.goto(componentsViewerUrl);
 
   const diff = page.locator("[data-code-diff]").filter({
     hasText: "src/catalog/read-through-cache.ts",
@@ -484,9 +484,9 @@ test("should expand a diff to full screen and restore it when dismissed", async 
 
 test("should copy the raw diff and the file path from the actions menu", async ({
   page,
-  mdxBlocksViewerUrl,
+  componentsViewerUrl,
 }) => {
-  await page.goto(mdxBlocksViewerUrl);
+  await page.goto(componentsViewerUrl);
   await page.evaluate(() => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -527,9 +527,9 @@ test("should copy the raw diff and the file path from the actions menu", async (
 
 test("should fallback-copy within a full-screen diff", async ({
   page,
-  mdxBlocksViewerUrl,
+  componentsViewerUrl,
 }) => {
-  await page.goto(mdxBlocksViewerUrl);
+  await page.goto(componentsViewerUrl);
   await page.evaluate(() => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -568,9 +568,9 @@ test("should fallback-copy within a full-screen diff", async ({
 
 test("should support keyboard navigation in the diff actions menu", async ({
   page,
-  mdxBlocksViewerUrl,
+  componentsViewerUrl,
 }) => {
-  await page.goto(mdxBlocksViewerUrl);
+  await page.goto(componentsViewerUrl);
 
   const diff = page.locator("[data-code-diff]").filter({
     hasText: "src/catalog/read-through-cache.ts",
@@ -612,9 +612,9 @@ test("should support keyboard navigation in the diff actions menu", async ({
 
 test("should let a short diff actions menu escape the figure", async ({
   page,
-  mdxBlocksViewerUrl,
+  componentsViewerUrl,
 }) => {
-  await page.goto(mdxBlocksViewerUrl);
+  await page.goto(componentsViewerUrl);
 
   const diff = page.locator("[data-code-diff]").last();
   await diff.locator(".code-diff-view").evaluateAll((views) => {
@@ -641,13 +641,13 @@ test("should let a short diff actions menu escape the figure", async ({
   expect(bounds.figureOverflow).toBe("visible");
 });
 
-test("should preserve typed-block content without controls when JavaScript is disabled", async ({
+test("should preserve component content without controls when JavaScript is disabled", async ({
   browser,
-  mdxBlocksViewerUrl,
+  componentsViewerUrl,
 }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
-  await page.goto(mdxBlocksViewerUrl);
+  await page.goto(componentsViewerUrl);
 
   await expect(page.locator("[data-callout]")).toHaveCount(4);
   await expect(page.locator("[data-callout]").first()).toBeVisible();

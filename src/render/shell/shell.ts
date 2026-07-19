@@ -1,6 +1,6 @@
 // Owns the review shell: the reading surface a rendered document lives in -
 // the branding bar, layout grid, theme control, responsive desktop and mobile
-// navigation, code-block and typed-block controls, and content region. It
+// navigation, code-block and component controls, and content region. It
 // produces body-level markup plus the styles and progressive-enhancement
 // scripts that markup needs, as data;
 // packaging into a complete document is page.ts's job. Authored markup is
@@ -11,7 +11,7 @@
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
-import { CODE_DIFF_JS } from "../markdown/blocks/code-diff/code-diff.generated.js";
+import { CODE_DIFF_JS } from "../markdown/components/code-diff/code-diff.generated.js";
 import { COPY_CODE_JS } from "../markdown/code-block/copy-code.generated.js";
 import { SCROLL_SPY_JS } from "./scroll-spy.generated.js";
 import { THEME_TOGGLE_JS } from "./theme-toggle.generated.js";
