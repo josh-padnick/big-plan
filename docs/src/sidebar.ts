@@ -42,7 +42,8 @@ export const SIDEBAR: readonly SidebarGroup[] = [
   {
     label: "For Agents",
     items: [
-      { label: "Render a plan", slug: "for-agents" },
+      { label: "Overview", slug: "for-agents" },
+      { label: "Render a plan", slug: "for-agents/render-a-plan" },
       { label: "Authoring plans", slug: "for-agents/authoring-plans" },
     ],
   },
