@@ -22,21 +22,21 @@ Enable the worker before stale reads.
 
 ## Attributes
 
-| Attribute | Type | Required | Behavior |
-| --- | --- | --- | --- |
-| `type` | `"note" \| "tip" \| "warning" \| "danger"` | Yes | Selects the accent palette, the icon, and the default title. |
-| `title` | string | No | Header text; defaults to `Note`, `Tip`, `Warning`, or `Danger` by type. |
+| Attribute | Type                                       | Required | Behavior                                                                |
+| --------- | ------------------------------------------ | -------- | ----------------------------------------------------------------------- |
+| `type`    | `"note" \| "tip" \| "warning" \| "danger"` | Yes      | Selects the accent palette, the icon, and the default title.            |
+| `title`   | string                                     | No       | Header text; defaults to `Note`, `Tip`, `Warning`, or `Danger` by type. |
 
 Any other attribute is a positional authoring error.
 
 ## Types
 
-| Type | Icon | Intended use |
-| --- | --- | --- |
-| `note` | info | Context the reviewer should hold while reading. |
-| `tip` | lightbulb | A better path the reviewer might not know. |
-| `warning` | triangle-alert | Something that will go wrong if ignored. |
-| `danger` | octagon-alert | Irreversible or destructive consequences. |
+| Type      | Icon           | Intended use                                    |
+| --------- | -------------- | ----------------------------------------------- |
+| `note`    | info           | Context the reviewer should hold while reading. |
+| `tip`     | lightbulb      | A better path the reviewer might not know.      |
+| `warning` | triangle-alert | Something that will go wrong if ignored.        |
+| `danger`  | octagon-alert  | Irreversible or destructive consequences.       |
 
 ## Children
 

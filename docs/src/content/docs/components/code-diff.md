@@ -26,11 +26,11 @@ A CodeDiff block in side-by-side view with line numbers, header stats, and the a
 
 ## Attributes
 
-| Attribute | Type | Required | Behavior |
-| --- | --- | --- | --- |
-| `file` | string (non-empty) | Yes | Shown in the header (directory muted, filename bold), used by the Copy path action, and names the full-screen dialog for assistive technology. |
-| `showLineNumbers` | bare boolean | No | Renders old/new line-number gutters computed from `@@` hunk headers. |
-| `showLineCounts` | bare boolean | No | Shows the computed `+added -removed` summary in the header. |
+| Attribute         | Type               | Required | Behavior                                                                                                                                       |
+| ----------------- | ------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `file`            | string (non-empty) | Yes      | Shown in the header (directory muted, filename bold), used by the Copy path action, and names the full-screen dialog for assistive technology. |
+| `showLineNumbers` | bare boolean       | No       | Renders old/new line-number gutters computed from `@@` hunk headers.                                                                           |
+| `showLineCounts`  | bare boolean       | No       | Shows the computed `+added -removed` summary in the header.                                                                                    |
 
 Attributes take the bare form (`showLineNumbers`, never `showLineNumbers="true"`).
 Any other attribute, an empty `file`, or `showLineNumbers` on a diff without `@@` headers is a positional authoring error.
@@ -61,11 +61,11 @@ The expand control at the far right opens the diff alone in a near-viewport moda
 
 Nest `Annotation` directly inside `CodeDiff` to anchor a markdown note to specific lines:
 
-````mdx
+```mdx
 <Annotation lines="45-46" side="new">
-Slug allocation must follow block rendering.
+  Slug allocation must follow block rendering.
 </Annotation>
-````
+```
 
 `lines` (required) is one positive integer or a strictly ascending inclusive range; `side` is `old` or `new`, defaulting to `new`.
 Every referenced line must exist on the chosen side, and annotations require `@@` hunk headers.

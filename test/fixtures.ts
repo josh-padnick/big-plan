@@ -48,7 +48,9 @@ retry();
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
   annotationCodeViewerUrl: [
     async ({}, use) => {
-      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-annotation-code-"));
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-annotation-code-"),
+      );
       const inputPath = join(outputDir, "annotation-code.mdx");
       const outputPath = join(outputDir, "annotation-code.html");
       await writeFile(inputPath, ANNOTATION_CODE_MDX, "utf8");

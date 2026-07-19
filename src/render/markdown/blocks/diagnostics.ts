@@ -76,9 +76,7 @@ const pointFromError = (
 
   const reason = error["reason"];
   const reasonMatch =
-    typeof reason === "string"
-      ? /\((\d+):(\d+)(?:-|\))/u.exec(reason)
-      : null;
+    typeof reason === "string" ? /\((\d+):(\d+)(?:-|\))/u.exec(reason) : null;
   if (reasonMatch !== null) {
     const matchedLine = reasonMatch[1];
     const matchedColumn = reasonMatch[2];

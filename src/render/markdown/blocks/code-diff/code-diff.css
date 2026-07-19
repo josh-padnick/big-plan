@@ -100,10 +100,14 @@ html:has(.code-diff-dialog[open]) {
     display: none;
     overflow-x: hidden;
   }
-  article [data-code-diff][data-diff-view="split"] > [data-diff-content="unified"] {
+  article
+    [data-code-diff][data-diff-view="split"]
+    > [data-diff-content="unified"] {
     display: none;
   }
-  article [data-code-diff][data-diff-view="split"] > [data-diff-content="split"] {
+  article
+    [data-code-diff][data-diff-view="split"]
+    > [data-diff-content="split"] {
     display: block;
   }
   article .code-diff-hunk-header {
@@ -143,22 +147,39 @@ html:has(.code-diff-dialog[open]) {
        lines read as annotated without losing their diff identity, and the
        card's stronger background stays the loudest element. */
     box-shadow: inset 4px 0 0 var(--diff-annotation-c);
-    background: color-mix(in srgb, var(--diff-annotation-c) 8%, var(--diff-content-bg));
+    background: color-mix(
+      in srgb,
+      var(--diff-annotation-c) 8%,
+      var(--diff-content-bg)
+    );
   }
   article [data-annotation-anchor][data-diff-line="add"] {
-    background: color-mix(in srgb, var(--diff-annotation-c) 10%, var(--diff-add-bg));
+    background: color-mix(
+      in srgb,
+      var(--diff-annotation-c) 10%,
+      var(--diff-add-bg)
+    );
   }
   article [data-annotation-anchor][data-diff-line="remove"] {
-    background: color-mix(in srgb, var(--diff-annotation-c) 10%, var(--diff-remove-bg));
+    background: color-mix(
+      in srgb,
+      var(--diff-annotation-c) 10%,
+      var(--diff-remove-bg)
+    );
   }
   article .code-diff-annotation-surround {
     border-left-color: var(--diff-annotation-c);
-    background: color-mix(in srgb, var(--diff-annotation-c) 8%, var(--diff-content-bg));
+    background: color-mix(
+      in srgb,
+      var(--diff-annotation-c) 8%,
+      var(--diff-content-bg)
+    );
   }
   article .code-diff-annotation {
     /* A subtle tinted border gives each card a crisp edge inside the
        shared surround wash. */
-    border: 1px solid color-mix(in srgb, var(--diff-annotation-c) 30%, transparent);
+    border: 1px solid
+      color-mix(in srgb, var(--diff-annotation-c) 30%, transparent);
     border-radius: 0.3rem;
     background: var(--diff-annotation-bg);
   }

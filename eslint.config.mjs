@@ -128,11 +128,15 @@ export default tseslint.config(
     // points at a known layer in a strictly lower tier.
     for (const name of names) {
       if (tierOf(name) === -1) {
-        throw new Error(`eslint.config.mjs layering: "${name}" is not placed in TIERS.`);
+        throw new Error(
+          `eslint.config.mjs layering: "${name}" is not placed in TIERS.`,
+        );
       }
       for (const grant of LAYERS[name].mayImport) {
         if (!names.includes(grant)) {
-          throw new Error(`eslint.config.mjs layering: "${name}" grants unknown layer "${grant}".`);
+          throw new Error(
+            `eslint.config.mjs layering: "${name}" grants unknown layer "${grant}".`,
+          );
         }
         if (tierOf(grant) >= tierOf(name)) {
           throw new Error(
@@ -155,7 +159,8 @@ export default tseslint.config(
             ) +
           "$",
       );
-    const matches = (path, globs) => globs.some((g) => globToRegExp(g).test(path));
+    const matches = (path, globs) =>
+      globs.some((g) => globToRegExp(g).test(path));
 
     // Completeness guard: every TypeScript file under src/ (generated files
     // excepted - they are lint-ignored build artifacts) must belong to
@@ -172,7 +177,10 @@ export default tseslint.config(
         const relative = absolute.slice(import.meta.dirname.length + 1);
         // All TypeScript source flavors are guarded; generated build
         // artifacts are lint-ignored and exempt.
-        if (!/\.(?:ts|tsx|mts|cts)$/.test(relative) || relative.includes(".generated.")) {
+        if (
+          !/\.(?:ts|tsx|mts|cts)$/.test(relative) ||
+          relative.includes(".generated.")
+        ) {
           continue;
         }
         const claimedBy = names.filter((name) => {
@@ -180,7 +188,9 @@ export default tseslint.config(
           return matches(relative, files) && !matches(relative, ignores);
         });
         if (claimedBy.length !== 1) {
-          unclaimed.push(`${relative} (claimed by: ${claimedBy.join(", ") || "no layer"})`);
+          unclaimed.push(
+            `${relative} (claimed by: ${claimedBy.join(", ") || "no layer"})`,
+          );
         }
       }
     };
@@ -255,7 +265,6 @@ export default tseslint.config(
     files: ["test/fixtures.ts"],
     rules: { "no-restricted-imports": "off" },
   },
-,
   // Prettier owns formatting; disable any style rules that would fight it.
   eslintConfigPrettier,
 );

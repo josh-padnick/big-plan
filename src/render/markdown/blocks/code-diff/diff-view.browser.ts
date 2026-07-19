@@ -41,7 +41,7 @@ const ownedCodeDiffElement = <ElementType extends Element>({
 const annotationToggleFor = (body: HTMLElement): HTMLButtonElement | null => {
   const sibling = body.nextElementSibling;
   return sibling instanceof HTMLButtonElement &&
-      sibling.classList.contains("code-diff-annotation-toggle")
+    sibling.classList.contains("code-diff-annotation-toggle")
     ? sibling
     : null;
 };
@@ -127,24 +127,25 @@ const syncAnnotationSpacer = (card: HTMLElement): void => {
 
 // One observer re-evaluates bodies and mirrors split card heights as their
 // boxes change; older engines keep the load-time measurements.
-const annotationResizeObserver = typeof ResizeObserver === "undefined"
-  ? undefined
-  : new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (
-          entry.target instanceof HTMLElement &&
-          entry.target.classList.contains("code-diff-annotation-body")
-        ) {
-          evaluateAnnotationBody(entry.target);
+const annotationResizeObserver =
+  typeof ResizeObserver === "undefined"
+    ? undefined
+    : new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (
+            entry.target instanceof HTMLElement &&
+            entry.target.classList.contains("code-diff-annotation-body")
+          ) {
+            evaluateAnnotationBody(entry.target);
+          }
+          if (
+            entry.target instanceof HTMLElement &&
+            entry.target.dataset.annotationCard !== undefined
+          ) {
+            syncAnnotationSpacer(entry.target);
+          }
         }
-        if (
-          entry.target instanceof HTMLElement &&
-          entry.target.dataset.annotationCard !== undefined
-        ) {
-          syncAnnotationSpacer(entry.target);
-        }
-      }
-    });
+      });
 
 // Hidden static views wait until selected so layout measurement never
 // mistakes display:none for short content; the observer catches them when
@@ -356,7 +357,9 @@ try {
   // Every in-page interaction still works when persistence is unavailable.
 }
 
-for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) {
+for (const block of document.querySelectorAll<HTMLElement>(
+  "[data-code-diff]",
+)) {
   const toggleGroup = ownedCodeDiffElement<HTMLElement>({
     block,
     selector: "[data-diff-toggle-group]",
@@ -418,41 +421,44 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
 
   // Escape closes the menu without also dismissing an enclosing full-screen
   // dialog; preventDefault stops the dialog's native cancel behavior.
-  ownedCodeDiffElement<HTMLElement>({ block, selector: "[data-diff-menu]" })
-    ?.addEventListener("keydown", (event) => {
-      if (menuList === null) {
-        return;
-      }
-      if (event.key === "Escape" && !menuList.hidden) {
-        event.preventDefault();
-        event.stopPropagation();
-        setMenuOpen({ open: false });
-        menuButton?.focus();
-        return;
-      }
-      if (event.target === menuButton && event.key === "ArrowDown") {
-        event.preventDefault();
-        setMenuOpen({ open: true, focus: "first" });
-        return;
-      }
-      if (event.target === menuButton && event.key === "ArrowUp") {
-        event.preventDefault();
-        setMenuOpen({ open: true, focus: "last" });
-        return;
-      }
-      if (menuList.hidden) {
-        return;
-      }
-      if (event.key === "Tab") {
-        setMenuOpen({ open: false });
-        return;
-      }
-      const items = menuItems();
-      const currentIndex = items.findIndex((item) => item === event.target);
-      if (currentIndex === -1) {
-        return;
-      }
-      const destination = event.key === "Home"
+  ownedCodeDiffElement<HTMLElement>({
+    block,
+    selector: "[data-diff-menu]",
+  })?.addEventListener("keydown", (event) => {
+    if (menuList === null) {
+      return;
+    }
+    if (event.key === "Escape" && !menuList.hidden) {
+      event.preventDefault();
+      event.stopPropagation();
+      setMenuOpen({ open: false });
+      menuButton?.focus();
+      return;
+    }
+    if (event.target === menuButton && event.key === "ArrowDown") {
+      event.preventDefault();
+      setMenuOpen({ open: true, focus: "first" });
+      return;
+    }
+    if (event.target === menuButton && event.key === "ArrowUp") {
+      event.preventDefault();
+      setMenuOpen({ open: true, focus: "last" });
+      return;
+    }
+    if (menuList.hidden) {
+      return;
+    }
+    if (event.key === "Tab") {
+      setMenuOpen({ open: false });
+      return;
+    }
+    const items = menuItems();
+    const currentIndex = items.findIndex((item) => item === event.target);
+    if (currentIndex === -1) {
+      return;
+    }
+    const destination =
+      event.key === "Home"
         ? 0
         : event.key === "End"
           ? items.length - 1
@@ -461,17 +467,17 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
             : event.key === "ArrowUp"
               ? (currentIndex - 1 + items.length) % items.length
               : undefined;
-      if (destination !== undefined) {
-        event.preventDefault();
-        const item = items[destination];
-        if (item !== undefined) {
-          for (const menuItem of items) {
-            menuItem.tabIndex = menuItem === item ? 0 : -1;
-          }
-          item.focus();
+    if (destination !== undefined) {
+      event.preventDefault();
+      const item = items[destination];
+      if (item !== undefined) {
+        for (const menuItem of items) {
+          menuItem.tabIndex = menuItem === item ? 0 : -1;
         }
+        item.focus();
       }
-    });
+    }
+  });
 
   const copyToClipboard = async ({
     value,
@@ -493,31 +499,29 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
   ownedCodeDiffElement<HTMLButtonElement>({
     block,
     selector: "[data-diff-copy-path]",
-  })
-    ?.addEventListener("click", () => {
-      void copyToClipboard({
-        value: block.dataset.diffPath ?? "",
-        successMessage: "Path copied!",
-      });
+  })?.addEventListener("click", () => {
+    void copyToClipboard({
+      value: block.dataset.diffPath ?? "",
+      successMessage: "Path copied!",
     });
+  });
 
   ownedCodeDiffElement<HTMLButtonElement>({
     block,
     selector: "[data-diff-copy]",
-  })
-    ?.addEventListener("click", () => {
-      const source = ownedCodeDiffElement<HTMLTextAreaElement>({
-        block,
-        selector: "[data-diff-source]",
-      });
-      if (source === null) {
-        return;
-      }
-      void copyToClipboard({
-        value: source.value,
-        successMessage: "Diff copied!",
-      });
+  })?.addEventListener("click", () => {
+    const source = ownedCodeDiffElement<HTMLTextAreaElement>({
+      block,
+      selector: "[data-diff-source]",
     });
+    if (source === null) {
+      return;
+    }
+    void copyToClipboard({
+      value: source.value,
+      successMessage: "Diff copied!",
+    });
+  });
 
   expand?.addEventListener("click", () => {
     const openDialog = block.closest("dialog");
@@ -550,7 +554,9 @@ for (const block of document.querySelectorAll<HTMLElement>("[data-code-diff]")) 
 // One document-level dismissal for every diff menu: clicking anywhere
 // outside an open menu closes it.
 document.addEventListener("click", (event) => {
-  for (const menu of document.querySelectorAll<HTMLElement>("[data-diff-menu]")) {
+  for (const menu of document.querySelectorAll<HTMLElement>(
+    "[data-diff-menu]",
+  )) {
     const block = menu.closest<HTMLElement>("[data-code-diff]");
     if (block === null) {
       continue;

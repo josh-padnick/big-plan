@@ -17,10 +17,7 @@ import {
   MINIMIZE_ICON,
   ROWS_ICON,
 } from "./code-diff-icons.js";
-import {
-  pairDiffLines,
-  parseUnifiedDiff,
-} from "./parse-unified-diff.js";
+import { pairDiffLines, parseUnifiedDiff } from "./parse-unified-diff.js";
 import type {
   DiffHunk,
   DiffLine,
@@ -69,7 +66,7 @@ const ANNOTATION_CLASSES =
 
 const markdownChildren = (
   node: MarkdownRoot | MarkdownNode,
-): ReadonlyArray<MarkdownNode> => "children" in node ? node.children : [];
+): ReadonlyArray<MarkdownNode> => ("children" in node ? node.children : []);
 
 // Reports content that cannot be cloned safely into both diff views.
 const validateAnnotationBody = ({
@@ -81,17 +78,20 @@ const validateAnnotationBody = ({
   readonly diagnostics: DiagnosticCollector;
   readonly registeredBlockNames: ReadonlySet<string>;
 }): void => {
-  const isTypedBlock = node.type === "mdxJsxFlowElement" &&
-    node.name !== null && registeredBlockNames.has(node.name);
-  const message = node.type === "heading"
-    ? "Annotation bodies cannot contain headings"
-    : node.type === "footnoteReference"
-      ? "Annotation bodies cannot contain footnote references"
-      : node.type === "footnoteDefinition"
-        ? "Annotation bodies cannot contain footnote definitions"
-        : isTypedBlock
-          ? "Annotation bodies cannot contain typed blocks"
-        : undefined;
+  const isTypedBlock =
+    node.type === "mdxJsxFlowElement" &&
+    node.name !== null &&
+    registeredBlockNames.has(node.name);
+  const message =
+    node.type === "heading"
+      ? "Annotation bodies cannot contain headings"
+      : node.type === "footnoteReference"
+        ? "Annotation bodies cannot contain footnote references"
+        : node.type === "footnoteDefinition"
+          ? "Annotation bodies cannot contain footnote definitions"
+          : isTypedBlock
+            ? "Annotation bodies cannot contain typed blocks"
+            : undefined;
   if (message !== undefined) {
     diagnostics.add({ message, position: node.position });
   }
@@ -135,24 +135,30 @@ const validateAnnotationBodies = ({
     return;
   }
   for (const child of markdownChildren(node)) {
-    validateAnnotationBodies({ node: child, diagnostics, registeredBlockNames });
+    validateAnnotationBodies({
+      node: child,
+      diagnostics,
+      registeredBlockNames,
+    });
   }
 };
 
 /** Creates the remark transform that validates Annotation body semantics. */
-export const remarkValidateCodeDiffAnnotations = ({
-  diagnostics,
-  registeredBlockNames,
-}: {
-  readonly diagnostics: DiagnosticCollector;
-  readonly registeredBlockNames: ReadonlySet<string>;
-}) => (tree: MarkdownRoot): void => {
-  validateAnnotationBodies({
-    node: tree,
+export const remarkValidateCodeDiffAnnotations =
+  ({
     diagnostics,
     registeredBlockNames,
-  });
-};
+  }: {
+    readonly diagnostics: DiagnosticCollector;
+    readonly registeredBlockNames: ReadonlySet<string>;
+  }) =>
+  (tree: MarkdownRoot): void => {
+    validateAnnotationBodies({
+      node: tree,
+      diagnostics,
+      registeredBlockNames,
+    });
+  };
 
 const isElement = (node: ElementContent): node is Element =>
   node.type === "element";
@@ -165,7 +171,9 @@ const languageClasses = (element: Element): ReadonlyArray<string> => {
   if (!Array.isArray(className)) {
     return [];
   }
-  return className.filter((value): value is string => typeof value === "string");
+  return className.filter(
+    (value): value is string => typeof value === "string",
+  );
 };
 
 // Enforces the fence shape before syntax highlighting can split its raw text.
@@ -232,20 +240,21 @@ const annotationFromScopedChild = ({
   readonly diagnostics: Parameters<BlockRenderer>[0]["diagnostics"];
 }): Annotation | undefined => {
   const linesValue = child.attributes["lines"];
-  const range = typeof linesValue === "string"
-    ? parseLineRange(linesValue)
-    : undefined;
+  const range =
+    typeof linesValue === "string" ? parseLineRange(linesValue) : undefined;
   if (range === undefined) {
     diagnostics.add({
-      message: linesValue === undefined
-        ? 'Missing required attribute "lines"; expected a positive-integer string or ascending range'
-        : 'Attribute "lines" must be a positive-integer string or ascending range',
+      message:
+        linesValue === undefined
+          ? 'Missing required attribute "lines"; expected a positive-integer string or ascending range'
+          : 'Attribute "lines" must be a positive-integer string or ascending range',
       position: child.position,
     });
   }
 
   const sideValue = child.attributes["side"];
-  const validSide = sideValue === undefined || sideValue === "old" || sideValue === "new";
+  const validSide =
+    sideValue === undefined || sideValue === "old" || sideValue === "new";
   if (!validSide) {
     diagnostics.add({
       message: 'Invalid value for attribute "side"; expected one of: old, new',
@@ -379,7 +388,8 @@ const lineNumberForSide = ({
 }: {
   readonly line: DiffLine;
   readonly side: DiffSide;
-}): number | undefined => side === "old" ? line.oldLineNumber : line.newLineNumber;
+}): number | undefined =>
+  side === "old" ? line.oldLineNumber : line.newLineNumber;
 
 // Range membership, rather than the final card target, drives the visual
 // spine and wash through every covered source row.
@@ -398,7 +408,10 @@ const annotationCoversLine = ({
   return value >= annotation.startLine && value <= annotation.endLine;
 };
 
-const lineNumberCell = (value: number | undefined, side: "old" | "new"): Element => ({
+const lineNumberCell = (
+  value: number | undefined,
+  side: "old" | "new",
+): Element => ({
   type: "element",
   tagName: "span",
   properties: {
@@ -417,12 +430,16 @@ const lineNumberCell = (value: number | undefined, side: "old" | "new"): Element
 const accessibleLinePrefix = (line: DiffLine): ReadonlyArray<Element> =>
   line.kind === "context"
     ? []
-    : [{
-        type: "element",
-        tagName: "span",
-        properties: { className: ["sr-only"] },
-        children: [text(line.kind === "add" ? "Added line: " : "Removed line: ")],
-      }];
+    : [
+        {
+          type: "element",
+          tagName: "span",
+          properties: { className: ["sr-only"] },
+          children: [
+            text(line.kind === "add" ? "Added line: " : "Removed line: "),
+          ],
+        },
+      ];
 
 const lineContent = (line: DiffLine): Element => ({
   type: "element",
@@ -436,10 +453,7 @@ const lineContent = (line: DiffLine): Element => ({
       "pl-[0.45rem]",
     ],
   },
-  children: [
-    ...accessibleLinePrefix(line),
-    text(line.text),
-  ],
+  children: [...accessibleLinePrefix(line), text(line.text)],
 });
 
 const unifiedLine = ({
@@ -456,7 +470,9 @@ const unifiedLine = ({
   properties: {
     className: [...LINE_CLASSES.split(" "), "code-diff-unified-line"],
     "data-diff-line": line.kind,
-    ...(annotations.some((annotation) => annotationCoversLine({ annotation, line }))
+    ...(annotations.some((annotation) =>
+      annotationCoversLine({ annotation, line }),
+    )
       ? { "data-annotation-anchor": "" }
       : {}),
     ...(showLineNumbers ? { "data-line-numbers": "" } : {}),
@@ -514,21 +530,27 @@ const splitLine = ({
   properties: {
     className: [...LINE_CLASSES.split(" "), "code-diff-split-line"],
     "data-diff-line": line?.kind ?? "empty",
-    ...(line !== undefined && annotations.some((annotation) =>
-        annotation.side === side && annotationCoversLine({ annotation, line })
-      )
+    ...(line !== undefined &&
+    annotations.some(
+      (annotation) =>
+        annotation.side === side && annotationCoversLine({ annotation, line }),
+    )
       ? { "data-annotation-anchor": "" }
       : {}),
     ...(showLineNumbers ? { "data-line-numbers": "" } : {}),
   },
   children: [
     ...(showLineNumbers
-      ? [lineNumberCell(
-          side === "old" ? line?.oldLineNumber : line?.newLineNumber,
-          side,
-        )]
+      ? [
+          lineNumberCell(
+            side === "old" ? line?.oldLineNumber : line?.newLineNumber,
+            side,
+          ),
+        ]
       : []),
-    ...(line === undefined ? [lineContent({ kind: "context", text: "" })] : [lineContent(line)]),
+    ...(line === undefined
+      ? [lineContent({ kind: "context", text: "" })]
+      : [lineContent(line)]),
   ],
 });
 
@@ -564,7 +586,7 @@ const splitPane = ({
     ...annotationsForSplitRow({ row, annotations }).map((annotation) =>
       annotation.side === side
         ? renderedSplitAnnotation(annotation)
-        : annotationSpacer(annotation)
+        : annotationSpacer(annotation),
     ),
   ]),
 });
@@ -595,9 +617,7 @@ const splitHunk = ({
     className: ["code-diff-split-hunk", "min-w-0"],
   },
   children: [
-    ...(header === undefined
-      ? []
-      : [splitHunkHeader(header)]),
+    ...(header === undefined ? [] : [splitHunkHeader(header)]),
     {
       type: "element",
       tagName: "div",
@@ -624,8 +644,9 @@ const annotationsForSplitRow = ({
   readonly row: SplitDiffRow;
   readonly annotations: ReadonlyArray<AnchoredAnnotation>;
 }): ReadonlyArray<AnchoredAnnotation> =>
-  annotations.filter((annotation) =>
-    annotation.target === row.left || annotation.target === row.right
+  annotations.filter(
+    (annotation) =>
+      annotation.target === row.left || annotation.target === row.right,
   );
 
 const renderSplitHunk = ({
@@ -660,9 +681,11 @@ const renderView = ({
     className: ["code-diff-view", "min-w-0"],
     "data-diff-content": view,
   },
-  children: diff.hunks.flatMap((hunk) => view === "unified"
-    ? renderUnifiedHunk({ hunk, showLineNumbers, annotations })
-    : renderSplitHunk({ hunk, showLineNumbers, annotations })),
+  children: diff.hunks.flatMap((hunk) =>
+    view === "unified"
+      ? renderUnifiedHunk({ hunk, showLineNumbers, annotations })
+      : renderSplitHunk({ hunk, showLineNumbers, annotations }),
+  ),
 });
 
 const menuItemButton = ({
@@ -785,7 +808,11 @@ const actionsMenu = (): Element => ({
         "data-variant": "ghost",
       },
       children: [
-        renderLucideIcon({ icon: ELLIPSIS_ICON, name: "ellipsis", hidden: false }),
+        renderLucideIcon({
+          icon: ELLIPSIS_ICON,
+          name: "ellipsis",
+          hidden: false,
+        }),
       ],
     },
     {
@@ -854,7 +881,11 @@ const expandControlButton = (): Element => ({
     "data-variant": "ghost",
   },
   children: [
-    renderLucideIcon({ icon: MAXIMIZE_ICON, name: "maximize-2", hidden: false }),
+    renderLucideIcon({
+      icon: MAXIMIZE_ICON,
+      name: "maximize-2",
+      hidden: false,
+    }),
     renderLucideIcon({ icon: MINIMIZE_ICON, name: "minimize-2", hidden: true }),
   ],
 });
@@ -910,31 +941,41 @@ export const renderCodeDiff: BlockRenderer = ({
   const fileValue = attributes["file"];
   if (typeof fileValue !== "string" || fileValue.trim() === "") {
     diagnostics.add({
-      message: fileValue === undefined
-        ? 'Missing required attribute "file"; expected a string'
-        : typeof fileValue !== "string"
-          ? 'Attribute "file" must be a string'
-          : 'Attribute "file" must be a non-empty string',
+      message:
+        fileValue === undefined
+          ? 'Missing required attribute "file"; expected a string'
+          : typeof fileValue !== "string"
+            ? 'Attribute "file" must be a string'
+            : 'Attribute "file" must be a non-empty string',
       position,
     });
   }
   const lineNumbersValue = attributes["showLineNumbers"];
   if (lineNumbersValue !== undefined && lineNumbersValue !== true) {
     diagnostics.add({
-      message: 'Attribute "showLineNumbers" is a shorthand boolean; use the bare form',
+      message:
+        'Attribute "showLineNumbers" is a shorthand boolean; use the bare form',
       position,
     });
   }
   const showLineCountsValue = attributes["showLineCounts"];
   if (showLineCountsValue !== undefined && showLineCountsValue !== true) {
     diagnostics.add({
-      message: 'Attribute "showLineCounts" is a shorthand boolean; use the bare form',
+      message:
+        'Attribute "showLineCounts" is a shorthand boolean; use the bare form',
       position,
     });
   }
   for (const name of Object.keys(attributes)) {
-    if (name !== "file" && name !== "showLineNumbers" && name !== "showLineCounts") {
-      diagnostics.add({ message: `Unknown attribute "${name}" on CodeDiff`, position });
+    if (
+      name !== "file" &&
+      name !== "showLineNumbers" &&
+      name !== "showLineCounts"
+    ) {
+      diagnostics.add({
+        message: `Unknown attribute "${name}" on CodeDiff`,
+        position,
+      });
     }
   }
 
@@ -942,25 +983,28 @@ export const renderCodeDiff: BlockRenderer = ({
   const extracted = diffFenceSource({ children: meaningfulChildren });
   if (extracted.source === undefined) {
     diagnostics.add({
-      message: "CodeDiff expects exactly one fenced code block with language diff and no other content",
+      message:
+        "CodeDiff expects exactly one fenced code block with language diff and no other content",
       position,
     });
   }
   const source = extracted.source ?? "";
-  const parsed = extracted.source === undefined
-    ? { diff: emptyDiff, diagnostics: [] }
-    : parseUnifiedDiff({ source });
+  const parsed =
+    extracted.source === undefined
+      ? { diff: emptyDiff, diagnostics: [] }
+      : parseUnifiedDiff({ source });
   for (const diagnostic of parsed.diagnostics) {
     const fenceLine = extracted.codePosition?.start.line;
     const fenceColumn = extracted.codePosition?.start.column;
     diagnostics.add({
       message: `Invalid diff line ${diagnostic.line}: ${diagnostic.message}`,
-      position: fenceLine === undefined || fenceColumn === undefined
-        ? position
-        : {
-            start: { line: fenceLine + diagnostic.line, column: fenceColumn },
-            end: { line: fenceLine + diagnostic.line, column: fenceColumn },
-          },
+      position:
+        fenceLine === undefined || fenceColumn === undefined
+          ? position
+          : {
+              start: { line: fenceLine + diagnostic.line, column: fenceColumn },
+              end: { line: fenceLine + diagnostic.line, column: fenceColumn },
+            },
     });
   }
   const showLineNumbers = lineNumbersValue === true;
@@ -980,7 +1024,8 @@ export const renderCodeDiff: BlockRenderer = ({
     for (const annotation of annotations) {
       if (!parsed.diff.hasHunkHeaders) {
         diagnostics.add({
-          message: "CodeDiff cannot anchor an Annotation without an @@ hunk header",
+          message:
+            "CodeDiff cannot anchor an Annotation without an @@ hunk header",
           position: annotation.position,
         });
         continue;
@@ -994,13 +1039,20 @@ export const renderCodeDiff: BlockRenderer = ({
       }
       const existingLines = [...sideLines.keys()].filter((line) => {
         const lineNumber = BigInt(line);
-        return lineNumber >= annotation.startLine && lineNumber <= annotation.endLine;
+        return (
+          lineNumber >= annotation.startLine && lineNumber <= annotation.endLine
+        );
       });
       const expectedLineCount = annotation.endLine - annotation.startLine + 1n;
       const target = sideLines.get(String(annotation.endLine));
-      if (BigInt(existingLines.length) !== expectedLineCount || target === undefined) {
-        const lineWord = annotation.startLine === annotation.endLine ? "line" : "lines";
-        const verb = annotation.startLine === annotation.endLine ? "does" : "do";
+      if (
+        BigInt(existingLines.length) !== expectedLineCount ||
+        target === undefined
+      ) {
+        const lineWord =
+          annotation.startLine === annotation.endLine ? "line" : "lines";
+        const verb =
+          annotation.startLine === annotation.endLine ? "does" : "do";
         diagnostics.add({
           message: `Annotation ${lineWord} ${annotation.lines} ${verb} not exist on the ${annotation.side} side of the diff`,
           position: annotation.position,
@@ -1051,7 +1103,11 @@ export const renderCodeDiff: BlockRenderer = ({
               ariaLabel: filePath,
             },
             children: [
-              renderLucideIcon({ icon: FILE_ICON, name: "file", hidden: false }),
+              renderLucideIcon({
+                icon: FILE_ICON,
+                name: "file",
+                hidden: false,
+              }),
               {
                 type: "element",
                 tagName: "span",
@@ -1075,7 +1131,11 @@ export const renderCodeDiff: BlockRenderer = ({
                     type: "element",
                     tagName: "span",
                     properties: {
-                      className: ["code-diff-file-name", "font-semibold", "text-ink"],
+                      className: [
+                        "code-diff-file-name",
+                        "font-semibold",
+                        "text-ink",
+                      ],
                     },
                     children: [text(fileName)],
                   },

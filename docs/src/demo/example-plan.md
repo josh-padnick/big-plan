@@ -18,11 +18,11 @@ This plan adds per-key rate limiting with a fixed monthly quota and a burst allo
 
 ## Options considered
 
-| Option | Latency | Accuracy | Operational cost | Verdict |
-| --- | --- | --- | --- | --- |
-| In-process token bucket | ~0 ms | Poor across replicas | None | Rejected |
-| Redis sliding window | ~1 ms | Exact | One new dependency | **Chosen** |
-| API management vendor | ~5 ms | Exact | New vendor, new bill | Rejected |
+| Option                  | Latency | Accuracy             | Operational cost     | Verdict    |
+| ----------------------- | ------- | -------------------- | -------------------- | ---------- |
+| In-process token bucket | ~0 ms   | Poor across replicas | None                 | Rejected   |
+| Redis sliding window    | ~1 ms   | Exact                | One new dependency   | **Chosen** |
+| API management vendor   | ~5 ms   | Exact                | New vendor, new bill | Rejected   |
 
 The in-process bucket fails because the gateway runs six replicas and clients would get six independent budgets.
 The vendor option solves problems we do not have yet.
@@ -85,9 +85,9 @@ The gateway change is small; the middleware slots in right after key auth:
 Rejected requests receive `429 Too Many Requests` with `Retry-After` and the standard `RateLimit-*` headers.
 Clients can also inspect their budget directly:
 
-| Method | Path | Auth | Returns |
-| --- | --- | --- | --- |
-| `GET` | `/v1/rate-limit` | API key | Current window usage and limits |
+| Method | Path             | Auth    | Returns                         |
+| ------ | ---------------- | ------- | ------------------------------- |
+| `GET`  | `/v1/rate-limit` | API key | Current window usage and limits |
 
 ```json
 {

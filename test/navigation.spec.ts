@@ -12,18 +12,23 @@ test("should navigate the rendered sample plan through the TOC without errors", 
   await page.goto(sampleViewerUrl);
   const banner = page.getByRole("banner");
   const toc = page.getByRole("navigation", { name: "Contents" });
-  const rolloutHeading = page.getByRole("heading", { level: 2, name: "Rollout plan" });
+  const rolloutHeading = page.getByRole("heading", {
+    level: 2,
+    name: "Rollout plan",
+  });
 
   await test.step("the branding bar and document title render", async () => {
     await expect(page).toHaveTitle("Payments Retry Architecture Plan");
     await expect(banner).toBeVisible();
     await expect(banner.getByRole("img", { name: "Big Plan" })).toBeVisible();
-    await expect(banner.getByRole("link", { name: "Big Plan" })).toHaveAttribute(
-      "href",
-      "https://big-plan.ai",
-    );
     await expect(
-      page.getByRole("heading", { level: 1, name: "Payments Retry Architecture Plan" }),
+      banner.getByRole("link", { name: "Big Plan" }),
+    ).toHaveAttribute("href", "https://big-plan.ai");
+    await expect(
+      page.getByRole("heading", {
+        level: 1,
+        name: "Payments Retry Architecture Plan",
+      }),
     ).toBeVisible();
   });
 
@@ -67,10 +72,9 @@ test("should navigate the rendered sample plan through the TOC without errors", 
     await page.evaluate(() =>
       window.scrollTo({ top: document.documentElement.scrollHeight }),
     );
-    await expect(toc.getByRole("link", { name: "Rollout plan" })).toHaveAttribute(
-      "aria-current",
-      "true",
-    );
+    await expect(
+      toc.getByRole("link", { name: "Rollout plan" }),
+    ).toHaveAttribute("aria-current", "true");
   });
 
   await test.step("wide tables scroll inside their own container", async () => {
@@ -154,13 +158,16 @@ test("should provide a compact sticky table of contents on mobile", async ({
     const themeToggle = page.getByRole("button", {
       name: /Use (?:light|dark) theme/,
     });
-    const requestedTheme = (await themeToggle.getAttribute("aria-label"))?.includes(
-      "dark",
-    )
+    const requestedTheme = (
+      await themeToggle.getAttribute("aria-label")
+    )?.includes("dark")
       ? "dark"
       : "light";
     await themeToggle.click();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", requestedTheme);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-theme",
+      requestedTheme,
+    );
   });
 
   await test.step("returning to the top makes Overview current again", async () => {

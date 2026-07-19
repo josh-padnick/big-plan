@@ -20,11 +20,11 @@ Reading on anyway is a fine way to audit exactly what your agent is told.
 Every page on this site is published twice: as HTML for humans, and as clean Markdown for agents.
 Do not scrape the HTML pages; fetch the Markdown endpoints instead.
 
-| Endpoint | What it returns | Fetch it when |
-| --- | --- | --- |
-| [`/llms.txt`](/llms.txt) | A curated map of every page, grouped by section, with one-line descriptions and links to each page's `.md` URL | You want to discover what documentation exists |
-| Any page path + `.md` | That single page as raw Markdown | You need specific pages and want to spend minimal tokens |
-| [`/llms-full.txt`](/llms-full.txt) | The complete documentation concatenated into one Markdown document | You want everything in one request |
+| Endpoint                           | What it returns                                                                                                | Fetch it when                                            |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| [`/llms.txt`](/llms.txt)           | A curated map of every page, grouped by section, with one-line descriptions and links to each page's `.md` URL | You want to discover what documentation exists           |
+| Any page path + `.md`              | That single page as raw Markdown                                                                               | You need specific pages and want to spend minimal tokens |
+| [`/llms-full.txt`](/llms-full.txt) | The complete documentation concatenated into one Markdown document                                             | You want everything in one request                       |
 
 Replace a page's trailing slash with `.md`:
 

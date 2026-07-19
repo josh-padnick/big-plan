@@ -25,16 +25,18 @@ const fence = ({
     start: { line: 4, column, offset: 30 },
     end: { line: 8, column: 4, offset: 80 },
   },
-  children: [{
-    type: "element",
-    tagName: "code",
-    properties: { className: [`language-${language}`] },
-    position: {
-      start: { line: 4, column, offset: 30 },
-      end: { line: 8, column: 4, offset: 80 },
+  children: [
+    {
+      type: "element",
+      tagName: "code",
+      properties: { className: [`language-${language}`] },
+      position: {
+        start: { line: 4, column, offset: 30 },
+        end: { line: 8, column: 4, offset: 80 },
+      },
+      children: [{ type: "text", value: source }],
     },
-    children: [{ type: "text", value: source }],
-  }],
+  ],
 });
 
 const annotation = ({
@@ -60,20 +62,29 @@ const annotation = ({
     start: { line: positionLine, column: 1, offset: 100 },
     end: { line: positionLine + 2, column: 12, offset: 150 },
   },
-  children: [{
-    type: "element",
-    tagName: "p",
-    properties: {},
-    children: [{ type: "text", value }],
-  }],
+  children: [
+    {
+      type: "element",
+      tagName: "p",
+      properties: {},
+      children: [{ type: "text", value }],
+    },
+  ],
 });
 
 const isElement = (node: ElementContent | undefined): node is Element =>
   node?.type === "element";
 
-const textOf = (element: Element): string => element.children.map((child) =>
-  child.type === "text" ? child.value : isElement(child) ? textOf(child) : ""
-).join("");
+const textOf = (element: Element): string =>
+  element.children
+    .map((child) =>
+      child.type === "text"
+        ? child.value
+        : isElement(child)
+          ? textOf(child)
+          : "",
+    )
+    .join("");
 
 // Finds the rendered container that directly owns a matching descendant.
 const parentOfMatchingChild = ({
@@ -130,8 +141,9 @@ const viewFrom = ({
   readonly element: Element;
   readonly view: "unified" | "split";
 }): Element => {
-  const found = element.children.find((child) =>
-    isElement(child) && child.properties["data-diff-content"] === view
+  const found = element.children.find(
+    (child) =>
+      isElement(child) && child.properties["data-diff-content"] === view,
   );
   if (found === undefined || !isElement(found)) {
     throw new Error(`Missing ${view} diff view`);
@@ -177,19 +189,29 @@ describe("renderCodeDiff", () => {
   });
 
   it("should diagnose a shorthand file and string-valued showLineNumbers", () => {
-    expect(render({ attributes: { file: true, showLineNumbers: "true" } }).diagnostics).toEqual([
+    expect(
+      render({ attributes: { file: true, showLineNumbers: "true" } })
+        .diagnostics,
+    ).toEqual([
       { line: 3, column: 1, message: 'Attribute "file" must be a string' },
       {
         line: 3,
         column: 1,
-        message: 'Attribute "showLineNumbers" is a shorthand boolean; use the bare form',
+        message:
+          'Attribute "showLineNumbers" is a shorthand boolean; use the bare form',
       },
     ]);
   });
 
   it("should diagnose an unknown attribute", () => {
-    expect(render({ attributes: { file: "x", compact: true } }).diagnostics).toEqual([
-      { line: 3, column: 1, message: 'Unknown attribute "compact" on CodeDiff' },
+    expect(
+      render({ attributes: { file: "x", compact: true } }).diagnostics,
+    ).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: 'Unknown attribute "compact" on CodeDiff',
+      },
     ]);
   });
 
@@ -214,17 +236,21 @@ describe("renderCodeDiff", () => {
       {
         line: 3,
         column: 1,
-        message: 'Attribute "showLineCounts" is a shorthand boolean; use the bare form',
+        message:
+          'Attribute "showLineCounts" is a shorthand boolean; use the bare form',
       },
     ]);
   });
 
   it("should diagnose a wrong-language child", () => {
-    expect(render({ children: [fence({ language: "ts" })] }).diagnostics).toEqual([
+    expect(
+      render({ children: [fence({ language: "ts" })] }).diagnostics,
+    ).toEqual([
       {
         line: 3,
         column: 1,
-        message: "CodeDiff expects exactly one fenced code block with language diff and no other content",
+        message:
+          "CodeDiff expects exactly one fenced code block with language diff and no other content",
       },
     ]);
   });
@@ -234,7 +260,8 @@ describe("renderCodeDiff", () => {
       {
         line: 3,
         column: 1,
-        message: "CodeDiff expects exactly one fenced code block with language diff and no other content",
+        message:
+          "CodeDiff expects exactly one fenced code block with language diff and no other content",
       },
     ]);
   });
@@ -244,28 +271,37 @@ describe("renderCodeDiff", () => {
       {
         line: 3,
         column: 1,
-        message: "CodeDiff expects exactly one fenced code block with language diff and no other content",
+        message:
+          "CodeDiff expects exactly one fenced code block with language diff and no other content",
       },
     ]);
   });
 
   it("should diagnose extra markdown children", () => {
-    expect(render({
-      children: [fence(), { type: "element", tagName: "p", properties: {}, children: [] }],
-    }).diagnostics).toEqual([
+    expect(
+      render({
+        children: [
+          fence(),
+          { type: "element", tagName: "p", properties: {}, children: [] },
+        ],
+      }).diagnostics,
+    ).toEqual([
       {
         line: 3,
         column: 1,
-        message: "CodeDiff expects exactly one fenced code block with language diff and no other content",
+        message:
+          "CodeDiff expects exactly one fenced code block with language diff and no other content",
       },
     ]);
   });
 
   it("should diagnose showLineNumbers when a headerless diff cannot supply numbers", () => {
-    expect(render({
-      attributes: { file: "x", showLineNumbers: true },
-      children: [fence({ source: "-old\n+new\n" })],
-    }).diagnostics).toEqual([
+    expect(
+      render({
+        attributes: { file: "x", showLineNumbers: true },
+        children: [fence({ source: "-old\n+new\n" })],
+      }).diagnostics,
+    ).toEqual([
       {
         line: 3,
         column: 1,
@@ -275,85 +311,118 @@ describe("renderCodeDiff", () => {
   });
 
   it("should diagnose an Annotation when a headerless diff cannot supply an anchor", () => {
-    expect(render({
-      children: [fence({ source: "-old\n+new\n" })],
-      scopedChildren: [annotation({ lines: "1", positionLine: 12 })],
-    }).diagnostics).toEqual([{
-      line: 12,
-      column: 1,
-      message: "CodeDiff cannot anchor an Annotation without an @@ hunk header",
-    }]);
+    expect(
+      render({
+        children: [fence({ source: "-old\n+new\n" })],
+        scopedChildren: [annotation({ lines: "1", positionLine: 12 })],
+      }).diagnostics,
+    ).toEqual([
+      {
+        line: 12,
+        column: 1,
+        message:
+          "CodeDiff cannot anchor an Annotation without an @@ hunk header",
+      },
+    ]);
   });
 
   it("should diagnose a missing lines attribute", () => {
     const child = annotation({ lines: "1", positionLine: 11 });
-    expect(render({
-      scopedChildren: [{ ...child, attributes: {} }],
-    }).diagnostics).toEqual([{
-      line: 11,
-      column: 1,
-      message:
-        'Missing required attribute "lines"; expected a positive-integer string or ascending range',
-    }]);
+    expect(
+      render({
+        scopedChildren: [{ ...child, attributes: {} }],
+      }).diagnostics,
+    ).toEqual([
+      {
+        line: 11,
+        column: 1,
+        message:
+          'Missing required attribute "lines"; expected a positive-integer string or ascending range',
+      },
+    ]);
   });
 
   it.each([true, "", "0", "01", "1-1", "2-1", "1-02", "1.5"])(
     "should diagnose invalid lines form %j",
     (lines) => {
-      expect(render({
-        scopedChildren: [annotation({ lines, positionLine: 11 })],
-      }).diagnostics).toEqual([{
-        line: 11,
-        column: 1,
-        message: 'Attribute "lines" must be a positive-integer string or ascending range',
-      }]);
+      expect(
+        render({
+          scopedChildren: [annotation({ lines, positionLine: 11 })],
+        }).diagnostics,
+      ).toEqual([
+        {
+          line: 11,
+          column: 1,
+          message:
+            'Attribute "lines" must be a positive-integer string or ascending range',
+        },
+      ]);
     },
   );
 
   it.each([true, "both"])("should diagnose invalid side form %j", (side) => {
-    expect(render({
-      scopedChildren: [annotation({ lines: "1", side, positionLine: 11 })],
-    }).diagnostics).toEqual([{
-      line: 11,
-      column: 1,
-      message: 'Invalid value for attribute "side"; expected one of: old, new',
-    }]);
+    expect(
+      render({
+        scopedChildren: [annotation({ lines: "1", side, positionLine: 11 })],
+      }).diagnostics,
+    ).toEqual([
+      {
+        line: 11,
+        column: 1,
+        message:
+          'Invalid value for attribute "side"; expected one of: old, new',
+      },
+    ]);
   });
 
   it("should diagnose an unknown Annotation attribute contextually", () => {
-    expect(render({
-      scopedChildren: [annotation({
-        lines: "1",
-        positionLine: 11,
-        extraAttributes: { tone: "quiet" },
-      })],
-    }).diagnostics).toEqual([{
-      line: 11,
-      column: 1,
-      message: 'Unknown attribute "tone" on Annotation',
-    }]);
+    expect(
+      render({
+        scopedChildren: [
+          annotation({
+            lines: "1",
+            positionLine: 11,
+            extraAttributes: { tone: "quiet" },
+          }),
+        ],
+      }).diagnostics,
+    ).toEqual([
+      {
+        line: 11,
+        column: 1,
+        message: 'Unknown attribute "tone" on Annotation',
+      },
+    ]);
   });
 
   it.each([
     ["old", "11-12"],
     ["new", "12-14"],
   ] as const)("should diagnose missing %s-side lines %s", (side, lines) => {
-    expect(render({
-      children: [fence({ source: "@@ -12 +12 @@\n-old\n+new\n" })],
-      scopedChildren: [annotation({ lines, side, positionLine: 14 })],
-    }).diagnostics).toEqual([{
-      line: 14,
-      column: 1,
-      message: `Annotation lines ${lines} do not exist on the ${side} side of the diff`,
-    }]);
+    expect(
+      render({
+        children: [fence({ source: "@@ -12 +12 @@\n-old\n+new\n" })],
+        scopedChildren: [annotation({ lines, side, positionLine: 14 })],
+      }).diagnostics,
+    ).toEqual([
+      {
+        line: 14,
+        column: 1,
+        message: `Annotation lines ${lines} do not exist on the ${side} side of the diff`,
+      },
+    ]);
   });
 
   it("should report malformed lines at their document and fence-relative positions", () => {
-    expect(render({ children: [fence({ source: "@@ -1 +1 @@\nbad\n" })] }).diagnostics).toEqual([
+    expect(
+      render({ children: [fence({ source: "@@ -1 +1 @@\nbad\n" })] })
+        .diagnostics,
+    ).toEqual([
       {
         line: 6,
         column: 1,
-        message: "Invalid diff line 2: Expected a diff line beginning with space, +, or -",
+        message:
+          "Invalid diff line 2: Expected a diff line beginning with space, +, or -",
       },
       {
         line: 5,
@@ -365,13 +434,16 @@ describe("renderCodeDiff", () => {
   });
 
   it("should preserve the fence column for a nested malformed diff", () => {
-    expect(render({
-      children: [fence({ source: "@@ -1 +1 @@\nbad\n", column: 5 })],
-    }).diagnostics).toEqual([
+    expect(
+      render({
+        children: [fence({ source: "@@ -1 +1 @@\nbad\n", column: 5 })],
+      }).diagnostics,
+    ).toEqual([
       {
         line: 6,
         column: 5,
-        message: "Invalid diff line 2: Expected a diff line beginning with space, +, or -",
+        message:
+          "Invalid diff line 2: Expected a diff line beginning with space, +, or -",
       },
       {
         line: 5,
@@ -383,14 +455,21 @@ describe("renderCodeDiff", () => {
   });
 
   it("should diagnose an unsafe hunk range before anchoring an Annotation", () => {
-    expect(render({
-      children: [fence({
-        source: "@@ -1 +999999999999999999999999999999999999999999 @@\n-old\n+new\n",
-      })],
-      scopedChildren: [annotation({
-        lines: "999999999999999999999999999999999999999999",
-      })],
-    }).diagnostics).toEqual([
+    expect(
+      render({
+        children: [
+          fence({
+            source:
+              "@@ -1 +999999999999999999999999999999999999999999 @@\n-old\n+new\n",
+          }),
+        ],
+        scopedChildren: [
+          annotation({
+            lines: "999999999999999999999999999999999999999999",
+          }),
+        ],
+      }).diagnostics,
+    ).toEqual([
       {
         line: 5,
         column: 1,
@@ -433,19 +512,26 @@ describe("renderCodeDiff", () => {
   it("should render a single-line Annotation after its line in both views", () => {
     const { element, diagnostics } = render({
       attributes: { file: "src/cache.ts", showLineNumbers: true },
-      children: [fence({
-        source: "@@ -12 +12,2 @@\n-const ttl = 30;\n+const ttl = 60;\n+metrics.increment(\"ttl_change\");\n",
-      })],
-      scopedChildren: [annotation({
-        lines: "13",
-        value: "Use the catalog prefix.",
-      })],
+      children: [
+        fence({
+          source:
+            '@@ -12 +12,2 @@\n-const ttl = 30;\n+const ttl = 60;\n+metrics.increment("ttl_change");\n',
+        }),
+      ],
+      scopedChildren: [
+        annotation({
+          lines: "13",
+          value: "Use the catalog prefix.",
+        }),
+      ],
     });
     expect(diagnostics).toEqual([]);
 
     const unified = viewFrom({ element, view: "unified" });
-    const unifiedTargetIndex = unified.children.findIndex((child) =>
-      isElement(child) && textOf(child).includes('metrics.increment("ttl_change")')
+    const unifiedTargetIndex = unified.children.findIndex(
+      (child) =>
+        isElement(child) &&
+        textOf(child).includes('metrics.increment("ttl_change")'),
     );
     const unifiedSurround = unified.children[unifiedTargetIndex + 1];
     expect(unifiedTargetIndex).toBeGreaterThan(-1);
@@ -456,7 +542,8 @@ describe("renderCodeDiff", () => {
     const unifiedAnnotation = isElement(unifiedSurround)
       ? findElement({
           element: unifiedSurround,
-          matches: (candidate) => candidate.properties["data-annotation"] === "",
+          matches: (candidate) =>
+            candidate.properties["data-annotation"] === "",
         })
       : undefined;
     expect(unifiedAnnotation).toMatchObject({
@@ -469,45 +556,56 @@ describe("renderCodeDiff", () => {
         "data-annotation-side": "new",
       },
     });
-    expect(unifiedAnnotation === undefined ? "" : textOf(unifiedAnnotation)).toContain(
-      "Line 13",
-    );
-    expect(unifiedAnnotation === undefined ? "" : textOf(unifiedAnnotation)).toContain(
-      "Use the catalog prefix.",
-    );
+    expect(
+      unifiedAnnotation === undefined ? "" : textOf(unifiedAnnotation),
+    ).toContain("Line 13");
+    expect(
+      unifiedAnnotation === undefined ? "" : textOf(unifiedAnnotation),
+    ).toContain("Use the catalog prefix.");
 
     const split = viewFrom({ element, view: "split" });
-    expect(JSON.stringify(split).match(/code-diff-split-hunk/gu)).toHaveLength(1);
+    expect(JSON.stringify(split).match(/code-diff-split-hunk/gu)).toHaveLength(
+      1,
+    );
     const splitAnnotationParent = parentOfMatchingChild({
       element: split,
       matches: (candidate) =>
         candidate.properties["data-annotation-card"] === "annotation-1",
     });
-    const splitAnnotationIndex = splitAnnotationParent?.children.findIndex((child) =>
-      isElement(child) && child.properties["data-annotation-card"] === "annotation-1"
-    ) ?? -1;
-    const precedingSegment = splitAnnotationParent?.children[splitAnnotationIndex - 1];
+    const splitAnnotationIndex =
+      splitAnnotationParent?.children.findIndex(
+        (child) =>
+          isElement(child) &&
+          child.properties["data-annotation-card"] === "annotation-1",
+      ) ?? -1;
+    const precedingSegment =
+      splitAnnotationParent?.children[splitAnnotationIndex - 1];
     expect(splitAnnotationIndex).toBeGreaterThan(-1);
-    expect(isElement(precedingSegment) ? textOf(precedingSegment) : "").toContain(
-      'metrics.increment("ttl_change")',
+    expect(
+      isElement(precedingSegment) ? textOf(precedingSegment) : "",
+    ).toContain('metrics.increment("ttl_change")');
+    const splitAnnotation =
+      splitAnnotationParent?.children[splitAnnotationIndex];
+    expect(isElement(splitAnnotation) ? textOf(splitAnnotation) : "").toContain(
+      "Use the catalog prefix.",
     );
-    const splitAnnotation = splitAnnotationParent?.children[splitAnnotationIndex];
-    expect(isElement(splitAnnotation)
-      ? textOf(splitAnnotation)
-      : "").toContain("Use the catalog prefix.");
     expect(splitAnnotationParent?.properties["data-diff-pane"]).toBe("new");
     const oldPane = findElement({
       element: split,
       matches: (candidate) => candidate.properties["data-diff-pane"] === "old",
     });
-    expect(JSON.stringify(oldPane)).toContain('"data-annotation-spacer":"annotation-1"');
+    expect(JSON.stringify(oldPane)).toContain(
+      '"data-annotation-spacer":"annotation-1"',
+    );
   });
 
   it("should localize old and new split Annotations without changing unified placement", () => {
     const { element, diagnostics } = render({
-      children: [fence({
-        source: "@@ -12,2 +12,2 @@\n-old();\n+new();\n shared();\n",
-      })],
+      children: [
+        fence({
+          source: "@@ -12,2 +12,2 @@\n-old();\n+new();\n shared();\n",
+        }),
+      ],
       scopedChildren: [
         annotation({ lines: "12", side: "old", value: "Old-side note." }),
         annotation({ lines: "12", side: "new", value: "New-side note." }),
@@ -517,12 +615,14 @@ describe("renderCodeDiff", () => {
 
     const unified = viewFrom({ element, view: "unified" });
     for (const note of ["Old-side note.", "New-side note."]) {
-      expect(parentOfMatchingChild({
-        element: unified,
-        matches: (candidate) =>
-          candidate.properties["data-annotation-surround"] === "" &&
-          textOf(candidate).includes(note),
-      })).toBe(unified);
+      expect(
+        parentOfMatchingChild({
+          element: unified,
+          matches: (candidate) =>
+            candidate.properties["data-annotation-surround"] === "" &&
+            textOf(candidate).includes(note),
+        }),
+      ).toBe(unified);
     }
 
     const split = viewFrom({ element, view: "split" });
@@ -542,18 +642,25 @@ describe("renderCodeDiff", () => {
     expect(newPane?.properties["data-diff-pane"]).toBe("new");
     expect(textOf(oldPane ?? split)).not.toContain("New-side note.");
     expect(textOf(newPane ?? split)).not.toContain("Old-side note.");
-    expect(JSON.stringify(oldPane)).toContain('"data-annotation-spacer":"annotation-2"');
-    expect(JSON.stringify(newPane)).toContain('"data-annotation-spacer":"annotation-1"');
+    expect(JSON.stringify(oldPane)).toContain(
+      '"data-annotation-spacer":"annotation-2"',
+    );
+    expect(JSON.stringify(newPane)).toContain(
+      '"data-annotation-spacer":"annotation-1"',
+    );
   });
 
   it("should anchor a range spanning context and added lines after its last line", () => {
-    const source = "@@ -12,2 +12,3 @@\n shared();\n-old();\n+new();\n+audit();\n";
+    const source =
+      "@@ -12,2 +12,3 @@\n shared();\n-old();\n+new();\n+audit();\n";
     const { element, diagnostics } = render({
       children: [fence({ source })],
-      scopedChildren: [annotation({
-        lines: "12-14",
-        value: "Review the whole transition.",
-      })],
+      scopedChildren: [
+        annotation({
+          lines: "12-14",
+          value: "Review the whole transition.",
+        }),
+      ],
     });
     expect(diagnostics).toEqual([]);
 
@@ -565,23 +672,26 @@ describe("renderCodeDiff", () => {
           candidate.properties["data-annotation-surround"] === "" &&
           textOf(candidate).includes("Lines 12-14"),
       });
-      const annotationIndex = annotationParent?.children.findIndex((child) =>
-        isElement(child) &&
-        child.properties["data-annotation-surround"] === "" &&
-        textOf(child).includes("Lines 12-14")
-      ) ?? -1;
+      const annotationIndex =
+        annotationParent?.children.findIndex(
+          (child) =>
+            isElement(child) &&
+            child.properties["data-annotation-surround"] === "" &&
+            textOf(child).includes("Lines 12-14"),
+        ) ?? -1;
       const precedingSegment = annotationParent?.children[annotationIndex - 1];
       expect(annotationIndex).toBeGreaterThan(-1);
-      expect(isElement(precedingSegment) ? textOf(precedingSegment) : "").toContain(
-        "audit();",
-      );
+      expect(
+        isElement(precedingSegment) ? textOf(precedingSegment) : "",
+      ).toContain("audit();");
       const renderedAnnotation = annotationParent?.children[annotationIndex];
-      expect(isElement(renderedAnnotation)
-        ? textOf(renderedAnnotation)
-        : "").toContain("Lines 12-14");
+      expect(
+        isElement(renderedAnnotation) ? textOf(renderedAnnotation) : "",
+      ).toContain("Lines 12-14");
     }
-    expect(JSON.stringify(element).match(/"data-annotation-anchor":""/gu))
-      .toHaveLength(6);
+    expect(
+      JSON.stringify(element).match(/"data-annotation-anchor":""/gu),
+    ).toHaveLength(6);
   });
 
   it("should preserve authored order when multiple Annotations share a line", () => {

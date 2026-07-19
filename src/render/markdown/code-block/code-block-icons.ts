@@ -8,6 +8,4 @@ export const COPY_ICON: IconNode = [
   ["path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" }],
 ];
 
-export const CHECK_ICON: IconNode = [
-  ["path", { d: "M20 6 9 17l-5-5" }],
-];
+export const CHECK_ICON: IconNode = [["path", { d: "M20 6 9 17l-5-5" }]];

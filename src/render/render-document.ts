@@ -3,10 +3,7 @@
 // function.
 
 import type { Section } from "./markdown/convert.js";
-import {
-  compileMarkdown,
-  serializeMarkdown,
-} from "./markdown/convert.js";
+import { compileMarkdown, serializeMarkdown } from "./markdown/convert.js";
 export { MarkdownDiagnosticsError } from "./markdown/convert.js";
 import { renderPage } from "./page.js";
 import { renderShell } from "./shell/shell.js";

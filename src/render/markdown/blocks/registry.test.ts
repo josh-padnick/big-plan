@@ -23,13 +23,15 @@ const diagnosticsFor = (markdown: string) => {
 
 describe("scoped child dispatch", () => {
   it("should leave a top-level scoped name unknown", () => {
-    expect(diagnosticsFor(
-      '<Annotation lines="1">\nReview.\n</Annotation>\n',
-    )).toEqual([{
-      line: 1,
-      column: 1,
-      message: 'Unknown block "Annotation"',
-    }]);
+    expect(
+      diagnosticsFor('<Annotation lines="1">\nReview.\n</Annotation>\n'),
+    ).toEqual([
+      {
+        line: 1,
+        column: 1,
+        message: 'Unknown block "Annotation"',
+      },
+    ]);
   });
 
   it("should dispatch a direct child through its declaring parent", () => {

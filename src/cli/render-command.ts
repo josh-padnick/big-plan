@@ -28,9 +28,7 @@ export const renderCommand = async (
 ): Promise<Record<string, unknown>> => {
   const inputArg = args[0];
   if (inputArg === undefined) {
-    throw new AxiError("Missing input MDX file", "VALIDATION_ERROR", [
-      USAGE,
-    ]);
+    throw new AxiError("Missing input MDX file", "VALIDATION_ERROR", [USAGE]);
   }
 
   const inputPath = resolve(inputArg);
@@ -59,8 +57,9 @@ export const renderCommand = async (
     throw new AxiError(
       "Cannot render document with invalid MDX",
       "VALIDATION_ERROR",
-      error.diagnostics.map(({ line, column, message }) =>
-        `${line ?? "?"}:${column ?? "?"} ${message}`
+      error.diagnostics.map(
+        ({ line, column, message }) =>
+          `${line ?? "?"}:${column ?? "?"} ${message}`,
       ),
     );
   }

@@ -11,8 +11,7 @@ const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 const isTheme = (value: string | null): value is Theme =>
   value === "light" || value === "dark";
 
-const systemTheme = (): Theme =>
-  systemThemeQuery.matches ? "dark" : "light";
+const systemTheme = (): Theme => (systemThemeQuery.matches ? "dark" : "light");
 
 const selectedTheme = (): Theme => {
   const theme = document.documentElement.dataset.theme ?? null;

@@ -12,11 +12,11 @@ A block's attributes are strings or bare booleans, structured data arrives as fe
 
 ## The component library
 
-| Component | What it is for |
-| --- | --- |
-| [Callout](/components/callout/) | Surface a note, tip, warning, or danger so reviewers cannot miss it. |
-| [CodeDiff](/components/code-diff/) | Review a verbatim `git diff` with switchable views, gutters, and line-anchored annotations. |
-| [CodeSnippet](/components/code-snippet/) | Inspect an annotated code excerpt with a file association and real line numbers. |
+| Component                                | What it is for                                                                              |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [Callout](/components/callout/)          | Surface a note, tip, warning, or danger so reviewers cannot miss it.                        |
+| [CodeDiff](/components/code-diff/)       | Review a verbatim `git diff` with switchable views, gutters, and line-anchored annotations. |
+| [CodeSnippet](/components/code-snippet/) | Inspect an annotated code excerpt with a file association and real line numbers.            |
 
 `Annotation` is a scoped child block, valid only inside `CodeDiff` and `CodeSnippet`, sharing one `lines` range grammar.
 

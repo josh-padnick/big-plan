@@ -47,7 +47,9 @@ type HunkCoordinates = {
 };
 
 // Parses hunk coordinates only when every declared line number remains exact.
-const hunkCoordinates = (match: RegExpExecArray): HunkCoordinates | undefined => {
+const hunkCoordinates = (
+  match: RegExpExecArray,
+): HunkCoordinates | undefined => {
   const oldStartValue = match[1];
   const newStartValue = match[3];
   if (oldStartValue === undefined || newStartValue === undefined) {
@@ -59,9 +61,11 @@ const hunkCoordinates = (match: RegExpExecArray): HunkCoordinates | undefined =>
   const newCount = BigInt(match[4] ?? "1");
   const oldEnd = oldCount === 0n ? oldStart : oldStart + oldCount - 1n;
   const newEnd = newCount === 0n ? newStart : newStart + newCount - 1n;
-  if ([oldStart, newStart, oldCount, newCount, oldEnd, newEnd].some(
-    (value) => value > MAX_SAFE_HUNK_VALUE,
-  )) {
+  if (
+    [oldStart, newStart, oldCount, newCount, oldEnd, newEnd].some(
+      (value) => value > MAX_SAFE_HUNK_VALUE,
+    )
+  ) {
     return undefined;
   }
   return {
@@ -149,13 +153,17 @@ const parseContentLine = ({
       ...(oldLineNumber === undefined
         ? {}
         : { nextOldLineNumber: incrementLineNumber(oldLineNumber) }),
-      ...(newLineNumber === undefined ? {} : { nextNewLineNumber: newLineNumber }),
+      ...(newLineNumber === undefined
+        ? {}
+        : { nextNewLineNumber: newLineNumber }),
     };
   }
   if (marker === "+") {
     return {
       line: { kind: "add", text, newLineNumber },
-      ...(oldLineNumber === undefined ? {} : { nextOldLineNumber: oldLineNumber }),
+      ...(oldLineNumber === undefined
+        ? {}
+        : { nextOldLineNumber: oldLineNumber }),
       ...(newLineNumber === undefined
         ? {}
         : { nextNewLineNumber: incrementLineNumber(newLineNumber) }),
@@ -183,7 +191,11 @@ export const parseUnifiedDiff = ({
   let headerLine: number | undefined;
 
   const finishHunk = (): void => {
-    if (header !== undefined || lines.length > 0 || (!hasHunkHeaders && hunks.length === 0)) {
+    if (
+      header !== undefined ||
+      lines.length > 0 ||
+      (!hasHunkHeaders && hunks.length === 0)
+    ) {
       hunks.push({ ...(header === undefined ? {} : { header }), lines });
     }
     if (
@@ -194,8 +206,13 @@ export const parseUnifiedDiff = ({
       return;
     }
     const actualOldCount = lines.filter((line) => line.kind !== "add").length;
-    const actualNewCount = lines.filter((line) => line.kind !== "remove").length;
-    if (actualOldCount !== declaredOldCount || actualNewCount !== declaredNewCount) {
+    const actualNewCount = lines.filter(
+      (line) => line.kind !== "remove",
+    ).length;
+    if (
+      actualOldCount !== declaredOldCount ||
+      actualNewCount !== declaredNewCount
+    ) {
       diagnostics.push({
         line: headerLine,
         message:
@@ -220,8 +237,7 @@ export const parseUnifiedDiff = ({
       if (coordinates === undefined) {
         diagnostics.push({
           line: headerLine,
-          message:
-            `Hunk values and line-number ranges must not exceed ${Number.MAX_SAFE_INTEGER}`,
+          message: `Hunk values and line-number ranges must not exceed ${Number.MAX_SAFE_INTEGER}`,
         });
       }
       continue;

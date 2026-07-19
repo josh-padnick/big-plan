@@ -25,12 +25,11 @@ const RAW_GIT_DIFF = [
   "@@ -31,4 +34,5 @@ export const readCatalog = async (key: string) => {",
   "   const value = await catalogOrigin.read(key);",
   "   await cache.put(key, value, { ttlSeconds: 300 });",
-  "+  metrics.increment(\"catalog_cache.origin_fallback\");",
+  '+  metrics.increment("catalog_cache.origin_fallback");',
   "   return value;",
   " };",
   "",
 ].join("\n");
-
 
 test("should distinguish every callout type when the typed-block plan renders", async ({
   page,
@@ -42,9 +41,11 @@ test("should distinguish every callout type when the typed-block plan renders", 
   for (const type of calloutTypes) {
     await expect(page.locator(`[data-callout="${type}"]`)).toBeVisible();
   }
-  const accents = await page.locator("[data-callout]").evaluateAll((callouts) =>
-    callouts.map((callout) => getComputedStyle(callout).borderLeftColor),
-  );
+  const accents = await page
+    .locator("[data-callout]")
+    .evaluateAll((callouts) =>
+      callouts.map((callout) => getComputedStyle(callout).borderLeftColor),
+    );
   expect(new Set(accents).size).toBe(calloutTypes.length);
 });
 
@@ -75,10 +76,9 @@ test("should remember the selected diff view when the page reloads", async ({
   await expect(unifiedButton).toHaveAttribute("aria-pressed", "false");
   await page.reload();
   await expect(diff).toHaveAttribute("data-diff-view", "split");
-  await expect(diff.getByRole("button", { name: "Side-by-side view" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(
+    diff.getByRole("button", { name: "Side-by-side view" }),
+  ).toHaveAttribute("aria-pressed", "true");
 });
 
 test("should keep a range Annotation visible when switching diff views", async ({
@@ -107,13 +107,19 @@ test("should keep a range Annotation visible when switching diff views", async (
     const bodyId = await body.getAttribute("id");
     expect(bodyId).not.toBeNull();
     await expect(toggle).toHaveAttribute("aria-controls", bodyId ?? "");
-    expect(await body.evaluate((element) => element.scrollHeight > element.clientHeight))
-      .toBe(true);
+    expect(
+      await body.evaluate(
+        (element) => element.scrollHeight > element.clientHeight,
+      ),
+    ).toBe(true);
     await toggle.click();
     await expect(toggle).toHaveAccessibleName("View less");
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(await body.evaluate((element) => element.scrollHeight - element.clientHeight))
-      .toBeLessThanOrEqual(1);
+    expect(
+      await body.evaluate(
+        (element) => element.scrollHeight - element.clientHeight,
+      ),
+    ).toBeLessThanOrEqual(1);
     const originalBody = await body.innerHTML();
     await body.evaluate((element) => {
       element.textContent = "Temporarily short.";
@@ -124,8 +130,11 @@ test("should keep a range Annotation visible when switching diff views", async (
     }, originalBody);
     await expect(toggle).toHaveAccessibleName("View less");
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(await body.evaluate((element) => element.scrollHeight - element.clientHeight))
-      .toBeLessThanOrEqual(1);
+    expect(
+      await body.evaluate(
+        (element) => element.scrollHeight - element.clientHeight,
+      ),
+    ).toBeLessThanOrEqual(1);
     await toggle.click();
     await expect(toggle).toHaveAccessibleName("View more…");
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -140,86 +149,126 @@ test("should keep a range Annotation visible when switching diff views", async (
     await expect(unifiedAnnotation).toBeHidden();
     await expect(splitAnnotation).toBeVisible();
     await expect(splitAnnotation).toContainText(annotationText);
-    expect(await splitAnnotation.evaluate((annotation) =>
-      annotation.closest<HTMLElement>("[data-diff-pane]")?.dataset.diffPane
-    )).toBe("new");
+    expect(
+      await splitAnnotation.evaluate(
+        (annotation) =>
+          annotation.closest<HTMLElement>("[data-diff-pane]")?.dataset.diffPane,
+      ),
+    ).toBe("new");
     const oldAnnotation = split.getByRole("note", { name: "Line 19" });
-    expect(await oldAnnotation.evaluate((annotation) =>
-      annotation.closest<HTMLElement>("[data-diff-pane]")?.dataset.diffPane
-    )).toBe("old");
+    expect(
+      await oldAnnotation.evaluate(
+        (annotation) =>
+          annotation.closest<HTMLElement>("[data-diff-pane]")?.dataset.diffPane,
+      ),
+    ).toBe("old");
     await expect(
-      split.locator('[data-diff-pane="old"]').getByRole("note", { name: "Lines 34-36" }),
+      split
+        .locator('[data-diff-pane="old"]')
+        .getByRole("note", { name: "Lines 34-36" }),
     ).toHaveCount(0);
     await expect(
-      split.locator('[data-diff-pane="new"]').getByRole("note", { name: "Line 19" }),
+      split
+        .locator('[data-diff-pane="new"]')
+        .getByRole("note", { name: "Line 19" }),
     ).toHaveCount(0);
   });
 
   await test.step("each split hunk owns one header and two pane scrollers", async () => {
-    const scrollContexts = await split.locator(".code-diff-split-hunk").evaluateAll(
-      (hunks) => hunks.map((hunk) => [...hunk.querySelectorAll<HTMLElement>("*")]
-        .filter((element) => {
-          const overflow = getComputedStyle(element).overflowX;
-          return overflow === "auto" || overflow === "scroll";
-        })
-        .map((element) => ({
-          header: element.classList.contains("code-diff-split-header-scroll"),
-          pane: element.dataset.diffPane ?? null,
-        }))),
-    );
+    const scrollContexts = await split
+      .locator(".code-diff-split-hunk")
+      .evaluateAll((hunks) =>
+        hunks.map((hunk) =>
+          [...hunk.querySelectorAll<HTMLElement>("*")]
+            .filter((element) => {
+              const overflow = getComputedStyle(element).overflowX;
+              return overflow === "auto" || overflow === "scroll";
+            })
+            .map((element) => ({
+              header: element.classList.contains(
+                "code-diff-split-header-scroll",
+              ),
+              pane: element.dataset.diffPane ?? null,
+            })),
+        ),
+      );
     expect(scrollContexts).toHaveLength(2);
     for (const hunkContexts of scrollContexts) {
       expect(hunkContexts).toHaveLength(3);
       expect(hunkContexts.filter((context) => context.header)).toHaveLength(1);
-      expect(hunkContexts.map((context) => context.pane).filter(Boolean).sort())
-        .toEqual(["new", "old"]);
+      expect(
+        hunkContexts
+          .map((context) => context.pane)
+          .filter(Boolean)
+          .sort(),
+      ).toEqual(["new", "old"]);
     }
   });
 
   await test.step("the opposite spacer tracks annotation height changes", async () => {
-    const heights = async () => splitAnnotation.evaluate((annotation) => {
-      const card = annotation.closest<HTMLElement>("[data-annotation-card]");
-      const block = annotation.closest<HTMLElement>("[data-code-diff]");
-      const id = card?.dataset.annotationCard;
-      const spacer = [...(block?.querySelectorAll<HTMLElement>(
-        "[data-annotation-spacer]",
-      ) ?? [])].find((candidate) => candidate.dataset.annotationSpacer === id);
-      if (card === null || card === undefined || spacer === undefined) {
-        throw new Error("Missing split annotation card or spacer");
-      }
-      return {
-        card: card.getBoundingClientRect().height,
-        spacer: spacer.getBoundingClientRect().height,
-      };
-    });
-    await expect.poll(heights).toEqual(expect.objectContaining({
-      card: expect.any(Number),
-      spacer: expect.any(Number),
-    }));
-    await expect.poll(async () => {
-      const measured = await heights();
-      return Math.abs(measured.card - measured.spacer);
-    }).toBeLessThan(1);
+    const heights = async () =>
+      splitAnnotation.evaluate((annotation) => {
+        const card = annotation.closest<HTMLElement>("[data-annotation-card]");
+        const block = annotation.closest<HTMLElement>("[data-code-diff]");
+        const id = card?.dataset.annotationCard;
+        const spacer = [
+          ...(block?.querySelectorAll<HTMLElement>(
+            "[data-annotation-spacer]",
+          ) ?? []),
+        ].find((candidate) => candidate.dataset.annotationSpacer === id);
+        if (card === null || card === undefined || spacer === undefined) {
+          throw new Error("Missing split annotation card or spacer");
+        }
+        return {
+          card: card.getBoundingClientRect().height,
+          spacer: spacer.getBoundingClientRect().height,
+        };
+      });
+    await expect.poll(heights).toEqual(
+      expect.objectContaining({
+        card: expect.any(Number),
+        spacer: expect.any(Number),
+      }),
+    );
+    await expect
+      .poll(async () => {
+        const measured = await heights();
+        return Math.abs(measured.card - measured.spacer);
+      })
+      .toBeLessThan(1);
 
     const toggle = splitAnnotation.locator(".code-diff-annotation-toggle");
     await toggle.click();
-    await expect.poll(async () => {
-      const measured = await heights();
-      return Math.abs(measured.card - measured.spacer);
-    }).toBeLessThan(1);
+    await expect
+      .poll(async () => {
+        const measured = await heights();
+        return Math.abs(measured.card - measured.spacer);
+      })
+      .toBeLessThan(1);
     await toggle.click();
   });
 
   await test.step("a long old line cannot push the new card offscreen at scroll zero", async () => {
     const layout = await splitAnnotation.evaluate((annotation) => {
-      const surround = annotation.closest<HTMLElement>("[data-annotation-card]");
+      const surround = annotation.closest<HTMLElement>(
+        "[data-annotation-card]",
+      );
       const hunk = annotation.closest<HTMLElement>(".code-diff-split-hunk");
-      const oldPane = hunk?.querySelector<HTMLElement>('[data-diff-pane="old"]');
-      const newPane = hunk?.querySelector<HTMLElement>('[data-diff-pane="new"]');
-      const oldLine = oldPane?.querySelector<HTMLElement>(".code-diff-line-content");
+      const oldPane = hunk?.querySelector<HTMLElement>(
+        '[data-diff-pane="old"]',
+      );
+      const newPane = hunk?.querySelector<HTMLElement>(
+        '[data-diff-pane="new"]',
+      );
+      const oldLine = oldPane?.querySelector<HTMLElement>(
+        ".code-diff-line-content",
+      );
       if (
-        surround === null || hunk === null || oldPane === null ||
-        newPane === null || oldLine === null
+        surround === null ||
+        hunk === null ||
+        oldPane === null ||
+        newPane === null ||
+        oldLine === null
       ) {
         throw new Error("Missing split annotation regression fixture");
       }
@@ -258,36 +307,45 @@ test("should keep a range Annotation visible when switching diff views", async (
 
   await test.step("the annotation stays pinned to the visible new pane in both themes", async () => {
     for (const theme of ["light", "dark"] as const) {
-      const layout = await splitAnnotation.evaluate((annotation, selectedTheme) => {
-        document.documentElement.dataset.theme = selectedTheme;
-        const surround = annotation.closest<HTMLElement>("[data-annotation-card]");
-        const scroller = annotation.closest<HTMLElement>("[data-diff-pane]");
-        if (surround === null || scroller === null) {
-          throw new Error("Missing split annotation surround or pane scroller");
-        }
-        scroller.scrollLeft = scroller.scrollWidth;
-        const surroundBox = surround.getBoundingClientRect();
-        const scrollerBox = scroller.getBoundingClientRect();
-        const cardStyle = getComputedStyle(annotation);
-        const surroundStyle = getComputedStyle(surround);
-        return {
-          surroundLeft: surroundBox.left,
-          surroundRight: surroundBox.right,
-          cardBackground: cardStyle.backgroundColor,
-          cardColor: cardStyle.color,
-          surroundBackground: surroundStyle.backgroundColor,
-          surroundBorder: surroundStyle.borderLeftColor,
-          scrollerLeft: scrollerBox.left,
-          scrollerRight: scrollerBox.right,
-          scrollLeft: scroller.scrollLeft,
-        };
-      }, theme);
+      const layout = await splitAnnotation.evaluate(
+        (annotation, selectedTheme) => {
+          document.documentElement.dataset.theme = selectedTheme;
+          const surround = annotation.closest<HTMLElement>(
+            "[data-annotation-card]",
+          );
+          const scroller = annotation.closest<HTMLElement>("[data-diff-pane]");
+          if (surround === null || scroller === null) {
+            throw new Error(
+              "Missing split annotation surround or pane scroller",
+            );
+          }
+          scroller.scrollLeft = scroller.scrollWidth;
+          const surroundBox = surround.getBoundingClientRect();
+          const scrollerBox = scroller.getBoundingClientRect();
+          const cardStyle = getComputedStyle(annotation);
+          const surroundStyle = getComputedStyle(surround);
+          return {
+            surroundLeft: surroundBox.left,
+            surroundRight: surroundBox.right,
+            cardBackground: cardStyle.backgroundColor,
+            cardColor: cardStyle.color,
+            surroundBackground: surroundStyle.backgroundColor,
+            surroundBorder: surroundStyle.borderLeftColor,
+            scrollerLeft: scrollerBox.left,
+            scrollerRight: scrollerBox.right,
+            scrollLeft: scroller.scrollLeft,
+          };
+        },
+        theme,
+      );
       expect(layout.scrollLeft).toBeGreaterThan(0);
       expect(
         Math.abs(layout.surroundLeft - layout.scrollerLeft),
         JSON.stringify(layout),
       ).toBeLessThan(2);
-      expect(layout.surroundRight).toBeLessThanOrEqual(layout.scrollerRight + 1);
+      expect(layout.surroundRight).toBeLessThanOrEqual(
+        layout.scrollerRight + 1,
+      );
       expect(layout.cardColor).not.toBe(layout.cardBackground);
       expect(layout.surroundBackground).not.toBe(layout.cardBackground);
       expect(layout.surroundBorder).not.toBe(layout.surroundBackground);
@@ -319,10 +377,13 @@ test("should fallback-copy Annotation code within a full-screen diff", async ({
       value: undefined,
     });
     document.execCommand = () => {
-      const textarea = document.querySelector("textarea:not([data-diff-source])");
-      document.body.dataset.fallbackCopy = textarea instanceof HTMLTextAreaElement
-        ? `${textarea.closest("dialog") === null ? "outside" : "dialog"}:${textarea.value}`
-        : "missing";
+      const textarea = document.querySelector(
+        "textarea:not([data-diff-source])",
+      );
+      document.body.dataset.fallbackCopy =
+        textarea instanceof HTMLTextAreaElement
+          ? `${textarea.closest("dialog") === null ? "outside" : "dialog"}:${textarea.value}`
+          : "missing";
       return textarea instanceof HTMLTextAreaElement;
     };
   });
@@ -357,10 +418,16 @@ test("should contain CodeDiff overflow without clipping the page", async ({
     scrollWidth: document.documentElement.scrollWidth,
   }));
   expect(overflow.bodyOverflowX).toBe("visible");
-  expect(overflow.scrollWidth, JSON.stringify(overflow)).toBe(overflow.clientWidth);
-  expect(await diff.locator("[data-diff-pane]").evaluateAll((panes) =>
-    panes.some((pane) => pane.scrollWidth > pane.clientWidth)
-  )).toBe(true);
+  expect(overflow.scrollWidth, JSON.stringify(overflow)).toBe(
+    overflow.clientWidth,
+  );
+  expect(
+    await diff
+      .locator("[data-diff-pane]")
+      .evaluateAll((panes) =>
+        panes.some((pane) => pane.scrollWidth > pane.clientWidth),
+      ),
+  ).toBe(true);
 });
 
 test("should expand a diff to full screen and restore it when dismissed", async ({
@@ -380,7 +447,9 @@ test("should expand a diff to full screen and restore it when dismissed", async 
 
   const dialog = page.locator("dialog.code-diff-dialog");
   await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveAccessibleName("src/catalog/read-through-cache.ts");
+  await expect(dialog).toHaveAccessibleName(
+    "src/catalog/read-through-cache.ts",
+  );
   await expect(dialog.locator("[data-code-diff]")).toHaveAttribute(
     "data-diff-expanded",
     "",
@@ -398,9 +467,7 @@ test("should expand a diff to full screen and restore it when dismissed", async 
   expect(Math.abs(horizontalGaps.left - horizontalGaps.right)).toBeLessThan(2);
   await expect
     .poll(() =>
-      page.evaluate(
-        () => getComputedStyle(document.documentElement).overflow,
-      ),
+      page.evaluate(() => getComputedStyle(document.documentElement).overflow),
     )
     .toBe("hidden");
 
@@ -473,9 +540,10 @@ test("should fallback-copy within a full-screen diff", async ({
         "textarea:not([data-diff-source])",
       );
       const textarea = textareas.item(textareas.length - 1);
-      document.body.dataset.fallbackCopy = textarea instanceof HTMLTextAreaElement
-        ? `${textarea.closest("dialog") === null ? "outside" : "dialog"}:${textarea.value}`
-        : "missing";
+      document.body.dataset.fallbackCopy =
+        textarea instanceof HTMLTextAreaElement
+          ? `${textarea.closest("dialog") === null ? "outside" : "dialog"}:${textarea.value}`
+          : "missing";
       return textarea instanceof HTMLTextAreaElement;
     };
   });
@@ -585,9 +653,14 @@ test("should preserve typed-block content without controls when JavaScript is di
   await expect(page.locator("[data-callout]").first()).toBeVisible();
   const diffs = page.locator("[data-code-diff]");
   await expect(diffs).toHaveCount(2);
-  await expect(diffs.first().locator('[data-diff-content="unified"]')).toBeVisible();
-  await expect(diffs.first().locator('[data-diff-content="split"]')).toBeHidden();
-  const annotation = diffs.first()
+  await expect(
+    diffs.first().locator('[data-diff-content="unified"]'),
+  ).toBeVisible();
+  await expect(
+    diffs.first().locator('[data-diff-content="split"]'),
+  ).toBeHidden();
+  const annotation = diffs
+    .first()
     .locator('[data-diff-content="unified"]')
     .getByRole("note", { name: "Lines 34-36" });
   await expect(annotation).toBeVisible();
@@ -597,7 +670,9 @@ test("should preserve typed-block content without controls when JavaScript is di
   await expect(annotation).toContainText(
     "I added a dashboard query that isolates synchronous origin fallbacks.",
   );
-  await expect(annotation.locator(".code-diff-annotation-body-clamped")).toHaveCount(0);
+  await expect(
+    annotation.locator(".code-diff-annotation-body-clamped"),
+  ).toHaveCount(0);
   await expect(page.locator(".code-diff-annotation-toggle")).toHaveCount(0);
   const controls = page.locator(
     "[data-diff-toggle-group], [data-diff-menu-button], [data-diff-expand]",

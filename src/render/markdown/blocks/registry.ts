@@ -120,7 +120,9 @@ const declaresScopedChild = ({
   readonly definitions: BlockDefinition["scopedChildren"];
   readonly name: string | null;
 }): boolean =>
-  name !== null && definitions !== undefined && Object.hasOwn(definitions, name);
+  name !== null &&
+  definitions !== undefined &&
+  Object.hasOwn(definitions, name);
 
 type ParentNode = Root | Element | MdxJsxFlowElement;
 
@@ -198,7 +200,11 @@ const renderChildren = ({
     }
     if (child.type === "mdxJsxFlowElement") {
       const rendered = renderFlowElement({ node: child, diagnostics });
-      parent.children.splice(index, 1, ...(rendered === undefined ? [] : [rendered]));
+      parent.children.splice(
+        index,
+        1,
+        ...(rendered === undefined ? [] : [rendered]),
+      );
       if (rendered !== undefined) {
         index += 1;
       }
@@ -238,11 +244,9 @@ const reportSurvivors = ({
 };
 
 /** Creates the rehype transform that validates and dispatches typed blocks. */
-export const rehypeRenderBlocks = ({
-  diagnostics,
-}: {
-  readonly diagnostics: DiagnosticCollector;
-}) => (tree: Root): void => {
-  renderChildren({ parent: tree, diagnostics });
-  reportSurvivors({ parent: tree, diagnostics });
-};
+export const rehypeRenderBlocks =
+  ({ diagnostics }: { readonly diagnostics: DiagnosticCollector }) =>
+  (tree: Root): void => {
+    renderChildren({ parent: tree, diagnostics });
+    reportSurvivors({ parent: tree, diagnostics });
+  };

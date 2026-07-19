@@ -15,7 +15,9 @@
     ),
   );
   const headings = links
-    .map((link) => document.getElementById(decodeURIComponent(link.hash.slice(1))))
+    .map((link) =>
+      document.getElementById(decodeURIComponent(link.hash.slice(1))),
+    )
     .filter((heading): heading is HTMLElement => heading !== null);
   if (headings.length === 0) {
     return;

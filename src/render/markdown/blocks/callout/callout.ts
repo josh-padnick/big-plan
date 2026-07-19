@@ -23,12 +23,24 @@ type CalloutConfig = {
 
 const ALLOWED_TYPES = "note, tip, warning, danger";
 
-const configForType = (value: string | boolean | undefined): CalloutConfig | undefined => {
+const configForType = (
+  value: string | boolean | undefined,
+): CalloutConfig | undefined => {
   switch (value) {
     case "note":
-      return { type: "note", defaultTitle: "Note", icon: INFO_ICON, iconName: "info" };
+      return {
+        type: "note",
+        defaultTitle: "Note",
+        icon: INFO_ICON,
+        iconName: "info",
+      };
     case "tip":
-      return { type: "tip", defaultTitle: "Tip", icon: LIGHTBULB_ICON, iconName: "lightbulb" };
+      return {
+        type: "tip",
+        defaultTitle: "Tip",
+        icon: LIGHTBULB_ICON,
+        iconName: "lightbulb",
+      };
     case "warning":
       return {
         type: "warning",
@@ -67,9 +79,10 @@ export const renderCallout: BlockRenderer = ({
   const configured = configForType(attributes["type"]);
   if (configured === undefined) {
     diagnostics.add({
-      message: attributes["type"] === undefined
-        ? `Missing required attribute "type"; expected one of: ${ALLOWED_TYPES}`
-        : `Invalid value for attribute "type"; expected one of: ${ALLOWED_TYPES}`,
+      message:
+        attributes["type"] === undefined
+          ? `Missing required attribute "type"; expected one of: ${ALLOWED_TYPES}`
+          : `Invalid value for attribute "type"; expected one of: ${ALLOWED_TYPES}`,
       position,
     });
   }
@@ -95,7 +108,8 @@ export const renderCallout: BlockRenderer = ({
   if (config === undefined) {
     throw new Error("Callout note configuration is missing");
   }
-  const title = typeof titleValue === "string" ? titleValue : config.defaultTitle;
+  const title =
+    typeof titleValue === "string" ? titleValue : config.defaultTitle;
 
   return {
     type: "element",

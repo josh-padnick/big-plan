@@ -25,11 +25,13 @@ const convertMarkdown = async ({ source, fallbackTitle }) => {
 ```
 
 <Annotation lines="44">
-The registry runs before every other transform so no MDX node can reach the serializer.
+  The registry runs before every other transform so no MDX node can reach the
+  serializer.
 </Annotation>
 
 <Annotation lines="45-46">
-Slug allocation must follow block rendering, because typed blocks may introduce new heading ids.
+  Slug allocation must follow block rendering, because typed blocks may
+  introduce new heading ids.
 </Annotation>
 
 </CodeSnippet>
@@ -37,11 +39,11 @@ Slug allocation must follow block rendering, because typed blocks may introduce 
 
 ## Attributes
 
-| Attribute | Type | Required | Behavior |
-| --- | --- | --- | --- |
-| `file` | string | No | File the excerpt belongs to; renders the header path and enables the copy-path action. |
-| `startLine` | string, positive integer | No (default `"1"`) | The file line the first fenced line corresponds to; the gutter and all annotation anchors use this file-absolute numbering. |
-| `showLineNumbers` | bare boolean | No | Renders the line-number gutter; required whenever `startLine` is set, since invisible numbering would make annotation anchors unverifiable. |
+| Attribute         | Type                     | Required           | Behavior                                                                                                                                    |
+| ----------------- | ------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `file`            | string                   | No                 | File the excerpt belongs to; renders the header path and enables the copy-path action.                                                      |
+| `startLine`       | string, positive integer | No (default `"1"`) | The file line the first fenced line corresponds to; the gutter and all annotation anchors use this file-absolute numbering.                 |
+| `showLineNumbers` | bare boolean             | No                 | Renders the line-number gutter; required whenever `startLine` is set, since invisible numbering would make annotation anchors unverifiable. |
 
 ## Annotations
 

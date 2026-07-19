@@ -51,7 +51,10 @@ A footnote reference.[^1]
 `;
 
 describe("renderDocument affordances", () => {
-  const { html } = renderDocument({ markdown: FULL_FIXTURE, fallbackTitle: "Plan" });
+  const { html } = renderDocument({
+    markdown: FULL_FIXTURE,
+    fallbackTitle: "Plan",
+  });
 
   it("should emit markup for every GFM affordance when the fixture uses them all", () => {
     const expectedFragments = [
@@ -156,11 +159,14 @@ describe("renderDocument shell", () => {
     expect(html).toContain(
       "<title>&lt;script&gt;&quot;a &amp; b&quot;&lt;/script&gt;</title>",
     );
-    expect(html).not.toContain("<script>\"a");
+    expect(html).not.toContain('<script>"a');
   });
 
   it("should produce a complete document with no TOC when the markdown is empty", () => {
-    const { html, sections } = renderDocument({ markdown: "", fallbackTitle: "Empty" });
+    const { html, sections } = renderDocument({
+      markdown: "",
+      fallbackTitle: "Empty",
+    });
     expect(sections.length).toBe(0);
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("</html>");

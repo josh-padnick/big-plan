@@ -31,7 +31,8 @@ const decorateCodeBlocks = (node: Root | Element): void => {
       return child;
     }
     decorateCodeBlocks(child);
-    const hasCodeChild = child.tagName === "pre" &&
+    const hasCodeChild =
+      child.tagName === "pre" &&
       child.children.some(
         (codeChild) => isElement(codeChild) && codeChild.tagName === "code",
       );

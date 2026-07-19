@@ -62,50 +62,54 @@ describe("compileMarkdown static MDX validation", () => {
 
   it("should reject an unknown component when it is absent from the registry", () => {
     expect(diagnosticsFor("<Unknown />\n")).toEqual([
-      { line: 1, column: 1, message: "Unknown block \"Unknown\"" },
+      { line: 1, column: 1, message: 'Unknown block "Unknown"' },
     ]);
   });
 
   it("should reject an inherited object property when used as a component", () => {
     expect(diagnosticsFor("<toString />\n")).toEqual([
-      { line: 1, column: 1, message: "Unknown block \"toString\"" },
+      { line: 1, column: 1, message: 'Unknown block "toString"' },
     ]);
   });
 
   it("should reject a spread attribute when a block uses one", () => {
     expect(diagnosticsFor("<Unknown {...props} />\n")).toEqual([
-      { line: 1, column: 1, message: "Unknown block \"Unknown\"" },
+      { line: 1, column: 1, message: 'Unknown block "Unknown"' },
       { line: 1, column: 10, message: "Spread attributes are not supported" },
     ]);
   });
 
   it("should reject an expression attribute when a block uses one", () => {
     expect(diagnosticsFor("<Unknown tone={tone} />\n")).toEqual([
-      { line: 1, column: 1, message: "Unknown block \"Unknown\"" },
+      { line: 1, column: 1, message: 'Unknown block "Unknown"' },
       {
         line: 1,
         column: 10,
-        message: "Expression-valued attribute \"tone\" is not supported",
+        message: 'Expression-valued attribute "tone" is not supported',
       },
     ]);
   });
 
   it("should reject a duplicate attribute when a name repeats", () => {
     expect(diagnosticsFor('<Unknown tone="a" tone="b" />\n')).toEqual([
-      { line: 1, column: 1, message: "Unknown block \"Unknown\"" },
-      { line: 1, column: 19, message: "Duplicate attribute \"tone\"" },
+      { line: 1, column: 1, message: 'Unknown block "Unknown"' },
+      { line: 1, column: 19, message: 'Duplicate attribute "tone"' },
     ]);
   });
 
   it("should accept shorthand attributes at validation when a value is omitted", () => {
     expect(diagnosticsFor("<Unknown flag />\n")).toEqual([
-      { line: 1, column: 1, message: "Unknown block \"Unknown\"" },
+      { line: 1, column: 1, message: 'Unknown block "Unknown"' },
     ]);
   });
 
   it("should preserve prototype-named attributes for typed-block validation", () => {
     expect(diagnosticsFor('<Callout type="note" __proto__ />\n')).toEqual([
-      { line: 1, column: 1, message: 'Unknown attribute "__proto__" on Callout' },
+      {
+        line: 1,
+        column: 1,
+        message: 'Unknown attribute "__proto__" on Callout',
+      },
     ]);
   });
 
@@ -129,15 +133,18 @@ describe("compileMarkdown static MDX validation", () => {
         message: "ESM import/export statements are not supported",
       },
       { line: 3, column: 1, message: "Flow expressions are not supported" },
-      { line: 5, column: 1, message: "Unknown block \"Unknown\"" },
+      { line: 5, column: 1, message: 'Unknown block "Unknown"' },
     ]);
   });
 
   it("should render MDX-compatible GFM features without changing their HTML", () => {
-    expect(compileAndSerialize("# Plan\n\nA **safe** [link](https://example.com).\n"))
-      .toBe(
-        '<h1 id="plan">Plan</h1>\n<p>A <strong>safe</strong> <a href="https://example.com">link</a>.</p>',
-      );
+    expect(
+      compileAndSerialize(
+        "# Plan\n\nA **safe** [link](https://example.com).\n",
+      ),
+    ).toBe(
+      '<h1 id="plan">Plan</h1>\n<p>A <strong>safe</strong> <a href="https://example.com">link</a>.</p>',
+    );
   });
 });
 
@@ -230,11 +237,9 @@ describe("compileMarkdown code highlighting", () => {
   });
 
   it("should leave an undeclared code block unhighlighted", () => {
-    const bodyHtml = compileAndSerialize(
-      "```\nSELECT id FROM users;\n```\n",
-    );
+    const bodyHtml = compileAndSerialize("```\nSELECT id FROM users;\n```\n");
     expect(bodyHtml).toContain("<code>SELECT id FROM users;\n</code></pre>");
-    expect(bodyHtml).not.toContain("class=\"hljs\"");
+    expect(bodyHtml).not.toContain('class="hljs"');
   });
 
   it("should preserve a block as plain code when its declared language is unknown", () => {
@@ -250,7 +255,9 @@ describe("compileMarkdown code highlighting", () => {
     const bodyHtml = compileAndSerialize(
       "```sql\nSELECT 1;\n```\n\n```\nplain block\n```\n",
     );
-    expect(bodyHtml.match(new RegExp(CODE_BLOCK_SELECTOR, "g"))).toHaveLength(2);
+    expect(bodyHtml.match(new RegExp(CODE_BLOCK_SELECTOR, "g"))).toHaveLength(
+      2,
+    );
     expect(bodyHtml.match(/data-copy-code/g)).toHaveLength(2);
     expect(bodyHtml).toContain('data-slot="button"');
     expect(bodyHtml).toContain('data-variant="ghost"');
@@ -292,10 +299,18 @@ describe("compileMarkdown CodeDiff blocks", () => {
     expect(bodyHtml).toContain('data-diff-number="new"');
     expect(bodyHtml).toContain('data-diff-line="remove"');
     expect(bodyHtml).toContain('data-diff-line="add"');
-    expect(bodyHtml).toContain('<span class="sr-only">2 added, 1 removed</span>');
-    expect(bodyHtml).toContain('<span class="code-diff-stat-add" aria-hidden="true">+2</span>');
-    expect(bodyHtml).toContain('<span class="code-diff-stat-remove" aria-hidden="true">-1</span>');
-    expect(bodyHtml).toContain('<textarea hidden readonly data-diff-source="">');
+    expect(bodyHtml).toContain(
+      '<span class="sr-only">2 added, 1 removed</span>',
+    );
+    expect(bodyHtml).toContain(
+      '<span class="code-diff-stat-add" aria-hidden="true">+2</span>',
+    );
+    expect(bodyHtml).toContain(
+      '<span class="code-diff-stat-remove" aria-hidden="true">-1</span>',
+    );
+    expect(bodyHtml).toContain(
+      '<textarea hidden readonly data-diff-source="">',
+    );
     expect(bodyHtml.match(/role="note"/gu)).toHaveLength(2);
     expect(bodyHtml).toContain('aria-label="Lines 1-2"');
     expect(bodyHtml).toContain('data-annotation-lines="1-2"');
@@ -306,33 +321,43 @@ describe("compileMarkdown CodeDiff blocks", () => {
   });
 
   it("should diagnose a top-level Annotation as an unknown block", () => {
-    expect(diagnosticsFor(
-      '<Annotation lines="13">\nReview this line.\n</Annotation>\n',
-    )).toEqual([{
-      line: 1,
-      column: 1,
-      message: 'Unknown block "Annotation"',
-    }]);
+    expect(
+      diagnosticsFor(
+        '<Annotation lines="13">\nReview this line.\n</Annotation>\n',
+      ),
+    ).toEqual([
+      {
+        line: 1,
+        column: 1,
+        message: 'Unknown block "Annotation"',
+      },
+    ]);
   });
 
   it.each([1, 2, 3, 4, 5, 6])(
     "should reject a level-%s heading in an Annotation body",
     (level) => {
       const heading = `${"#".repeat(level)} Nested heading`;
-      expect(diagnosticsFor(
-        `<CodeDiff file="src/retry.ts">\n\`\`\`diff\n@@ -1 +1 @@\n-old\n+new\n\`\`\`\n<Annotation lines="1">\n${heading}\n</Annotation>\n</CodeDiff>\n`,
-      )).toEqual([{
-        line: 8,
-        column: 1,
-        message: "Annotation bodies cannot contain headings",
-      }]);
+      expect(
+        diagnosticsFor(
+          `<CodeDiff file="src/retry.ts">\n\`\`\`diff\n@@ -1 +1 @@\n-old\n+new\n\`\`\`\n<Annotation lines="1">\n${heading}\n</Annotation>\n</CodeDiff>\n`,
+        ),
+      ).toEqual([
+        {
+          line: 8,
+          column: 1,
+          message: "Annotation bodies cannot contain headings",
+        },
+      ]);
     },
   );
 
   it("should reject footnote references and definitions in an Annotation body", () => {
-    expect(diagnosticsFor(
-      '<CodeDiff file="src/retry.ts">\n```diff\n@@ -1 +1 @@\n-old\n+new\n```\n<Annotation lines="1">\nRef[^retry].\n\n[^retry]: Retry note.\n</Annotation>\n</CodeDiff>\n',
-    )).toEqual([
+    expect(
+      diagnosticsFor(
+        '<CodeDiff file="src/retry.ts">\n```diff\n@@ -1 +1 @@\n-old\n+new\n```\n<Annotation lines="1">\nRef[^retry].\n\n[^retry]: Retry note.\n</Annotation>\n</CodeDiff>\n',
+      ),
+    ).toEqual([
       {
         line: 8,
         column: 4,
@@ -353,13 +378,17 @@ describe("compileMarkdown CodeDiff blocks", () => {
       '<CodeDiff file="src/nested.ts">\n```diff\n@@ -1 +1 @@\n-old\n+new\n```\n</CodeDiff>',
     ],
   ])("should reject a %s block in an Annotation body", (_name, block) => {
-    expect(diagnosticsFor(
-      `<CodeDiff file="src/retry.ts">\n\`\`\`diff\n@@ -1 +1 @@\n-old\n+new\n\`\`\`\n<Annotation lines="1">\n${block}\n</Annotation>\n</CodeDiff>\n`,
-    )).toEqual([{
-      line: 8,
-      column: 1,
-      message: "Annotation bodies cannot contain typed blocks",
-    }]);
+    expect(
+      diagnosticsFor(
+        `<CodeDiff file="src/retry.ts">\n\`\`\`diff\n@@ -1 +1 @@\n-old\n+new\n\`\`\`\n<Annotation lines="1">\n${block}\n</Annotation>\n</CodeDiff>\n`,
+      ),
+    ).toEqual([
+      {
+        line: 8,
+        column: 1,
+        message: "Annotation bodies cannot contain typed blocks",
+      },
+    ]);
   });
 
   it("should preserve supported rich content in an Annotation body", () => {
@@ -368,17 +397,22 @@ describe("compileMarkdown CodeDiff blocks", () => {
     );
     expect(bodyHtml).toContain("Review the <code>retry</code> path.");
     expect(bodyHtml).toContain("<li>Keep the fallback</li>");
-    expect(bodyHtml.match(new RegExp(CODE_BLOCK_SELECTOR, "gu"))).toHaveLength(2);
+    expect(bodyHtml.match(new RegExp(CODE_BLOCK_SELECTOR, "gu"))).toHaveLength(
+      2,
+    );
   });
 
   it("should position malformed diff diagnostics at a nested fence column", () => {
-    expect(diagnosticsFor(
-      '> <CodeDiff file="src/retry.ts">\n>\n> ```diff\n> @@ -1 +1 @@\n> bad\n> ```\n> </CodeDiff>\n',
-    )).toEqual([
+    expect(
+      diagnosticsFor(
+        '> <CodeDiff file="src/retry.ts">\n>\n> ```diff\n> @@ -1 +1 @@\n> bad\n> ```\n> </CodeDiff>\n',
+      ),
+    ).toEqual([
       {
         line: 5,
         column: 3,
-        message: "Invalid diff line 2: Expected a diff line beginning with space, +, or -",
+        message:
+          "Invalid diff line 2: Expected a diff line beginning with space, +, or -",
       },
       {
         line: 4,

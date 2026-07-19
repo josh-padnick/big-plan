@@ -2,10 +2,7 @@
 
 import type { APIRoute } from "astro";
 import { getCollection } from "astro:content";
-import {
-  fullDocumentSection,
-  orderAllEntries,
-} from "../docs-delivery";
+import { fullDocumentSection, orderAllEntries } from "../docs-delivery";
 
 // Concatenates every canonical page in stable reader-oriented order.
 export const GET: APIRoute = async () => {
