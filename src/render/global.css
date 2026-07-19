@@ -14,6 +14,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
 @import "./markdown/components/callout/callout.css";
 @import "./markdown/components/code-diff/code-diff.css";
 @import "./markdown/components/code-snippet/code-snippet.css";
+@import "./markdown/components/file-tree/file-tree.css";
 
 /* Only authored source emits utility candidates; examples and docs do not. */
 @source "../";

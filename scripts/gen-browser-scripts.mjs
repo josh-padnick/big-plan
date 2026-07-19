@@ -35,6 +35,11 @@ const browserScripts = [
     name: "code-snippet",
     exportName: "CODE_SNIPPET_JS",
   },
+  {
+    directory: "markdown/components/file-tree",
+    name: "file-tree",
+    exportName: "FILE_TREE_JS",
+  },
 ];
 
 const check = spawnSync(

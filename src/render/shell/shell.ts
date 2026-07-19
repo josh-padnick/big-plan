@@ -13,6 +13,7 @@ import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
 import { CODE_DIFF_JS } from "../markdown/components/code-diff/code-diff.generated.js";
 import { CODE_SNIPPET_JS } from "../markdown/components/code-snippet/code-snippet.generated.js";
+import { FILE_TREE_JS } from "../markdown/components/file-tree/file-tree.generated.js";
 import { COPY_CODE_JS } from "../markdown/code-block/copy-code.generated.js";
 import { SCROLL_SPY_JS } from "./scroll-spy.generated.js";
 import { THEME_TOGGLE_JS } from "./theme-toggle.generated.js";
@@ -159,9 +160,16 @@ ${contentHtml}
           COPY_CODE_JS,
           CODE_DIFF_JS,
           CODE_SNIPPET_JS,
+          FILE_TREE_JS,
           SCROLL_SPY_JS,
         ]
-      : [THEME_TOGGLE_JS, COPY_CODE_JS, CODE_DIFF_JS, CODE_SNIPPET_JS],
+      : [
+          THEME_TOGGLE_JS,
+          COPY_CODE_JS,
+          CODE_DIFF_JS,
+          CODE_SNIPPET_JS,
+          FILE_TREE_JS,
+        ],
     bodyClassName: BODY_CLASSES,
   };
 };

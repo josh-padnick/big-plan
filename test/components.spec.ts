@@ -58,6 +58,215 @@ test("should distinguish every callout type when the component plan renders", as
   expect(new Set(accents).size).toBe(calloutTypes.length);
 });
 
+test("should review planned file changes in combined and before/after trees", async ({
+  browser,
+  page,
+  componentsViewerUrl,
+}) => {
+  await page.goto(componentsViewerUrl);
+  const tree = page.locator("[data-file-tree-diff]");
+  const combined = tree.locator('[data-tree-content="combined"]');
+  const beforeAfter = tree.locator('[data-tree-content="before-after"]');
+  const before = tree.locator('[data-tree-pane="before"]');
+  const after = tree.locator('[data-tree-pane="after"]');
+
+  await test.step("combined is the default complete tree", async () => {
+    await expect(tree).toBeVisible();
+    await expect(tree).toHaveAttribute("data-tree-view", "combined");
+    await expect(combined).toBeVisible();
+    await expect(beforeAfter).toBeHidden();
+    await expect(
+      tree.getByRole("button", { name: "Combined view" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(combined.locator(":scope > ul")).toHaveCount(1);
+    await expect(
+      combined
+        .locator(
+          ".file-tree-list > .file-tree-item > .file-tree-children > " +
+            ".file-tree-item > .file-tree-children > .file-tree-item > .file-tree-row",
+        )
+        .filter({ hasText: "refresh-worker.ts" }),
+    ).toHaveCount(1);
+  });
+
+  await test.step("every change kind shows its own colored status icon", async () => {
+    const badgedRows = combined.locator("[data-tree-badge]");
+    await expect(badgedRows).toHaveCount(5);
+    const statusIcons: ReadonlyArray<readonly [string, string]> = [
+      ["added", "file-plus-2"],
+      ["modified", "file-diff"],
+      ["removed", "file-minus-2"],
+      ["renamed", "file-symlink"],
+    ];
+    for (const [badge, icon] of statusIcons) {
+      await expect(
+        combined
+          .locator(`[data-tree-badge="${badge}"] > svg[data-lucide="${icon}"]`)
+          .first(),
+      ).toBeVisible();
+    }
+    const labels: ReadonlyArray<readonly [string, string]> = [
+      ["added", "Add"],
+      ["modified", "Modify"],
+      ["removed", "Delete"],
+      ["renamed", "Rename"],
+    ];
+    for (const [badge, label] of labels) {
+      const row = combined.locator(`[data-tree-badge="${badge}"]`).first();
+      await expect(row.locator(".file-tree-label")).toHaveText(label);
+      const iconColor = await row
+        .locator(":scope > svg")
+        .evaluate((element) => getComputedStyle(element).color);
+      const labelColor = await row
+        .locator(".file-tree-label")
+        .evaluate((element) => getComputedStyle(element).color);
+      expect(labelColor).toBe(iconColor);
+    }
+    const plainIconColor = await combined
+      .locator('[data-tree-entry="file"]:not([data-tree-badge]) > svg')
+      .first()
+      .evaluate((element) => getComputedStyle(element).color);
+    const statusColors = await badgedRows
+      .locator(":scope > svg")
+      .evaluateAll((elements) =>
+        elements.map((element) => getComputedStyle(element).color),
+      );
+    expect(statusColors.every((color) => color !== plainIconColor)).toBe(true);
+    expect(new Set(statusColors).size).toBeGreaterThanOrEqual(4);
+  });
+
+  await test.step("before and after show the matching state and rename", async () => {
+    await tree.getByRole("button", { name: "Before/After view" }).click();
+    await expect(tree).toHaveAttribute("data-tree-view", "before-after");
+    await expect(combined).toBeHidden();
+    await expect(beforeAfter).toBeVisible();
+    await expect(before.locator(".file-tree-diff-pane-caption")).toHaveText(
+      "Before",
+    );
+    await expect(after.locator(".file-tree-diff-pane-caption")).toHaveText(
+      "After",
+    );
+    await expect(before).toContainText("legacy-cache-counter.ts");
+    await expect(before).not.toContainText("refresh-queue.ts");
+    await expect(after).toContainText("refresh-queue.ts");
+    await expect(after).not.toContainText("legacy-cache-counter.ts");
+    await expect(before).toContainText("catalog-worker.env");
+    await expect(before).not.toContainText("catalog-cache-worker.env");
+    await expect(after).toContainText("catalog-cache-worker.env");
+    await expect(after).not.toContainText("catalog-worker.env");
+  });
+
+  await test.step("the panes sit side by side on a wide viewport", async () => {
+    const geometry = await beforeAfter.evaluate((view) => {
+      const before = view.querySelector('[data-tree-pane="before"]');
+      const after = view.querySelector('[data-tree-pane="after"]');
+      if (!(before instanceof HTMLElement) || !(after instanceof HTMLElement)) {
+        throw new Error("Missing before/after panes");
+      }
+      return {
+        beforeX: before.getBoundingClientRect().x,
+        beforeY: before.getBoundingClientRect().y,
+        afterX: after.getBoundingClientRect().x,
+        afterY: after.getBoundingClientRect().y,
+      };
+    });
+    expect(geometry.afterX).toBeGreaterThan(geometry.beforeX);
+    expect(geometry.afterY).toBe(geometry.beforeY);
+  });
+
+  await test.step("the preference survives reload", async () => {
+    await page.reload();
+    await expect(tree).toHaveAttribute("data-tree-view", "before-after");
+    await expect(
+      tree.getByRole("button", { name: "Before/After view" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(beforeAfter).toBeVisible();
+  });
+
+  await test.step("the panes stack before above after on a narrow viewport", async () => {
+    await page.setViewportSize({ width: 500, height: 800 });
+    // Both rects are read in one evaluate so the narrow-layout reflow cannot
+    // land between the two measurements and fake an overlap.
+    const stacked = await beforeAfter.evaluate((view) => {
+      const before = view.querySelector('[data-tree-pane="before"]');
+      const after = view.querySelector('[data-tree-pane="after"]');
+      if (!(before instanceof HTMLElement) || !(after instanceof HTMLElement)) {
+        throw new Error("Missing before/after panes");
+      }
+      const beforeRect = before.getBoundingClientRect();
+      const afterRect = after.getBoundingClientRect();
+      return {
+        beforeBottom: beforeRect.y + beforeRect.height,
+        afterY: afterRect.y,
+        afterX: afterRect.x,
+        beforeX: beforeRect.x,
+      };
+    });
+    expect(stacked.afterX).toBe(stacked.beforeX);
+    expect(stacked.afterY).toBeGreaterThanOrEqual(stacked.beforeBottom - 1);
+  });
+
+  await test.step("combined remains the complete no-JavaScript view", async () => {
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    const staticPage = await context.newPage();
+    await staticPage.goto(componentsViewerUrl);
+    const staticTree = staticPage.locator("[data-file-tree-diff]");
+    await expect(staticTree).toBeVisible();
+    await expect(staticTree).toContainText("Planned changes");
+    await expect(staticTree).toContainText(
+      "catalog-worker.env -> catalog-cache-worker.env",
+    );
+    await expect(
+      staticTree.locator('[data-tree-content="combined"]'),
+    ).toBeVisible();
+    await expect(
+      staticTree.locator('[data-tree-content="before-after"]'),
+    ).toBeHidden();
+    await expect(staticTree.locator("[data-tree-toggle-group]")).toBeHidden();
+    await expect(
+      staticTree.locator(
+        '[data-tree-content="combined"] [data-tree-badge="renamed"]',
+      ),
+    ).toBeVisible();
+    await expect(
+      staticTree
+        .locator('[data-tree-content="combined"]')
+        .locator(
+          ".file-tree-list > .file-tree-item > .file-tree-children > " +
+            ".file-tree-item > .file-tree-children > .file-tree-item > .file-tree-row",
+        )
+        .filter({ hasText: "refresh-worker.ts" }),
+    ).toHaveCount(1);
+    await context.close();
+  });
+});
+
+test("should present a plain file hierarchy without change styling", async ({
+  page,
+  componentsViewerUrl,
+}) => {
+  await page.goto(componentsViewerUrl);
+  const tree = page.locator("[data-file-tree]:not([data-file-tree-diff])");
+
+  await test.step("the worker layout keeps hierarchy and notes", async () => {
+    await expect(tree).toBeVisible();
+    await expect(tree).toContainText("Worker pool layout");
+    await expect(tree).toContainText(
+      "Consumes deduplicated catalog refresh jobs.",
+    );
+    await expect(
+      tree.locator(".file-tree-children .file-tree-row"),
+    ).toHaveCount(2);
+  });
+
+  await test.step("every row uses plain file or folder presentation", async () => {
+    await expect(tree.locator("[data-tree-badge]")).toHaveCount(0);
+    await expect(tree.locator(".file-tree-label")).toHaveCount(0);
+    await expect(tree.locator('svg[data-lucide="folder"]')).toHaveCount(1);
+    await expect(tree.locator('svg[data-lucide="file"]')).toHaveCount(2);
+  });
+});
+
 test("should review an annotated file-absolute code snippet", async ({
   browser,
   page,
