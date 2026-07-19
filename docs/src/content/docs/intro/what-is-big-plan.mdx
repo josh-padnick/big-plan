@@ -22,19 +22,27 @@ Run it in your favorite agent harness as a skill like this:
   </TabItem>
 </Tabs>
 
-## Philosophy
+## Why build it?
 
-Three beliefs drive every design decision.
+Agent plans are kind of a big deal.
 
-**Plans are for human review.**
-The one reader who matters is the human who has to agree to the plan, so everything is judged by one test: does it help a person read, question, and decide?
+The more confident you are in your agent's plan, the better your agent will perform at the execution step and the faster your final review will go.
 
-**Components make review first-class.**
-A code change wants a diff, a schema wants a table, a risk wants to stand out.
-Typed components render each kind of information the way humans consume it, instead of flattening everything into prose.
+But an agent's standard wall-of-text plan is painful to read! If plans are so important for the human, they should present in a first-class way. These plans really are a big deal, so we call them "big plans".
 
-**Plans are local and private.**
-Plans carry sensitive context, so the whole loop stays on your disk: no account, no server, no external requests.
+## What makes a good agent plan
+
+A great agent plan should be:
+
+1. **Easy to scan.** You don't always want to read the full plan. Sometimes it's better to scan the sections and read the details where they interest you.
+
+1. **Easy to read.** There are many ways to present an idea. Sometimes a paragraph of text is best, but often a visual arrangement conveys the same information with far less cognitive load.
+
+1. **Easy to update.** It's painful to reference a specific paragraph of prose. You should be able to instantly highlight a section and give the agent feedback.
+
+1. **Versioned.** Sometimes the plan updates and you're not sure what changed, or you accidentally ovewrite something. Versioning should allow you to easily see older plans.
+
+1. **Local and private.** Your plan can contain sensitive information; it shouldn't be shared with anyone else without a good reason.
 
 ## Let's see an example
 
