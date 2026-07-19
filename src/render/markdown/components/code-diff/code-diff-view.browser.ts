@@ -70,7 +70,7 @@ const openFullScreen = ({
   const article = component.closest("article");
   const fileCaption = ownedCodeDiffElement<HTMLElement>({
     component,
-    selector: ".code-diff-file",
+    selector: ".file-identity",
   });
   if (article === null || fileCaption === null) {
     return;

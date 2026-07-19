@@ -5,8 +5,8 @@
 import type { Element, Text } from "hast";
 import { COPY_ICON } from "../../../icons/lucide/copy.js";
 import { ELLIPSIS_ICON } from "../../../icons/lucide/ellipsis.js";
-import { FILE_ICON } from "../../../icons/lucide/file.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import { renderFileIdentity } from "../shared/file-identity.js";
 
 const HEADER_CLASSES =
   "code-snippet-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem]";
@@ -16,64 +16,8 @@ const MENU_LIST_CLASSES =
   "code-snippet-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge p-1";
 const MENU_ITEM_CLASSES =
   "code-snippet-menu-item flex w-full cursor-pointer items-center gap-[0.45rem] whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-[0.3rem] text-left text-xs text-ink [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted";
-const FILE_CLASSES =
-  "code-snippet-file flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted";
 
 const text = (value: string): Text => ({ type: "text", value });
-
-// The stable file caption: an icon, a muted directory, an emphasized name, and
-// an accessible name pinned to the exact path independent of the visual split.
-const fileIdentity = (filePath: string): Element => {
-  const lastSlashIndex = filePath.lastIndexOf("/");
-  const fileDir =
-    lastSlashIndex === -1 ? "" : filePath.slice(0, lastSlashIndex + 1);
-  const fileName =
-    lastSlashIndex === -1 ? filePath : filePath.slice(lastSlashIndex + 1);
-  return {
-    type: "element",
-    tagName: "span",
-    properties: {
-      className: FILE_CLASSES.split(" "),
-      ariaLabel: filePath,
-    },
-    children: [
-      renderLucideIcon({ icon: FILE_ICON, hidden: false }),
-      {
-        type: "element",
-        tagName: "span",
-        properties: {
-          className: ["code-snippet-file-path", "min-w-0", "truncate"],
-        },
-        children: [
-          ...(fileDir === ""
-            ? []
-            : [
-                {
-                  type: "element" as const,
-                  tagName: "span",
-                  properties: {
-                    className: ["code-snippet-file-dir", "text-muted"],
-                  },
-                  children: [text(fileDir)],
-                },
-              ]),
-          {
-            type: "element",
-            tagName: "span",
-            properties: {
-              className: [
-                "code-snippet-file-name",
-                "font-semibold",
-                "text-ink",
-              ],
-            },
-            children: [text(fileName)],
-          },
-        ],
-      },
-    ],
-  };
-};
 
 const snippetLabel = (): Element => ({
   type: "element",
@@ -165,7 +109,7 @@ export const renderCodeSnippetHeader = ({
   tagName: "figcaption",
   properties: { className: HEADER_CLASSES.split(" ") },
   children: [
-    filePath === undefined ? snippetLabel() : fileIdentity(filePath),
+    filePath === undefined ? snippetLabel() : renderFileIdentity({ filePath }),
     {
       type: "element",
       tagName: "span",

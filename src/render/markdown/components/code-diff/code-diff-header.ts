@@ -5,19 +5,17 @@ import type { Element, Text } from "hast";
 import { COLUMNS_2_ICON } from "../../../icons/lucide/columns-2.js";
 import { COPY_ICON } from "../../../icons/lucide/copy.js";
 import { ELLIPSIS_ICON } from "../../../icons/lucide/ellipsis.js";
-import { FILE_ICON } from "../../../icons/lucide/file.js";
 import { MAXIMIZE_2_ICON } from "../../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../../icons/lucide/minimize-2.js";
 import { ROWS_2_ICON } from "../../../icons/lucide/rows-2.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import { renderFileIdentity } from "../shared/file-identity.js";
 import type { LucideIcon } from "../../../icons/lucide-icon.js";
 
 const BUTTON_CLASSES =
   "code-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 const HEADER_CLASSES =
   "code-diff-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem]";
-const FILE_CLASSES =
-  "code-diff-file flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted";
 const STATS_CLASSES =
   "code-diff-stats inline-flex shrink-0 gap-[0.4rem] text-xs font-semibold";
 const MENU_LIST_CLASSES =
@@ -270,67 +268,12 @@ export const renderCodeDiffHeader = ({
   readonly removedCount: number;
   readonly showLineCounts: boolean;
 }): Element => {
-  const lastSlashIndex = filePath.lastIndexOf("/");
-  const fileDir =
-    lastSlashIndex === -1 ? "" : filePath.slice(0, lastSlashIndex + 1);
-  const fileName =
-    lastSlashIndex === -1 ? filePath : filePath.slice(lastSlashIndex + 1);
-
   return {
     type: "element",
     tagName: "figcaption",
     properties: { className: HEADER_CLASSES.split(" ") },
     children: [
-      {
-        type: "element",
-        tagName: "span",
-        // The explicit label keeps the component's accessible name (also
-        // referenced by the full-screen dialog) the exact file path,
-        // independent of the styled dir/name split below.
-        properties: {
-          className: FILE_CLASSES.split(" "),
-          ariaLabel: filePath,
-        },
-        children: [
-          renderLucideIcon({
-            icon: FILE_ICON,
-            hidden: false,
-          }),
-          {
-            type: "element",
-            tagName: "span",
-            properties: {
-              className: ["code-diff-file-path", "min-w-0", "truncate"],
-            },
-            children: [
-              ...(fileDir === ""
-                ? []
-                : [
-                    {
-                      type: "element" as const,
-                      tagName: "span",
-                      properties: {
-                        className: ["code-diff-file-dir", "text-muted"],
-                      },
-                      children: [text(fileDir)],
-                    },
-                  ]),
-              {
-                type: "element",
-                tagName: "span",
-                properties: {
-                  className: [
-                    "code-diff-file-name",
-                    "font-semibold",
-                    "text-ink",
-                  ],
-                },
-                children: [text(fileName)],
-              },
-            ],
-          },
-        ],
-      },
+      renderFileIdentity({ filePath }),
       {
         type: "element",
         tagName: "span",

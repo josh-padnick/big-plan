@@ -68,10 +68,19 @@ export default tseslint.config(
         imports: ["**/markdown/code-block/**"],
         mayImport: ["icons"],
       },
+      // Never-authorable presentation building blocks the registered
+      // component directories compose; shared/ may reach down into icons but
+      // never sideways into a component directory.
+      componentShared: {
+        files: ["src/render/markdown/components/shared/**/*.ts"],
+        imports: ["**/components/shared/**"],
+        mayImport: ["icons"],
+      },
       components: {
         files: ["src/render/markdown/components/**/*.ts"],
+        ignores: ["src/render/markdown/components/shared/**/*.ts"],
         imports: ["**/markdown/components/**"],
-        mayImport: ["icons"],
+        mayImport: ["icons", "componentShared"],
       },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
@@ -114,7 +123,7 @@ export default tseslint.config(
     // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
       ["escapeHtml", "icons"],
-      ["codeBlock", "page"],
+      ["codeBlock", "page", "componentShared"],
       ["components"],
       ["markdown", "shell"],
       ["composer"],
