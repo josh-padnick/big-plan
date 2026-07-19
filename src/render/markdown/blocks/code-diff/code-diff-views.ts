@@ -1,9 +1,13 @@
 // Renders CodeDiff's unified and split HAST views, including line semantics,
 // gutters, annotation cards, side-localized spacers, and hunk presentation.
 
-import type { Element, ElementContent, Text } from "hast";
+import type { Element, Text } from "hast";
 import { MESSAGE_SQUARE_ICON } from "../../../icons/lucide/message-square.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import type {
+  CodeDiffSide,
+  ResolvedCodeDiffAnnotation,
+} from "./compile-code-diff.js";
 import { pairDiffLines } from "./unified-diff.js";
 import type {
   DiffHunk,
@@ -12,17 +16,7 @@ import type {
   UnifiedDiff,
 } from "./unified-diff.js";
 
-export type CodeDiffSide = "old" | "new";
-
-export type AnchoredAnnotation = {
-  readonly id: string;
-  readonly lines: string;
-  readonly startLine: bigint;
-  readonly endLine: bigint;
-  readonly side: CodeDiffSide;
-  readonly children: ReadonlyArray<ElementContent>;
-  readonly target: DiffLine;
-};
+type AnchoredAnnotation = ResolvedCodeDiffAnnotation;
 
 const HUNK_HEADER_CLASSES =
   "code-diff-hunk-header min-w-max whitespace-pre px-[0.65rem] py-[0.4rem] text-xs";
