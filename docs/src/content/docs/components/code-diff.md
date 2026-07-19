@@ -6,9 +6,7 @@ description: A reviewable code diff from verbatim git output - unified and side-
 `CodeDiff` renders a unified diff as a first-class review surface: a file header, switchable unified and side-by-side views, optional line-number gutters and change counts, copy actions, and a full-screen dialog.
 Its authoring contract is deliberately the one agents already speak: paste `git diff` output into a fenced `diff` block.
 
-:::note[📸 Screenshot placeholder]
-A CodeDiff block in side-by-side view with line numbers, header stats, and the actions menu open.
-:::
+![A CodeDiff block in side-by-side view with line numbers, header stats, and the actions menu open](../../../assets/components/code-diff-split.png)
 
 ## Usage
 
@@ -77,9 +75,7 @@ Annotation bodies accept prose, lists, inline formatting, and plain fenced code,
 An `Annotation` anywhere other than a direct `CodeDiff` child is an unknown block.
 `Annotation` is a scoped child block, a concept other components (such as `CodeSnippet`) reuse with the same `lines` grammar.
 
-:::note[📸 Screenshot placeholder]
-An annotation card pinned beneath its line range, with the accent spine on the covered lines.
-:::
+![An annotation card beneath its line range, with the accent spine on the covered lines](../../../assets/components/annotation-card.png)
 
 ## Design notes
 

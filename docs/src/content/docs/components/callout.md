@@ -6,9 +6,7 @@ description: An accent-bordered panel with a typed icon and title, for the notes
 `Callout` renders an accent-bordered panel with a per-type icon and title over arbitrary Markdown children.
 Use it for the sentences a reviewer must read even when skimming: review goals, deploy-ordering warnings, data-loss dangers.
 
-:::note[📸 Screenshot placeholder]
-All four callout types rendered in the viewer, one theme.
-:::
+![All four callout types rendered in the viewer](../../../assets/components/callout-types.png)
 
 ## Usage
 
