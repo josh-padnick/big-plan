@@ -8,7 +8,7 @@ They contain decisions, code changes, schemas, and risks, and each of those dese
 Components are Big Plan's typed blocks: flow-level elements from a closed, built-in registry, rendered entirely server-side so documents stay self-contained and readable without JavaScript.
 
 The registry never evaluates code from a plan.
-A block's attributes are strings or bare booleans, structured data arrives as fenced children, and any authoring mistake fails the render with a positional diagnostic; see [Authoring plans](/guides/authoring-plans/) for the contract.
+A block's attributes are strings or bare booleans, structured data arrives as fenced children, and any authoring mistake fails the render with a positional diagnostic; see [Authoring plans](/for-agents/authoring-plans/) for the contract.
 
 ## The component library
 

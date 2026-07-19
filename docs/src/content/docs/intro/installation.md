@@ -53,5 +53,5 @@ The output is one self-contained HTML file: styling, behavior, and branding embe
 
 ## Next steps
 
-- [Walk through every feature.](/guides/walkthrough/)
-- [Learn the plan document format.](/guides/authoring-plans/)
+- [See how Big Plan works under the hood.](/architecture/)
+- [Learn the plan document format.](/for-agents/authoring-plans/)

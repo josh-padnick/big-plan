@@ -32,7 +32,7 @@ For what comes next, see the [roadmap](/intro/roadmap/).
 - Readable with JavaScript disabled; scripts only enhance navigation, theming, and copy controls.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 
-See [the viewer](/guides/the-viewer/) for the full tour of the reading experience, or the [CLI reference](/reference/cli/) for command details.
+See the [CLI reference](/reference/cli/) for command details.
 
 ## Next step
 

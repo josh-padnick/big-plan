@@ -23,12 +23,8 @@ export const SIDEBAR: readonly SidebarGroup[] = [
     ],
   },
   {
-    label: "Guides",
-    items: [
-      { label: "Walkthrough", slug: "guides/walkthrough" },
-      { label: "Authoring plans", slug: "guides/authoring-plans" },
-      { label: "The viewer", slug: "guides/the-viewer" },
-    ],
+    label: "Architecture",
+    items: [{ label: "How Big Plan works", slug: "architecture" }],
   },
   {
     label: "Components",
@@ -45,13 +41,9 @@ export const SIDEBAR: readonly SidebarGroup[] = [
   },
   {
     label: "For Agents",
-    items: [{ label: "Render a plan", slug: "for-agents" }],
-  },
-  {
-    label: "Contributing",
     items: [
-      { label: "Development", slug: "contributing/development" },
-      { label: "Architecture", slug: "contributing/architecture" },
+      { label: "Render a plan", slug: "for-agents" },
+      { label: "Authoring plans", slug: "for-agents/authoring-plans" },
     ],
   },
 ];

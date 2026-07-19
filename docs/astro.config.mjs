@@ -2,13 +2,22 @@
 
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
+import mermaid from "astro-mermaid";
 import { SIDEBAR } from "./src/sidebar";
 
 export default defineConfig({
   site: "https://big-plan.ai",
   integrations: [
+    mermaid(),
     starlight({
       title: "Big Plan",
+      social: [
+        {
+          icon: "github",
+          label: "GitHub",
+          href: "https://github.com/josh-padnick/big-plan",
+        },
+      ],
       // The boxed favicon marks the docs site apart from the tool's plain
       // /bp favicon; the SVG swaps light/dark art itself.
       favicon: "/favicon.svg",
