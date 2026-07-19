@@ -3,7 +3,7 @@ title: Render a plan for human review
 description: Follow the exact operational workflow an agent uses to hand a rendered plan to a person.
 ---
 
-Use this workflow after writing a plan as a GFM Markdown file and before acting on it.
+Use this workflow after writing a plan as a static-subset MDX file and before acting on it.
 
 ## Prerequisite
 
@@ -18,14 +18,14 @@ node --version
 From the working directory that contains the plan path, run:
 
 ```sh
-npx big-plan render <plan.md>
+npx big-plan render <plan.mdx>
 ```
 
-Replace `<plan.md>` with the actual path to the plan.
+Replace `<plan.mdx>` with the actual path to the plan.
 For example:
 
 ```sh
-npx big-plan render plans/implementation.md
+npx big-plan render plans/implementation.mdx
 ```
 
 The command creates `plans/implementation.html` next to the source plan.
@@ -34,7 +34,7 @@ Give the human reviewer that HTML path and wait for agreement before acting on t
 To choose a different location, pass it as the second argument:
 
 ```sh
-npx big-plan render plans/implementation.md reviews/implementation.html
+npx big-plan render plans/implementation.mdx reviews/implementation.html
 ```
 
 The command creates missing parent directories for that output path.

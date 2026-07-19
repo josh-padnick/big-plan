@@ -9,16 +9,16 @@ The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors,
 ## Command
 
 ```text
-big-plan render <input.md> [output.html]
+big-plan render <input.mdx> [output.html]
 ```
 
-`<input.md>` is required.
+`<input.mdx>` is required.
 `[output.html]` is optional.
 
 The equivalent package runner form is:
 
 ```sh
-npx big-plan render <input.md> [output.html]
+npx big-plan render <input.mdx> [output.html]
 ```
 
 ## Input and output paths
@@ -35,7 +35,7 @@ It creates the output file's parent directories recursively before writing UTF-8
 
 ## Document metadata
 
-The renderer chooses the document title from the Markdown content.
+The renderer chooses the document title from the MDX content.
 The input filename without its extension is the fallback title.
 The reported section count comes from the rendered document's level-two sections.
 
@@ -51,14 +51,17 @@ The result contains:
 
 ## Errors
 
-If the input argument is missing, the command raises a structured `VALIDATION_ERROR` with the message `Missing input markdown file` and the usage line.
+If the input argument is missing, the command raises a structured `VALIDATION_ERROR` with the message `Missing input MDX file` and the usage line.
 
 ```text
-Usage: big-plan render <input.md> [output.html]
+Usage: big-plan render <input.mdx> [output.html]
 ```
 
 If the input cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
 The read error covers any failure to read the input file.
+
+If parsing or typed-block validation fails, the command raises a structured `VALIDATION_ERROR` with the message `Cannot render document with invalid MDX`.
+Its help entries contain every collected authoring diagnostic as `line:column message`, and no output file is written.
 
 ## Top-level help and version
 

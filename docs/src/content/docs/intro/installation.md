@@ -23,26 +23,26 @@ Big Plan needs Node.js 22 or newer; the published package runs under plain Node.
 Run it with no install at all:
 
 ```sh
-npx big-plan render plan.md
+npx big-plan render plan.mdx
 ```
 
 Or install it globally:
 
 ```sh
 npm install -g big-plan
-big-plan render plan.md
+big-plan render plan.mdx
 ```
 
 Either way, `render` writes `plan.html` next to the input.
-Pass a second argument to choose the output path: `big-plan render plan.md reviews/plan.html`.
+Pass a second argument to choose the output path: `big-plan render plan.mdx reviews/plan.html`.
 
 ## Render your first plan
 
 Download the example plan, or use any plan your agent has written:
 
 ```sh
-curl -o plan.md https://big-plan.ai/demo/example-plan.md
-npx big-plan render plan.md
+curl -o plan.mdx https://big-plan.ai/demo/example-plan.md
+npx big-plan render plan.mdx
 ```
 
 Open `plan.html` in your browser, and you should see this:

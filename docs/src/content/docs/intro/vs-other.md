@@ -17,7 +17,7 @@ Lavish embraces freeform HTML: the agent designs each artifact from playbooks, w
 The cost of that flexibility is consistency; each plan is its own custom page, so structure and quality vary from plan to plan, and reading ten plans means learning ten layouts.
 
 Big Plan makes the opposite bet.
-Plans are markdown today and structured MDX with a fixed library of typed [components](/components/) on the [roadmap](/intro/roadmap/), so every plan renders into the same document shape.
+Plans are structured MDX with a fixed library of typed [components](/components/), so every plan renders into the same document shape.
 The agent spends its effort on the decisions, not the presentation, and the tenth plan you review reads exactly like the first.
 
 ## Big Plan vs. Agent-Native Plans
@@ -27,7 +27,7 @@ It renders plans beautifully through discrete components, diagrams, annotated co
 
 The difference is packaging and custody.
 Agent-Native Plans is part of a larger platform, and the default flow signs you in to view your plan.
-Big Plan sees no reason a plan on your own disk should require an account: it is one standalone command (`npx big-plan render plan.md`), the output is one HTML file, and nothing about reviewing it involves logging in or leaving your machine.
+Big Plan sees no reason a plan on your own disk should require an account: it is one standalone command (`npx big-plan render plan.mdx`), the output is one HTML file, and nothing about reviewing it involves logging in or leaving your machine.
 
 Big Plan is pre-alpha, and honesty matters here: both neighbors ship feedback loops today that Big Plan has only planned.
 What Big Plan offers now is the combination the others don't: structured, consistent plan documents from a standalone tool that keeps everything on your disk.

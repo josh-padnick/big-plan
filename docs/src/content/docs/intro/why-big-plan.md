@@ -44,7 +44,8 @@ Big Plan reviews intent before any code exists; agree on the plan first, and cod
 Big Plan has none of that; it exists only for the moment of agreement.
 
 **A markdown preview** shows you the text.
-Big Plan is built for review: navigation that follows you, readable code, and, planned on the [roadmap](/intro/roadmap/), typed components, comment threads, and live agent chat.
+Big Plan is built for review: navigation that follows you, readable code, and typed components.
+Comment threads and live agent chat are planned on the [roadmap](/intro/roadmap/).
 
 For how Big Plan compares to its closest neighbors, Lavish and Agent-Native Plans, see [Big Plan vs. Other](/intro/vs-other/).
 

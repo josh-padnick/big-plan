@@ -35,11 +35,12 @@ Any other attribute, an empty `file`, or `showLineNumbers` on a diff without `@@
 
 ## The diff child
 
-The block takes exactly one fenced ` ```diff ` code block and nothing else.
+The block takes exactly one fenced ` ```diff ` code block, plus zero or more direct `Annotation` children, and nothing else.
 Verbatim `git diff` output works: the file preamble (`diff --git`, `index`, `---`, `+++`, mode and rename lines) is accepted before the first hunk.
 Headerless diffs of bare `+`/`-`/context lines are legal when line numbers are not requested.
 Inside a hunk, a blank line counts as empty context even when an editor has stripped its leading space.
 Malformed lines fail the render with both the document position and the fence-relative line number.
+Each `@@` header's declared old and new line counts must match the hunk content, and its coordinates and resulting line-number ranges cannot exceed `9007199254740991`.
 
 ## Views
 
@@ -65,15 +66,17 @@ Nest `Annotation` directly inside `CodeDiff` to anchor a markdown note to specif
 </Annotation>
 ```
 
-`lines` (required) is one positive integer or a strictly ascending inclusive range; `side` is `old` or `new`, defaulting to `new`.
+`lines` (required) is one canonical positive integer or a strictly ascending inclusive range; zero and leading zeros are invalid.
+`side` is `old` or `new`, defaulting to `new`.
 Every referenced line must exist on the chosen side, and annotations require `@@` hunk headers.
 The note renders as a prose card after the range's final line, statically, with a `Line N` / `Lines N-M` badge and `role="note"`.
 In unified view the card spans the block; in side-by-side view it renders inside the pane of its `side`, pinned to the visible pane width while the code scrolls.
 Covered lines carry the annotation accent as a left spine and a subtle wash blended over their add/remove tints, so ranges read at a glance.
-Long cards gain a progressive `View more` / `View less` disclosure; without JavaScript the full content is always present.
+Multiple annotations may target the same line or range and render in authored order.
+Long cards gain a progressive `View more` / `View less` disclosure, and the reader's expanded choice survives responsive layout changes; without JavaScript the full content is always present.
 Annotation bodies accept prose, lists, inline formatting, and plain fenced code, but reject headings, footnotes, and typed blocks (each with a positional diagnostic).
 An `Annotation` anywhere other than a direct `CodeDiff` child is an unknown block.
-`Annotation` is a scoped child block, a concept other components (such as `CodeSnippet`) reuse with the same `lines` grammar.
+`Annotation` is a scoped child block; the planned `CodeSnippet` component will reuse the concept with the same `lines` grammar.
 
 ![An annotation card beneath its line range, with the accent spine on the covered lines](../../../assets/components/annotation-card.png)
 

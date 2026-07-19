@@ -1,10 +1,15 @@
 ---
 title: CodeSnippet
-description: Annotated code excerpts with a file association, real line numbers, and line-anchored notes.
+description: A planned block for annotated code excerpts with a file association, real line numbers, and line-anchored notes.
 ---
 
 `CodeSnippet` is for code a reviewer must inspect line by line: a file association, real line numbers starting from the file's actual line, and `Annotation` cards anchored to the lines they explain.
 Plain samples should stay plain fences, which already ship syntax highlighting and a copy control; `CodeSnippet` earns its place through exactly the three things a fence cannot express.
+
+:::caution[In progress]
+`CodeSnippet` is a planned contract, not an available block yet.
+The current renderer rejects it as an unknown block.
+:::
 
 :::note[📸 Screenshot placeholder]
 An annotated snippet with the file header, file-absolute gutter, a tinted anchor line, and its annotation card.

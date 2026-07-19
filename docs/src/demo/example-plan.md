@@ -67,7 +67,10 @@ ALTER TABLE api_keys
 
 The gateway change is small; the middleware slots in right after key auth:
 
+<CodeDiff file="api-gateway/src/app.ts" showLineNumbers showLineCounts>
+
 ```diff
+@@ -41,4 +41,9 @@
  // api-gateway/src/app.ts
  app.addHook("preHandler", keyAuth);
 +app.addHook("preHandler", rateLimit({
@@ -79,6 +82,13 @@ The gateway change is small; the middleware slots in right after key auth:
 -app.setErrorHandler(defaultErrorHandler);
 +app.setErrorHandler(rateLimitAwareErrorHandler);
 ```
+
+<Annotation lines="43-47" side="new">
+  Keep this hook immediately after authentication so the rate-limit key always
+  comes from a validated API key.
+</Annotation>
+
+</CodeDiff>
 
 ## HTTP endpoint
 
@@ -108,7 +118,12 @@ Clients can also inspect their budget directly:
 
 ## Risks and mitigations
 
-- **Redis becomes a single point of failure.** Fail open: if Redis is unreachable, allow the request and increment a `rate_limit_degraded` counter that pages on-call.
+<Callout type="warning" title="Fail-open dependency">
+
+If Redis is unreachable, allow the request and increment a `rate_limit_degraded` counter that pages on-call.
+
+</Callout>
+
 - **Clock skew between replicas.** The window uses Redis server time via `TIME`, not gateway clocks.
 - **Hot keys for very large customers.** Shard the sorted set by minute bucket if any single key exceeds 50k requests per minute; not built now, documented as the known upgrade path.
 

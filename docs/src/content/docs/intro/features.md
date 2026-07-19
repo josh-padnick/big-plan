@@ -25,11 +25,18 @@ For what comes next, see the [roadmap](/intro/roadmap/).
 - Unknown and undeclared languages stay plain and readable.
 - A copy control on every block code sample.
 
+## Plan authoring
+
+- A static subset of MDX: standard Markdown and GFM plus a closed registry of typed blocks, without executable imports, exports, or expressions.
+- All-at-once positional diagnostics for unsupported syntax, unknown blocks, invalid attributes, and malformed block content.
+- `Callout` blocks for notes, tips, warnings, and dangers.
+- `CodeDiff` blocks with optional line numbers and change counts, unified and side-by-side views, scoped line annotations, copy actions, and full-screen viewing.
+
 ## Output
 
 - One self-contained HTML file: styling, behavior, and branding embedded.
 - No external requests, ever.
-- Readable with JavaScript disabled; scripts only enhance navigation, theming, and copy controls.
+- Readable with JavaScript disabled; scripts only enhance navigation, theming, code-copy controls, and `CodeDiff` interactions.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 
 See the [CLI reference](/reference/cli/) for command details.

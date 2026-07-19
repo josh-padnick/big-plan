@@ -19,13 +19,12 @@ This is what a rendered plan looks like:
 The viewer follows your OS preference and remembers your choice when you override it.
 [See the full rendered plan in your browser.](/demo/)
 
-Some parts of this plan are plain-old markdown.
+Some parts of this plan are ordinary Markdown.
 
-But take a look at the **code diff** and **HTTP endpoint** sections.
-Those are examples of [big plan components](/components/) that are specially designed to render common types of information in a first-class way.
-Big Plan ships today with over a dozen components, and because it's open source, it's easy to add more as we find the need.
+But take a look at the **code diff** and the warning under **Risks and mitigations**.
+Those use [`CodeDiff`](/components/code-diff/) and [`Callout`](/components/callout/), the first [typed components](/components/) Big Plan ships for presenting common plan information in a first-class way.
+The diff adds switchable views, line numbers, counts, copy actions, full-screen viewing, and a line-anchored annotation without asking the agent to design custom HTML.
 
-But wait, there's more!
-You can also comment on specific parts of a big-plan, track plan versions, navigate the plan with vim shortcuts, and enforce plan templates.
-Plus, it all runs locally without the need for any third-party service.
+The output runs locally without a third-party service and remains readable without JavaScript.
+Comments, live agent chat, and versioned change review are on the [roadmap](/intro/roadmap/).
 To see it in action, [install it](/intro/installation/).

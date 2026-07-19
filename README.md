@@ -10,7 +10,8 @@ Big Plan makes reviewing agent plans a first-class experience.
 Planning is an essential part of effective development with AI, and it deserves a first-class experience.
 Big Plan is built around one question: **what is the best way to review a plan and reach agreement on it, before an agent acts?**
 
-An agent writes its plan as structured MDX, and Big Plan renders it into a rich local review document: section navigation, typed blocks for diagrams, schemas, API endpoints and code diffs, a live chat connection to the authoring agent, highlight-to-comment threads the agent replies to in place, versioned change review, and full keyboard control.
+An agent writes its plan as structured MDX, and Big Plan renders it into a rich local review document.
+Today that means section navigation and typed callouts and code diffs; the planned review experience adds more typed blocks, live agent chat, highlight-to-comment threads, versioned change review, and full keyboard control.
 
 Big Plan focuses exclusively on that upfront moment of agreement - not code review, not project management.
 Everything runs locally, and the MDX file on your disk is the source of truth.
@@ -102,12 +103,14 @@ Generated previews remain ignored by Git.
 bun install
 bun run build           # regenerate embedded modules, then compile TypeScript to dist/
 bun run test            # vitest unit tests (regenerates embedded modules first)
-bun run lint            # ESLint conventions and architecture checks
+bun run lint            # ESLint checks plus Prettier format verification
+bun run format          # format authored files with Prettier
 bun run gen             # regenerate CSS, browser-script, and branding-asset modules
 bunx playwright test    # browser tests of the rendered viewer (build first)
 node bin/big-plan.mjs render examples/sample.mdx
 ```
 
+Formatting exclusions and their rationale are documented in [.prettierignore](.prettierignore).
 Use `bun run test`, not `bun test` - the latter invokes Bun's own test runner instead of vitest.
 
 See [AGENTS.md](AGENTS.md) for architecture and engineering rules, and [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
