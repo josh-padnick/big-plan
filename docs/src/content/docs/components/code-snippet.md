@@ -1,14 +1,9 @@
 ---
 title: CodeSnippet
-description: A planned component for annotated code excerpts with a file association, real line numbers, and line-anchored notes.
+description: A component for annotated code excerpts with a file association, real line numbers, and line-anchored notes.
 ---
 
 `CodeSnippet` shows an excerpt of existing code a reviewer must inspect line by line: a file association, real line numbers starting from the file's actual line, and `Annotation` cards anchored to the lines they explain.
-
-:::caution[In progress]
-`CodeSnippet` is a planned contract, not an available component yet.
-The current renderer rejects it as an unknown component.
-:::
 
 ## When to use it
 
@@ -86,7 +81,7 @@ Nest `Annotation` directly inside `CodeSnippet` to anchor a markdown note to spe
 | --------- | ------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `lines`   | string | Yes      | A single file-absolute line (`"47"`) or a strictly ascending inclusive range (`"47-52"`); every referenced line must fall inside the snippet's range. |
 
-The body is ordinary markdown, and an `Annotation` outside a declaring parent stays an unknown component.
+The body is ordinary markdown - though not headings, footnotes, or nested components - and must not be empty; an `Annotation` outside a declaring parent stays an unknown component.
 
 An annotation renders as a prose card immediately after the last line of its range, with a `Line N` / `Lines N-M` badge; anchor lines are accent-tinted with a gutter marker in both themes.
 
