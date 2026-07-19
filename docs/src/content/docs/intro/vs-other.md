@@ -5,7 +5,7 @@ description: How Big Plan compares to Lavish and Agent-Native Plans, and the two
 
 Big Plan is not the first tool to notice that agent plans deserve better than a wall of text.
 Two neighbors approach the same problem well, and comparing them is the clearest way to see the two bets Big Plan makes: discrete typed components, and a standalone local file you never sign in to view.
-Both bets come straight from Big Plan's [philosophy](/intro/philosophy/) of what a plan should be.
+Both bets come straight from Big Plan's [philosophy](/intro/what-is-big-plan/#philosophy) of what a plan should be.
 
 ## Big Plan vs. Lavish
 

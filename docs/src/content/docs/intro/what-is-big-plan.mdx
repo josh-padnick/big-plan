@@ -13,6 +13,20 @@ Run it in your favorite agent harness (Claude Code, Codex, etc.) as a skill like
 Give me a /big-plan for implementing the following feature...
 ```
 
+## Philosophy
+
+Three beliefs drive every design decision.
+
+**Plans are for human review.**
+The one reader who matters is the human who has to agree to the plan, so everything is judged by one test: does it help a person read, question, and decide?
+
+**Components make review first-class.**
+A code change wants a diff, a schema wants a table, a risk wants to stand out.
+Typed components render each kind of information the way humans consume it, instead of flattening everything into prose.
+
+**Plans are local and private.**
+Plans carry sensitive context, so the whole loop stays on your disk: no account, no server, no external requests.
+
 ## Let's see an example
 
 This is what a rendered plan looks like:

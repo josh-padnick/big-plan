@@ -19,7 +19,6 @@ export const SIDEBAR: readonly SidebarGroup[] = [
       { label: "Installation", slug: "intro/installation" },
       { label: "Features", slug: "intro/features" },
       { label: "Why Big Plan?", slug: "intro/why-big-plan" },
-      { label: "Philosophy", slug: "intro/philosophy" },
       { label: "Big Plan vs. Other", slug: "intro/vs-other" },
       { label: "Roadmap", slug: "intro/roadmap" },
     ],
