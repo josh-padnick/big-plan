@@ -9,12 +9,10 @@ import {
   type BlockAttributeSchema,
   type BlockRenderer,
 } from "../registry.js";
-import {
-  INFO_ICON,
-  LIGHTBULB_ICON,
-  OCTAGON_ALERT_ICON,
-  TRIANGLE_ALERT_ICON,
-} from "./callout-icons.js";
+import { INFO_ICON } from "../../../icons/lucide/info.js";
+import { LIGHTBULB_ICON } from "../../../icons/lucide/lightbulb.js";
+import { OCTAGON_ALERT_ICON } from "../../../icons/lucide/octagon-alert.js";
+import { TRIANGLE_ALERT_ICON } from "../../../icons/lucide/triangle-alert.js";
 
 type CalloutConfig = {
   readonly defaultTitle: string;

@@ -5,7 +5,6 @@
 import type { Element, ElementContent, Root, Text } from "hast";
 import type { Nodes as MarkdownNode, Root as MarkdownRoot } from "mdast";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
-import { COPY_ICON } from "../../code-block/code-block-icons.js";
 import {
   validateBlockAttributes,
   type BlockAttributeSchema,
@@ -13,15 +12,14 @@ import {
   type ScopedChild,
 } from "../registry.js";
 import type { DiagnosticCollector } from "../diagnostics.js";
-import {
-  COLUMNS_ICON,
-  ELLIPSIS_ICON,
-  FILE_ICON,
-  MAXIMIZE_ICON,
-  MESSAGE_SQUARE_ICON,
-  MINIMIZE_ICON,
-  ROWS_ICON,
-} from "./code-diff-icons.js";
+import { COLUMNS_ICON } from "../../../icons/lucide/columns-2.js";
+import { COPY_ICON } from "../../../icons/lucide/copy.js";
+import { ELLIPSIS_ICON } from "../../../icons/lucide/ellipsis.js";
+import { FILE_ICON } from "../../../icons/lucide/file.js";
+import { MAXIMIZE_ICON } from "../../../icons/lucide/maximize-2.js";
+import { MESSAGE_SQUARE_ICON } from "../../../icons/lucide/message-square.js";
+import { MINIMIZE_ICON } from "../../../icons/lucide/minimize-2.js";
+import { ROWS_ICON } from "../../../icons/lucide/rows-2.js";
 import { pairDiffLines, parseUnifiedDiff } from "./parse-unified-diff.js";
 import type {
   DiffHunk,

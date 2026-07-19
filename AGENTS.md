@@ -110,6 +110,7 @@ The unenforced conventions to hold by hand:
 - Single-object args for multi-parameter functions; immutable data (`readonly`, `const`).
 - Colocate code and tests by feature; kebab-case file names.
 - Every authored file starts with a file-level comment saying what it owns or why it exists; every non-trivial function gets a concise description above it (trivial one-liners stay uncommented); comments explain why, not what.
+- Icons all come from Lucide and live one file per icon in `src/render/icons/lucide/`, named by the Lucide catalog name; a component never defines icon path data locally.
 - Generated files always carry `.generated.` in their name (for example `global.generated.ts`) and are never edited by hand.
   They are committed so the codebase is scannable without running the generators; after changing a generator or its inputs, run `bun run gen` and commit the regenerated output alongside (CI fails on drift).
 - `global.css` owns design tokens, palettes, and page-level rules only; component-specific styles are colocated with the component and imported from `global.css`; authored markup prefers Tailwind utilities, and stylesheet rules are reserved for variants, state, pseudo-elements, and script-created elements.

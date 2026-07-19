@@ -3,7 +3,8 @@
 
 import type { Element, Root, RootContent } from "hast";
 import { renderLucideIcon } from "../../icons/lucide-icon.js";
-import { CHECK_ICON, COPY_ICON } from "./code-block-icons.js";
+import { CHECK_ICON } from "../../icons/lucide/check.js";
+import { COPY_ICON } from "../../icons/lucide/copy.js";
 
 // This data contract is shared with the browser copy behavior so a future
 // CodeSnippet component can opt in without depending on Markdown conversion.

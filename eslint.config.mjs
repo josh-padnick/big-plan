@@ -71,7 +71,7 @@ export default tseslint.config(
       blocks: {
         files: ["src/render/markdown/blocks/**/*.ts"],
         imports: ["**/markdown/blocks/**"],
-        mayImport: ["icons", "codeBlock"],
+        mayImport: ["icons"],
       },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
