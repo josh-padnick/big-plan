@@ -10,7 +10,7 @@ hero:
     light: ../../assets/viewer-light.png
     dark: ../../assets/viewer-dark.png
   actions:
-    - text: Installation
+    - text: Install
       link: /intro/installation/
       icon: right-arrow
     - text: See a rendered plan
@@ -24,10 +24,15 @@ The static markdown viewer works today; the rest of the review experience is sti
 :::
 
 Big Plan turns your agent's markdown plan into a document built for review, so you reach real agreement before the agent acts.
-One command, one self-contained HTML file, everything on your machine:
 
-```sh
-npx big-plan render plan.md
+Give this prompt to your coding agent to install it:
+
+```text
+Install Big Plan for me using `npm i -g big-plan`, then read
+https://big-plan.ai/setup.md and set yourself up to use it.
 ```
 
-[What is Big Plan?](/intro/what-is-big-plan/) · [Why Big Plan?](/intro/why-big-plan/) · [Roadmap](/intro/roadmap/) · [The viewer](/guides/the-viewer/)
+Your agent reads [setup.md](/setup.md) and wires the plan-review workflow into your project.
+Prefer to do it yourself? See [Installation](/intro/installation/).
+
+[What is Big Plan?](/intro/what-is-big-plan/) · [Demo](/intro/demo/) · [Walkthrough](/guides/walkthrough/) · [Components](/components/)

@@ -1,28 +1,32 @@
 ---
 title: Installation
-description: Install Big Plan and render your first plan in under a minute.
+description: Give your agent one prompt and it installs Big Plan and sets up the plan-review workflow.
 ---
 
-Big Plan is one command with no setup; install it globally or run it straight through `npx`.
+The fastest install is the one you don't do yourself.
 
-## Prerequisite
+## Give this to your coding agent
 
-Install Node.js 22 or newer.
-The published package runs under plain Node.js, so Bun is not required.
+Copy this prompt into your agent:
 
-```sh
-node --version
+```text
+Install Big Plan for me using `npm i -g big-plan`, then read
+https://big-plan.ai/setup.md and set yourself up to use it.
 ```
 
-## Run it without installing
+The agent installs the CLI, reads [setup.md](/setup.md), adopts the plan-review workflow, and adds the rule to your project's agent instructions so every future session keeps it.
 
-`npx` fetches and runs the CLI in one step:
+## Or install it yourself
+
+Big Plan needs Node.js 22 or newer; the published package runs under plain Node.js, so Bun is not required.
+
+Run it with no install at all:
 
 ```sh
 npx big-plan render plan.md
 ```
 
-## Or install it globally
+Or install it globally:
 
 ```sh
 npm install -g big-plan
@@ -46,20 +50,6 @@ Open `plan.html` in your browser, and you should see this:
 ![The example plan rendered in the Big Plan viewer, with section navigation, a comparison table, and themed reading column.](../../../assets/viewer-light.png)
 
 The output is one self-contained HTML file: styling, behavior, and branding embedded, no external requests, readable even with JavaScript disabled.
-
-## Use it with your agent
-
-The real workflow starts with your agent writing the plan.
-Give your agent an instruction like:
-
-```text
-Before writing any code, write your implementation plan to plan.md,
-run `npx big-plan render plan.md`, and ask me to review the rendered
-plan. Do not start implementing until I agree.
-```
-
-When you want changes, tell the agent; it revises the file, renders again, and you review again.
-See [For Agents](/for-agents/) for the operational version of this workflow.
 
 ## Next steps
 
