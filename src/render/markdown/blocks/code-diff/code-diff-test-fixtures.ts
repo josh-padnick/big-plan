@@ -3,7 +3,7 @@
 
 import type { Element, ElementContent } from "hast";
 import { createDiagnosticCollector } from "../diagnostics.js";
-import type { BlockAttributeValue, ScopedChild } from "../registry.js";
+import type { BlockAttributeValue, ScopedChild } from "../block-contract.js";
 import { renderCodeDiff } from "./code-diff.js";
 
 const POSITION = {

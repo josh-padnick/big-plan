@@ -3,12 +3,13 @@
 
 import type { Element } from "hast";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
-import type { IconNode } from "../../../icons/lucide-icon.js";
+import type { LucideIcon } from "../../../icons/lucide-icon.js";
 import {
   validateBlockAttributes,
   type BlockAttributeSchema,
+  type BlockDefinition,
   type BlockRenderer,
-} from "../registry.js";
+} from "../block-contract.js";
 import { INFO_ICON } from "../../../icons/lucide/info.js";
 import { LIGHTBULB_ICON } from "../../../icons/lucide/lightbulb.js";
 import { OCTAGON_ALERT_ICON } from "../../../icons/lucide/octagon-alert.js";
@@ -16,34 +17,27 @@ import { TRIANGLE_ALERT_ICON } from "../../../icons/lucide/triangle-alert.js";
 
 type CalloutConfig = {
   readonly defaultTitle: string;
-  readonly icon: IconNode;
-  readonly iconName: string;
+  readonly icon: LucideIcon;
 };
 
 const CALLOUT_CONFIGS = {
   note: {
     defaultTitle: "Note",
     icon: INFO_ICON,
-    iconName: "info",
   },
   tip: {
     defaultTitle: "Tip",
     icon: LIGHTBULB_ICON,
-    iconName: "lightbulb",
   },
   warning: {
     defaultTitle: "Warning",
     icon: TRIANGLE_ALERT_ICON,
-    iconName: "triangle-alert",
   },
   danger: {
     defaultTitle: "Danger",
     icon: OCTAGON_ALERT_ICON,
-    iconName: "octagon-alert",
   },
 } satisfies Readonly<Record<string, CalloutConfig>>;
-
-type CalloutType = keyof typeof CALLOUT_CONFIGS;
 
 function objectKeys<const Value extends object>(
   value: Value,
@@ -58,9 +52,6 @@ const CALLOUT_SCHEMA = {
   title: { kind: "string" },
 } satisfies BlockAttributeSchema;
 
-const configForType = (value: CalloutType): CalloutConfig | undefined =>
-  Object.hasOwn(CALLOUT_CONFIGS, value) ? CALLOUT_CONFIGS[value] : undefined;
-
 const CALLOUT_CLASSES =
   // Border colors come from the stylesheet's [data-callout] rules; a
   // border-edge utility here would win the cascade and flatten the accent.
@@ -70,8 +61,8 @@ const HEADER_CLASSES =
 const TITLE_CLASSES = "callout-title text-sm leading-5";
 const BODY_CLASSES = "callout-body text-ink";
 
-/** Validates and renders one Callout typed block. */
-export const renderCallout: BlockRenderer = ({
+// Validates and renders one Callout behind the feature-owned block definition.
+const renderCallout: BlockRenderer = ({
   attributes,
   children,
   position,
@@ -85,10 +76,7 @@ export const renderCallout: BlockRenderer = ({
     schema: CALLOUT_SCHEMA,
   });
   const type = validated.type ?? "note";
-  const config = configForType(type);
-  if (config === undefined) {
-    throw new Error(`Callout ${type} configuration is missing`);
-  }
+  const config = CALLOUT_CONFIGS[type];
   const title = validated.title ?? config.defaultTitle;
 
   return {
@@ -106,7 +94,6 @@ export const renderCallout: BlockRenderer = ({
         children: [
           renderLucideIcon({
             icon: config.icon,
-            name: config.iconName,
             hidden: false,
           }),
           {
@@ -126,3 +113,8 @@ export const renderCallout: BlockRenderer = ({
     ],
   };
 };
+
+/** Declares Callout's complete typed-block integration contract. */
+export const CALLOUT_BLOCK_DEFINITION = {
+  render: renderCallout,
+} satisfies BlockDefinition;

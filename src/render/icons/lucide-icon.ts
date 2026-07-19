@@ -12,19 +12,22 @@
 
 import type { Element } from "hast";
 
-export type IconNode = ReadonlyArray<
+type IconNode = ReadonlyArray<
   readonly [tagName: string, properties: Readonly<Record<string, string>>]
 >;
+
+export type LucideIcon = {
+  readonly name: string;
+  readonly node: IconNode;
+};
 
 // Builds one decorative Lucide SVG; the button or other owning control keeps
 // responsibility for the accessible name.
 export const renderLucideIcon = ({
   icon,
-  name,
   hidden,
 }: {
-  readonly icon: IconNode;
-  readonly name: string;
+  readonly icon: LucideIcon;
   readonly hidden: boolean;
 }): Element => ({
   type: "element",
@@ -40,10 +43,10 @@ export const renderLucideIcon = ({
     strokeLinecap: "round",
     strokeLinejoin: "round",
     ariaHidden: "true",
-    "data-lucide": name,
+    "data-lucide": icon.name,
     ...(hidden ? { hidden: true } : {}),
   },
-  children: icon.map(([tagName, properties]) => ({
+  children: icon.node.map(([tagName, properties]) => ({
     type: "element",
     tagName,
     properties: { ...properties },

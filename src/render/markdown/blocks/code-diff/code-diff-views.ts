@@ -49,7 +49,6 @@ const annotationCard = (annotation: AnchoredAnnotation): Element => ({
   children: [
     renderLucideIcon({
       icon: MESSAGE_SQUARE_ICON,
-      name: "message-square",
       hidden: false,
     }),
     {

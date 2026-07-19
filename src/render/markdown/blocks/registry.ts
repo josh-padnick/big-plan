@@ -2,196 +2,123 @@
 // centralized form validation, scoped child collection, depth-first global
 // dispatch, and removal of every MDX node.
 
-import type { Element, ElementContent, Root, RootContent } from "hast";
-import type { Root as MarkdownRoot } from "mdast";
-import { renderCallout } from "./callout/callout.js";
-import {
-  renderCodeDiff,
-  validateCodeDiffMarkdown,
-} from "./code-diff/code-diff.js";
+import type { Element, Root, RootContent } from "hast";
+import type { Nodes as MarkdownNode, Root as MarkdownRoot } from "mdast";
+import type {
+  BlockAttributeValue,
+  BlockDefinition,
+  MarkdownBodyNodeKind,
+  MarkdownBodyPolicy,
+  ScopedChild,
+} from "./block-contract.js";
+import { CALLOUT_BLOCK_DEFINITION } from "./callout/callout.js";
+import { CODE_DIFF_BLOCK_DEFINITION } from "./code-diff/code-diff.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
 
 type MdxJsxFlowElement = Extract<
   RootContent,
   { readonly type: "mdxJsxFlowElement" }
 >;
-type NodePosition = Root["position"];
-
-export type BlockAttributeValue = string | boolean;
-
-export type BlockAttributeSchemaEntry =
-  | {
-      readonly kind: "enum";
-      readonly values: ReadonlyArray<string>;
-      readonly required?: boolean;
-    }
-  | {
-      readonly kind: "string";
-      readonly required?: boolean;
-      readonly nonEmpty?: boolean;
-    }
-  | { readonly kind: "booleanShorthand" };
-
-export type BlockAttributeSchema = Readonly<
-  Record<string, BlockAttributeSchemaEntry>
->;
-
-type ValidatedAttributeValue<Entry extends BlockAttributeSchemaEntry> =
-  Entry extends {
-    readonly kind: "enum";
-    readonly values: ReadonlyArray<infer Value extends string>;
-  }
-    ? Value | undefined
-    : Entry extends { readonly kind: "string" }
-      ? string | undefined
-      : true | undefined;
-
-export type ValidatedBlockAttributes<Schema extends BlockAttributeSchema> = {
-  readonly [Name in keyof Schema]: ValidatedAttributeValue<Schema[Name]>;
-};
-
-export type ScopedChild = {
-  readonly name: string;
-  readonly attributes: Readonly<Record<string, BlockAttributeValue>>;
-  readonly children: ReadonlyArray<ElementContent>;
-  readonly position: NodePosition;
-};
-
-export type BlockRenderer = (input: {
-  readonly attributes: Readonly<Record<string, BlockAttributeValue>>;
-  readonly children: ReadonlyArray<ElementContent>;
-  readonly scopedChildren: ReadonlyArray<ScopedChild>;
-  readonly position: NodePosition;
-  readonly diagnostics: DiagnosticCollector;
-}) => Element;
-
-export type ScopedChildDefinition = {
-  readonly kind: "scoped-child";
-};
-
-export type BlockMarkdownValidator = (input: {
-  readonly tree: MarkdownRoot;
-  readonly diagnostics: DiagnosticCollector;
-  readonly registeredBlockNames: ReadonlySet<string>;
-}) => void;
-
-export type BlockDefinition = {
-  readonly render: BlockRenderer;
-  readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
-  readonly validateMarkdown?: BlockMarkdownValidator;
-};
 
 export const BLOCK_REGISTRY: Readonly<Record<string, BlockDefinition>> = {
-  Callout: { render: (input) => renderCallout(input) },
-  CodeDiff: {
-    render: (input) => renderCodeDiff(input),
-    scopedChildren: { Annotation: { kind: "scoped-child" } },
-    validateMarkdown: validateCodeDiffMarkdown,
-  },
+  Callout: CALLOUT_BLOCK_DEFINITION,
+  CodeDiff: CODE_DIFF_BLOCK_DEFINITION,
 };
 
 export const REGISTERED_BLOCK_NAMES: ReadonlySet<string> = new Set(
   Object.keys(BLOCK_REGISTRY),
 );
 
-/** Runs every registered block's pre-HAST Markdown validation. */
+const markdownChildren = (
+  node: MarkdownRoot | MarkdownNode,
+): ReadonlyArray<MarkdownNode> => ("children" in node ? node.children : []);
+
+const registeredBlockName = (node: MarkdownNode): string | undefined =>
+  node.type === "mdxJsxFlowElement" &&
+  node.name !== null &&
+  REGISTERED_BLOCK_NAMES.has(node.name)
+    ? node.name
+    : undefined;
+
+const prohibitedKind = (
+  node: MarkdownNode,
+): MarkdownBodyNodeKind | undefined =>
+  node.type === "heading" ||
+  node.type === "footnoteReference" ||
+  node.type === "footnoteDefinition"
+    ? node.type
+    : registeredBlockName(node) === undefined
+      ? undefined
+      : "registeredBlock";
+
+// Applies a scoped child's declared content policy recursively. Registered
+// blocks are opaque after a rejection so their internals do not add secondary
+// diagnostics for content the parent contract already excludes.
+const validateMarkdownBody = ({
+  node,
+  policy,
+  diagnostics,
+}: {
+  readonly node: MarkdownNode;
+  readonly policy: MarkdownBodyPolicy;
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const kind = prohibitedKind(node);
+  const message = kind === undefined ? undefined : policy.prohibited[kind];
+  if (message !== undefined) {
+    diagnostics.add({ message, position: node.position });
+  }
+  if (kind === "registeredBlock") {
+    return;
+  }
+  for (const child of markdownChildren(node)) {
+    validateMarkdownBody({ node: child, policy, diagnostics });
+  }
+};
+
+// Finds registered parents anywhere in Markdown and applies each direct
+// scoped child's declarative body policy before Markdown becomes HAST.
+const validateRegisteredBlockMarkdown = ({
+  node,
+  diagnostics,
+}: {
+  readonly node: MarkdownRoot | MarkdownNode;
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const blockName =
+    node.type === "root" ? undefined : registeredBlockName(node);
+  const definition =
+    blockName === undefined ? undefined : BLOCK_REGISTRY[blockName];
+  for (const child of markdownChildren(node)) {
+    const scopedDefinition =
+      child.type !== "mdxJsxFlowElement" || child.name === null
+        ? undefined
+        : definition?.scopedChildren?.[child.name];
+    if (scopedDefinition !== undefined) {
+      const policy = scopedDefinition.markdownBody;
+      if (policy !== undefined) {
+        for (const bodyChild of markdownChildren(child)) {
+          validateMarkdownBody({
+            node: bodyChild,
+            policy,
+            diagnostics,
+          });
+        }
+      }
+      if (policy?.prohibited.registeredBlock !== undefined) {
+        continue;
+      }
+    }
+    validateRegisteredBlockMarkdown({ node: child, diagnostics });
+  }
+};
+
+/** Applies every registered block's declarative pre-HAST Markdown policy. */
 export const remarkValidateBlocks =
   ({ diagnostics }: { readonly diagnostics: DiagnosticCollector }) =>
   (tree: MarkdownRoot): void => {
-    for (const definition of Object.values(BLOCK_REGISTRY)) {
-      definition.validateMarkdown?.({
-        tree,
-        diagnostics,
-        registeredBlockNames: REGISTERED_BLOCK_NAMES,
-      });
-    }
+    validateRegisteredBlockMarkdown({ node: tree, diagnostics });
   };
-
-// Validates shared static attribute shapes in schema order, then reports every
-// attribute outside that schema in authored order.
-export function validateBlockAttributes<
-  const Schema extends BlockAttributeSchema,
->(input: {
-  readonly block: string;
-  readonly attributes: Readonly<Record<string, BlockAttributeValue>>;
-  readonly position: NodePosition;
-  readonly diagnostics: DiagnosticCollector;
-  readonly schema: Schema;
-}): ValidatedBlockAttributes<Schema>;
-export function validateBlockAttributes({
-  block,
-  attributes,
-  position,
-  diagnostics,
-  schema,
-}: {
-  readonly block: string;
-  readonly attributes: Readonly<Record<string, BlockAttributeValue>>;
-  readonly position: NodePosition;
-  readonly diagnostics: DiagnosticCollector;
-  readonly schema: BlockAttributeSchema;
-}): Readonly<Record<string, BlockAttributeValue | undefined>> {
-  const validated: Array<readonly [string, BlockAttributeValue | undefined]> =
-    [];
-  for (const [name, entry] of Object.entries(schema)) {
-    const value = attributes[name];
-    if (entry.kind === "enum") {
-      const validValue =
-        typeof value === "string" && entry.values.includes(value)
-          ? value
-          : undefined;
-      if (validValue === undefined && (value !== undefined || entry.required)) {
-        diagnostics.add({
-          message: `${value === undefined ? "Missing required" : "Invalid value for"} attribute "${name}"; expected one of: ${entry.values.join(", ")}`,
-          position,
-        });
-      }
-      validated.push([name, validValue]);
-      continue;
-    }
-    if (entry.kind === "string") {
-      const validValue = typeof value === "string" ? value : undefined;
-      if (value === undefined && entry.required) {
-        diagnostics.add({
-          message: `Missing required attribute "${name}"; expected a string`,
-          position,
-        });
-      } else if (value !== undefined && validValue === undefined) {
-        diagnostics.add({
-          message: `Attribute "${name}" must be a string`,
-          position,
-        });
-      } else if (entry.nonEmpty && validValue?.trim() === "") {
-        diagnostics.add({
-          message: `Attribute "${name}" must be a non-empty string`,
-          position,
-        });
-      }
-      validated.push([
-        name,
-        entry.nonEmpty && validValue?.trim() === "" ? undefined : validValue,
-      ]);
-      continue;
-    }
-    const validValue = value === true ? true : undefined;
-    if (value !== undefined && validValue === undefined) {
-      diagnostics.add({
-        message: `Attribute "${name}" is a shorthand boolean; use the bare form`,
-        position,
-      });
-    }
-    validated.push([name, validValue]);
-  }
-  for (const name of Object.keys(attributes)) {
-    if (!Object.hasOwn(schema, name)) {
-      diagnostics.add({
-        message: `Unknown attribute "${name}" on ${block}`,
-        position,
-      });
-    }
-  }
-  return Object.fromEntries(validated);
-}
 
 const isMdxNodeType = (type: string): boolean => type.startsWith("mdx");
 

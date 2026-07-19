@@ -10,6 +10,7 @@ import { MAXIMIZE_2_ICON } from "../../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../../icons/lucide/minimize-2.js";
 import { ROWS_2_ICON } from "../../../icons/lucide/rows-2.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import type { LucideIcon } from "../../../icons/lucide-icon.js";
 
 const BUTTON_CLASSES =
   "code-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
@@ -42,10 +43,7 @@ const menuItemButton = ({
     tabIndex: -1,
     [`data-diff-${action}`]: "",
   },
-  children: [
-    renderLucideIcon({ icon: COPY_ICON, name: "copy", hidden: false }),
-    text(label),
-  ],
+  children: [renderLucideIcon({ icon: COPY_ICON, hidden: false }), text(label)],
 });
 
 // Header summary of the parsed diff; authors opt in per block via the
@@ -148,7 +146,6 @@ const actionsMenu = (): Element => ({
       children: [
         renderLucideIcon({
           icon: ELLIPSIS_ICON,
-          name: "ellipsis",
           hidden: false,
         }),
       ],
@@ -178,13 +175,11 @@ const viewToggleButton = ({
   pressed,
   label,
   icon,
-  iconName,
 }: {
   readonly view: "unified" | "split";
   readonly pressed: boolean;
   readonly label: string;
-  readonly icon: typeof COLUMNS_2_ICON;
-  readonly iconName: string;
+  readonly icon: LucideIcon;
 }): Element => ({
   type: "element",
   tagName: "button",
@@ -199,7 +194,7 @@ const viewToggleButton = ({
     "data-slot": "button",
     "data-variant": "ghost",
   },
-  children: [renderLucideIcon({ icon, name: iconName, hidden: false })],
+  children: [renderLucideIcon({ icon, hidden: false })],
 });
 
 // Opens the block alone in a near-full-screen modal dialog; the browser
@@ -221,12 +216,10 @@ const expandControlButton = (): Element => ({
   children: [
     renderLucideIcon({
       icon: MAXIMIZE_2_ICON,
-      name: "maximize-2",
       hidden: false,
     }),
     renderLucideIcon({
       icon: MINIMIZE_2_ICON,
-      name: "minimize-2",
       hidden: true,
     }),
   ],
@@ -255,14 +248,12 @@ const viewToggleGroup = (): Element => ({
       pressed: true,
       label: "Unified view",
       icon: ROWS_2_ICON,
-      iconName: "rows-2",
     }),
     viewToggleButton({
       view: "split",
       pressed: false,
       label: "Side-by-side view",
       icon: COLUMNS_2_ICON,
-      iconName: "columns-2",
     }),
   ],
 });
@@ -303,7 +294,6 @@ export const renderCodeDiffHeader = ({
         children: [
           renderLucideIcon({
             icon: FILE_ICON,
-            name: "file",
             hidden: false,
           }),
           {

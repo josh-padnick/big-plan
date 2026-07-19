@@ -8,7 +8,7 @@ import {
   type BlockAttributeSchema,
   type BlockRenderer,
   type ScopedChild,
-} from "../registry.js";
+} from "../block-contract.js";
 import type { DiagnosticCollector } from "../diagnostics.js";
 import { parseUnifiedDiff } from "./unified-diff.js";
 import type { DiffLine, UnifiedDiff } from "./unified-diff.js";

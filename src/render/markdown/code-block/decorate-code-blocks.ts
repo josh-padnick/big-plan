@@ -64,8 +64,8 @@ const decorateCodeBlocks = (node: Root | Element): void => {
         "data-variant": "ghost",
       },
       children: [
-        renderLucideIcon({ icon: COPY_ICON, name: "copy", hidden: false }),
-        renderLucideIcon({ icon: CHECK_ICON, name: "check", hidden: true }),
+        renderLucideIcon({ icon: COPY_ICON, hidden: false }),
+        renderLucideIcon({ icon: CHECK_ICON, hidden: true }),
       ],
     };
     const wrapper: Element = {
