@@ -113,7 +113,7 @@ describe("renderFileTreeDiff", () => {
     expect(after).not.toContain('"value":"old.ts"');
   });
 
-  it("should show added and removed markers only on the matching side", () => {
+  it("should keep the before pane unmarked and every marker on the after pane", () => {
     const states = contentView({
       element: render().element,
       view: "before-after",
@@ -121,11 +121,9 @@ describe("renderFileTreeDiff", () => {
     const before = JSON.stringify(states?.children[0]);
     const after = JSON.stringify(states?.children[1]);
 
-    expect(before).toContain('"data-tree-badge":"removed"');
-    expect(before).not.toContain('"data-tree-badge":"added"');
+    expect(before).not.toContain('"data-tree-badge"');
     expect(after).toContain('"data-tree-badge":"added"');
-    expect(after).not.toContain('"data-tree-badge":"removed"');
-    expect(before).toContain('"data-tree-badge":"renamed"');
+    expect(after).toContain('"data-tree-badge":"removed"');
     expect(after).toContain('"data-tree-badge":"renamed"');
   });
 });

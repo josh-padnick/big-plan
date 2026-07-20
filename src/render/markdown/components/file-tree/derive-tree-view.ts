@@ -1,5 +1,8 @@
-// Derives FileTreeDiff's before and after hierarchies from one authored tree,
-// including subtree filtering, displayed rename side, and marker sidedness.
+// Derives FileTreeDiff's before and after hierarchies from one authored tree.
+// The before tree is the unchanged snapshot - old names, no markers - while
+// the after tree carries every change marker, keeping deleted entries as
+// struck-through tombstones so removals stay visible beside what replaced
+// them.
 
 import type { TreeBadge, TreeEntry } from "./parse-tree-text.js";
 
@@ -11,13 +14,8 @@ const excludedFromSide = ({
 }: {
   readonly entry: TreeEntry;
   readonly side: FileTreeDiffSide;
-}): boolean =>
-  (side === "before" && entry.badge === "added") ||
-  (side === "after" && entry.badge === "removed");
+}): boolean => side === "before" && entry.badge === "added";
 
-// The before pane is a snapshot of today's tree, so it stays unmarked except
-// for entries that will disappear (removed files and the old names of
-// renames); every other change reads on the after side where it lands.
 /** Returns the change marker that applies on one side of the diff. */
 export const markerForTreeSide = ({
   entry,
@@ -25,21 +23,7 @@ export const markerForTreeSide = ({
 }: {
   readonly entry: TreeEntry;
   readonly side: FileTreeDiffSide;
-}): TreeBadge | undefined => {
-  if (entry.badge === "renamed") {
-    return entry.badge;
-  }
-  if (side === "before" && entry.badge === "removed") {
-    return entry.badge;
-  }
-  if (
-    side === "after" &&
-    (entry.badge === "added" || entry.badge === "modified")
-  ) {
-    return entry.badge;
-  }
-  return undefined;
-};
+}): TreeBadge | undefined => (side === "after" ? entry.badge : undefined);
 
 /** Filters and renames a hierarchy for one state without dropping empty dirs. */
 export const deriveTreeView = ({

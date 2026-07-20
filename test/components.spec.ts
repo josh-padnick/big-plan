@@ -172,22 +172,26 @@ test("should review planned file changes in combined and before/after trees", as
     await expect(before).toContainText("legacy-cache-counter.ts");
     await expect(before).not.toContainText("refresh-queue.ts");
     await expect(after).toContainText("refresh-queue.ts");
-    await expect(after).not.toContainText("legacy-cache-counter.ts");
+    await expect(after).toContainText("legacy-cache-counter.ts");
     await expect(before).toContainText("catalog-worker.env");
     await expect(before).not.toContainText("catalog-cache-worker.env");
     await expect(after).toContainText("catalog-cache-worker.env");
     await expect(after).not.toContainText("catalog-worker.env");
   });
 
-  await test.step("before stays a snapshot: only disappearing entries carry markers", async () => {
-    await expect(before.locator('[data-tree-badge="modified"]')).toHaveCount(0);
-    await expect(before.locator('[data-tree-badge="added"]')).toHaveCount(0);
-    await expect(before.locator('[data-tree-badge="removed"]')).not.toHaveCount(
-      0,
-    );
-    await expect(after.locator('[data-tree-badge="modified"]')).not.toHaveCount(
-      0,
-    );
+  await test.step("before is untouched; every marker reads on the after tree", async () => {
+    await expect(before.locator("[data-tree-badge]")).toHaveCount(0);
+    for (const badge of ["added", "modified", "removed", "renamed"]) {
+      await expect(
+        after.locator(`[data-tree-badge="${badge}"]`),
+      ).not.toHaveCount(0);
+    }
+    const tombstone = after.locator('[data-tree-badge="removed"]').first();
+    await expect(tombstone.locator(".file-tree-label")).toHaveText("Deleted");
+    const decoration = await tombstone
+      .locator(".file-tree-name")
+      .evaluate((element) => getComputedStyle(element).textDecorationLine);
+    expect(decoration).toBe("line-through");
   });
 
   await test.step("the panes sit side by side on a wide viewport", async () => {

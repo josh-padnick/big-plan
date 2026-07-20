@@ -1,5 +1,6 @@
-// Tests FileTreeDiff state derivation, including subtree filtering, empty
-// surviving directories, explicit rename names, and marker sidedness.
+// Tests FileTreeDiff state derivation: the unmarked before snapshot, the
+// fully marked after tree with deletion tombstones, subtree filtering, empty
+// surviving directories, and explicit rename names.
 
 import { describe, expect, it } from "vitest";
 import { deriveTreeView } from "./derive-tree-view.js";
@@ -22,7 +23,7 @@ const source = `src/
 const parsedEntries = () => parseTreeText({ source, mode: "diff" }).entries;
 
 describe("deriveTreeView", () => {
-  it("should skip added subtrees before and removed subtrees after", () => {
+  it("should skip added subtrees before and keep removed subtrees after as tombstones", () => {
     const before = JSON.stringify(
       deriveTreeView({
         entries: parsedEntries(),
@@ -40,28 +41,23 @@ describe("deriveTreeView", () => {
     expect(before).not.toContain("only-after.ts");
     expect(before).toContain("removed/");
     expect(before).toContain("only-before.ts");
-    expect(after).not.toContain("removed/");
-    expect(after).not.toContain("only-before.ts");
+    expect(after).toContain("removed/");
+    expect(after).toContain("only-before.ts");
     expect(after).toContain("added/");
     expect(after).toContain("only-after.ts");
   });
 
   it("should retain directories emptied by state filtering", () => {
     const before = deriveTreeView({ entries: parsedEntries(), side: "before" });
-    const after = deriveTreeView({ entries: parsedEntries(), side: "after" });
     const beforeChildren = before[0]?.children ?? [];
-    const afterChildren = after[0]?.children ?? [];
 
     expect(
       beforeChildren.find((entry) => entry.name === "emptied-before/")
         ?.children,
     ).toEqual([]);
-    expect(
-      afterChildren.find((entry) => entry.name === "emptied-after/")?.children,
-    ).toEqual([]);
   });
 
-  it("should select rename names and apply markers only on their relevant sides", () => {
+  it("should select rename names and keep every marker on the after side", () => {
     const before = JSON.stringify(
       deriveTreeView({
         entries: parsedEntries(),
@@ -79,14 +75,11 @@ describe("deriveTreeView", () => {
     expect(before).not.toContain('"name":"new.ts"');
     expect(after).toContain('"name":"new.ts"');
     expect(after).not.toContain('"name":"old.ts"');
-    expect(before).toContain('"badge":"removed"');
-    expect(before).not.toContain('"badge":"added"');
+    // The before tree is by definition unchanged, so it carries no markers;
+    // every change, including deletion tombstones, reads on the after tree.
+    expect(before).not.toContain('"badge"');
     expect(after).toContain('"badge":"added"');
-    expect(after).not.toContain('"badge":"removed"');
-    // The before pane is a snapshot of today's tree: only disappearing
-    // entries are marked, so modifications read on the after side alone.
-    expect(before).not.toContain('"badge":"modified"');
-    expect(before).toContain('"badge":"renamed"');
+    expect(after).toContain('"badge":"removed"');
     expect(after).toContain('"badge":"modified"');
     expect(after).toContain('"badge":"renamed"');
   });
