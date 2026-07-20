@@ -10,10 +10,14 @@ html:has(.component-dialog[open]) {
   article .component-dialog {
     display: flex;
     overflow: visible;
-    width: min(96vw, 100rem);
-    height: 92vh;
-    max-width: none;
-    max-height: none;
+    /* The dialog hugs its content so a narrow component is not stranded in
+       an empty modal; only past these caps do the component's own scrollbars
+       take over. */
+    width: fit-content;
+    min-width: min(48rem, 96vw);
+    max-width: min(96vw, 100rem);
+    height: fit-content;
+    max-height: 92vh;
     /* Preflight zeroes dialog margins, which pins the fixed-position modal
        to the top-left; auto restores user-agent centering. */
     margin: auto;

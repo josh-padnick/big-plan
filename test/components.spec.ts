@@ -252,6 +252,12 @@ test("should review planned file changes in combined and before/after trees", as
     const dialog = page.locator("dialog.component-dialog");
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAccessibleName("Planned changes");
+    // The dialog hugs the tree instead of claiming the whole viewport.
+    const size = await dialog.evaluate((element) => ({
+      width: element.getBoundingClientRect().width,
+      viewport: window.innerWidth,
+    }));
+    expect(size.width).toBeLessThan(size.viewport * 0.9);
     await expect(dialog.locator("[data-file-tree-diff]")).toHaveAttribute(
       "data-tree-expanded",
       "",
