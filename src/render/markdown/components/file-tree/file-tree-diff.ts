@@ -166,6 +166,7 @@ const combinedView = (entries: ReadonlyArray<TreeEntry>): Element => ({
   },
   children: [
     renderTreeHierarchy({
+      noteDisplay: "hint",
       entries,
       nameForEntry: combinedName,
       badgeForEntry: (entry) => entry.badge,
@@ -218,6 +219,7 @@ const statePane = ({
       properties: { className: BODY_CLASSES.split(" ") },
       children: [
         renderTreeHierarchy({
+          noteDisplay: "hint",
           entries,
           nameForEntry: (entry) => entry.name,
           badgeForEntry: (entry) => entry.badge,

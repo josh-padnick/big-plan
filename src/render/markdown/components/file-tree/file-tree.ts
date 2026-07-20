@@ -49,6 +49,7 @@ const renderFileTreeFigure = ({
       properties: { className: BODY_CLASSES.split(" ") },
       children: [
         renderTreeHierarchy({
+          noteDisplay: "inline",
           entries: model.entries,
           nameForEntry: (entry) => entry.name,
           badgeForEntry: () => undefined,

@@ -4,8 +4,19 @@
 import type { Element, Text } from "hast";
 import { FILE_ICON } from "../../../icons/lucide/file.js";
 import { FOLDER_ICON } from "../../../icons/lucide/folder.js";
+import { MESSAGE_SQUARE_ICON } from "../../../icons/lucide/message-square.js";
+import { SQUARE_ARROW_RIGHT_ICON } from "../../../icons/lucide/square-arrow-right.js";
+import { SQUARE_DOT_ICON } from "../../../icons/lucide/square-dot.js";
+import { SQUARE_MINUS_ICON } from "../../../icons/lucide/square-minus.js";
+import { SQUARE_PLUS_ICON } from "../../../icons/lucide/square-plus.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import type { LucideIcon } from "../../../icons/lucide-icon.js";
 import type { TreeBadge, TreeEntry } from "./parse-tree-text.js";
+
+// How an entry's authored note reaches the reader: FileTree keeps notes in
+// the row because they are its content, while FileTreeDiff keeps rows
+// status-first and tucks each note behind a hoverable comment hint.
+export type TreeNoteDisplay = "inline" | "hint";
 
 const LIST_CLASSES = "file-tree-list m-0 min-w-max list-none p-0";
 const CHILD_LIST_CLASSES =
@@ -15,12 +26,21 @@ const ROW_CLASSES =
 
 // Statuses read the way git tooling presents them: the file name carries the
 // change tint (with deletions struck through, via the stylesheet's badge
-// rules) and the spelled-out status sits at the row's far edge.
+// rules) and the spelled-out status sits at the row's far edge beside a
+// GitHub-style status square (the Lucide equivalents of the octicon
+// diff-added/removed/modified/renamed glyphs).
 const BADGE_LABELS: Readonly<Record<TreeBadge, string>> = {
   added: "Added",
   modified: "Modified",
   removed: "Deleted",
   renamed: "Renamed",
+};
+
+const BADGE_ICONS: Readonly<Record<TreeBadge, LucideIcon>> = {
+  added: SQUARE_PLUS_ICON,
+  modified: SQUARE_DOT_ICON,
+  removed: SQUARE_MINUS_ICON,
+  renamed: SQUARE_ARROW_RIGHT_ICON,
 };
 
 const text = (value: string): Text => ({ type: "text", value });
@@ -36,13 +56,21 @@ const badgeLabel = (badge: TreeBadge | undefined): ReadonlyArray<Element> =>
             className: [
               "file-tree-label",
               "ml-auto",
+              "inline-flex",
+              "items-center",
+              "gap-[0.3rem]",
               "pl-6",
               "font-sans",
               "text-[0.6875rem]",
               "font-semibold",
+              "[&>svg]:size-3.5",
+              "[&>svg]:shrink-0",
             ],
           },
-          children: [text(BADGE_LABELS[badge])],
+          children: [
+            renderLucideIcon({ icon: BADGE_ICONS[badge], hidden: false }),
+            text(BADGE_LABELS[badge]),
+          ],
         },
       ];
 
@@ -52,28 +80,69 @@ const entryIcon = (entry: TreeEntry): Element =>
     hidden: false,
   });
 
-const noteElement = (entry: TreeEntry): ReadonlyArray<Element> =>
-  entry.note === undefined
-    ? []
-    : [
+const noteElement = ({
+  entry,
+  noteDisplay,
+}: {
+  readonly entry: TreeEntry;
+  readonly noteDisplay: TreeNoteDisplay;
+}): ReadonlyArray<Element> => {
+  if (entry.note === undefined) {
+    return [];
+  }
+  if (noteDisplay === "inline") {
+    return [
+      {
+        type: "element",
+        tagName: "span",
+        properties: {
+          className: ["file-tree-note", "font-sans", "text-xs", "text-muted"],
+        },
+        children: [text(`- ${entry.note}`)],
+      },
+    ];
+  }
+  // The native title tooltip serves sighted hover; the visually hidden text
+  // keeps the note in the accessibility tree and in copied selections.
+  return [
+    {
+      type: "element",
+      tagName: "span",
+      properties: {
+        className: [
+          "file-tree-note-hint",
+          "inline-flex",
+          "cursor-help",
+          "text-muted",
+          "hover:text-ink",
+          "[&>svg]:size-3.5",
+          "[&>svg]:shrink-0",
+        ],
+        title: entry.note,
+      },
+      children: [
+        renderLucideIcon({ icon: MESSAGE_SQUARE_ICON, hidden: false }),
         {
           type: "element",
           tagName: "span",
-          properties: {
-            className: ["file-tree-note", "font-sans", "text-xs", "text-muted"],
-          },
-          children: [text(`- ${entry.note}`)],
+          properties: { className: ["sr-only"] },
+          children: [text(entry.note)],
         },
-      ];
+      ],
+    },
+  ];
+};
 
 const entryRow = ({
   entry,
   name,
   badge,
+  noteDisplay,
 }: {
   readonly entry: TreeEntry;
   readonly name: string;
   readonly badge: TreeBadge | undefined;
+  readonly noteDisplay: TreeNoteDisplay;
 }): Element => ({
   type: "element",
   tagName: "div",
@@ -98,7 +167,7 @@ const entryRow = ({
       },
       children: [text(name)],
     },
-    ...noteElement(entry),
+    ...noteElement({ entry, noteDisplay }),
     ...badgeLabel(badge),
   ],
 });
@@ -108,11 +177,13 @@ export const renderTreeHierarchy = ({
   entries,
   nameForEntry,
   badgeForEntry,
+  noteDisplay,
   nested = false,
 }: {
   readonly entries: ReadonlyArray<TreeEntry>;
   readonly nameForEntry: (entry: TreeEntry) => string;
   readonly badgeForEntry: (entry: TreeEntry) => TreeBadge | undefined;
+  readonly noteDisplay: TreeNoteDisplay;
   readonly nested?: boolean;
 }): Element => ({
   type: "element",
@@ -129,6 +200,7 @@ export const renderTreeHierarchy = ({
         entry,
         name: nameForEntry(entry),
         badge: badgeForEntry(entry),
+        noteDisplay,
       }),
       ...(entry.children.length === 0
         ? []
@@ -137,6 +209,7 @@ export const renderTreeHierarchy = ({
               entries: entry.children,
               nameForEntry,
               badgeForEntry,
+              noteDisplay,
               nested: true,
             }),
           ]),

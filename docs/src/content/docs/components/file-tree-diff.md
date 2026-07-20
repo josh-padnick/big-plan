@@ -68,7 +68,8 @@ It must carry at least one change status; a tree with none is rejected with a po
 - Append a status in brackets after the name: `[added]`, `[modified]`, `[removed]`, or `[renamed]`.
 - Write a rename as `old -> new [renamed]`; both sides must stay files or stay directories, and the arrow only pairs with `[renamed]`.
 
-Each status tints the entry name in its change color and spells out Added, Modified, Deleted, or Renamed at the row's edge, the way git tooling presents working-tree status; deleted names are additionally struck through.
+Each status tints the entry name in its change color and spells out Added, Modified, Deleted, or Renamed at the row's edge beside a GitHub-style status square, the way git tooling presents working-tree status; deleted names are additionally struck through.
+A note on an entry renders as a hoverable comment hint rather than inline text, keeping rows status-first; the note stays available to assistive technology and in copied selections.
 Every violation - an unknown badge, a rename without its `[renamed]` badge, or a tree with no change at all - reports a positional diagnostic.
 
 ## Views

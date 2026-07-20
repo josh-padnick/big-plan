@@ -92,15 +92,18 @@ test("should review planned file changes in combined and before/after trees", as
   await test.step("every change kind tints its name and spells its status at the row edge", async () => {
     const badgedRows = combined.locator("[data-tree-badge]");
     await expect(badgedRows).toHaveCount(5);
-    const labels: ReadonlyArray<readonly [string, string]> = [
-      ["added", "Added"],
-      ["modified", "Modified"],
-      ["removed", "Deleted"],
-      ["renamed", "Renamed"],
+    const labels: ReadonlyArray<readonly [string, string, string]> = [
+      ["added", "Added", "square-plus"],
+      ["modified", "Modified", "square-dot"],
+      ["removed", "Deleted", "square-minus"],
+      ["renamed", "Renamed", "square-arrow-right"],
     ];
-    for (const [badge, label] of labels) {
+    for (const [badge, label, statusIcon] of labels) {
       const row = combined.locator(`[data-tree-badge="${badge}"]`).first();
       await expect(row.locator(".file-tree-label")).toHaveText(label);
+      await expect(
+        row.locator(`.file-tree-label > svg[data-lucide="${statusIcon}"]`),
+      ).toBeVisible();
       const style = await row.evaluate((element) => {
         const name = element.querySelector(".file-tree-name");
         const status = element.querySelector(".file-tree-label");
@@ -140,6 +143,22 @@ test("should review planned file changes in combined and before/after trees", as
         .locator('[data-tree-badge="added"] > svg[data-lucide="file"]')
         .first(),
     ).toBeVisible();
+  });
+
+  await test.step("comments tuck behind hoverable hints", async () => {
+    const hint = combined
+      .locator('[data-tree-badge="added"] .file-tree-note-hint')
+      .first();
+    await expect(hint).toHaveAttribute(
+      "title",
+      "Deduplicate refresh jobs by cache key.",
+    );
+    await expect(
+      hint.locator('svg[data-lucide="message-square"]'),
+    ).toBeVisible();
+    await expect(
+      combined.getByText("- Deduplicate refresh jobs by cache key."),
+    ).toHaveCount(0);
   });
 
   await test.step("before and after show the matching state and rename", async () => {
