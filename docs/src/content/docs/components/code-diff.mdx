@@ -3,11 +3,7 @@ title: CodeDiff
 description: A reviewable single-file unified diff - unified and side-by-side views, line numbers, counts, an actions menu, and a full-screen mode.
 ---
 
-import ThemeImage from "../../../components/ThemeImage.astro";
-import splitLight from "../../../assets/components/code-diff-split-light.png";
-import splitDark from "../../../assets/components/code-diff-split-dark.png";
-import annotationLight from "../../../assets/components/annotation-card-light.png";
-import annotationDark from "../../../assets/components/annotation-card-dark.png";
+import ThemeFrame from "../../../components/ThemeFrame.astro";
 
 `CodeDiff` shows a proposed change to one file the way a code review tool would: removed lines tinted red, added lines tinted green, under a header naming the file.
 
@@ -15,10 +11,13 @@ The plan author pastes ordinary `git diff` output for that file into the compone
 
 ## How it looks
 
-<ThemeImage
-  light={splitLight}
-  dark={splitDark}
-  alt="A CodeDiff component in side-by-side view with line numbers, header stats, and the actions menu open"
+A live `CodeDiff` with line numbers and header change counts - flip the view toggle to compare side by side, and open the actions menu for the copy actions:
+
+<ThemeFrame
+  light="/embeds/code-diff-light.html"
+  dark="/embeds/code-diff-dark.html"
+  title="A live CodeDiff with line numbers, header change counts, a view toggle, and an actions menu"
+  height="18rem"
 />
 
 ## When to use it
@@ -109,10 +108,13 @@ An annotation renders as a prose card after the final line of its range, with a 
 - Hovering an annotation or any of its anchored lines highlights both, so the pairing reads at a glance.
 - Long cards gain a progressive `View more` / `View less` disclosure, and the reader's expanded choice survives responsive layout changes; without JavaScript the full content is always present.
 
-<ThemeImage
-  light={annotationLight}
-  dark={annotationDark}
-  alt="An annotation card beneath its line range, with the accent spine on the covered lines"
+A live annotated diff - hover the card or any covered line and both light up together:
+
+<ThemeFrame
+  light="/embeds/code-diff-annotated-light.html"
+  dark="/embeds/code-diff-annotated-dark.html"
+  title="An annotation card beneath its line range, with the accent spine on the covered lines"
+  height="27rem"
 />
 
 ## Views

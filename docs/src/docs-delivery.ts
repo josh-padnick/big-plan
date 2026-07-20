@@ -15,6 +15,9 @@ const SIDEBAR_SLUGS: readonly string[] = SIDEBAR.flatMap((group) =>
 const FULL_DOCUMENT_ORDER: readonly string[] = ["index", ...SIDEBAR_SLUGS];
 
 const THEME_IMAGE = /<ThemeImage\b[\s\S]*?\/>/g;
+// Live embed frames cannot travel to Markdown at all; the pages keep a
+// one-line prose description beside each frame so agents lose nothing.
+const THEME_FRAME = /[ \t]*<ThemeFrame\b[\s\S]*?\/>[ \t]*(?:\r?\n)*/g;
 const TABS = /<Tabs>([\s\S]*?)<\/Tabs>/g;
 const TAB_ITEM =
   /[ \t]*<TabItem\s+label=(?:"([^"]*)"|'([^']*)')>[ \t]*\r?\n([\s\S]*?)[ \t]*<\/TabItem>/g;
@@ -126,7 +129,8 @@ export const serializeMarkdownBody = (body: string): string => {
       .replace(THEME_IMAGE, (element) => {
         const alt = /\balt=(?:"([^"]*)"|'([^']*)')/.exec(element);
         return alt?.[1] ?? alt?.[2] ?? "";
-      }),
+      })
+      .replace(THEME_FRAME, ""),
   );
 };
 

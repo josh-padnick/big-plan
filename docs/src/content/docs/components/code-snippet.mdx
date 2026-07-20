@@ -3,18 +3,19 @@ title: CodeSnippet
 description: A component for code excerpts with optional file identity, file-absolute line numbers, and line-anchored notes.
 ---
 
-import ThemeImage from "../../../components/ThemeImage.astro";
-import snippetLight from "../../../assets/components/code-snippet-annotated-light.png";
-import snippetDark from "../../../assets/components/code-snippet-annotated-dark.png";
+import ThemeFrame from "../../../components/ThemeFrame.astro";
 
 `CodeSnippet` shows an excerpt of existing code a reviewer must inspect line by line, adding a file association, file-absolute line numbers, or `Annotation` cards anchored to the lines they explain.
 
 ## How it looks
 
-<ThemeImage
-  light={snippetLight}
-  dark={snippetDark}
-  alt="An annotated snippet with the file header, file-absolute gutter, tinted anchor lines, and their annotation cards"
+A live annotated snippet with the file header and file-absolute gutter - hover an annotation card or one of its tinted anchor lines and the pairing lights up:
+
+<ThemeFrame
+  light="/embeds/code-snippet-annotated-light.html"
+  dark="/embeds/code-snippet-annotated-dark.html"
+  title="An annotated snippet with the file header, file-absolute gutter, tinted anchor lines, and their annotation cards"
+  height="28rem"
 />
 
 ## When to use it

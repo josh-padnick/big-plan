@@ -3,18 +3,19 @@ title: Callout
 description: An accent-bordered panel with a typed icon and title, for the notes, tips, warnings, and dangers a plan reviewer must not miss.
 ---
 
-import ThemeImage from "../../../components/ThemeImage.astro";
-import calloutTypesLight from "../../../assets/components/callout-types-light.png";
-import calloutTypesDark from "../../../assets/components/callout-types-dark.png";
+import ThemeFrame from "../../../components/ThemeFrame.astro";
 
 `Callout` highlights information that a reviewer must read even when skimming. Callouts can be used to share a `note`, `tip`, `warning` or `danger`.
 
 ## How it looks
 
-<ThemeImage
-  light={calloutTypesLight}
-  dark={calloutTypesDark}
-  alt="All four callout types rendered in the viewer"
+All four callout types, rendered live by the viewer:
+
+<ThemeFrame
+  light="/embeds/callout-types-light.html"
+  dark="/embeds/callout-types-dark.html"
+  title="All four callout types rendered in the viewer"
+  height="34rem"
 />
 
 ## When to use it

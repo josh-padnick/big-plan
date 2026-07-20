@@ -3,31 +3,20 @@ title: FileTreeDiff
 description: A component for a project file hierarchy annotated with per-file change status, viewable as a combined tree or side-by-side before and after trees.
 ---
 
-import ThemeImage from "../../../components/ThemeImage.astro";
-import combinedLight from "../../../assets/components/file-tree-diff-combined-light.png";
-import combinedDark from "../../../assets/components/file-tree-diff-combined-dark.png";
-import panesLight from "../../../assets/components/file-tree-diff-panes-light.png";
-import panesDark from "../../../assets/components/file-tree-diff-panes-dark.png";
+import ThemeFrame from "../../../components/ThemeFrame.astro";
 
 `FileTreeDiff` renders a file hierarchy where each entry can carry a change status - added, modified, removed, or renamed - so a reviewer sees the shape of a change across the tree.
 It offers a combined change tree by default and a derived before-and-after view.
 
 ## How it looks
 
-The combined change tree is the default view:
+A live change tree - the combined view carries status-tinted names, comment hints, and the header change summary, the side-by-side view pairs the untouched Current tree with the fully annotated Planned tree and its Show diff switch, and clicking any directory row folds it:
 
-<ThemeImage
-  light={combinedLight}
-  dark={combinedDark}
-  alt="The combined change tree with status-tinted names, spelled-out statuses, comment hints, and the header change summary"
-/>
-
-The side-by-side view pairs the untouched Current tree with the fully annotated Planned tree:
-
-<ThemeImage
-  light={panesLight}
-  dark={panesDark}
-  alt="The Current and Planned trees side by side, with pane fold controls and the Show diff switch in the Planned bar"
+<ThemeFrame
+  light="/embeds/file-tree-diff-light.html"
+  dark="/embeds/file-tree-diff-dark.html"
+  title="The change tree with status-tinted names, comment hints, the header change summary, and the combined and side-by-side view toggle"
+  height="26rem"
 />
 
 ## When to use it

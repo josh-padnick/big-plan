@@ -38,6 +38,32 @@ import Example from "./Example.astro";
 `);
   });
 
+  it("should drop live embed frames while keeping the prose beside them", () => {
+    const body = `
+import ThemeFrame from "../../../components/ThemeFrame.astro";
+
+## How it looks
+
+All four callout types, rendered live by the viewer:
+
+<ThemeFrame
+  light="/embeds/callout-types-light.html"
+  dark="/embeds/callout-types-dark.html"
+  title="All four callout types rendered in the viewer"
+  height="34rem"
+/>
+
+Next paragraph.
+`;
+
+    expect(serializeMarkdownBody(body)).toBe(`## How it looks
+
+All four callout types, rendered live by the viewer:
+
+Next paragraph.
+`);
+  });
+
   it("should convert Starlight tabs into labeled Markdown sections", () => {
     const body = `
 import { Tabs, TabItem } from "@astrojs/starlight/components";

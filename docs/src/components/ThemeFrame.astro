@@ -1,0 +1,41 @@
+---
+// Renders a light and dark live-embed iframe pair, showing only the frame
+// matching the active docs theme via Starlight's theme-variant utility
+// classes. Each frame loads a self-contained document rendered through the
+// CLI's embed envelope with that color scheme forced, so the embed always
+// matches the mode the reader is browsing in. The height is per-embed,
+// sized so the shipped fixture needs no vertical scrolling in its default
+// state; anything wider or taller scrolls inside the frame, never the page.
+type Props = {
+  readonly light: string;
+  readonly dark: string;
+  readonly title: string;
+  readonly height: string;
+};
+
+const { light, dark, title, height } = Astro.props;
+---
+
+<iframe
+  src={light}
+  title={title}
+  loading="lazy"
+  class="dark:sl-hidden"
+  style={`height: ${height}`}></iframe>
+<iframe
+  src={dark}
+  title={title}
+  loading="lazy"
+  class="light:sl-hidden"
+  style={`height: ${height}`}></iframe>
+
+<style>
+  /* No display declaration here: Starlight's theme-variant sl-hidden rules
+     must keep control of which frame shows. */
+  iframe {
+    width: 100%;
+    vertical-align: top;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 0.5rem;
+  }
+</style>
