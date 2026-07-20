@@ -532,14 +532,17 @@ test("should review an annotated file-absolute code snippet", async ({
     );
     expect(rowLinked).not.toBe(rowRest);
     await page.mouse.move(0, 0);
-    const cardRest = await annotation.evaluate(
-      (element) => getComputedStyle(element).borderTopColor,
-    );
+    const cardRest = await annotation.evaluate((element) => ({
+      border: getComputedStyle(element).borderTopColor,
+      background: getComputedStyle(element).backgroundColor,
+    }));
     await row.hover();
-    const cardLinked = await annotation.evaluate(
-      (element) => getComputedStyle(element).borderTopColor,
-    );
-    expect(cardLinked).not.toBe(cardRest);
+    const cardLinked = await annotation.evaluate((element) => ({
+      border: getComputedStyle(element).borderTopColor,
+      background: getComputedStyle(element).backgroundColor,
+    }));
+    expect(cardLinked.border).not.toBe(cardRest.border);
+    expect(cardLinked.background).not.toBe(cardRest.background);
     await page.mouse.move(0, 0);
   });
 

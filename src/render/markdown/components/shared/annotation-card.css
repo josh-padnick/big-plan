@@ -20,7 +20,12 @@
   /* Hover linkage: the browser script mirrors this class onto the card and
      its anchored lines so the pairing reads at a glance. */
   article .annotation-card.annotation-hover {
-    border-color: color-mix(in srgb, var(--annotation-c) 55%, transparent);
+    border-color: color-mix(in srgb, var(--annotation-c) 60%, transparent);
+    background: color-mix(
+      in srgb,
+      var(--annotation-c) 14%,
+      var(--annotation-bg)
+    );
   }
   article .annotation-card-body > :first-child {
     margin-top: 0;
