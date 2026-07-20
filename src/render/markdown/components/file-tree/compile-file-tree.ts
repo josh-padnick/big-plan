@@ -17,31 +17,40 @@ export type CompiledFileTree = {
   readonly entries: ReadonlyArray<TreeEntry>;
 };
 
+export type CompiledFileTreeDiff = CompiledFileTree & {
+  readonly hideDiff: boolean;
+};
+
 const FILE_TREE_SCHEMA = {
   title: { kind: "string", nonEmpty: true },
 } satisfies ComponentAttributeSchema;
 
-// Runs the validation, fence extraction, and parsing shared by both trees,
-// reporting whether an authored fence was present so the diff variant can layer
-// its change-required check without re-parsing.
+// The After pane's Show diff switch defaults on; hideDiff is the authored
+// opt-out for a tree whose final state matters more than its change set.
+const FILE_TREE_DIFF_SCHEMA = {
+  title: { kind: "string", nonEmpty: true },
+  hideDiff: { kind: "booleanShorthand" },
+} satisfies ComponentAttributeSchema;
+
+// Runs the fence extraction and parsing shared by both trees, reporting
+// whether an authored fence was present so the diff variant can layer its
+// change-required check without re-parsing. Attribute validation stays with
+// each public compiler so every component reports its own schema once.
 const compileTree = ({
-  component,
+  title,
   mode,
-  attributes,
+  component,
   children,
   position,
   diagnostics,
-}: Parameters<ComponentRenderer>[0] & {
+}: Pick<
+  Parameters<ComponentRenderer>[0],
+  "children" | "position" | "diagnostics"
+> & {
+  readonly title: string | undefined;
   readonly component: string;
   readonly mode: "plain" | "diff";
 }): CompiledFileTree & { readonly hasSource: boolean } => {
-  const validated = validateComponentAttributes({
-    component,
-    attributes,
-    position,
-    diagnostics,
-    schema: FILE_TREE_SCHEMA,
-  });
   const extracted = treeSource({ children });
   if (extracted.source === undefined) {
     diagnostics.add({
@@ -67,7 +76,7 @@ const compileTree = ({
     });
   }
   return {
-    ...(validated.title === undefined ? {} : { title: validated.title }),
+    ...(title === undefined ? {} : { title }),
     entries: parsed.entries,
     hasSource: extracted.source !== undefined,
   };
@@ -77,7 +86,19 @@ const compileTree = ({
 export const compileFileTree = (
   input: Parameters<ComponentRenderer>[0],
 ): CompiledFileTree => {
-  const model = compileTree({ ...input, component: "FileTree", mode: "plain" });
+  const validated = validateComponentAttributes({
+    component: "FileTree",
+    attributes: input.attributes,
+    position: input.position,
+    diagnostics: input.diagnostics,
+    schema: FILE_TREE_SCHEMA,
+  });
+  const model = compileTree({
+    ...input,
+    title: validated.title,
+    component: "FileTree",
+    mode: "plain",
+  });
   return {
     ...(model.title === undefined ? {} : { title: model.title }),
     entries: model.entries,
@@ -87,9 +108,17 @@ export const compileFileTree = (
 /** Compiles one FileTreeDiff component, requiring at least one change badge. */
 export const compileFileTreeDiff = (
   input: Parameters<ComponentRenderer>[0],
-): CompiledFileTree => {
+): CompiledFileTreeDiff => {
+  const validated = validateComponentAttributes({
+    component: "FileTreeDiff",
+    attributes: input.attributes,
+    position: input.position,
+    diagnostics: input.diagnostics,
+    schema: FILE_TREE_DIFF_SCHEMA,
+  });
   const model = compileTree({
     ...input,
+    title: validated.title,
     component: "FileTreeDiff",
     mode: "diff",
   });
@@ -103,5 +132,6 @@ export const compileFileTreeDiff = (
   return {
     ...(model.title === undefined ? {} : { title: model.title }),
     entries: model.entries,
+    hideDiff: validated.hideDiff === true,
   };
 };

@@ -113,6 +113,19 @@ describe("renderFileTreeDiff", () => {
     expect(after).not.toContain('"value":"old.ts"');
   });
 
+  it("should let hideDiff author the switch off while defaulting to on", () => {
+    const shown = render({ attributes: { title: "Changes" } }).element;
+    expect(shown.properties["data-tree-changes"]).toBe("shown");
+    expect(JSON.stringify(shown)).toContain('"data-state":"checked"');
+
+    const { element, diagnostics } = render({
+      attributes: { title: "Changes", hideDiff: true },
+    });
+    expect(diagnostics).toEqual([]);
+    expect(element.properties["data-tree-changes"]).toBe("hidden");
+    expect(JSON.stringify(element)).toContain('"data-state":"unchecked"');
+  });
+
   it("should keep the before pane unmarked and every marker on the after pane", () => {
     const states = contentView({
       element: render().element,

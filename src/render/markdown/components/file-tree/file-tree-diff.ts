@@ -15,7 +15,7 @@ import {
 } from "../component-contract.js";
 import {
   compileFileTreeDiff,
-  type CompiledFileTree,
+  type CompiledFileTreeDiff,
 } from "./compile-file-tree.js";
 import { deriveTreeView } from "./derive-tree-view.js";
 import type { TreeEntry } from "./parse-tree-text.js";
@@ -193,7 +193,11 @@ const SWITCH_THUMB_CLASSES =
 // The switch lives in the After caption because only that pane has two
 // truths to swap between: the annotated change set and the plain final
 // state the plan produces.
-const showDiffSwitch = (): Element => ({
+const showDiffSwitch = ({
+  checked,
+}: {
+  readonly checked: boolean;
+}): Element => ({
   type: "element",
   tagName: "span",
   properties: {
@@ -215,13 +219,13 @@ const showDiffSwitch = (): Element => ({
       properties: {
         type: "button",
         role: "switch",
-        ariaChecked: "true",
+        ariaChecked: checked ? "true" : "false",
         ariaLabel: "Show diff",
         className: SWITCH_CLASSES.split(" "),
         "data-tree-changes-toggle": "",
         "data-slot": "switch",
         "data-size": "sm",
-        "data-state": "checked",
+        "data-state": checked ? "checked" : "unchecked",
       },
       children: [
         {
@@ -230,7 +234,7 @@ const showDiffSwitch = (): Element => ({
           properties: {
             className: SWITCH_THUMB_CLASSES.split(" "),
             "data-slot": "switch-thumb",
-            "data-state": "checked",
+            "data-state": checked ? "checked" : "unchecked",
           },
           children: [],
         },
@@ -266,10 +270,12 @@ const statePane = ({
   entries,
   afterPlainEntries = [],
   side,
+  showDiff = true,
 }: {
   readonly entries: ReadonlyArray<TreeEntry>;
   readonly afterPlainEntries?: ReadonlyArray<TreeEntry>;
   readonly side: "before" | "after";
+  readonly showDiff?: boolean;
 }): Element => ({
   type: "element",
   tagName: "section",
@@ -322,7 +328,9 @@ const statePane = ({
           },
           children: [
             ...renderTreeFoldControls({ tone: "quiet" }),
-            ...(side === "after" ? [showDiffSwitch()] : []),
+            ...(side === "after"
+              ? [showDiffSwitch({ checked: showDiff })]
+              : []),
           ],
         },
       ],
@@ -336,7 +344,13 @@ const statePane = ({
   ],
 });
 
-const beforeAfterView = (entries: ReadonlyArray<TreeEntry>): Element => ({
+const beforeAfterView = ({
+  entries,
+  showDiff,
+}: {
+  readonly entries: ReadonlyArray<TreeEntry>;
+  readonly showDiff: boolean;
+}): Element => ({
   type: "element",
   tagName: "div",
   properties: {
@@ -361,6 +375,7 @@ const beforeAfterView = (entries: ReadonlyArray<TreeEntry>): Element => ({
         showChanges: false,
       }),
       side: "after",
+      showDiff,
     }),
   ],
 });
@@ -368,7 +383,7 @@ const beforeAfterView = (entries: ReadonlyArray<TreeEntry>): Element => ({
 const renderFileTreeDiffFigure = ({
   model,
 }: {
-  readonly model: CompiledFileTree;
+  readonly model: CompiledFileTreeDiff;
 }): Element => ({
   type: "element",
   tagName: "figure",
@@ -376,12 +391,12 @@ const renderFileTreeDiffFigure = ({
     className: FIGURE_CLASSES.split(" "),
     "data-file-tree-diff": "",
     "data-tree-view": "combined",
-    "data-tree-changes": "shown",
+    "data-tree-changes": model.hideDiff ? "hidden" : "shown",
   },
   children: [
     header(model.title),
     combinedView(model.entries),
-    beforeAfterView(model.entries),
+    beforeAfterView({ entries: model.entries, showDiff: !model.hideDiff }),
   ],
 });
 

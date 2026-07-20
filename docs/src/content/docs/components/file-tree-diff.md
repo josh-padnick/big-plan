@@ -50,9 +50,10 @@ README.md [modified] - Document the stale-while-revalidate path.
 
 ### Attributes
 
-| Attribute | Type               | Required | Behavior                                                               |
-| --------- | ------------------ | -------- | ---------------------------------------------------------------------- |
-| `title`   | string (non-empty) | No       | Header caption beside the view toggle; omitted, only the toggle shows. |
+| Attribute  | Type               | Required | Behavior                                                                     |
+| ---------- | ------------------ | -------- | ---------------------------------------------------------------------------- |
+| `title`    | string (non-empty) | No       | Header caption beside the view toggle; omitted, only the toggle shows.       |
+| `hideDiff` | bare boolean       | No       | Starts the After pane's Show diff switch off, showing the plain final state. |
 
 Any other attribute is a positional authoring error.
 
@@ -78,7 +79,8 @@ Every violation - an unknown badge, a rename without its `[renamed]` badge, or a
 The combined tree is the default and the only view rendered without JavaScript.
 A reviewer can switch to the before-and-after view, which derives two trees from the single authored tree: the before tree drops added entries and shows old rename names, and the after tree shows new rename names.
 The before tree is by definition the unchanged snapshot, so it carries no markers at all; every change reads on the after tree, where deleted entries remain as struck-through tombstones so removals stay visible beside what replaced them.
-A persisted Show diff toggle in the After caption swaps those annotations for the plain final state - no markers, no tombstones - so a reviewer can also see exactly the hierarchy the plan produces.
+A Show diff switch in the After caption swaps those annotations for the plain final state - no markers, no tombstones - so a reviewer can also see exactly the hierarchy the plan produces.
+It defaults on; the author's `hideDiff` attribute starts it off, and a reader's flip applies to that tree alone.
 The selection persists across documents, and the two panes sit side by side on wide screens and stack, before above after, below the layout breakpoint.
 A full-screen control expands the tree into a modal dialog - named by the component's title when one is set - and closing it returns the reader to their exact scroll position.
 Directories fold: clicking a directory row (or its chevron) collapses that subtree, the header controls fold the whole tree, each Before and After bar quietly folds its own pane, and without JavaScript the tree stays fully expanded.

@@ -9,7 +9,6 @@ import {
 } from "../shared/full-screen.browser.js";
 
 const TREE_DIFF_VIEW_STORAGE_KEY = "big-plan:file-tree-diff-view";
-const TREE_DIFF_CHANGES_STORAGE_KEY = "big-plan:file-tree-diff-changes";
 
 type FileTreeDiffView = "combined" | "before-after";
 
@@ -49,21 +48,6 @@ const readStoredTreeDiffView = (): FileTreeDiffView => {
 
 type TreeChangesMode = "shown" | "hidden";
 
-const isTreeChangesMode = (value: string | null): value is TreeChangesMode =>
-  value === "shown" || value === "hidden";
-
-const readStoredTreeChanges = (): TreeChangesMode => {
-  try {
-    const stored = window.localStorage.getItem(TREE_DIFF_CHANGES_STORAGE_KEY);
-    if (isTreeChangesMode(stored)) {
-      return stored;
-    }
-  } catch {
-    // Every in-page interaction still works when persistence is unavailable.
-  }
-  return "shown";
-};
-
 // Applies the After pane's diff-or-final-state selection and mirrors it into
 // the Show diff switch's checked state, on the root and thumb alike so the
 // shadcn-derived data-state styling tracks Radix's contract.
@@ -91,7 +75,6 @@ const applyTreeChanges = ({
 };
 
 const storedTreeDiffView = readStoredTreeDiffView();
-const storedTreeChanges = readStoredTreeChanges();
 
 // Reveals the folding chevrons and header fold-all controls, and lets a
 // click anywhere on a directory row (outside its note hint) toggle that
@@ -289,17 +272,14 @@ for (const component of document.querySelectorAll<HTMLElement>(
   wireNoteHints({ component });
   wireTreeFolding({ component });
   applyTreeDiffView({ component, view: storedTreeDiffView });
-  applyTreeChanges({ component, mode: storedTreeChanges });
 
+  // The authored default renders server-side (hideDiff opts a tree out);
+  // a reader's flip applies to this tree alone, deliberately unpersisted so
+  // the author's default always greets the next document.
   changesToggle?.addEventListener("click", () => {
     const mode =
       component.dataset.treeChanges === "hidden" ? "shown" : "hidden";
     applyTreeChanges({ component, mode });
-    try {
-      window.localStorage.setItem(TREE_DIFF_CHANGES_STORAGE_KEY, mode);
-    } catch {
-      // Keep the component-local selection when persistence is unavailable.
-    }
   });
 
   expand?.addEventListener("click", () => {
