@@ -15,6 +15,9 @@ const excludedFromSide = ({
   (side === "before" && entry.badge === "added") ||
   (side === "after" && entry.badge === "removed");
 
+// The before pane is a snapshot of today's tree, so it stays unmarked except
+// for entries that will disappear (removed files and the old names of
+// renames); every other change reads on the after side where it lands.
 /** Returns the change marker that applies on one side of the diff. */
 export const markerForTreeSide = ({
   entry,
@@ -23,13 +26,16 @@ export const markerForTreeSide = ({
   readonly entry: TreeEntry;
   readonly side: FileTreeDiffSide;
 }): TreeBadge | undefined => {
-  if (entry.badge === "modified" || entry.badge === "renamed") {
+  if (entry.badge === "renamed") {
     return entry.badge;
   }
   if (side === "before" && entry.badge === "removed") {
     return entry.badge;
   }
-  if (side === "after" && entry.badge === "added") {
+  if (
+    side === "after" &&
+    (entry.badge === "added" || entry.badge === "modified")
+  ) {
     return entry.badge;
   }
   return undefined;

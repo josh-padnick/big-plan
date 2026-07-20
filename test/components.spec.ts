@@ -156,6 +156,17 @@ test("should review planned file changes in combined and before/after trees", as
     await expect(after).not.toContainText("catalog-worker.env");
   });
 
+  await test.step("before stays a snapshot: only disappearing entries carry markers", async () => {
+    await expect(before.locator('[data-tree-badge="modified"]')).toHaveCount(0);
+    await expect(before.locator('[data-tree-badge="added"]')).toHaveCount(0);
+    await expect(before.locator('[data-tree-badge="removed"]')).not.toHaveCount(
+      0,
+    );
+    await expect(after.locator('[data-tree-badge="modified"]')).not.toHaveCount(
+      0,
+    );
+  });
+
   await test.step("the panes sit side by side on a wide viewport", async () => {
     const geometry = await beforeAfter.evaluate((view) => {
       const before = view.querySelector('[data-tree-pane="before"]');

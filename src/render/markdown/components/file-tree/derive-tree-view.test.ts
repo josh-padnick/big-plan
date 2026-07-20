@@ -83,7 +83,9 @@ describe("deriveTreeView", () => {
     expect(before).not.toContain('"badge":"added"');
     expect(after).toContain('"badge":"added"');
     expect(after).not.toContain('"badge":"removed"');
-    expect(before).toContain('"badge":"modified"');
+    // The before pane is a snapshot of today's tree: only disappearing
+    // entries are marked, so modifications read on the after side alone.
+    expect(before).not.toContain('"badge":"modified"');
     expect(before).toContain('"badge":"renamed"');
     expect(after).toContain('"badge":"modified"');
     expect(after).toContain('"badge":"renamed"');
