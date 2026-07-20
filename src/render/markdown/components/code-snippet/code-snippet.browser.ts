@@ -1,7 +1,7 @@
 // Owns CodeSnippet's progressively enhanced actions menu and raw-source/path
 // clipboard behavior; the snippet and annotations remain readable without it.
 
-import { linkAnnotationHover } from "../shared/annotation-hover.browser.js";
+import { linkAnnotationHover } from "../shared/annotation-hover/annotation-hover.browser.js";
 
 const SNIPPET_MESSAGE_RESET_MS = 2_000;
 const snippetMessageTimers = new WeakMap<HTMLElement, number>();

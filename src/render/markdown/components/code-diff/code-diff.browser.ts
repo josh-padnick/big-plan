@@ -9,7 +9,7 @@ import {
   enhanceCodeDiffView,
   readStoredCodeDiffView,
 } from "./code-diff-view.browser.js";
-import { linkAnnotationHover } from "../shared/annotation-hover.browser.js";
+import { linkAnnotationHover } from "../shared/annotation-hover/annotation-hover.browser.js";
 
 const initialView = readStoredCodeDiffView();
 for (const component of document.querySelectorAll<HTMLElement>(

@@ -5,8 +5,8 @@
 // directories beside shared/ compose.
 
 import type { Element, Text } from "hast";
-import { FILE_ICON } from "../../../icons/lucide/file.js";
-import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import { FILE_ICON } from "../../../../icons/lucide/file.js";
+import { renderLucideIcon } from "../../../../icons/lucide-icon.js";
 
 const IDENTITY_CLASSES =
   "file-identity flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted";

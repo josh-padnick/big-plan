@@ -6,7 +6,7 @@ import type { Element, Text } from "hast";
 import { COPY_ICON } from "../../../icons/lucide/copy.js";
 import { ELLIPSIS_ICON } from "../../../icons/lucide/ellipsis.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
-import { renderFileIdentity } from "../shared/file-identity.js";
+import { renderFileIdentity } from "../shared/file-identity/file-identity.js";
 
 const HEADER_CLASSES =
   "code-snippet-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem]";

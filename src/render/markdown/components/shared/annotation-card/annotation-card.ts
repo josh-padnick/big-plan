@@ -5,8 +5,8 @@
 // pass their hook classes and data attributes through.
 
 import type { Element, ElementContent, Properties, Text } from "hast";
-import { MESSAGE_SQUARE_ICON } from "../../../icons/lucide/message-square.js";
-import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import { MESSAGE_SQUARE_ICON } from "../../../../icons/lucide/message-square.js";
+import { renderLucideIcon } from "../../../../icons/lucide-icon.js";
 
 const CARD_CLASSES =
   "annotation-card flex min-w-0 gap-2 px-3 py-2 font-sans text-sm leading-normal whitespace-normal [&>svg]:size-4 [&>svg]:shrink-0";

@@ -2,7 +2,7 @@
 // gutters, annotation cards, side-localized spacers, and hunk presentation.
 
 import type { Element, Text } from "hast";
-import { renderAnnotationCard } from "../shared/annotation-card.js";
+import { renderAnnotationCard } from "../shared/annotation-card/annotation-card.js";
 import type {
   CodeDiffSide,
   ResolvedCodeDiffAnnotation,

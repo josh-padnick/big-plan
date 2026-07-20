@@ -9,7 +9,7 @@ import { MAXIMIZE_2_ICON } from "../../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../../icons/lucide/minimize-2.js";
 import { ROWS_2_ICON } from "../../../icons/lucide/rows-2.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
-import { renderFileIdentity } from "../shared/file-identity.js";
+import { renderFileIdentity } from "../shared/file-identity/file-identity.js";
 import type { LucideIcon } from "../../../icons/lucide-icon.js";
 
 const BUTTON_CLASSES =

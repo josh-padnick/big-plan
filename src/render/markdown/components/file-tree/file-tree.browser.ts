@@ -6,7 +6,7 @@
 import {
   openComponentFullScreen,
   updateFullScreenControl,
-} from "../shared/full-screen.browser.js";
+} from "../shared/full-screen/full-screen.browser.js";
 
 const TREE_DIFF_VIEW_STORAGE_KEY = "big-plan:file-tree-diff-view";
 

@@ -8,7 +8,7 @@ import {
 import {
   openComponentFullScreen,
   updateFullScreenControl,
-} from "../shared/full-screen.browser.js";
+} from "../shared/full-screen/full-screen.browser.js";
 
 const DIFF_VIEW_STORAGE_KEY = "big-plan-diff-view";
 
