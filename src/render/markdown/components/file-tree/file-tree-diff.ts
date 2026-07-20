@@ -181,11 +181,58 @@ const combinedView = (entries: ReadonlyArray<TreeEntry>): Element => ({
   ],
 });
 
+const CHANGES_TOGGLE_CLASSES =
+  "file-tree-changes-toggle inline-flex h-6 shrink-0 cursor-pointer items-center rounded-[0.375rem] border border-edge bg-surface px-2 font-sans text-[0.6875rem] font-semibold text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+
+// The toggle lives in the After caption because only that pane has two
+// truths to switch between: the annotated change set and the plain final
+// state the plan produces.
+const showDiffToggle = (): Element => ({
+  type: "element",
+  tagName: "button",
+  properties: {
+    type: "button",
+    className: CHANGES_TOGGLE_CLASSES.split(" "),
+    ariaPressed: "true",
+    hidden: true,
+    "data-tree-changes-toggle": "",
+    "data-size": "xs",
+    "data-slot": "button",
+    "data-variant": "ghost",
+  },
+  children: [text("Show diff")],
+});
+
+const paneBody = ({
+  entries,
+  variant,
+}: {
+  readonly entries: ReadonlyArray<TreeEntry>;
+  readonly variant?: "diff" | "plain";
+}): Element => ({
+  type: "element",
+  tagName: "div",
+  properties: {
+    className: BODY_CLASSES.split(" "),
+    ...(variant === undefined ? {} : { "data-tree-after-variant": variant }),
+  },
+  children: [
+    renderTreeHierarchy({
+      noteDisplay: "hint",
+      entries,
+      nameForEntry: (entry) => entry.name,
+      badgeForEntry: (entry) => entry.badge,
+    }),
+  ],
+});
+
 const statePane = ({
   entries,
+  afterPlainEntries = [],
   side,
 }: {
   readonly entries: ReadonlyArray<TreeEntry>;
+  readonly afterPlainEntries?: ReadonlyArray<TreeEntry>;
   readonly side: "before" | "after";
 }): Element => ({
   type: "element",
@@ -208,6 +255,11 @@ const statePane = ({
       properties: {
         className: [
           "file-tree-diff-pane-caption",
+          "flex",
+          "min-w-0",
+          "items-center",
+          "justify-between",
+          "gap-2",
           "border-b",
           "border-edge",
           "px-3",
@@ -218,21 +270,17 @@ const statePane = ({
           "text-muted",
         ],
       },
-      children: [text(side === "before" ? "Before" : "After")],
-    },
-    {
-      type: "element",
-      tagName: "div",
-      properties: { className: BODY_CLASSES.split(" ") },
       children: [
-        renderTreeHierarchy({
-          noteDisplay: "hint",
-          entries,
-          nameForEntry: (entry) => entry.name,
-          badgeForEntry: (entry) => entry.badge,
-        }),
+        text(side === "before" ? "Before" : "After"),
+        ...(side === "after" ? [showDiffToggle()] : []),
       ],
     },
+    ...(side === "before"
+      ? [paneBody({ entries })]
+      : [
+          paneBody({ entries, variant: "diff" }),
+          paneBody({ entries: afterPlainEntries, variant: "plain" }),
+        ]),
   ],
 });
 
@@ -255,6 +303,11 @@ const beforeAfterView = (entries: ReadonlyArray<TreeEntry>): Element => ({
     }),
     statePane({
       entries: deriveTreeView({ entries, side: "after" }),
+      afterPlainEntries: deriveTreeView({
+        entries,
+        side: "after",
+        showChanges: false,
+      }),
       side: "after",
     }),
   ],
@@ -271,6 +324,7 @@ const renderFileTreeDiffFigure = ({
     className: FIGURE_CLASSES.split(" "),
     "data-file-tree-diff": "",
     "data-tree-view": "combined",
+    "data-tree-changes": "shown",
   },
   children: [
     header(model.title),

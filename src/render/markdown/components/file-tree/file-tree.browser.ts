@@ -9,6 +9,7 @@ import {
 } from "../shared/full-screen.browser.js";
 
 const TREE_DIFF_VIEW_STORAGE_KEY = "big-plan:file-tree-diff-view";
+const TREE_DIFF_CHANGES_STORAGE_KEY = "big-plan:file-tree-diff-changes";
 
 type FileTreeDiffView = "combined" | "before-after";
 
@@ -46,7 +47,40 @@ const readStoredTreeDiffView = (): FileTreeDiffView => {
   return "combined";
 };
 
+type TreeChangesMode = "shown" | "hidden";
+
+const isTreeChangesMode = (value: string | null): value is TreeChangesMode =>
+  value === "shown" || value === "hidden";
+
+const readStoredTreeChanges = (): TreeChangesMode => {
+  try {
+    const stored = window.localStorage.getItem(TREE_DIFF_CHANGES_STORAGE_KEY);
+    if (isTreeChangesMode(stored)) {
+      return stored;
+    }
+  } catch {
+    // Every in-page interaction still works when persistence is unavailable.
+  }
+  return "shown";
+};
+
+// Applies the After pane's diff-or-final-state selection and mirrors it into
+// the Show diff toggle's pressed state.
+const applyTreeChanges = ({
+  component,
+  mode,
+}: {
+  readonly component: HTMLElement;
+  readonly mode: TreeChangesMode;
+}): void => {
+  component.dataset.treeChanges = mode;
+  component
+    .querySelector<HTMLButtonElement>("[data-tree-changes-toggle]")
+    ?.setAttribute("aria-pressed", mode === "shown" ? "true" : "false");
+};
+
 const storedTreeDiffView = readStoredTreeDiffView();
+const storedTreeChanges = readStoredTreeChanges();
 
 // Reveals the folding chevrons and header fold-all controls, and lets a
 // click anywhere on a directory row (outside its note hint) toggle that
@@ -231,9 +265,25 @@ for (const component of document.querySelectorAll<HTMLElement>(
   const expand =
     component.querySelector<HTMLButtonElement>("[data-tree-expand]");
   expand?.removeAttribute("hidden");
+  const changesToggle = component.querySelector<HTMLButtonElement>(
+    "[data-tree-changes-toggle]",
+  );
+  changesToggle?.removeAttribute("hidden");
   wireNoteHints({ component });
   wireTreeFolding({ component });
   applyTreeDiffView({ component, view: storedTreeDiffView });
+  applyTreeChanges({ component, mode: storedTreeChanges });
+
+  changesToggle?.addEventListener("click", () => {
+    const mode =
+      component.dataset.treeChanges === "hidden" ? "shown" : "hidden";
+    applyTreeChanges({ component, mode });
+    try {
+      window.localStorage.setItem(TREE_DIFF_CHANGES_STORAGE_KEY, mode);
+    } catch {
+      // Keep the component-local selection when persistence is unavailable.
+    }
+  });
 
   expand?.addEventListener("click", () => {
     const openDialog = component.closest("dialog");

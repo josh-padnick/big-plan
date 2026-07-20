@@ -196,7 +196,7 @@ test("should review planned file changes in combined and before/after trees", as
     await expect(before.locator(".file-tree-diff-pane-caption")).toHaveText(
       "Before",
     );
-    await expect(after.locator(".file-tree-diff-pane-caption")).toHaveText(
+    await expect(after.locator(".file-tree-diff-pane-caption")).toContainText(
       "After",
     );
     await expect(before).toContainText("legacy-cache-counter.ts");
@@ -229,6 +229,28 @@ test("should review planned file changes in combined and before/after trees", as
       .locator(".file-tree-name")
       .evaluate((element) => getComputedStyle(element).textDecorationLine);
     expect(decoration).toBe("line-through");
+  });
+
+  await test.step("the After bar can swap the diff for the final state", async () => {
+    const toggle = after.getByRole("button", { name: "Show diff" });
+    const plain = after.locator('[data-tree-after-variant="plain"]');
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      after.locator('[data-tree-after-variant="diff"]'),
+    ).toBeVisible();
+    await expect(plain).toBeHidden();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await expect(plain).toBeVisible();
+    await expect(plain.locator("[data-tree-badge]")).toHaveCount(0);
+    await expect(plain).not.toContainText("legacy-cache-counter.ts");
+    await expect(plain).toContainText("refresh-queue.ts");
+    await expect(plain).toContainText("deploy/");
+    await expect(plain.locator(".file-tree-note-hint").first()).toBeVisible();
+    await toggle.click();
+    await expect(
+      after.locator('[data-tree-after-variant="diff"]'),
+    ).toBeVisible();
   });
 
   await test.step("the panes sit side by side on a wide viewport", async () => {

@@ -26,8 +26,8 @@ Declared fenced-code languages receive syntax highlighting, every block code sam
 Every viewport has a sticky branding bar whose logo follows that active theme, while embedded light and dark favicons follow the OS preference.
 CodeDiff renders a no-JavaScript unified view with full scoped line annotations, plus progressively enhanced unified/split selection, responsive annotation disclosures, aligned side-localized split annotations, file-path and fence-source copying (LF-normalized with a trailing newline, as MDX parses fences), and full-screen viewing.
 CodeSnippet renders excerpts with optional file identity, file-absolute line numbers, and scoped annotations, plus progressively enhanced file-path and raw-source copying.
-FileTree renders plain hierarchies, while FileTreeDiff renders a no-JavaScript combined change tree plus a persisted combined/before-and-after selection whose panes stack below the layout breakpoint.
-The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, code-copy controls, CodeDiff and CodeSnippet controls, and FileTreeDiff view selection.
+FileTree renders plain hierarchies with foldable directories, while FileTreeDiff renders a no-JavaScript combined change tree plus a persisted combined/before-and-after selection whose panes stack below the layout breakpoint and an After-pane Show diff toggle that swaps annotations for the plain final state.
+The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, code-copy controls, CodeDiff and CodeSnippet controls, file tree folding, and FileTreeDiff view selection.
 
 ## Architecture at a glance
 

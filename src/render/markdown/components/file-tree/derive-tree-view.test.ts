@@ -57,6 +57,23 @@ describe("deriveTreeView", () => {
     ).toEqual([]);
   });
 
+  it("should derive the plain final state when changes are hidden", () => {
+    const finalState = JSON.stringify(
+      deriveTreeView({
+        entries: parsedEntries(),
+        side: "after",
+        showChanges: false,
+      }),
+    );
+
+    expect(finalState).not.toContain('"badge"');
+    expect(finalState).not.toContain("removed/");
+    expect(finalState).not.toContain("only-before.ts");
+    expect(finalState).toContain("added/");
+    expect(finalState).toContain('"name":"new.ts"');
+    expect(finalState).toContain("changed.ts");
+  });
+
   it("should select rename names and keep every marker on the after side", () => {
     const before = JSON.stringify(
       deriveTreeView({

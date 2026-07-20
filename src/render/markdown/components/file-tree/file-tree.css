@@ -73,6 +73,23 @@
   article .file-tree-diff-pane-caption {
     background: var(--diff-hunk-bg);
   }
+  article [data-tree-after-variant="plain"] {
+    display: none;
+  }
+  article
+    [data-file-tree-diff][data-tree-changes="hidden"]
+    [data-tree-after-variant="diff"] {
+    display: none;
+  }
+  article
+    [data-file-tree-diff][data-tree-changes="hidden"]
+    [data-tree-after-variant="plain"] {
+    display: block;
+  }
+  article .file-tree-changes-toggle[aria-pressed="true"] {
+    background: var(--color-edge);
+    color: var(--color-ink);
+  }
   article .file-tree-row > svg {
     color: var(--color-muted);
   }

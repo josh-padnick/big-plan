@@ -34,7 +34,7 @@ A bordered tree titled and topped with a Combined / Before-After toggle; entries
 ```tree
 src/
   catalog/
-    refresh-worker.ts [modified] - Move refresh work behind the queue.
+    refresh-worker.ts [modified]
     refresh-queue.ts [added] - Deduplicate refresh jobs by cache key.
   metrics/
     legacy-cache-counter.ts [removed] - Replace the ambiguous cache counter.
@@ -78,6 +78,7 @@ Every violation - an unknown badge, a rename without its `[renamed]` badge, or a
 The combined tree is the default and the only view rendered without JavaScript.
 A reviewer can switch to the before-and-after view, which derives two trees from the single authored tree: the before tree drops added entries and shows old rename names, and the after tree shows new rename names.
 The before tree is by definition the unchanged snapshot, so it carries no markers at all; every change reads on the after tree, where deleted entries remain as struck-through tombstones so removals stay visible beside what replaced them.
+A persisted Show diff toggle in the After caption swaps those annotations for the plain final state - no markers, no tombstones - so a reviewer can also see exactly the hierarchy the plan produces.
 The selection persists across documents, and the two panes sit side by side on wide screens and stack, before above after, below the layout breakpoint.
 A full-screen control expands the tree into a modal dialog - named by the component's title when one is set - and closing it returns the reader to their exact scroll position.
 Directories fold: clicking a directory row (or its chevron) collapses that subtree, header controls collapse or expand every folder at once, and without JavaScript the tree stays fully expanded.
