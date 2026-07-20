@@ -29,7 +29,16 @@ const ROW_CLASSES =
 const TOGGLE_CLASSES =
   "file-tree-toggle inline-flex cursor-pointer border-0 bg-transparent p-0 text-muted hover:text-ink [&>svg]:size-3.5 [&>svg]:shrink-0";
 const FOLD_BUTTON_CLASSES =
-  "file-tree-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+  "file-tree-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 p-0 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+// The quiet tone keeps pane-bar fold-alls discoverable without competing
+// with the trees; the header pair keeps standard contrast beside its
+// neighboring controls. Hover restores full contrast either way.
+const FOLD_TONE_CLASSES: Readonly<Record<TreeFoldTone, string>> = {
+  standard: "bg-surface text-muted",
+  quiet: "bg-transparent text-muted/50",
+};
+
+export type TreeFoldTone = "standard" | "quiet";
 
 // Statuses read the way git tooling presents them: a changed file's leading
 // glyph becomes its status icon (the Lucide file-plus-2 family standing in
@@ -104,16 +113,21 @@ const foldButton = ({
   action,
   label,
   icon,
+  tone,
 }: {
   readonly action: "collapse" | "expand";
   readonly label: string;
   readonly icon: LucideIcon;
+  readonly tone: TreeFoldTone;
 }): Element => ({
   type: "element",
   tagName: "button",
   properties: {
     type: "button",
-    className: FOLD_BUTTON_CLASSES.split(" "),
+    className: [
+      ...FOLD_BUTTON_CLASSES.split(" "),
+      ...FOLD_TONE_CLASSES[tone].split(" "),
+    ],
     ariaLabel: label,
     title: label,
     hidden: true,
@@ -125,17 +139,23 @@ const foldButton = ({
   children: [renderLucideIcon({ icon, hidden: false })],
 });
 
-/** Renders the header collapse-all and expand-all folding controls. */
-export const renderTreeFoldControls = (): ReadonlyArray<Element> => [
+/** Renders the collapse-all and expand-all folding controls in one tone. */
+export const renderTreeFoldControls = ({
+  tone,
+}: {
+  readonly tone: TreeFoldTone;
+}): ReadonlyArray<Element> => [
   foldButton({
     action: "collapse",
     label: "Collapse all folders",
     icon: COPY_MINUS_ICON,
+    tone,
   }),
   foldButton({
     action: "expand",
     label: "Expand all folders",
     icon: COPY_PLUS_ICON,
+    tone,
   }),
 ];
 

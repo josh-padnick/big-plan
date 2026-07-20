@@ -81,4 +81,4 @@ The before tree is by definition the unchanged snapshot, so it carries no marker
 A persisted Show diff toggle in the After caption swaps those annotations for the plain final state - no markers, no tombstones - so a reviewer can also see exactly the hierarchy the plan produces.
 The selection persists across documents, and the two panes sit side by side on wide screens and stack, before above after, below the layout breakpoint.
 A full-screen control expands the tree into a modal dialog - named by the component's title when one is set - and closing it returns the reader to their exact scroll position.
-Directories fold: clicking a directory row (or its chevron) collapses that subtree, header controls collapse or expand every folder at once, and without JavaScript the tree stays fully expanded.
+Directories fold: clicking a directory row (or its chevron) collapses that subtree, the header controls fold the whole tree, each Before and After bar quietly folds its own pane, and without JavaScript the tree stays fully expanded.

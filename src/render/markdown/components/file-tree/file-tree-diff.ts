@@ -151,7 +151,7 @@ const header = (title: string | undefined): Element => ({
         ],
       },
       children: [
-        ...renderTreeFoldControls(),
+        ...renderTreeFoldControls({ tone: "standard" }),
         viewToggleGroup(),
         expandButton(),
       ],
@@ -321,7 +321,7 @@ const statePane = ({
             ],
           },
           children: [
-            ...renderTreeFoldControls(),
+            ...renderTreeFoldControls({ tone: "quiet" }),
             ...(side === "after" ? [showDiffSwitch()] : []),
           ],
         },

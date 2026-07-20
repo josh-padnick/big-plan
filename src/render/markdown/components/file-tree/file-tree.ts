@@ -48,7 +48,7 @@ const titleElement = (title: string | undefined): ReadonlyArray<Element> =>
                   "gap-1",
                 ],
               },
-              children: [...renderTreeFoldControls()],
+              children: [...renderTreeFoldControls({ tone: "standard" })],
             },
           ],
         },
