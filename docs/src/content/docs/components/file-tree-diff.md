@@ -66,6 +66,7 @@ It must carry at least one change status; a tree with none is rejected with a po
 `FileTreeDiff` uses the same indentation, directory, and note grammar as [`FileTree`](/components/file-tree/#tree-grammar), plus change syntax:
 
 - Append a status in brackets after the name: `[added]`, `[modified]`, `[removed]`, or `[renamed]`.
+- Statuses and renames apply to directories too; a rename must keep the entry a file or keep it a directory, and a removed directory lists its removed children beneath it.
 - Write a rename as `old -> new [renamed]`; both sides must stay files or stay directories, and the arrow only pairs with `[renamed]`.
 
 Each changed file leads with a status icon in place of the plain file glyph, tints its name in the change color, and spells out Added, Modified, Deleted, or Renamed at the row's edge; deleted names are additionally struck through.

@@ -27,8 +27,8 @@ const ROW_CLASSES =
 // Statuses read the way git tooling presents them: a changed file's leading
 // glyph becomes its status icon (the Lucide file-plus-2 family standing in
 // for GitHub's per-change file icons), the name carries the change tint with
-// deletions struck through, and the spelled-out status sits at the row's far
-// edge.
+// deletions struck through, and the spelled-out status follows the name,
+// ahead of any comment hint.
 const STATUS_ICONS: Readonly<Record<TreeBadge, LucideIcon>> = {
   added: FILE_PLUS_2_ICON,
   removed: FILE_MINUS_2_ICON,
@@ -55,8 +55,6 @@ const badgeLabel = (badge: TreeBadge | undefined): ReadonlyArray<Element> =>
           properties: {
             className: [
               "file-tree-label",
-              "ml-auto",
-              "pl-6",
               "font-sans",
               "text-[0.6875rem]",
               "font-semibold",
@@ -173,8 +171,8 @@ const entryRow = ({
       },
       children: [text(name)],
     },
-    ...noteElement({ entry, noteDisplay }),
     ...badgeLabel(badge),
+    ...noteElement({ entry, noteDisplay }),
   ],
 });
 

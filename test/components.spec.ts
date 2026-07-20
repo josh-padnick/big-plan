@@ -91,7 +91,7 @@ test("should review planned file changes in combined and before/after trees", as
 
   await test.step("every change kind tints its name and spells its status at the row edge", async () => {
     const badgedRows = combined.locator("[data-tree-badge]");
-    await expect(badgedRows).toHaveCount(5);
+    await expect(badgedRows).toHaveCount(9);
     const labels: ReadonlyArray<readonly [string, string, string]> = [
       ["added", "Added", "file-plus-2"],
       ["modified", "Modified", "file-diff"],
@@ -99,7 +99,9 @@ test("should review planned file changes in combined and before/after trees", as
       ["renamed", "Renamed", "file-symlink"],
     ];
     for (const [badge, label, statusIcon] of labels) {
-      const row = combined.locator(`[data-tree-badge="${badge}"]`).first();
+      const row = combined
+        .locator(`[data-tree-badge="${badge}"][data-tree-entry="file"]`)
+        .first();
       await expect(row.locator(".file-tree-label")).toHaveText(label);
       await expect(
         row.locator(`:scope > svg[data-lucide="${statusIcon}"]`),
@@ -118,14 +120,14 @@ test("should review planned file changes in combined and before/after trees", as
           status: getComputedStyle(status).color,
           decoration: getComputedStyle(name).textDecorationLine,
           nameRight: name.getBoundingClientRect().right,
-          statusRight: status.getBoundingClientRect().right,
-          rowRight: element.getBoundingClientRect().right,
+          statusLeft: status.getBoundingClientRect().left,
         };
       });
       expect(style.status).toBe(style.name);
       expect(style.decoration === "line-through").toBe(badge === "removed");
-      expect(style.rowRight - style.statusRight).toBeLessThan(2);
-      expect(style.statusRight).toBeGreaterThan(style.nameRight + 24);
+      // The status reads inline right beside the name, not at the far edge.
+      expect(style.statusLeft).toBeGreaterThan(style.nameRight);
+      expect(style.statusLeft - style.nameRight).toBeLessThan(60);
     }
     const plainName = await combined
       .locator(
@@ -138,6 +140,14 @@ test("should review planned file changes in combined and before/after trees", as
       .first()
       .evaluate((element) => getComputedStyle(element).color);
     expect(addedName).not.toBe(plainName);
+    // Changed directories keep the folder glyph, tinted like their name.
+    const removedDir = combined
+      .locator('[data-tree-badge="removed"][data-tree-entry="directory"]')
+      .first();
+    await expect(
+      removedDir.locator(':scope > svg[data-lucide="folder"]'),
+    ).toBeVisible();
+    await expect(removedDir.locator(".file-tree-label")).toHaveText("Deleted");
   });
 
   await test.step("comments tuck behind instant hover hints", async () => {
@@ -177,6 +187,13 @@ test("should review planned file changes in combined and before/after trees", as
     await expect(before).not.toContainText("catalog-cache-worker.env");
     await expect(after).toContainText("catalog-cache-worker.env");
     await expect(after).not.toContainText("catalog-worker.env");
+    await expect(before).toContainText("ops/");
+    await expect(before).not.toContainText("deploy/");
+    await expect(before).not.toContainText("queue/");
+    await expect(after).toContainText("deploy/");
+    await expect(after).not.toContainText("ops/");
+    await expect(after).toContainText("queue/");
+    await expect(after).toContainText("metrics/");
   });
 
   await test.step("before is untouched; every marker reads on the after tree", async () => {
@@ -315,9 +332,9 @@ test("should review planned file changes in combined and before/after trees", as
     ).toBeHidden();
     await expect(staticTree.locator("[data-tree-toggle-group]")).toBeHidden();
     await expect(
-      staticTree.locator(
-        '[data-tree-content="combined"] [data-tree-badge="renamed"]',
-      ),
+      staticTree
+        .locator('[data-tree-content="combined"] [data-tree-badge="renamed"]')
+        .first(),
     ).toBeVisible();
     await expect(
       staticTree
