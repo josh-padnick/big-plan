@@ -16,6 +16,9 @@ Usage:
   big-plan render <input.mdx> [output.html]  Render an MDX plan to a
                                             single self-contained HTML file
                                             (defaults to <input>.html)
+    --embed             Render without the viewer chrome, for embedding
+                        inside a host page
+    --theme light|dark  Pin an embed to one color scheme
 `;
 
 // Reads this package's own version for --version output, tolerating a missing

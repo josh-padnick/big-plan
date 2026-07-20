@@ -22,7 +22,9 @@ describe("renderCommand validation", () => {
     await expect(renderCommand([])).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
       message: "Missing input MDX file",
-      suggestions: ["Usage: big-plan render <input.mdx> [output.html]"],
+      suggestions: [
+        "Usage: big-plan render <input.mdx> [output.html] [--embed [--theme light|dark]]",
+      ],
     });
   });
 
@@ -42,6 +44,32 @@ describe("renderCommand validation", () => {
         '1:10 Expression-valued attribute "first" is not supported',
         "3:6 Text expressions are not supported",
       ],
+    });
+  });
+
+  it("should reject an unknown flag when one is passed", async () => {
+    await expect(renderCommand(["--frame", "plan.mdx"])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "Unknown flag: --frame",
+    });
+  });
+
+  it("should reject --theme when --embed is absent", async () => {
+    await expect(
+      renderCommand(["plan.mdx", "--theme", "dark"]),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message:
+        "--theme requires --embed; the viewer keeps its own theme control",
+    });
+  });
+
+  it("should reject --theme when its value is not light or dark", async () => {
+    await expect(
+      renderCommand(["plan.mdx", "--embed", "--theme=sepia"]),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: '--theme must be "light" or "dark", got: sepia',
     });
   });
 
@@ -83,6 +111,31 @@ describe("renderCommand output", () => {
     expect(result).toMatchObject({ rendered: outputPath, title: "plan" });
     await expect(readFile(outputPath, "utf8")).resolves.toContain(
       "<title>plan</title>",
+    );
+  });
+
+  it("should render the chromeless embed envelope when --embed is passed", async () => {
+    const inputPath = join(tempDirectory, "plan.md");
+    const outputPath = join(tempDirectory, "plan.html");
+    await writeFile(inputPath, "# Embedded plan\n\n## Rollout\n", "utf8");
+
+    await renderCommand([inputPath, "--embed"]);
+
+    const html = await readFile(outputPath, "utf8");
+    expect(html).toContain("data-embed");
+    expect(html).not.toContain("data-theme-toggle");
+    expect(html).toContain('<html lang="en">');
+  });
+
+  it("should pin the embed to the requested color scheme when --theme is passed", async () => {
+    const inputPath = join(tempDirectory, "plan.md");
+    const outputPath = join(tempDirectory, "plan.html");
+    await writeFile(inputPath, "# Embedded plan\n", "utf8");
+
+    await renderCommand([inputPath, "--embed", "--theme", "dark"]);
+
+    await expect(readFile(outputPath, "utf8")).resolves.toContain(
+      '<html lang="en" data-theme="dark">',
     );
   });
 });
