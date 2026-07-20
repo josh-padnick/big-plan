@@ -81,4 +81,10 @@ export const openComponentFullScreen = ({
     window.scrollTo({ top: scrollY });
   });
   dialog.showModal();
+  // Content-fit sizing can make the dialog match the inline component so
+  // closely that full screen appears to do nothing; a slack band keeps the
+  // modal visibly roomier until the viewport caps take over.
+  const rect = dialog.getBoundingClientRect();
+  dialog.style.width = `min(${Math.round(rect.width + 64)}px, 96vw, 100rem)`;
+  dialog.style.height = `min(${Math.round(rect.height + 48)}px, 92vh)`;
 };
