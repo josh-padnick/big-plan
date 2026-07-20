@@ -4,10 +4,11 @@
   "type": "module",
   "scripts": {
     "gen:demo": "node ../bin/big-plan.mjs render src/demo/example-plan.md public/demo/index.html && cp src/demo/example-plan.md public/demo/example-plan.md",
+    "gen:embeds": "node scripts/generate-component-embeds.mjs",
     "screenshots": "node scripts/capture-component-screenshots.mjs",
-    "predev": "bun run gen:demo",
+    "predev": "bun run gen:demo && bun run gen:embeds",
     "dev": "astro dev",
-    "prebuild": "bun run gen:demo",
+    "prebuild": "bun run gen:demo && bun run gen:embeds",
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro"

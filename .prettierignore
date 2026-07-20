@@ -4,6 +4,7 @@ node_modules/
 *.generated.ts
 examples/*.html
 docs/public/demo/
+docs/public/embeds/
 playwright-report/
 test-results/
 bun.lock
