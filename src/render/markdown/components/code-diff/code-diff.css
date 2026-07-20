@@ -2,10 +2,6 @@
    styles, colocated with the component that owns the stable selectors. */
 
 /* A modal diff owns the screen: the document behind it must not scroll. */
-html:has(.code-diff-dialog[open]) {
-  overflow: hidden;
-}
-
 @layer components {
   article [data-code-diff] {
     /* Content sits on its own background so red/green line tints read
@@ -35,34 +31,13 @@ html:has(.code-diff-dialog[open]) {
   article .code-diff-menu-item:hover {
     background: var(--color-edge);
   }
-  article .code-diff-dialog {
-    display: flex;
-    overflow: visible;
-    width: min(96vw, 100rem);
-    height: 92vh;
-    max-width: none;
-    max-height: none;
-    /* Preflight zeroes dialog margins, which pins the fixed-position modal
-       to the top-left; auto restores user-agent centering. */
-    margin: auto;
-    flex-direction: column;
-    padding: 0;
-    border: 0;
-    background: transparent;
-  }
-  article .code-diff-dialog::backdrop {
-    /* The blur keeps the modal separation legible in dark mode, where a
-       plain dark veil over a dark page is nearly invisible. */
-    background: rgb(12 10 8 / 0.75);
-    backdrop-filter: blur(3px);
-  }
-  article .code-diff-dialog > [data-code-diff] {
+  article .component-dialog > [data-code-diff] {
     display: flex;
     min-height: 0;
     flex: 1;
     flex-direction: column;
   }
-  article .code-diff-dialog > [data-code-diff] > .code-diff-view {
+  article .component-dialog > [data-code-diff] > .code-diff-view {
     min-height: 0;
     flex: 1;
     overflow-y: auto;

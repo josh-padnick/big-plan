@@ -77,3 +77,4 @@ The combined tree is the default and the only view rendered without JavaScript.
 A reviewer can switch to the before-and-after view, which derives two trees from the single authored tree: the before tree drops added entries and shows old rename names, and the after tree drops removed entries and shows new rename names.
 The before tree is a snapshot of today's hierarchy, so it marks only entries that will disappear (removed files and old rename names); added and modified markers read on the after tree where they land.
 The selection persists across documents, and the two panes sit side by side on wide screens and stack, before above after, below the layout breakpoint.
+A full-screen control expands the tree into a modal dialog - named by the component's title when one is set - and closing it returns the reader to their exact scroll position.

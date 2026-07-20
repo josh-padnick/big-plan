@@ -4,6 +4,8 @@
 
 import type { Element, Text } from "hast";
 import { COLUMNS_2_ICON } from "../../../icons/lucide/columns-2.js";
+import { MAXIMIZE_2_ICON } from "../../../icons/lucide/maximize-2.js";
+import { MINIMIZE_2_ICON } from "../../../icons/lucide/minimize-2.js";
 import { ROWS_2_ICON } from "../../../icons/lucide/rows-2.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import type { LucideIcon } from "../../../icons/lucide-icon.js";
@@ -102,6 +104,28 @@ const titleContent = (title: string | undefined): ReadonlyArray<Element> =>
         },
       ];
 
+// Full screen stays unavailable without JavaScript, like the view toggle; the
+// server-rendered combined tree needs neither.
+const expandButton = (): Element => ({
+  type: "element",
+  tagName: "button",
+  properties: {
+    type: "button",
+    className: BUTTON_CLASSES.split(" "),
+    ariaLabel: "View file tree full screen",
+    title: "View file tree full screen",
+    hidden: true,
+    "data-tree-expand": "",
+    "data-size": "xs",
+    "data-slot": "button",
+    "data-variant": "ghost",
+  },
+  children: [
+    renderLucideIcon({ icon: MAXIMIZE_2_ICON, hidden: false }),
+    renderLucideIcon({ icon: MINIMIZE_2_ICON, hidden: true }),
+  ],
+});
+
 const header = (title: string | undefined): Element => ({
   type: "element",
   tagName: "figcaption",
@@ -109,7 +133,23 @@ const header = (title: string | undefined): Element => ({
     className: HEADER_CLASSES.split(" "),
     ...(title === undefined ? { "data-tree-header-without-title": "" } : {}),
   },
-  children: [...titleContent(title), viewToggleGroup()],
+  children: [
+    ...titleContent(title),
+    {
+      type: "element",
+      tagName: "span",
+      properties: {
+        className: [
+          "file-tree-diff-controls",
+          "flex",
+          "shrink-0",
+          "items-center",
+          "gap-1",
+        ],
+      },
+      children: [viewToggleGroup(), expandButton()],
+    },
+  ],
 });
 
 const combinedName = (entry: TreeEntry): string =>

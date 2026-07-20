@@ -194,6 +194,59 @@ test("should review planned file changes in combined and before/after trees", as
     await expect(beforeAfter).toBeVisible();
   });
 
+  let expandScrollY = 0;
+
+  await test.step("the tree expands full screen named by its title", async () => {
+    const expand = tree.getByRole("button", {
+      name: "View file tree full screen",
+    });
+    await expand.scrollIntoViewIfNeeded();
+    expandScrollY = await page.evaluate(() => window.scrollY);
+    expect(expandScrollY).toBeGreaterThan(0);
+    await expand.click();
+
+    const dialog = page.locator("dialog.component-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAccessibleName("Planned changes");
+    await expect(dialog.locator("[data-file-tree-diff]")).toHaveAttribute(
+      "data-tree-expanded",
+      "",
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => getComputedStyle(document.documentElement).overflow,
+        ),
+      )
+      .toBe("hidden");
+  });
+
+  await test.step("the view toggle keeps working inside the dialog", async () => {
+    const dialog = page.locator("dialog.component-dialog");
+    await dialog.getByRole("button", { name: "Combined view" }).click();
+    await expect(
+      dialog.locator('[data-tree-content="combined"]'),
+    ).toBeVisible();
+    await dialog.getByRole("button", { name: "Before/After view" }).click();
+    await expect(
+      dialog.locator('[data-tree-content="before-after"]'),
+    ).toBeVisible();
+  });
+
+  await test.step("closing restores the tree and the scroll position", async () => {
+    await page.keyboard.press("Escape");
+    await expect(page.locator("dialog.component-dialog")).toHaveCount(0);
+    await expect(tree).toBeVisible();
+    await expect(tree).not.toHaveAttribute("data-tree-expanded", "");
+    await expect(
+      tree.getByRole("button", { name: "View file tree full screen" }),
+    ).toBeVisible();
+    await expect(beforeAfter).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBe(expandScrollY);
+  });
+
   await test.step("the panes stack before above after on a narrow viewport", async () => {
     await page.setViewportSize({ width: 500, height: 800 });
     // Both rects are read in one evaluate so the narrow-layout reflow cannot
@@ -685,7 +738,7 @@ test("should keep a range Annotation visible when switching diff views", async (
 
   await test.step("the disclosure still works in full screen", async () => {
     await diff.getByRole("button", { name: "View diff full screen" }).click();
-    const dialog = page.locator("dialog.code-diff-dialog");
+    const dialog = page.locator("dialog.component-dialog");
     const dialogAnnotation = dialog.getByRole("note", { name: "Lines 34-36" });
     const toggle = dialogAnnotation.locator(".code-diff-annotation-toggle");
     await expect(toggle).toHaveAccessibleName("View more…");
@@ -776,7 +829,7 @@ test("should expand a diff to full screen and restore it when dismissed", async 
   expect(scrollY).toBeGreaterThan(0);
   await expand.click();
 
-  const dialog = page.locator("dialog.code-diff-dialog");
+  const dialog = page.locator("dialog.component-dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAccessibleName(
     "src/catalog/read-through-cache.ts",
@@ -804,7 +857,7 @@ test("should expand a diff to full screen and restore it when dismissed", async 
 
   await page.keyboard.press("Escape");
 
-  await expect(page.locator("dialog.code-diff-dialog")).toHaveCount(0);
+  await expect(page.locator("dialog.component-dialog")).toHaveCount(0);
   await expect(diff).toBeVisible();
   await expect(diff).not.toHaveAttribute("data-diff-expanded", "");
   await expect(
@@ -883,7 +936,7 @@ test("should fallback-copy within a full-screen diff", async ({
   await diff.getByRole("button", { name: "View diff full screen" }).click();
   const expandedDiff = page.locator("dialog [data-code-diff]");
   const menuButton = expandedDiff.locator("[data-diff-menu-button]");
-  await expect(page.locator("dialog.code-diff-dialog[open]")).toHaveCount(1);
+  await expect(page.locator("dialog.component-dialog[open]")).toHaveCount(1);
   await expect(
     page.locator("textarea:not([data-diff-source]):not([data-snippet-source])"),
   ).toHaveCount(0);

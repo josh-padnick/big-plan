@@ -68,7 +68,7 @@ const writeDiffClipboard = async ({
   textarea.style.opacity = "0";
   const previousFocus = document.activeElement;
   const activeDialog = document.querySelector<HTMLDialogElement>(
-    "dialog.code-diff-dialog[open]",
+    "dialog.component-dialog[open]",
   );
   (activeDialog ?? container).append(textarea);
   let copied: boolean;

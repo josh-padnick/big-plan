@@ -11,6 +11,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
 @import "tailwindcss" source(none);
 @import "./markdown/prose.css";
 @import "./markdown/code-block/syntax-highlighting.css";
+@import "./markdown/components/shared/full-screen.css";
 @import "./markdown/components/callout/callout.css";
 @import "./markdown/components/code-diff/code-diff.css";
 @import "./markdown/components/code-snippet/code-snippet.css";
