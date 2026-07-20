@@ -93,16 +93,16 @@ test("should review planned file changes in combined and before/after trees", as
     const badgedRows = combined.locator("[data-tree-badge]");
     await expect(badgedRows).toHaveCount(5);
     const labels: ReadonlyArray<readonly [string, string, string]> = [
-      ["added", "Added", "square-plus"],
-      ["modified", "Modified", "square-dot"],
-      ["removed", "Deleted", "square-minus"],
-      ["renamed", "Renamed", "square-arrow-right"],
+      ["added", "Added", "file-plus-2"],
+      ["modified", "Modified", "file-diff"],
+      ["removed", "Deleted", "file-minus-2"],
+      ["renamed", "Renamed", "file-symlink"],
     ];
     for (const [badge, label, statusIcon] of labels) {
       const row = combined.locator(`[data-tree-badge="${badge}"]`).first();
       await expect(row.locator(".file-tree-label")).toHaveText(label);
       await expect(
-        row.locator(`.file-tree-label > svg[data-lucide="${statusIcon}"]`),
+        row.locator(`:scope > svg[data-lucide="${statusIcon}"]`),
       ).toBeVisible();
       const style = await row.evaluate((element) => {
         const name = element.querySelector(".file-tree-name");
@@ -138,27 +138,24 @@ test("should review planned file changes in combined and before/after trees", as
       .first()
       .evaluate((element) => getComputedStyle(element).color);
     expect(addedName).not.toBe(plainName);
-    await expect(
-      combined
-        .locator('[data-tree-badge="added"] > svg[data-lucide="file"]')
-        .first(),
-    ).toBeVisible();
   });
 
-  await test.step("comments tuck behind hoverable hints", async () => {
+  await test.step("comments tuck behind instant hover hints", async () => {
     const hint = combined
       .locator('[data-tree-badge="added"] .file-tree-note-hint')
       .first();
-    await expect(hint).toHaveAttribute(
-      "title",
-      "Deduplicate refresh jobs by cache key.",
-    );
     await expect(
       hint.locator('svg[data-lucide="message-square"]'),
     ).toBeVisible();
     await expect(
       combined.getByText("- Deduplicate refresh jobs by cache key."),
     ).toHaveCount(0);
+    await hint.hover();
+    await expect(page.locator(".file-tree-note-tip")).toHaveText(
+      "Deduplicate refresh jobs by cache key.",
+    );
+    await page.mouse.move(0, 0);
+    await expect(page.locator(".file-tree-note-tip")).toHaveCount(0);
   });
 
   await test.step("before and after show the matching state and rename", async () => {

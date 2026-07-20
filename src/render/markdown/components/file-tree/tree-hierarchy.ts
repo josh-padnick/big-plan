@@ -2,13 +2,13 @@
 // FileTreeDiff view, parameterized by displayed names and change markers.
 
 import type { Element, Text } from "hast";
+import { FILE_DIFF_ICON } from "../../../icons/lucide/file-diff.js";
+import { FILE_MINUS_2_ICON } from "../../../icons/lucide/file-minus-2.js";
+import { FILE_PLUS_2_ICON } from "../../../icons/lucide/file-plus-2.js";
+import { FILE_SYMLINK_ICON } from "../../../icons/lucide/file-symlink.js";
 import { FILE_ICON } from "../../../icons/lucide/file.js";
 import { FOLDER_ICON } from "../../../icons/lucide/folder.js";
 import { MESSAGE_SQUARE_ICON } from "../../../icons/lucide/message-square.js";
-import { SQUARE_ARROW_RIGHT_ICON } from "../../../icons/lucide/square-arrow-right.js";
-import { SQUARE_DOT_ICON } from "../../../icons/lucide/square-dot.js";
-import { SQUARE_MINUS_ICON } from "../../../icons/lucide/square-minus.js";
-import { SQUARE_PLUS_ICON } from "../../../icons/lucide/square-plus.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import type { LucideIcon } from "../../../icons/lucide-icon.js";
 import type { TreeBadge, TreeEntry } from "./parse-tree-text.js";
@@ -24,23 +24,23 @@ const CHILD_LIST_CLASSES =
 const ROW_CLASSES =
   "file-tree-row relative flex min-h-6 items-center gap-[0.45rem] whitespace-nowrap [&>svg]:size-3.5 [&>svg]:shrink-0";
 
-// Statuses read the way git tooling presents them: the file name carries the
-// change tint (with deletions struck through, via the stylesheet's badge
-// rules) and the spelled-out status sits at the row's far edge beside a
-// GitHub-style status square (the Lucide equivalents of the octicon
-// diff-added/removed/modified/renamed glyphs).
+// Statuses read the way git tooling presents them: a changed file's leading
+// glyph becomes its status icon (the Lucide file-plus-2 family standing in
+// for GitHub's per-change file icons), the name carries the change tint with
+// deletions struck through, and the spelled-out status sits at the row's far
+// edge.
+const STATUS_ICONS: Readonly<Record<TreeBadge, LucideIcon>> = {
+  added: FILE_PLUS_2_ICON,
+  removed: FILE_MINUS_2_ICON,
+  modified: FILE_DIFF_ICON,
+  renamed: FILE_SYMLINK_ICON,
+};
+
 const BADGE_LABELS: Readonly<Record<TreeBadge, string>> = {
   added: "Added",
   modified: "Modified",
   removed: "Deleted",
   renamed: "Renamed",
-};
-
-const BADGE_ICONS: Readonly<Record<TreeBadge, LucideIcon>> = {
-  added: SQUARE_PLUS_ICON,
-  modified: SQUARE_DOT_ICON,
-  removed: SQUARE_MINUS_ICON,
-  renamed: SQUARE_ARROW_RIGHT_ICON,
 };
 
 const text = (value: string): Text => ({ type: "text", value });
@@ -56,29 +56,29 @@ const badgeLabel = (badge: TreeBadge | undefined): ReadonlyArray<Element> =>
             className: [
               "file-tree-label",
               "ml-auto",
-              "inline-flex",
-              "items-center",
-              "gap-[0.3rem]",
               "pl-6",
               "font-sans",
               "text-[0.6875rem]",
               "font-semibold",
-              "[&>svg]:size-3.5",
-              "[&>svg]:shrink-0",
             ],
           },
-          children: [
-            renderLucideIcon({ icon: BADGE_ICONS[badge], hidden: false }),
-            text(BADGE_LABELS[badge]),
-          ],
+          children: [text(BADGE_LABELS[badge])],
         },
       ];
 
-const entryIcon = (entry: TreeEntry): Element =>
-  renderLucideIcon({
-    icon: entry.kind === "directory" ? FOLDER_ICON : FILE_ICON,
-    hidden: false,
-  });
+const entryIcon = ({
+  entry,
+  badge,
+}: {
+  readonly entry: TreeEntry;
+  readonly badge: TreeBadge | undefined;
+}): Element => {
+  if (entry.kind === "directory") {
+    return renderLucideIcon({ icon: FOLDER_ICON, hidden: false });
+  }
+  const status = badge === undefined ? undefined : STATUS_ICONS[badge];
+  return renderLucideIcon({ icon: status ?? FILE_ICON, hidden: false });
+};
 
 const noteElement = ({
   entry,
@@ -102,17 +102,23 @@ const noteElement = ({
       },
     ];
   }
-  // The native title tooltip serves sighted hover; the visually hidden text
-  // keeps the note in the accessibility tree and in copied selections.
+  // The title attribute is the no-JavaScript fallback; the browser script
+  // upgrades it to an instant tooltip on hover, focus, or tap. The visually
+  // hidden text keeps the note in the accessibility tree and in copied
+  // selections.
   return [
     {
       type: "element",
-      tagName: "span",
+      tagName: "button",
       properties: {
+        type: "button",
         className: [
           "file-tree-note-hint",
           "inline-flex",
           "cursor-help",
+          "border-0",
+          "bg-transparent",
+          "p-0",
           "text-muted",
           "hover:text-ink",
           "[&>svg]:size-3.5",
@@ -152,7 +158,7 @@ const entryRow = ({
     ...(badge === undefined ? {} : { "data-tree-badge": badge }),
   },
   children: [
-    entryIcon(entry),
+    entryIcon({ entry, badge }),
     {
       type: "element",
       tagName: "span",

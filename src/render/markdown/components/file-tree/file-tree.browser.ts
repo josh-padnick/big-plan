@@ -47,6 +47,75 @@ const readStoredTreeDiffView = (): FileTreeDiffView => {
 
 const storedTreeDiffView = readStoredTreeDiffView();
 
+// Upgrades each note hint's slow native title tooltip to an instant floating
+// card shown while hovered or focused. The card uses fixed positioning so the
+// tree's scroll container cannot clip it, and mounts inside an open dialog so
+// the full-screen top layer cannot bury it.
+const wireNoteHints = ({
+  component,
+}: {
+  readonly component: HTMLElement;
+}): void => {
+  for (const hint of component.querySelectorAll<HTMLButtonElement>(
+    ".file-tree-note-hint",
+  )) {
+    const note = hint.getAttribute("title") ?? "";
+    if (note === "") {
+      continue;
+    }
+    hint.removeAttribute("title");
+    let tip: HTMLDivElement | null = null;
+    let hovered = false;
+    let focused = false;
+    const update = (): void => {
+      if (!hovered && !focused) {
+        tip?.remove();
+        tip = null;
+        return;
+      }
+      if (tip !== null) {
+        return;
+      }
+      tip = document.createElement("div");
+      tip.className = "file-tree-note-tip";
+      tip.textContent = note;
+      tip.setAttribute("aria-hidden", "true");
+      (component.closest("dialog") ?? document.body).append(tip);
+      const rect = hint.getBoundingClientRect();
+      const width = tip.getBoundingClientRect().width;
+      const left = Math.max(
+        8,
+        Math.min(rect.left, window.innerWidth - width - 8),
+      );
+      tip.style.left = `${left}px`;
+      tip.style.top = `${rect.bottom + 6}px`;
+    };
+    hint.addEventListener("pointerenter", () => {
+      hovered = true;
+      update();
+    });
+    hint.addEventListener("pointerleave", () => {
+      hovered = false;
+      update();
+    });
+    hint.addEventListener("focus", () => {
+      focused = true;
+      update();
+    });
+    hint.addEventListener("blur", () => {
+      focused = false;
+      update();
+    });
+    hint.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        hovered = false;
+        focused = false;
+        update();
+      }
+    });
+  }
+};
+
 // Mirrors the expanded state into the tree's dataset and expand control.
 const applyTreeExpandedState = ({
   component,
@@ -80,6 +149,7 @@ for (const component of document.querySelectorAll<HTMLElement>(
   const expand =
     component.querySelector<HTMLButtonElement>("[data-tree-expand]");
   expand?.removeAttribute("hidden");
+  wireNoteHints({ component });
   applyTreeDiffView({ component, view: storedTreeDiffView });
 
   expand?.addEventListener("click", () => {
