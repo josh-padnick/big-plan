@@ -1,6 +1,8 @@
 // Owns CodeSnippet's progressively enhanced actions menu and raw-source/path
 // clipboard behavior; the snippet and annotations remain readable without it.
 
+import { linkAnnotationHover } from "../shared/annotation-hover.browser.js";
+
 const SNIPPET_MESSAGE_RESET_MS = 2_000;
 const snippetMessageTimers = new WeakMap<HTMLElement, number>();
 
@@ -77,6 +79,27 @@ const writeSnippetClipboard = async ({
 for (const block of document.querySelectorAll<HTMLElement>(
   "[data-code-snippet]",
 )) {
+  for (const card of block.querySelectorAll<HTMLElement>(
+    "[data-snippet-annotation]",
+  )) {
+    const range = /^(\d+)(?:-(\d+))?$/u.exec(
+      card.getAttribute("data-snippet-annotation") ?? "",
+    );
+    if (range === null) {
+      continue;
+    }
+    const start = Number(range[1]);
+    const end = Number(range[2] ?? range[1]);
+    linkAnnotationHover({
+      card,
+      targets: [
+        ...block.querySelectorAll<HTMLElement>("[data-snippet-line]"),
+      ].filter((row) => {
+        const line = Number(row.dataset.snippetLine);
+        return line >= start && line <= end;
+      }),
+    });
+  }
   const menuButton = block.querySelector<HTMLButtonElement>(
     "[data-snippet-menu-button]",
   );

@@ -138,6 +138,23 @@
       var(--diff-remove-bg)
     );
   }
+  article [data-annotation-anchor].annotation-hover {
+    background: color-mix(
+      in srgb,
+      var(--annotation-c) 18%,
+      var(--diff-content-bg)
+    );
+  }
+  article [data-annotation-anchor][data-diff-line="add"].annotation-hover {
+    background: color-mix(in srgb, var(--annotation-c) 20%, var(--diff-add-bg));
+  }
+  article [data-annotation-anchor][data-diff-line="remove"].annotation-hover {
+    background: color-mix(
+      in srgb,
+      var(--annotation-c) 20%,
+      var(--diff-remove-bg)
+    );
+  }
   article .code-diff-annotation-surround {
     border-left-color: var(--annotation-c);
     background: color-mix(

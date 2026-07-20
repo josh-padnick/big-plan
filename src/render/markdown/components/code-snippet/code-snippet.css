@@ -26,6 +26,9 @@
     position: relative;
     background: color-mix(in srgb, var(--annotation-c) 8%, transparent);
   }
+  article [data-snippet-annotated].annotation-hover {
+    background: color-mix(in srgb, var(--annotation-c) 16%, transparent);
+  }
   /* One continuous rail spans every line of an annotation range; the
      start/end boundary tokens round its caps so the extent reads at a
      glance even across adjacent ranges. */

@@ -38,6 +38,7 @@ const annotationCard = (annotation: AnchoredAnnotation): Element =>
     className: ["code-diff-annotation"],
     properties: {
       "data-annotation": "",
+      "data-annotation-id": annotation.id,
       "data-annotation-lines": annotation.lines,
       "data-annotation-side": annotation.side,
     },
@@ -170,11 +171,14 @@ const unifiedLine = ({
   properties: {
     className: [...LINE_CLASSES.split(" "), "code-diff-unified-line"],
     "data-diff-line": line.kind,
-    ...(annotations.some((annotation) =>
-      annotationCoversLine({ annotation, line }),
-    )
-      ? { "data-annotation-anchor": "" }
-      : {}),
+    ...(() => {
+      const ids = annotations
+        .filter((annotation) => annotationCoversLine({ annotation, line }))
+        .map((annotation) => annotation.id);
+      return ids.length === 0
+        ? {}
+        : { "data-annotation-anchor": ids.join(" ") };
+    })(),
     ...(showLineNumbers ? { "data-line-numbers": "" } : {}),
   },
   children: [
@@ -230,13 +234,21 @@ const splitLine = ({
   properties: {
     className: [...LINE_CLASSES.split(" "), "code-diff-split-line"],
     "data-diff-line": line?.kind ?? "empty",
-    ...(line !== undefined &&
-    annotations.some(
-      (annotation) =>
-        annotation.side === side && annotationCoversLine({ annotation, line }),
-    )
-      ? { "data-annotation-anchor": "" }
-      : {}),
+    ...(() => {
+      const ids =
+        line === undefined
+          ? []
+          : annotations
+              .filter(
+                (annotation) =>
+                  annotation.side === side &&
+                  annotationCoversLine({ annotation, line }),
+              )
+              .map((annotation) => annotation.id);
+      return ids.length === 0
+        ? {}
+        : { "data-annotation-anchor": ids.join(" ") };
+    })(),
     ...(showLineNumbers ? { "data-line-numbers": "" } : {}),
   },
   children: [

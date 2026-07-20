@@ -232,8 +232,10 @@ describe("renderCodeDiff output", () => {
         isElement(renderedAnnotation) ? textOf(renderedAnnotation) : "",
       ).toContain("Lines 12-14");
     }
+    // Anchors carry the ids of the annotations covering them, so hover can
+    // link each card with its lines.
     expect(
-      JSON.stringify(element).match(/"data-annotation-anchor":""/gu),
+      JSON.stringify(element).match(/"data-annotation-anchor":"[^"]+"/gu),
     ).toHaveLength(6);
   });
 

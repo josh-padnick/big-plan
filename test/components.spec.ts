@@ -521,6 +521,28 @@ test("should review an annotated file-absolute code snippet", async ({
     await expect(snippet.locator("[data-snippet-annotated]")).toHaveCount(3);
   });
 
+  await test.step("hovering links the annotation with its lines", async () => {
+    const row = snippet.locator('[data-snippet-line="44"]');
+    const rowRest = await row.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    await annotation.hover();
+    const rowLinked = await row.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    expect(rowLinked).not.toBe(rowRest);
+    await page.mouse.move(0, 0);
+    const cardRest = await annotation.evaluate(
+      (element) => getComputedStyle(element).borderTopColor,
+    );
+    await row.hover();
+    const cardLinked = await annotation.evaluate(
+      (element) => getComputedStyle(element).borderTopColor,
+    );
+    expect(cardLinked).not.toBe(cardRest);
+    await page.mouse.move(0, 0);
+  });
+
   await test.step("copy code excludes review chrome", async () => {
     await page.evaluate(() => {
       Object.defineProperty(navigator, "clipboard", {

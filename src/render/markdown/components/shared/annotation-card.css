@@ -17,6 +17,11 @@
     background: color-mix(in srgb, var(--annotation-c) 14%, transparent);
     color: var(--annotation-c);
   }
+  /* Hover linkage: the browser script mirrors this class onto the card and
+     its anchored lines so the pairing reads at a glance. */
+  article .annotation-card.annotation-hover {
+    border-color: color-mix(in srgb, var(--annotation-c) 55%, transparent);
+  }
   article .annotation-card-body > :first-child {
     margin-top: 0;
   }
