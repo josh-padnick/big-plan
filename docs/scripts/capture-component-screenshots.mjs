@@ -77,6 +77,62 @@ This range turns the cache-age check into a stale-while-revalidate policy: entri
 </CodeDiff>
 `;
 
+const SNIPPET_FIXTURE = `<CodeSnippet file="src/catalog/refresh-worker.ts" startLine="42" showLineNumbers>
+
+\`\`\`ts
+export const refreshCatalog = async (key: string): Promise<void> => {
+  const current = await catalogOrigin.read(key);
+  await cache.put(key, current, { ttlSeconds: 300 });
+  metrics.increment("catalog_cache.refresh_success");
+};
+\`\`\`
+
+<Annotation lines="43">
+
+Resolve through \`catalogOrigin\` so refreshes use the same retries and tracing as synchronous fallbacks.
+
+</Annotation>
+
+<Annotation lines="44-45">
+
+The cache write must complete before success is recorded; otherwise dashboards can report a refresh that readers cannot observe.
+
+</Annotation>
+
+</CodeSnippet>
+`;
+
+const FILE_TREE_FIXTURE = `<FileTree title="Worker pool layout">
+
+\`\`\`tree
+worker-pool/
+  refresh-worker.ts - Consumes deduplicated catalog refresh jobs.
+  worker-config.ts - Owns concurrency and timeout settings.
+\`\`\`
+
+</FileTree>
+`;
+
+const TREE_DIFF_FIXTURE = `<FileTreeDiff title="Planned changes">
+
+\`\`\`tree
+src/
+  catalog/
+    catalog-origin.ts
+    refresh-worker.ts [modified] - Move refresh work behind the queue.
+    refresh-queue.ts [added] - Deduplicate refresh jobs by cache key.
+  metrics/ [removed] - The legacy metrics module retires with its counter.
+    legacy-cache-counter.ts [removed]
+  queue/ [added] - New home for queue worker configuration.
+    queue-config.ts [added]
+ops/ -> deploy/ [renamed] - Match the platform team's naming.
+  runbook.md
+README.md [modified]
+\`\`\`
+
+</FileTreeDiff>
+`;
+
 /** Renders an MDX fixture through the CLI and returns the output HTML path. */
 const renderFixture = ({ dir, name, mdx }) => {
   const input = join(dir, `${name}.mdx`);
@@ -87,10 +143,18 @@ const renderFixture = ({ dir, name, mdx }) => {
 };
 
 /** Screenshots one region of a rendered fixture in one color scheme. */
-const capture = async ({ browser, colorScheme, html, prepare, shoot, out }) => {
+const capture = async ({
+  browser,
+  colorScheme,
+  html,
+  prepare,
+  shoot,
+  out,
+  width = 760,
+}) => {
   const context = await browser.newContext({
     colorScheme,
-    viewport: { width: 760, height: 1600 },
+    viewport: { width, height: 1600 },
     deviceScaleFactor: 2,
   });
   const page = await context.newPage();
@@ -124,6 +188,29 @@ const shootFigure = async (page, path) => {
   await page.locator("figure[data-code-diff]").screenshot({ path });
 };
 
+/** Screenshots the CodeSnippet figure element. */
+const shootSnippet = async (page, path) => {
+  await page.locator("figure[data-code-snippet]").screenshot({ path });
+};
+
+/** Screenshots the FileTree figure element. */
+const shootFileTree = async (page, path) => {
+  await page.locator("figure[data-file-tree]").screenshot({ path });
+};
+
+/** Screenshots the FileTreeDiff figure element. */
+const shootFileTreeDiff = async (page, path) => {
+  await page.locator("figure[data-file-tree-diff]").screenshot({ path });
+};
+
+/** Switches the tree to the side-by-side view. */
+const openSideBySide = async (page) => {
+  await page.click('[data-tree-set-view="before-after"]');
+  await page.waitForSelector('[data-tree-content="before-after"]', {
+    state: "visible",
+  });
+};
+
 /** Switches to side-by-side view and opens the actions menu. */
 const openSplitAndMenu = async (page) => {
   await page.click('[data-diff-set-view="split"]');
@@ -151,6 +238,32 @@ const SHOTS = [
     base: "annotation-card",
     shoot: shootFigure,
   },
+  {
+    name: "snippet",
+    mdx: SNIPPET_FIXTURE,
+    base: "code-snippet-annotated",
+    shoot: shootSnippet,
+  },
+  {
+    name: "file-tree",
+    mdx: FILE_TREE_FIXTURE,
+    base: "file-tree-plain",
+    shoot: shootFileTree,
+  },
+  {
+    name: "tree-diff-combined",
+    mdx: TREE_DIFF_FIXTURE,
+    base: "file-tree-diff-combined",
+    shoot: shootFileTreeDiff,
+  },
+  {
+    name: "tree-diff-panes",
+    mdx: TREE_DIFF_FIXTURE,
+    base: "file-tree-diff-panes",
+    shoot: shootFileTreeDiff,
+    prepare: openSideBySide,
+    width: 1200,
+  },
 ];
 
 const dir = mkdtempSync(join(tmpdir(), "big-plan-shots-"));
@@ -166,6 +279,7 @@ try {
         prepare: shot.prepare,
         shoot: shot.shoot,
         out: `${shot.base}-${colorScheme}.png`,
+        width: shot.width,
       });
       console.log(`captured ${shot.base}-${colorScheme}.png`);
     }

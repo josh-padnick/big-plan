@@ -13,6 +13,14 @@ import annotationDark from "../../../assets/components/annotation-card-dark.png"
 
 The plan author pastes ordinary `git diff` output for that file into the component, and the reader gets a full diff viewer: unified or side-by-side layout, optional line numbers and change counts, copy actions, and a full-screen mode.
 
+## How it looks
+
+<ThemeImage
+  light={splitLight}
+  dark={splitDark}
+  alt="A CodeDiff component in side-by-side view with line numbers, header stats, and the actions menu open"
+/>
+
 ## When to use it
 
 Use `CodeDiff` whenever a plan proposes a concrete change to existing code, so the reviewer approves the exact lines rather than a prose description of them.
@@ -28,14 +36,6 @@ Use `CodeDiff` whenever a plan proposes a concrete change to existing code, so t
 - Show the exact edit an agent intends to make before it touches the file
 - Explain a risky or subtle change with annotations anchored to the specific lines they discuss
 - Put the current and proposed versions of dense code side by side so the reviewer can compare them line by line
-
-## How it looks
-
-<ThemeImage
-  light={splitLight}
-  dark={splitDark}
-  alt="A CodeDiff component in side-by-side view with line numbers, header stats, and the actions menu open"
-/>
 
 ## Usage
 

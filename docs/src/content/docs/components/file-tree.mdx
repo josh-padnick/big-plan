@@ -3,9 +3,21 @@ title: FileTree
 description: A component for a plain project file hierarchy, with directories, files, and optional per-entry notes.
 ---
 
+import ThemeImage from "../../../components/ThemeImage.astro";
+import fileTreeLight from "../../../assets/components/file-tree-plain-light.png";
+import fileTreeDark from "../../../assets/components/file-tree-plain-dark.png";
+
 `FileTree` renders a plain file hierarchy from an indented text outline: directories, files, and an optional note beside any entry.
 It shows where code lives without implying that anything changes.
 Directories fold: clicking a directory row (or its chevron) collapses that subtree, titled trees get header controls that collapse or expand every folder, and without JavaScript the tree stays fully expanded.
+
+## How it looks
+
+<ThemeImage
+  light={fileTreeLight}
+  dark={fileTreeDark}
+  alt="A titled plain file hierarchy with folder and file icons, connector lines, and a muted note beside each file"
+/>
 
 ## When to use it
 
@@ -20,12 +32,6 @@ Use `FileTree` to orient a reviewer in an unchanged directory structure - the sh
 
 - Sketch the layout a plan assumes before describing the work
 - Point out which directory owns a concern the reviewer will need to find
-
-## How it looks
-
-:::note[📸 Screenshot placeholder]
-A bordered tree with a title header, folder and file icons, connector lines between nested entries, and a muted note beside one file.
-:::
 
 ## Usage
 

@@ -3,8 +3,32 @@ title: FileTreeDiff
 description: A component for a project file hierarchy annotated with per-file change status, viewable as a combined tree or side-by-side before and after trees.
 ---
 
+import ThemeImage from "../../../components/ThemeImage.astro";
+import combinedLight from "../../../assets/components/file-tree-diff-combined-light.png";
+import combinedDark from "../../../assets/components/file-tree-diff-combined-dark.png";
+import panesLight from "../../../assets/components/file-tree-diff-panes-light.png";
+import panesDark from "../../../assets/components/file-tree-diff-panes-dark.png";
+
 `FileTreeDiff` renders a file hierarchy where each entry can carry a change status - added, modified, removed, or renamed - so a reviewer sees the shape of a change across the tree.
 It offers a combined change tree by default and a derived before-and-after view.
+
+## How it looks
+
+The combined change tree is the default view:
+
+<ThemeImage
+  light={combinedLight}
+  dark={combinedDark}
+  alt="The combined change tree with status-tinted names, spelled-out statuses, comment hints, and the header change summary"
+/>
+
+The side-by-side view pairs the untouched Current tree with the fully annotated Planned tree:
+
+<ThemeImage
+  light={panesLight}
+  dark={panesDark}
+  alt="The Current and Planned trees side by side, with pane fold controls and the Show diff switch in the Planned bar"
+/>
 
 ## When to use it
 
@@ -19,12 +43,6 @@ Use `FileTreeDiff` to show which files a plan touches and how: the additions, mo
 
 - Summarize the file-level footprint of a plan at a glance
 - Confirm a rename lands where intended by reading the before and after trees side by side
-
-## How it looks
-
-:::note[📸 Screenshot placeholder]
-A bordered tree titled and topped with a change-count summary and a Combined / Side-by-side toggle; entries tint their names by change status - deletions struck through - and spell out Added, Modified, Deleted, or Renamed beside the name, with the Current and Planned trees shown as two panes.
-:::
 
 ## Usage
 
