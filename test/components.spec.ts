@@ -613,7 +613,7 @@ test("should keep a range Annotation visible when switching diff views", async (
   await test.step("long content clamps while short content stays complete", async () => {
     await expect(unifiedAnnotation).toBeVisible();
     await expect(unifiedAnnotation).toContainText(annotationText);
-    const body = unifiedAnnotation.locator(".code-diff-annotation-body");
+    const body = unifiedAnnotation.locator(".annotation-card-body");
     const toggle = unifiedAnnotation.locator(".code-diff-annotation-toggle");
     await expect(toggle).toHaveAccessibleName("View more…");
     await expect(toggle).toHaveAttribute("aria-expanded", "false");

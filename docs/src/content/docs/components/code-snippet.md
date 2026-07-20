@@ -84,7 +84,7 @@ Nest `Annotation` directly inside `CodeSnippet` to anchor a markdown note to spe
 
 The body is ordinary markdown - though not headings, footnotes, or nested components - and must not be empty; an `Annotation` outside a declaring parent stays an unknown component.
 
-An annotation renders as a prose card immediately after the last line of its range, with a `Line N` / `Lines N-M` badge; anchor lines are accent-tinted with a gutter marker in both themes.
+An annotation renders as a prose card immediately after the last line of its range, sharing [`CodeDiff`](/components/code-diff/)'s annotation identity: the comment glyph, a `Line N` / `Lines N-M` badge, and the annotation tint, which also washes the anchor lines and their gutter marker in both themes.
 
 ## Copy behavior
 

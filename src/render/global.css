@@ -11,6 +11,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
 @import "tailwindcss" source(none);
 @import "./markdown/prose.css";
 @import "./markdown/code-block/syntax-highlighting.css";
+@import "./markdown/components/shared/annotation-card.css";
 @import "./markdown/components/shared/full-screen.css";
 @import "./markdown/components/callout/callout.css";
 @import "./markdown/components/code-diff/code-diff.css";
@@ -39,16 +40,12 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --diff-add-bg: #e8f2e9;
   --diff-remove-c: #9a493f;
   --diff-remove-bg: #f6e8e4;
-  --diff-annotation-c: #5965a8;
-  --diff-annotation-bg: #e4e8f7;
+  --annotation-c: #5965a8;
+  --annotation-bg: #e4e8f7;
   --diff-content-bg: #ffffff;
   --diff-hunk-bg: #f6f5f2;
   --diff-hunk-c: #8a857c;
   --diff-header-bg: #efece3;
-  --snippet-annotation-bg: #f3f1ea;
-  --snippet-annotation-edge: #d7d1c3;
-  --snippet-annotation-card-bg: #faf9f5;
-  --snippet-annotation-badge-bg: #eae6da;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -71,16 +68,12 @@ Light and dark follow the reader's OS unless the theme control overrides it.
     --diff-add-bg: #1e2b21;
     --diff-remove-c: #df9184;
     --diff-remove-bg: #30211f;
-    --diff-annotation-c: #aab4f0;
-    --diff-annotation-bg: #2a2f4e;
+    --annotation-c: #aab4f0;
+    --annotation-bg: #2a2f4e;
     --diff-content-bg: #1b1916;
     --diff-hunk-bg: #21201d;
     --diff-hunk-c: #8d887e;
     --diff-header-bg: #2e2a22;
-    --snippet-annotation-bg: #26231c;
-    --snippet-annotation-edge: #47423a;
-    --snippet-annotation-card-bg: #232019;
-    --snippet-annotation-badge-bg: #35312a;
   }
 }
 
@@ -107,16 +100,12 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --diff-add-bg: #1e2b21;
   --diff-remove-c: #df9184;
   --diff-remove-bg: #30211f;
-  --diff-annotation-c: #aab4f0;
-  --diff-annotation-bg: #2a2f4e;
+  --annotation-c: #aab4f0;
+  --annotation-bg: #2a2f4e;
   --diff-content-bg: #1b1916;
   --diff-hunk-bg: #21201d;
   --diff-hunk-c: #8d887e;
   --diff-header-bg: #2e2a22;
-  --snippet-annotation-bg: #26231c;
-  --snippet-annotation-edge: #47423a;
-  --snippet-annotation-card-bg: #232019;
-  --snippet-annotation-badge-bg: #35312a;
   color-scheme: dark;
 }
 

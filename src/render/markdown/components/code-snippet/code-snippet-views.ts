@@ -2,6 +2,7 @@
 // tagging every covered row with range-boundary tokens the stylesheet caps.
 
 import type { Element, Text } from "hast";
+import { renderAnnotationCard } from "../shared/annotation-card.js";
 import type {
   CompiledCodeSnippet,
   CompiledCodeSnippetAnnotation,
@@ -67,59 +68,19 @@ const codeLine = ({
   ],
 });
 
-const annotationCard = (
-  annotation: CompiledCodeSnippetAnnotation,
-): Element => ({
-  type: "element",
-  tagName: "aside",
-  properties: {
-    className: [
-      "code-snippet-annotation",
-      "mx-3",
-      "my-2",
-      "rounded-md",
-      "border",
-      "px-3",
-      "py-2.5",
-      "font-sans",
-      "text-sm",
-      "whitespace-normal",
-    ],
-    "data-snippet-annotation": annotation.sourceValue,
-    "data-snippet-anchor-end": annotation.end,
-  },
-  children: [
-    {
-      type: "element",
-      tagName: "span",
-      properties: {
-        className: [
-          "code-snippet-annotation-badge",
-          "mb-1.5",
-          "inline-flex",
-          "rounded-full",
-          "px-2",
-          "py-0.5",
-          "text-xs",
-          "font-semibold",
-        ],
-      },
-      children: [
-        text(
-          annotation.start === annotation.end
-            ? `Line ${annotation.start}`
-            : `Lines ${annotation.start}-${annotation.end}`,
-        ),
-      ],
+const annotationCard = (annotation: CompiledCodeSnippetAnnotation): Element =>
+  renderAnnotationCard({
+    label:
+      annotation.start === annotation.end
+        ? `Line ${annotation.start}`
+        : `Lines ${annotation.start}-${annotation.end}`,
+    children: annotation.children,
+    className: ["code-snippet-annotation", "mx-3", "my-2"],
+    properties: {
+      "data-snippet-annotation": annotation.sourceValue,
+      "data-snippet-anchor-end": annotation.end,
     },
-    {
-      type: "element",
-      tagName: "div",
-      properties: { className: ["code-snippet-annotation-body"] },
-      children: [...annotation.children],
-    },
-  ],
-});
+  });
 
 /** Renders the numbered rows and interleaved annotation cards for one snippet. */
 export const renderCodeSnippetRows = ({

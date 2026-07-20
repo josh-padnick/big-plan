@@ -121,52 +121,32 @@
        An around-10% wash blends over the semantic add/remove tints so covered
        lines read as annotated without losing their diff identity, and the
        card's stronger background stays the loudest element. */
-    box-shadow: inset 4px 0 0 var(--diff-annotation-c);
+    box-shadow: inset 4px 0 0 var(--annotation-c);
     background: color-mix(
       in srgb,
-      var(--diff-annotation-c) 8%,
+      var(--annotation-c) 8%,
       var(--diff-content-bg)
     );
   }
   article [data-annotation-anchor][data-diff-line="add"] {
-    background: color-mix(
-      in srgb,
-      var(--diff-annotation-c) 10%,
-      var(--diff-add-bg)
-    );
+    background: color-mix(in srgb, var(--annotation-c) 10%, var(--diff-add-bg));
   }
   article [data-annotation-anchor][data-diff-line="remove"] {
     background: color-mix(
       in srgb,
-      var(--diff-annotation-c) 10%,
+      var(--annotation-c) 10%,
       var(--diff-remove-bg)
     );
   }
   article .code-diff-annotation-surround {
-    border-left-color: var(--diff-annotation-c);
+    border-left-color: var(--annotation-c);
     background: color-mix(
       in srgb,
-      var(--diff-annotation-c) 8%,
+      var(--annotation-c) 8%,
       var(--diff-content-bg)
     );
   }
-  article .code-diff-annotation {
-    /* A subtle tinted border gives each card a crisp edge inside the
-       shared surround wash. */
-    border: 1px solid
-      color-mix(in srgb, var(--diff-annotation-c) 30%, transparent);
-    border-radius: 0.3rem;
-    background: var(--diff-annotation-bg);
-  }
-  article .code-diff-annotation > svg {
-    margin-top: 0.125rem;
-    color: var(--diff-annotation-c);
-  }
-  article .code-diff-annotation-badge {
-    background: color-mix(in srgb, var(--diff-annotation-c) 14%, transparent);
-    color: var(--diff-annotation-c);
-  }
-  article .code-diff-annotation-content {
+  article .code-diff-annotation .annotation-card-content {
     flex: 1;
   }
   article .code-diff-annotation-body-clamped {
@@ -175,16 +155,13 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 3;
   }
-  article .code-diff-annotation-body > :last-child {
-    margin-bottom: 0;
-  }
   article .code-diff-annotation-toggle {
     margin-top: 0.5rem;
     cursor: pointer;
     border: 0;
     background: transparent;
     padding: 0;
-    color: var(--diff-annotation-c);
+    color: var(--annotation-c);
     font-size: 0.75rem;
     font-weight: 600;
   }

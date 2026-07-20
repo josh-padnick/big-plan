@@ -24,7 +24,7 @@
   }
   article [data-snippet-annotated] {
     position: relative;
-    background: var(--snippet-annotation-bg);
+    background: color-mix(in srgb, var(--annotation-c) 8%, transparent);
   }
   /* One continuous rail spans every line of an annotation range; the
      start/end boundary tokens round its caps so the extent reads at a
@@ -35,7 +35,7 @@
     bottom: 0;
     left: 0;
     width: 0.1875rem;
-    background: var(--color-muted);
+    background: var(--annotation-c);
     content: "";
   }
   article [data-snippet-annotated~="start"]::before {
@@ -45,20 +45,6 @@
   article [data-snippet-annotated~="end"]::before {
     border-bottom-left-radius: 9999px;
     border-bottom-right-radius: 9999px;
-  }
-  article .code-snippet-annotation {
-    border-color: var(--snippet-annotation-edge);
-    background: var(--snippet-annotation-card-bg);
-  }
-  article .code-snippet-annotation-badge {
-    background: var(--snippet-annotation-badge-bg);
-    color: var(--color-muted);
-  }
-  article .code-snippet-annotation-body > :first-child {
-    margin-top: 0;
-  }
-  article .code-snippet-annotation-body > :last-child {
-    margin-bottom: 0;
   }
   article .code-snippet-menu-list {
     background: var(--diff-header-bg);
