@@ -119,7 +119,7 @@ ${items}
 /**
  * Wraps rendered content in the review shell: the layout grid and branding
  * bar, responsive navigation when nav entries exist, theme control, and
- * code-block controls. Returns markup plus the styles and
+ * code-block and component controls. Returns markup plus the styles and
  * progressive-enhancement scripts the caller packages into a page.
  */
 export const renderShell = ({

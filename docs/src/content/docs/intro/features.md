@@ -31,12 +31,15 @@ For what comes next, see the [roadmap](/intro/roadmap/).
 - Positional diagnostics that aggregate recoverable unsupported syntax, unknown components, invalid attributes, and malformed component content after MDX parses.
 - `Callout` components for notes, tips, warnings, and dangers.
 - `CodeDiff` components with optional line numbers and change counts, unified and side-by-side views, scoped line annotations, copy actions, and full-screen viewing.
+- `CodeSnippet` components for excerpts with optional file identity, file-absolute line numbers, scoped annotations, and copy actions.
+- `FileTree` components for plain hierarchies with optional per-entry notes.
+- `FileTreeDiff` components with change badges and persisted combined or before-and-after views.
 
 ## Output
 
 - One self-contained HTML file: styling, behavior, and branding embedded.
 - No external requests, ever.
-- Readable with JavaScript disabled; scripts only enhance navigation, theming, code-copy controls, and `CodeDiff` interactions.
+- Readable with JavaScript disabled; scripts only enhance navigation, theming, code-copy controls, `CodeDiff` and `CodeSnippet` interactions, and `FileTreeDiff` view selection.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 
 See the [CLI reference](/reference/cli/) for command details.

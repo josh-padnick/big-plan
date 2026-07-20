@@ -24,7 +24,7 @@ The full contract lives in [Authoring plans](/for-agents/authoring-plans/).
 
 ## Components render to HTML
 
-Components like [`Callout`](/components/callout/) and [`CodeDiff`](/components/code-diff/) come from a closed, built-in registry.
+[`Callout`](/components/callout/), [`CodeDiff`](/components/code-diff/), [`CodeSnippet`](/components/code-snippet/), [`FileTree`](/components/file-tree/), and [`FileTreeDiff`](/components/file-tree-diff/) come from a closed, built-in registry.
 When the renderer meets a component, the registry renders it to plain HTML on the server: the component's markup and styles are baked into the output document, no plan-authored code is evaluated or shipped, and built-in scripts provide only progressive enhancement.
 Everything else renders as ordinary markdown prose.
 
@@ -47,7 +47,7 @@ An MDX syntax error can stop parsing before component validation begins, so fix 
 ## One self-contained file
 
 The rendered document embeds everything it needs: styles, scripts, branding, and favicons.
-It makes no external requests, works offline, and stays readable with JavaScript disabled; scripts only enhance navigation, theme switching, code-copy controls, and `CodeDiff` views, annotations, actions, and full-screen mode.
+It makes no external requests, works offline, and stays readable with JavaScript disabled; scripts only enhance navigation, theme switching, code-copy controls, `CodeDiff` and `CodeSnippet` interactions, and `FileTreeDiff` view selection.
 Nothing about rendering or reviewing a plan touches a server, an account, or anyone else's machine.
 
 ## What comes next

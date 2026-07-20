@@ -50,9 +50,9 @@ README.md [modified] - Document the stale-while-revalidate path.
 
 ### Attributes
 
-| Attribute | Type   | Required | Behavior                                                               |
-| --------- | ------ | -------- | ---------------------------------------------------------------------- |
-| `title`   | string | No       | Header caption beside the view toggle; omitted, only the toggle shows. |
+| Attribute | Type               | Required | Behavior                                                               |
+| --------- | ------------------ | -------- | ---------------------------------------------------------------------- |
+| `title`   | string (non-empty) | No       | Header caption beside the view toggle; omitted, only the toggle shows. |
 
 Any other attribute is a positional authoring error.
 

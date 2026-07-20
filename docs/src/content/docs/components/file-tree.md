@@ -8,7 +8,7 @@ It shows where code lives without implying that anything changes.
 
 ## When to use it
 
-Use `FileTree` to orient a reviewer in a directory structure - the shape of a module, the layout of a package, or where a plan's new files will sit - when no change is being proposed.
+Use `FileTree` to orient a reviewer in an unchanged directory structure - the shape of a module, the layout of a package, or where existing files live.
 
 ### When not to use it
 
@@ -44,9 +44,9 @@ worker-pool/
 
 ### Attributes
 
-| Attribute | Type   | Required | Behavior                                                        |
-| --------- | ------ | -------- | --------------------------------------------------------------- |
-| `title`   | string | No       | Header caption above the tree; omitted, the tree has no header. |
+| Attribute | Type               | Required | Behavior                                                        |
+| --------- | ------------------ | -------- | --------------------------------------------------------------- |
+| `title`   | string (non-empty) | No       | Header caption above the tree; omitted, the tree has no header. |
 
 Any other attribute is a positional authoring error.
 

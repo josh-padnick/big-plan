@@ -1,13 +1,13 @@
 ---
 title: CodeSnippet
-description: A component for annotated code excerpts with a file association, real line numbers, and line-anchored notes.
+description: A component for code excerpts with optional file identity, file-absolute line numbers, and line-anchored notes.
 ---
 
-`CodeSnippet` shows an excerpt of existing code a reviewer must inspect line by line: a file association, real line numbers starting from the file's actual line, and `Annotation` cards anchored to the lines they explain.
+`CodeSnippet` shows an excerpt of existing code a reviewer must inspect line by line, adding a file association, file-absolute line numbers, or `Annotation` cards anchored to the lines they explain.
 
 ## When to use it
 
-Use `CodeSnippet` when the code under review already exists and the reviewer needs to see it in place - with its real file path and file-absolute line numbers - rather than as an anonymous sample.
+Use `CodeSnippet` when the code under review already exists and the reviewer needs file context, verifiable line numbers, or anchored notes that an anonymous sample cannot provide.
 
 ### When not to use it
 
@@ -58,28 +58,29 @@ const convertMarkdown = async ({ source, fallbackTitle }) => {
 
 | Attribute         | Type                     | Required           | Behavior                                                                                                                                    |
 | ----------------- | ------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `file`            | string                   | No                 | File the excerpt belongs to; renders the header path and enables the copy-path action.                                                      |
+| `file`            | string (non-empty)       | No                 | File the excerpt belongs to; renders the header path and enables the copy-path action.                                                      |
 | `startLine`       | string, positive integer | No (default `"1"`) | The file line the first fenced line corresponds to; the gutter and all annotation anchors use this file-absolute numbering.                 |
 | `showLineNumbers` | bare boolean             | No                 | Renders the line-number gutter; required whenever `startLine` is set, since invisible numbering would make annotation anchors unverifiable. |
 
 ### Children
 
 The component takes exactly one fenced code block, plus zero or more `Annotation` components, and nothing else.
+The fence may declare any language or none; supported languages receive syntax highlighting, while unknown and undeclared languages remain plain.
 
-Every violation reports a positional diagnostic:
+Component-specific violations report positional diagnostics, including:
 
 - A non-integer `startLine`
 - `startLine` without `showLineNumbers`
 - An annotation anchor outside the snippet's range (the message includes the valid range)
-- A bare snippet with no `file`, no `startLine`, and no annotations, which is rejected with a pointer to use a plain markdown fence
+- A bare snippet with no `file`, `startLine`, `showLineNumbers`, or annotations, which is rejected with a pointer to use a plain markdown fence
 
 ### Annotation
 
 Nest `Annotation` directly inside `CodeSnippet` to anchor a markdown note to specific lines.
 
-| Attribute | Type   | Required | Behavior                                                                                                                                              |
-| --------- | ------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lines`   | string | Yes      | A single file-absolute line (`"47"`) or a strictly ascending inclusive range (`"47-52"`); every referenced line must fall inside the snippet's range. |
+| Attribute | Type   | Required | Behavior                                                                                                                              |
+| --------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `lines`   | string | Yes      | A file-absolute line (`"47"`) or inclusive non-descending range (`"47-52"`); values must be safe integers inside the snippet's range. |
 
 The body is ordinary markdown - though not headings, footnotes, or nested components - and must not be empty; an `Annotation` outside a declaring parent stays an unknown component.
 
@@ -87,5 +88,5 @@ An annotation renders as a prose card immediately after the last line of its ran
 
 ## Copy behavior
 
-The copy action copies only the raw fenced source: never annotations, never line numbers.
+The Copy code action copies only the raw fenced source: never annotations, never line numbers; when `file` is set, Copy path copies that value separately.
 The line-number gutter is excluded from text selection, so copy-by-drag stays clean too.
