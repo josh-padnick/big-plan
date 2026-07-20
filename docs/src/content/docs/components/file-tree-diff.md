@@ -23,7 +23,7 @@ Use `FileTreeDiff` to show which files a plan touches and how: the additions, mo
 ## How it looks
 
 :::note[📸 Screenshot placeholder]
-A bordered tree titled and topped with a Combined / Before-After toggle; entries carry colored status icons and Add, Modify, Delete, and Rename labels, with the before and after trees shown as two panes.
+A bordered tree titled and topped with a Combined / Before-After toggle; entries tint their names by change status - deletions struck through - and spell out Added, Modified, Deleted, or Renamed at the row's edge, with the before and after trees shown as two panes.
 :::
 
 ## Usage
@@ -68,7 +68,7 @@ It must carry at least one change status; a tree with none is rejected with a po
 - Append a status in brackets after the name: `[added]`, `[modified]`, `[removed]`, or `[renamed]`.
 - Write a rename as `old -> new [renamed]`; both sides must stay files or stay directories, and the arrow only pairs with `[renamed]`.
 
-Each status renders its own colored icon and short label - Add, Modify, Delete, or Rename - standing in for GitHub's per-change file-tree glyphs.
+Each status tints the entry name in its change color and spells out Added, Modified, Deleted, or Renamed at the row's edge, the way git tooling presents working-tree status; deleted names are additionally struck through.
 Every violation - an unknown badge, a rename without its `[renamed]` badge, or a tree with no change at all - reports a positional diagnostic.
 
 ## Views

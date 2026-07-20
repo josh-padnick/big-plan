@@ -89,50 +89,57 @@ test("should review planned file changes in combined and before/after trees", as
     ).toHaveCount(1);
   });
 
-  await test.step("every change kind shows its own colored status icon", async () => {
+  await test.step("every change kind tints its name and spells its status at the row edge", async () => {
     const badgedRows = combined.locator("[data-tree-badge]");
     await expect(badgedRows).toHaveCount(5);
-    const statusIcons: ReadonlyArray<readonly [string, string]> = [
-      ["added", "file-plus-2"],
-      ["modified", "file-diff"],
-      ["removed", "file-minus-2"],
-      ["renamed", "file-symlink"],
-    ];
-    for (const [badge, icon] of statusIcons) {
-      await expect(
-        combined
-          .locator(`[data-tree-badge="${badge}"] > svg[data-lucide="${icon}"]`)
-          .first(),
-      ).toBeVisible();
-    }
     const labels: ReadonlyArray<readonly [string, string]> = [
-      ["added", "Add"],
-      ["modified", "Modify"],
-      ["removed", "Delete"],
-      ["renamed", "Rename"],
+      ["added", "Added"],
+      ["modified", "Modified"],
+      ["removed", "Deleted"],
+      ["renamed", "Renamed"],
     ];
     for (const [badge, label] of labels) {
       const row = combined.locator(`[data-tree-badge="${badge}"]`).first();
       await expect(row.locator(".file-tree-label")).toHaveText(label);
-      const iconColor = await row
-        .locator(":scope > svg")
-        .evaluate((element) => getComputedStyle(element).color);
-      const labelColor = await row
-        .locator(".file-tree-label")
-        .evaluate((element) => getComputedStyle(element).color);
-      expect(labelColor).toBe(iconColor);
+      const style = await row.evaluate((element) => {
+        const name = element.querySelector(".file-tree-name");
+        const status = element.querySelector(".file-tree-label");
+        if (
+          !(name instanceof HTMLElement) ||
+          !(status instanceof HTMLElement)
+        ) {
+          throw new Error("Missing row name or status");
+        }
+        return {
+          name: getComputedStyle(name).color,
+          status: getComputedStyle(status).color,
+          decoration: getComputedStyle(name).textDecorationLine,
+          nameRight: name.getBoundingClientRect().right,
+          statusRight: status.getBoundingClientRect().right,
+          rowRight: element.getBoundingClientRect().right,
+        };
+      });
+      expect(style.status).toBe(style.name);
+      expect(style.decoration === "line-through").toBe(badge === "removed");
+      expect(style.rowRight - style.statusRight).toBeLessThan(2);
+      expect(style.statusRight).toBeGreaterThan(style.nameRight + 24);
     }
-    const plainIconColor = await combined
-      .locator('[data-tree-entry="file"]:not([data-tree-badge]) > svg')
+    const plainName = await combined
+      .locator(
+        '[data-tree-entry="file"]:not([data-tree-badge]) .file-tree-name',
+      )
       .first()
       .evaluate((element) => getComputedStyle(element).color);
-    const statusColors = await badgedRows
-      .locator(":scope > svg")
-      .evaluateAll((elements) =>
-        elements.map((element) => getComputedStyle(element).color),
-      );
-    expect(statusColors.every((color) => color !== plainIconColor)).toBe(true);
-    expect(new Set(statusColors).size).toBeGreaterThanOrEqual(4);
+    const addedName = await combined
+      .locator('[data-tree-badge="added"] .file-tree-name')
+      .first()
+      .evaluate((element) => getComputedStyle(element).color);
+    expect(addedName).not.toBe(plainName);
+    await expect(
+      combined
+        .locator('[data-tree-badge="added"] > svg[data-lucide="file"]')
+        .first(),
+    ).toBeVisible();
   });
 
   await test.step("before and after show the matching state and rename", async () => {

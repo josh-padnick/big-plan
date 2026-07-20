@@ -2,14 +2,9 @@
 // FileTreeDiff view, parameterized by displayed names and change markers.
 
 import type { Element, Text } from "hast";
-import { FILE_DIFF_ICON } from "../../../icons/lucide/file-diff.js";
-import { FILE_MINUS_2_ICON } from "../../../icons/lucide/file-minus-2.js";
-import { FILE_PLUS_2_ICON } from "../../../icons/lucide/file-plus-2.js";
-import { FILE_SYMLINK_ICON } from "../../../icons/lucide/file-symlink.js";
 import { FILE_ICON } from "../../../icons/lucide/file.js";
 import { FOLDER_ICON } from "../../../icons/lucide/folder.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
-import type { LucideIcon } from "../../../icons/lucide-icon.js";
 import type { TreeBadge, TreeEntry } from "./parse-tree-text.js";
 
 const LIST_CLASSES = "file-tree-list m-0 min-w-max list-none p-0";
@@ -18,21 +13,14 @@ const CHILD_LIST_CLASSES =
 const ROW_CLASSES =
   "file-tree-row relative flex min-h-6 items-center gap-[0.45rem] whitespace-nowrap [&>svg]:size-3.5 [&>svg]:shrink-0";
 
-// The file-status Lucide glyphs stand in for GitHub's per-change file-tree
-// icons, so a reviewer reads add/modify/delete/rename the way a pull request
-// presents them.
-const STATUS_ICONS: Readonly<Record<TreeBadge, LucideIcon>> = {
-  added: FILE_PLUS_2_ICON,
-  removed: FILE_MINUS_2_ICON,
-  modified: FILE_DIFF_ICON,
-  renamed: FILE_SYMLINK_ICON,
-};
-
+// Statuses read the way git tooling presents them: the file name carries the
+// change tint (with deletions struck through, via the stylesheet's badge
+// rules) and the spelled-out status sits at the row's far edge.
 const BADGE_LABELS: Readonly<Record<TreeBadge, string>> = {
-  added: "Add",
-  modified: "Modify",
-  removed: "Delete",
-  renamed: "Rename",
+  added: "Added",
+  modified: "Modified",
+  removed: "Deleted",
+  renamed: "Renamed",
 };
 
 const text = (value: string): Text => ({ type: "text", value });
@@ -47,6 +35,8 @@ const badgeLabel = (badge: TreeBadge | undefined): ReadonlyArray<Element> =>
           properties: {
             className: [
               "file-tree-label",
+              "ml-auto",
+              "pl-6",
               "font-sans",
               "text-[0.6875rem]",
               "font-semibold",
@@ -56,19 +46,11 @@ const badgeLabel = (badge: TreeBadge | undefined): ReadonlyArray<Element> =>
         },
       ];
 
-const entryIcon = ({
-  entry,
-  badge,
-}: {
-  readonly entry: TreeEntry;
-  readonly badge: TreeBadge | undefined;
-}): Element => {
-  if (entry.kind === "directory") {
-    return renderLucideIcon({ icon: FOLDER_ICON, hidden: false });
-  }
-  const status = badge === undefined ? undefined : STATUS_ICONS[badge];
-  return renderLucideIcon({ icon: status ?? FILE_ICON, hidden: false });
-};
+const entryIcon = (entry: TreeEntry): Element =>
+  renderLucideIcon({
+    icon: entry.kind === "directory" ? FOLDER_ICON : FILE_ICON,
+    hidden: false,
+  });
 
 const noteElement = (entry: TreeEntry): ReadonlyArray<Element> =>
   entry.note === undefined
@@ -101,21 +83,23 @@ const entryRow = ({
     ...(badge === undefined ? {} : { "data-tree-badge": badge }),
   },
   children: [
-    entryIcon({ entry, badge }),
+    entryIcon(entry),
     {
       type: "element",
       tagName: "span",
       properties: {
         className: [
           "file-tree-name",
-          "text-ink",
+          // The ink utility would beat the stylesheet's status tint, so
+          // badged names leave their color to the badge rules.
+          ...(badge === undefined ? ["text-ink"] : []),
           ...(entry.kind === "directory" ? ["font-semibold"] : []),
         ],
       },
       children: [text(name)],
     },
-    ...badgeLabel(badge),
     ...noteElement(entry),
+    ...badgeLabel(badge),
   ],
 });
 
