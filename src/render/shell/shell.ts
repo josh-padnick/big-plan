@@ -33,7 +33,9 @@ export type ShellResult = {
   readonly bodyClassName: string;
 };
 
-const BODY_CLASSES =
+// The reading surface's base typography and palette, shared with the embed
+// surface so both render content identically.
+export const BODY_CLASSES =
   "bg-paper font-sans text-base leading-[1.65] text-ink antialiased";
 
 // Stacked reading layout below the wide breakpoint; sidebar plus one reading

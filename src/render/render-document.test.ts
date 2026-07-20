@@ -150,6 +150,80 @@ describe("renderDocument affordances", () => {
   });
 });
 
+describe("renderDocument embed envelope", () => {
+  // A sectioned document with a full-screen-capable component, so chrome
+  // omission and control hiding are both observable.
+  const EMBED_FIXTURE = `## A section
+
+<CodeDiff file="src/cache.ts">
+
+\`\`\`diff
+-const ttl = 30;
++const ttl = 60;
+\`\`\`
+
+</CodeDiff>
+`;
+
+  const { html } = renderDocument({
+    markdown: EMBED_FIXTURE,
+    fallbackTitle: "Embed",
+    envelope: { mode: "embed" },
+  });
+
+  it("should omit the branding bar, navigation, and theme control when rendering an embed", () => {
+    expect(html).not.toContain("big-plan.ai");
+    expect(html).not.toContain("<header");
+    expect(html).not.toContain('alt="Big Plan"');
+    expect(html).not.toContain("<nav");
+    expect(html).not.toContain("data-theme-toggle");
+    expect(html).toContain("data-embed");
+    expect(html).toContain("<article>");
+  });
+
+  it("should ship only the copy and component scripts when rendering an embed", () => {
+    // Theme toggle and scroll spy stay out: there is no control for the one
+    // and no navigation for the other.
+    expect(html.match(/<script>/g)).toHaveLength(4);
+    expect(html).toContain("data-copy-code");
+    expect(html).toContain("data-diff-set-view");
+  });
+
+  it("should hide the full-screen control when rendering an embed", () => {
+    // The modal dialog cannot escape a host iframe, so the embed stylesheet
+    // suppresses the controls that would open it.
+    expect(html).toContain("data-diff-expand");
+    expect(html).toMatch(/\[data-embed\][^{}]*\[data-diff-expand\]/);
+    expect(html).toMatch(/\[data-embed\][^{}]*\[data-tree-expand\]/);
+  });
+
+  it("should leave the color scheme to the OS when no theme is forced", () => {
+    expect(html).toContain('<html lang="en">');
+  });
+
+  it("should stamp the forced theme on the root when one is requested", () => {
+    for (const theme of ["light", "dark"] as const) {
+      const { html: themedHtml } = renderDocument({
+        markdown: EMBED_FIXTURE,
+        fallbackTitle: "Embed",
+        envelope: { mode: "embed", theme },
+      });
+      expect(themedHtml).toContain(`<html lang="en" data-theme="${theme}">`);
+    }
+  });
+
+  it("should stay self-contained when rendering an embed", () => {
+    const fetchedValues = [
+      ...html.matchAll(/\b(?:src|srcset)="([^"]*)"/g),
+      ...html.matchAll(/<link\b[^>]*\bhref="([^"]*)"/g),
+    ].map((match) => match[1]);
+    for (const value of fetchedValues) {
+      expect(value).toMatch(/^data:/);
+    }
+    expect(html).not.toMatch(/<script\s+[^>]*src=/);
+  });
+});
+
 describe("renderDocument shell", () => {
   it("should escape the title when it contains HTML special characters", () => {
     const { html } = renderDocument({

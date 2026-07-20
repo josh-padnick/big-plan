@@ -8,10 +8,16 @@
 import { FAVICON_DARK_SRC, FAVICON_LIGHT_SRC } from "./branding.generated.js";
 import { escapeHtml } from "./escape-html.js";
 
+// A forced color scheme pins the document to one palette by stamping the
+// same data-theme root attribute the viewer's theme control uses, so the
+// stylesheet's existing override order applies unchanged.
+export type ForcedTheme = "light" | "dark";
+
 /**
  * Wraps body markup in a self-contained HTML document. Favicons, styles, and
  * scripts are embedded, so callers guarantee they reference no external
- * resources.
+ * resources. A forced theme overrides the OS preference from the first paint;
+ * callers who force one must not ship a script that re-stamps data-theme.
  */
 export const renderPage = ({
   title,
@@ -19,18 +25,22 @@ export const renderPage = ({
   scripts,
   bodyClassName,
   bodyHtml,
+  forcedTheme,
 }: {
   readonly title: string;
   readonly styles: string;
   readonly scripts: ReadonlyArray<string>;
   readonly bodyClassName: string;
   readonly bodyHtml: string;
+  readonly forcedTheme?: ForcedTheme;
 }): string => {
   const scriptTags = scripts
     .map((script) => `<script>${script}</script>`)
     .join("\n");
+  const themeAttribute =
+    forcedTheme === undefined ? "" : ` data-theme="${forcedTheme}"`;
   return `<!doctype html>
-<html lang="en">
+<html lang="en"${themeAttribute}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

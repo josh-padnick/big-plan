@@ -1,0 +1,11 @@
+/*
+Embed-surface rules, scoped under the data-embed marker embed-shell.ts emits.
+The full-screen controls are hidden here because a modal dialog cannot escape
+the host iframe an embed lives in, so "full screen" would mislead; display
+wins over the hidden-attribute toggling the component scripts perform.
+*/
+
+[data-embed] [data-diff-expand],
+[data-embed] [data-tree-expand] {
+  display: none;
+}
