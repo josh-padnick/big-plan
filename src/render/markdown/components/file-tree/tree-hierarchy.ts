@@ -14,6 +14,8 @@ import { FOLDER_ICON } from "../../../icons/lucide/folder.js";
 import { MESSAGE_SQUARE_ICON } from "../../../icons/lucide/message-square.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import type { LucideIcon } from "../../../icons/lucide-icon.js";
+import { countTreeChanges } from "./derive-tree-view.js";
+import type { TreeChangeCounts } from "./derive-tree-view.js";
 import type { TreeBadge, TreeEntry } from "./parse-tree-text.js";
 
 // How an entry's authored note reaches the reader: FileTree keeps notes in
@@ -60,6 +62,68 @@ const BADGE_LABELS: Readonly<Record<TreeBadge, string>> = {
 };
 
 const text = (value: string): Text => ({ type: "text", value });
+
+const COUNT_SIGILS: ReadonlyArray<
+  readonly [keyof TreeChangeCounts, string, string]
+> = [
+  ["added", "+", "file-tree-sum-added"],
+  ["modified", "~", "file-tree-sum-modified"],
+  ["removed", "-", "file-tree-sum-removed"],
+  ["renamed", "->", "file-tree-sum-renamed"],
+];
+
+/** Renders one compact colored count per non-zero change kind. */
+export const renderTreeChangeCounts = (
+  counts: TreeChangeCounts,
+): ReadonlyArray<Element> =>
+  COUNT_SIGILS.flatMap(([kind, sigil, className]) =>
+    counts[kind] === 0
+      ? []
+      : [
+          {
+            type: "element" as const,
+            tagName: "span",
+            properties: { className: [className] },
+            children: [text(`${sigil}${counts[kind]}`)],
+          },
+        ],
+  );
+
+// Only visible while its directory is collapsed, telling the reader whether
+// the folded subtree is worth expanding.
+const directorySummary = ({
+  entry,
+  badgeForEntry,
+}: {
+  readonly entry: TreeEntry;
+  readonly badgeForEntry: (entry: TreeEntry) => TreeBadge | undefined;
+}): ReadonlyArray<Element> => {
+  if (entry.kind !== "directory" || entry.children.length === 0) {
+    return [];
+  }
+  const counts = countTreeChanges({ entries: entry.children, badgeForEntry });
+  const parts = renderTreeChangeCounts(counts);
+  if (parts.length === 0) {
+    return [];
+  }
+  return [
+    {
+      type: "element",
+      tagName: "span",
+      properties: {
+        className: [
+          "file-tree-dir-summary",
+          "items-center",
+          "gap-1",
+          "font-sans",
+          "text-[0.6875rem]",
+          "font-semibold",
+        ],
+      },
+      children: [...parts],
+    },
+  ];
+};
 
 const badgeLabel = (badge: TreeBadge | undefined): ReadonlyArray<Element> =>
   badge === undefined
@@ -237,11 +301,13 @@ const entryRow = ({
   name,
   badge,
   noteDisplay,
+  badgeForEntry,
 }: {
   readonly entry: TreeEntry;
   readonly name: string;
   readonly badge: TreeBadge | undefined;
   readonly noteDisplay: TreeNoteDisplay;
+  readonly badgeForEntry: (entry: TreeEntry) => TreeBadge | undefined;
 }): Element => ({
   type: "element",
   tagName: "div",
@@ -269,6 +335,7 @@ const entryRow = ({
     },
     ...badgeLabel(badge),
     ...noteElement({ entry, noteDisplay }),
+    ...directorySummary({ entry, badgeForEntry }),
   ],
 });
 
@@ -301,6 +368,7 @@ export const renderTreeHierarchy = ({
         name: nameForEntry(entry),
         badge: badgeForEntry(entry),
         noteDisplay,
+        badgeForEntry,
       }),
       ...(entry.children.length === 0
         ? []

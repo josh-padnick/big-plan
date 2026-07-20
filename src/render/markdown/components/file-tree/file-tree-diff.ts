@@ -17,9 +17,10 @@ import {
   compileFileTreeDiff,
   type CompiledFileTreeDiff,
 } from "./compile-file-tree.js";
-import { deriveTreeView } from "./derive-tree-view.js";
+import { countTreeChanges, deriveTreeView } from "./derive-tree-view.js";
 import type { TreeEntry } from "./parse-tree-text.js";
 import {
+  renderTreeChangeCounts,
   renderTreeFoldControls,
   renderTreeHierarchy,
 } from "./tree-hierarchy.js";
@@ -89,7 +90,7 @@ const viewToggleGroup = (): Element => ({
     viewToggleButton({
       view: "before-after",
       pressed: false,
-      label: "Before/After view",
+      label: "Side-by-side view",
       icon: COLUMNS_2_ICON,
     }),
   ],
@@ -129,7 +130,37 @@ const expandButton = (): Element => ({
   ],
 });
 
-const header = (title: string | undefined): Element => ({
+// A glance-level answer to "how big is this change?" before reading rows.
+const changeSummary = (entries: ReadonlyArray<TreeEntry>): Element => ({
+  type: "element",
+  tagName: "span",
+  properties: {
+    className: [
+      "file-tree-diff-summary",
+      "inline-flex",
+      "min-w-0",
+      "shrink-0",
+      "items-center",
+      "gap-1",
+      "font-sans",
+      "text-[0.6875rem]",
+      "font-semibold",
+    ],
+  },
+  children: [
+    ...renderTreeChangeCounts(
+      countTreeChanges({ entries, badgeForEntry: (entry) => entry.badge }),
+    ),
+  ],
+});
+
+const header = ({
+  title,
+  entries,
+}: {
+  readonly title: string | undefined;
+  readonly entries: ReadonlyArray<TreeEntry>;
+}): Element => ({
   type: "element",
   tagName: "figcaption",
   properties: {
@@ -138,6 +169,7 @@ const header = (title: string | undefined): Element => ({
   },
   children: [
     ...titleContent(title),
+    changeSummary(entries),
     {
       type: "element",
       tagName: "span",
@@ -287,7 +319,7 @@ const statePane = ({
         ? ["border-t", "border-edge", "wide:border-t-0", "wide:border-l"]
         : []),
     ],
-    ariaLabel: side === "before" ? "Before" : "After",
+    ariaLabel: side === "before" ? "Current" : "Planned",
     "data-tree-pane": side,
   },
   children: [
@@ -313,7 +345,7 @@ const statePane = ({
         ],
       },
       children: [
-        text(side === "before" ? "Before" : "After"),
+        text(side === "before" ? "Current" : "Planned"),
         {
           type: "element",
           tagName: "span",
@@ -394,7 +426,7 @@ const renderFileTreeDiffFigure = ({
     "data-tree-changes": model.hideDiff ? "hidden" : "shown",
   },
   children: [
-    header(model.title),
+    header({ title: model.title, entries: model.entries }),
     combinedView(model.entries),
     beforeAfterView({ entries: model.entries, showDiff: !model.hideDiff }),
   ],

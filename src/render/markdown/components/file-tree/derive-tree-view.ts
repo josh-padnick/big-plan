@@ -63,6 +63,41 @@ export const deriveTreeView = ({
     ];
   });
 
+export type TreeChangeCounts = {
+  readonly added: number;
+  readonly modified: number;
+  readonly removed: number;
+  readonly renamed: number;
+};
+
+/** Tallies change badges across a subtree, as chosen by the caller's badge. */
+export const countTreeChanges = ({
+  entries,
+  badgeForEntry,
+}: {
+  readonly entries: ReadonlyArray<TreeEntry>;
+  readonly badgeForEntry: (entry: TreeEntry) => TreeBadge | undefined;
+}): TreeChangeCounts =>
+  entries.reduce(
+    (counts, entry) => {
+      const badge = badgeForEntry(entry);
+      const nested = countTreeChanges({
+        entries: entry.children,
+        badgeForEntry,
+      });
+      return {
+        added: counts.added + nested.added + (badge === "added" ? 1 : 0),
+        modified:
+          counts.modified + nested.modified + (badge === "modified" ? 1 : 0),
+        removed:
+          counts.removed + nested.removed + (badge === "removed" ? 1 : 0),
+        renamed:
+          counts.renamed + nested.renamed + (badge === "renamed" ? 1 : 0),
+      };
+    },
+    { added: 0, modified: 0, removed: 0, renamed: 0 },
+  );
+
 /** Detects whether a tree contains at least one diff-bearing entry. */
 export const hasTreeChanges = ({
   entries,

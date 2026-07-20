@@ -23,7 +23,7 @@ Use `FileTreeDiff` to show which files a plan touches and how: the additions, mo
 ## How it looks
 
 :::note[📸 Screenshot placeholder]
-A bordered tree titled and topped with a Combined / Before-After toggle; entries tint their names by change status - deletions struck through - and spell out Added, Modified, Deleted, or Renamed at the row's edge, with the before and after trees shown as two panes.
+A bordered tree titled and topped with a change-count summary and a Combined / Side-by-side toggle; entries tint their names by change status - deletions struck through - and spell out Added, Modified, Deleted, or Renamed beside the name, with the Current and Planned trees shown as two panes.
 :::
 
 ## Usage
@@ -50,10 +50,10 @@ README.md [modified] - Document the stale-while-revalidate path.
 
 ### Attributes
 
-| Attribute  | Type               | Required | Behavior                                                                     |
-| ---------- | ------------------ | -------- | ---------------------------------------------------------------------------- |
-| `title`    | string (non-empty) | No       | Header caption beside the view toggle; omitted, only the toggle shows.       |
-| `hideDiff` | bare boolean       | No       | Starts the After pane's Show diff switch off, showing the plain final state. |
+| Attribute  | Type               | Required | Behavior                                                                       |
+| ---------- | ------------------ | -------- | ------------------------------------------------------------------------------ |
+| `title`    | string (non-empty) | No       | Header caption beside the view toggle; omitted, only the toggle shows.         |
+| `hideDiff` | bare boolean       | No       | Starts the Planned pane's Show diff switch off, showing the plain final state. |
 
 Any other attribute is a positional authoring error.
 
@@ -77,10 +77,12 @@ Every violation - an unknown badge, a rename without its `[renamed]` badge, or a
 ## Views
 
 The combined tree is the default and the only view rendered without JavaScript.
-A reviewer can switch to the before-and-after view, which derives two trees from the single authored tree: the before tree drops added entries and shows old rename names, and the after tree shows new rename names.
-The before tree is by definition the unchanged snapshot, so it carries no markers at all; every change reads on the after tree, where deleted entries remain as struck-through tombstones so removals stay visible beside what replaced them.
-A Show diff switch in the After caption swaps those annotations for the plain final state - no markers, no tombstones - so a reviewer can also see exactly the hierarchy the plan produces.
+A reviewer can switch to the side-by-side view, which derives two trees from the single authored tree and captions them Current and Planned - the plan reviews a transition, not two repositories.
+The Current tree drops added entries and shows old rename names; the Planned tree shows new rename names.
+The Current tree is by definition the unchanged snapshot, so it carries no markers at all; every change reads on the Planned tree, where deleted entries remain as struck-through tombstones so removals stay visible beside what replaced them.
+A Show diff switch in the Planned caption swaps those annotations for the plain final state - no markers, no tombstones - so a reviewer can also see exactly the hierarchy the plan produces.
 It defaults on; the author's `hideDiff` attribute starts it off, and a reader's flip applies to that tree alone.
-The selection persists across documents, and the two panes sit side by side on wide screens and stack, before above after, below the layout breakpoint.
+The selection persists across documents, and the two panes sit side by side on wide screens and stack, Current above Planned, below the layout breakpoint.
 A full-screen control expands the tree into a modal dialog - named by the component's title when one is set - and closing it returns the reader to their exact scroll position.
-Directories fold: clicking a directory row (or its chevron) collapses that subtree, the header controls fold the whole tree, each Before and After bar quietly folds its own pane, and without JavaScript the tree stays fully expanded.
+Directories fold: clicking a directory row (or its chevron) collapses that subtree, the header controls fold the whole tree, each pane bar quietly folds its own, and without JavaScript the tree stays fully expanded.
+A collapsed directory summarizes the changes folded inside it with compact colored counts, and the header carries the same summary for the whole tree.

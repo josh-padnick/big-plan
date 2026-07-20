@@ -79,6 +79,11 @@ test("should review planned file changes in combined and before/after trees", as
       tree.getByRole("button", { name: "Combined view" }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(combined.locator(":scope > ul")).toHaveCount(1);
+    const summary = tree.locator(".file-tree-diff-summary");
+    await expect(summary).toContainText("+3");
+    await expect(summary).toContainText("~2");
+    await expect(summary).toContainText("-2");
+    await expect(summary).toContainText("->2");
     await expect(
       combined
         .locator(
@@ -176,11 +181,17 @@ test("should review planned file changes in combined and before/after trees", as
     const srcToggle = srcRow.locator("[data-tree-toggle]");
     const nestedFile = combined.getByText("refresh-worker.ts");
     await expect(srcToggle).toHaveAttribute("aria-expanded", "true");
+    const srcSummary = srcRow.locator(".file-tree-dir-summary");
+    await expect(srcSummary).toBeHidden();
     await srcRow.click();
     await expect(nestedFile).toBeHidden();
     await expect(srcToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(srcSummary).toBeVisible();
+    await expect(srcSummary).toContainText("+3");
+    await expect(srcSummary).toContainText("-2");
     await srcRow.click();
     await expect(nestedFile).toBeVisible();
+    await expect(srcSummary).toBeHidden();
     const headerControls = tree.locator(".file-tree-diff-controls");
     await headerControls
       .getByRole("button", { name: "Collapse all folders" })
@@ -194,15 +205,15 @@ test("should review planned file changes in combined and before/after trees", as
   });
 
   await test.step("before and after show the matching state and rename", async () => {
-    await tree.getByRole("button", { name: "Before/After view" }).click();
+    await tree.getByRole("button", { name: "Side-by-side view" }).click();
     await expect(tree).toHaveAttribute("data-tree-view", "before-after");
     await expect(combined).toBeHidden();
     await expect(beforeAfter).toBeVisible();
-    await expect(before.locator(".file-tree-diff-pane-caption")).toHaveText(
-      "Before",
+    await expect(before.locator(".file-tree-diff-pane-caption")).toContainText(
+      "Current",
     );
     await expect(after.locator(".file-tree-diff-pane-caption")).toContainText(
-      "After",
+      "Planned",
     );
     await expect(before).toContainText("legacy-cache-counter.ts");
     await expect(before).not.toContainText("refresh-queue.ts");
@@ -290,7 +301,7 @@ test("should review planned file changes in combined and before/after trees", as
     await page.reload();
     await expect(tree).toHaveAttribute("data-tree-view", "before-after");
     await expect(
-      tree.getByRole("button", { name: "Before/After view" }),
+      tree.getByRole("button", { name: "Side-by-side view" }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(beforeAfter).toBeVisible();
   });
@@ -334,7 +345,7 @@ test("should review planned file changes in combined and before/after trees", as
     await expect(
       dialog.locator('[data-tree-content="combined"]'),
     ).toBeVisible();
-    await dialog.getByRole("button", { name: "Before/After view" }).click();
+    await dialog.getByRole("button", { name: "Side-by-side view" }).click();
     await expect(
       dialog.locator('[data-tree-content="before-after"]'),
     ).toBeVisible();

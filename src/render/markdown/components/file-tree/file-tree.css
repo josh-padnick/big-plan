@@ -73,6 +73,29 @@
   article .file-tree-diff-pane-caption {
     background: var(--diff-hunk-bg);
   }
+  /* Folded-away changes surface as a compact count so a reader knows
+     whether a collapsed directory is worth expanding. */
+  article .file-tree-dir-summary {
+    display: none;
+  }
+  article
+    .file-tree-item[data-tree-collapsed]
+    > .file-tree-row
+    .file-tree-dir-summary {
+    display: inline-flex;
+  }
+  article .file-tree-sum-added {
+    color: var(--diff-add-c);
+  }
+  article .file-tree-sum-modified {
+    color: var(--callout-warning-c);
+  }
+  article .file-tree-sum-removed {
+    color: var(--diff-remove-c);
+  }
+  article .file-tree-sum-renamed {
+    color: var(--callout-note-c);
+  }
   article [data-tree-after-variant="plain"] {
     display: none;
   }
@@ -89,12 +112,17 @@
   article .file-tree-row > svg {
     color: var(--color-muted);
   }
+  /* Guides sit well behind the content: indentation already carries the
+     structure, so the lines only whisper it. */
+  article .file-tree-children {
+    border-left-color: color-mix(in srgb, var(--color-edge) 55%, transparent);
+  }
   article .file-tree-children > .file-tree-item > .file-tree-row::before {
     position: absolute;
     top: 50%;
     left: -1.05rem;
     width: 0.75rem;
-    border-top: 1px solid var(--color-edge);
+    border-top: 1px solid color-mix(in srgb, var(--color-edge) 55%, transparent);
     content: "";
   }
   /* Git-status-style change tinting shared by the file name and its
