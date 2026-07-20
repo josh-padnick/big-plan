@@ -2,6 +2,9 @@
 // FileTreeDiff view, parameterized by displayed names and change markers.
 
 import type { Element, Text } from "hast";
+import { CHEVRON_RIGHT_ICON } from "../../../icons/lucide/chevron-right.js";
+import { COPY_MINUS_ICON } from "../../../icons/lucide/copy-minus.js";
+import { COPY_PLUS_ICON } from "../../../icons/lucide/copy-plus.js";
 import { FILE_DIFF_ICON } from "../../../icons/lucide/file-diff.js";
 import { FILE_MINUS_2_ICON } from "../../../icons/lucide/file-minus-2.js";
 import { FILE_PLUS_2_ICON } from "../../../icons/lucide/file-plus-2.js";
@@ -23,6 +26,10 @@ const CHILD_LIST_CLASSES =
   "file-tree-children m-0 ml-[0.45rem] list-none border-l border-edge pl-[1.05rem]";
 const ROW_CLASSES =
   "file-tree-row relative flex min-h-6 items-center gap-[0.45rem] whitespace-nowrap [&>svg]:size-3.5 [&>svg]:shrink-0";
+const TOGGLE_CLASSES =
+  "file-tree-toggle inline-flex cursor-pointer border-0 bg-transparent p-0 text-muted hover:text-ink [&>svg]:size-3.5 [&>svg]:shrink-0";
+const FOLD_BUTTON_CLASSES =
+  "file-tree-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 
 // Statuses read the way git tooling presents them: a changed file's leading
 // glyph becomes its status icon (the Lucide file-plus-2 family standing in
@@ -63,6 +70,74 @@ const badgeLabel = (badge: TreeBadge | undefined): ReadonlyArray<Element> =>
           children: [text(BADGE_LABELS[badge])],
         },
       ];
+
+// A server-rendered but hidden control; the browser script reveals it, so
+// documents without JavaScript stay fully expanded with no dead affordance.
+const directoryToggle = ({
+  entry,
+  name,
+}: {
+  readonly entry: TreeEntry;
+  readonly name: string;
+}): ReadonlyArray<Element> =>
+  entry.kind !== "directory" || entry.children.length === 0
+    ? []
+    : [
+        {
+          type: "element",
+          tagName: "button",
+          properties: {
+            type: "button",
+            className: TOGGLE_CLASSES.split(" "),
+            ariaLabel: `Collapse ${name}`,
+            ariaExpanded: "true",
+            hidden: true,
+            "data-tree-toggle": "",
+          },
+          children: [
+            renderLucideIcon({ icon: CHEVRON_RIGHT_ICON, hidden: false }),
+          ],
+        },
+      ];
+
+const foldButton = ({
+  action,
+  label,
+  icon,
+}: {
+  readonly action: "collapse" | "expand";
+  readonly label: string;
+  readonly icon: LucideIcon;
+}): Element => ({
+  type: "element",
+  tagName: "button",
+  properties: {
+    type: "button",
+    className: FOLD_BUTTON_CLASSES.split(" "),
+    ariaLabel: label,
+    title: label,
+    hidden: true,
+    "data-tree-fold": action,
+    "data-size": "xs",
+    "data-slot": "button",
+    "data-variant": "ghost",
+  },
+  children: [renderLucideIcon({ icon, hidden: false })],
+});
+
+/** Renders the header collapse-all and expand-all folding controls. */
+export const renderTreeFoldControls = (): ReadonlyArray<Element> => [
+  foldButton({
+    action: "collapse",
+    label: "Collapse all folders",
+    icon: COPY_MINUS_ICON,
+  }),
+  foldButton({
+    action: "expand",
+    label: "Expand all folders",
+    icon: COPY_PLUS_ICON,
+  }),
+];
 
 const entryIcon = ({
   entry,
@@ -156,6 +231,7 @@ const entryRow = ({
     ...(badge === undefined ? {} : { "data-tree-badge": badge }),
   },
   children: [
+    ...directoryToggle({ entry, name }),
     entryIcon({ entry, badge }),
     {
       type: "element",

@@ -19,7 +19,10 @@ import {
 } from "./compile-file-tree.js";
 import { deriveTreeView } from "./derive-tree-view.js";
 import type { TreeEntry } from "./parse-tree-text.js";
-import { renderTreeHierarchy } from "./tree-hierarchy.js";
+import {
+  renderTreeFoldControls,
+  renderTreeHierarchy,
+} from "./tree-hierarchy.js";
 
 const FIGURE_CLASSES =
   "file-tree file-tree-diff mb-5 min-w-0 overflow-hidden rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]";
@@ -147,7 +150,11 @@ const header = (title: string | undefined): Element => ({
           "gap-1",
         ],
       },
-      children: [viewToggleGroup(), expandButton()],
+      children: [
+        ...renderTreeFoldControls(),
+        viewToggleGroup(),
+        expandButton(),
+      ],
     },
   ],
 });

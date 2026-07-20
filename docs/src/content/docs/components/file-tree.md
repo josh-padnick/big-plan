@@ -5,6 +5,7 @@ description: A component for a plain project file hierarchy, with directories, f
 
 `FileTree` renders a plain file hierarchy from an indented text outline: directories, files, and an optional note beside any entry.
 It shows where code lives without implying that anything changes.
+Directories fold: clicking a directory row (or its chevron) collapses that subtree, titled trees get header controls that collapse or expand every folder, and without JavaScript the tree stays fully expanded.
 
 ## When to use it
 

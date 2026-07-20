@@ -8,12 +8,15 @@ import {
   type ComponentRenderer,
 } from "../component-contract.js";
 import { compileFileTree, type CompiledFileTree } from "./compile-file-tree.js";
-import { renderTreeHierarchy } from "./tree-hierarchy.js";
+import {
+  renderTreeFoldControls,
+  renderTreeHierarchy,
+} from "./tree-hierarchy.js";
 
 const FIGURE_CLASSES =
   "file-tree mb-5 min-w-0 overflow-hidden rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]";
 const HEADER_CLASSES =
-  "file-tree-header border-b border-edge px-[0.65rem] py-[0.4rem] font-sans text-sm font-semibold text-ink";
+  "file-tree-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.65rem] py-[0.4rem] font-sans text-sm font-semibold text-ink";
 const BODY_CLASSES = "file-tree-body overflow-x-auto px-3 py-2.5";
 
 const text = (value: string): Text => ({ type: "text", value });
@@ -26,7 +29,28 @@ const titleElement = (title: string | undefined): ReadonlyArray<Element> =>
           type: "element",
           tagName: "figcaption",
           properties: { className: HEADER_CLASSES.split(" ") },
-          children: [text(title)],
+          children: [
+            {
+              type: "element",
+              tagName: "span",
+              properties: { className: ["file-tree-title", "truncate"] },
+              children: [text(title)],
+            },
+            {
+              type: "element",
+              tagName: "span",
+              properties: {
+                className: [
+                  "file-tree-controls",
+                  "flex",
+                  "shrink-0",
+                  "items-center",
+                  "gap-1",
+                ],
+              },
+              children: [...renderTreeFoldControls()],
+            },
+          ],
         },
       ];
 

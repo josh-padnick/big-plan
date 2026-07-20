@@ -80,3 +80,4 @@ A reviewer can switch to the before-and-after view, which derives two trees from
 The before tree is by definition the unchanged snapshot, so it carries no markers at all; every change reads on the after tree, where deleted entries remain as struck-through tombstones so removals stay visible beside what replaced them.
 The selection persists across documents, and the two panes sit side by side on wide screens and stack, before above after, below the layout breakpoint.
 A full-screen control expands the tree into a modal dialog - named by the component's title when one is set - and closing it returns the reader to their exact scroll position.
+Directories fold: clicking a directory row (or its chevron) collapses that subtree, header controls collapse or expand every folder at once, and without JavaScript the tree stays fully expanded.

@@ -168,6 +168,26 @@ test("should review planned file changes in combined and before/after trees", as
     await expect(page.locator(".file-tree-note-tip")).toHaveCount(0);
   });
 
+  await test.step("directories fold by click and by the header controls", async () => {
+    const srcRow = combined
+      .locator('.file-tree-row[data-tree-entry="directory"]')
+      .filter({ hasText: "src/" })
+      .first();
+    const srcToggle = srcRow.locator("[data-tree-toggle]");
+    const nestedFile = combined.getByText("refresh-worker.ts");
+    await expect(srcToggle).toHaveAttribute("aria-expanded", "true");
+    await srcRow.click();
+    await expect(nestedFile).toBeHidden();
+    await expect(srcToggle).toHaveAttribute("aria-expanded", "false");
+    await srcRow.click();
+    await expect(nestedFile).toBeVisible();
+    await tree.getByRole("button", { name: "Collapse all folders" }).click();
+    await expect(combined.getByText("catalog-origin.ts")).toBeHidden();
+    await expect(combined.getByText("src/", { exact: true })).toBeVisible();
+    await tree.getByRole("button", { name: "Expand all folders" }).click();
+    await expect(combined.getByText("catalog-origin.ts")).toBeVisible();
+  });
+
   await test.step("before and after show the matching state and rename", async () => {
     await tree.getByRole("button", { name: "Before/After view" }).click();
     await expect(tree).toHaveAttribute("data-tree-view", "before-after");
@@ -361,6 +381,17 @@ test("should present a plain file hierarchy without change styling", async ({
 }) => {
   await page.goto(componentsViewerUrl);
   const tree = page.locator("[data-file-tree]:not([data-file-tree-diff])");
+
+  await test.step("the plain tree folds too", async () => {
+    const dirRow = tree
+      .locator('.file-tree-row[data-tree-entry="directory"]')
+      .first();
+    const child = tree.getByText("worker-config.ts");
+    await tree.getByRole("button", { name: "Collapse all folders" }).click();
+    await expect(child).toBeHidden();
+    await dirRow.click();
+    await expect(child).toBeVisible();
+  });
 
   await test.step("the worker layout keeps hierarchy and notes", async () => {
     await expect(tree).toBeVisible();

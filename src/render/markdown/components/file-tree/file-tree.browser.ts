@@ -1,5 +1,6 @@
-// Owns FileTreeDiff's progressively enhanced view preference and full-screen
-// control; the combined change tree remains the server-rendered default when
+// Owns the file tree components' progressive enhancements: directory folding
+// for FileTree and FileTreeDiff, plus FileTreeDiff's view preference and
+// full-screen control. Server-rendered trees stay fully expanded when
 // JavaScript is unavailable.
 
 import {
@@ -46,6 +47,87 @@ const readStoredTreeDiffView = (): FileTreeDiffView => {
 };
 
 const storedTreeDiffView = readStoredTreeDiffView();
+
+// Reveals the folding chevrons and header fold-all controls, and lets a
+// click anywhere on a directory row (outside its note hint) toggle that
+// subtree.
+const wireTreeFolding = ({
+  component,
+}: {
+  readonly component: HTMLElement;
+}): void => {
+  const setCollapsed = ({
+    item,
+    collapsed,
+  }: {
+    readonly item: HTMLElement;
+    readonly collapsed: boolean;
+  }): void => {
+    const toggle = item.querySelector<HTMLButtonElement>(
+      ":scope > .file-tree-row [data-tree-toggle]",
+    );
+    if (toggle === null) {
+      return;
+    }
+    if (collapsed) {
+      item.dataset.treeCollapsed = "";
+    } else {
+      delete item.dataset.treeCollapsed;
+    }
+    const name =
+      item.querySelector(":scope > .file-tree-row .file-tree-name")
+        ?.textContent ?? "";
+    const label = `${collapsed ? "Expand" : "Collapse"} ${name}`;
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    toggle.setAttribute("aria-label", label);
+    toggle.title = label;
+  };
+  const toggleItem = (item: HTMLElement): void => {
+    setCollapsed({ item, collapsed: item.dataset.treeCollapsed === undefined });
+  };
+  for (const toggle of component.querySelectorAll<HTMLButtonElement>(
+    "[data-tree-toggle]",
+  )) {
+    toggle.removeAttribute("hidden");
+    toggle.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const item = toggle.closest<HTMLElement>(".file-tree-item");
+      if (item !== null) {
+        toggleItem(item);
+      }
+    });
+  }
+  for (const row of component.querySelectorAll<HTMLElement>(
+    '.file-tree-row[data-tree-entry="directory"]',
+  )) {
+    row.classList.add("cursor-pointer");
+    row.addEventListener("click", (event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(".file-tree-note-hint") !== null
+      ) {
+        return;
+      }
+      const item = row.closest<HTMLElement>(".file-tree-item");
+      if (item !== null) {
+        toggleItem(item);
+      }
+    });
+  }
+  for (const button of component.querySelectorAll<HTMLButtonElement>(
+    "[data-tree-fold]",
+  )) {
+    button.removeAttribute("hidden");
+    button.addEventListener("click", () => {
+      const collapsed = button.dataset.treeFold === "collapse";
+      for (const item of component.querySelectorAll<HTMLElement>(
+        ".file-tree-item",
+      )) {
+        setCollapsed({ item, collapsed });
+      }
+    });
+  }
+};
 
 // Upgrades each note hint's slow native title tooltip to an instant floating
 // card shown while hovered or focused. The card uses fixed positioning so the
@@ -150,6 +232,7 @@ for (const component of document.querySelectorAll<HTMLElement>(
     component.querySelector<HTMLButtonElement>("[data-tree-expand]");
   expand?.removeAttribute("hidden");
   wireNoteHints({ component });
+  wireTreeFolding({ component });
   applyTreeDiffView({ component, view: storedTreeDiffView });
 
   expand?.addEventListener("click", () => {
@@ -186,4 +269,10 @@ for (const component of document.querySelectorAll<HTMLElement>(
       }
     });
   }
+}
+
+for (const component of document.querySelectorAll<HTMLElement>(
+  "[data-file-tree]",
+)) {
+  wireTreeFolding({ component });
 }
