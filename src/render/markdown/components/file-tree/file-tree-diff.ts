@@ -181,26 +181,62 @@ const combinedView = (entries: ReadonlyArray<TreeEntry>): Element => ({
   ],
 });
 
-const CHANGES_TOGGLE_CLASSES =
-  "file-tree-changes-toggle inline-flex h-6 shrink-0 cursor-pointer items-center rounded-[0.375rem] border border-edge bg-surface px-2 font-sans text-[0.6875rem] font-semibold text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+// The switch shape and data-slot/data-state contract come from the shadcn/ui
+// registry Switch (sm size), translated to static HAST with this palette:
+// primary -> accent, input -> edge, background -> paper. State transitions are
+// driven by the component's browser script instead of Radix.
+const SWITCH_CLASSES =
+  "file-tree-changes-toggle inline-flex h-3.5 w-6 shrink-0 cursor-pointer items-center rounded-full border border-transparent shadow-xs transition-all outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 data-[state=checked]:bg-accent data-[state=unchecked]:bg-edge";
+const SWITCH_THUMB_CLASSES =
+  "pointer-events-none block size-3 rounded-full bg-paper ring-0 transition-transform data-[state=checked]:translate-x-[calc(100%-2px)] data-[state=unchecked]:translate-x-0";
 
-// The toggle lives in the After caption because only that pane has two
-// truths to switch between: the annotated change set and the plain final
+// The switch lives in the After caption because only that pane has two
+// truths to swap between: the annotated change set and the plain final
 // state the plan produces.
-const showDiffToggle = (): Element => ({
+const showDiffSwitch = (): Element => ({
   type: "element",
-  tagName: "button",
+  tagName: "span",
   properties: {
-    type: "button",
-    className: CHANGES_TOGGLE_CLASSES.split(" "),
-    ariaPressed: "true",
+    className: [
+      "file-tree-changes",
+      "flex",
+      "shrink-0",
+      "items-center",
+      "gap-1.5",
+    ],
     hidden: true,
-    "data-tree-changes-toggle": "",
-    "data-size": "xs",
-    "data-slot": "button",
-    "data-variant": "ghost",
+    "data-tree-changes-control": "",
   },
-  children: [text("Show diff")],
+  children: [
+    text("Show diff"),
+    {
+      type: "element",
+      tagName: "button",
+      properties: {
+        type: "button",
+        role: "switch",
+        ariaChecked: "true",
+        ariaLabel: "Show diff",
+        className: SWITCH_CLASSES.split(" "),
+        "data-tree-changes-toggle": "",
+        "data-slot": "switch",
+        "data-size": "sm",
+        "data-state": "checked",
+      },
+      children: [
+        {
+          type: "element",
+          tagName: "span",
+          properties: {
+            className: SWITCH_THUMB_CLASSES.split(" "),
+            "data-slot": "switch-thumb",
+            "data-state": "checked",
+          },
+          children: [],
+        },
+      ],
+    },
+  ],
 });
 
 const paneBody = ({
@@ -272,7 +308,23 @@ const statePane = ({
       },
       children: [
         text(side === "before" ? "Before" : "After"),
-        ...(side === "after" ? [showDiffToggle()] : []),
+        {
+          type: "element",
+          tagName: "span",
+          properties: {
+            className: [
+              "file-tree-pane-controls",
+              "flex",
+              "shrink-0",
+              "items-center",
+              "gap-1.5",
+            ],
+          },
+          children: [
+            ...renderTreeFoldControls(),
+            ...(side === "after" ? [showDiffSwitch()] : []),
+          ],
+        },
       ],
     },
     ...(side === "before"

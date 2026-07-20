@@ -65,7 +65,8 @@ const readStoredTreeChanges = (): TreeChangesMode => {
 };
 
 // Applies the After pane's diff-or-final-state selection and mirrors it into
-// the Show diff toggle's pressed state.
+// the Show diff switch's checked state, on the root and thumb alike so the
+// shadcn-derived data-state styling tracks Radix's contract.
 const applyTreeChanges = ({
   component,
   mode,
@@ -74,9 +75,19 @@ const applyTreeChanges = ({
   readonly mode: TreeChangesMode;
 }): void => {
   component.dataset.treeChanges = mode;
-  component
-    .querySelector<HTMLButtonElement>("[data-tree-changes-toggle]")
-    ?.setAttribute("aria-pressed", mode === "shown" ? "true" : "false");
+  const toggle = component.querySelector<HTMLButtonElement>(
+    "[data-tree-changes-toggle]",
+  );
+  if (toggle === null) {
+    return;
+  }
+  const state = mode === "shown" ? "checked" : "unchecked";
+  toggle.setAttribute("aria-checked", mode === "shown" ? "true" : "false");
+  toggle.dataset.state = state;
+  const thumb = toggle.querySelector<HTMLElement>('[data-slot="switch-thumb"]');
+  if (thumb !== null) {
+    thumb.dataset.state = state;
+  }
 };
 
 const storedTreeDiffView = readStoredTreeDiffView();
@@ -154,7 +165,11 @@ const wireTreeFolding = ({
     button.removeAttribute("hidden");
     button.addEventListener("click", () => {
       const collapsed = button.dataset.treeFold === "collapse";
-      for (const item of component.querySelectorAll<HTMLElement>(
+      // A fold-all in a pane caption folds that pane; the header pair still
+      // folds the whole component.
+      const scope =
+        button.closest<HTMLElement>("[data-tree-pane]") ?? component;
+      for (const item of scope.querySelectorAll<HTMLElement>(
         ".file-tree-item",
       )) {
         setCollapsed({ item, collapsed });
@@ -268,7 +283,9 @@ for (const component of document.querySelectorAll<HTMLElement>(
   const changesToggle = component.querySelector<HTMLButtonElement>(
     "[data-tree-changes-toggle]",
   );
-  changesToggle?.removeAttribute("hidden");
+  component
+    .querySelector<HTMLElement>("[data-tree-changes-control]")
+    ?.removeAttribute("hidden");
   wireNoteHints({ component });
   wireTreeFolding({ component });
   applyTreeDiffView({ component, view: storedTreeDiffView });

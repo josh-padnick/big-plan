@@ -86,10 +86,6 @@
     [data-tree-after-variant="plain"] {
     display: block;
   }
-  article .file-tree-changes-toggle[aria-pressed="true"] {
-    background: var(--color-edge);
-    color: var(--color-ink);
-  }
   article .file-tree-row > svg {
     color: var(--color-muted);
   }

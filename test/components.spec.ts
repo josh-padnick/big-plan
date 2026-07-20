@@ -181,10 +181,15 @@ test("should review planned file changes in combined and before/after trees", as
     await expect(srcToggle).toHaveAttribute("aria-expanded", "false");
     await srcRow.click();
     await expect(nestedFile).toBeVisible();
-    await tree.getByRole("button", { name: "Collapse all folders" }).click();
+    const headerControls = tree.locator(".file-tree-diff-controls");
+    await headerControls
+      .getByRole("button", { name: "Collapse all folders" })
+      .click();
     await expect(combined.getByText("catalog-origin.ts")).toBeHidden();
     await expect(combined.getByText("src/", { exact: true })).toBeVisible();
-    await tree.getByRole("button", { name: "Expand all folders" }).click();
+    await headerControls
+      .getByRole("button", { name: "Expand all folders" })
+      .click();
     await expect(combined.getByText("catalog-origin.ts")).toBeVisible();
   });
 
@@ -232,15 +237,16 @@ test("should review planned file changes in combined and before/after trees", as
   });
 
   await test.step("the After bar can swap the diff for the final state", async () => {
-    const toggle = after.getByRole("button", { name: "Show diff" });
+    const toggle = after.getByRole("switch", { name: "Show diff" });
     const plain = after.locator('[data-tree-after-variant="plain"]');
-    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await expect(toggle).toHaveAttribute("data-state", "checked");
     await expect(
       after.locator('[data-tree-after-variant="diff"]'),
     ).toBeVisible();
     await expect(plain).toBeHidden();
     await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
     await expect(plain).toBeVisible();
     await expect(plain.locator("[data-tree-badge]")).toHaveCount(0);
     await expect(plain).not.toContainText("legacy-cache-counter.ts");
@@ -251,6 +257,15 @@ test("should review planned file changes in combined and before/after trees", as
     await expect(
       after.locator('[data-tree-after-variant="diff"]'),
     ).toBeVisible();
+  });
+
+  await test.step("each pane bar folds only its own pane", async () => {
+    const afterDiff = after.locator('[data-tree-after-variant="diff"]');
+    await before.getByRole("button", { name: "Collapse all folders" }).click();
+    await expect(before.getByText("catalog-origin.ts")).toBeHidden();
+    await expect(afterDiff.getByText("catalog-origin.ts")).toBeVisible();
+    await before.getByRole("button", { name: "Expand all folders" }).click();
+    await expect(before.getByText("catalog-origin.ts")).toBeVisible();
   });
 
   await test.step("the panes sit side by side on a wide viewport", async () => {
