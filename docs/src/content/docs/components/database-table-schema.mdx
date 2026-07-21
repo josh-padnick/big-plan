@@ -77,13 +77,13 @@ The component takes exactly one fenced code block with the `dbml` language, and 
 
 ### Schema grammar
 
-The fence carries a deliberate subset of [DBML](https://dbml.dbdiagram.io/docs/) - column lines, one optional `indexes { ... }` block, and one optional table `Note:` - with two Postgres-motivated extensions.
+The fence carries a deliberate subset of [DBML](https://dbml.dbdiagram.io/docs/) - column lines, one optional `indexes { ... }` block, and one optional table `Note:` - with Postgres-motivated referential-action and partial-index extensions.
 Every violation reports a positional diagnostic pointing at the offending fence line, and out-of-subset DBML (`Table` blocks, standalone `Ref:` lines, `Enum` blocks) is rejected with the supported alternative named in the message.
 
 Each column is one line, `name type [settings]`:
 
 - The name must be a bare identifier; the type is opaque text and may contain spaces (`timestamp with time zone`) or array brackets (`text[]`).
-- Marker settings: `pk` (or `primary key`, which also implies `not null`), `not null`, `null`, `unique`, `increment` (rendered as an Identity badge).
+- Marker settings: `pk` (or `primary key`), `not null`, `null`, `unique`, `increment` (rendered as an Identity badge). Either primary-key spelling implies `not null`.
 - `default:` takes a number, `true`, `false`, `null`, a quoted string, or a backtick expression such as `` `now()` ``.
 - `note:` and `check:` take a single-line quoted value; notes render in the column's Comment cell, and checks render as `CHECK (...)` in its Constraints cell.
 - `ref: > table.column` declares a many-to-one foreign key; `delete:` and `update:` add referential actions (`cascade`, `restrict`, `set null`, `set default`, `no action`) and require the `ref:` on the same line.
