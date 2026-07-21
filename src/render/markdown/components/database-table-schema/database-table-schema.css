@@ -52,13 +52,19 @@
   article .table-schema-head-comment {
     width: 23%;
   }
-  article .table-schema-section-list {
-    list-style: none;
-  }
   /* The Indexes band is the one deliberate visual break below the grid. */
   article .table-schema-section {
     background: var(--diff-header-bg);
     border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
+  }
+  article .table-schema-head-index {
+    width: 26%;
+  }
+  article .table-schema-head-columns {
+    width: 22%;
+  }
+  article .table-schema-head-properties {
+    width: 29%;
   }
   article .table-schema-badge {
     border-color: var(--color-edge);

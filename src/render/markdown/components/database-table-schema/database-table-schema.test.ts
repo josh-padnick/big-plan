@@ -177,8 +177,12 @@ describe("renderDatabaseTableSchema rendering", () => {
 
   it("should render one grid row per column with the dense column order", () => {
     const { element } = render();
-    const headLabels = queryAll(
+    const columnsGrid = queryAll(
       element,
+      (candidate) => candidate.tagName === "table",
+    )[0];
+    const headLabels = queryAll(
+      columnsGrid ?? element,
       (candidate) =>
         candidate.tagName === "th" && candidate.properties.scope === "col",
     ).map((head) => collectText(head));
@@ -292,6 +296,16 @@ describe("renderDatabaseTableSchema rendering", () => {
     expect(collectText(note ?? element)).toBe(
       "One row per subscription attempt.",
     );
+    const indexGrid = queryAll(
+      element,
+      (candidate) => candidate.tagName === "table",
+    )[1];
+    const indexHeads = queryAll(
+      indexGrid ?? element,
+      (candidate) =>
+        candidate.tagName === "th" && candidate.properties.scope === "col",
+    ).map((head) => collectText(head));
+    expect(indexHeads).toEqual(["Index", "Columns", "Properties", "Comment"]);
     const index = queryAll(
       element,
       (candidate) => candidate.properties["data-schema-index"] !== undefined,

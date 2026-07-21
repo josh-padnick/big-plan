@@ -8,7 +8,7 @@ import tableSchemaLight from "../../../assets/components/database-table-schema-l
 import tableSchemaDark from "../../../assets/components/database-table-schema-dark.png";
 
 `DatabaseTableSchema` renders one table's schema from a compact, validated DBML subset: a header band with the schema-qualified name and table note, and a dense `Column | Type | Constraints | Default | Comment` grid in which every column is exactly one equal-rhythm row.
-The Constraints cell carries key badges, explicit nullability, foreign keys with their actions, and check expressions beside the column they govern, and the tinted Indexes band below the grid lists each index name-first with its definition and invariant note.
+The Constraints cell carries key badges, explicit nullability, foreign keys with their actions, and check expressions beside the column they govern, and the tinted Indexes table below the grid gives each index one row: its name, columns, properties, and comment.
 It is optimized for Postgres but generic: column types are opaque text, so any engine's types render unchanged.
 The grid and sections are fully server-rendered; JavaScript only powers the actions menu (copy table name, copy source), and a wide grid scrolls inside the figure instead of widening the page.
 

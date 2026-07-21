@@ -310,91 +310,61 @@ export const renderTableSchemaGrid = ({
   ],
 });
 
-// Name-first index rows in one consistent shape: the name engineers reference,
-// the definition run in SQL voice, and the invariant note beneath.
-const indexItem = (index: TableIndex): Element => {
-  const definitionRun = separated([
-    {
-      type: "element",
-      tagName: "span",
-      properties: {
-        className: [
-          "table-schema-index-kind",
-          "font-sans",
-          "text-[0.625rem]",
-          "font-semibold",
-          "uppercase",
-          "tracking-wide",
-          "text-muted",
-        ],
-      },
-      children: [text(index.unique ? "Unique" : "Index")],
-    },
-    code(index.columns.map((column) => column.replaceAll("`", "")).join(", ")),
-    ...(index.method === undefined ? [] : [muted(index.method)]),
-    ...(index.where === undefined ? [] : [code(`WHERE ${index.where}`)]),
-  ]);
-  return {
-    type: "element",
-    tagName: "li",
-    properties: {
-      className: ["table-schema-section-item", "m-0"],
-      "data-schema-index": "",
-    },
-    children: [
-      ...(index.name === undefined
-        ? []
-        : [
-            {
-              type: "element" as const,
-              tagName: "span",
-              properties: {
-                className: [
-                  "table-schema-index-name",
-                  "block",
-                  "font-mono",
-                  "text-[0.8125rem]",
-                  "font-medium",
-                ],
-              },
-              children: [text(index.name)],
-            },
-          ]),
-      {
-        type: "element",
-        tagName: "span",
-        properties: {
-          className: [
-            "table-schema-index-definition",
-            "block",
-            "text-[0.8125rem]",
-          ],
-        },
-        children: [...definitionRun],
-      },
-      ...(index.note === undefined
-        ? []
-        : [
-            {
-              type: "element" as const,
-              tagName: "span",
-              properties: {
-                className: [
-                  "table-schema-item-note",
-                  "block",
-                  "text-xs",
-                  "leading-snug",
-                  "text-muted",
-                ],
-              },
-              children: [text(index.note)],
-            },
-          ]),
-    ],
-  };
-};
+const INDEX_HEADS: ReadonlyArray<{
+  readonly label: string;
+  readonly key: string;
+}> = [
+  { label: "Index", key: "index" },
+  { label: "Columns", key: "columns" },
+  { label: "Properties", key: "properties" },
+  { label: "Comment", key: "comment" },
+];
 
-/** Renders the tinted Indexes band below the grid; absent without indexes. */
+// One equal-rhythm row per index, mirroring the columns grid: the name
+// engineers reference, the column list, the properties run in SQL voice, and
+// the invariant note in its own Comment cell.
+const indexRow = (index: TableIndex): Element => ({
+  type: "element",
+  tagName: "tr",
+  properties: {
+    className: ["table-schema-index-row"],
+    "data-schema-index": "",
+  },
+  children: [
+    cell({
+      tagName: "th",
+      className:
+        "table-schema-cell-index-name font-mono text-[0.8125rem] font-medium",
+      properties: { scope: "row" },
+      children: index.name === undefined ? [] : [text(index.name)],
+    }),
+    cell({
+      tagName: "td",
+      className: "table-schema-cell-index-columns font-mono text-[0.8125rem]",
+      children: [
+        code(
+          index.columns.map((column) => column.replaceAll("`", "")).join(", "),
+        ),
+      ],
+    }),
+    cell({
+      tagName: "td",
+      className: "table-schema-cell-index-properties text-[0.8125rem]",
+      children: separated([
+        ...(index.unique ? [badge({ kind: "unique", label: "Unique" })] : []),
+        ...(index.method === undefined ? [] : [muted(index.method)]),
+        ...(index.where === undefined ? [] : [code(`WHERE ${index.where}`)]),
+      ]),
+    }),
+    cell({
+      tagName: "td",
+      className: "table-schema-cell-comment text-xs leading-snug text-muted",
+      children: index.note === undefined ? [] : [text(index.note)],
+    }),
+  ],
+});
+
+/** Renders the tinted Indexes table below the grid; absent without indexes. */
 export const renderTableSchemaSections = ({
   schema,
 }: {
@@ -412,8 +382,7 @@ export const renderTableSchemaSections = ({
           "table-schema-section",
           "border-t",
           "border-edge",
-          "px-[0.75rem]",
-          "py-[0.55rem]",
+          "pt-[0.55rem]",
         ],
       },
       children: [
@@ -422,23 +391,61 @@ export const renderTableSchemaSections = ({
         {
           type: "element",
           tagName: "p",
-          properties: { className: SECTION_LABEL_CLASSES.split(" ") },
+          properties: {
+            className: [...SECTION_LABEL_CLASSES.split(" "), "px-[0.75rem]"],
+          },
           children: [text("Indexes")],
         },
         {
           type: "element",
-          tagName: "ul",
+          tagName: "div",
           properties: {
-            className: [
-              "table-schema-section-list",
-              "m-0",
-              "flex",
-              "flex-col",
-              "gap-[0.45rem]",
-              "p-0",
-            ],
+            // The same scroll-container contract as the columns grid, so the
+            // global table transform never adds its own wrapper here either.
+            className: ["table-schema-scroll", "min-w-0", "overflow-x-auto"],
+            "data-table-scroll-container": "",
           },
-          children: schema.indexes.map((index) => indexItem(index)),
+          children: [
+            {
+              type: "element",
+              tagName: "table",
+              properties: {
+                className: [
+                  "table-schema-grid",
+                  "table-schema-index-grid",
+                  "w-full",
+                ],
+              },
+              children: [
+                {
+                  type: "element",
+                  tagName: "thead",
+                  properties: {},
+                  children: [
+                    {
+                      type: "element",
+                      tagName: "tr",
+                      properties: {},
+                      children: INDEX_HEADS.map(({ label, key }) =>
+                        cell({
+                          tagName: "th",
+                          className: `table-schema-head table-schema-head-${key} text-[0.625rem] uppercase tracking-wider`,
+                          properties: { scope: "col" },
+                          children: [text(label)],
+                        }),
+                      ),
+                    },
+                  ],
+                },
+                {
+                  type: "element",
+                  tagName: "tbody",
+                  properties: {},
+                  children: schema.indexes.map((index) => indexRow(index)),
+                },
+              ],
+            },
+          ],
         },
       ],
     },

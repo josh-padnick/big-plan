@@ -1290,13 +1290,9 @@ test("should review a database table schema end to end", async ({
   });
 
   await test.step("the grid answers columns, types, and rules in one row each", async () => {
-    await expect(schema.locator("thead th")).toHaveText([
-      "Column",
-      "Type",
-      "Constraints",
-      "Default",
-      "Comment",
-    ]);
+    await expect(
+      schema.locator(".table-schema-scroll").first().locator("thead th"),
+    ).toHaveText(["Column", "Type", "Constraints", "Default", "Comment"]);
     await expect(
       schema.locator('[data-schema-column="cache_key"] [data-schema-note]'),
     ).toHaveText("The catalog cache key this job refreshes.");
@@ -1323,9 +1319,15 @@ test("should review a database table schema end to end", async ({
     ).toHaveText("CHECK (attempts <= 5)");
   });
 
-  await test.step("the indexes section names each index and its invariant", async () => {
+  await test.step("the indexes table names each index and its invariant", async () => {
+    await expect(
+      schema.locator(".table-schema-index-grid thead th"),
+    ).toHaveText(["Index", "Columns", "Properties", "Comment"]);
     const indexes = schema.locator("[data-schema-index]");
     await expect(indexes).toHaveCount(2);
+    await expect(indexes.first().locator("th")).toHaveText(
+      "refresh_jobs_live_key_idx",
+    );
     await expect(indexes.first()).toContainText("cache_key");
     await expect(indexes.first()).toContainText("Unique");
     await expect(indexes.first()).toContainText("WHERE status <> 'done'");
@@ -1368,10 +1370,10 @@ test("should review a database table schema end to end", async ({
   await test.step("a narrow viewport scrolls the grid inside the figure", async () => {
     await page.setViewportSize({ width: 420, height: 900 });
     const container = schema.locator("[data-table-scroll-container]");
-    await expect(container).toHaveCount(1);
-    const overflow = await container.evaluate(
-      (element) => getComputedStyle(element).overflowX,
-    );
+    await expect(container).toHaveCount(2);
+    const overflow = await container
+      .first()
+      .evaluate((element) => getComputedStyle(element).overflowX);
     expect(overflow).toBe("auto");
     const pageScrolls = await page.evaluate(
       () =>
