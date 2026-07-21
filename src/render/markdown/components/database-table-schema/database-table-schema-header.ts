@@ -4,9 +4,10 @@
 
 import type { Element, Text } from "hast";
 import { COPY_ICON } from "../../../icons/lucide/copy.js";
+import { DATABASE_ICON } from "../../../icons/lucide/database.js";
 import { ELLIPSIS_ICON } from "../../../icons/lucide/ellipsis.js";
-import { TABLE_2_ICON } from "../../../icons/lucide/table-2.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import { renderCopyFeedback } from "../shared/copy-feedback/copy-feedback.js";
 
 const HEADER_CLASSES =
   "table-schema-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem]";
@@ -37,7 +38,7 @@ const tableIdentity = ({
     ariaLabel: `${schemaName ?? ""}${tableName}`,
   },
   children: [
-    renderLucideIcon({ icon: TABLE_2_ICON, hidden: false }),
+    renderLucideIcon({ icon: DATABASE_ICON, hidden: false }),
     {
       type: "element",
       tagName: "span",
@@ -164,17 +165,7 @@ export const renderTableSchemaHeader = ({
         ],
       },
       children: [
-        {
-          type: "element",
-          tagName: "span",
-          properties: {
-            className: ["code-copy-message", "static", "h-6"],
-            ariaHidden: "true",
-            "data-schema-copy-message": "",
-            hidden: true,
-          },
-          children: [text("Copied!")],
-        },
+        renderCopyFeedback({ dataAttribute: "data-schema-copy-message" }),
         actionsMenu(),
       ],
     },
