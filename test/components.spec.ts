@@ -2,7 +2,7 @@
 // layouts, clipboard behavior, full-screen dialogs, and no-JavaScript fallbacks.
 // Render-health failures are enforced by fixtures.
 
-import { expect, test } from "./fixtures";
+import { boxOf, expect, test } from "./fixtures";
 
 const RAW_CODE_SNIPPET = [
   "export const refreshCatalog = async (key: string): Promise<void> => {",
@@ -171,6 +171,20 @@ test("should review planned file changes in combined and before/after trees", as
     );
     await page.mouse.move(0, 0);
     await expect(page.locator(".file-tree-note-tip")).toHaveCount(0);
+  });
+
+  await test.step("file rows share the icon column with their foldable siblings", async () => {
+    const srcRow = combined
+      .locator('.file-tree-row[data-tree-entry="directory"]')
+      .filter({ hasText: "src/" })
+      .first();
+    const readmeRow = combined
+      .locator('.file-tree-row[data-tree-entry="file"]')
+      .filter({ hasText: "README.md" })
+      .first();
+    const folderIcon = await boxOf(srcRow.locator(":scope > svg").first());
+    const fileIcon = await boxOf(readmeRow.locator(":scope > svg").first());
+    expect(fileIcon.x).toBeCloseTo(folderIcon.x, 0);
   });
 
   await test.step("directories fold by click and by the header controls", async () => {
@@ -405,6 +419,9 @@ test("should review planned file changes in combined and before/after trees", as
       staticTree.locator('[data-tree-content="before-after"]'),
     ).toBeHidden();
     await expect(staticTree.locator("[data-tree-toggle-group]")).toBeHidden();
+    await expect(
+      staticTree.locator("[data-tree-toggle-spacer]").first(),
+    ).toBeHidden();
     await expect(
       staticTree
         .locator('[data-tree-content="combined"] [data-tree-badge="renamed"]')

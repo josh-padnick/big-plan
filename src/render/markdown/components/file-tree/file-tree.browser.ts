@@ -113,6 +113,13 @@ const wireTreeFolding = ({
   const toggleItem = (item: HTMLElement): void => {
     setCollapsed({ item, collapsed: item.dataset.treeCollapsed === undefined });
   };
+  // Spacers surface with the chevrons they stand in for, keeping every row's
+  // icon in the same column whether or not the row can fold.
+  for (const spacer of component.querySelectorAll<HTMLElement>(
+    "[data-tree-toggle-spacer]",
+  )) {
+    spacer.removeAttribute("hidden");
+  }
   for (const toggle of component.querySelectorAll<HTMLButtonElement>(
     "[data-tree-toggle]",
   )) {

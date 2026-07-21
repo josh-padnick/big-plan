@@ -146,6 +146,9 @@ const badgeLabel = (badge: TreeBadge | undefined): ReadonlyArray<Element> =>
 
 // A server-rendered but hidden control; the browser script reveals it, so
 // documents without JavaScript stay fully expanded with no dead affordance.
+// Rows without a toggle (files and childless directories) carry an equally
+// hidden chevron-width spacer revealed by the same script, so revealing the
+// chevrons never pushes foldable rows out of column with their siblings.
 const directoryToggle = ({
   entry,
   name,
@@ -154,7 +157,23 @@ const directoryToggle = ({
   readonly name: string;
 }): ReadonlyArray<Element> =>
   entry.kind !== "directory" || entry.children.length === 0
-    ? []
+    ? [
+        {
+          type: "element",
+          tagName: "span",
+          properties: {
+            className: [
+              "file-tree-toggle-spacer",
+              "inline-flex",
+              "w-3.5",
+              "shrink-0",
+            ],
+            hidden: true,
+            "data-tree-toggle-spacer": "",
+          },
+          children: [],
+        },
+      ]
     : [
         {
           type: "element",
