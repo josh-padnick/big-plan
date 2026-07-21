@@ -62,6 +62,13 @@ Identifier of the plan receiving the comment.
 
 <Response status="404" label="Plan not found" />
 
+<Review>
+
+- [x] Idempotency: retrying a timed-out create may duplicate a comment; client token decided.
+- [ ] Rate limiting: confirm the local bridge is trusted enough to skip it.
+
+</Review>
+
 </HttpEndpoint>
 ````
 
@@ -83,13 +90,15 @@ A bare endpoint with no description, parameters, request, or responses still ren
 ### Param
 
 Nest `Param` directly inside `HttpEndpoint` to document one parameter; the body is its markdown description.
+Put constraints - ranges, item limits, accepted values - in the body right beside the field they govern instead of in distant prose.
 
 | Attribute  | Type                                    | Required | Behavior                                                       |
 | ---------- | --------------------------------------- | -------- | --------------------------------------------------------------- |
 | `name`     | string (non-empty)                      | Yes      | The parameter name, rendered monospace.                         |
 | `in`       | enum: `path` `query` `header` `body`    | Yes      | The location badge; entries group in this order when rendered.  |
 | `type`     | string                                  | No       | Free-form type label, rendered muted.                           |
-| `required` | bare boolean                            | No       | Renders the emphasized required marker.                         |
+| `required` | bare boolean                            | No       | Renders the emphasized required marker; optional params show a muted optional marker instead. |
+| `default`  | string                                  | No       | Rendered beside the optional marker; invalid on a required param. |
 
 ### Request
 
@@ -107,7 +116,12 @@ Component-specific violations report positional diagnostics, including:
 - More than one `Request`, a `Request` without exactly one fence, or a `Response` with more than one fence
 - Headings, footnotes, or nested components inside a scoped child's body
 
-`Param`, `Request`, and `Response` outside a declaring `HttpEndpoint` stay unknown components.
+### Review
+
+At most one `Review` closes the card with a review checklist: a markdown body, typically a GFM task list, holding the architectural questions a reviewer should answer before implementation - idempotency, rate limiting, telemetry, error completeness.
+Unlike an API reference, a plan exists to reach agreement, and the checklist nudges the review toward the questions that matter.
+
+`Param`, `Request`, `Response`, and `Review` outside a declaring `HttpEndpoint` stay unknown components.
 
 ## Copy behavior
 

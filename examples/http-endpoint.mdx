@@ -1,0 +1,149 @@
+# Catalog Refresh API Plan
+
+This plan proposes the catalog cache refresh API and exists to demonstrate `HttpEndpoint`'s major usage modes: the full contract treatment, a moderate read endpoint, compact surface-area enumeration, and a deprecated route.
+
+## The queueing endpoint, in full
+
+The write path gets the complete treatment: parameters in three locations with constraints beside the fields they govern, a request example, success and failure responses, and a closing review checklist.
+
+<HttpEndpoint method="POST" path="/catalog/refresh" summary="Queue a refresh for one or more cache keys" auth="Internal service token">
+
+Queues a deduplicated refresh job per cache key and returns immediately; the worker pool performs the refreshes asynchronously.
+
+<Param name="X-Request-Id" in="header" type="string">
+
+Correlates the enqueue with worker telemetry; generated server-side when absent.
+
+</Param>
+
+<Param name="cacheKeys" in="body" type="string[]" required>
+
+The keys to refresh.
+Constraints: at least 1 and at most 500 items; duplicates are ignored.
+
+</Param>
+
+<Param name="force" in="body" type="boolean" default="false">
+
+Refreshes keys even when their entries are still fresh.
+
+</Param>
+
+<Param name="reason" in="body" type="string">
+
+Free-form operator note recorded on the refresh job for audit.
+
+</Param>
+
+<Request contentType="application/json">
+
+```json
+{
+  "cacheKeys": ["catalog:eu:electronics", "catalog:eu:garden"],
+  "force": false,
+  "reason": "Stale prices reported by support"
+}
+```
+
+</Request>
+
+<Response status="202" label="Refresh queued">
+
+```json
+{
+  "refreshId": "rfr_31c8",
+  "status": "queued",
+  "estimatedStart": "2026-07-20T22:41:00Z"
+}
+```
+
+</Response>
+
+<Response status="400" label="Invalid request">
+
+```json
+{
+  "error": "cache_keys_empty"
+}
+```
+
+</Response>
+
+<Response status="401" label="Missing or invalid service token" />
+
+<Response status="409" label="Refresh already queued for every requested key">
+
+```json
+{
+  "error": "already_queued",
+  "refreshId": "rfr_2fa0"
+}
+```
+
+</Response>
+
+<Review>
+
+- [x] Authentication: internal service token matches the other catalog write paths.
+- [x] Idempotency: re-posting the same keys returns the existing job as a 409, so retries are safe.
+- [ ] Rate limiting: is 500 keys per request enough back-pressure, or does the endpoint need a per-service quota?
+- [ ] Telemetry: confirm the enqueue emits the same metrics family as the synchronous fallback.
+- [x] Error codes: every failure the handler can produce is documented above.
+
+</Review>
+
+</HttpEndpoint>
+
+## Reading a refresh
+
+The read path is a moderate card: a path parameter, one optional query parameter with a default, and two responses.
+
+<HttpEndpoint method="GET" path="/catalog/refresh/{refreshId}" summary="Read one refresh job" auth="Internal service token">
+
+<Param name="refreshId" in="path" type="string" required>
+
+Identifier returned by the queueing endpoint.
+
+</Param>
+
+<Param name="verbose" in="query" type="boolean" default="false">
+
+Includes per-key worker outcomes instead of the summary counts.
+
+</Param>
+
+<Response status="200" label="Refresh job">
+
+```json
+{
+  "refreshId": "rfr_31c8",
+  "status": "running",
+  "completed": 412,
+  "failed": 3
+}
+```
+
+</Response>
+
+<Response status="404" label="Unknown refresh job" />
+
+</HttpEndpoint>
+
+## The rest of the surface
+
+Header-only cards enumerate the remaining routes compactly; each is a legitimate bare `HttpEndpoint` whose contract detail can be filled in when its design review happens.
+
+<HttpEndpoint method="GET" path="/catalog/refresh" summary="List recent refresh jobs" auth="Internal service token" />
+
+<HttpEndpoint method="DELETE" path="/catalog/refresh/{refreshId}" summary="Cancel a queued refresh" auth="Internal service token" />
+
+## Retiring the flush-everything route
+
+<Callout type="warning" title="Deprecation">
+
+The old whole-catalog flush is replaced by the `force` flag on the queueing endpoint, which keeps refreshes deduplicated and bounded.
+The route stays available for one release with its deprecated styling making the state unmissable.
+
+</Callout>
+
+<HttpEndpoint method="POST" path="/catalog/refresh-all" summary="Replaced by the force flag on /catalog/refresh" auth="Internal service token" deprecated />

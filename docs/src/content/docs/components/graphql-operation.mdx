@@ -117,4 +117,8 @@ Each appears at most once and takes exactly one fence of its required language: 
 
 Component-specific violations report positional diagnostics, including a wrong-language or missing fence, duplicate arguments, repeated single-instance children, a `deprecationReason` without `deprecated`, and headings, footnotes, or nested components inside scoped-child bodies.
 
-`Argument`, `Returns`, `Operation`, `Variables`, and `Response` outside a declaring `GraphqlOperation` stay unknown components.
+### Review
+
+At most one `Review` closes the card with a review checklist - a markdown body, typically a GFM task list, of the architectural questions to answer before implementation.
+
+`Argument`, `Returns`, `Operation`, `Variables`, `Response`, and `Review` outside a declaring `GraphqlOperation` stay unknown components.
