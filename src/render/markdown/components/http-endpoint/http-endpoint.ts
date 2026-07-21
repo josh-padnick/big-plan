@@ -198,16 +198,9 @@ const renderRequest = ({
       ...(bodyParams.length === 0
         ? []
         : [
-            {
-              type: "element",
-              tagName: "div",
-              properties: { className: ["mb-3"] },
-              children: [
-                renderDefinitionList({
-                  entries: bodyParams.map(renderParam),
-                }),
-              ],
-            } satisfies Element,
+            // No trailing margin: the last field row's own padding gives the
+            // Example rule the same clearance as the rules between rows.
+            renderDefinitionList({ entries: bodyParams.map(renderParam) }),
           ]),
       ...(request === undefined || request.children.length === 0
         ? []
