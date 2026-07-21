@@ -74,8 +74,9 @@ test("should review HTTP endpoint contracts", async ({
       .locator('[data-http-endpoint][data-http-method="POST"]')
       .first();
     await expect(staticEndpoint).toBeVisible();
-    await expect(staticEndpoint).toContainText("Parameters");
-    await expect(staticEndpoint).toContainText("Request");
+    await expect(staticEndpoint).toContainText("Path parameters");
+    await expect(staticEndpoint).toContainText("Headers");
+    await expect(staticEndpoint).toContainText("Request body");
     await expect(staticEndpoint).toContainText("Responses");
     await expect(staticEndpoint.locator("pre code").first()).toContainText(
       '"body"',

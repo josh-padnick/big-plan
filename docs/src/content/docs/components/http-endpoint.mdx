@@ -44,7 +44,7 @@ Identifier of the plan receiving the comment.
 
 </Param>
 
-<Request contentType="application/json">
+<Request type="CreateCommentRequest" contentType="application/json">
 
 ```json
 { "body": "Keep the retry budget explicit." }
@@ -95,14 +95,15 @@ Put constraints - ranges, item limits, accepted values - in the body right besid
 | Attribute  | Type                                    | Required | Behavior                                                       |
 | ---------- | --------------------------------------- | -------- | --------------------------------------------------------------- |
 | `name`     | string (non-empty)                      | Yes      | The parameter name, rendered monospace.                         |
-| `in`       | enum: `path` `query` `header` `body`    | Yes      | The location badge; entries group in this order when rendered.  |
+| `in`       | enum: `path` `query` `header` `body`    | Yes      | Seats the parameter under its location section - Path parameters, Query parameters, Headers - or among the Request body fields. |
 | `type`     | string                                  | No       | Free-form type label, rendered muted.                           |
 | `required` | bare boolean                            | No       | Renders the emphasized required marker; optional params show a muted optional marker instead. |
 | `default`  | string                                  | No       | Rendered beside the optional marker; invalid on a required param. |
 
 ### Request
 
-At most one `Request` documents the request body: an optional `contentType` attribute rendered as a chip, and exactly one fenced code block as the body.
+At most one `Request` documents the request body: an optional `type` naming the body's declared type, an optional `contentType` rendered as a chip, and exactly one fenced code block as the example.
+The Request body section states what the body is in one place: the declared type and media type up front, the `in="body"` Params as the type's fields, then the example JSON demonstrating it; body Params without a `Request` still render the section.
 
 ### Response
 

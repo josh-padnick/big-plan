@@ -582,6 +582,89 @@ describe("renderHttpEndpoint presentation", () => {
     );
   });
 
+  it("should split parameters into location sections and seat body fields in the request", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [
+        param({ line: 6 }),
+        scoped({
+          name: "Param",
+          attributes: { name: "verbose", in: "query", type: "boolean" },
+          children: [paragraph()],
+          line: 8,
+        }),
+        scoped({
+          name: "Param",
+          attributes: {
+            name: "cacheKeys",
+            in: "body",
+            type: "string[]",
+            required: true,
+          },
+          children: [paragraph()],
+          line: 10,
+        }),
+        request({ line: 14 }),
+      ],
+    });
+    const rendered = JSON.stringify(element);
+    expect(diagnostics).toEqual([]);
+    expect(rendered).not.toContain('"value":"Parameters"');
+    const labels = ["Path parameters", "Query parameters", "Request body"];
+    const indexes = labels.map((label) =>
+      rendered.indexOf(`"value":"${label}"`),
+    );
+    expect(indexes.every((index) => index >= 0)).toBe(true);
+    expect([...indexes].sort((a, b) => a - b)).toEqual(indexes);
+    // The body field renders inside the Request body section, before the
+    // example fence, and no per-row location badge restates the sections.
+    expect(rendered.indexOf('"value":"cacheKeys"')).toBeGreaterThan(
+      rendered.indexOf('"value":"Request body"'),
+    );
+    expect(rendered.indexOf('"value":"cacheKeys"')).toBeLessThan(
+      rendered.indexOf('"tagName":"pre"'),
+    );
+    expect(rendered).not.toContain('"value":"path"');
+  });
+
+  it("should state the declared body type beside the content type", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [
+        scoped({
+          name: "Request",
+          attributes: {
+            contentType: "application/json",
+            type: "RefreshCatalogRequest",
+          },
+          children: [fence()],
+          line: 12,
+        }),
+      ],
+    });
+    const rendered = JSON.stringify(element);
+    expect(diagnostics).toEqual([]);
+    expect(rendered).toContain('"data-http-body-type":""');
+    expect(rendered.indexOf('"value":"RefreshCatalogRequest"')).toBeLessThan(
+      rendered.indexOf('"value":"application/json"'),
+    );
+  });
+
+  it("should render the request body section for body fields without a Request", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [
+        scoped({
+          name: "Param",
+          attributes: { name: "reason", in: "body", type: "string" },
+          children: [paragraph()],
+          line: 10,
+        }),
+      ],
+    });
+    const rendered = JSON.stringify(element);
+    expect(diagnostics).toEqual([]);
+    expect(rendered).toContain('"value":"Request body"');
+    expect(rendered).toContain('"value":"reason"');
+  });
+
   it("should diagnose a second or empty review checklist", () => {
     const { diagnostics } = render({
       scopedChildren: [

@@ -47,7 +47,9 @@ const renderPathChildren = (path: string): ReadonlyArray<ElementContent> =>
     );
 
 // Renders one parameter as a definition pair so its identity and prose remain
-// semantically connected even in the script-free document.
+// semantically connected even in the script-free document. The location badge
+// is gone: each parameter now lives under an explicit location section, so a
+// per-row badge would restate the section label.
 const renderParam = (param: CompiledHttpParam): Element =>
   renderDefinitionEntry({
     properties: { "data-http-param-location": param.location },
@@ -59,24 +61,6 @@ const renderParam = (param: CompiledHttpParam): Element =>
           className: ["font-mono", "text-[0.8125rem]", "font-semibold"],
         },
         children: [text(param.name)],
-      },
-      {
-        type: "element",
-        tagName: "span",
-        properties: {
-          className: [
-            "rounded-full",
-            "bg-surface",
-            "px-2",
-            "py-0.5",
-            "text-[0.625rem]",
-            "leading-4",
-            "font-bold",
-            "uppercase",
-            "text-muted",
-          ],
-        },
-        children: [text(param.location)],
       },
       ...(param.dataType === undefined
         ? []
@@ -133,15 +117,67 @@ const renderParam = (param: CompiledHttpParam): Element =>
     body: param.children,
   });
 
-const renderParameters = (params: ReadonlyArray<CompiledHttpParam>): Element =>
-  renderCardSection({
-    children: [
-      renderSectionLabel("Parameters"),
-      renderDefinitionList({ entries: params.map(renderParam) }),
-    ],
+// Each non-body location gets its own labeled section, so where a parameter
+// travels is stated by the section instead of inferred from a badge.
+const PARAM_GROUPS: ReadonlyArray<{
+  readonly location: CompiledHttpParam["location"];
+  readonly label: string;
+}> = [
+  { location: "path", label: "Path parameters" },
+  { location: "query", label: "Query parameters" },
+  { location: "header", label: "Headers" },
+];
+
+const renderParamGroups = (
+  params: ReadonlyArray<CompiledHttpParam>,
+): ReadonlyArray<Element> =>
+  PARAM_GROUPS.flatMap(({ location, label }) => {
+    const grouped = params.filter((param) => param.location === location);
+    return grouped.length === 0
+      ? []
+      : [
+          renderCardSection({
+            children: [
+              renderSectionLabel(label),
+              renderDefinitionList({ entries: grouped.map(renderParam) }),
+            ],
+          }),
+        ];
   });
 
-const renderRequest = (request: CompiledHttpRequest): Element =>
+// Media types stay lowercase monospace, the way every API reference prints
+// them; the uppercase chip is for labels.
+const contentTypeChip = (contentType: string): Element => ({
+  type: "element",
+  tagName: "span",
+  properties: {
+    className: [
+      "inline-flex",
+      "items-center",
+      "rounded-full",
+      "bg-surface",
+      "px-2",
+      "py-0.5",
+      "font-mono",
+      "text-[0.6875rem]",
+      "leading-4",
+      "text-muted",
+    ],
+  },
+  children: [text(contentType)],
+});
+
+// The Request section states what the body IS: its declared type and media
+// type up front, the body fields describing that type's parameters, then the
+// example demonstrating it. Body Params live here, not among the transport
+// parameters, because they describe the payload's shape.
+const renderRequest = ({
+  request,
+  bodyParams,
+}: {
+  readonly request?: CompiledHttpRequest;
+  readonly bodyParams: ReadonlyArray<CompiledHttpParam>;
+}): Element =>
   renderCardSection({
     children: [
       {
@@ -151,40 +187,53 @@ const renderRequest = (request: CompiledHttpRequest): Element =>
           className: ["mb-3", "flex", "flex-wrap", "items-center", "gap-2"],
         },
         children: [
-          renderSectionLabel("Request"),
-          ...(request.contentType === undefined
+          renderSectionLabel("Request body"),
+          ...(request?.bodyType === undefined
             ? []
             : [
-                // Media types stay lowercase monospace, the way every API
-                // reference prints them; the uppercase chip is for labels.
                 {
                   type: "element",
                   tagName: "span",
                   properties: {
                     className: [
-                      "inline-flex",
-                      "items-center",
-                      "rounded-full",
-                      "bg-surface",
-                      "px-2",
-                      "py-0.5",
                       "font-mono",
-                      "text-[0.6875rem]",
-                      "leading-4",
-                      "text-muted",
+                      "text-[0.8125rem]",
+                      "font-semibold",
                     ],
+                    "data-http-body-type": "",
                   },
-                  children: [text(request.contentType)],
+                  children: [text(request.bodyType)],
                 } satisfies Element,
               ]),
+          ...(request?.contentType === undefined
+            ? []
+            : [contentTypeChip(request.contentType)]),
         ],
       },
-      {
-        type: "element",
-        tagName: "div",
-        properties: { className: ["[&>:last-child]:mb-0"] },
-        children: [...request.children],
-      },
+      ...(bodyParams.length === 0
+        ? []
+        : [
+            {
+              type: "element",
+              tagName: "div",
+              properties: { className: ["mb-3"] },
+              children: [
+                renderDefinitionList({
+                  entries: bodyParams.map(renderParam),
+                }),
+              ],
+            } satisfies Element,
+          ]),
+      ...(request === undefined || request.children.length === 0
+        ? []
+        : [
+            {
+              type: "element",
+              tagName: "div",
+              properties: { className: ["[&>:last-child]:mb-0"] },
+              children: [...request.children],
+            } satisfies Element,
+          ]),
     ],
   });
 
@@ -364,8 +413,18 @@ const renderHttpEndpointFigure = ({
             children: [...model.description],
           } satisfies Element,
         ]),
-    ...(model.params.length === 0 ? [] : [renderParameters(model.params)]),
-    ...(model.request === undefined ? [] : [renderRequest(model.request)]),
+    ...renderParamGroups(model.params),
+    ...(model.request === undefined &&
+    !model.params.some((param) => param.location === "body")
+      ? []
+      : [
+          renderRequest({
+            ...(model.request === undefined ? {} : { request: model.request }),
+            bodyParams: model.params.filter(
+              (param) => param.location === "body",
+            ),
+          }),
+        ]),
     ...(model.responses.length === 0 ? [] : [renderResponses(model.responses)]),
     ...(model.review === undefined
       ? []
