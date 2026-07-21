@@ -258,8 +258,10 @@ const columnRow = (
   children: [
     cell({
       tagName: "th",
+      // Semibold matches the index names in the band: both are the
+      // identifier the reader scans for.
       className:
-        "table-schema-cell-name font-mono text-[0.8125rem] font-medium",
+        "table-schema-cell-name font-mono text-[0.8125rem] font-semibold",
       properties: { scope: "row" },
       children: [text(column.name)],
     }),
