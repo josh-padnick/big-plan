@@ -41,7 +41,7 @@ const BODY_CLASSES =
 // column (~70ch) above it. The no-TOC variant is always a single column.
 const LAYOUT_CLASSES =
   "grid grid-cols-[minmax(0,1fr)] justify-center gap-8 px-5 pt-16 pb-16 wide:gap-14 wide:px-6 wide:pt-12 wide:pb-20";
-const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[14rem_minmax(0,70ch)]`;
+const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,70ch)]`;
 const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,70ch)]`;
 
 const TOC_LINK_CLASSES =
@@ -64,6 +64,19 @@ const createOverviewId = (contentIds: ReadonlyArray<string>): string => {
   return candidate;
 };
 
+// Sizes every label word at its semibold width via a hidden ::after ghost
+// (see the .toc-word rules), so the active section's bolding can never move
+// a label's line breaks; pseudo-element text stays out of copies and the
+// accessibility tree.
+const bufferedTocLabel = (label: string): string =>
+  label
+    .split(" ")
+    .map(
+      (word) =>
+        `<span class="toc-word" data-word="${escapeHtml(word)}">${escapeHtml(word)}</span>`,
+    )
+    .join(" ");
+
 // Builds links shared by both TOCs; ids are URI-encoded because slugs may
 // contain characters that are not literal-safe inside href values.
 const renderTocItems = ({
@@ -76,7 +89,7 @@ const renderTocItems = ({
   nav
     .map(
       (entry) =>
-        `<li><a class="${linkClasses}" data-section-link href="#${encodeURIComponent(entry.id)}">${escapeHtml(entry.label)}</a></li>`,
+        `<li><a class="${linkClasses}" data-section-link href="#${encodeURIComponent(entry.id)}">${bufferedTocLabel(entry.label)}</a></li>`,
     )
     .join("\n");
 
