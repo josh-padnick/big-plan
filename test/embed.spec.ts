@@ -44,3 +44,35 @@ test("should enter and exit browser full screen when the embed's control is used
     await expect.poll(fullscreenTag).toBe(null);
   });
 });
+
+test("should keep the copy feedback fully visible when copying inside an embed", async ({
+  page,
+  embedUrl,
+}) => {
+  await page.goto(embedUrl);
+  const diff = page.locator("[data-code-diff]");
+
+  await test.step("copying from the actions menu confirms visibly", async () => {
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: () => Promise.resolve() },
+      });
+    });
+    await diff.getByRole("button", { name: "More actions" }).click();
+    await diff.getByRole("menuitem", { name: "Copy diff" }).click();
+  });
+
+  await test.step("the feedback chip stays inside the embed's viewport", async () => {
+    // The component hugs the top of the embed document, so a chip above the
+    // header would land at a negative y and be clipped by the frame edge.
+    const chip = diff.locator("[data-diff-copy-message]");
+    await expect(chip).toBeVisible();
+    const chipBox = await boxOf(chip);
+    const buttonBox = await boxOf(
+      diff.getByRole("button", { name: "More actions" }),
+    );
+    expect(chipBox.y).toBeGreaterThanOrEqual(0);
+    expect(chipBox.y).toBeGreaterThan(buttonBox.y + buttonBox.height);
+  });
+});

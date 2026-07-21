@@ -10,3 +10,11 @@ fullscreened component supplies its own backdrop and scroll surface here.
   border-radius: 0;
   background: var(--bg);
 }
+
+/* The diff header's copy feedback pops above the header, which the top edge
+   of a height-fitted embed frame would clip; below the control it stays
+   fully visible, briefly overlaying the diff instead of vanishing. */
+[data-embed] [data-diff-copy-message] {
+  top: calc(100% + 0.25rem);
+  bottom: auto;
+}

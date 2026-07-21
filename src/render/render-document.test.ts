@@ -199,6 +199,12 @@ describe("renderDocument embed envelope", () => {
     expect(html).not.toMatch(/\[data-embed\][^{}]*\[data-diff-expand\]/);
   });
 
+  it("should reposition the diff copy feedback below the header when rendering an embed", () => {
+    // Above the header the chip would poke past the top of a height-fitted
+    // embed frame and be clipped.
+    expect(html).toMatch(/\[data-embed\][^{}]*\[data-diff-copy-message\]/);
+  });
+
   it("should leave the color scheme to the OS when no theme is forced", () => {
     expect(html).toContain('<html lang="en">');
   });
