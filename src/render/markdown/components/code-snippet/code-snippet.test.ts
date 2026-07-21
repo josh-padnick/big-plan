@@ -210,7 +210,7 @@ describe("renderCodeSnippet annotations", () => {
         line: 9,
         column: 1,
         message:
-          'Missing required attribute "lines"; expected a line or inclusive ascending range within 1-3',
+          'Missing required attribute "lines"; expected a line or strictly ascending inclusive range within 1-3',
       },
       {
         line: 9,
@@ -243,8 +243,8 @@ describe("renderCodeSnippet annotations", () => {
     ]);
   });
 
-  it.each(["line", "42-", "41", "45", "44-43"])(
-    "should diagnose malformed, out-of-range, or descending range %s",
+  it.each(["line", "42-", "41", "45", "44-43", "042", "43-43", "0"])(
+    "should diagnose malformed, non-canonical, out-of-range, or non-ascending range %s",
     (lines) => {
       expect(
         render({
@@ -260,7 +260,7 @@ describe("renderCodeSnippet annotations", () => {
           line: 9,
           column: 1,
           message:
-            'Attribute "lines" on Annotation must be a line or inclusive ascending range within 42-44',
+            'Attribute "lines" on Annotation must be a line or strictly ascending inclusive range within 42-44',
         },
       ]);
     },

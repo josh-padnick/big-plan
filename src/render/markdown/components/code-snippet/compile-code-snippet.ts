@@ -106,8 +106,9 @@ const positiveInteger = (value: string | undefined): number | undefined => {
   return Number.isSafeInteger(parsed) ? parsed : undefined;
 };
 
-// Parses one file-absolute single line or inclusive ascending range and keeps
-// collecting schema/body diagnostics even when its anchor is invalid.
+// Parses one file-absolute single line or strictly ascending inclusive range
+// (canonical positive integers, matching CodeDiff's Annotation grammar) and
+// keeps collecting schema/body diagnostics even when its anchor is invalid.
 const parseAnnotation = ({
   annotation,
   firstLine,
@@ -123,7 +124,7 @@ const parseAnnotation = ({
   const validRange = `${firstLine}-${lastLine}`;
   if (linesValue === undefined) {
     diagnostics.add({
-      message: `Missing required attribute "lines"; expected a line or inclusive ascending range within ${validRange}`,
+      message: `Missing required attribute "lines"; expected a line or strictly ascending inclusive range within ${validRange}`,
       position: annotation.position,
     });
   } else if (typeof linesValue !== "string") {
@@ -149,11 +150,11 @@ const parseAnnotation = ({
   if (typeof linesValue !== "string") {
     return undefined;
   }
-  const match = /^(\d+)(?:-(\d+))?$/u.exec(linesValue);
+  const match = /^([1-9]\d*)(?:-([1-9]\d*))?$/u.exec(linesValue);
   const startValue = match?.[1];
-  const endValue = match?.[2] ?? startValue;
+  const endValue = match?.[2];
   const start = startValue === undefined ? undefined : Number(startValue);
-  const end = endValue === undefined ? undefined : Number(endValue);
+  const end = endValue === undefined ? start : Number(endValue);
   if (
     start === undefined ||
     end === undefined ||
@@ -161,10 +162,10 @@ const parseAnnotation = ({
     !Number.isSafeInteger(end) ||
     start < firstLine ||
     end > lastLine ||
-    start > end
+    (endValue !== undefined && end <= start)
   ) {
     diagnostics.add({
-      message: `Attribute "lines" on Annotation must be a line or inclusive ascending range within ${validRange}`,
+      message: `Attribute "lines" on Annotation must be a line or strictly ascending inclusive range within ${validRange}`,
       position: annotation.position,
     });
     return undefined;
