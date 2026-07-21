@@ -85,7 +85,9 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
   ],
   httpEndpointViewerUrl: [
     async ({}, use) => {
-      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-http-endpoint-"));
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-http-endpoint-"),
+      );
       const outputPath = join(outputDir, "http-endpoint.html");
       await execFileAsync(process.execPath, [
         join(repoRoot, "bin", "big-plan.mjs"),
