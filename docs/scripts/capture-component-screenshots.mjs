@@ -133,6 +133,27 @@ README.md [modified]
 </FileTreeDiff>
 `;
 
+const TABLE_SCHEMA_FIXTURE = `<DatabaseTableSchema name="catalog.refresh_jobs">
+
+\`\`\`dbml
+id           bigint      [pk, increment]
+cache_key    text        [not null, note: 'The catalog cache key this job refreshes.']
+requested_by bigint      [ref: > catalog.api_instances.id, delete: set null]
+attempts     integer     [not null, default: 0, check: 'attempts <= 5']
+status       text        [not null, default: 'queued']
+enqueued_at  timestamptz [not null, default: \`now()\`]
+
+indexes {
+  cache_key [unique, where: 'status <> done', note: 'One live job per cache key.']
+  (status, enqueued_at) [name: 'refresh_jobs_scan_idx']
+}
+
+Note: 'One row per queued catalog refresh; done rows are pruned nightly.'
+\`\`\`
+
+</DatabaseTableSchema>
+`;
+
 /** Renders an MDX fixture through the CLI and returns the output HTML path. */
 const renderFixture = ({ dir, name, mdx }) => {
   const input = join(dir, `${name}.mdx`);
@@ -193,6 +214,11 @@ const shootSnippet = async (page, path) => {
   await page.locator("figure[data-code-snippet]").screenshot({ path });
 };
 
+/** Screenshots the DatabaseTableSchema figure element. */
+const shootTableSchema = async (page, path) => {
+  await page.locator("figure[data-database-table-schema]").screenshot({ path });
+};
+
 /** Screenshots the FileTree figure element. */
 const shootFileTree = async (page, path) => {
   await page.locator("figure[data-file-tree]").screenshot({ path });
@@ -243,6 +269,12 @@ const SHOTS = [
     mdx: SNIPPET_FIXTURE,
     base: "code-snippet-annotated",
     shoot: shootSnippet,
+  },
+  {
+    name: "table-schema",
+    mdx: TABLE_SCHEMA_FIXTURE,
+    base: "database-table-schema",
+    shoot: shootTableSchema,
   },
   {
     name: "file-tree",

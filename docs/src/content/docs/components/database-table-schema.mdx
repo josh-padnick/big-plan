@@ -1,0 +1,93 @@
+---
+title: DatabaseTableSchema
+description: A component for one database table's schema, rendered as a psql-style columns grid with key badges, foreign keys, indexes, and checks.
+---
+
+import ThemeImage from "../../../components/ThemeImage.astro";
+import tableSchemaLight from "../../../assets/components/database-table-schema-light.png";
+import tableSchemaDark from "../../../assets/components/database-table-schema-dark.png";
+
+`DatabaseTableSchema` renders one table's schema from a compact, validated DBML subset: a header with the schema-qualified name, a columns grid in psql's `Column | Type | Nullable | Default` order with key badges, foreign-key targets and notes adjacent to their columns, and Indexes and Checks sections below the grid.
+It is optimized for Postgres but generic: column types are opaque text, so any engine's types render unchanged.
+The grid and sections are fully server-rendered; JavaScript only powers the actions menu (copy table name, copy source), and a wide grid scrolls inside the figure instead of widening the page.
+
+## How it looks
+
+<ThemeImage
+  light={tableSchemaLight}
+  dark={tableSchemaDark}
+  alt="A table schema figure with a schema-qualified header, a columns grid with PK and FK badges, adjacent foreign-key and note lines, and Indexes and Checks sections"
+/>
+
+## When to use it
+
+Use `DatabaseTableSchema` whenever a plan proposes or modifies a table and the reviewer must judge its shape: keys, nullability, defaults, relationships, and the indexes that back the access paths.
+
+### When not to use it
+
+- Exact DDL the reader will execute - use a fenced `sql` block, which preserves every clause verbatim
+- Multi-table relationship overviews - render one component per table; a diagram of the whole schema is a different concern
+- Row-level security policies, triggers, or partitioning - put the `CREATE POLICY` or `CREATE TRIGGER` statements in a `sql` fence (or a [`CodeSnippet`](/components/code-snippet/) when line-anchored commentary helps) directly beneath the component, and one-line facts such as "RLS enabled; policies below" in the table `Note:`
+
+## Use cases
+
+- Propose a new table and let the reviewer approve its keys, constraints, and indexes before a migration exists
+- Show the current shape of a table a plan is about to alter, beside a second component showing the planned shape
+
+## Usage
+
+````mdx
+<DatabaseTableSchema name="catalog.refresh_jobs">
+
+```dbml
+id           bigint      [pk, increment]
+cache_key    text        [not null, note: 'The catalog cache key this job refreshes.']
+requested_by bigint      [ref: > catalog.api_instances.id, delete: set null]
+attempts     integer     [not null, default: 0, check: 'attempts <= 5']
+status       text        [not null, default: 'queued']
+enqueued_at  timestamptz [not null, default: `now()`]
+
+indexes {
+  cache_key [unique, where: 'status <> done', note: 'One live job per cache key.']
+  (status, enqueued_at) [name: 'refresh_jobs_scan_idx']
+}
+
+Note: 'One row per queued catalog refresh; done rows are pruned nightly.'
+```
+
+</DatabaseTableSchema>
+````
+
+## Authoring
+
+### Attributes
+
+| Attribute | Type               | Required | Behavior                                                                                                     |
+| --------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `name`    | string (non-empty) | Yes      | The table identity, optionally schema-qualified (`catalog.refresh_jobs`); the last dot splits the muted schema prefix from the emphasized table name. |
+
+Any other attribute is a positional authoring error.
+
+### Children
+
+The component takes exactly one fenced code block with the `dbml` language, and nothing else.
+
+### Schema grammar
+
+The fence carries a deliberate subset of [DBML](https://dbml.dbdiagram.io/docs/) - column lines, one optional `indexes { ... }` block, and one optional table `Note:` - with two Postgres-motivated extensions.
+Every violation reports a positional diagnostic pointing at the offending fence line, and out-of-subset DBML (`Table` blocks, standalone `Ref:` lines, `Enum` blocks) is rejected with the supported alternative named in the message.
+
+Each column is one line, `name type [settings]`:
+
+- The name must be a bare identifier; the type is opaque text and may contain spaces (`timestamp with time zone`) or array brackets (`text[]`).
+- Marker settings: `pk` (or `primary key`, which also implies `not null`), `not null`, `null`, `unique`, `increment` (rendered as an Identity badge).
+- `default:` takes a number, `true`, `false`, `null`, a quoted string, or a backtick expression such as `` `now()` ``.
+- `note:` and `check:` take a single-line quoted value; notes render as muted prose under the column, checks collect into the Checks section.
+- `ref: > table.column` declares a many-to-one foreign key; `delete:` and `update:` add referential actions (`cascade`, `restrict`, `set null`, `set default`, `no action`) and require the `ref:` on the same line.
+
+Each `indexes` block entry is a column, a composite `(a, b)` tuple, or a backtick expression, with optional settings `unique`, `name:`, `type:` (`btree`, `hash`, `gin`, `gist`), `note:`, and the extension `where:` for a partial-index predicate.
+
+### What stays outside the component
+
+Triggers, row-level security, partitioning, storage parameters, collation, and grants are deliberately not part of the grammar.
+Capture them beside the component: exact DDL in a `sql` fence, decision-worthy rationale in a [`Callout`](/components/callout/), and one-line facts in the table `Note:`.
