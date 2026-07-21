@@ -1,5 +1,11 @@
-// Owns DatabaseTableSchema's progressively enhanced actions menu and
-// name/source clipboard behavior; the grid stays readable without it.
+// Owns DatabaseTableSchema's progressively enhanced actions menu, the
+// name/source clipboard behavior, and full-screen viewing; the grid stays
+// readable without any of it.
+
+import {
+  openComponentFullScreen,
+  updateFullScreenControl,
+} from "../shared/full-screen/full-screen.browser.js";
 
 const SCHEMA_MESSAGE_RESET_MS = 2_000;
 const schemaMessageTimers = new WeakMap<HTMLElement, number>();
@@ -82,6 +88,34 @@ for (const block of document.querySelectorAll<HTMLElement>(
   );
   const menuList = block.querySelector<HTMLElement>("[data-schema-menu-list]");
   menuButton?.removeAttribute("hidden");
+
+  const expand = block.querySelector<HTMLButtonElement>("[data-schema-expand]");
+  expand?.removeAttribute("hidden");
+  expand?.addEventListener("click", () => {
+    if (block.dataset.schemaExpanded !== undefined) {
+      block.closest("dialog")?.close();
+      return;
+    }
+    openComponentFullScreen({
+      component: block,
+      labelElement: block.querySelector<HTMLElement>(".table-schema-identity"),
+      fallbackLabel: "Table schema",
+      onToggle: ({ expanded }) => {
+        if (expanded) {
+          block.dataset.schemaExpanded = "";
+        } else {
+          delete block.dataset.schemaExpanded;
+        }
+        if (expand !== null) {
+          updateFullScreenControl({
+            button: expand,
+            expanded,
+            expandLabel: "View table schema full screen",
+          });
+        }
+      },
+    });
+  });
 
   const menuItems = (): ReadonlyArray<HTMLButtonElement> =>
     menuList === null

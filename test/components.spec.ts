@@ -1241,9 +1241,9 @@ test("should preserve component content without controls when JavaScript is disa
   );
   await expect(schema.locator('[data-schema-badge="pk"]')).toBeVisible();
   const controls = page.locator(
-    "[data-diff-toggle-group], [data-diff-menu-button], [data-diff-expand], [data-schema-menu-button]",
+    "[data-diff-toggle-group], [data-diff-menu-button], [data-diff-expand], [data-schema-menu-button], [data-schema-expand]",
   );
-  await expect(controls).toHaveCount(7);
+  await expect(controls).toHaveCount(8);
   for (const control of await controls.all()) {
     await expect(control).toBeHidden();
   }
@@ -1377,6 +1377,27 @@ test("should review a database table schema end to end", async ({
       RAW_TABLE_SCHEMA,
     );
     await expect(menuButton).toHaveAccessibleName("Source copied!");
+  });
+
+  await test.step("full screen enlarges the schema and restores it on dismiss", async () => {
+    const expand = schema.getByRole("button", {
+      name: "View table schema full screen",
+    });
+    await expand.scrollIntoViewIfNeeded();
+    await expand.click();
+    const dialog = page.locator("dialog.component-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAccessibleName("catalog.refresh_jobs");
+    await expect(
+      dialog.locator("[data-database-table-schema]"),
+    ).toHaveAttribute("data-schema-expanded", "");
+    await expect(
+      dialog.getByRole("button", { name: "Exit full screen" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("dialog.component-dialog")).toHaveCount(0);
+    await expect(schema).toBeVisible();
+    await expect(schema).not.toHaveAttribute("data-schema-expanded", "");
   });
 
   await test.step("a narrow viewport scrolls the grid inside the figure", async () => {

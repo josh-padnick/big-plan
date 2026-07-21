@@ -6,6 +6,8 @@ import type { Element, Text } from "hast";
 import { COPY_ICON } from "../../../icons/lucide/copy.js";
 import { DATABASE_ICON } from "../../../icons/lucide/database.js";
 import { ELLIPSIS_ICON } from "../../../icons/lucide/ellipsis.js";
+import { MAXIMIZE_2_ICON } from "../../../icons/lucide/maximize-2.js";
+import { MINIMIZE_2_ICON } from "../../../icons/lucide/minimize-2.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import { renderCopyFeedback } from "../shared/copy-feedback/copy-feedback.js";
 
@@ -140,6 +142,28 @@ const actionsMenu = (): Element => ({
   ],
 });
 
+// Progressive full-screen control; both icons ship server-side so the
+// browser script only toggles visibility.
+const expandButton = (): Element => ({
+  type: "element",
+  tagName: "button",
+  properties: {
+    type: "button",
+    className: BUTTON_CLASSES.split(" "),
+    ariaLabel: "View table schema full screen",
+    title: "View table schema full screen",
+    hidden: true,
+    "data-schema-expand": "",
+    "data-size": "xs",
+    "data-slot": "button",
+    "data-variant": "ghost",
+  },
+  children: [
+    renderLucideIcon({ icon: MAXIMIZE_2_ICON, hidden: false }),
+    renderLucideIcon({ icon: MINIMIZE_2_ICON, hidden: true }),
+  ],
+});
+
 /** Renders the caption: identity and controls, plus the table note beneath
  * them in the same band so the header stays one bordered region. */
 export const renderTableSchemaHeader = ({
@@ -179,6 +203,7 @@ export const renderTableSchemaHeader = ({
           children: [
             renderCopyFeedback({ dataAttribute: "data-schema-copy-message" }),
             actionsMenu(),
+            expandButton(),
           ],
         },
       ],

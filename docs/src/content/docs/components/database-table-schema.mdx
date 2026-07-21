@@ -12,7 +12,7 @@ The Constraints cell carries key badges, explicit nullability, foreign keys with
 The tinted Indexes band below the grid numbers each index (`INDX 1`, `INDX 2`, ...) and leads with its name; the columns, method, and partial predicate follow in demoted muted text with the invariant note beneath.
 A column that an index uses as a key carries the matching `INDX n` pill, while a column that only appears in a partial-index predicate is marked `WHERE INDX n`, so a reviewer can answer "is this column indexed?" without leaving the row.
 It is optimized for Postgres but generic: column types are opaque text, so any engine's types render unchanged.
-The grid and sections are fully server-rendered; JavaScript only powers the actions menu (copy table name, copy source), and a wide grid scrolls inside the figure instead of widening the page.
+The grid and sections are fully server-rendered; JavaScript only powers the actions menu (copy table name, copy source) and a full-screen view that gives a wide schema the whole viewport, and a wide grid scrolls inside the figure instead of widening the page.
 
 ## How it looks
 

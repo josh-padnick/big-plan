@@ -4,9 +4,32 @@
    with the component that owns them. */
 
 @layer components {
+  /* The figure paints its own background: inline it matches the page, and
+     inside the shared full-screen dialog (which is deliberately transparent)
+     it keeps the page from bleeding through the grid rows. */
+  article [data-database-table-schema] {
+    background: var(--bg);
+  }
   article .table-schema-header {
     background: var(--diff-header-bg);
     border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0;
+  }
+  /* Inside the dialog the figure owns the vertical scroll for tall tables
+     and drops its inline bottom margin. */
+  article .component-dialog > [data-database-table-schema] {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+  article
+    .component-dialog
+    > [data-database-table-schema]
+    > .table-schema-scroll {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
   }
   /* SQL fragments read as code, not chips: the prose inline-code chrome is
      figure chrome here, so it comes off inside the component. */
