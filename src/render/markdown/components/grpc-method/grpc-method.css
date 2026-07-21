@@ -1,0 +1,30 @@
+/* GrpcMethod streaming-kind, stream-keyword, error-code, and deprecation
+   palette variants, colocated with the component that emits those stable
+   selector contracts. */
+
+@layer components {
+  article .grpc-method-kind-unary,
+  article .grpc-method-deprecated {
+    color: var(--color-muted);
+    background: color-mix(in srgb, var(--color-muted) 14%, transparent);
+  }
+  article .grpc-method-kind-serverstreaming {
+    color: var(--callout-note-c);
+    background: color-mix(in srgb, var(--callout-note-c) 14%, transparent);
+  }
+  article .grpc-method-kind-clientstreaming {
+    color: var(--callout-warning-c);
+    background: color-mix(in srgb, var(--callout-warning-c) 14%, transparent);
+  }
+  article .grpc-method-kind-bidistreaming {
+    color: var(--annotation-c);
+    background: color-mix(in srgb, var(--annotation-c) 14%, transparent);
+  }
+  article .grpc-method-stream {
+    color: var(--color-accent);
+  }
+  article .grpc-method-error-code {
+    color: var(--callout-warning-c);
+    background: color-mix(in srgb, var(--callout-warning-c) 14%, transparent);
+  }
+}

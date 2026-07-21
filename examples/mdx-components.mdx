@@ -289,6 +289,107 @@ Identifier of the plan to read from disk.
 
 </HttpEndpoint>
 
+Agent bridges that already speak GraphQL get the same comment contract mirrored onto their native shape.
+
+<GraphqlOperation kind="mutation" name="commentCreate" access="Requires plan write access">
+
+Creates a comment through the GraphQL bridge, mirroring the REST endpoint above.
+
+<Argument name="input" type="CommentCreateInput!">
+
+The plan id, the anchored range, and the markdown comment body.
+
+</Argument>
+
+<Returns type="CommentCreatePayload">
+
+The created `comment` plus a `userErrors` list following the mutation-payload convention.
+
+</Returns>
+
+<Operation>
+
+```graphql
+mutation commentCreate($input: CommentCreateInput!) {
+  commentCreate(input: $input) {
+    comment {
+      id
+      createdAt
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}
+```
+
+</Operation>
+
+<Variables>
+
+```json
+{
+  "input": {
+    "planId": "pln_42",
+    "body": "Keep the retry budget explicit."
+  }
+}
+```
+
+</Variables>
+
+<Response>
+
+```json
+{
+  "data": {
+    "commentCreate": {
+      "comment": { "id": "cmt_8f3a" },
+      "userErrors": []
+    }
+  }
+}
+```
+
+</Response>
+
+</GraphqlOperation>
+
+Streaming consumers watch comments over the gRPC bridge instead of polling.
+
+<GrpcMethod service="bigplan.v1.CommentService" name="WatchComments" request="WatchCommentsRequest" response="Comment" kind="serverStreaming">
+
+Streams new comments on a plan as reviewers create them.
+
+<Field in="request" name="plan_id" type="string">
+
+Required. Resource name of the plan being watched.
+
+</Field>
+
+<Field in="response" name="body" type="string">
+
+The comment body as authored markdown.
+
+</Field>
+
+<Error code="NOT_FOUND">
+
+The plan does not exist or the caller cannot see it.
+
+</Error>
+
+<Proto>
+
+```proto
+rpc WatchComments(WatchCommentsRequest) returns (stream Comment);
+```
+
+</Proto>
+
+</GrpcMethod>
+
 ## Rollout and validation
 
 The rollout uses three cohorts and advances only after a full peak-traffic window.

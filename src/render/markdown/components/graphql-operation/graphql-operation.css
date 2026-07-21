@@ -1,0 +1,21 @@
+/* GraphqlOperation kind and deprecation palette variants, colocated with the
+   component that emits those stable selector contracts. */
+
+@layer components {
+  article .graphql-operation-kind-query {
+    color: var(--callout-note-c);
+    background: color-mix(in srgb, var(--callout-note-c) 14%, transparent);
+  }
+  article .graphql-operation-kind-mutation {
+    color: var(--callout-warning-c);
+    background: color-mix(in srgb, var(--callout-warning-c) 14%, transparent);
+  }
+  article .graphql-operation-kind-subscription {
+    color: var(--annotation-c);
+    background: color-mix(in srgb, var(--annotation-c) 14%, transparent);
+  }
+  article .graphql-operation-deprecated {
+    color: var(--color-muted);
+    background: color-mix(in srgb, var(--color-muted) 14%, transparent);
+  }
+}

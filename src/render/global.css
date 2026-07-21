@@ -17,6 +17,8 @@ Light and dark follow the reader's OS unless the theme control overrides it.
 @import "./markdown/components/code-diff/code-diff.css";
 @import "./markdown/components/code-snippet/code-snippet.css";
 @import "./markdown/components/file-tree/file-tree.css";
+@import "./markdown/components/graphql-operation/graphql-operation.css";
+@import "./markdown/components/grpc-method/grpc-method.css";
 @import "./markdown/components/http-endpoint/http-endpoint.css";
 
 /* Only authored source emits utility candidates; examples and docs do not. */
