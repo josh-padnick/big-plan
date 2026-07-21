@@ -1,6 +1,6 @@
 ---
 title: HttpEndpoint
-description: A component that renders one HTTP endpoint as an always-expanded API review card with parameters, request, and responses.
+description: A component that renders one HTTP endpoint as a progressively tabbed API review card with parameters, request, and responses.
 ---
 
 import ThemeImage from "../../../components/ThemeImage.astro";
@@ -14,7 +14,7 @@ import endpointDark from "../../../assets/components/http-endpoint-dark.png";
 <ThemeImage
   light={endpointLight}
   dark={endpointDark}
-  alt="An endpoint card with a method pill, a path with a tinted placeholder, an auth line, a parameter list, and status-coded responses"
+  alt="A POST endpoint card with the Body tab selected, an application/json chip, required and optional fields, and a JSON request example"
 />
 
 ## When to use it
@@ -107,7 +107,7 @@ The Request body section states what the body is in one place: the declared type
 
 ### Response
 
-Each `Response` documents one status: a required three-digit `status` (`100`-`599`) rendered as a class-colored pill (2xx green, 4xx amber, 5xx red), an optional `label`, and an optional markdown body with at most one fenced example.
+Each `Response` documents one status: a required three-digit `status` (`100`-`599`) rendered as a class-colored pill (1xx and 3xx muted, 2xx green, 4xx amber, 5xx red), an optional `label`, and an optional markdown body with at most one fenced example.
 Document the failure statuses reviewers usually have to ask about, not only the success shape.
 
 Component-specific violations report positional diagnostics, including:
@@ -119,14 +119,16 @@ Component-specific violations report positional diagnostics, including:
 
 ### Review
 
-At most one `Review` closes the card with a review checklist: a markdown body, typically a GFM task list, holding the architectural questions a reviewer should answer before implementation - idempotency, rate limiting, telemetry, error completeness.
+At most one attribute-free `Review` closes the card with a non-empty markdown body, typically a GFM task list, holding the architectural questions a reviewer should answer before implementation - idempotency, rate limiting, telemetry, error completeness.
 Unlike an API reference, a plan exists to reach agreement, and the checklist nudges the review toward the questions that matter.
 
 `Param`, `Request`, `Response`, and `Review` outside a declaring `HttpEndpoint` stay unknown components.
 
 ## Tabbed navigation
 
+The tabbed enhancement is experimental.
 With JavaScript enabled, a card with two or more sections folds them behind a tab bar - Path, Query, Headers, Body, Responses, Review - with entry counts and an accent underline on the active tab.
+Left and Right Arrow cycle through the tabs, while Home and End jump to the first and last tab.
 The stacked sections remain the server-rendered document, so readers without JavaScript, printouts, and text extraction always see the complete contract.
 
 ## Copy behavior

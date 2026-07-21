@@ -81,6 +81,7 @@ rpc WatchComments(WatchCommentsRequest) returns (stream Comment);
 | `deprecated` | bare boolean                                                      | No                  | Renders a Deprecated badge and strikes the method name.                       |
 
 The markdown body before the scoped children is the method's description.
+A method with no description or scoped children renders as a compact header-only service entry.
 
 ### Field
 
@@ -101,6 +102,6 @@ Component-specific violations report positional diagnostics, including an unknow
 
 ### Review
 
-At most one `Review` closes the card with a review checklist - a markdown body, typically a GFM task list, of the architectural questions to answer before implementation (deadlines, retry semantics, back-pressure).
+At most one attribute-free `Review` closes the card with a non-empty markdown body, typically a GFM task list, of the architectural questions to answer before implementation (deadlines, retry semantics, back-pressure).
 
 `Field`, `Error`, `Proto`, and `Review` outside a declaring `GrpcMethod` stay unknown components.

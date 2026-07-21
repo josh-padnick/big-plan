@@ -1,5 +1,6 @@
 // Exposes HttpEndpoint's component definition and renders its compiled API
-// contract as an always-expanded, static endpoint review card.
+// contract as the server-expanded card progressively folded by its browser
+// enhancement.
 
 import type { Element, ElementContent, Text } from "hast";
 import { LOCK_ICON } from "../../../icons/lucide/lock.js";

@@ -34,12 +34,16 @@ For what comes next, see the [roadmap](/intro/roadmap/).
 - `CodeSnippet` components for excerpts with optional file identity, file-absolute line numbers, scoped annotations, and copy actions.
 - `FileTree` components for foldable plain hierarchies with optional per-entry notes.
 - `FileTreeDiff` components with entry-level change status, summaries, persisted combined or side-by-side views, a Planned-pane final-state switch, fold controls, note hints, and full-screen viewing.
+- `HttpEndpoint` components for HTTP contracts with location-grouped parameters, request examples, status-coded responses, and tabbed section navigation.
+- `GraphqlOperation` components for queries, mutations, and subscriptions with literal argument types and executable examples.
+- `GrpcMethod` components for streaming-aware proto signatures, request and response fields, canonical errors, and proto examples.
+- Closing `Review` checklists on every protocol card for the architectural questions to settle before implementation.
 
 ## Output
 
 - One self-contained HTML file: styling, behavior, and branding embedded.
 - No external requests, ever.
-- Readable with JavaScript disabled; scripts only enhance navigation, theming, code-copy controls, and `CodeDiff`, `CodeSnippet`, `FileTree`, and `FileTreeDiff` interactions.
+- Readable with JavaScript disabled; scripts only enhance navigation, theming, code-copy controls, `CodeDiff`, `CodeSnippet`, `FileTree`, and `FileTreeDiff` interactions, and `HttpEndpoint`'s tabbed section navigation.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 
 See the [CLI reference](/reference/cli/) for command details.
