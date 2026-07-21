@@ -82,6 +82,7 @@ test("should review HTTP endpoint contracts", async ({
       "CreateCommentRequest",
     );
     await expect(bodySection).toContainText("application/json");
+    await expect(bodySection.locator(".card-section-label")).toBeHidden();
     await expect(bodySection.locator("[data-copy-code]")).toHaveAccessibleName(
       "Copy code",
     );
@@ -97,9 +98,7 @@ test("should review HTTP endpoint contracts", async ({
 
   await test.step("the review tab holds the checklist and its task list", async () => {
     await endpoint.getByRole("tab", { name: "Review" }).click();
-    const checklist = endpoint.locator("[data-review-checklist]");
-    await expect(checklist).toBeVisible();
-    await expect(endpoint).toContainText("Review checklist");
+    await expect(endpoint.locator("[data-review-checklist]")).toBeHidden();
     const boxes = endpoint.locator('input[type="checkbox"]');
     await expect(boxes).toHaveCount(3);
     await expect(boxes.first()).toBeChecked();

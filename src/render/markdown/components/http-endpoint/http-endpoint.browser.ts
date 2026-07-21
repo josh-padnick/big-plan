@@ -89,6 +89,16 @@ for (const card of document.querySelectorAll<HTMLElement>(
     nextPanelId += 1;
     entry.section.id = panelId;
     entry.section.setAttribute("role", "tabpanel");
+    // The selected tab already names the panel, so the in-panel label (and
+    // the review checklist's icon row) would say it twice; the stacked
+    // no-JavaScript document keeps them as its only headings.
+    const reviewRow = entry.section.querySelector<HTMLElement>(
+      "[data-review-checklist]",
+    );
+    const label = entry.section.querySelector<HTMLElement>(
+      ".card-section-label",
+    );
+    (reviewRow ?? label)?.setAttribute("hidden", "");
 
     const tab = document.createElement("button");
     tab.type = "button";

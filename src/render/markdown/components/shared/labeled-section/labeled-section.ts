@@ -8,7 +8,7 @@
 import type { Element, ElementContent, Text } from "hast";
 
 const SECTION_LABEL_CLASSES =
-  "text-[0.6875rem] leading-4 font-bold tracking-[0.08em] uppercase text-muted";
+  "card-section-label text-[0.6875rem] leading-4 font-bold tracking-[0.08em] uppercase text-muted";
 
 const text = (value: string): Text => ({ type: "text", value });
 
