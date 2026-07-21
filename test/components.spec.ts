@@ -1264,7 +1264,7 @@ const RAW_TABLE_SCHEMA = [
   "  (status, enqueued_at) [name: 'refresh_jobs_scan_idx']",
   "}",
   "",
-  "Note: 'One row per queued catalog refresh; done rows are pruned nightly.'",
+  "Note: 'One row per queued catalog refresh.'",
   "",
 ].join("\n");
 
@@ -1285,7 +1285,7 @@ test("should review a database table schema end to end", async ({
       "refresh_jobs",
     );
     await expect(schema.locator("[data-schema-table-note]")).toHaveText(
-      "One row per queued catalog refresh; done rows are pruned nightly.",
+      "One row per queued catalog refresh.",
     );
   });
 

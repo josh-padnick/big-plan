@@ -148,7 +148,7 @@ indexes {
   (status, enqueued_at) [name: 'refresh_jobs_scan_idx']
 }
 
-Note: 'One row per queued catalog refresh; done rows are pruned nightly.'
+Note: 'One row per queued catalog refresh.'
 \`\`\`
 
 </DatabaseTableSchema>

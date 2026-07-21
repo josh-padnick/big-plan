@@ -187,7 +187,7 @@ Without those safeguards, a popular expired key can multiply origin load across 
 
 ## Queue persistence
 
-Refresh jobs survive worker restarts in one Postgres table.
+Refresh jobs survive worker restarts in one Postgres table, and completed rows are pruned nightly.
 Deduplication rides the unique partial index: a cache key can hold at most one unfinished job, so a popular expired key enqueues once no matter how many readers race.
 
 <DatabaseTableSchema name="catalog.refresh_jobs">
@@ -205,7 +205,7 @@ indexes {
   (status, enqueued_at) [name: 'refresh_jobs_scan_idx']
 }
 
-Note: 'One row per queued catalog refresh; done rows are pruned nightly.'
+Note: 'One row per queued catalog refresh.'
 ```
 
 </DatabaseTableSchema>

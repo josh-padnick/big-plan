@@ -53,7 +53,7 @@ indexes {
   (status, enqueued_at) [name: 'refresh_jobs_scan_idx']
 }
 
-Note: 'One row per queued catalog refresh; done rows are pruned nightly.'
+Note: 'One row per queued catalog refresh.'
 ```
 
 </DatabaseTableSchema>
@@ -87,6 +87,9 @@ Each column is one line, `name type [settings]`:
 - `ref: > table.column` declares a many-to-one foreign key; `delete:` and `update:` add referential actions (`cascade`, `restrict`, `set null`, `set default`, `no action`) and require the `ref:` on the same line.
 
 Each `indexes` block entry is a column, a composite `(a, b)` tuple, or a backtick expression, with optional settings `unique`, `name:`, `type:` (`btree`, `hash`, `gin`, `gist`), `note:`, and the extension `where:` for a partial-index predicate.
+
+The table `Note:` is the table's comment, headed for `COMMENT ON TABLE`: one sentence saying what a single row represents.
+Operational behavior - pruning schedules, rollout plans, lifecycle narration - belongs in the prose around the component, not inside the schema.
 
 ### What stays outside the component
 
