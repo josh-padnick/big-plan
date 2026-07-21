@@ -1,9 +1,59 @@
-// Owns the shared full-screen dialog behavior for review components: the
-// component moves into a modal dialog and back without cloning, so listeners
-// and in-component state survive, with page-scroll restore and an accessible
-// dialog name taken from an existing caption when one exists.
+// Owns the shared full-screen behavior for review components. In the viewer
+// the component moves into a modal dialog and back without cloning, so
+// listeners and in-component state survive, with page-scroll restore and an
+// accessible dialog name taken from an existing caption when one exists. On
+// the embed surface (under the data-embed marker) a modal dialog could never
+// escape the host iframe, so the same control drives the browser Fullscreen
+// API instead, which the host grants via allowfullscreen.
 
 let nextDialogLabelId = 1;
+
+const isEmbedComponent = (component: HTMLElement): boolean =>
+  component.closest("[data-embed]") !== null;
+
+/**
+ * Whether the full-screen control can work for this component: always in the
+ * viewer's dialog path, and only with an available Fullscreen API (the host
+ * iframe must allow it) on the embed surface. Callers keep the control
+ * hidden when this is false, so a denied embed degrades to no control.
+ */
+export const fullScreenSupported = ({
+  component,
+}: {
+  readonly component: HTMLElement;
+}): boolean => !isEmbedComponent(component) || document.fullscreenEnabled;
+
+// Enters or exits browser full screen for an embedded component. The exit
+// path only requests it; state mirroring waits for fullscreenchange so Esc,
+// the control, and programmatic exits all converge on the same handler.
+const toggleEmbedFullScreen = ({
+  component,
+  onToggle,
+}: {
+  readonly component: HTMLElement;
+  readonly onToggle: (input: { readonly expanded: boolean }) => void;
+}): void => {
+  if (document.fullscreenElement === component) {
+    void document.exitFullscreen();
+    return;
+  }
+  component
+    .requestFullscreen()
+    .then(() => {
+      onToggle({ expanded: true });
+      const onChange = (): void => {
+        if (document.fullscreenElement === component) {
+          return;
+        }
+        document.removeEventListener("fullscreenchange", onChange);
+        onToggle({ expanded: false });
+      };
+      document.addEventListener("fullscreenchange", onChange);
+    })
+    .catch(() => {
+      // The platform or host denied the request; the component stays inline.
+    });
+};
 
 // Flips one expand control between its maximize and minimize affordances; the
 // server renders both icons so the script only toggles visibility.
@@ -42,6 +92,10 @@ export const openComponentFullScreen = ({
   readonly fallbackLabel: string;
   readonly onToggle: (input: { readonly expanded: boolean }) => void;
 }): void => {
+  if (isEmbedComponent(component)) {
+    toggleEmbedFullScreen({ component, onToggle });
+    return;
+  }
   const article = component.closest("article");
   if (article === null) {
     return;

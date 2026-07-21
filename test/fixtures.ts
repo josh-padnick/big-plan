@@ -19,6 +19,7 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
   readonly componentsViewerUrl: string;
+  readonly embedUrl: string;
   readonly sampleViewerUrl: string;
 };
 
@@ -41,6 +42,17 @@ retry();
 \`\`\`
 
 </Annotation>
+
+</CodeDiff>
+`;
+
+const EMBED_MDX = `<CodeDiff file="src/retry.ts" showLineNumbers>
+
+\`\`\`diff
+@@ -1 +1 @@
+-oldRetry();
++newRetry();
+\`\`\`
 
 </CodeDiff>
 `;
@@ -76,6 +88,26 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         "render",
         join(repoRoot, "examples", "mdx-components.mdx"),
         outputPath,
+      ]);
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  // The embed document exercises the chromeless envelope the docs frame in
+  // iframes, where full screen goes through the browser Fullscreen API.
+  embedUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-embed-"));
+      const inputPath = join(outputDir, "embed.mdx");
+      const outputPath = join(outputDir, "embed.html");
+      await writeFile(inputPath, EMBED_MDX, "utf8");
+      await execFileAsync(process.execPath, [
+        join(repoRoot, "bin", "big-plan.mjs"),
+        "render",
+        inputPath,
+        outputPath,
+        "--embed",
       ]);
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });

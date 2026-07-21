@@ -20,12 +20,16 @@ const { light, dark, title, height } = Astro.props;
   src={light}
   title={title}
   loading="lazy"
+  allowfullscreen
+  allow="fullscreen"
   class="dark:sl-hidden"
   style={`height: ${height}`}></iframe>
 <iframe
   src={dark}
   title={title}
   loading="lazy"
+  allowfullscreen
+  allow="fullscreen"
   class="light:sl-hidden"
   style={`height: ${height}`}></iframe>
 

@@ -189,12 +189,14 @@ describe("renderDocument embed envelope", () => {
     expect(html).toContain("data-diff-set-view");
   });
 
-  it("should hide the full-screen control when rendering an embed", () => {
-    // The modal dialog cannot escape a host iframe, so the embed stylesheet
-    // suppresses the controls that would open it.
+  it("should keep the full-screen control and style browser full screen when rendering an embed", () => {
+    // The embed keeps the control but drives the browser Fullscreen API (the
+    // viewer's modal dialog could not escape a host iframe), so the
+    // stylesheet must give the fullscreened component its own backdrop and
+    // must not hide the control.
     expect(html).toContain("data-diff-expand");
-    expect(html).toMatch(/\[data-embed\][^{}]*\[data-diff-expand\]/);
-    expect(html).toMatch(/\[data-embed\][^{}]*\[data-tree-expand\]/);
+    expect(html).toMatch(/\[data-embed\][^{}]*:fullscreen/);
+    expect(html).not.toMatch(/\[data-embed\][^{}]*\[data-diff-expand\]/);
   });
 
   it("should leave the color scheme to the OS when no theme is forced", () => {
