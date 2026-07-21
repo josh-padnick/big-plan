@@ -36,6 +36,11 @@ const browserScripts = [
     exportName: "CODE_SNIPPET_JS",
   },
   {
+    directory: "markdown/components/database-table-schema",
+    name: "database-table-schema",
+    exportName: "DATABASE_TABLE_SCHEMA_JS",
+  },
+  {
     directory: "markdown/components/file-tree",
     name: "file-tree",
     exportName: "FILE_TREE_JS",

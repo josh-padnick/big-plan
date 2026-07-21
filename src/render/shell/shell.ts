@@ -13,6 +13,7 @@ import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
 import { CODE_DIFF_JS } from "../markdown/components/code-diff/code-diff.generated.js";
 import { CODE_SNIPPET_JS } from "../markdown/components/code-snippet/code-snippet.generated.js";
+import { DATABASE_TABLE_SCHEMA_JS } from "../markdown/components/database-table-schema/database-table-schema.generated.js";
 import { FILE_TREE_JS } from "../markdown/components/file-tree/file-tree.generated.js";
 import { HTTP_ENDPOINT_JS } from "../markdown/components/http-endpoint/http-endpoint.generated.js";
 import { COPY_CODE_JS } from "../markdown/code-block/copy-code.generated.js";
@@ -174,6 +175,7 @@ ${contentHtml}
           COPY_CODE_JS,
           CODE_DIFF_JS,
           CODE_SNIPPET_JS,
+          DATABASE_TABLE_SCHEMA_JS,
           FILE_TREE_JS,
           HTTP_ENDPOINT_JS,
           SCROLL_SPY_JS,
@@ -183,6 +185,7 @@ ${contentHtml}
           COPY_CODE_JS,
           CODE_DIFF_JS,
           CODE_SNIPPET_JS,
+          DATABASE_TABLE_SCHEMA_JS,
           FILE_TREE_JS,
           HTTP_ENDPOINT_JS,
         ],

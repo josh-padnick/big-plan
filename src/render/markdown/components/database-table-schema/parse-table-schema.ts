@@ -3,11 +3,7 @@
 // table Note, with per-line diagnostics that name the subset boundary.
 
 export type ReferentialAction =
-  | "cascade"
-  | "restrict"
-  | "set null"
-  | "set default"
-  | "no action";
+  "cascade" | "restrict" | "set null" | "set default" | "no action";
 
 export type TableColumnRef = {
   readonly target: string;
@@ -185,7 +181,8 @@ const splitSettingsGroup = ({
   readonly value: string;
   readonly line: number;
   readonly diagnostics: Array<TableSchemaParseDiagnostic>;
-}): { readonly head: string; readonly settingsContent?: string } | undefined => {
+}):
+  { readonly head: string; readonly settingsContent?: string } | undefined => {
   const bracketIndexes = topLevelIndexes({
     value,
     matches: (character, index) =>
@@ -328,7 +325,10 @@ const applyColumnSetting = ({
           ? undefined
           : parseDefaultValue({ value, line, diagnostics });
       if (value === undefined) {
-        diagnostics.push({ line, message: "The default: setting requires a value" });
+        diagnostics.push({
+          line,
+          message: "The default: setting requires a value",
+        });
       } else if (parsed !== undefined) {
         column.defaultValue = parsed;
       }

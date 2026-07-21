@@ -56,7 +56,10 @@ describe("parseTableSchema columns", () => {
       source: "id bigint [primary key]\n",
     });
     expect(diagnostics).toEqual([]);
-    expect(schema.columns[0]).toMatchObject({ primaryKey: true, notNull: true });
+    expect(schema.columns[0]).toMatchObject({
+      primaryKey: true,
+      notNull: true,
+    });
   });
 
   it.each([
@@ -212,7 +215,9 @@ describe("parseTableSchema columns", () => {
     expect(
       parseTableSchema({ source: "id\nother text\n" }).diagnostics,
     ).toEqual([{ line: 1, message: 'Column "id" is missing a type' }]);
-    expect(parseTableSchema({ source: "user-id bigint\n" }).diagnostics).toEqual([
+    expect(
+      parseTableSchema({ source: "user-id bigint\n" }).diagnostics,
+    ).toEqual([
       {
         line: 1,
         message:
@@ -281,7 +286,9 @@ describe("parseTableSchema indexes", () => {
 
   it("should diagnose an unknown index method and unknown setting", () => {
     const { diagnostics } = parseTableSchema({
-      source: withColumns("indexes {\n  status [type: brin]\n  status [foo]\n}\n"),
+      source: withColumns(
+        "indexes {\n  status [type: brin]\n  status [foo]\n}\n",
+      ),
     });
     expect(diagnostics).toEqual([
       {
@@ -392,12 +399,15 @@ describe("parseTableSchema table shape", () => {
       "TableGroup billing {",
       "Only column lines, one indexes block, and one Note are supported inside the fence",
     ],
-  ])("should name the alternative for out-of-subset line %s", (line, message) => {
-    const { diagnostics } = parseTableSchema({
-      source: `id bigint\n${line}\n`,
-    });
-    expect(diagnostics).toEqual([{ line: 2, message }]);
-  });
+  ])(
+    "should name the alternative for out-of-subset line %s",
+    (line, message) => {
+      const { diagnostics } = parseTableSchema({
+        source: `id bigint\n${line}\n`,
+      });
+      expect(diagnostics).toEqual([{ line: 2, message }]);
+    },
+  );
 
   it("should ignore blank and whitespace-only lines when numbering", () => {
     const { diagnostics } = parseTableSchema({
