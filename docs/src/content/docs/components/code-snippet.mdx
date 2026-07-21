@@ -96,4 +96,5 @@ Hovering an annotation or any of its anchored lines highlights both, so the pair
 ## Copy behavior
 
 The Copy code action copies only the raw fenced source: never annotations, never line numbers; when `file` is set, Copy path copies that value separately.
+As MDX parses fenced content, the copied source uses LF line endings and includes a trailing newline.
 The line-number gutter is excluded from text selection, so copy-by-drag stays clean too.

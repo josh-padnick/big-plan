@@ -1,7 +1,7 @@
 // Owns the file tree components' progressive enhancements: directory folding
-// for FileTree and FileTreeDiff, plus FileTreeDiff's view preference and
-// full-screen control. Server-rendered trees stay fully expanded when
-// JavaScript is unavailable.
+// for both components, plus FileTreeDiff's note hints, persisted view,
+// Planned-pane diff switch, and full-screen control. Server-rendered trees stay
+// fully expanded when JavaScript is unavailable.
 
 import {
   openComponentFullScreen,

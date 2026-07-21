@@ -47,7 +47,7 @@ An MDX syntax error can stop parsing before component validation begins, so fix 
 ## One self-contained file
 
 The rendered document embeds everything it needs: styles, scripts, branding, and favicons.
-It makes no external requests, works offline, and stays readable with JavaScript disabled; scripts only enhance navigation, theme switching, code-copy controls, `CodeDiff` and `CodeSnippet` interactions, and `FileTreeDiff` view selection.
+It makes no external requests, works offline, and stays readable with JavaScript disabled; scripts only enhance navigation, theme switching, code-copy controls, and `CodeDiff`, `CodeSnippet`, `FileTree`, and `FileTreeDiff` interactions.
 Nothing about rendering or reviewing a plan touches a server, an account, or anyone else's machine.
 
 ## What comes next

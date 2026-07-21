@@ -10,7 +10,7 @@ A plan is prose plus components, and the file on disk stays the greppable, diffa
 ## What a plan may contain
 
 Standard Markdown plus GFM tables, task lists, footnotes, and literal autolinks all work.
-Fenced code blocks with a declared language receive syntax highlighting and a copy control.
+Fenced code blocks with a supported declared language receive syntax highlighting, and every fenced block receives a copy control; unknown and undeclared languages stay plain.
 Components are flow-level JSX elements from the built-in [component registry](/components/): `Callout`, `CodeDiff`, `CodeSnippet`, `FileTree`, and `FileTreeDiff`, plus scoped child components such as `Annotation` that are valid only inside a declaring parent.
 Component attributes are strings (`title="Rollout"`) or bare shorthand booleans (`showLineNumbers`) where a component's schema allows them.
 

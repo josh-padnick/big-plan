@@ -1,6 +1,6 @@
 ---
 title: FileTreeDiff
-description: A component for a project file hierarchy annotated with per-file change status, viewable as a combined tree or side-by-side before and after trees.
+description: A component for a project file hierarchy annotated with per-entry change status, viewable as a combined tree or side-by-side before and after trees.
 ---
 
 import ThemeImage from "../../../components/ThemeImage.astro";
@@ -70,7 +70,7 @@ README.md [modified] - Document the stale-while-revalidate path.
 
 | Attribute  | Type               | Required | Behavior                                                                       |
 | ---------- | ------------------ | -------- | ------------------------------------------------------------------------------ |
-| `title`    | string (non-empty) | No       | Header caption beside the view toggle; omitted, only the toggle shows.         |
+| `title`    | string (non-empty) | No       | Header and full-screen dialog caption; omitted, the summary and controls remain. |
 | `hideDiff` | bare boolean       | No       | Starts the Planned pane's Show diff switch off, showing the plain final state. |
 
 Any other attribute is a positional authoring error.
@@ -86,9 +86,9 @@ It must carry at least one change status; a tree with none is rejected with a po
 
 - Append a status in brackets after the name: `[added]`, `[modified]`, `[removed]`, or `[renamed]`.
 - Statuses and renames apply to directories too; a rename must keep the entry a file or keep it a directory, and a removed directory lists its removed children beneath it.
-- Write a rename as `old -> new [renamed]`; both sides must stay files or stay directories, and the arrow only pairs with `[renamed]`.
+- To show both names for a rename, write `old -> new [renamed]`; both sides must stay files or stay directories, and the arrow only pairs with `[renamed]`.
 
-Each changed file leads with a status icon in place of the plain file glyph, tints its name in the change color, and spells out Added, Modified, Deleted, or Renamed at the row's edge; deleted names are additionally struck through.
+Each changed entry tints its name in the change color and spells out Added, Modified, Deleted, or Renamed at the row's edge; changed files also replace the plain file glyph with a status icon, and deleted names are struck through.
 A note on an entry renders as a comment hint rather than inline text, keeping rows status-first; hovering, focusing, or tapping the hint reveals the note, which also stays available to assistive technology and in copied selections.
 Every violation - an unknown badge, a rename without its `[renamed]` badge, or a tree with no change at all - reports a positional diagnostic.
 

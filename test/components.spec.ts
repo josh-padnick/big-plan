@@ -1,6 +1,6 @@
-// Browser tests of the components: callout variants and the CodeDiff views,
-// line annotations, actions menu, clipboard behavior, and full-screen dialog,
-// plus the no-JavaScript fallback. Render-health failures are enforced by fixtures.
+// Browser tests of the built-in components' reader interactions, responsive
+// layouts, clipboard behavior, full-screen dialogs, and no-JavaScript fallbacks.
+// Render-health failures are enforced by fixtures.
 
 import { expect, test } from "./fixtures";
 

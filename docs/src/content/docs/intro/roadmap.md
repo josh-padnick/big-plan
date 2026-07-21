@@ -9,7 +9,7 @@ Big Plan is pre-alpha and is being built in the open, one registry capability at
 
 - **The static viewer.** `big-plan render` converts a plan into one self-contained themed HTML document: section navigation, syntax highlighting, copy controls, and light/dark themes, readable with JavaScript disabled.
 - **Components.** Plans parse as a static subset of MDX; a closed registry renders components server-side, and invalid documents fail loudly with positional diagnostics that aggregate recoverable problems. [`Callout`](/components/callout/) and [`CodeDiff`](/components/code-diff/) shipped first, including line-anchored `Annotation` notes on diffs.
-- **Code and file-tree review.** [`CodeSnippet`](/components/code-snippet/) inspects annotated excerpts of existing code with file-absolute line numbers, while [`FileTree`](/components/file-tree/) and [`FileTreeDiff`](/components/file-tree-diff/) show plain hierarchies and per-file change status with combined or before-and-after views.
+- **Code and file-tree review.** [`CodeSnippet`](/components/code-snippet/) inspects annotated excerpts of existing code with file-absolute line numbers, while [`FileTree`](/components/file-tree/) and [`FileTreeDiff`](/components/file-tree-diff/) show plain hierarchies and per-entry change status with combined or side-by-side views.
 
 ## Planned components
 

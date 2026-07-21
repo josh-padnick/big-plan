@@ -18,7 +18,7 @@ A component's attributes are strings or bare booleans, structured data arrives a
 | [CodeDiff](/components/code-diff/)          | Review one file's unified diff with switchable views, gutters, and line-anchored annotations.   |
 | [CodeSnippet](/components/code-snippet/)    | Inspect existing code with optional file identity, file-absolute line numbers, and annotations. |
 | [FileTree](/components/file-tree/)          | Show a plain file hierarchy with optional per-entry notes.                                      |
-| [FileTreeDiff](/components/file-tree-diff/) | Review per-file change status as a combined tree or before-and-after views.                     |
+| [FileTreeDiff](/components/file-tree-diff/) | Review per-entry change status as a combined tree or before-and-after views.                    |
 
 `Annotation` is a scoped child component, valid only as a direct child of `CodeDiff` or `CodeSnippet`.
 
