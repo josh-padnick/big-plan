@@ -188,6 +188,24 @@ describe("parseTreeText", () => {
     });
   });
 
+  it("should reject tab indentation instead of misparsing it", () => {
+    const result = parseTreeText({
+      source: "src/\n\tchild.ts\n  \tdeep.ts\n",
+      mode: "plain",
+    });
+    expect(result.diagnostics).toEqual([
+      {
+        line: 2,
+        message: "Indentation must use spaces; tabs are not supported",
+      },
+      {
+        line: 3,
+        message: "Indentation must use spaces; tabs are not supported",
+      },
+    ]);
+    expect(JSON.stringify(result.entries)).not.toContain("child.ts");
+  });
+
   it("should diagnose an empty note", () => {
     expect(parseDiff({ source: "README.md - \n" }).diagnostics).toEqual([
       { line: 1, message: 'Expected note text after " - "' },

@@ -161,6 +161,15 @@ export const parseTreeText = ({
       continue;
     }
     const line = index + 1;
+    // The grammar promises two-space indentation, so tabs are a hard error
+    // rather than silently parsing as a top-level entry named with the tab.
+    if (/^ *\t/u.test(value)) {
+      diagnostics.push({
+        line,
+        message: "Indentation must use spaces; tabs are not supported",
+      });
+      continue;
+    }
     const indentation = /^ */u.exec(value)?.[0].length ?? 0;
     if (indentation % 2 !== 0) {
       diagnostics.push({
