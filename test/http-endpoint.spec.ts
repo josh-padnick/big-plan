@@ -72,15 +72,12 @@ test("should review HTTP endpoint contracts", async ({
     expect(colors[2]).not.toEqual(colors[3]);
   });
 
-  await test.step("the body tab states the type and carries its copy control", async () => {
+  await test.step("the body tab states the media type and carries its copy control", async () => {
     await expect(endpoint.locator("[data-code-block]")).toHaveCount(4);
     await expect(endpoint.locator("[data-copy-code]")).toHaveCount(4);
     await endpoint.getByRole("tab", { name: "Body" }).click();
     const bodySection = endpoint.locator('[data-http-section="request-body"]');
     await expect(bodySection).toBeVisible();
-    await expect(bodySection.locator("[data-http-body-type]")).toHaveText(
-      "CreateCommentRequest",
-    );
     await expect(bodySection).toContainText("application/json");
     await expect(bodySection.locator(".card-section-label")).toBeHidden();
     await expect(bodySection.locator("[data-copy-code]")).toHaveAccessibleName(

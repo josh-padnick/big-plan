@@ -46,7 +46,6 @@ export type CompiledHttpParam = {
 
 export type CompiledHttpRequest = {
   readonly contentType?: string;
-  readonly bodyType?: string;
   readonly children: ReadonlyArray<ElementContent>;
 };
 
@@ -88,7 +87,6 @@ const PARAM_SCHEMA = {
 
 const REQUEST_SCHEMA = {
   contentType: { kind: "string" },
-  type: { kind: "string" },
 } satisfies ComponentAttributeSchema;
 
 const RESPONSE_SCHEMA = {
@@ -202,7 +200,6 @@ const compileRequest = ({
     ...(validated.contentType === undefined
       ? {}
       : { contentType: validated.contentType }),
-    ...(validated.type === undefined ? {} : { bodyType: validated.type }),
     children,
   };
 };

@@ -44,7 +44,7 @@ Identifier of the plan receiving the comment.
 
 </Param>
 
-<Request type="CreateCommentRequest" contentType="application/json">
+<Request contentType="application/json">
 
 ```json
 { "body": "Keep the retry budget explicit." }
@@ -102,8 +102,8 @@ Put constraints - ranges, item limits, accepted values - in the body right besid
 
 ### Request
 
-At most one `Request` documents the request body: an optional `type` naming the body's declared type, an optional `contentType` rendered as a chip, and exactly one fenced code block as the example.
-The Request body section states what the body is in one place: the declared type and media type up front, the `in="body"` Params as the type's fields, then the example JSON demonstrating it; body Params without a `Request` still render the section.
+At most one `Request` documents the request body: an optional `contentType` rendered as a chip, and exactly one fenced code block as the example.
+The Request body section states what the body is in one place: the media type up front, the `in="body"` Params as the payload's fields, then the example JSON demonstrating it; body Params without a `Request` still render the section.
 
 ### Response
 

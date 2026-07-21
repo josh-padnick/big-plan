@@ -626,28 +626,6 @@ describe("renderHttpEndpoint presentation", () => {
     expect(rendered).not.toContain('"value":"path"');
   });
 
-  it("should state the declared body type beside the content type", () => {
-    const { element, diagnostics } = render({
-      scopedChildren: [
-        scoped({
-          name: "Request",
-          attributes: {
-            contentType: "application/json",
-            type: "RefreshCatalogRequest",
-          },
-          children: [fence()],
-          line: 12,
-        }),
-      ],
-    });
-    const rendered = JSON.stringify(element);
-    expect(diagnostics).toEqual([]);
-    expect(rendered).toContain('"data-http-body-type":""');
-    expect(rendered.indexOf('"value":"RefreshCatalogRequest"')).toBeLessThan(
-      rendered.indexOf('"value":"application/json"'),
-    );
-  });
-
   it("should render the request body section for body fields without a Request", () => {
     const { element, diagnostics } = render({
       scopedChildren: [

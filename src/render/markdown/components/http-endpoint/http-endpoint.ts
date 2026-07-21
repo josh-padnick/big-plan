@@ -169,9 +169,9 @@ const contentTypeChip = (contentType: string): Element => ({
   children: [text(contentType)],
 });
 
-// The Request section states what the body IS: its declared type and media
-// type up front, the body fields describing that type's parameters, then the
-// example demonstrating it. Body Params live here, not among the transport
+// The Request section states what the body IS: the media type up front, the
+// body fields describing the payload's parameters, then the example
+// demonstrating it. Body Params live here, not among the transport
 // parameters, because they describe the payload's shape.
 const renderRequest = ({
   request,
@@ -191,23 +191,6 @@ const renderRequest = ({
         },
         children: [
           renderSectionLabel("Request body"),
-          ...(request?.bodyType === undefined
-            ? []
-            : [
-                {
-                  type: "element",
-                  tagName: "span",
-                  properties: {
-                    className: [
-                      "font-mono",
-                      "text-[0.8125rem]",
-                      "font-semibold",
-                    ],
-                    "data-http-body-type": "",
-                  },
-                  children: [text(request.bodyType)],
-                } satisfies Element,
-              ]),
           ...(request?.contentType === undefined
             ? []
             : [contentTypeChip(request.contentType)]),
