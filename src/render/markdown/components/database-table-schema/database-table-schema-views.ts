@@ -336,15 +336,18 @@ export const renderTableSchemaGrid = ({
   ],
 });
 
-// One band entry per index: the INDX pill and strong name lead, and the
-// demoted definition and note sit beneath them in muted small text, so the
-// names stay scannable against the DDL below each of them.
+// One band entry per index: the INDX pill leads a content column holding the
+// strong name and its demoted definition and note, so everything under a name
+// left-aligns with the name itself whatever width the pill takes.
 const indexEntry = (index: TableIndex, offset: number): Element => ({
   type: "element",
   tagName: "li",
   properties: {
     className: [
       "m-0",
+      "flex",
+      "items-baseline",
+      "gap-[0.45rem]",
       "px-[0.75rem]",
       "py-[0.5rem]",
       ...(offset === 0 ? [] : ["border-t", "border-edge"]),
@@ -352,66 +355,77 @@ const indexEntry = (index: TableIndex, offset: number): Element => ({
     "data-schema-index": "",
   },
   children: [
+    badge({ kind: "idx", label: indxLabel(offset + 1) }),
     {
       type: "element",
       tagName: "span",
-      properties: {
-        className: ["flex", "flex-wrap", "items-center", "gap-[0.45rem]"],
-      },
+      properties: { className: ["min-w-0", "flex-1"] },
       children: [
-        badge({ kind: "idx", label: indxLabel(offset + 1) }),
+        {
+          type: "element",
+          tagName: "span",
+          properties: {
+            className: ["flex", "flex-wrap", "items-center", "gap-[0.45rem]"],
+          },
+          children: [
+            {
+              type: "element",
+              tagName: "span",
+              properties: {
+                className: [
+                  "table-schema-index-name",
+                  "font-mono",
+                  "text-[0.8125rem]",
+                  "font-semibold",
+                  "text-ink",
+                ],
+              },
+              children: [text(index.name ?? "(unnamed)")],
+            },
+            ...(index.unique
+              ? [badge({ kind: "unique", label: "Unique" })]
+              : []),
+          ],
+        },
         {
           type: "element",
           tagName: "span",
           properties: {
             className: [
-              "table-schema-index-name",
-              "font-mono",
-              "text-[0.8125rem]",
-              "font-semibold",
-              "text-ink",
+              "table-schema-index-definition",
+              "block",
+              "text-xs",
+              "text-muted",
             ],
           },
-          children: [text(index.name ?? "(unnamed)")],
+          children: [
+            ...separated([
+              code(
+                index.columns
+                  .map((column) => column.replaceAll("`", ""))
+                  .join(", "),
+              ),
+              ...(index.method === undefined ? [] : [muted(index.method)]),
+              ...(index.where === undefined
+                ? []
+                : [code(`WHERE ${index.where}`)]),
+            ]),
+          ],
         },
-        ...(index.unique ? [badge({ kind: "unique", label: "Unique" })] : []),
+        ...(index.note === undefined
+          ? []
+          : [
+              {
+                type: "element" as const,
+                tagName: "span",
+                properties: {
+                  className: ["block", "text-xs", "leading-snug", "text-muted"],
+                },
+                children: [text(index.note)],
+              },
+            ]),
       ],
     },
-    {
-      type: "element",
-      tagName: "span",
-      properties: {
-        className: [
-          "table-schema-index-definition",
-          "block",
-          "text-xs",
-          "text-muted",
-        ],
-      },
-      children: [
-        ...separated([
-          code(
-            index.columns
-              .map((column) => column.replaceAll("`", ""))
-              .join(", "),
-          ),
-          ...(index.method === undefined ? [] : [muted(index.method)]),
-          ...(index.where === undefined ? [] : [code(`WHERE ${index.where}`)]),
-        ]),
-      ],
-    },
-    ...(index.note === undefined
-      ? []
-      : [
-          {
-            type: "element" as const,
-            tagName: "span",
-            properties: {
-              className: ["block", "text-xs", "leading-snug", "text-muted"],
-            },
-            children: [text(index.note)],
-          },
-        ]),
   ],
 });
 
