@@ -1296,6 +1296,16 @@ test("should review a database table schema end to end", async ({
     await expect(
       schema.locator('[data-schema-column="cache_key"] [data-schema-note]'),
     ).toHaveText("The catalog cache key this job refreshes.");
+    await expect(
+      schema.locator(
+        '[data-schema-column="cache_key"] [data-schema-badge="idx"]',
+      ),
+    ).toHaveText("INDX 1");
+    const statusRow = schema.locator('[data-schema-column="status"]');
+    await expect(statusRow.locator('[data-schema-badge="idx"]')).toHaveText(
+      "INDX 2",
+    );
+    await expect(statusRow).toContainText("WHERE INDX 1");
     await expect(schema.locator("[data-schema-column]")).toHaveCount(6);
     const idRow = schema.locator('[data-schema-column="id"]');
     await expect(idRow.locator('[data-schema-badge="pk"]')).toHaveText("PK");
@@ -1319,22 +1329,24 @@ test("should review a database table schema end to end", async ({
     ).toHaveText("CHECK (attempts <= 5)");
   });
 
-  await test.step("the indexes table names each index and its invariant", async () => {
-    await expect(
-      schema.locator(".table-schema-index-grid thead th"),
-    ).toHaveText(["Index", "Columns", "Properties", "Comment"]);
+  await test.step("the numbered band names each index and its invariant", async () => {
     const indexes = schema.locator("[data-schema-index]");
     await expect(indexes).toHaveCount(2);
-    await expect(indexes.first().locator("th")).toHaveText(
-      "refresh_jobs_live_key_idx",
-    );
+    await expect(
+      indexes.first().locator('[data-schema-badge="idx"]'),
+    ).toHaveText("INDX 1");
+    await expect(
+      indexes.first().locator(".table-schema-index-name"),
+    ).toHaveText("refresh_jobs_live_key_idx");
     await expect(indexes.first()).toContainText("cache_key");
     await expect(indexes.first()).toContainText("Unique");
     await expect(indexes.first()).toContainText("WHERE status <> 'done'");
-    await expect(indexes.first()).toContainText("refresh_jobs_live_key_idx");
     await expect(indexes.first()).toContainText(
       "Ensures one unfinished job per cache key.",
     );
+    await expect(
+      indexes.last().locator('[data-schema-badge="idx"]'),
+    ).toHaveText("INDX 2");
     await expect(indexes.last()).toContainText("status, enqueued_at");
     await expect(indexes.last()).toContainText("refresh_jobs_scan_idx");
   });
@@ -1370,10 +1382,10 @@ test("should review a database table schema end to end", async ({
   await test.step("a narrow viewport scrolls the grid inside the figure", async () => {
     await page.setViewportSize({ width: 420, height: 900 });
     const container = schema.locator("[data-table-scroll-container]");
-    await expect(container).toHaveCount(2);
-    const overflow = await container
-      .first()
-      .evaluate((element) => getComputedStyle(element).overflowX);
+    await expect(container).toHaveCount(1);
+    const overflow = await container.evaluate(
+      (element) => getComputedStyle(element).overflowX,
+    );
     expect(overflow).toBe("auto");
     const pageScrolls = await page.evaluate(
       () =>

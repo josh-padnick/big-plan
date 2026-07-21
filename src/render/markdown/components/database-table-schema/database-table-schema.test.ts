@@ -296,24 +296,39 @@ describe("renderDatabaseTableSchema rendering", () => {
     expect(collectText(note ?? element)).toBe(
       "One row per subscription attempt.",
     );
-    const indexGrid = queryAll(
-      element,
-      (candidate) => candidate.tagName === "table",
-    )[1];
-    const indexHeads = queryAll(
-      indexGrid ?? element,
-      (candidate) =>
-        candidate.tagName === "th" && candidate.properties.scope === "col",
-    ).map((head) => collectText(head));
-    expect(indexHeads).toEqual(["Index", "Columns", "Properties", "Comment"]);
     const index = queryAll(
       element,
       (candidate) => candidate.properties["data-schema-index"] !== undefined,
     )[0];
     const indexText = collectText(index ?? element);
+    expect(indexText).toContain("INDX 1");
     expect(indexText).toContain("customer_id, status");
     expect(indexText).toContain("Unique");
     expect(indexText).toContain("WHERE status = live");
+  });
+
+  it("should mark participating columns with the band's INDX labels", () => {
+    const { element } = render();
+    const customerRow = queryAll(
+      element,
+      (candidate) =>
+        candidate.properties["data-schema-column"] === "customer_id",
+    )[0];
+    const marker = queryAll(
+      customerRow ?? element,
+      (candidate) => candidate.properties["data-schema-badge"] === "idx",
+    )[0];
+    expect(collectText(marker ?? element)).toBe("INDX 1");
+    const idRow = queryAll(
+      element,
+      (candidate) => candidate.properties["data-schema-column"] === "id",
+    )[0];
+    expect(
+      queryAll(
+        idRow ?? element,
+        (candidate) => candidate.properties["data-schema-badge"] === "idx",
+      ),
+    ).toHaveLength(0);
   });
 
   it("should omit the sections wrapper when no indexes or checks exist", () => {
