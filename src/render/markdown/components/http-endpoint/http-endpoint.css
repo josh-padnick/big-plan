@@ -1,0 +1,43 @@
+/* HttpEndpoint method, status, placeholder, and deprecation palette variants,
+   colocated with the component that emits those stable selector contracts. */
+
+@layer components {
+  article .http-endpoint-method-get {
+    color: var(--callout-note-c);
+    background: color-mix(in srgb, var(--callout-note-c) 14%, transparent);
+  }
+  article .http-endpoint-method-post,
+  article .http-endpoint-status-success {
+    color: var(--diff-add-c);
+    background: color-mix(in srgb, var(--diff-add-c) 14%, transparent);
+  }
+  article .http-endpoint-method-put {
+    color: var(--callout-warning-c);
+    background: color-mix(in srgb, var(--callout-warning-c) 14%, transparent);
+  }
+  article .http-endpoint-method-patch {
+    color: var(--annotation-c);
+    background: color-mix(in srgb, var(--annotation-c) 14%, transparent);
+  }
+  article .http-endpoint-method-delete,
+  article .http-endpoint-status-server-error {
+    color: var(--diff-remove-c);
+    background: color-mix(in srgb, var(--diff-remove-c) 14%, transparent);
+  }
+  article .http-endpoint-method-head,
+  article .http-endpoint-method-options,
+  article .http-endpoint-status-informational,
+  article .http-endpoint-status-redirect,
+  article .http-endpoint-deprecated {
+    color: var(--color-muted);
+    background: color-mix(in srgb, var(--color-muted) 14%, transparent);
+  }
+  article .http-endpoint-status-client-error {
+    color: var(--callout-warning-c);
+    background: color-mix(in srgb, var(--callout-warning-c) 14%, transparent);
+  }
+  article .http-endpoint-placeholder {
+    color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  }
+}

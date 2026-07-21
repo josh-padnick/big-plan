@@ -16,6 +16,7 @@ import { CODE_DIFF_COMPONENT_DEFINITION } from "./code-diff/code-diff.js";
 import { CODE_SNIPPET_COMPONENT_DEFINITION } from "./code-snippet/code-snippet.js";
 import { FILE_TREE_COMPONENT_DEFINITION } from "./file-tree/file-tree.js";
 import { FILE_TREE_DIFF_COMPONENT_DEFINITION } from "./file-tree/file-tree-diff.js";
+import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "./http-endpoint/http-endpoint.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
 
 type MdxJsxFlowElement = Extract<
@@ -30,6 +31,7 @@ export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
     CodeSnippet: CODE_SNIPPET_COMPONENT_DEFINITION,
     FileTree: FILE_TREE_COMPONENT_DEFINITION,
     FileTreeDiff: FILE_TREE_DIFF_COMPONENT_DEFINITION,
+    HttpEndpoint: HTTP_ENDPOINT_COMPONENT_DEFINITION,
   };
 
 export const REGISTERED_COMPONENT_NAMES: ReadonlySet<string> = new Set(
