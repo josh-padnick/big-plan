@@ -45,7 +45,7 @@ const scoped = ({
   children = [],
   line,
 }: {
-  readonly name: "Param" | "Request" | "Response";
+  readonly name: "Param" | "Request" | "Response" | "Review";
   readonly attributes: Readonly<Record<string, string | boolean>>;
   readonly children?: ReadonlyArray<ElementContent>;
   readonly line: number;
@@ -505,5 +505,102 @@ describe("renderHttpEndpoint presentation", () => {
     expect(rendered).toContain('"line-through"');
     expect(rendered).toContain('"data-lucide":"lock"');
     expect(rendered).toContain('"value":"Bearer token"');
+  });
+
+  it("should mark optional params and render an authored default beside them", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [
+        scoped({
+          name: "Param",
+          attributes: {
+            name: "force",
+            in: "query",
+            type: "boolean",
+            default: "false",
+          },
+          children: [paragraph()],
+          line: 8,
+        }),
+        param({ line: 10 }),
+      ],
+    });
+    const rendered = JSON.stringify(element);
+    expect(diagnostics).toEqual([]);
+    expect(rendered).toContain('"value":"optional"');
+    expect(rendered).toContain('"value":"default "');
+    expect(rendered).toContain('"value":"false"');
+    // The required param carries the required marker, never the optional one.
+    expect(rendered.match(/"value":"optional"/gu)).toHaveLength(1);
+    expect(rendered.match(/"value":"required"/gu)).toHaveLength(1);
+  });
+
+  it("should diagnose a default on a required param", () => {
+    const { diagnostics } = render({
+      scopedChildren: [
+        scoped({
+          name: "Param",
+          attributes: {
+            name: "planId",
+            in: "path",
+            required: true,
+            default: "pln_1",
+          },
+          children: [paragraph()],
+          line: 8,
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 8,
+        column: 1,
+        message: 'Attribute "default" is only valid on an optional Param',
+      },
+    ]);
+  });
+
+  it("should close the card with a review checklist when authored", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [
+        response({ line: 12 }),
+        scoped({
+          name: "Review",
+          attributes: {},
+          children: [paragraph("Is this endpoint idempotent?")],
+          line: 20,
+        }),
+      ],
+    });
+    const rendered = JSON.stringify(element);
+    expect(diagnostics).toEqual([]);
+    expect(rendered).toContain('"data-review-checklist":""');
+    expect(rendered).toContain('"data-lucide":"clipboard-check"');
+    expect(rendered).toContain('"value":"Review checklist"');
+    // The checklist is the closing section, after the responses.
+    expect(rendered.indexOf('"value":"Responses"')).toBeLessThan(
+      rendered.indexOf('"value":"Review checklist"'),
+    );
+  });
+
+  it("should diagnose a second or empty review checklist", () => {
+    const { diagnostics } = render({
+      scopedChildren: [
+        scoped({ name: "Review", attributes: {}, children: [], line: 20 }),
+        scoped({
+          name: "Review",
+          attributes: {},
+          children: [paragraph()],
+          line: 24,
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 24,
+        column: 1,
+        message: "HttpEndpoint cannot contain more than one Review",
+      },
+      { line: 20, column: 1, message: "Review requires a markdown body" },
+    ]);
   });
 });

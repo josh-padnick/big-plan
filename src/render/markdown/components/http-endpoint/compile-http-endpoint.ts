@@ -9,6 +9,7 @@ import {
   type ScopedChild,
 } from "../component-contract.js";
 import type { DiagnosticCollector } from "../diagnostics.js";
+import { compileReviewChild } from "../shared/review-checklist/review-checklist.js";
 
 export type HttpMethod =
   "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
@@ -39,6 +40,7 @@ export type CompiledHttpParam = {
   readonly location: HttpParamLocation;
   readonly dataType?: string;
   readonly required: boolean;
+  readonly defaultValue?: string;
   readonly children: ReadonlyArray<ElementContent>;
 };
 
@@ -64,6 +66,7 @@ export type CompiledHttpEndpoint = {
   readonly params: ReadonlyArray<CompiledHttpParam>;
   readonly request?: CompiledHttpRequest;
   readonly responses: ReadonlyArray<CompiledHttpResponse>;
+  readonly review?: ReadonlyArray<ElementContent>;
 };
 
 const HTTP_ENDPOINT_SCHEMA = {
@@ -79,6 +82,7 @@ const PARAM_SCHEMA = {
   in: { kind: "enum", values: PARAM_LOCATIONS, required: true },
   type: { kind: "string" },
   required: { kind: "booleanShorthand" },
+  default: { kind: "string" },
 } satisfies ComponentAttributeSchema;
 
 const REQUEST_SCHEMA = {
@@ -150,11 +154,20 @@ const compileParam = ({
     diagnostics,
     schema: PARAM_SCHEMA,
   });
+  if (validated.default !== undefined && validated.required === true) {
+    diagnostics.add({
+      message: 'Attribute "default" is only valid on an optional Param',
+      position: child.position,
+    });
+  }
   return {
     name: validated.name ?? "",
     location: validated.in ?? "query",
     ...(validated.type === undefined ? {} : { dataType: validated.type }),
     required: validated.required === true,
+    ...(validated.default === undefined || validated.required === true
+      ? {}
+      : { defaultValue: validated.default }),
     children: child.children.filter((node) => !isWhitespace(node)),
   };
 };
@@ -322,6 +335,12 @@ export const compileHttpEndpointComponent = ({
     statuses.add(response.status);
   }
 
+  const review = compileReviewChild({
+    component: "HttpEndpoint",
+    scopedChildren,
+    diagnostics,
+  });
+
   return {
     method: validated.method ?? "GET",
     path: validated.path ?? "",
@@ -332,5 +351,6 @@ export const compileHttpEndpointComponent = ({
     params: groupParams({ entries: paramEntries, diagnostics }),
     ...(requests[0] === undefined ? {} : { request: requests[0] }),
     responses: responseEntries.map(({ response }) => response),
+    ...(review === undefined ? {} : { review }),
   };
 };

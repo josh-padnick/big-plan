@@ -294,4 +294,20 @@ describe("renderGraphqlOperation", () => {
       },
     ]);
   });
+
+  it("should close the card with a review checklist when authored", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [
+        scoped({
+          name: "Review",
+          children: [paragraph("Should this mutation be idempotent?")],
+          line: 20,
+        }),
+      ],
+    });
+    const rendered = JSON.stringify(element);
+    expect(diagnostics).toEqual([]);
+    expect(rendered).toContain('"data-review-checklist":""');
+    expect(rendered).toContain('"value":"Review checklist"');
+  });
 });

@@ -10,6 +10,7 @@ import {
   type ScopedChildDefinition,
 } from "../component-contract.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
+import { renderReviewChecklist } from "../shared/review-checklist/review-checklist.js";
 import {
   renderCardSection,
   renderDefinitionEntry,
@@ -98,7 +99,36 @@ const renderParam = (param: CompiledHttpParam): Element =>
               children: [text("required")],
             } satisfies Element,
           ]
-        : []),
+        : [
+            // Optional-ness is a visual property beside the name, never a
+            // separate cell; an authored default rides right next to it.
+            {
+              type: "element",
+              tagName: "span",
+              properties: { className: ["text-[0.6875rem]", "text-muted"] },
+              children: [text("optional")],
+            } satisfies Element,
+            ...(param.defaultValue === undefined
+              ? []
+              : [
+                  {
+                    type: "element",
+                    tagName: "span",
+                    properties: {
+                      className: ["text-[0.6875rem]", "text-muted"],
+                    },
+                    children: [
+                      text("default "),
+                      {
+                        type: "element",
+                        tagName: "span",
+                        properties: { className: ["font-mono"] },
+                        children: [text(param.defaultValue)],
+                      } satisfies Element,
+                    ],
+                  } satisfies Element,
+                ]),
+          ]),
     ],
     body: param.children,
   });
@@ -337,6 +367,9 @@ const renderHttpEndpointFigure = ({
     ...(model.params.length === 0 ? [] : [renderParameters(model.params)]),
     ...(model.request === undefined ? [] : [renderRequest(model.request)]),
     ...(model.responses.length === 0 ? [] : [renderResponses(model.responses)]),
+    ...(model.review === undefined
+      ? []
+      : [renderReviewChecklist({ review: model.review })]),
   ],
 });
 
@@ -346,7 +379,7 @@ export const renderHttpEndpoint: ComponentRenderer = (input) =>
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (
-  name: "Param" | "Request" | "Response",
+  name: "Param" | "Request" | "Response" | "Review",
 ): ScopedChildDefinition => ({
   kind: "scoped-child",
   markdownBody: {
@@ -366,5 +399,6 @@ export const HTTP_ENDPOINT_COMPONENT_DEFINITION = {
     Param: scopedChild("Param"),
     Request: scopedChild("Request"),
     Response: scopedChild("Response"),
+    Review: scopedChild("Review"),
   },
 } satisfies ComponentDefinition;

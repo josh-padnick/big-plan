@@ -56,6 +56,16 @@ test("should review HTTP endpoint contracts", async ({
     }
   });
 
+  await test.step("the review checklist closes the card with its task list", async () => {
+    const checklist = endpoint.locator("[data-review-checklist]");
+    await expect(checklist).toBeVisible();
+    await expect(endpoint).toContainText("Review checklist");
+    const boxes = endpoint.locator('input[type="checkbox"]');
+    await expect(boxes).toHaveCount(3);
+    await expect(boxes.first()).toBeChecked();
+    await expect(boxes.nth(1)).not.toBeChecked();
+  });
+
   await test.step("the complete card reads without JavaScript", async () => {
     const context = await browser.newContext({ javaScriptEnabled: false });
     const staticPage = await context.newPage();

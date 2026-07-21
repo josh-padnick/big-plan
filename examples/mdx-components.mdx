@@ -200,7 +200,7 @@ Identifier of the plan receiving the comment.
 
 </Param>
 
-<Param name="includeContext" in="query" type="boolean">
+<Param name="includeContext" in="query" type="boolean" default="false">
 
 Includes the selected plan text in the response when the client needs to confirm its anchor.
 
@@ -261,6 +261,14 @@ The response carries the stable comment identity used for replies.
 ```
 
 </Response>
+
+<Review>
+
+- [x] Authentication: the local bridge session is sufficient for a localhost-only server.
+- [ ] Idempotency: retrying a timed-out create may duplicate a comment; decide on a client token.
+- [ ] Rate limiting: none planned; confirm the local bridge is trusted enough to skip it.
+
+</Review>
 
 </HttpEndpoint>
 

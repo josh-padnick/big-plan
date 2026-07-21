@@ -9,6 +9,7 @@ import {
   type ScopedChild,
 } from "../component-contract.js";
 import type { DiagnosticCollector } from "../diagnostics.js";
+import { compileReviewChild } from "../shared/review-checklist/review-checklist.js";
 
 export type GraphqlOperationKind = "query" | "mutation" | "subscription";
 
@@ -45,6 +46,7 @@ export type CompiledGraphqlOperation = {
   readonly operation?: CompiledGraphqlExample;
   readonly variables?: CompiledGraphqlExample;
   readonly response?: CompiledGraphqlExample;
+  readonly review?: ReadonlyArray<ElementContent>;
 };
 
 const GRAPHQL_OPERATION_SCHEMA = {
@@ -260,6 +262,12 @@ export const compileGraphqlOperationComponent = ({
     });
   }
 
+  const review = compileReviewChild({
+    component: "GraphqlOperation",
+    scopedChildren,
+    diagnostics,
+  });
+
   return {
     kind: validated.kind ?? "query",
     name: validated.name ?? "",
@@ -283,5 +291,6 @@ export const compileGraphqlOperationComponent = ({
     ...(operation === undefined ? {} : { operation }),
     ...(variables === undefined ? {} : { variables }),
     ...(response === undefined ? {} : { response }),
+    ...(review === undefined ? {} : { review }),
   };
 };
