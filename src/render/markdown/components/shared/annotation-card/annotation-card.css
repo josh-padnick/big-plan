@@ -1,0 +1,36 @@
+/* The shared annotation card look: tinted border, wash, glyph, and badge on
+   the annotation tokens, so reviewer notes read identically in every
+   component that anchors them. */
+
+@layer components {
+  article .annotation-card {
+    /* A subtle tinted border gives each card a crisp edge on any surround. */
+    border: 1px solid color-mix(in srgb, var(--annotation-c) 30%, transparent);
+    border-radius: 0.3rem;
+    background: var(--annotation-bg);
+  }
+  article .annotation-card > svg {
+    margin-top: 0.125rem;
+    color: var(--annotation-c);
+  }
+  article .annotation-card-badge {
+    background: color-mix(in srgb, var(--annotation-c) 14%, transparent);
+    color: var(--annotation-c);
+  }
+  /* Hover linkage: the browser script mirrors this class onto the card and
+     its anchored lines so the pairing reads at a glance. */
+  article .annotation-card.annotation-hover {
+    border-color: color-mix(in srgb, var(--annotation-c) 60%, transparent);
+    background: color-mix(
+      in srgb,
+      var(--annotation-c) 14%,
+      var(--annotation-bg)
+    );
+  }
+  article .annotation-card-body > :first-child {
+    margin-top: 0;
+  }
+  article .annotation-card-body > :last-child {
+    margin-bottom: 0;
+  }
+}

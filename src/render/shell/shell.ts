@@ -12,6 +12,8 @@ import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
 import { CODE_DIFF_JS } from "../markdown/components/code-diff/code-diff.generated.js";
+import { CODE_SNIPPET_JS } from "../markdown/components/code-snippet/code-snippet.generated.js";
+import { FILE_TREE_JS } from "../markdown/components/file-tree/file-tree.generated.js";
 import { COPY_CODE_JS } from "../markdown/code-block/copy-code.generated.js";
 import { SCROLL_SPY_JS } from "./scroll-spy.generated.js";
 import { THEME_TOGGLE_JS } from "./theme-toggle.generated.js";
@@ -117,7 +119,7 @@ ${items}
 /**
  * Wraps rendered content in the review shell: the layout grid and branding
  * bar, responsive navigation when nav entries exist, theme control, and
- * code-block controls. Returns markup plus the styles and
+ * code-block and component controls. Returns markup plus the styles and
  * progressive-enhancement scripts the caller packages into a page.
  */
 export const renderShell = ({
@@ -153,8 +155,21 @@ ${contentHtml}
     html,
     styles: GLOBAL_CSS,
     scripts: hasToc
-      ? [THEME_TOGGLE_JS, COPY_CODE_JS, CODE_DIFF_JS, SCROLL_SPY_JS]
-      : [THEME_TOGGLE_JS, COPY_CODE_JS, CODE_DIFF_JS],
+      ? [
+          THEME_TOGGLE_JS,
+          COPY_CODE_JS,
+          CODE_DIFF_JS,
+          CODE_SNIPPET_JS,
+          FILE_TREE_JS,
+          SCROLL_SPY_JS,
+        ]
+      : [
+          THEME_TOGGLE_JS,
+          COPY_CODE_JS,
+          CODE_DIFF_JS,
+          CODE_SNIPPET_JS,
+          FILE_TREE_JS,
+        ],
     bodyClassName: BODY_CLASSES,
   };
 };

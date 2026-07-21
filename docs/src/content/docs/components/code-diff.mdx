@@ -13,6 +13,14 @@ import annotationDark from "../../../assets/components/annotation-card-dark.png"
 
 The plan author pastes ordinary `git diff` output for that file into the component, and the reader gets a full diff viewer: unified or side-by-side layout, optional line numbers and change counts, copy actions, and a full-screen mode.
 
+## How it looks
+
+<ThemeImage
+  light={splitLight}
+  dark={splitDark}
+  alt="A CodeDiff component in side-by-side view with line numbers, header stats, and the actions menu open"
+/>
+
 ## When to use it
 
 Use `CodeDiff` whenever a plan proposes a concrete change to existing code, so the reviewer approves the exact lines rather than a prose description of them.
@@ -28,14 +36,6 @@ Use `CodeDiff` whenever a plan proposes a concrete change to existing code, so t
 - Show the exact edit an agent intends to make before it touches the file
 - Explain a risky or subtle change with annotations anchored to the specific lines they discuss
 - Put the current and proposed versions of dense code side by side so the reviewer can compare them line by line
-
-## How it looks
-
-<ThemeImage
-  light={splitLight}
-  dark={splitDark}
-  alt="A CodeDiff component in side-by-side view with line numbers, header stats, and the actions menu open"
-/>
 
 ## Usage
 
@@ -99,13 +99,14 @@ Nest `Annotation` directly inside `CodeDiff` to anchor a markdown note to specif
 Every referenced line must exist on the chosen side, and annotations require `@@` hunk headers.
 Annotation bodies accept prose, lists, inline formatting, and plain fenced code, but reject headings, footnotes, and typed components (each with a positional diagnostic).
 An `Annotation` anywhere other than a direct `CodeDiff` child is an unknown component.
-`Annotation` is a scoped child component; the planned `CodeSnippet` component will reuse the concept with the same `lines` grammar.
+`Annotation` is a scoped child component; [`CodeSnippet`](/components/code-snippet/) reuses the concept with file-absolute line anchors.
 
-An annotation renders as a prose card after the final line of its range, with a `Line N` / `Lines N-M` badge and `role="note"`:
+An annotation renders as a prose card after the final line of its range, with a comment glyph, a `Line N` / `Lines N-M` badge, and `role="note"`:
 
 - In unified view the card spans the component; in side-by-side view it renders inside the pane of its `side`, pinned to the visible pane width while the code scrolls.
 - Covered lines carry the annotation accent as a left spine and a subtle wash blended over their add/remove tints, so ranges read at a glance.
 - Multiple annotations may target the same line or range and render in authored order.
+- Hovering an annotation or any of its anchored lines highlights both, so the pairing reads at a glance.
 - Long cards gain a progressive `View more` / `View less` disclosure, and the reader's expanded choice survives responsive layout changes; without JavaScript the full content is always present.
 
 <ThemeImage

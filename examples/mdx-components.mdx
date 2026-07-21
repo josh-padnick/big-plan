@@ -27,6 +27,32 @@ It already has regional concurrency controls and the required service account.
 
 </Callout>
 
+## Planned file changes
+
+The work lands in the catalog module and one renamed worker configuration file.
+The combined tree is the default review surface; switch to the before-and-after trees to confirm each file's starting and ending state.
+
+<FileTreeDiff title="Planned changes">
+
+```tree
+src/
+  catalog/
+    catalog-origin.ts
+    refresh-worker.ts [modified] - Move refresh work behind the queue.
+    refresh-queue.ts [added] - Deduplicate refresh jobs by cache key.
+  metrics/ [removed] - The legacy metrics module retires with its counter.
+    legacy-cache-counter.ts [removed]
+  queue/ [added] - New home for queue worker configuration.
+    queue-config.ts [added]
+ops/ -> deploy/ [renamed] - Match the platform team's naming.
+  runbook.md
+config/
+  catalog-worker.env -> catalog-cache-worker.env [renamed] - Rename the existing worker configuration.
+README.md [modified]
+```
+
+</FileTreeDiff>
+
 ## Request path
 
 The handler will return fresh entries unchanged.
@@ -104,6 +130,42 @@ I added this counter with the `catalog_cache` prefix so it lands on the dashboar
 
 Each job carries only the cache key and enqueue timestamp.
 The worker resolves current catalog data, writes it with the existing TTL, and acknowledges the job only after the cache write succeeds.
+The refresh routine itself already exists, so the plan reuses it unchanged.
+The worker pool keeps its small, unchanged shape; no files move in or out of it.
+
+<FileTree title="Worker pool layout">
+
+```tree
+worker-pool/
+  refresh-worker.ts - Consumes deduplicated catalog refresh jobs.
+  worker-config.ts - Owns concurrency and timeout settings.
+```
+
+</FileTree>
+
+<CodeSnippet file="src/catalog/refresh-worker.ts" startLine="42" showLineNumbers>
+
+```ts
+export const refreshCatalog = async (key: string): Promise<void> => {
+  const current = await catalogOrigin.read(key);
+  await cache.put(key, current, { ttlSeconds: 300 });
+  metrics.increment("catalog_cache.refresh_success");
+};
+```
+
+<Annotation lines="43">
+
+Resolve through `catalogOrigin` so refreshes use the same retries and tracing as synchronous fallbacks.
+
+</Annotation>
+
+<Annotation lines="44-45">
+
+The cache write must complete before success is recorded; otherwise dashboards can report a refresh that readers cannot observe.
+
+</Annotation>
+
+</CodeSnippet>
 
 <CodeDiff file="config/catalog-cache-worker.env">
 

@@ -1,0 +1,35 @@
+/* Shared full-screen dialog shell for review components; each component owns
+   how its own content flexes and scrolls inside the dialog. */
+
+/* The modal must own the only scroll surface while it is open. */
+html:has(.component-dialog[open]) {
+  overflow: hidden;
+}
+
+@layer components {
+  article .component-dialog {
+    display: flex;
+    overflow: visible;
+    /* The dialog hugs its content so a narrow component is not stranded in
+       an empty modal; only past these caps do the component's own scrollbars
+       take over. */
+    width: fit-content;
+    min-width: min(48rem, 96vw);
+    max-width: min(96vw, 100rem);
+    height: fit-content;
+    max-height: 92vh;
+    /* Preflight zeroes dialog margins, which pins the fixed-position modal
+       to the top-left; auto restores user-agent centering. */
+    margin: auto;
+    flex-direction: column;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  article .component-dialog::backdrop {
+    /* The blur keeps the modal separation legible in dark mode, where a
+       plain dark veil over a dark page is nearly invisible. */
+    background: rgb(12 10 8 / 0.75);
+    backdrop-filter: blur(3px);
+  }
+}

@@ -12,23 +12,21 @@ A component's attributes are strings or bare booleans, structured data arrives a
 
 ## Available today
 
-| Component                          | What it is for                                                                                |
-| ---------------------------------- | --------------------------------------------------------------------------------------------- |
-| [Callout](/components/callout/)    | Surface a note, tip, warning, or danger so reviewers cannot miss it.                          |
-| [CodeDiff](/components/code-diff/) | Review one file's unified diff with switchable views, gutters, and line-anchored annotations. |
+| Component                                   | What it is for                                                                                  |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [Callout](/components/callout/)             | Surface a note, tip, warning, or danger so reviewers cannot miss it.                            |
+| [CodeDiff](/components/code-diff/)          | Review one file's unified diff with switchable views, gutters, and line-anchored annotations.   |
+| [CodeSnippet](/components/code-snippet/)    | Inspect existing code with optional file identity, file-absolute line numbers, and annotations. |
+| [FileTree](/components/file-tree/)          | Show a plain file hierarchy with optional per-entry notes.                                      |
+| [FileTreeDiff](/components/file-tree-diff/) | Review per-entry change status as a combined tree or before-and-after views.                    |
 
-`Annotation` is a scoped child component, valid only as a direct child of `CodeDiff`.
-
-## In progress
-
-[`CodeSnippet`](/components/code-snippet/) will inspect an annotated code excerpt with a file association and real line numbers, reusing the same `Annotation` range grammar.
+`Annotation` is a scoped child component, valid only as a direct child of `CodeDiff` or `CodeSnippet`.
 
 ## Coming next
 
-The library grows one registry capability at a time; each pair below is sequenced in the [roadmap](/intro/roadmap/):
+The library grows one registry capability at a time; each item below is sequenced in the [roadmap](/intro/roadmap/):
 
 - `Decision` renders options considered, the choice, and the rationale, with nested `Option` children.
-- `FileTree` renders a styled file hierarchy with per-path change badges.
 - `ApiEndpoint` and `DatabaseSchema` render structured cards from a fenced YAML child.
 - `Diagram` renders diagram source into inline SVG at build time, keeping documents free of external requests.
 

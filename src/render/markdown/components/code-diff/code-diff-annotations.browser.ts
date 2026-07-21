@@ -100,7 +100,7 @@ const annotationResizeObserver =
         for (const entry of entries) {
           if (
             entry.target instanceof HTMLElement &&
-            entry.target.classList.contains("code-diff-annotation-body")
+            entry.target.classList.contains("annotation-card-body")
           ) {
             evaluateAnnotationBody(entry.target);
           }
@@ -131,7 +131,7 @@ export const enhanceVisibleAnnotations = ({
   }
   for (const body of ownedCodeDiffElements<HTMLElement>({
     component,
-    selector: ".code-diff-annotation-body",
+    selector: ".annotation-card-body",
   })) {
     if (body.dataset.annotationObserved === undefined) {
       body.dataset.annotationObserved = "";

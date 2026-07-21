@@ -5,9 +5,12 @@ import {
   ownedCodeDiffElement,
   ownedCodeDiffElements,
 } from "./code-diff-dom.browser.js";
+import {
+  openComponentFullScreen,
+  updateFullScreenControl,
+} from "../shared/full-screen/full-screen.browser.js";
 
 const DIFF_VIEW_STORAGE_KEY = "big-plan-diff-view";
-let nextDiffDialogLabelId = 1;
 
 export type CodeDiffView = "unified" | "split";
 
@@ -35,79 +38,52 @@ const applyDiffView = ({
   enhanceVisibleAnnotations({ component });
 };
 
-// Mirrors the expanded state into the expand control's icon and label.
-const updateExpandControl = ({
+// Mirrors the expanded state into the diff's dataset and expand control.
+const applyExpandedState = ({
   component,
+  expanded,
 }: {
   readonly component: HTMLElement;
+  readonly expanded: boolean;
 }): void => {
+  if (expanded) {
+    component.dataset.diffExpanded = "";
+  } else {
+    delete component.dataset.diffExpanded;
+  }
   const button = ownedCodeDiffElement<HTMLButtonElement>({
     component,
     selector: "[data-diff-expand]",
   });
-  if (button === null) {
-    return;
+  if (button !== null) {
+    updateFullScreenControl({
+      button,
+      expanded,
+      expandLabel: "View diff full screen",
+    });
   }
-  const expanded = component.dataset.diffExpanded !== undefined;
-  const label = expanded ? "Exit full screen" : "View diff full screen";
-  button.setAttribute("aria-label", label);
-  button.title = label;
-  button
-    .querySelector<SVGElement>('[data-lucide="maximize-2"]')
-    ?.toggleAttribute("hidden", expanded);
-  button
-    .querySelector<SVGElement>('[data-lucide="minimize-2"]')
-    ?.toggleAttribute("hidden", !expanded);
 };
 
-// Moves the component into a modal rather than cloning it, preserving listeners
-// and the selected view, then restores its DOM and page-scroll positions.
+// The shared dialog moves the component rather than cloning it, preserving
+// listeners and the selected view; the file caption names the dialog.
 const openFullScreen = ({
   component,
 }: {
   readonly component: HTMLElement;
 }): void => {
-  const article = component.closest("article");
   const fileCaption = ownedCodeDiffElement<HTMLElement>({
     component,
-    selector: ".code-diff-file",
+    selector: ".file-identity",
   });
-  if (article === null || fileCaption === null) {
+  if (fileCaption === null) {
     return;
   }
-  const scrollY = window.scrollY;
-  let labelId = fileCaption.id;
-  if (labelId === "" || document.getElementById(labelId) !== fileCaption) {
-    do {
-      labelId = `code-diff-dialog-label-${nextDiffDialogLabelId}`;
-      nextDiffDialogLabelId += 1;
-    } while (document.getElementById(labelId) !== null);
-    fileCaption.id = labelId;
-  }
-  const placeholder = document.createElement("span");
-  placeholder.hidden = true;
-  component.before(placeholder);
-  const dialog = document.createElement("dialog");
-  dialog.className = "code-diff-dialog";
-  dialog.setAttribute("aria-labelledby", labelId);
-  dialog.append(component);
-  article.append(dialog);
-  component.dataset.diffExpanded = "";
-  updateExpandControl({ component });
-  dialog.addEventListener("click", (event) => {
-    if (event.target === dialog) {
-      dialog.close();
-    }
+  openComponentFullScreen({
+    component,
+    labelElement: fileCaption,
+    fallbackLabel: "Code diff",
+    onToggle: ({ expanded }) => applyExpandedState({ component, expanded }),
   });
-  dialog.addEventListener("close", () => {
-    placeholder.before(component);
-    placeholder.remove();
-    dialog.remove();
-    delete component.dataset.diffExpanded;
-    updateExpandControl({ component });
-    window.scrollTo({ top: scrollY });
-  });
-  dialog.showModal();
 };
 
 /** Reads the shared view preference while tolerating unavailable storage. */

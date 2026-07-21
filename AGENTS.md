@@ -20,12 +20,14 @@ Deliverable 2 is shipped in this repo: MDX plan documents with components, build
 `big-plan render <input.mdx> [output.html]` converts a static-subset MDX plan document into a single self-contained themed HTML document with a responsive table of contents built from level-two headings.
 Wide screens use a sticky sidebar; narrower screens use a sticky `Sections` disclosure showing the section count.
 Both navigation variants track the current section while the reader scrolls, including short final sections at the bottom of the page, and section links scroll smoothly unless the reader has requested reduced motion.
-The static subset rejects imports, exports, expressions, and unsupported attributes with hard-fail diagnostics carrying line and column positions, while the built-in Callout and CodeDiff components provide validated plan-native presentation.
+The static subset rejects imports, exports, expressions, and unsupported attributes with hard-fail diagnostics carrying line and column positions, while the built-in Callout, CodeDiff, CodeSnippet, FileTree, and FileTreeDiff components provide validated plan-native presentation.
 GFM tables, task lists, footnotes, and autolinks remain supported, but MDX does not support four-space indented code blocks; plans use fenced code blocks instead.
-Declared fenced-code languages receive syntax highlighting, every block code sample gets a copy control, and readers can override the OS light/dark preference with a locally persisted theme control.
+Supported declared fenced-code languages receive syntax highlighting, every block code sample gets a copy control, and readers can override the OS light/dark preference with a locally persisted theme control.
 Every viewport has a sticky branding bar whose logo follows that active theme, while embedded light and dark favicons follow the OS preference.
 CodeDiff renders a no-JavaScript unified view with full scoped line annotations, plus progressively enhanced unified/split selection, responsive annotation disclosures, aligned side-localized split annotations, file-path and fence-source copying (LF-normalized with a trailing newline, as MDX parses fences), and full-screen viewing.
-The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, code-copy controls, and CodeDiff controls.
+CodeSnippet renders excerpts with optional file identity, file-absolute line numbers, and scoped annotations, plus progressively enhanced file-path and raw-source copying.
+FileTree renders plain hierarchies with foldable directories, while FileTreeDiff renders a no-JavaScript combined change tree with change-count summaries plus a persisted combined/side-by-side selection whose Current and Planned panes stack below the layout breakpoint, a Planned-pane Show diff switch that swaps annotations for the plain final state, and full-screen viewing.
+The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, code-copy controls, CodeDiff and CodeSnippet controls, and FileTree and FileTreeDiff interactions.
 
 ## Architecture at a glance
 

@@ -2,8 +2,7 @@
 // gutters, annotation cards, side-localized spacers, and hunk presentation.
 
 import type { Element, Text } from "hast";
-import { MESSAGE_SQUARE_ICON } from "../../../icons/lucide/message-square.js";
-import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import { renderAnnotationCard } from "../shared/annotation-card/annotation-card.js";
 import type {
   CodeDiffSide,
   ResolvedCodeDiffAnnotation,
@@ -23,9 +22,6 @@ const HUNK_HEADER_CLASSES =
 const LINE_CLASSES = "code-diff-line grid min-w-max whitespace-pre";
 const ANNOTATION_SURROUND_CLASSES =
   "code-diff-annotation-surround min-w-0 border-l-4 p-[0.35rem]";
-const ANNOTATION_CLASSES =
-  "code-diff-annotation flex min-w-0 gap-2 px-3 py-2 font-sans text-sm leading-normal whitespace-normal [&>svg]:size-4 [&>svg]:shrink-0";
-
 const text = (value: string): Text => ({ type: "text", value });
 
 const annotationLineLabel = (annotation: AnchoredAnnotation): string =>
@@ -35,54 +31,18 @@ const annotationLineLabel = (annotation: AnchoredAnnotation): string =>
 
 // Each static view gets its own annotation body so downstream Markdown
 // transforms can decorate nested content without sharing mutations.
-const annotationCard = (annotation: AnchoredAnnotation): Element => ({
-  type: "element",
-  tagName: "aside",
-  properties: {
-    className: ANNOTATION_CLASSES.split(" "),
-    role: "note",
-    ariaLabel: annotationLineLabel(annotation),
-    "data-annotation": "",
-    "data-annotation-lines": annotation.lines,
-    "data-annotation-side": annotation.side,
-  },
-  children: [
-    renderLucideIcon({
-      icon: MESSAGE_SQUARE_ICON,
-      hidden: false,
-    }),
-    {
-      type: "element",
-      tagName: "div",
-      properties: { className: ["code-diff-annotation-content", "min-w-0"] },
-      children: [
-        {
-          type: "element",
-          tagName: "span",
-          properties: {
-            className: [
-              "code-diff-annotation-badge",
-              "mb-1",
-              "inline-flex",
-              "rounded-sm",
-              "px-1.5",
-              "py-0.5",
-              "text-xs",
-              "font-semibold",
-            ],
-          },
-          children: [text(annotationLineLabel(annotation))],
-        },
-        {
-          type: "element",
-          tagName: "div",
-          properties: { className: ["code-diff-annotation-body"] },
-          children: [...structuredClone(annotation.children)],
-        },
-      ],
+const annotationCard = (annotation: AnchoredAnnotation): Element =>
+  renderAnnotationCard({
+    label: annotationLineLabel(annotation),
+    children: structuredClone(annotation.children),
+    className: ["code-diff-annotation"],
+    properties: {
+      "data-annotation": "",
+      "data-annotation-id": annotation.id,
+      "data-annotation-lines": annotation.lines,
+      "data-annotation-side": annotation.side,
     },
-  ],
-});
+  });
 
 const renderedAnnotation = (annotation: AnchoredAnnotation): Element => ({
   type: "element",
@@ -211,11 +171,14 @@ const unifiedLine = ({
   properties: {
     className: [...LINE_CLASSES.split(" "), "code-diff-unified-line"],
     "data-diff-line": line.kind,
-    ...(annotations.some((annotation) =>
-      annotationCoversLine({ annotation, line }),
-    )
-      ? { "data-annotation-anchor": "" }
-      : {}),
+    ...(() => {
+      const ids = annotations
+        .filter((annotation) => annotationCoversLine({ annotation, line }))
+        .map((annotation) => annotation.id);
+      return ids.length === 0
+        ? {}
+        : { "data-annotation-anchor": ids.join(" ") };
+    })(),
     ...(showLineNumbers ? { "data-line-numbers": "" } : {}),
   },
   children: [
@@ -271,13 +234,21 @@ const splitLine = ({
   properties: {
     className: [...LINE_CLASSES.split(" "), "code-diff-split-line"],
     "data-diff-line": line?.kind ?? "empty",
-    ...(line !== undefined &&
-    annotations.some(
-      (annotation) =>
-        annotation.side === side && annotationCoversLine({ annotation, line }),
-    )
-      ? { "data-annotation-anchor": "" }
-      : {}),
+    ...(() => {
+      const ids =
+        line === undefined
+          ? []
+          : annotations
+              .filter(
+                (annotation) =>
+                  annotation.side === side &&
+                  annotationCoversLine({ annotation, line }),
+              )
+              .map((annotation) => annotation.id);
+      return ids.length === 0
+        ? {}
+        : { "data-annotation-anchor": ids.join(" ") };
+    })(),
     ...(showLineNumbers ? { "data-line-numbers": "" } : {}),
   },
   children: [
