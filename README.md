@@ -46,6 +46,7 @@ The full authoring contract lives in the documentation:
 
 To preview components locally, render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`.
 To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.
+To see every DatabaseTableSchema scenario in one document, render the [table-schema showcase](examples/database-table-schema.mdx).
 Generated previews remain ignored by Git.
 
 ## Development
