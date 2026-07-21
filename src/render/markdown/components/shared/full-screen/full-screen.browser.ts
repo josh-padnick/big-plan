@@ -78,7 +78,10 @@ export const openComponentFullScreen = ({
     placeholder.remove();
     dialog.remove();
     onToggle({ expanded: false });
-    window.scrollTo({ top: scrollY });
+    // Instant, not smooth: the page opts into smooth scrolling for section
+    // navigation, but restoring where the reader already was must not read
+    // as a visible re-scroll on exit.
+    window.scrollTo({ top: scrollY, behavior: "instant" });
   });
   dialog.showModal();
   // Content-fit sizing can make the dialog match the inline component so
