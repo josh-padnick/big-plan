@@ -23,12 +23,17 @@ export const renderSectionLabel = (label: string): Element => ({
 /** Renders one top-bordered card section holding a labeled region. */
 export const renderCardSection = ({
   children,
+  properties = {},
 }: {
   readonly children: ReadonlyArray<ElementContent>;
+  readonly properties?: Readonly<Record<string, string>>;
 }): Element => ({
   type: "element",
   tagName: "section",
-  properties: { className: ["border-t", "border-edge", "px-4", "py-4"] },
+  properties: {
+    className: ["border-t", "border-edge", "px-4", "py-4"],
+    ...properties,
+  },
   children: [...children],
 });
 

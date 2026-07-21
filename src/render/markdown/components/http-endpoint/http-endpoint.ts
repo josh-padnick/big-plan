@@ -137,6 +137,7 @@ const renderParamGroups = (
       ? []
       : [
           renderCardSection({
+            properties: { "data-http-section": `${location}-params` },
             children: [
               renderSectionLabel(label),
               renderDefinitionList({ entries: grouped.map(renderParam) }),
@@ -179,6 +180,7 @@ const renderRequest = ({
   readonly bodyParams: ReadonlyArray<CompiledHttpParam>;
 }): Element =>
   renderCardSection({
+    properties: { "data-http-section": "request-body" },
     children: [
       {
         type: "element",
@@ -287,6 +289,7 @@ const renderResponses = (
   responses: ReadonlyArray<CompiledHttpResponse>,
 ): Element =>
   renderCardSection({
+    properties: { "data-http-section": "responses" },
     children: [
       renderSectionLabel("Responses"),
       {

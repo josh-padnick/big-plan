@@ -41,3 +41,26 @@
     background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   }
 }
+
+@layer components {
+  /* Experimental tabbed navigation: the tab bar replaces the stacked
+     sections' separating borders, so a tabbed card suppresses per-section
+     top borders and marks the active tab with an accent underline. */
+  article [data-http-tabbed] > section {
+    border-top: 0;
+  }
+  article .http-endpoint-tab {
+    color: var(--color-muted);
+    box-shadow: inset 0 -2px 0 transparent;
+  }
+  article .http-endpoint-tab:hover {
+    color: var(--color-ink);
+  }
+  article .http-endpoint-tab[aria-selected="true"] {
+    color: var(--color-ink);
+    box-shadow: inset 0 -2px 0 var(--color-accent);
+  }
+  article .http-endpoint-tab-count {
+    font-variant-numeric: tabular-nums;
+  }
+}

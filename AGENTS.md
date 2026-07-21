@@ -30,7 +30,7 @@ HttpEndpoint renders always-expanded API review cards with validated parameters,
 GraphqlOperation and GrpcMethod extend that review-card grammar to the other protocols: kind-badged operation cards with executable example, variables, and response fences, and streaming-aware RPC cards headed by the authentic proto signature with field, error, and proto sections.
 Every protocol card marks optional parameters with authored defaults and can close with a Review checklist of the architectural questions to answer before implementation.
 FileTree renders plain hierarchies with foldable directories, while FileTreeDiff renders a no-JavaScript combined change tree with change-count summaries plus a persisted combined/side-by-side selection whose Current and Planned panes stack below the layout breakpoint, a Planned-pane Show diff switch that swaps annotations for the plain final state, and full-screen viewing.
-The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, code-copy controls, CodeDiff and CodeSnippet controls, and FileTree and FileTreeDiff interactions.
+The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, code-copy controls, CodeDiff and CodeSnippet controls, FileTree and FileTreeDiff interactions, and HttpEndpoint's tabbed section navigation.
 
 ## Architecture at a glance
 
