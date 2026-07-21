@@ -19,15 +19,17 @@ A component's attributes are strings or bare booleans, structured data arrives a
 | [CodeSnippet](/components/code-snippet/)    | Inspect existing code with optional file identity, file-absolute line numbers, and annotations. |
 | [FileTree](/components/file-tree/)          | Show a plain file hierarchy with optional per-entry notes.                                      |
 | [FileTreeDiff](/components/file-tree-diff/) | Review per-entry change status as a combined tree or before-and-after views.                    |
+| [HttpEndpoint](/components/http-endpoint/)  | Review one HTTP endpoint's contract: parameters, request body, and status-coded responses.      |
 
-`Annotation` is a scoped child component, valid only as a direct child of `CodeDiff` or `CodeSnippet`.
+`Annotation` is a scoped child component, valid only as a direct child of `CodeDiff` or `CodeSnippet`; `Param`, `Request`, and `Response` are scoped children of `HttpEndpoint`.
 
 ## Coming next
 
 The library grows one registry capability at a time; each item below is sequenced in the [roadmap](/intro/roadmap/):
 
 - `Decision` renders options considered, the choice, and the rationale, with nested `Option` children.
-- `ApiEndpoint` and `DatabaseSchema` render structured cards from a fenced YAML child.
+- `DatabaseSchema` renders a structured schema card from a fenced YAML child.
+- `GraphqlOperation` and `GrpcMethod` extend the protocol family `HttpEndpoint` started.
 - `Diagram` renders diagram source into inline SVG at build time, keeping documents free of external requests.
 
 Interactive components such as forms are deliberately deferred until the live review server exists; static documents should never contain dead controls.

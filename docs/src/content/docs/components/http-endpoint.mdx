@@ -1,0 +1,114 @@
+---
+title: HttpEndpoint
+description: A component that renders one HTTP endpoint as an always-expanded API review card with parameters, request, and responses.
+---
+
+import ThemeImage from "../../../components/ThemeImage.astro";
+import endpointLight from "../../../assets/components/http-endpoint-light.png";
+import endpointDark from "../../../assets/components/http-endpoint-dark.png";
+
+`HttpEndpoint` shows one proposed HTTP endpoint - method, path, parameters, request body, and responses - so a plan that introduces or changes an API can be reviewed on the contract itself instead of prose approximations of it.
+
+## How it looks
+
+<ThemeImage
+  light={endpointLight}
+  dark={endpointDark}
+  alt="An endpoint card with a method pill, a path with a tinted placeholder, an auth line, a parameter list, and status-coded responses"
+/>
+
+## When to use it
+
+Use `HttpEndpoint` when a plan proposes, changes, or relies on an HTTP endpoint and the reviewer should judge the contract: which parameters exist and where they live, what the request carries, and which statuses can come back with what bodies.
+
+### When not to use it
+
+- Loose examples - a single request or response sample with no contract to review is just a fenced code block
+- Changed endpoints as diffs - change states are deliberately not part of this component; describe before-and-after in prose until a diff treatment exists
+
+## Use cases
+
+- Propose a new endpoint with its full request and response contract, including the error responses reviewers usually have to ask about
+- Enumerate a planned API surface compactly, since a header-only endpoint with just method, path, and summary is valid
+
+## Usage
+
+````mdx
+<HttpEndpoint method="POST" path="/api/plans/{planId}/comments" summary="Create a comment on a plan" auth="Local bridge session">
+
+The endpoint accepts one review comment anchored to a plan that is already open in the local workspace.
+
+<Param name="planId" in="path" type="string" required>
+
+Identifier of the plan receiving the comment.
+
+</Param>
+
+<Request contentType="application/json">
+
+```json
+{ "body": "Keep the retry budget explicit." }
+```
+
+</Request>
+
+<Response status="201" label="Comment created">
+
+```json
+{ "id": "cmt_8f3a", "status": "open" }
+```
+
+</Response>
+
+<Response status="404" label="Plan not found" />
+
+</HttpEndpoint>
+````
+
+## Authoring
+
+### Attributes
+
+| Attribute    | Type                                                        | Required | Behavior                                                                                          |
+| ------------ | ----------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `method`     | enum: `GET` `POST` `PUT` `PATCH` `DELETE` `HEAD` `OPTIONS` | Yes      | Renders the color-coded method pill.                                                               |
+| `path`       | string (non-empty)                                          | Yes      | The URL template; `{placeholder}` segments render tinted so template variables read at a glance.   |
+| `summary`    | string                                                      | No       | One-line summary beside the path.                                                                  |
+| `auth`       | string                                                      | No       | Short auth requirement, rendered as a lock-annotated line; keep the mechanics in plan prose.       |
+| `deprecated` | bare boolean                                                | No       | Renders a Deprecated badge and mutes and strikes the path.                                         |
+
+The markdown body before the scoped children is the endpoint's long description.
+A bare endpoint with no description, parameters, request, or responses still renders; the header row alone is a legitimate way to enumerate a surface area.
+
+### Param
+
+Nest `Param` directly inside `HttpEndpoint` to document one parameter; the body is its markdown description.
+
+| Attribute  | Type                                    | Required | Behavior                                                       |
+| ---------- | --------------------------------------- | -------- | --------------------------------------------------------------- |
+| `name`     | string (non-empty)                      | Yes      | The parameter name, rendered monospace.                         |
+| `in`       | enum: `path` `query` `header` `body`    | Yes      | The location badge; entries group in this order when rendered.  |
+| `type`     | string                                  | No       | Free-form type label, rendered muted.                           |
+| `required` | bare boolean                            | No       | Renders the emphasized required marker.                         |
+
+### Request
+
+At most one `Request` documents the request body: an optional `contentType` attribute rendered as a chip, and exactly one fenced code block as the body.
+
+### Response
+
+Each `Response` documents one status: a required three-digit `status` (`100`-`599`) rendered as a class-colored pill (2xx green, 4xx amber, 5xx red), an optional `label`, and an optional markdown body with at most one fenced example.
+Document the failure statuses reviewers usually have to ask about, not only the success shape.
+
+Component-specific violations report positional diagnostics, including:
+
+- A `status` that is not a three-digit HTTP status
+- Duplicate `Param` identities (same `name` and `in`) or duplicate `Response` statuses
+- More than one `Request`, a `Request` without exactly one fence, or a `Response` with more than one fence
+- Headings, footnotes, or nested components inside a scoped child's body
+
+`Param`, `Request`, and `Response` outside a declaring `HttpEndpoint` stay unknown components.
+
+## Copy behavior
+
+Request and response fences flow through the standard code pipeline, so supported declared languages receive syntax highlighting and every example carries the standard copy control.
