@@ -9,7 +9,6 @@ import {
   type ScopedChildDefinition,
 } from "../component-contract.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
-import { renderReviewChecklist } from "../shared/review-checklist/review-checklist.js";
 import {
   renderCardSection,
   renderDefinitionEntry,
@@ -290,9 +289,6 @@ const renderGrpcMethodFigure = ({
         ]),
     ...(model.errors.length === 0 ? [] : [renderErrors(model.errors)]),
     ...(model.proto === undefined ? [] : [renderProto(model.proto)]),
-    ...(model.review === undefined
-      ? []
-      : [renderReviewChecklist({ review: model.review })]),
   ],
 });
 
@@ -302,7 +298,7 @@ export const renderGrpcMethod: ComponentRenderer = (input) =>
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (
-  name: "Field" | "Error" | "Proto" | "Review",
+  name: "Field" | "Error" | "Proto",
 ): ScopedChildDefinition => ({
   kind: "scoped-child",
   markdownBody: {
@@ -322,6 +318,5 @@ export const GRPC_METHOD_COMPONENT_DEFINITION = {
     Field: scopedChild("Field"),
     Error: scopedChild("Error"),
     Proto: scopedChild("Proto"),
-    Review: scopedChild("Review"),
   },
 } satisfies ComponentDefinition;

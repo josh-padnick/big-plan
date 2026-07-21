@@ -10,7 +10,6 @@ import {
   type ScopedChildDefinition,
 } from "../component-contract.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
-import { renderReviewChecklist } from "../shared/review-checklist/review-checklist.js";
 import {
   renderCardSection,
   renderDefinitionEntry,
@@ -235,9 +234,6 @@ const renderGraphqlOperationFigure = ({
     ...(model.response === undefined
       ? []
       : [renderExample({ label: "Response", example: model.response })]),
-    ...(model.review === undefined
-      ? []
-      : [renderReviewChecklist({ review: model.review })]),
   ],
 });
 
@@ -249,8 +245,7 @@ export const renderGraphqlOperation: ComponentRenderer = (input) =>
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (
-  name:
-    "Argument" | "Returns" | "Operation" | "Variables" | "Response" | "Review",
+  name: "Argument" | "Returns" | "Operation" | "Variables" | "Response",
 ): ScopedChildDefinition => ({
   kind: "scoped-child",
   markdownBody: {
@@ -272,6 +267,5 @@ export const GRAPHQL_OPERATION_COMPONENT_DEFINITION = {
     Operation: scopedChild("Operation"),
     Variables: scopedChild("Variables"),
     Response: scopedChild("Response"),
-    Review: scopedChild("Review"),
   },
 } satisfies ComponentDefinition;

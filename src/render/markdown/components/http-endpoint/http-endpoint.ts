@@ -11,7 +11,6 @@ import {
   type ScopedChildDefinition,
 } from "../component-contract.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
-import { renderReviewChecklist } from "../shared/review-checklist/review-checklist.js";
 import {
   renderCardSection,
   renderDefinitionEntry,
@@ -218,7 +217,15 @@ const renderRequest = ({
             {
               type: "element",
               tagName: "div",
-              properties: { className: ["mb-2"] },
+              properties: {
+                // A rule seats the example against preceding fields the same
+                // way the field rows separate from each other; with no
+                // fields there is nothing to separate.
+                className:
+                  bodyParams.length === 0
+                    ? ["mb-2"]
+                    : ["mb-2", "border-t", "border-edge", "pt-3"],
+              },
               children: [renderSectionLabel("Example")],
             } satisfies Element,
             {
@@ -421,9 +428,6 @@ const renderHttpEndpointFigure = ({
           }),
         ]),
     ...(model.responses.length === 0 ? [] : [renderResponses(model.responses)]),
-    ...(model.review === undefined
-      ? []
-      : [renderReviewChecklist({ review: model.review })]),
   ],
 });
 
@@ -433,7 +437,7 @@ export const renderHttpEndpoint: ComponentRenderer = (input) =>
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (
-  name: "Param" | "Request" | "Response" | "Review",
+  name: "Param" | "Request" | "Response",
 ): ScopedChildDefinition => ({
   kind: "scoped-child",
   markdownBody: {
@@ -453,6 +457,5 @@ export const HTTP_ENDPOINT_COMPONENT_DEFINITION = {
     Param: scopedChild("Param"),
     Request: scopedChild("Request"),
     Response: scopedChild("Response"),
-    Review: scopedChild("Review"),
   },
 } satisfies ComponentDefinition;

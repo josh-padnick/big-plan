@@ -45,7 +45,7 @@ const scoped = ({
   children = [],
   line,
 }: {
-  readonly name: "Param" | "Request" | "Response" | "Review";
+  readonly name: "Param" | "Request" | "Response";
   readonly attributes: Readonly<Record<string, string | boolean>>;
   readonly children?: ReadonlyArray<ElementContent>;
   readonly line: number;
@@ -559,29 +559,6 @@ describe("renderHttpEndpoint presentation", () => {
     ]);
   });
 
-  it("should close the card with a review checklist when authored", () => {
-    const { element, diagnostics } = render({
-      scopedChildren: [
-        response({ line: 12 }),
-        scoped({
-          name: "Review",
-          attributes: {},
-          children: [paragraph("Is this endpoint idempotent?")],
-          line: 20,
-        }),
-      ],
-    });
-    const rendered = JSON.stringify(element);
-    expect(diagnostics).toEqual([]);
-    expect(rendered).toContain('"data-review-checklist":""');
-    expect(rendered).toContain('"data-lucide":"clipboard-check"');
-    expect(rendered).toContain('"value":"Review checklist"');
-    // The checklist is the closing section, after the responses.
-    expect(rendered.indexOf('"value":"Responses"')).toBeLessThan(
-      rendered.indexOf('"value":"Review checklist"'),
-    );
-  });
-
   it("should split parameters into location sections and seat body fields in the request", () => {
     const { element, diagnostics } = render({
       scopedChildren: [
@@ -648,27 +625,5 @@ describe("renderHttpEndpoint presentation", () => {
     expect(diagnostics).toEqual([]);
     expect(rendered).toContain('"value":"Request body"');
     expect(rendered).toContain('"value":"reason"');
-  });
-
-  it("should diagnose a second or empty review checklist", () => {
-    const { diagnostics } = render({
-      scopedChildren: [
-        scoped({ name: "Review", attributes: {}, children: [], line: 20 }),
-        scoped({
-          name: "Review",
-          attributes: {},
-          children: [paragraph()],
-          line: 24,
-        }),
-      ],
-    });
-    expect(diagnostics).toEqual([
-      {
-        line: 24,
-        column: 1,
-        message: "HttpEndpoint cannot contain more than one Review",
-      },
-      { line: 20, column: 1, message: "Review requires a markdown body" },
-    ]);
   });
 });

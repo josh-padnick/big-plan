@@ -37,7 +37,6 @@ test("should review HTTP endpoint contracts", async ({
       "Headers1",
       "Body1",
       "Responses3",
-      "Review",
     ]);
     await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
     await expect(
@@ -96,15 +95,6 @@ test("should review HTTP endpoint contracts", async ({
     ).toBeHidden();
   });
 
-  await test.step("the review tab holds the checklist and its task list", async () => {
-    await endpoint.getByRole("tab", { name: "Review" }).click();
-    await expect(endpoint.locator("[data-review-checklist]")).toBeHidden();
-    const boxes = endpoint.locator('input[type="checkbox"]');
-    await expect(boxes).toHaveCount(3);
-    await expect(boxes.first()).toBeChecked();
-    await expect(boxes.nth(1)).not.toBeChecked();
-  });
-
   await test.step("the complete card reads stacked without JavaScript", async () => {
     const context = await browser.newContext({ javaScriptEnabled: false });
     const staticPage = await context.newPage();
@@ -118,7 +108,6 @@ test("should review HTTP endpoint contracts", async ({
     await expect(staticEndpoint).toContainText("Headers");
     await expect(staticEndpoint).toContainText("Request body");
     await expect(staticEndpoint).toContainText("Responses");
-    await expect(staticEndpoint).toContainText("Review checklist");
     await expect(staticEndpoint.locator("pre code").first()).toContainText(
       '"body"',
     );

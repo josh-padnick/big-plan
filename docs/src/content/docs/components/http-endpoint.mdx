@@ -62,13 +62,6 @@ Identifier of the plan receiving the comment.
 
 <Response status="404" label="Plan not found" />
 
-<Review>
-
-- [x] Idempotency: retrying a timed-out create may duplicate a comment; client token decided.
-- [ ] Rate limiting: confirm the local bridge is trusted enough to skip it.
-
-</Review>
-
 </HttpEndpoint>
 ````
 
@@ -117,18 +110,11 @@ Component-specific violations report positional diagnostics, including:
 - More than one `Request`, a `Request` without exactly one fence, or a `Response` with more than one fence
 - Headings, footnotes, or nested components inside a scoped child's body
 
-### Review
-
-At most one attribute-free `Review` closes the card with a non-empty markdown body, typically a GFM task list, holding the architectural questions a reviewer should answer before implementation - idempotency, rate limiting, telemetry, error completeness.
-Unlike an API reference, a plan exists to reach agreement, and the checklist nudges the review toward the questions that matter.
-
-`Param`, `Request`, `Response`, and `Review` outside a declaring `HttpEndpoint` stay unknown components.
+`Param`, `Request`, and `Response` outside a declaring `HttpEndpoint` stay unknown components.
 
 ## Tabbed navigation
 
-The tabbed enhancement is experimental.
-With JavaScript enabled, a card with two or more sections folds them behind a tab bar - Path, Query, Headers, Body, Responses, Review - with entry counts and an accent underline on the active tab.
-Left and Right Arrow cycle through the tabs, while Home and End jump to the first and last tab.
+With JavaScript enabled, a card with two or more sections folds them behind a tab bar - Path, Query, Headers, Body, Responses - with entry counts and an accent underline on the active tab.
 The stacked sections remain the server-rendered document, so readers without JavaScript, printouts, and text extraction always see the complete contract.
 
 ## Copy behavior

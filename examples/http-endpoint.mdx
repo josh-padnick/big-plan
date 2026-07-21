@@ -4,7 +4,7 @@ This plan proposes the catalog cache refresh API and exists to demonstrate `Http
 
 ## The queueing endpoint, in full
 
-The write path gets the complete treatment: parameters in three locations with constraints beside the fields they govern, a request example, success and failure responses, and a closing review checklist.
+The write path gets the complete treatment: parameters in three locations with constraints beside the fields they govern, a request example, and success and failure responses.
 
 <HttpEndpoint method="POST" path="/catalog/refresh" summary="Queue a refresh for one or more cache keys" auth="Internal service token">
 
@@ -81,16 +81,6 @@ Free-form operator note recorded on the refresh job for audit.
 ```
 
 </Response>
-
-<Review>
-
-- [x] Authentication: internal service token matches the other catalog write paths.
-- [x] Idempotency: re-posting the same keys returns the existing job as a 409, so retries are safe.
-- [ ] Rate limiting: is 500 keys per request enough back-pressure, or does the endpoint need a per-service quota?
-- [ ] Telemetry: confirm the enqueue emits the same metrics family as the synchronous fallback.
-- [x] Error codes: every failure the handler can produce is documented above.
-
-</Review>
 
 </HttpEndpoint>
 

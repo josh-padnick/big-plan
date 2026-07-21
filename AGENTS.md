@@ -28,7 +28,7 @@ CodeDiff renders a no-JavaScript unified view with full scoped line annotations,
 CodeSnippet renders excerpts with optional file identity, file-absolute line numbers, and scoped annotations, plus progressively enhanced file-path and raw-source copying.
 HttpEndpoint renders server-expanded API review cards with validated parameters, request examples, and response contracts, then progressively folds multi-section cards behind tabs.
 GraphqlOperation and GrpcMethod extend that review-card grammar to the other protocols: kind-badged operation cards with executable example, variables, and response fences, and streaming-aware RPC cards headed by the authentic proto signature with field, error, and proto sections.
-HttpEndpoint marks optional parameters with authored defaults, and every protocol card can close with a Review checklist of the architectural questions to answer before implementation.
+HttpEndpoint marks optional parameters with authored defaults.
 FileTree renders plain hierarchies with foldable directories, while FileTreeDiff renders a no-JavaScript combined change tree with change-count summaries plus a persisted combined/side-by-side selection whose Current and Planned panes stack below the layout breakpoint, a Planned-pane Show diff switch that swaps annotations for the plain final state, and full-screen viewing.
 The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, code-copy controls, CodeDiff and CodeSnippet controls, FileTree and FileTreeDiff interactions, and HttpEndpoint's tabbed section navigation.
 

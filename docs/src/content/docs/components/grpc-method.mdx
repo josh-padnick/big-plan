@@ -100,8 +100,4 @@ At most one `Proto` carries exactly one `proto` fence - the raw-source secondary
 
 Component-specific violations report positional diagnostics, including an unknown error code, duplicate field or error identities, a second `Proto` or a wrong-language fence, and headings, footnotes, or nested components inside scoped-child bodies.
 
-### Review
-
-At most one attribute-free `Review` closes the card with a non-empty markdown body, typically a GFM task list, of the architectural questions to answer before implementation (deadlines, retry semantics, back-pressure).
-
-`Field`, `Error`, `Proto`, and `Review` outside a declaring `GrpcMethod` stay unknown components.
+`Field`, `Error`, and `Proto` outside a declaring `GrpcMethod` stay unknown components.

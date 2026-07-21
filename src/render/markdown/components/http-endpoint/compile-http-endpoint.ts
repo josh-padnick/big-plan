@@ -9,7 +9,6 @@ import {
   type ScopedChild,
 } from "../component-contract.js";
 import type { DiagnosticCollector } from "../diagnostics.js";
-import { compileReviewChild } from "../shared/review-checklist/review-checklist.js";
 
 export type HttpMethod =
   "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
@@ -66,7 +65,6 @@ export type CompiledHttpEndpoint = {
   readonly params: ReadonlyArray<CompiledHttpParam>;
   readonly request?: CompiledHttpRequest;
   readonly responses: ReadonlyArray<CompiledHttpResponse>;
-  readonly review?: ReadonlyArray<ElementContent>;
 };
 
 const HTTP_ENDPOINT_SCHEMA = {
@@ -335,12 +333,6 @@ export const compileHttpEndpointComponent = ({
     statuses.add(response.status);
   }
 
-  const review = compileReviewChild({
-    component: "HttpEndpoint",
-    scopedChildren,
-    diagnostics,
-  });
-
   return {
     method: validated.method ?? "GET",
     path: validated.path ?? "",
@@ -351,6 +343,5 @@ export const compileHttpEndpointComponent = ({
     params: groupParams({ entries: paramEntries, diagnostics }),
     ...(requests[0] === undefined ? {} : { request: requests[0] }),
     responses: responseEntries.map(({ response }) => response),
-    ...(review === undefined ? {} : { review }),
   };
 };

@@ -23,7 +23,7 @@ A component's attributes are strings or bare booleans, structured data arrives a
 | [GrpcMethod](/components/grpc-method/)             | Review one gRPC method headed by its proto signature, with streaming badges, fields, and error codes.     |
 | [HttpEndpoint](/components/http-endpoint/)         | Review one HTTP endpoint's contract: parameters, request body, and status-coded responses.                |
 
-Scoped child components are valid only inside their declaring parent: `Annotation` in `CodeDiff` and `CodeSnippet`; `Param`, `Request`, and `Response` in `HttpEndpoint`; `Argument`, `Returns`, `Operation`, `Variables`, and `Response` in `GraphqlOperation`; `Field`, `Error`, and `Proto` in `GrpcMethod`; every protocol card also accepts one closing `Review` checklist.
+Scoped child components are valid only inside their declaring parent: `Annotation` in `CodeDiff` and `CodeSnippet`; `Param`, `Request`, and `Response` in `HttpEndpoint`; `Argument`, `Returns`, `Operation`, `Variables`, and `Response` in `GraphqlOperation`; `Field`, `Error`, and `Proto` in `GrpcMethod`.
 
 ## Coming next
 

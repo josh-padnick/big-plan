@@ -332,20 +332,4 @@ describe("renderGrpcMethod", () => {
     expect(rendered).toContain('"line-through"');
     expect(rendered).toContain("grpc-method-deprecated");
   });
-
-  it("should close the card with a review checklist when authored", () => {
-    const { element, diagnostics } = render({
-      scopedChildren: [
-        scoped({
-          name: "Review",
-          children: [paragraph("Are deadlines specified for the stream?")],
-          line: 20,
-        }),
-      ],
-    });
-    const rendered = JSON.stringify(element);
-    expect(diagnostics).toEqual([]);
-    expect(rendered).toContain('"data-review-checklist":""');
-    expect(rendered).toContain('"value":"Review checklist"');
-  });
 });

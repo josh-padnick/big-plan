@@ -262,14 +262,6 @@ The response carries the stable comment identity used for replies.
 
 </Response>
 
-<Review>
-
-- [x] Authentication: the local bridge session is sufficient for a localhost-only server.
-- [ ] Idempotency: retrying a timed-out create may duplicate a comment; decide on a client token.
-- [ ] Rate limiting: none planned; confirm the local bridge is trusted enough to skip it.
-
-</Review>
-
 </HttpEndpoint>
 
 The read path stays compact because it needs no request payload.
