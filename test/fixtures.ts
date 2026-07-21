@@ -19,6 +19,7 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
   readonly componentsViewerUrl: string;
+  readonly httpEndpointViewerUrl: string;
   readonly sampleViewerUrl: string;
 };
 
@@ -75,6 +76,21 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         join(repoRoot, "bin", "big-plan.mjs"),
         "render",
         join(repoRoot, "examples", "mdx-components.mdx"),
+        outputPath,
+      ]);
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  httpEndpointViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-http-endpoint-"));
+      const outputPath = join(outputDir, "http-endpoint.html");
+      await execFileAsync(process.execPath, [
+        join(repoRoot, "bin", "big-plan.mjs"),
+        "render",
+        join(repoRoot, "examples", "http-endpoint.mdx"),
         outputPath,
       ]);
       await use(pathToFileURL(outputPath).href);
