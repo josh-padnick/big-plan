@@ -15,8 +15,10 @@ const HEADER_ROW_CLASSES =
   "table-schema-header-row flex min-w-0 items-center justify-between gap-3";
 const IDENTITY_CLASSES =
   "table-schema-identity flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted";
+// A transparent resting state keeps the overflow control quieter than the
+// schema it acts on; hover and focus still reveal the full affordance.
 const BUTTON_CLASSES =
-  "table-schema-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+  "table-schema-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 const MENU_LIST_CLASSES =
   "table-schema-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge p-1";
 const MENU_ITEM_CLASSES =

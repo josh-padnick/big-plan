@@ -1256,7 +1256,7 @@ const RAW_TABLE_SCHEMA = [
   "cache_key    text        [not null, note: 'The catalog cache key this job refreshes.']",
   "requested_by bigint      [ref: > catalog.api_instances.id, delete: set null]",
   "attempts     integer     [not null, default: 0, check: 'attempts <= 5']",
-  "status       text        [not null, default: 'queued', note: 'One of queued, running, done, or failed.']",
+  "status       text        [not null, default: 'queued', note: 'Allowed: queued | running | done | failed.']",
   "enqueued_at  timestamptz [not null, default: `now()`]",
   "",
   "indexes {",
@@ -1295,7 +1295,11 @@ test("should review a database table schema end to end", async ({
       "Type",
       "Constraints",
       "Default",
+      "Comment",
     ]);
+    await expect(
+      schema.locator('[data-schema-column="cache_key"] [data-schema-note]'),
+    ).toHaveText("The catalog cache key this job refreshes.");
     await expect(schema.locator("[data-schema-column]")).toHaveCount(6);
     const idRow = schema.locator('[data-schema-column="id"]');
     await expect(idRow.locator('[data-schema-badge="pk"]')).toHaveText("PK");
@@ -1310,6 +1314,7 @@ test("should review a database table schema end to end", async ({
 
   await test.step("the foreign key and check live inside their columns' rows", async () => {
     const fkRow = schema.locator('[data-schema-column="requested_by"]');
+    await expect(fkRow).toContainText("nullable");
     const refLine = fkRow.locator("[data-schema-ref]");
     await expect(refLine).toContainText("catalog.api_instances.id");
     await expect(refLine).toContainText("ON DELETE SET NULL");

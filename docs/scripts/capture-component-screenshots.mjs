@@ -140,7 +140,7 @@ id           bigint      [pk, increment]
 cache_key    text        [not null, note: 'The catalog cache key this job refreshes.']
 requested_by bigint      [ref: > catalog.api_instances.id, delete: set null]
 attempts     integer     [not null, default: 0, check: 'attempts <= 5']
-status       text        [not null, default: 'queued', note: 'One of queued, running, done, or failed.']
+status       text        [not null, default: 'queued', note: 'Allowed: queued | running | done | failed.']
 enqueued_at  timestamptz [not null, default: \`now()\`]
 
 indexes {

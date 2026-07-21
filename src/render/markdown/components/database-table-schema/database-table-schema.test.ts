@@ -182,7 +182,13 @@ describe("renderDatabaseTableSchema rendering", () => {
       (candidate) =>
         candidate.tagName === "th" && candidate.properties.scope === "col",
     ).map((head) => collectText(head));
-    expect(headLabels).toEqual(["Column", "Type", "Constraints", "Default"]);
+    expect(headLabels).toEqual([
+      "Column",
+      "Type",
+      "Constraints",
+      "Default",
+      "Comment",
+    ]);
     const rows = queryAll(
       element,
       (candidate) => candidate.properties["data-schema-column"] !== undefined,
@@ -209,6 +215,34 @@ describe("renderDatabaseTableSchema rendering", () => {
     ).map((found) => found.properties["data-schema-badge"]);
     expect(badges).toEqual(["pk", "identity"]);
     expect(collectText(idRow ?? element)).toContain("not null");
+  });
+
+  it("should state nullability explicitly when a column has no not null", () => {
+    const { element } = render();
+    const usernameRow = queryAll(
+      element,
+      (candidate) => candidate.properties["data-schema-column"] === "username",
+    )[0];
+    expect(collectText(usernameRow ?? element)).toContain("nullable");
+  });
+
+  it("should keep a commented column to one row with the note in its Comment cell", () => {
+    const { element } = render();
+    const statusRow = queryAll(
+      element,
+      (candidate) => candidate.properties["data-schema-column"] === "status",
+    )[0];
+    expect(statusRow).toBeDefined();
+    const note = queryAll(
+      statusRow ?? element,
+      (candidate) => candidate.properties["data-schema-note"] !== undefined,
+    )[0];
+    expect(collectText(note ?? element)).toBe("Denormalized");
+    expect(
+      queryAll(element, (candidate) =>
+        hasClass(candidate, "table-schema-detail-row"),
+      ),
+    ).toHaveLength(0);
   });
 
   it("should render the foreign key inside its column's constraints cell", () => {

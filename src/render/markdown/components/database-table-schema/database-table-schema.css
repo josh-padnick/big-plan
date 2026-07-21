@@ -1,6 +1,7 @@
-/* DatabaseTableSchema palette-dependent chrome: header band, dense grid
-   overrides of the prose table rules, plain in-figure code, badge tints, and
-   action-menu styles, colocated with the component that owns them. */
+/* DatabaseTableSchema palette-dependent chrome: header band, dense
+   equal-height grid overrides of the prose table rules, plain in-figure code,
+   badge tints, the tinted Indexes band, and action-menu styles, colocated
+   with the component that owns them. */
 
 @layer components {
   article .table-schema-header {
@@ -14,47 +15,50 @@
     border: 0;
     border-radius: 0;
     padding: 0;
-    /* SQL fragments wrap as whole units between flex items, never inside
-       an expression; the grid's scroll container absorbs the overflow. */
+    /* SQL fragments wrap as whole units between constraint runs, never
+       inside an expression; the grid's scroll container absorbs overflow. */
     white-space: nowrap;
   }
   /* Row-scope name cells opt back out of the prose header treatment; the
-     column-head row keeps a quiet muted-label look instead. */
+     column-head row keeps a quiet muted-label look that guides alignment
+     without competing with the table identity above it. */
   article .table-schema-grid th {
     background: transparent;
   }
   article .table-schema-head {
+    padding-top: 0.3rem;
+    padding-bottom: 0.3rem;
     color: var(--color-muted);
-    font-weight: 600;
+    font-weight: 500;
   }
   /* Denser rows than prose tables: answering "what columns exist and what
      rules apply" should fit many columns on one screen. */
   article .table-schema-grid th,
   article .table-schema-grid td {
-    padding: 0.35rem 0.9rem;
+    padding: 0.35rem 0.75rem;
   }
   article .table-schema-head-column {
-    width: 30%;
+    width: 19%;
   }
   article .table-schema-head-type {
-    width: 18%;
+    width: 14%;
   }
   article .table-schema-head-constraints {
-    width: 34%;
+    width: 33%;
   }
   article .table-schema-head-default {
-    width: 18%;
+    width: 11%;
   }
-  article .table-schema-grid .table-schema-column-row[data-has-detail] th,
-  article .table-schema-grid .table-schema-column-row[data-has-detail] td {
-    border-bottom: 0;
-    padding-bottom: 0;
-  }
-  article .table-schema-grid .table-schema-detail-row td {
-    padding-top: 0.1rem;
+  article .table-schema-head-comment {
+    width: 23%;
   }
   article .table-schema-section-list {
     list-style: none;
+  }
+  /* The Indexes band is the one deliberate visual break below the grid. */
+  article .table-schema-section {
+    background: var(--diff-header-bg);
+    border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
   }
   article .table-schema-badge {
     border-color: var(--color-edge);

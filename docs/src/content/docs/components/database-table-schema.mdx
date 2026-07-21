@@ -7,7 +7,8 @@ import ThemeImage from "../../../components/ThemeImage.astro";
 import tableSchemaLight from "../../../assets/components/database-table-schema-light.png";
 import tableSchemaDark from "../../../assets/components/database-table-schema-dark.png";
 
-`DatabaseTableSchema` renders one table's schema from a compact, validated DBML subset: a header band with the schema-qualified name and table note, a dense `Column | Type | Constraints | Default` grid whose Constraints cell carries key badges, nullability, foreign keys with their actions, and check expressions beside the column they govern, and an Indexes section below the grid.
+`DatabaseTableSchema` renders one table's schema from a compact, validated DBML subset: a header band with the schema-qualified name and table note, and a dense `Column | Type | Constraints | Default | Comment` grid in which every column is exactly one equal-rhythm row.
+The Constraints cell carries key badges, explicit nullability, foreign keys with their actions, and check expressions beside the column they govern, and the tinted Indexes band below the grid lists each index name-first with its definition and invariant note.
 It is optimized for Postgres but generic: column types are opaque text, so any engine's types render unchanged.
 The grid and sections are fully server-rendered; JavaScript only powers the actions menu (copy table name, copy source), and a wide grid scrolls inside the figure instead of widening the page.
 
@@ -44,7 +45,7 @@ id           bigint      [pk, increment]
 cache_key    text        [not null, note: 'The catalog cache key this job refreshes.']
 requested_by bigint      [ref: > catalog.api_instances.id, delete: set null]
 attempts     integer     [not null, default: 0, check: 'attempts <= 5']
-status       text        [not null, default: 'queued', note: 'One of queued, running, done, or failed.']
+status       text        [not null, default: 'queued', note: 'Allowed: queued | running | done | failed.']
 enqueued_at  timestamptz [not null, default: `now()`]
 
 indexes {
@@ -82,7 +83,7 @@ Each column is one line, `name type [settings]`:
 - The name must be a bare identifier; the type is opaque text and may contain spaces (`timestamp with time zone`) or array brackets (`text[]`).
 - Marker settings: `pk` (or `primary key`, which also implies `not null`), `not null`, `null`, `unique`, `increment` (rendered as an Identity badge).
 - `default:` takes a number, `true`, `false`, `null`, a quoted string, or a backtick expression such as `` `now()` ``.
-- `note:` and `check:` take a single-line quoted value; notes render as muted prose under the column, and checks render as `CHECK (...)` in the column's Constraints cell.
+- `note:` and `check:` take a single-line quoted value; notes render in the column's Comment cell, and checks render as `CHECK (...)` in its Constraints cell.
 - `ref: > table.column` declares a many-to-one foreign key; `delete:` and `update:` add referential actions (`cascade`, `restrict`, `set null`, `set default`, `no action`) and require the `ref:` on the same line.
 
 Each `indexes` block entry is a column, a composite `(a, b)` tuple, or a backtick expression, with optional settings `unique`, `name:`, `type:` (`btree`, `hash`, `gin`, `gist`), `note:`, and the extension `where:` for a partial-index predicate.
