@@ -1,0 +1,102 @@
+---
+title: GrpcMethod
+description: A component that renders one gRPC method as a review card headed by the authentic proto signature with streaming badges, field lists, and canonical error codes.
+---
+
+import ThemeImage from "../../../components/ThemeImage.astro";
+import methodLight from "../../../assets/components/grpc-method-light.png";
+import methodDark from "../../../assets/components/grpc-method-dark.png";
+
+`GrpcMethod` shows one proposed RPC on a service, headed by the literal proto signature - `rpc WatchComments(WatchCommentsRequest) returns (stream Comment)` - so a plan that introduces or changes a gRPC surface is reviewed on what the `.proto` would actually say.
+
+## How it looks
+
+<ThemeImage
+  light={methodLight}
+  dark={methodDark}
+  alt="A method card with the service caption, a signature with a tinted stream keyword, a streaming badge, request and response field lists, an error code, and a proto fence"
+/>
+
+## When to use it
+
+Use `GrpcMethod` when a plan proposes or changes an RPC and the reviewer should judge the signature, the streaming kind, the request and response fields, and the failure codes.
+
+### When not to use it
+
+- Loose proto samples with no method contract to review - use a plain fence
+- Whole-service or message-heavy schema dumps - the card documents one method; larger proto excerpts belong in prose or fences
+
+## Use cases
+
+- Propose a streaming RPC where the streaming kind must be unmissable - the signature places the `stream` keyword and the badge names the kind, which even Google's reference fails to surface
+- Document the canonical `google.rpc.Code` failures reviewers usually have to ask about
+
+## Usage
+
+````mdx
+<GrpcMethod service="bigplan.v1.CommentService" name="WatchComments" request="WatchCommentsRequest" response="Comment" kind="serverStreaming">
+
+Streams new comments on a plan as reviewers create them.
+
+<Field in="request" name="plan_id" type="string">
+
+Required. Resource name of the plan being watched.
+
+</Field>
+
+<Field in="response" name="body" type="string">
+
+The comment body as authored markdown.
+
+</Field>
+
+<Error code="NOT_FOUND">
+
+The plan does not exist or the caller cannot see it.
+
+</Error>
+
+<Proto>
+
+```proto
+rpc WatchComments(WatchCommentsRequest) returns (stream Comment);
+```
+
+</Proto>
+
+</GrpcMethod>
+````
+
+## Authoring
+
+### Attributes
+
+| Attribute    | Type                                                              | Required            | Behavior                                                                     |
+| ------------ | ----------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------- |
+| `service`    | string (non-empty)                                                | Yes                 | Fully qualified service name, rendered as the card's caption.                 |
+| `name`       | string (non-empty)                                                | Yes                 | The method name inside the signature.                                         |
+| `request`    | string (non-empty)                                                | Yes                 | Request message type inside the signature.                                    |
+| `response`   | string (non-empty)                                                | Yes                 | Response message type inside the signature.                                   |
+| `kind`       | enum: `unary` `serverStreaming` `clientStreaming` `bidiStreaming` | No (default `unary`) | Places the tinted `stream` keywords and renders the streaming badge.          |
+| `deprecated` | bare boolean                                                      | No                  | Renders a Deprecated badge and strikes the method name.                       |
+
+The markdown body before the scoped children is the method's description.
+
+### Field
+
+Each `Field` documents one message field: a required `in` (`request` or `response`) that groups it into the matching section, a required non-empty `name`, an optional `type`, and a markdown body.
+Proto3 has no required label, so requiredness stays prose in the description ("Required. ..."), matching the ecosystem.
+Duplicate `in`-plus-`name` identities are rejected.
+
+### Error
+
+Each `Error` documents one failure: a required `code` from the canonical `google.rpc.Code` error names (`NOT_FOUND`, `PERMISSION_DENIED`, `RESOURCE_EXHAUSTED`, and the rest) and a markdown body explaining when it happens.
+Duplicate codes are rejected.
+
+### Proto
+
+At most one `Proto` carries exactly one `proto` fence - the raw-source secondary affordance behind the structured card.
+
+Component-specific violations report positional diagnostics, including an unknown error code, duplicate field or error identities, a second `Proto` or a wrong-language fence, and headings, footnotes, or nested components inside scoped-child bodies.
+
+`Field`, `Error`, and `Proto` outside a declaring `GrpcMethod` stay unknown components.

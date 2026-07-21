@@ -14,7 +14,7 @@ Big Plan is pre-alpha and is being built in the open, one registry capability at
 ## Planned components
 
 - **`Decision`.** Options-considered cards with nested `Option` children.
-- **`DatabaseSchema`.** A structured schema card from a fenced YAML child; `HttpEndpoint` shipped as the first structured API card, and `GraphqlOperation` + `GrpcMethod` follow it.
+- **`DatabaseSchema`.** A structured schema card from a fenced YAML child; `HttpEndpoint`, `GraphqlOperation`, and `GrpcMethod` shipped as the structured API cards.
 - **`Diagram`.** Diagram source rendered to inline SVG at build time, preserving the no-external-requests invariant.
 
 ## Planned review experience
