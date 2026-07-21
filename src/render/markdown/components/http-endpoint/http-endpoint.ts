@@ -9,6 +9,13 @@ import {
   type ComponentRenderer,
   type ScopedChildDefinition,
 } from "../component-contract.js";
+import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
+import {
+  renderCardSection,
+  renderDefinitionEntry,
+  renderDefinitionList,
+  renderSectionLabel,
+} from "../shared/labeled-section/labeled-section.js";
 import {
   compileHttpEndpointComponent,
   type CompiledHttpEndpoint,
@@ -18,11 +25,6 @@ import {
 } from "./compile-http-endpoint.js";
 
 const text = (value: string): Text => ({ type: "text", value });
-
-const SECTION_LABEL_CLASSES =
-  "text-[0.6875rem] leading-4 font-bold tracking-[0.08em] uppercase text-muted";
-const CHIP_CLASSES =
-  "inline-flex items-center rounded-full px-2 py-0.5 text-[0.6875rem] leading-4 font-bold uppercase";
 
 // Splits brace-delimited placeholders from the literal path without treating
 // the authored string as markup.
@@ -43,160 +45,118 @@ const renderPathChildren = (path: string): ReadonlyArray<ElementContent> =>
         : text(part),
     );
 
-const renderSectionLabel = (label: string): Element => ({
-  type: "element",
-  tagName: "div",
-  properties: { className: SECTION_LABEL_CLASSES.split(" ") },
-  children: [text(label)],
-});
-
 // Renders one parameter as a definition pair so its identity and prose remain
 // semantically connected even in the script-free document.
-const renderParam = (param: CompiledHttpParam): Element => ({
-  type: "element",
-  tagName: "div",
-  properties: {
-    className: ["border-b", "border-edge", "py-3", "last:border-b-0"],
-    "data-http-param-location": param.location,
-  },
-  children: [
-    {
-      type: "element",
-      tagName: "dt",
-      properties: {
-        className: ["flex", "flex-wrap", "items-baseline", "gap-2"],
-      },
-      children: [
-        {
-          type: "element",
-          tagName: "span",
-          properties: {
-            className: ["font-mono", "text-[0.8125rem]", "font-semibold"],
-          },
-          children: [text(param.name)],
+const renderParam = (param: CompiledHttpParam): Element =>
+  renderDefinitionEntry({
+    properties: { "data-http-param-location": param.location },
+    term: [
+      {
+        type: "element",
+        tagName: "span",
+        properties: {
+          className: ["font-mono", "text-[0.8125rem]", "font-semibold"],
         },
-        {
-          type: "element",
-          tagName: "span",
-          properties: {
-            className: [
-              "rounded-full",
-              "bg-surface",
-              "px-2",
-              "py-0.5",
-              "text-[0.625rem]",
-              "leading-4",
-              "font-bold",
-              "uppercase",
-              "text-muted",
-            ],
-          },
-          children: [text(param.location)],
+        children: [text(param.name)],
+      },
+      {
+        type: "element",
+        tagName: "span",
+        properties: {
+          className: [
+            "rounded-full",
+            "bg-surface",
+            "px-2",
+            "py-0.5",
+            "text-[0.625rem]",
+            "leading-4",
+            "font-bold",
+            "uppercase",
+            "text-muted",
+          ],
         },
-        ...(param.dataType === undefined
-          ? []
-          : [
-              {
-                type: "element",
-                tagName: "span",
-                properties: { className: ["text-xs", "text-muted"] },
-                children: [text(param.dataType)],
-              } satisfies Element,
-            ]),
-        ...(param.required
-          ? [
-              {
-                type: "element",
-                tagName: "span",
-                properties: {
-                  className: ["text-[0.6875rem]", "font-bold", "text-ink"],
-                },
-                children: [text("required")],
-              } satisfies Element,
-            ]
-          : []),
-      ],
-    },
-    {
-      type: "element",
-      tagName: "dd",
-      properties: {
-        className: ["mt-1.5", "text-sm", "text-muted", "[&>:last-child]:mb-0"],
+        children: [text(param.location)],
       },
-      children: [...param.children],
-    },
-  ],
-});
+      ...(param.dataType === undefined
+        ? []
+        : [
+            {
+              type: "element",
+              tagName: "span",
+              properties: { className: ["text-xs", "text-muted"] },
+              children: [text(param.dataType)],
+            } satisfies Element,
+          ]),
+      ...(param.required
+        ? [
+            {
+              type: "element",
+              tagName: "span",
+              properties: {
+                className: ["text-[0.6875rem]", "font-bold", "text-ink"],
+              },
+              children: [text("required")],
+            } satisfies Element,
+          ]
+        : []),
+    ],
+    body: param.children,
+  });
 
-const renderParameters = (
-  params: ReadonlyArray<CompiledHttpParam>,
-): Element => ({
-  type: "element",
-  tagName: "section",
-  properties: {
-    className: ["border-t", "border-edge", "px-4", "py-4"],
-  },
-  children: [
-    renderSectionLabel("Parameters"),
-    {
-      type: "element",
-      tagName: "dl",
-      properties: { className: ["mt-1"] },
-      children: params.map(renderParam),
-    },
-  ],
-});
+const renderParameters = (params: ReadonlyArray<CompiledHttpParam>): Element =>
+  renderCardSection({
+    children: [
+      renderSectionLabel("Parameters"),
+      renderDefinitionList({ entries: params.map(renderParam) }),
+    ],
+  });
 
-const renderRequest = (request: CompiledHttpRequest): Element => ({
-  type: "element",
-  tagName: "section",
-  properties: {
-    className: ["border-t", "border-edge", "px-4", "py-4"],
-  },
-  children: [
-    {
-      type: "element",
-      tagName: "div",
-      properties: {
-        className: ["mb-3", "flex", "flex-wrap", "items-center", "gap-2"],
+const renderRequest = (request: CompiledHttpRequest): Element =>
+  renderCardSection({
+    children: [
+      {
+        type: "element",
+        tagName: "div",
+        properties: {
+          className: ["mb-3", "flex", "flex-wrap", "items-center", "gap-2"],
+        },
+        children: [
+          renderSectionLabel("Request"),
+          ...(request.contentType === undefined
+            ? []
+            : [
+                // Media types stay lowercase monospace, the way every API
+                // reference prints them; the uppercase chip is for labels.
+                {
+                  type: "element",
+                  tagName: "span",
+                  properties: {
+                    className: [
+                      "inline-flex",
+                      "items-center",
+                      "rounded-full",
+                      "bg-surface",
+                      "px-2",
+                      "py-0.5",
+                      "font-mono",
+                      "text-[0.6875rem]",
+                      "leading-4",
+                      "text-muted",
+                    ],
+                  },
+                  children: [text(request.contentType)],
+                } satisfies Element,
+              ]),
+        ],
       },
-      children: [
-        renderSectionLabel("Request"),
-        ...(request.contentType === undefined
-          ? []
-          : [
-              // Media types stay lowercase monospace, the way every API
-              // reference prints them; the uppercase chip is for labels.
-              {
-                type: "element",
-                tagName: "span",
-                properties: {
-                  className: [
-                    "inline-flex",
-                    "items-center",
-                    "rounded-full",
-                    "bg-surface",
-                    "px-2",
-                    "py-0.5",
-                    "font-mono",
-                    "text-[0.6875rem]",
-                    "leading-4",
-                    "text-muted",
-                  ],
-                },
-                children: [text(request.contentType)],
-              } satisfies Element,
-            ]),
-      ],
-    },
-    {
-      type: "element",
-      tagName: "div",
-      properties: { className: ["[&>:last-child]:mb-0"] },
-      children: [...request.children],
-    },
-  ],
-});
+      {
+        type: "element",
+        tagName: "div",
+        properties: { className: ["[&>:last-child]:mb-0"] },
+        children: [...request.children],
+      },
+    ],
+  });
 
 const renderResponse = (response: CompiledHttpResponse): Element => ({
   type: "element",
@@ -213,19 +173,14 @@ const renderResponse = (response: CompiledHttpResponse): Element => ({
         className: ["mb-2", "flex", "flex-wrap", "items-center", "gap-2"],
       },
       children: [
-        {
-          type: "element",
-          tagName: "span",
-          properties: {
-            className: [
-              ...CHIP_CLASSES.split(" "),
-              "http-endpoint-status-pill",
-              `http-endpoint-status-${response.statusClass}`,
-            ],
-            "data-http-status-class": response.statusClass,
-          },
-          children: [text(response.status)],
-        },
+        renderBadgePill({
+          label: response.status,
+          classNames: [
+            "http-endpoint-status-pill",
+            `http-endpoint-status-${response.statusClass}`,
+          ],
+          properties: { "data-http-status-class": response.statusClass },
+        }),
         ...(response.label === undefined
           ? []
           : [
@@ -251,22 +206,18 @@ const renderResponse = (response: CompiledHttpResponse): Element => ({
 
 const renderResponses = (
   responses: ReadonlyArray<CompiledHttpResponse>,
-): Element => ({
-  type: "element",
-  tagName: "section",
-  properties: {
-    className: ["border-t", "border-edge", "px-4", "py-4"],
-  },
-  children: [
-    renderSectionLabel("Responses"),
-    {
-      type: "element",
-      tagName: "div",
-      properties: { className: ["mt-1"] },
-      children: responses.map(renderResponse),
-    },
-  ],
-});
+): Element =>
+  renderCardSection({
+    children: [
+      renderSectionLabel("Responses"),
+      {
+        type: "element",
+        tagName: "div",
+        properties: { className: ["mt-1"] },
+        children: responses.map(renderResponse),
+      },
+    ],
+  });
 
 // Builds the complete card while omitting every empty optional region, making
 // a header-only endpoint a deliberate and useful compact rendering.
@@ -304,18 +255,13 @@ const renderHttpEndpointFigure = ({
             className: ["flex", "flex-wrap", "items-center", "gap-2.5"],
           },
           children: [
-            {
-              type: "element",
-              tagName: "span",
-              properties: {
-                className: [
-                  ...CHIP_CLASSES.split(" "),
-                  "http-endpoint-method-pill",
-                  `http-endpoint-method-${model.method.toLowerCase()}`,
-                ],
-              },
-              children: [text(model.method)],
-            },
+            renderBadgePill({
+              label: model.method,
+              classNames: [
+                "http-endpoint-method-pill",
+                `http-endpoint-method-${model.method.toLowerCase()}`,
+              ],
+            }),
             {
               type: "element",
               tagName: "span",
@@ -342,17 +288,10 @@ const renderHttpEndpointFigure = ({
                 ]),
             ...(model.deprecated
               ? [
-                  {
-                    type: "element",
-                    tagName: "span",
-                    properties: {
-                      className: [
-                        ...CHIP_CLASSES.split(" "),
-                        "http-endpoint-deprecated",
-                      ],
-                    },
-                    children: [text("Deprecated")],
-                  } satisfies Element,
+                  renderBadgePill({
+                    label: "Deprecated",
+                    classNames: ["http-endpoint-deprecated"],
+                  }),
                 ]
               : []),
           ],
