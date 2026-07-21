@@ -160,12 +160,22 @@ const constraintsCell = (
       ? []
       : [
           foreignKeyTarget(column.ref.target),
+          // Actions read in SQL voice but stay muted: they qualify the
+          // relationship rather than define it.
           ...(column.ref.onDelete === undefined
             ? []
-            : [code(`ON DELETE ${column.ref.onDelete.toUpperCase()}`)]),
+            : [
+                code(`ON DELETE ${column.ref.onDelete.toUpperCase()}`, {
+                  className: ["text-muted"],
+                }),
+              ]),
           ...(column.ref.onUpdate === undefined
             ? []
-            : [code(`ON UPDATE ${column.ref.onUpdate.toUpperCase()}`)]),
+            : [
+                code(`ON UPDATE ${column.ref.onUpdate.toUpperCase()}`, {
+                  className: ["text-muted"],
+                }),
+              ]),
         ];
   const checkItems: ReadonlyArray<ElementContent> =
     column.check === undefined
