@@ -935,7 +935,7 @@ test("should fallback-copy Annotation code within a full-screen diff", async ({
     });
     document.execCommand = () => {
       const textarea = document.querySelector(
-        "textarea:not([data-diff-source]):not([data-snippet-source])",
+        "textarea:not([data-diff-source]):not([data-snippet-source]):not([data-schema-source])",
       );
       document.body.dataset.fallbackCopy =
         textarea instanceof HTMLTextAreaElement
@@ -1094,7 +1094,7 @@ test("should fallback-copy within a full-screen diff", async ({
     });
     document.execCommand = () => {
       const textareas = document.querySelectorAll(
-        "textarea:not([data-diff-source]):not([data-snippet-source])",
+        "textarea:not([data-diff-source]):not([data-snippet-source]):not([data-schema-source])",
       );
       const textarea = textareas.item(textareas.length - 1);
       document.body.dataset.fallbackCopy =
@@ -1111,7 +1111,9 @@ test("should fallback-copy within a full-screen diff", async ({
   const menuButton = expandedDiff.locator("[data-diff-menu-button]");
   await expect(page.locator("dialog.component-dialog[open]")).toHaveCount(1);
   await expect(
-    page.locator("textarea:not([data-diff-source]):not([data-snippet-source])"),
+    page.locator(
+      "textarea:not([data-diff-source]):not([data-snippet-source]):not([data-schema-source])",
+    ),
   ).toHaveCount(0);
   await menuButton.evaluate((button) => button.click());
   await expandedDiff
@@ -1233,13 +1235,149 @@ test("should preserve component content without controls when JavaScript is disa
     annotation.locator(".code-diff-annotation-body-clamped"),
   ).toHaveCount(0);
   await expect(page.locator(".code-diff-annotation-toggle")).toHaveCount(0);
-  const controls = page.locator(
-    "[data-diff-toggle-group], [data-diff-menu-button], [data-diff-expand]",
+  const schema = page.locator("[data-database-table-schema]");
+  await expect(schema.locator(".table-schema-name-table")).toHaveText(
+    "refresh_jobs",
   );
-  await expect(controls).toHaveCount(6);
+  await expect(schema.locator('[data-schema-badge="pk"]')).toBeVisible();
+  const controls = page.locator(
+    "[data-diff-toggle-group], [data-diff-menu-button], [data-diff-expand], [data-schema-menu-button]",
+  );
+  await expect(controls).toHaveCount(7);
   for (const control of await controls.all()) {
     await expect(control).toBeHidden();
   }
 
   await context.close();
+});
+
+const RAW_TABLE_SCHEMA = [
+  "id           bigint      [pk, increment]",
+  "cache_key    text        [not null, note: 'The catalog cache key this job refreshes.']",
+  "requested_by bigint      [ref: > catalog.api_instances.id, delete: set null]",
+  "attempts     integer     [not null, default: 0, check: 'attempts <= 5']",
+  "status       text        [not null, default: 'queued']",
+  "enqueued_at  timestamptz [not null, default: `now()`]",
+  "",
+  "indexes {",
+  "  cache_key [unique, where: 'status <> done', note: 'One live job per cache key.']",
+  "  (status, enqueued_at) [name: 'refresh_jobs_scan_idx']",
+  "}",
+  "",
+  "Note: 'One row per queued catalog refresh; done rows are pruned nightly.'",
+  "",
+].join("\n");
+
+test("should review a database table schema end to end", async ({
+  page,
+  componentsViewerUrl,
+}) => {
+  await page.goto(componentsViewerUrl);
+  const schema = page.locator("[data-database-table-schema]");
+  const menuButton = schema.locator("[data-schema-menu-button]");
+  const menu = schema.getByRole("menu", { name: "Table schema actions" });
+
+  await test.step("the header names the schema-qualified table", async () => {
+    await expect(schema.locator(".table-schema-name-schema")).toHaveText(
+      "catalog.",
+    );
+    await expect(schema.locator(".table-schema-name-table")).toHaveText(
+      "refresh_jobs",
+    );
+    await expect(schema.locator("[data-schema-table-note]")).toHaveText(
+      "One row per queued catalog refresh; done rows are pruned nightly.",
+    );
+  });
+
+  await test.step("the grid follows psql column order with key badges", async () => {
+    await expect(schema.locator("thead th")).toHaveText([
+      "Column",
+      "Type",
+      "Nullable",
+      "Default",
+    ]);
+    await expect(schema.locator("[data-schema-column]")).toHaveCount(6);
+    const idRow = schema.locator('[data-schema-column="id"]');
+    await expect(idRow.locator('[data-schema-badge="pk"]')).toHaveText("PK");
+    await expect(idRow.locator('[data-schema-badge="identity"]')).toHaveText(
+      "Identity",
+    );
+    await expect(idRow).toContainText("not null");
+    await expect(schema.locator('[data-schema-column="status"]')).toContainText(
+      "'queued'",
+    );
+  });
+
+  await test.step("the foreign key renders adjacent to its column", async () => {
+    const refLine = schema.locator("[data-schema-ref]");
+    await expect(refLine).toContainText("catalog.api_instances.id");
+    await expect(refLine).toContainText("on delete set null");
+    const adjacent = await schema.evaluate((figure) => {
+      const row = figure.querySelector('[data-schema-column="requested_by"]');
+      return (
+        row instanceof HTMLElement &&
+        row.nextElementSibling instanceof HTMLElement &&
+        row.nextElementSibling.querySelector("[data-schema-ref]") !== null
+      );
+    });
+    expect(adjacent).toBe(true);
+  });
+
+  await test.step("indexes and checks summarize the remaining constraints", async () => {
+    const indexes = schema.locator("[data-schema-index]");
+    await expect(indexes).toHaveCount(2);
+    await expect(indexes.first()).toContainText("cache_key");
+    await expect(indexes.first()).toContainText("Unique");
+    await expect(indexes.first()).toContainText("WHERE status <> done");
+    await expect(indexes.first()).toContainText("One live job per cache key.");
+    await expect(indexes.last()).toContainText("(status, enqueued_at)");
+    await expect(indexes.last()).toContainText("refresh_jobs_scan_idx");
+    const check = schema.locator("[data-schema-check]");
+    await expect(check).toContainText("attempts:");
+    await expect(check).toContainText("CHECK (attempts <= 5)");
+  });
+
+  await test.step("the actions menu copies the table name and raw source", async () => {
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: (value: string) => {
+            document.body.dataset.copiedSchema = value;
+            return Promise.resolve();
+          },
+        },
+      });
+    });
+    await expect(menuButton).toHaveAccessibleName("More actions");
+    await menuButton.click();
+    await expect(menu).toBeVisible();
+    await menu.getByRole("menuitem", { name: "Copy table name" }).click();
+    expect(await page.locator("body").getAttribute("data-copied-schema")).toBe(
+      "catalog.refresh_jobs",
+    );
+    await expect(menuButton).toHaveAccessibleName("Name copied!");
+    await menuButton.click();
+    await menu.getByRole("menuitem", { name: "Copy source" }).click();
+    expect(await page.locator("body").getAttribute("data-copied-schema")).toBe(
+      RAW_TABLE_SCHEMA,
+    );
+    await expect(menuButton).toHaveAccessibleName("Source copied!");
+  });
+
+  await test.step("a narrow viewport scrolls the grid inside the figure", async () => {
+    await page.setViewportSize({ width: 420, height: 900 });
+    const container = schema.locator("[data-table-scroll-container]");
+    await expect(container).toHaveCount(1);
+    const overflow = await container.evaluate(
+      (element) => getComputedStyle(element).overflowX,
+    );
+    expect(overflow).toBe("auto");
+    const pageScrolls = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
+    );
+    expect(pageScrolls).toBe(false);
+  });
 });
