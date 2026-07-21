@@ -27,7 +27,7 @@ const LIST_CLASSES = "file-tree-list m-0 min-w-max list-none p-0";
 const CHILD_LIST_CLASSES =
   "file-tree-children m-0 ml-[0.45rem] list-none border-l border-edge pl-[1.05rem]";
 const ROW_CLASSES =
-  "file-tree-row relative flex min-h-6 items-center gap-[0.45rem] whitespace-nowrap [&>svg]:size-3.5 [&>svg]:shrink-0";
+  "file-tree-row relative flex min-h-6 items-center gap-[0.35rem] whitespace-nowrap [&>svg]:size-3.5 [&>svg]:shrink-0";
 const TOGGLE_CLASSES =
   "file-tree-toggle inline-flex cursor-pointer border-0 bg-transparent p-0 text-muted hover:text-ink [&>svg]:size-3.5 [&>svg]:shrink-0";
 const FOLD_BUTTON_CLASSES =
@@ -147,8 +147,10 @@ const badgeLabel = (badge: TreeBadge | undefined): ReadonlyArray<Element> =>
 // A server-rendered but hidden control; the browser script reveals it, so
 // documents without JavaScript stay fully expanded with no dead affordance.
 // Rows without a toggle (files and childless directories) carry an equally
-// hidden chevron-width spacer revealed by the same script, so revealing the
-// chevrons never pushes foldable rows out of column with their siblings.
+// hidden spacer revealed by the same script, so revealing the chevrons never
+// pushes foldable rows a full chevron out of column with their siblings. The
+// spacer is deliberately 6px narrower than the chevron: a slight outdent
+// keeps files from reading as over-indented under their folder rows.
 const directoryToggle = ({
   entry,
   name,
@@ -165,7 +167,7 @@ const directoryToggle = ({
             className: [
               "file-tree-toggle-spacer",
               "inline-flex",
-              "w-3.5",
+              "w-2",
               "shrink-0",
             ],
             hidden: true,

@@ -169,7 +169,7 @@ describe("renderFileTree", () => {
     expect(rendered).not.toContain('"tagName":"code"');
   });
 
-  it("should give toggle-less rows a hidden chevron-width spacer when siblings can fold", () => {
+  it("should give toggle-less rows a hidden slightly-outdented spacer when siblings can fold", () => {
     const { element, diagnostics } = render({
       children: [
         fence({ source: "src/\n  nested/\n    index.ts\n  helpers.ts\n" }),
@@ -184,7 +184,7 @@ describe("renderFileTree", () => {
     expect(rendered.match(/"data-tree-toggle":""/gu)).toHaveLength(2);
     expect(
       rendered.match(
-        /"file-tree-toggle-spacer","inline-flex","w-3.5","shrink-0"\],"hidden":true/gu,
+        /"file-tree-toggle-spacer","inline-flex","w-2","shrink-0"\],"hidden":true/gu,
       ),
     ).toHaveLength(2);
   });

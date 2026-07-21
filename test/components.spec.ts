@@ -173,7 +173,7 @@ test("should review planned file changes in combined and before/after trees", as
     await expect(page.locator(".file-tree-note-tip")).toHaveCount(0);
   });
 
-  await test.step("file rows share the icon column with their foldable siblings", async () => {
+  await test.step("file rows sit a slight outdent from their foldable siblings", async () => {
     const srcRow = combined
       .locator('.file-tree-row[data-tree-entry="directory"]')
       .filter({ hasText: "src/" })
@@ -184,7 +184,9 @@ test("should review planned file changes in combined and before/after trees", as
       .first();
     const folderIcon = await boxOf(srcRow.locator(":scope > svg").first());
     const fileIcon = await boxOf(readmeRow.locator(":scope > svg").first());
-    expect(fileIcon.x).toBeCloseTo(folderIcon.x, 0);
+    // The spacer is 6px narrower than the chevron, a deliberate nudge that
+    // keeps files from reading as over-indented while staying in column.
+    expect(folderIcon.x - fileIcon.x).toBeCloseTo(6, 0);
   });
 
   await test.step("directories fold by click and by the header controls", async () => {
