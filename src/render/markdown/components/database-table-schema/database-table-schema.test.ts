@@ -175,14 +175,14 @@ describe("renderDatabaseTableSchema rendering", () => {
     ).toHaveLength(0);
   });
 
-  it("should render one grid row per column with psql column order", () => {
+  it("should render one grid row per column with the dense column order", () => {
     const { element } = render();
     const headLabels = queryAll(
       element,
       (candidate) =>
         candidate.tagName === "th" && candidate.properties.scope === "col",
     ).map((head) => collectText(head));
-    expect(headLabels).toEqual(["Column", "Type", "Nullable", "Default"]);
+    expect(headLabels).toEqual(["Column", "Type", "Constraints", "Default"]);
     const rows = queryAll(
       element,
       (candidate) => candidate.properties["data-schema-column"] !== undefined,
@@ -211,21 +211,47 @@ describe("renderDatabaseTableSchema rendering", () => {
     expect(collectText(idRow ?? element)).toContain("not null");
   });
 
-  it("should render the foreign-key target and action adjacent to its column", () => {
+  it("should render the foreign key inside its column's constraints cell", () => {
     const { element } = render();
-    const refLine = queryAll(
+    const customerRow = queryAll(
       element,
+      (candidate) =>
+        candidate.properties["data-schema-column"] === "customer_id",
+    )[0];
+    expect(customerRow).toBeDefined();
+    const refLine = queryAll(
+      customerRow ?? element,
       (candidate) => candidate.properties["data-schema-ref"] !== undefined,
     )[0];
     const rendered = collectText(refLine ?? element);
     expect(rendered).toContain("public.customers.id");
-    expect(rendered).toContain("on delete cascade");
+    expect(rendered).toContain("ON DELETE CASCADE");
   });
 
-  it("should render the table note, index entry, and check entry", () => {
+  it("should render the check expression inside its column's row", () => {
     const { element } = render();
-    const note = queryAll(
+    const usernameRow = queryAll(
       element,
+      (candidate) => candidate.properties["data-schema-column"] === "username",
+    )[0];
+    expect(usernameRow).toBeDefined();
+    const check = queryAll(
+      usernameRow ?? element,
+      (candidate) => candidate.properties["data-schema-check"] !== undefined,
+    )[0];
+    expect(collectText(check ?? element)).toBe(
+      "CHECK (char_length(username) > 4)",
+    );
+  });
+
+  it("should render the table note in the header band and the index entry", () => {
+    const { element } = render();
+    const header = queryAll(
+      element,
+      (candidate) => candidate.tagName === "figcaption",
+    )[0];
+    const note = queryAll(
+      header ?? element,
       (candidate) =>
         candidate.properties["data-schema-table-note"] !== undefined,
     )[0];
@@ -237,16 +263,9 @@ describe("renderDatabaseTableSchema rendering", () => {
       (candidate) => candidate.properties["data-schema-index"] !== undefined,
     )[0];
     const indexText = collectText(index ?? element);
-    expect(indexText).toContain("(customer_id, status)");
+    expect(indexText).toContain("customer_id, status");
     expect(indexText).toContain("Unique");
     expect(indexText).toContain("WHERE status = live");
-    const check = queryAll(
-      element,
-      (candidate) => candidate.properties["data-schema-check"] !== undefined,
-    )[0];
-    expect(collectText(check ?? element)).toContain(
-      "CHECK (char_length(username) > 4)",
-    );
   });
 
   it("should omit the sections wrapper when no indexes or checks exist", () => {

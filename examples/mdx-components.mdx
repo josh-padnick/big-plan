@@ -197,11 +197,11 @@ id           bigint      [pk, increment]
 cache_key    text        [not null, note: 'The catalog cache key this job refreshes.']
 requested_by bigint      [ref: > catalog.api_instances.id, delete: set null]
 attempts     integer     [not null, default: 0, check: 'attempts <= 5']
-status       text        [not null, default: 'queued']
+status       text        [not null, default: 'queued', note: 'One of queued, running, done, or failed.']
 enqueued_at  timestamptz [not null, default: `now()`]
 
 indexes {
-  cache_key [unique, where: 'status <> done', note: 'One live job per cache key.']
+  cache_key [unique, name: 'refresh_jobs_live_key_idx', where: 'status <> \'done\'', note: 'Ensures one unfinished job per cache key.']
   (status, enqueued_at) [name: 'refresh_jobs_scan_idx']
 }
 

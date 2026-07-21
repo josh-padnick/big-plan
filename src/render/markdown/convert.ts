@@ -78,14 +78,19 @@ const TABLE_WRAPPER_CLASSES = [
 
 // Wraps each <table> in a scroll container so a wide table scrolls inside its
 // own box instead of widening the whole page. Mutating the tree in place is
-// the idiomatic shape for a rehype transform.
+// the idiomatic shape for a rehype transform. A table whose parent is already
+// a scroll container keeps it: components that ship their own figure-styled
+// container must not gain a second, chrome-bearing wrapper here.
 const wrapTables = (node: Root | Element): void => {
+  const nodeIsScrollContainer =
+    node.type === "element" &&
+    node.properties["data-table-scroll-container"] !== undefined;
   node.children = node.children.map((child) => {
     if (!isElement(child)) {
       return child;
     }
     wrapTables(child);
-    if (child.tagName !== "table") {
+    if (child.tagName !== "table" || nodeIsScrollContainer) {
       return child;
     }
     const wrapper: Element = {

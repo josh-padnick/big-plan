@@ -40,29 +40,8 @@ const renderTableSchemaFigure = ({
       ...(model.schemaName === undefined
         ? {}
         : { schemaName: model.schemaName }),
+      ...(model.schema.note === undefined ? {} : { note: model.schema.note }),
     }),
-    ...(model.schema.note === undefined
-      ? []
-      : [
-          {
-            type: "element" as const,
-            tagName: "p",
-            properties: {
-              className: [
-                "table-schema-note",
-                "m-0",
-                "border-b",
-                "border-edge",
-                "px-[0.9rem]",
-                "py-[0.5rem]",
-                "text-sm",
-                "text-muted",
-              ],
-              "data-schema-table-note": "",
-            },
-            children: [text(model.schema.note)],
-          },
-        ]),
     renderTableSchemaGrid({ schema: model.schema }),
     ...renderTableSchemaSections({ schema: model.schema }),
     {

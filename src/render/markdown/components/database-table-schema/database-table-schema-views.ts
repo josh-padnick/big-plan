@@ -1,5 +1,6 @@
-// Renders DatabaseTableSchema's body: the psql-ordered columns grid with key
-// badges and per-column detail lines, plus the Indexes and Checks sections.
+// Renders DatabaseTableSchema's body: a dense columns grid whose Constraints
+// cell carries key badges, nullability, foreign keys, and checks beside their
+// column, plus the structured Indexes section below it.
 
 import type { Element, ElementContent, Text } from "hast";
 import type {
@@ -8,22 +9,31 @@ import type {
   TableSchema,
 } from "./parse-table-schema.js";
 
-const GRID_CLASSES = "table-schema-grid w-full";
 const BADGE_CLASSES =
-  "table-schema-badge inline-flex shrink-0 items-center rounded-full border px-[0.4rem] py-px align-middle font-sans text-[0.625rem] font-semibold uppercase tracking-wide";
-const DETAIL_LINE_CLASSES =
-  "table-schema-detail-line m-0 flex flex-wrap items-baseline gap-x-[0.35rem] text-[0.8125rem]";
+  "table-schema-badge inline-flex shrink-0 items-center rounded-full border px-[0.4rem] py-px font-sans text-[0.625rem] font-semibold uppercase tracking-wide";
+const CONSTRAINT_LINE_CLASSES =
+  "table-schema-constraints flex flex-wrap items-center gap-x-[0.45rem] gap-y-[0.2rem]";
 const SECTION_LABEL_CLASSES =
-  "table-schema-section-label m-0 text-xs font-semibold uppercase tracking-wide text-muted";
+  "table-schema-section-label m-0 text-[0.6875rem] font-medium uppercase tracking-wide text-muted";
 const SECTION_ITEM_CLASSES =
-  "table-schema-section-item m-0 flex flex-wrap items-baseline gap-x-[0.45rem] text-[0.8125rem]";
+  "table-schema-section-item m-0 flex flex-wrap items-baseline gap-x-[0.55rem] gap-y-[0.1rem] text-[0.8125rem]";
 
 const text = (value: string): Text => ({ type: "text", value });
 
-const code = (value: string): Element => ({
+const code = (
+  value: string,
+  properties: Element["properties"] = {},
+): Element => ({
   type: "element",
   tagName: "code",
-  properties: {},
+  properties,
+  children: [text(value)],
+});
+
+const muted = (value: string): Element => ({
+  type: "element",
+  tagName: "span",
+  properties: { className: ["text-muted"] },
   children: [text(value)],
 });
 
@@ -60,123 +70,124 @@ const cell = ({
   children: [...children],
 });
 
-const columnBadges = (column: TableColumn): ReadonlyArray<Element> => [
-  ...(column.primaryKey ? [badge({ kind: "pk", label: "PK" })] : []),
-  ...(column.ref === undefined ? [] : [badge({ kind: "fk", label: "FK" })]),
-  ...(column.unique ? [badge({ kind: "unique", label: "Unique" })] : []),
-  ...(column.identity ? [badge({ kind: "identity", label: "Identity" })] : []),
+// SQL fragments render in uppercase SQL voice as code, while semantic
+// classifications (keys, identity, uniqueness) stay badges.
+const referentialActionFragments = (
+  column: TableColumn,
+): ReadonlyArray<Element> => [
+  ...(column.ref?.onDelete === undefined
+    ? []
+    : [code(`ON DELETE ${column.ref.onDelete.toUpperCase()}`)]),
+  ...(column.ref?.onUpdate === undefined
+    ? []
+    : [code(`ON UPDATE ${column.ref.onUpdate.toUpperCase()}`)]),
 ];
 
-const referentialActions = (column: TableColumn): string => {
-  const actions = [
-    ...(column.ref?.onDelete === undefined
+// The one Constraints cell answers "what rules apply to this column": key
+// badges first, then nullability, then the foreign key with its actions,
+// then the check expression, all beside the column they govern.
+const constraintsCell = (column: TableColumn): Element => {
+  const fkParts: ReadonlyArray<Element> =
+    column.ref === undefined
       ? []
-      : [`on delete ${column.ref.onDelete}`]),
-    ...(column.ref?.onUpdate === undefined
-      ? []
-      : [`on update ${column.ref.onUpdate}`]),
-  ];
-  return actions.length === 0 ? "" : actions.join(", ");
-};
-
-// Foreign-key targets and notes render adjacent to their column as secondary
-// lines, the placement psql's trailing constraint sections give up.
-const detailLines = (column: TableColumn): ReadonlyArray<Element> => [
-  ...(column.ref === undefined
-    ? []
-    : [
-        {
-          type: "element" as const,
-          tagName: "p",
-          properties: {
-            className: DETAIL_LINE_CLASSES.split(" "),
-            "data-schema-ref": "",
-          },
-          children: [
-            {
-              type: "element" as const,
-              tagName: "span",
-              properties: {
-                className: ["table-schema-ref-arrow", "text-muted"],
-                ariaHidden: "true",
-              },
-              children: [text("→")],
+      : [
+          {
+            type: "element",
+            tagName: "span",
+            properties: {
+              className: [
+                ...CONSTRAINT_LINE_CLASSES.split(" "),
+                "table-schema-ref",
+              ],
+              "data-schema-ref": "",
             },
-            code(column.ref.target),
-            ...(referentialActions(column) === ""
-              ? []
-              : [
+            children: [
+              badge({ kind: "fk", label: "FK" }),
+              // The arrow and its target wrap as one unit so a narrow
+              // Constraints cell never strands the arrow on its own line.
+              {
+                type: "element",
+                tagName: "span",
+                properties: {
+                  className: [
+                    "table-schema-ref-target",
+                    "inline-flex",
+                    "items-center",
+                    "gap-[0.35rem]",
+                    "whitespace-nowrap",
+                  ],
+                },
+                children: [
                   {
                     type: "element" as const,
                     tagName: "span",
-                    properties: { className: ["text-muted"] },
-                    children: [text(referentialActions(column))],
+                    properties: {
+                      className: ["table-schema-ref-arrow", "text-muted"],
+                      ariaHidden: "true",
+                    },
+                    children: [text("→")],
                   },
-                ]),
-          ],
-        },
-      ]),
-  ...(column.note === undefined
-    ? []
-    : [
-        {
-          type: "element" as const,
-          tagName: "p",
-          properties: {
-            className: [...DETAIL_LINE_CLASSES.split(" "), "text-muted"],
-            "data-schema-note": "",
+                  code(column.ref.target),
+                ],
+              },
+              ...referentialActionFragments(column),
+            ],
           },
-          children: [text(column.note)],
-        },
-      ]),
-];
-
-const columnRows = (column: TableColumn): ReadonlyArray<Element> => {
-  const details = detailLines(column);
-  const nameCell = cell({
-    tagName: "th",
-    className:
-      "table-schema-cell-name font-mono text-[0.8125rem] font-semibold",
-    properties: { scope: "row" },
+        ];
+  return cell({
+    tagName: "td",
+    className: "table-schema-cell-constraints text-[0.8125rem]",
     children: [
-      // A cell must stay display: table-cell for grid alignment, so the
-      // name/badge flex row lives on an inner span.
       {
         type: "element",
         tagName: "span",
-        properties: {
-          className: [
-            "table-schema-name-line",
-            "flex",
-            "flex-wrap",
-            "items-center",
-            "gap-[0.45rem]",
-          ],
-        },
-        children: [text(column.name), ...columnBadges(column)],
+        properties: { className: CONSTRAINT_LINE_CLASSES.split(" ") },
+        children: [
+          ...(column.primaryKey ? [badge({ kind: "pk", label: "PK" })] : []),
+          ...(column.identity
+            ? [badge({ kind: "identity", label: "Identity" })]
+            : []),
+          ...(column.unique
+            ? [badge({ kind: "unique", label: "Unique" })]
+            : []),
+          ...(column.notNull ? [muted("not null")] : []),
+          ...fkParts,
+          ...(column.check === undefined
+            ? []
+            : [
+                code(`CHECK (${column.check})`, {
+                  "data-schema-check": "",
+                }),
+              ]),
+        ],
       },
     ],
   });
+};
+
+const columnRows = (column: TableColumn): ReadonlyArray<Element> => {
   const row: Element = {
     type: "element",
     tagName: "tr",
     properties: {
       className: ["table-schema-column-row"],
       "data-schema-column": column.name,
-      ...(details.length === 0 ? {} : { "data-has-detail": "" }),
+      ...(column.note === undefined ? {} : { "data-has-detail": "" }),
     },
     children: [
-      nameCell,
+      cell({
+        tagName: "th",
+        className:
+          "table-schema-cell-name font-mono text-[0.8125rem] font-semibold",
+        properties: { scope: "row" },
+        children: [text(column.name)],
+      }),
       cell({
         tagName: "td",
         className: "table-schema-cell-type font-mono text-[0.8125rem]",
         children: [text(column.type)],
       }),
-      cell({
-        tagName: "td",
-        className: "table-schema-cell-nullable text-[0.8125rem] text-muted",
-        children: column.notNull ? [text("not null")] : [],
-      }),
+      constraintsCell(column),
       cell({
         tagName: "td",
         className: "table-schema-cell-default font-mono text-[0.8125rem]",
@@ -185,7 +196,7 @@ const columnRows = (column: TableColumn): ReadonlyArray<Element> => {
       }),
     ],
   };
-  if (details.length === 0) {
+  if (column.note === undefined) {
     return [row];
   }
   return [
@@ -197,56 +208,79 @@ const columnRows = (column: TableColumn): ReadonlyArray<Element> => {
       children: [
         cell({
           tagName: "td",
-          className: "table-schema-cell-detail",
+          className: "table-schema-cell-detail text-xs text-muted",
           properties: { colSpan: 4 },
-          children: details,
+          children: [
+            {
+              type: "element",
+              tagName: "p",
+              properties: {
+                className: ["table-schema-detail-line", "m-0"],
+                "data-schema-note": "",
+              },
+              children: [text(column.note)],
+            },
+          ],
         }),
       ],
     },
   ];
 };
 
-/** Renders the semantic columns grid in psql's column order. */
+/** Renders the columns grid inside its own figure-styled scroll container. */
 export const renderTableSchemaGrid = ({
   schema,
 }: {
   readonly schema: TableSchema;
 }): Element => ({
   type: "element",
-  tagName: "table",
-  properties: { className: GRID_CLASSES.split(" ") },
+  tagName: "div",
+  properties: {
+    // Emitting the document-wide scroll-container contract here keeps the
+    // global table transform from adding a second, chrome-bearing wrapper.
+    className: ["table-schema-scroll", "min-w-0", "overflow-x-auto"],
+    "data-table-scroll-container": "",
+  },
   children: [
     {
       type: "element",
-      tagName: "thead",
-      properties: {},
+      tagName: "table",
+      properties: { className: ["table-schema-grid", "w-full"] },
       children: [
         {
           type: "element",
-          tagName: "tr",
+          tagName: "thead",
           properties: {},
-          children: ["Column", "Type", "Nullable", "Default"].map((label) =>
-            cell({
-              tagName: "th",
-              className: "table-schema-head text-xs uppercase tracking-wide",
-              properties: { scope: "col" },
-              children: [text(label)],
-            }),
-          ),
+          children: [
+            {
+              type: "element",
+              tagName: "tr",
+              properties: {},
+              children: ["Column", "Type", "Constraints", "Default"].map(
+                (label) =>
+                  cell({
+                    tagName: "th",
+                    className: `table-schema-head table-schema-head-${label.toLowerCase()} text-[0.6875rem] uppercase tracking-wide`,
+                    properties: { scope: "col" },
+                    children: [text(label)],
+                  }),
+              ),
+            },
+          ],
+        },
+        {
+          type: "element",
+          tagName: "tbody",
+          properties: {},
+          children: schema.columns.flatMap((column) => columnRows(column)),
         },
       ],
-    },
-    {
-      type: "element",
-      tagName: "tbody",
-      properties: {},
-      children: schema.columns.flatMap((column) => columnRows(column)),
     },
   ],
 });
 
-// Index entries echo psql's definition lines: the column tuple, then UNIQUE,
-// the non-default method, the partial predicate, and the muted name.
+// One row per index: a leading kind label, the column list and predicate in
+// SQL voice, the muted index name, and the invariant note on its own line.
 const indexItem = (index: TableIndex): Element => ({
   type: "element",
   tagName: "li",
@@ -255,33 +289,28 @@ const indexItem = (index: TableIndex): Element => ({
     "data-schema-index": "",
   },
   children: [
-    code(
-      index.columns.length === 1
-        ? (index.columns[0] ?? "").replaceAll("`", "")
-        : `(${index.columns.join(", ")})`,
-    ),
-    ...(index.unique ? [badge({ kind: "unique", label: "Unique" })] : []),
-    ...(index.method === undefined
-      ? []
-      : [
-          {
-            type: "element" as const,
-            tagName: "span",
-            properties: { className: ["text-muted"] },
-            children: [text(index.method)],
+    index.unique
+      ? badge({ kind: "unique", label: "Unique" })
+      : {
+          type: "element",
+          tagName: "span",
+          properties: {
+            className: [
+              "table-schema-index-kind",
+              "font-sans",
+              "text-[0.625rem]",
+              "font-semibold",
+              "uppercase",
+              "tracking-wide",
+              "text-muted",
+            ],
           },
-        ]),
+          children: [text("Index")],
+        },
+    code(index.columns.map((column) => column.replaceAll("`", "")).join(", ")),
+    ...(index.method === undefined ? [] : [muted(index.method)]),
     ...(index.where === undefined ? [] : [code(`WHERE ${index.where}`)]),
-    ...(index.name === undefined
-      ? []
-      : [
-          {
-            type: "element" as const,
-            tagName: "span",
-            properties: { className: ["text-muted"] },
-            children: [text(index.name)],
-          },
-        ]),
+    ...(index.name === undefined ? [] : [muted(index.name)]),
     ...(index.note === undefined
       ? []
       : [
@@ -289,7 +318,12 @@ const indexItem = (index: TableIndex): Element => ({
             type: "element" as const,
             tagName: "span",
             properties: {
-              className: ["table-schema-item-note", "w-full", "text-muted"],
+              className: [
+                "table-schema-item-note",
+                "w-full",
+                "text-xs",
+                "text-muted",
+              ],
             },
             children: [text(index.note)],
           },
@@ -297,108 +331,53 @@ const indexItem = (index: TableIndex): Element => ({
   ],
 });
 
-const checkItem = ({
-  columnName,
-  check,
-}: {
-  readonly columnName: string;
-  readonly check: string;
-}): Element => ({
-  type: "element",
-  tagName: "li",
-  properties: {
-    className: SECTION_ITEM_CLASSES.split(" "),
-    "data-schema-check": "",
-  },
-  children: [
-    {
-      type: "element",
-      tagName: "span",
-      properties: { className: ["text-muted"] },
-      children: [text(`${columnName}:`)],
-    },
-    code(`CHECK (${check})`),
-  ],
-});
-
-const section = ({
-  label,
-  items,
-}: {
-  readonly label: string;
-  readonly items: ReadonlyArray<Element>;
-}): Element => ({
-  type: "element",
-  tagName: "section",
-  properties: { className: ["table-schema-section"] },
-  children: [
-    // A styled paragraph rather than a real heading keeps component chrome
-    // out of the document outline the section navigator is built from.
-    {
-      type: "element",
-      tagName: "p",
-      properties: { className: SECTION_LABEL_CLASSES.split(" ") },
-      children: [text(label)],
-    },
-    {
-      type: "element",
-      tagName: "ul",
-      properties: { className: ["table-schema-section-list", "m-0", "p-0"] },
-      children: [...items],
-    },
-  ],
-});
-
-/** Renders the labeled sections below the grid; absent when empty. */
+/** Renders the Indexes section below the grid; absent when no indexes exist. */
 export const renderTableSchemaSections = ({
   schema,
 }: {
   readonly schema: TableSchema;
 }): ReadonlyArray<Element> => {
-  const checks = schema.columns.filter((column) => column.check !== undefined);
-  const sections = [
-    ...(schema.indexes.length === 0
-      ? []
-      : [
-          section({
-            label: "Indexes",
-            items: schema.indexes.map((index) => indexItem(index)),
-          }),
-        ]),
-    ...(checks.length === 0
-      ? []
-      : [
-          section({
-            label: "Checks",
-            items: checks.map((column) =>
-              checkItem({
-                columnName: column.name,
-                check: column.check ?? "",
-              }),
-            ),
-          }),
-        ]),
-  ];
-  if (sections.length === 0) {
+  if (schema.indexes.length === 0) {
     return [];
   }
   return [
     {
       type: "element",
-      tagName: "div",
+      tagName: "section",
       properties: {
         className: [
-          "table-schema-sections",
-          "flex",
-          "flex-col",
-          "gap-3",
+          "table-schema-section",
           "border-t",
           "border-edge",
           "px-[0.9rem]",
-          "py-[0.6rem]",
+          "py-[0.5rem]",
         ],
       },
-      children: sections,
+      children: [
+        // A styled paragraph rather than a real heading keeps component
+        // chrome out of the document outline the section navigator uses.
+        {
+          type: "element",
+          tagName: "p",
+          properties: { className: SECTION_LABEL_CLASSES.split(" ") },
+          children: [text("Indexes")],
+        },
+        {
+          type: "element",
+          tagName: "ul",
+          properties: {
+            className: [
+              "table-schema-section-list",
+              "m-0",
+              "flex",
+              "flex-col",
+              "gap-[0.3rem]",
+              "p-0",
+            ],
+          },
+          children: schema.indexes.map((index) => indexItem(index)),
+        },
+      ],
     },
   ];
 };

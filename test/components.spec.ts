@@ -1256,11 +1256,11 @@ const RAW_TABLE_SCHEMA = [
   "cache_key    text        [not null, note: 'The catalog cache key this job refreshes.']",
   "requested_by bigint      [ref: > catalog.api_instances.id, delete: set null]",
   "attempts     integer     [not null, default: 0, check: 'attempts <= 5']",
-  "status       text        [not null, default: 'queued']",
+  "status       text        [not null, default: 'queued', note: 'One of queued, running, done, or failed.']",
   "enqueued_at  timestamptz [not null, default: `now()`]",
   "",
   "indexes {",
-  "  cache_key [unique, where: 'status <> done', note: 'One live job per cache key.']",
+  "  cache_key [unique, name: 'refresh_jobs_live_key_idx', where: 'status <> \\'done\\'', note: 'Ensures one unfinished job per cache key.']",
   "  (status, enqueued_at) [name: 'refresh_jobs_scan_idx']",
   "}",
   "",
@@ -1289,11 +1289,11 @@ test("should review a database table schema end to end", async ({
     );
   });
 
-  await test.step("the grid follows psql column order with key badges", async () => {
+  await test.step("the grid answers columns, types, and rules in one row each", async () => {
     await expect(schema.locator("thead th")).toHaveText([
       "Column",
       "Type",
-      "Nullable",
+      "Constraints",
       "Default",
     ]);
     await expect(schema.locator("[data-schema-column]")).toHaveCount(6);
@@ -1308,33 +1308,28 @@ test("should review a database table schema end to end", async ({
     );
   });
 
-  await test.step("the foreign key renders adjacent to its column", async () => {
-    const refLine = schema.locator("[data-schema-ref]");
+  await test.step("the foreign key and check live inside their columns' rows", async () => {
+    const fkRow = schema.locator('[data-schema-column="requested_by"]');
+    const refLine = fkRow.locator("[data-schema-ref]");
     await expect(refLine).toContainText("catalog.api_instances.id");
-    await expect(refLine).toContainText("on delete set null");
-    const adjacent = await schema.evaluate((figure) => {
-      const row = figure.querySelector('[data-schema-column="requested_by"]');
-      return (
-        row instanceof HTMLElement &&
-        row.nextElementSibling instanceof HTMLElement &&
-        row.nextElementSibling.querySelector("[data-schema-ref]") !== null
-      );
-    });
-    expect(adjacent).toBe(true);
+    await expect(refLine).toContainText("ON DELETE SET NULL");
+    await expect(
+      schema.locator('[data-schema-column="attempts"] [data-schema-check]'),
+    ).toHaveText("CHECK (attempts <= 5)");
   });
 
-  await test.step("indexes and checks summarize the remaining constraints", async () => {
+  await test.step("the indexes section names each index and its invariant", async () => {
     const indexes = schema.locator("[data-schema-index]");
     await expect(indexes).toHaveCount(2);
     await expect(indexes.first()).toContainText("cache_key");
     await expect(indexes.first()).toContainText("Unique");
-    await expect(indexes.first()).toContainText("WHERE status <> done");
-    await expect(indexes.first()).toContainText("One live job per cache key.");
-    await expect(indexes.last()).toContainText("(status, enqueued_at)");
+    await expect(indexes.first()).toContainText("WHERE status <> 'done'");
+    await expect(indexes.first()).toContainText("refresh_jobs_live_key_idx");
+    await expect(indexes.first()).toContainText(
+      "Ensures one unfinished job per cache key.",
+    );
+    await expect(indexes.last()).toContainText("status, enqueued_at");
     await expect(indexes.last()).toContainText("refresh_jobs_scan_idx");
-    const check = schema.locator("[data-schema-check]");
-    await expect(check).toContainText("attempts:");
-    await expect(check).toContainText("CHECK (attempts <= 5)");
   });
 
   await test.step("the actions menu copies the table name and raw source", async () => {

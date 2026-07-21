@@ -1,21 +1,25 @@
-/* DatabaseTableSchema palette-dependent chrome: header and scroll-container
-   integration, prose-table overrides, badge tints, and action-menu styles,
-   colocated with the component that owns these selector contracts. */
+/* DatabaseTableSchema palette-dependent chrome: header band, dense grid
+   overrides of the prose table rules, plain in-figure code, badge tints, and
+   action-menu styles, colocated with the component that owns them. */
 
 @layer components {
   article .table-schema-header {
     background: var(--diff-header-bg);
     border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0;
   }
-  /* The document-wide table scroll container keeps wide grids scrolling
-     inside the figure; its standalone chrome is the figure's job here. */
-  article [data-database-table-schema] [data-table-scroll-container] {
-    margin-bottom: 0;
+  /* SQL fragments read as code, not chips: the prose inline-code chrome is
+     figure chrome here, so it comes off inside the component. */
+  article [data-database-table-schema] code {
+    background: transparent;
     border: 0;
     border-radius: 0;
+    padding: 0;
+    /* SQL fragments wrap as whole units between flex items, never inside
+       an expression; the grid's scroll container absorbs the overflow. */
+    white-space: nowrap;
   }
   /* Row-scope name cells opt back out of the prose header treatment; the
-     column-head row keeps a muted label look instead. */
+     column-head row keeps a quiet muted-label look instead. */
   article .table-schema-grid th {
     background: transparent;
   }
@@ -23,19 +27,34 @@
     color: var(--color-muted);
     font-weight: 600;
   }
+  /* Denser rows than prose tables: answering "what columns exist and what
+     rules apply" should fit many columns on one screen. */
+  article .table-schema-grid th,
+  article .table-schema-grid td {
+    padding: 0.35rem 0.9rem;
+  }
+  article .table-schema-head-column {
+    width: 30%;
+  }
+  article .table-schema-head-type {
+    width: 18%;
+  }
+  article .table-schema-head-constraints {
+    width: 34%;
+  }
+  article .table-schema-head-default {
+    width: 18%;
+  }
   article .table-schema-grid .table-schema-column-row[data-has-detail] th,
   article .table-schema-grid .table-schema-column-row[data-has-detail] td {
     border-bottom: 0;
-    padding-bottom: 0.15rem;
+    padding-bottom: 0;
   }
   article .table-schema-grid .table-schema-detail-row td {
-    padding-top: 0;
+    padding-top: 0.1rem;
   }
   article .table-schema-section-list {
     list-style: none;
-  }
-  article .table-schema-section-item {
-    padding: 0.15rem 0;
   }
   article .table-schema-badge {
     border-color: var(--color-edge);

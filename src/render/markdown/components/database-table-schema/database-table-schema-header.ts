@@ -10,7 +10,9 @@ import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import { renderCopyFeedback } from "../shared/copy-feedback/copy-feedback.js";
 
 const HEADER_CLASSES =
-  "table-schema-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem]";
+  "table-schema-header min-w-0 border-b border-edge px-[0.55rem] py-[0.3rem]";
+const HEADER_ROW_CLASSES =
+  "table-schema-header-row flex min-w-0 items-center justify-between gap-3";
 const IDENTITY_CLASSES =
   "table-schema-identity flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted";
 const BUTTON_CLASSES =
@@ -136,38 +138,67 @@ const actionsMenu = (): Element => ({
   ],
 });
 
-/** Renders the complete DatabaseTableSchema caption and its controls. */
+/** Renders the caption: identity and controls, plus the table note beneath
+ * them in the same band so the header stays one bordered region. */
 export const renderTableSchemaHeader = ({
   tableName,
   schemaName,
+  note,
 }: {
   readonly tableName: string;
   readonly schemaName?: string;
+  readonly note?: string;
 }): Element => ({
   type: "element",
   tagName: "figcaption",
   properties: { className: HEADER_CLASSES.split(" ") },
   children: [
-    tableIdentity({
-      tableName,
-      ...(schemaName === undefined ? {} : { schemaName }),
-    }),
     {
       type: "element",
       tagName: "span",
-      properties: {
-        className: [
-          "table-schema-controls",
-          "flex",
-          "shrink-0",
-          "items-center",
-          "gap-1",
-        ],
-      },
+      properties: { className: HEADER_ROW_CLASSES.split(" ") },
       children: [
-        renderCopyFeedback({ dataAttribute: "data-schema-copy-message" }),
-        actionsMenu(),
+        tableIdentity({
+          tableName,
+          ...(schemaName === undefined ? {} : { schemaName }),
+        }),
+        {
+          type: "element",
+          tagName: "span",
+          properties: {
+            className: [
+              "table-schema-controls",
+              "flex",
+              "shrink-0",
+              "items-center",
+              "gap-1",
+            ],
+          },
+          children: [
+            renderCopyFeedback({ dataAttribute: "data-schema-copy-message" }),
+            actionsMenu(),
+          ],
+        },
       ],
     },
+    ...(note === undefined
+      ? []
+      : [
+          {
+            type: "element" as const,
+            tagName: "span",
+            properties: {
+              className: [
+                "table-schema-note",
+                "block",
+                "pb-[0.15rem]",
+                "text-xs",
+                "text-muted",
+              ],
+              "data-schema-table-note": "",
+            },
+            children: [text(note)],
+          },
+        ]),
   ],
 });
