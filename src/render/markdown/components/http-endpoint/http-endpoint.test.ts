@@ -623,6 +623,13 @@ describe("renderHttpEndpoint presentation", () => {
     expect(rendered.indexOf('"value":"cacheKeys"')).toBeLessThan(
       rendered.indexOf('"tagName":"pre"'),
     );
+    // The fence is labeled as the body's example, between fields and code.
+    expect(rendered.indexOf('"value":"Example"')).toBeGreaterThan(
+      rendered.indexOf('"value":"cacheKeys"'),
+    );
+    expect(rendered.indexOf('"value":"Example"')).toBeLessThan(
+      rendered.indexOf('"tagName":"pre"'),
+    );
     expect(rendered).not.toContain('"value":"path"');
   });
 

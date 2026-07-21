@@ -213,6 +213,14 @@ const renderRequest = ({
       ...(request === undefined || request.children.length === 0
         ? []
         : [
+            // The fence is explicitly an example of the body, not the body's
+            // definition; the label keeps it from floating after the fields.
+            {
+              type: "element",
+              tagName: "div",
+              properties: { className: ["mb-2"] },
+              children: [renderSectionLabel("Example")],
+            } satisfies Element,
             {
               type: "element",
               tagName: "div",

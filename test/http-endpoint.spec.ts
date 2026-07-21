@@ -79,7 +79,10 @@ test("should review HTTP endpoint contracts", async ({
     const bodySection = endpoint.locator('[data-http-section="request-body"]');
     await expect(bodySection).toBeVisible();
     await expect(bodySection).toContainText("application/json");
-    await expect(bodySection.locator(".card-section-label")).toBeHidden();
+    await expect(
+      bodySection.locator(".card-section-label").first(),
+    ).toBeHidden();
+    await expect(bodySection.getByText("Example")).toBeVisible();
     await expect(bodySection.locator("[data-copy-code]")).toHaveAccessibleName(
       "Copy code",
     );
