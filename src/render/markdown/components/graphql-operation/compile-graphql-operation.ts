@@ -287,7 +287,7 @@ export const compileGraphqlOperationComponent = ({
     ) {
       continue;
     }
-    const identity = `${authoredSide} ${authoredName}`;
+    const identity = `${authoredSide}\u0000${authoredName}`;
     if (fieldIdentities.has(identity)) {
       diagnostics.add({
         message: `Duplicate Field "${authoredName}" in "${authoredSide}"`,
