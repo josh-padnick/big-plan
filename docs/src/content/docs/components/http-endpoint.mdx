@@ -96,7 +96,7 @@ Put constraints - ranges, item limits, accepted values - in the body right besid
 ### Request
 
 At most one `Request` documents the request body: an optional `contentType` rendered as a chip, and exactly one fenced code block as the example.
-The Request body section states what the body is in one place: the media type up front, the `in="body"` Params as the payload's fields, then the example JSON demonstrating it; body Params without a `Request` still render the section.
+The Request body section states what the body is in one place: the media type up front, the `in="body"` Params as the payload's fields, then the fenced example demonstrating it; body Params without a `Request` still render the section.
 
 ### Response
 
@@ -114,7 +114,7 @@ Component-specific violations report positional diagnostics, including:
 
 ## Tabbed navigation
 
-With JavaScript enabled, a card with two or more sections folds them behind a tab bar - Path, Query, Headers, Body, Responses - with entry counts and an accent underline on the active tab.
+With JavaScript enabled, a card with two or more sections folds them behind a tab bar - Path, Query, Headers, Body, Responses - with entry counts where applicable and an accent underline on the active tab.
 The stacked sections remain the server-rendered document, so readers without JavaScript, printouts, and text extraction always see the complete contract.
 
 ## Copy behavior

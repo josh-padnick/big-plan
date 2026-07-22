@@ -1,8 +1,8 @@
-// Owns HttpEndpoint's experimental tabbed section navigation. The server
-// renders every section stacked - that stacked card IS the no-JavaScript
-// document - and this enhancement folds a card's sections behind a tab bar
-// so a reader can move between the contract's facets without scrolling
-// through all of them.
+// Owns HttpEndpoint's progressively enhanced tabbed section navigation. The
+// server renders every section stacked - that stacked card IS the no-JavaScript
+// document - and this enhancement folds a card's sections behind a tab bar so a
+// reader can move between the contract's facets without scrolling through all
+// of them.
 
 const TAB_DEFINITIONS: ReadonlyArray<readonly [string, string]> = [
   ["path-params", "Path"],

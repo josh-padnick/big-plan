@@ -91,7 +91,7 @@ Duplicate `in`-plus-`name` identities are rejected.
 
 ### Error
 
-Each `Error` documents one failure: a required `code` from the canonical `google.rpc.Code` error names (`NOT_FOUND`, `PERMISSION_DENIED`, `RESOURCE_EXHAUSTED`, and the rest) and a markdown body explaining when it happens.
+Each `Error` documents one failure: a required `code` from the canonical `google.rpc.Code` error names except `OK` (`NOT_FOUND`, `PERMISSION_DENIED`, `RESOURCE_EXHAUSTED`, and the rest) and a markdown body explaining when it happens.
 Duplicate codes are rejected.
 
 ### Proto
