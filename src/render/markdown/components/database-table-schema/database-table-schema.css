@@ -26,7 +26,7 @@
   article
     .component-dialog
     > [data-database-table-schema]
-    > .table-schema-scroll {
+    > .table-schema-body {
     min-height: 0;
     flex: 1;
     overflow-y: auto;

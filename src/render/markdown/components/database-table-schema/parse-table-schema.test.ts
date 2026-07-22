@@ -324,6 +324,35 @@ describe("parseTableSchema indexes", () => {
     expect(schema.indexes[0]?.where).toBe("status = 'live'");
   });
 
+  it.each([
+    {
+      source: "status text [check: '']\n",
+      line: 1,
+      message: "The check: setting must not be empty",
+    },
+    {
+      source: "status text [check: '   ']\n",
+      line: 1,
+      message: "The check: setting must not be empty",
+    },
+    {
+      source: withColumns("indexes {\n  status [where: '']\n}\n"),
+      line: 4,
+      message: "The where: setting must not be empty",
+    },
+    {
+      source: withColumns("indexes {\n  status [where: '   ']\n}\n"),
+      line: 4,
+      message: "The where: setting must not be empty",
+    },
+  ])(
+    "should diagnose an empty expression at its line",
+    ({ source, line, message }) => {
+      const { diagnostics } = parseTableSchema({ source });
+      expect(diagnostics).toEqual([{ line, message }]);
+    },
+  );
+
   it("should diagnose an empty index name at its line", () => {
     const { diagnostics } = parseTableSchema({
       source: withColumns("indexes {\n  status [name: '']\n}\n"),

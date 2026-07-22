@@ -42,8 +42,15 @@ const renderTableSchemaFigure = ({
         : { schemaName: model.schemaName }),
       ...(model.schema.note === undefined ? {} : { note: model.schema.note }),
     }),
-    renderTableSchemaGrid({ schema: model.schema }),
-    ...renderTableSchemaSections({ schema: model.schema }),
+    {
+      type: "element",
+      tagName: "div",
+      properties: { className: ["table-schema-body", "min-h-0"] },
+      children: [
+        renderTableSchemaGrid({ schema: model.schema }),
+        ...renderTableSchemaSections({ schema: model.schema }),
+      ],
+    },
     {
       type: "element",
       tagName: "textarea",

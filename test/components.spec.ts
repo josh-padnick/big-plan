@@ -1380,6 +1380,15 @@ test("should review a database table schema end to end", async ({
   });
 
   await test.step("full screen enlarges the schema and restores it on dismiss", async () => {
+    await schema.locator(".table-schema-index-list").evaluate((list) => {
+      const entry = list.querySelector("[data-schema-index]");
+      if (entry === null) {
+        throw new Error("Missing schema index entry");
+      }
+      for (let index = 0; index < 20; index += 1) {
+        list.append(entry.cloneNode(true));
+      }
+    });
     const expand = schema.getByRole("button", {
       name: "View table schema full screen",
     });
@@ -1394,10 +1403,47 @@ test("should review a database table schema end to end", async ({
     await expect(
       dialog.getByRole("button", { name: "Exit full screen" }),
     ).toBeVisible();
+    const body = dialog.locator(".table-schema-body");
+    const header = dialog.locator(".table-schema-header");
+    const lastIndex = dialog.locator("[data-schema-index]").last();
+    const beforeScroll = await header.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
+    const bodyMetrics = await body.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      overflowY: getComputedStyle(element).overflowY,
+      scrollHeight: element.scrollHeight,
+    }));
+    expect(bodyMetrics.overflowY).toBe("auto");
+    expect(bodyMetrics.scrollHeight).toBeGreaterThan(bodyMetrics.clientHeight);
+    await lastIndex.scrollIntoViewIfNeeded();
+    await expect(lastIndex).toBeInViewport();
+    const afterScroll = await header.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
+    expect(await body.evaluate((element) => element.scrollTop)).toBeGreaterThan(
+      0,
+    );
+    expect(afterScroll).toBe(beforeScroll);
+    expect(
+      await dialog
+        .locator("[data-table-scroll-container]")
+        .evaluate((element) => getComputedStyle(element).overflowX),
+    ).toBe("auto");
+    expect(
+      await lastIndex
+        .locator(".table-schema-index-definition")
+        .evaluate((element) => getComputedStyle(element).overflowX),
+    ).toBe("auto");
     await page.keyboard.press("Escape");
     await expect(page.locator("dialog.component-dialog")).toHaveCount(0);
     await expect(schema).toBeVisible();
     await expect(schema).not.toHaveAttribute("data-schema-expanded", "");
+    await schema.locator("[data-schema-index]").evaluateAll((indexes) => {
+      for (const index of indexes.slice(2)) {
+        index.remove();
+      }
+    });
   });
 
   await test.step("a narrow viewport scrolls the grid inside the figure", async () => {

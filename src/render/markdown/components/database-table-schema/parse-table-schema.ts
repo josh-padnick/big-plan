@@ -267,6 +267,29 @@ const requireQuoted = ({
   return inner;
 };
 
+// Requires expression-valued settings to carry meaningful content.
+const requireNonEmptyQuoted = ({
+  key,
+  value,
+  line,
+  diagnostics,
+}: {
+  readonly key: string;
+  readonly value: string | undefined;
+  readonly line: number;
+  readonly diagnostics: Array<TableSchemaParseDiagnostic>;
+}): string | undefined => {
+  const inner = requireQuoted({ key, value, line, diagnostics });
+  if (inner !== undefined && inner.trim() === "") {
+    diagnostics.push({
+      line,
+      message: `The ${key}: setting must not be empty`,
+    });
+    return undefined;
+  }
+  return inner;
+};
+
 type MutableColumn = {
   name: string;
   type: string;
@@ -356,7 +379,12 @@ const applyColumnSetting = ({
       return;
     }
     case "check": {
-      const inner = requireQuoted({ key: "check", value, line, diagnostics });
+      const inner = requireNonEmptyQuoted({
+        key: "check",
+        value,
+        line,
+        diagnostics,
+      });
       if (inner !== undefined) {
         column.check = inner;
       }
@@ -632,7 +660,7 @@ const parseIndexLine = ({
         index.method = method;
       }
     } else if (key === "where") {
-      const inner = requireQuoted({
+      const inner = requireNonEmptyQuoted({
         key: "where",
         value: settingValue,
         line,
