@@ -12,6 +12,11 @@ export type IndexParticipation = {
 const escapeRegExp = (value: string): string =>
   value.replace(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`);
 
+// Quoted SQL literals are opaque to reference scanning: a predicate like
+// status = 'active' names no column called active.
+const withoutQuotedLiterals = (value: string): string =>
+  value.replace(/'[^']*'|"[^"]*"/gu, " ");
+
 // A column participates as a key when it is a plain entry or appears inside
 // an expression entry; predicate participation covers partial-index WHERE
 // clauses that mention the column without indexing it. Key participation
@@ -23,8 +28,10 @@ export const indexParticipation = ({
   readonly column: TableColumn;
   readonly indexes: ReadonlyArray<TableIndex>;
 }): ReadonlyArray<IndexParticipation> => {
+  // Lookarounds rather than \b: $ is a legal identifier character here, so a
+  // name like amount$ still ends at a real boundary.
   const namePattern = new RegExp(
-    String.raw`\b${escapeRegExp(column.name)}\b`,
+    String.raw`(?<![\w$])${escapeRegExp(column.name)}(?![\w$])`,
     "u",
   );
   const found: Array<IndexParticipation> = [];
@@ -32,11 +39,15 @@ export const indexParticipation = ({
     const position = offset + 1;
     const isKey = index.columns.some(
       (entry) =>
-        entry.replaceAll("`", "") === column.name || namePattern.test(entry),
+        entry.replaceAll("`", "") === column.name ||
+        namePattern.test(withoutQuotedLiterals(entry)),
     );
     if (isKey) {
       found.push({ position, kind: "key" });
-    } else if (index.where !== undefined && namePattern.test(index.where)) {
+    } else if (
+      index.where !== undefined &&
+      namePattern.test(withoutQuotedLiterals(index.where))
+    ) {
       found.push({ position, kind: "predicate" });
     }
   }

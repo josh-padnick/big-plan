@@ -81,6 +81,41 @@ describe("indexParticipation", () => {
     ).toEqual([{ position: 1, kind: "predicate" }]);
   });
 
+  it("should ignore quoted literals when scanning a predicate", () => {
+    expect(
+      indexParticipation({
+        column: column("active"),
+        indexes: [
+          index({ columns: ["cache_key"], where: "status = 'active'" }),
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it("should ignore quoted literals inside an expression entry", () => {
+    expect(
+      indexParticipation({
+        column: column("active"),
+        indexes: [index({ columns: ["`coalesce(status, 'active')`"] })],
+      }),
+    ).toEqual([]);
+  });
+
+  it("should treat a dollar sign as part of an identifier when matching", () => {
+    expect(
+      indexParticipation({
+        column: column("usd"),
+        indexes: [index({ columns: ["cache_key"], where: "total$usd > 0" })],
+      }),
+    ).toEqual([]);
+    expect(
+      indexParticipation({
+        column: column("amount$"),
+        indexes: [index({ columns: ["cache_key"], where: "amount$ > 0" })],
+      }),
+    ).toEqual([{ position: 1, kind: "predicate" }]);
+  });
+
   it("should report nothing for an unreferenced column", () => {
     expect(
       indexParticipation({
