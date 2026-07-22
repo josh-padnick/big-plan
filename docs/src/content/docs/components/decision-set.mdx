@@ -1,0 +1,111 @@
+---
+title: DecisionSet
+description: A component that groups question-led decisions with lifecycle status, competing options, signed tradeoffs, recommendations, and recorded outcomes.
+---
+
+import ThemeImage from "../../../components/ThemeImage.astro";
+import decisionSetLight from "../../../assets/components/decision-set-light.png";
+import decisionSetDark from "../../../assets/components/decision-set-dark.png";
+
+`DecisionSet` presents the choices a plan asks reviewers to make as a structured review surface: each decision states the question and context, keeps its options together, and exposes the recommendation, tradeoffs, and outcome without making the reader reconstruct them from prose.
+
+## How it looks
+
+<ThemeImage
+  light={decisionSetLight}
+  dark={decisionSetDark}
+  alt="An open decision card comparing PostgreSQL and SQLite, with a Recommended badge and green pro and red con tradeoffs"
+/>
+
+## When to use it
+
+Use `DecisionSet` when a plan contains real alternatives whose tradeoffs need reviewer agreement before implementation.
+Phrase every decision as a question, and keep the set pruned: around five options is the practical ceiling for one decision.
+Treat "do nothing" as an ordinary option whenever the status quo is a legitimate choice.
+When a decision is decided, mark the chosen option but keep the losing options visible so the outcome retains its alternatives and context.
+
+### When not to use it
+
+- Implementation steps with no competing choice - use prose or a task list
+- Uniform alternatives that need row-by-row scoring - a comparison table is easier to scan
+- Historical decisions with no bearing on the proposed plan - keep those in the owning decision record
+
+## Use cases
+
+- Ask for agreement on an open architecture choice while making the agent's recommendation and accepted downside explicit
+- Record a decided choice without erasing the alternatives that reviewers considered
+- Preserve a deferred choice and its current context so later work can resume from a clear boundary
+
+## Usage
+
+````mdx
+<DecisionSet title="Review storage decisions">
+
+<Decision question="Which persistence layer should back review comments?" status="open">
+
+Comments need durable identities and ordered replies without blocking a later multi-reviewer workflow.
+
+<Option title="PostgreSQL" recommended summary="Use the relational store the team already operates.">
+
+<Pro>
+Transactions keep threads and their selection anchors consistent.
+</Pro>
+
+<Con>
+Local development requires a database process.
+</Con>
+
+The repository layer keeps SQL concerns out of the renderer.
+
+</Option>
+
+<Option title="SQLite" summary="Keep review state in one embedded database.">
+
+<Pro>
+The zero-service setup matches the local-first installation story.
+</Pro>
+
+<Con>
+The single-writer model adds a migration point before shared review scales.
+</Con>
+
+</Option>
+
+</Decision>
+
+</DecisionSet>
+````
+
+## Authoring
+
+### DecisionSet
+
+An optional `title` labels the group.
+Introductory markdown before the first `Decision` explains what the set covers, and the header always summarizes the total decisions and how many remain open.
+
+### Decision
+
+Nest one or more `Decision` elements directly inside the set.
+Each decision needs at least two options.
+
+| Attribute  | Type                                | Required | Behavior                                                    |
+| ---------- | ----------------------------------- | -------- | ----------------------------------------------------------- |
+| `question` | string (non-empty)                  | Yes      | Renders the question as the decision heading.               |
+| `status`   | enum: `open` `decided` `deferred`  | No       | Drives the status pill; defaults to `open`.                 |
+
+Markdown before the first `Option` supplies the context and forces that make the choice meaningful.
+
+### Option
+
+| Attribute     | Type               | Required | Behavior                                                                 |
+| ------------- | ------------------ | -------- | ------------------------------------------------------------------------ |
+| `title`       | string (non-empty) | Yes      | Names the option; titles must be unique within the decision.             |
+| `summary`     | string             | No       | Adds the always-visible one-line description under the title.            |
+| `recommended` | bare boolean       | No       | Marks at most one option per decision as Recommended.                    |
+| `chosen`      | bare boolean       | No       | Marks the single outcome of a `decided` decision.                        |
+
+Free-form markdown in an option becomes long-form detail behind a native disclosure.
+Nest `Pro` and `Con` directly in the option for always-visible signed tradeoffs; neither accepts attributes.
+A decided decision requires exactly one chosen option, and chosen options are invalid in open or deferred decisions.
+
+`Decision`, `Option`, `Pro`, and `Con` outside their declaring parent stay unknown components.

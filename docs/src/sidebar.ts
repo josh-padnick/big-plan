@@ -37,6 +37,7 @@ export const SIDEBAR: readonly SidebarGroup[] = [
         label: "DatabaseTableSchema",
         slug: "components/database-table-schema",
       },
+      { label: "DecisionSet", slug: "components/decision-set" },
       { label: "FileTree", slug: "components/file-tree" },
       { label: "FileTreeDiff", slug: "components/file-tree-diff" },
       { label: "GraphqlOperation", slug: "components/graphql-operation" },

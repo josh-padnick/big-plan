@@ -165,6 +165,41 @@ CREATE POLICY refresh_jobs_service_all ON catalog.refresh_jobs
 </DatabaseTableSchema>
 `;
 
+const DECISION_SET_FIXTURE = `<DecisionSet title="Review storage decisions">
+
+<Decision question="Which persistence layer should back review comments?" status="open">
+
+Comments need durable identities and ordered replies without blocking a later multi-reviewer workflow.
+
+<Option title="PostgreSQL" recommended summary="Use the relational store the team already operates.">
+
+<Pro>
+Transactions keep threads and their selection anchors consistent.
+</Pro>
+
+<Con>
+Local development requires a database process.
+</Con>
+
+</Option>
+
+<Option title="SQLite" summary="Keep review state in one embedded database.">
+
+<Pro>
+The zero-service setup matches the local-first installation story.
+</Pro>
+
+<Con>
+The single-writer model adds a migration point before shared review scales.
+</Con>
+
+</Option>
+
+</Decision>
+
+</DecisionSet>
+`;
+
 /** Renders an MDX fixture through the CLI and returns the output HTML path. */
 const renderFixture = ({ dir, name, mdx }) => {
   const input = join(dir, `${name}.mdx`);
@@ -240,6 +275,11 @@ const shootFileTreeDiff = async (page, path) => {
   await page.locator("figure[data-file-tree-diff]").screenshot({ path });
 };
 
+/** Screenshots the DecisionSet figure element. */
+const shootDecisionSet = async (page, path) => {
+  await page.locator("figure[data-decision-set]").screenshot({ path });
+};
+
 /** Switches the tree to the side-by-side view. */
 const openSideBySide = async (page) => {
   await page.click('[data-tree-set-view="before-after"]');
@@ -274,6 +314,12 @@ const SHOTS = [
     mdx: ANNOTATION_FIXTURE,
     base: "annotation-card",
     shoot: shootFigure,
+  },
+  {
+    name: "decision-set",
+    mdx: DECISION_SET_FIXTURE,
+    base: "decision-set",
+    shoot: shootDecisionSet,
   },
   {
     name: "snippet",

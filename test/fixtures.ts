@@ -20,6 +20,7 @@ type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
   readonly componentsViewerUrl: string;
   readonly apiEndpointsViewerUrl: string;
+  readonly decisionSetViewerUrl: string;
   readonly sampleViewerUrl: string;
   readonly tableSchemaViewerUrl: string;
 };
@@ -123,6 +124,21 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         join(repoRoot, "bin", "big-plan.mjs"),
         "render",
         inputPath,
+        outputPath,
+      ]);
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  decisionSetViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-decision-set-"));
+      const outputPath = join(outputDir, "decision-set.html");
+      await execFileAsync(process.execPath, [
+        join(repoRoot, "bin", "big-plan.mjs"),
+        "render",
+        join(repoRoot, "examples", "decision-set.mdx"),
         outputPath,
       ]);
       await use(pathToFileURL(outputPath).href);

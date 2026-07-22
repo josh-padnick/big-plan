@@ -27,6 +27,46 @@ It already has regional concurrency controls and the required service account.
 
 </Callout>
 
+## Review decision
+
+The queue boundary is the remaining architectural choice in this excerpt, so its options stay grouped with the tradeoffs the reviewer must judge.
+
+<DecisionSet title="Queue architecture">
+
+<Decision question="Where should refresh-job deduplication live?" status="open">
+
+The enqueue path must collapse repeated refreshes for the same cache key without coupling request handlers to worker internals.
+
+<Option title="Queue adapter" recommended summary="Make deduplication part of the catalog queue's enqueue contract.">
+
+<Pro>
+Every producer gets the same idempotency guarantee.
+</Pro>
+
+<Con>
+The adapter must expose enough telemetry to distinguish a new job from a duplicate.
+</Con>
+
+Keep the deduplication key scoped by region so a refresh in one deployment cannot suppress the equivalent job in another.
+
+</Option>
+
+<Option title="Request handler" summary="Check for an in-flight job before each route publishes.">
+
+<Pro>
+The queue abstraction stays transport-only.
+</Pro>
+
+<Con>
+Every producer must reproduce the same race-prone check-and-publish sequence.
+</Con>
+
+</Option>
+
+</Decision>
+
+</DecisionSet>
+
 ## Planned file changes
 
 The work lands in the catalog module and one renamed worker configuration file.
