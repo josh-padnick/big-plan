@@ -39,7 +39,8 @@
     border-radius: 0;
     padding: 0;
     /* SQL fragments wrap as whole units between constraint runs, never
-       inside an expression; the grid's scroll container absorbs overflow. */
+       inside an expression; the grid's scroll container absorbs overflow in
+       the grid, and each Indexes-band definition line scrolls on its own. */
     white-space: nowrap;
   }
   /* Row-scope name cells opt back out of the prose header treatment; the

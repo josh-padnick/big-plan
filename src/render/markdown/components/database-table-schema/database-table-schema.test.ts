@@ -331,6 +331,17 @@ describe("renderDatabaseTableSchema rendering", () => {
     ).toHaveLength(0);
   });
 
+  it("should give each index definition its own overflow container", () => {
+    const { element } = render();
+    const definition = queryAll(element, (candidate) =>
+      hasClass(candidate, "table-schema-index-definition"),
+    )[0];
+    // The Indexes band sits outside the grid's scroll container, so a long
+    // no-wrap definition must scroll in place instead of widening the page.
+    expect(definition).toBeDefined();
+    expect(hasClass(definition ?? element, "overflow-x-auto")).toBe(true);
+  });
+
   it("should omit the sections wrapper when no indexes or checks exist", () => {
     const { element } = render({
       children: [fence({ source: "id bigint [pk]\n" })],

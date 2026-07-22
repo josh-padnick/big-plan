@@ -403,9 +403,12 @@ const indexEntry = (index: TableIndex, offset: number): Element => ({
           type: "element",
           tagName: "span",
           properties: {
+            // The band sits outside the grid's scroll container, so each
+            // definition line owns its overflow instead of widening the page.
             className: [
               "table-schema-index-definition",
               "block",
+              "overflow-x-auto",
               "text-xs",
               "text-muted",
             ],
