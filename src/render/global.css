@@ -153,6 +153,9 @@ Light and dark follow the reader's OS unless the theme control overrides it.
    wraps. */
 nav[aria-label="Contents"] .toc-word {
   display: inline-block;
+  /* Top-align the word boxes: the block ghost would otherwise move each
+     span's baseline and inflate the line boxes. */
+  vertical-align: top;
 }
 nav[aria-label="Contents"] .toc-word::after {
   content: attr(data-word);
