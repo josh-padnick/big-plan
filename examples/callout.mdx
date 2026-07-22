@@ -1,0 +1,41 @@
+# Rollout Guardrails Plan
+
+This plan sets the guardrails for the cache rollout and exists to demonstrate `Callout`'s major usage modes: the four types and the titled and untitled forms.
+
+## The four types
+
+Each type carries its own icon and accent so a reviewer can triage attention before reading.
+
+<Callout type="note">
+
+The rollout advances one region at a time; each cohort holds for a full peak-traffic window before the next begins.
+
+</Callout>
+
+<Callout type="tip">
+
+Use the existing `catalog-cache` worker pool rather than adding a new deployment; it already has regional concurrency controls.
+
+</Callout>
+
+<Callout type="warning">
+
+Create the queue before enabling stale reads, or the first expired key will fall through to a synchronous origin fetch under load.
+
+</Callout>
+
+<Callout type="danger">
+
+Do not enable the stale-read flag if deduplication is missing; a popular expired key can multiply origin load across every API instance.
+
+</Callout>
+
+## Titles and defaults
+
+An untitled callout uses its type's default title, while a custom title names the exact decision or risk.
+
+<Callout type="note" title="Review decision">
+
+Approve the queue boundary and the 90-second stale window before implementation begins.
+
+</Callout>
