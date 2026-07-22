@@ -45,6 +45,7 @@ export type ScopedChild = {
   readonly name: string;
   readonly attributes: Readonly<Record<string, ComponentAttributeValue>>;
   readonly children: ReadonlyArray<ElementContent>;
+  readonly scopedChildren?: ReadonlyArray<ScopedChild>;
   readonly position: NodePosition;
 };
 
@@ -69,6 +70,7 @@ export type MarkdownBodyPolicy = {
 export type ScopedChildDefinition = {
   readonly kind: "scoped-child";
   readonly markdownBody?: MarkdownBodyPolicy;
+  readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
 };
 
 export type ComponentDefinition = {
