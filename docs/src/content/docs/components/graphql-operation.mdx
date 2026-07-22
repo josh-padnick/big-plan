@@ -106,15 +106,21 @@ The markdown body before the scoped children is the operation's description.
 Each `Argument` documents one argument: a required non-empty `name` and a required non-empty `type` rendered literally - GraphQL's `!` and `[...]` markers convey requiredness, so there is no separate required flag - plus a markdown body description.
 Duplicate argument names are rejected.
 
+### Field
+
+Each `Field` expands one level of the input or payload shape: a required `in` (`input` or `payload`) that seats it under Arguments or Returns, a required `name` and literal `type` (GraphQL's `!` and `[...]` markers convey requiredness), an optional `default`, and a markdown body.
+Duplicate `in`-plus-`name` identities are rejected; deeper nesting belongs to prose, not the card.
+
 ### Returns
 
 At most one `Returns` names the required non-empty return `type` and carries a markdown walkthrough of the payload fields.
 
 ### Operation, Variables, and Response
 
-Each appears at most once and takes exactly one fence of its required language: an executable `graphql` operation, its `json` variables, and the `json` response.
+`Operation` and `Variables` appear at most once; `Response` repeats with an optional `label` so a success example can sit beside the validation error that teaches how `userErrors` behaves.
+Each takes exactly one fence of its required language - an executable `graphql` operation, `json` variables, and `json` responses - and all render together under one labeled Example section.
 `Variables` without an `Operation` beside it is rejected, and every fence flows through the standard highlighting and copy pipeline.
 
 Component-specific violations report positional diagnostics, including a wrong-language or missing fence, duplicate arguments, repeated single-instance children, a `deprecationReason` without `deprecated`, and headings, footnotes, or nested components inside scoped-child bodies.
 
-`Argument`, `Returns`, `Operation`, `Variables`, and `Response` outside a declaring `GraphqlOperation` stay unknown components.
+`Argument`, `Field`, `Returns`, `Operation`, `Variables`, and `Response` outside a declaring `GraphqlOperation` stay unknown components.

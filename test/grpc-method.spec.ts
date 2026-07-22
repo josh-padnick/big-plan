@@ -37,8 +37,8 @@ test("should review a gRPC method contract", async ({
   });
 
   await test.step("fields group by side and the error carries its code pill", async () => {
-    await expect(method).toContainText("Request fields");
-    await expect(method).toContainText("Response fields");
+    await expect(method).toContainText("WatchCommentsRequest");
+    await expect(method).toContainText("Comment");
     await expect(method.locator('[data-grpc-error="NOT_FOUND"]')).toBeVisible();
     await expect(method.locator(".grpc-method-error-code")).toHaveText(
       "NOT_FOUND",
@@ -57,7 +57,7 @@ test("should review a gRPC method contract", async ({
       .locator('[data-grpc-method][data-grpc-kind="serverStreaming"]')
       .first();
     await expect(staticMethod).toBeVisible();
-    await expect(staticMethod).toContainText("Errors");
+    await expect(staticMethod).toContainText("gRPC status codes");
     await expect(staticMethod).toContainText("Proto");
     await expect(staticMethod.locator("pre code").first()).toContainText(
       "rpc WatchComments",

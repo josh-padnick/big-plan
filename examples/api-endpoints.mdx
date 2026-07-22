@@ -267,21 +267,51 @@ The route stays available for one release with its deprecated styling making the
 
 Agent consoles that already speak GraphQL get the same queueing contract mirrored onto their native shape: a kind-badged operation with literal argument types, the payload convention, and an executable example.
 
-<GraphqlOperation kind="mutation" name="refreshCreate" access="Requires catalog write access">
+<GraphqlOperation kind="mutation" name="refreshCreate" access="Requires catalog:write">
 
 Queues a refresh through the GraphQL bridge, mirroring the HTTP queueing endpoint above.
 
 <Argument name="input" type="RefreshCreateInput!">
 
-The cache keys, the force flag, and the optional operator note.
+The cache keys to refresh, whether to force fresh entries, and an optional reason.
 
 </Argument>
 
+<Field in="input" name="cacheKeys" type="[String!]!">
+
+The cache entries to refresh; at least 1 and at most 500 items.
+
+</Field>
+
+<Field in="input" name="force" type="Boolean" default="false">
+
+Refreshes keys even when their entries are still fresh.
+
+</Field>
+
+<Field in="input" name="reason" type="String">
+
+Free-form reason recorded on the refresh job for audit.
+
+</Field>
+
 <Returns type="RefreshCreatePayload">
 
-The created `refresh` plus a `userErrors` list following the mutation-payload convention.
+The queued `refresh` plus a `userErrors` list following the mutation-payload convention.
 
 </Returns>
+
+<Field in="payload" name="refresh" type="Refresh">
+
+The queued refresh job; null when validation fails.
+
+</Field>
+
+<Field in="payload" name="userErrors" type="[UserError!]!">
+
+Field-anchored validation failures; empty on success.
+
+</Field>
 
 <Operation>
 
@@ -315,7 +345,7 @@ mutation refreshCreate($input: RefreshCreateInput!) {
 
 </Variables>
 
-<Response>
+<Response label="Success">
 
 ```json
 {
@@ -330,13 +360,33 @@ mutation refreshCreate($input: RefreshCreateInput!) {
 
 </Response>
 
+<Response label="Validation error">
+
+```json
+{
+  "data": {
+    "refreshCreate": {
+      "refresh": null,
+      "userErrors": [
+        {
+          "field": ["input", "cacheKeys"],
+          "message": "At least one cache key is required."
+        }
+      ]
+    }
+  }
+}
+```
+
+</Response>
+
 </GraphqlOperation>
 
 ### Reading over GraphQL
 
 A header-only operation enumerates the read side compactly, exactly like a bare HTTP card.
 
-<GraphqlOperation kind="query" name="refresh" access="Requires catalog read access" />
+<GraphqlOperation kind="query" name="refresh" access="Requires catalog:read" />
 
 ## gRPC methods
 
@@ -366,10 +416,31 @@ The refresh job does not exist or the caller cannot see it.
 
 </Error>
 
+<Example label="Request">
+
+```json
+{ "refresh_id": "rfr_31c8" }
+```
+
+</Example>
+
+<Example label="Stream">
+
+```text
+status: queued
+status: running
+status: done
+```
+
+</Example>
+
 <Proto>
 
 ```proto
-rpc WatchRefreshes(WatchRefreshesRequest) returns (stream RefreshEvent);
+service RefreshService {
+  rpc WatchRefreshes(WatchRefreshesRequest) returns (stream RefreshEvent);
+  rpc GetRefresh(GetRefreshRequest) returns (Refresh);
+}
 ```
 
 </Proto>

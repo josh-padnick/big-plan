@@ -141,6 +141,101 @@ describe("renderGraphqlOperation", () => {
     ]);
   });
 
+  it("should render labeled success and error responses side by side", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [
+        scoped({ name: "Operation", children: [fence()], line: 10 }),
+        scoped({
+          name: "Response",
+          children: [fence({ language: "json" })],
+          line: 14,
+        }),
+        scoped({
+          name: "Response",
+          attributes: { label: "Validation error" },
+          children: [fence({ language: "json" })],
+          line: 18,
+        }),
+      ],
+    });
+    const rendered = JSON.stringify(element);
+    expect(diagnostics).toEqual([]);
+    expect(rendered).toContain('"data-graphql-example":""');
+    expect(rendered).toContain('"value":"Example"');
+    expect(rendered).toContain('"value":"Response"');
+    expect(rendered).toContain('"value":"Validation error"');
+  });
+
+  it("should expand input and payload fields one level under their sections", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [
+        scoped({
+          name: "Argument",
+          attributes: { name: "input", type: "RefreshCreateInput!" },
+          children: [paragraph()],
+          line: 6,
+        }),
+        scoped({
+          name: "Field",
+          attributes: { in: "input", name: "cacheKeys", type: "[String!]!" },
+          children: [paragraph()],
+          line: 8,
+        }),
+        scoped({
+          name: "Field",
+          attributes: {
+            in: "input",
+            name: "force",
+            type: "Boolean",
+            default: "false",
+          },
+          children: [paragraph()],
+          line: 10,
+        }),
+        scoped({
+          name: "Field",
+          attributes: {
+            in: "payload",
+            name: "userErrors",
+            type: "[UserError!]!",
+          },
+          children: [paragraph()],
+          line: 14,
+        }),
+      ],
+    });
+    const rendered = JSON.stringify(element);
+    expect(diagnostics).toEqual([]);
+    expect(rendered).toContain('"data-graphql-field":"input"');
+    expect(rendered).toContain('"data-graphql-field":"payload"');
+    expect(rendered).toContain('"value":"[String!]!"');
+    expect(rendered).toContain('"value":"default "');
+    // Payload fields render the Returns section even without a Returns child.
+    expect(rendered.indexOf('"value":"userErrors"')).toBeGreaterThan(
+      rendered.indexOf('"value":"Returns"'),
+    );
+  });
+
+  it("should diagnose duplicate fields per side", () => {
+    const { diagnostics } = render({
+      scopedChildren: [
+        scoped({
+          name: "Field",
+          attributes: { in: "input", name: "force", type: "Boolean" },
+          line: 8,
+        }),
+        scoped({
+          name: "Field",
+          attributes: { in: "input", name: "force", type: "Boolean" },
+          line: 11,
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      { line: 11, column: 1, message: 'Duplicate Field "force" in "input"' },
+    ]);
+  });
+
   it.each([
     ["Operation", "graphql", "json"],
     ["Variables", "json", "graphql"],
@@ -254,9 +349,9 @@ describe("renderGraphqlOperation", () => {
     const labels = [
       "Arguments",
       "Returns",
+      "Example",
       "Operation",
       "Variables",
-      "Response",
     ];
     const indexes = labels.map((label) =>
       rendered.indexOf(`"value":"${label}"`),

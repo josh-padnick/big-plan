@@ -85,19 +85,24 @@ A method with no description or scoped children renders as a compact header-only
 
 ### Field
 
-Each `Field` documents one message field: a required `in` (`request` or `response`) that groups it into the matching section, a required non-empty `name`, an optional `type`, and a markdown body.
+Each `Field` documents one message field: a required `in` (`request` or `response`) that groups it into the matching section - each section names its message type beside the label, keeping the signature's RPC-to-message model alive - a required non-empty `name`, an optional `type`, and a markdown body.
 Proto3 has no required label, so requiredness stays prose in the description ("Required. ..."), matching the ecosystem.
 Duplicate `in`-plus-`name` identities are rejected.
 
 ### Error
 
-Each `Error` documents one failure: a required `code` from the canonical `google.rpc.Code` error names except `OK` (`NOT_FOUND`, `PERMISSION_DENIED`, `RESOURCE_EXHAUSTED`, and the rest) and a markdown body explaining when it happens.
+Each `Error` documents one transport-level failure under the gRPC status codes section: a required `code` from the canonical `google.rpc.Code` error names except `OK` (`NOT_FOUND`, `PERMISSION_DENIED`, `RESOURCE_EXHAUSTED`, and the rest) and a markdown body explaining when it happens.
 Duplicate codes are rejected.
+
+### Example
+
+`Example` repeats with an optional `label` and exactly one fence, rendered together under one labeled Example section - typically a `json` request payload beside a `text` stream trace, since a stream's behavior over time is what streaming-unfamiliar reviewers need to see.
 
 ### Proto
 
 At most one `Proto` carries exactly one `proto` fence - the raw-source secondary affordance behind the structured card.
+Author the surrounding `service` block rather than repeating the header's signature line, so the fence adds context instead of duplication.
 
 Component-specific violations report positional diagnostics, including an unknown error code, duplicate field or error identities, a second `Proto` or a wrong-language fence, and headings, footnotes, or nested components inside scoped-child bodies.
 
-`Field`, `Error`, and `Proto` outside a declaring `GrpcMethod` stay unknown components.
+`Field`, `Error`, `Example`, and `Proto` outside a declaring `GrpcMethod` stay unknown components.

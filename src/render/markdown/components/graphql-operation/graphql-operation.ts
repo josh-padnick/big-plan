@@ -1,7 +1,7 @@
 // Exposes GraphqlOperation's component definition and renders its compiled
 // schema capability as an always-expanded, static operation review card.
 
-import type { Element, Text } from "hast";
+import type { Element, ElementContent, Text } from "hast";
 import { LOCK_ICON } from "../../../icons/lucide/lock.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import {
@@ -14,13 +14,16 @@ import {
   renderCardSection,
   renderDefinitionEntry,
   renderDefinitionList,
+  renderExampleBlock,
   renderSectionLabel,
 } from "../shared/labeled-section/labeled-section.js";
 import {
   compileGraphqlOperationComponent,
   type CompiledGraphqlArgument,
   type CompiledGraphqlExample,
+  type CompiledGraphqlField,
   type CompiledGraphqlOperation,
+  type CompiledGraphqlResponse,
   type CompiledGraphqlReturns,
 } from "./compile-graphql-operation.js";
 
@@ -53,61 +56,150 @@ const renderArgument = (argument: CompiledGraphqlArgument): Element =>
     body: argument.children,
   });
 
-const renderArguments = (
-  args: ReadonlyArray<CompiledGraphqlArgument>,
-): Element =>
+// One expanded field: literal type beside the name, an authored default
+// beside that, and the markdown description beneath.
+const renderField = (field: CompiledGraphqlField): Element =>
+  renderDefinitionEntry({
+    properties: { "data-graphql-field": field.side },
+    term: [
+      {
+        type: "element",
+        tagName: "span",
+        properties: {
+          className: ["font-mono", "text-[0.8125rem]", "font-semibold"],
+        },
+        children: [text(field.name)],
+      },
+      monoType(field.fieldType),
+      ...(field.defaultValue === undefined
+        ? []
+        : [
+            {
+              type: "element",
+              tagName: "span",
+              properties: { className: ["text-[0.6875rem]", "text-muted"] },
+              children: [
+                text("default "),
+                {
+                  type: "element",
+                  tagName: "span",
+                  properties: { className: ["font-mono"] },
+                  children: [text(field.defaultValue)],
+                } satisfies Element,
+              ],
+            } satisfies Element,
+          ]),
+    ],
+    body: field.children,
+  });
+
+// One level of expansion, indented under the argument or return entry it
+// details, so the reader gets the shape without leaving the card.
+const renderFieldExpansion = (
+  fields: ReadonlyArray<CompiledGraphqlField>,
+): Element => ({
+  type: "element",
+  tagName: "div",
+  properties: {
+    className: ["mt-1", "border-l", "border-edge", "pl-4"],
+  },
+  children: [renderDefinitionList({ entries: fields.map(renderField) })],
+});
+
+const renderArguments = ({
+  args,
+  inputFields,
+}: {
+  readonly args: ReadonlyArray<CompiledGraphqlArgument>;
+  readonly inputFields: ReadonlyArray<CompiledGraphqlField>;
+}): Element =>
   renderCardSection({
     children: [
       renderSectionLabel("Arguments"),
       renderDefinitionList({ entries: args.map(renderArgument) }),
+      ...(inputFields.length === 0 ? [] : [renderFieldExpansion(inputFields)]),
     ],
   });
 
-const renderReturns = (returns: CompiledGraphqlReturns): Element =>
+const renderReturns = ({
+  returns,
+  payloadFields,
+}: {
+  readonly returns?: CompiledGraphqlReturns;
+  readonly payloadFields: ReadonlyArray<CompiledGraphqlField>;
+}): Element =>
   renderCardSection({
     children: [
       renderSectionLabel("Returns"),
-      renderDefinitionList({
-        entries: [
-          renderDefinitionEntry({
-            term: [
-              {
-                type: "element",
-                tagName: "span",
-                properties: {
-                  className: ["font-mono", "text-[0.8125rem]", "font-semibold"],
-                },
-                children: [text(returns.returnType)],
-              },
-            ],
-            body: returns.children,
-          }),
-        ],
-      }),
+      ...(returns === undefined
+        ? []
+        : [
+            renderDefinitionList({
+              entries: [
+                renderDefinitionEntry({
+                  term: [
+                    {
+                      type: "element",
+                      tagName: "span",
+                      properties: {
+                        className: [
+                          "font-mono",
+                          "text-[0.8125rem]",
+                          "font-semibold",
+                        ],
+                      },
+                      children: [text(returns.returnType)],
+                    },
+                  ],
+                  body: returns.children,
+                }),
+              ],
+            }),
+          ]),
+      ...(payloadFields.length === 0
+        ? []
+        : [renderFieldExpansion(payloadFields)]),
     ],
   });
 
-const renderExample = ({
-  label,
-  example,
+// Operation, variables, and responses form one executable example, so they
+// share one labeled section instead of three sibling sections.
+const renderExampleSection = ({
+  operation,
+  variables,
+  responses,
 }: {
-  readonly label: string;
-  readonly example: CompiledGraphqlExample;
+  readonly operation?: CompiledGraphqlExample;
+  readonly variables?: CompiledGraphqlExample;
+  readonly responses: ReadonlyArray<CompiledGraphqlResponse>;
 }): Element =>
   renderCardSection({
+    properties: { "data-graphql-example": "" },
     children: [
       {
         type: "element",
         tagName: "div",
         properties: { className: ["mb-3"] },
-        children: [renderSectionLabel(label)],
+        children: [renderSectionLabel("Example")],
       },
-      {
-        type: "element",
-        tagName: "div",
-        properties: { className: ["[&>:last-child]:mb-0"] },
-        children: [...example.children],
-      },
+      ...(operation === undefined
+        ? []
+        : renderExampleBlock({
+            label: "Operation",
+            children: operation.children,
+          })),
+      ...(variables === undefined
+        ? []
+        : renderExampleBlock({
+            label: "Variables",
+            children: variables.children,
+          })),
+      ...responses.flatMap((response) =>
+        renderExampleBlock({
+          label: response.label ?? "Response",
+          children: response.children,
+        }),
+      ),
     ],
   });
 
@@ -223,17 +315,37 @@ const renderGraphqlOperationFigure = ({
             children: [...model.description],
           } satisfies Element,
         ]),
-    ...(model.args.length === 0 ? [] : [renderArguments(model.args)]),
-    ...(model.returns === undefined ? [] : [renderReturns(model.returns)]),
-    ...(model.operation === undefined
+    ...(model.args.length === 0 && model.inputFields.length === 0
       ? []
-      : [renderExample({ label: "Operation", example: model.operation })]),
-    ...(model.variables === undefined
+      : [
+          renderArguments({
+            args: model.args,
+            inputFields: model.inputFields,
+          }),
+        ]),
+    ...(model.returns === undefined && model.payloadFields.length === 0
       ? []
-      : [renderExample({ label: "Variables", example: model.variables })]),
-    ...(model.response === undefined
+      : [
+          renderReturns({
+            ...(model.returns === undefined ? {} : { returns: model.returns }),
+            payloadFields: model.payloadFields,
+          }),
+        ]),
+    ...(model.operation === undefined &&
+    model.variables === undefined &&
+    model.responses.length === 0
       ? []
-      : [renderExample({ label: "Response", example: model.response })]),
+      : [
+          renderExampleSection({
+            ...(model.operation === undefined
+              ? {}
+              : { operation: model.operation }),
+            ...(model.variables === undefined
+              ? {}
+              : { variables: model.variables }),
+            responses: model.responses,
+          }),
+        ]),
   ],
 });
 
@@ -245,7 +357,8 @@ export const renderGraphqlOperation: ComponentRenderer = (input) =>
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (
-  name: "Argument" | "Returns" | "Operation" | "Variables" | "Response",
+  name:
+    "Argument" | "Field" | "Returns" | "Operation" | "Variables" | "Response",
 ): ScopedChildDefinition => ({
   kind: "scoped-child",
   markdownBody: {
@@ -263,6 +376,7 @@ export const GRAPHQL_OPERATION_COMPONENT_DEFINITION = {
   render: renderGraphqlOperation,
   scopedChildren: {
     Argument: scopedChild("Argument"),
+    Field: scopedChild("Field"),
     Returns: scopedChild("Returns"),
     Operation: scopedChild("Operation"),
     Variables: scopedChild("Variables"),

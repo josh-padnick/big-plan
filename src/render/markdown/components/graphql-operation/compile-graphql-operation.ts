@@ -33,6 +33,23 @@ export type CompiledGraphqlExample = {
   readonly children: ReadonlyArray<ElementContent>;
 };
 
+export type GraphqlFieldSide = "input" | "payload";
+
+const FIELD_SIDES: ReadonlyArray<GraphqlFieldSide> = ["input", "payload"];
+
+export type CompiledGraphqlField = {
+  readonly side: GraphqlFieldSide;
+  readonly name: string;
+  readonly fieldType: string;
+  readonly defaultValue?: string;
+  readonly children: ReadonlyArray<ElementContent>;
+};
+
+export type CompiledGraphqlResponse = {
+  readonly label?: string;
+  readonly children: ReadonlyArray<ElementContent>;
+};
+
 export type CompiledGraphqlOperation = {
   readonly kind: GraphqlOperationKind;
   readonly name: string;
@@ -41,10 +58,12 @@ export type CompiledGraphqlOperation = {
   readonly deprecationReason?: string;
   readonly description: ReadonlyArray<ElementContent>;
   readonly args: ReadonlyArray<CompiledGraphqlArgument>;
+  readonly inputFields: ReadonlyArray<CompiledGraphqlField>;
+  readonly payloadFields: ReadonlyArray<CompiledGraphqlField>;
   readonly returns?: CompiledGraphqlReturns;
   readonly operation?: CompiledGraphqlExample;
   readonly variables?: CompiledGraphqlExample;
-  readonly response?: CompiledGraphqlExample;
+  readonly responses: ReadonlyArray<CompiledGraphqlResponse>;
 };
 
 const GRAPHQL_OPERATION_SCHEMA = {
@@ -63,6 +82,47 @@ const ARGUMENT_SCHEMA = {
 const RETURNS_SCHEMA = {
   type: { kind: "string", required: true, nonEmpty: true },
 } satisfies ComponentAttributeSchema;
+
+const FIELD_SCHEMA = {
+  in: { kind: "enum", values: FIELD_SIDES, required: true },
+  name: { kind: "string", required: true, nonEmpty: true },
+  type: { kind: "string", required: true, nonEmpty: true },
+  default: { kind: "string" },
+} satisfies ComponentAttributeSchema;
+
+const RESPONSE_SCHEMA = {
+  label: { kind: "string" },
+} satisfies ComponentAttributeSchema;
+
+const isFieldSide = (value: string): value is GraphqlFieldSide =>
+  FIELD_SIDES.some((side) => side === value);
+
+// Validates one expanded field; GraphQL's own `!` and `[...]` markers carry
+// requiredness inside the literal type, and a default renders beside it.
+const compileField = ({
+  child,
+  diagnostics,
+}: {
+  readonly child: ScopedChild;
+  readonly diagnostics: DiagnosticCollector;
+}): CompiledGraphqlField => {
+  const validated = validateComponentAttributes({
+    component: "Field",
+    attributes: child.attributes,
+    position: child.position,
+    diagnostics,
+    schema: FIELD_SCHEMA,
+  });
+  return {
+    side: validated.in ?? "input",
+    name: validated.name ?? "",
+    fieldType: validated.type ?? "",
+    ...(validated.default === undefined
+      ? {}
+      : { defaultValue: validated.default }),
+    children: child.children.filter((node) => !isWhitespace(node)),
+  };
+};
 
 const EMPTY_SCHEMA = {} satisfies ComponentAttributeSchema;
 
@@ -212,6 +272,34 @@ export const compileGraphqlOperationComponent = ({
     compileArgument({ child, diagnostics }),
   );
 
+  const fieldChildren = scopedChildren.filter(
+    (child) => child.name === "Field",
+  );
+  const fieldIdentities = new Set<string>();
+  for (const child of fieldChildren) {
+    const authoredName = child.attributes["name"];
+    const authoredSide = child.attributes["in"];
+    if (
+      typeof authoredName !== "string" ||
+      authoredName.trim() === "" ||
+      typeof authoredSide !== "string" ||
+      !isFieldSide(authoredSide)
+    ) {
+      continue;
+    }
+    const identity = `${authoredSide} ${authoredName}`;
+    if (fieldIdentities.has(identity)) {
+      diagnostics.add({
+        message: `Duplicate Field "${authoredName}" in "${authoredSide}"`,
+        position: child.position,
+      });
+    }
+    fieldIdentities.add(identity);
+  }
+  const fields = fieldChildren.map((child) =>
+    compileField({ child, diagnostics }),
+  );
+
   const returnsChildren = scopedChildren.filter(
     (child) => child.name === "Returns",
   );
@@ -233,7 +321,7 @@ export const compileGraphqlOperationComponent = ({
         });
 
   const exampleFor = (
-    name: "Operation" | "Variables" | "Response",
+    name: "Operation" | "Variables",
     language: string,
   ): CompiledGraphqlExample | undefined => {
     const matches = scopedChildren.filter((child) => child.name === name);
@@ -249,7 +337,38 @@ export const compileGraphqlOperationComponent = ({
   };
   const operation = exampleFor("Operation", "graphql");
   const variables = exampleFor("Variables", "json");
-  const response = exampleFor("Response", "json");
+  // Responses repeat so a success example can sit beside the validation
+  // error that teaches how userErrors behaves.
+  const responses = scopedChildren
+    .filter((child) => child.name === "Response")
+    .map((child) => {
+      const responseValidated = validateComponentAttributes({
+        component: "Response",
+        attributes: child.attributes,
+        position: child.position,
+        diagnostics,
+        schema: RESPONSE_SCHEMA,
+      });
+      const children = child.children.filter((node) => !isWhitespace(node));
+      const onlyChild = children[0];
+      if (
+        children.length !== 1 ||
+        onlyChild === undefined ||
+        fenceLanguage(onlyChild) !== "json"
+      ) {
+        diagnostics.add({
+          message:
+            "Response expects exactly one fenced code block with language json and no other content",
+          position: child.position,
+        });
+      }
+      return {
+        ...(responseValidated.label === undefined
+          ? {}
+          : { label: responseValidated.label }),
+        children,
+      };
+    });
   if (variables !== undefined && operation === undefined) {
     const variablesChild = scopedChildren.find(
       (child) => child.name === "Variables",
@@ -280,8 +399,10 @@ export const compileGraphqlOperationComponent = ({
             ),
           },
         }),
+    inputFields: fields.filter((field) => field.side === "input"),
+    payloadFields: fields.filter((field) => field.side === "payload"),
     ...(operation === undefined ? {} : { operation }),
     ...(variables === undefined ? {} : { variables }),
-    ...(response === undefined ? {} : { response }),
+    responses,
   };
 };

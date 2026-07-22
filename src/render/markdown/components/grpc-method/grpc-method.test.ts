@@ -196,8 +196,11 @@ describe("renderGrpcMethod", () => {
     });
     const rendered = JSON.stringify(element);
     expect(diagnostics).toEqual([]);
-    const requestIndex = rendered.indexOf('"value":"Request fields"');
-    const responseIndex = rendered.indexOf('"value":"Response fields"');
+    const requestIndex = rendered.indexOf('"value":"Request"');
+    const responseIndex = rendered.indexOf('"value":"Response"');
+    // The sections name their message types beside the labels.
+    expect(rendered).toContain('"value":"WatchCommentsRequest"');
+    expect(rendered.indexOf('"value":"Comment"')).toBeGreaterThan(-1);
     expect(requestIndex).toBeGreaterThan(-1);
     expect(responseIndex).toBeGreaterThan(requestIndex);
     expect(rendered).toContain('"data-grpc-field":"request"');
@@ -288,6 +291,53 @@ describe("renderGrpcMethod", () => {
         column: 1,
         message:
           "Proto expects exactly one fenced code block with language proto and no other content",
+      },
+    ]);
+  });
+
+  it("should group labeled examples under one example section", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [
+        scoped({
+          name: "Example",
+          attributes: { label: "Request" },
+          children: [
+            fence({ language: "json", source: '{ "plan_id": "pln_42" }\n' }),
+          ],
+          line: 18,
+        }),
+        scoped({
+          name: "Example",
+          attributes: { label: "Stream" },
+          children: [
+            fence({
+              language: "text",
+              source: "status: queued\nstatus: done\n",
+            }),
+          ],
+          line: 22,
+        }),
+      ],
+    });
+    const rendered = JSON.stringify(element);
+    expect(diagnostics).toEqual([]);
+    expect(rendered).toContain('"data-grpc-example":""');
+    expect(rendered).toContain('"value":"Example"');
+    expect(rendered).toContain('"value":"Stream"');
+  });
+
+  it("should diagnose an example without exactly one fence", () => {
+    const { diagnostics } = render({
+      scopedChildren: [
+        scoped({ name: "Example", children: [paragraph()], line: 18 }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 18,
+        column: 1,
+        message:
+          "Example expects exactly one fenced code block and no other content",
       },
     ]);
   });

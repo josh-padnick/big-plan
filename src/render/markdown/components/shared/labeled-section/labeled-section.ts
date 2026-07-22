@@ -7,8 +7,10 @@
 
 import type { Element, ElementContent, Text } from "hast";
 
+// The label reads a step above muted so section names anchor scanning
+// without competing with content ink.
 const SECTION_LABEL_CLASSES =
-  "card-section-label text-[0.6875rem] leading-4 font-bold tracking-[0.08em] uppercase text-muted";
+  "card-section-label text-[0.6875rem] leading-4 font-bold tracking-[0.08em] uppercase text-ink/70";
 
 const text = (value: string): Text => ({ type: "text", value });
 
@@ -74,6 +76,30 @@ export const renderDefinitionEntry = ({
     },
   ],
 });
+
+/** One quiet sublabeled block inside a grouped example section. */
+export const renderExampleBlock = ({
+  label,
+  children,
+}: {
+  readonly label: string;
+  readonly children: ReadonlyArray<ElementContent>;
+}): ReadonlyArray<Element> => [
+  {
+    type: "element",
+    tagName: "div",
+    properties: {
+      className: ["mb-1.5", "text-xs", "font-medium", "text-muted"],
+    },
+    children: [text(label)],
+  },
+  {
+    type: "element",
+    tagName: "div",
+    properties: { className: ["mb-4", "last:mb-0", "[&>:last-child]:mb-0"] },
+    children: [...children],
+  },
+];
 
 /** Renders the definition list wrapper for stacked entries. */
 export const renderDefinitionList = ({

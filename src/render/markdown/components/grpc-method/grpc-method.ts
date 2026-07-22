@@ -13,11 +13,13 @@ import {
   renderCardSection,
   renderDefinitionEntry,
   renderDefinitionList,
+  renderExampleBlock,
   renderSectionLabel,
 } from "../shared/labeled-section/labeled-section.js";
 import {
   compileGrpcMethodComponent,
   type CompiledGrpcError,
+  type CompiledGrpcExample,
   type CompiledGrpcField,
   type CompiledGrpcMethod,
   type GrpcStreamingKind,
@@ -109,16 +111,37 @@ const renderField = (field: CompiledGrpcField): Element =>
     body: field.children,
   });
 
+// The section names the message type beside its label, keeping the
+// signature's RPC-to-message mental model alive inside the field lists.
 const renderFieldSection = ({
   label,
+  messageType,
   fields,
 }: {
   readonly label: string;
+  readonly messageType: string;
   readonly fields: ReadonlyArray<CompiledGrpcField>;
 }): Element =>
   renderCardSection({
     children: [
-      renderSectionLabel(label),
+      {
+        type: "element",
+        tagName: "div",
+        properties: {
+          className: ["flex", "flex-wrap", "items-center", "gap-2"],
+        },
+        children: [
+          renderSectionLabel(label),
+          {
+            type: "element",
+            tagName: "span",
+            properties: {
+              className: ["font-mono", "text-[0.8125rem]", "font-semibold"],
+            },
+            children: [text(messageType)],
+          },
+        ],
+      },
       renderDefinitionList({ entries: fields.map(renderField) }),
     ],
   });
@@ -171,7 +194,7 @@ const renderError = (error: CompiledGrpcError): Element => ({
 const renderErrors = (errors: ReadonlyArray<CompiledGrpcError>): Element =>
   renderCardSection({
     children: [
-      renderSectionLabel("Errors"),
+      renderSectionLabel("gRPC status codes"),
       {
         type: "element",
         tagName: "div",
@@ -275,7 +298,8 @@ const renderGrpcMethodFigure = ({
       ? []
       : [
           renderFieldSection({
-            label: "Request fields",
+            label: "Request",
+            messageType: model.request,
             fields: model.requestFields,
           }),
         ]),
@@ -283,11 +307,33 @@ const renderGrpcMethodFigure = ({
       ? []
       : [
           renderFieldSection({
-            label: "Response fields",
+            label: "Response",
+            messageType: model.response,
             fields: model.responseFields,
           }),
         ]),
     ...(model.errors.length === 0 ? [] : [renderErrors(model.errors)]),
+    ...(model.examples.length === 0
+      ? []
+      : [
+          renderCardSection({
+            properties: { "data-grpc-example": "" },
+            children: [
+              {
+                type: "element",
+                tagName: "div",
+                properties: { className: ["mb-3"] },
+                children: [renderSectionLabel("Example")],
+              },
+              ...model.examples.flatMap((example: CompiledGrpcExample) =>
+                renderExampleBlock({
+                  label: example.label ?? "Example",
+                  children: example.children,
+                }),
+              ),
+            ],
+          }),
+        ]),
     ...(model.proto === undefined ? [] : [renderProto(model.proto)]),
   ],
 });
@@ -298,7 +344,7 @@ export const renderGrpcMethod: ComponentRenderer = (input) =>
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (
-  name: "Field" | "Error" | "Proto",
+  name: "Field" | "Error" | "Example" | "Proto",
 ): ScopedChildDefinition => ({
   kind: "scoped-child",
   markdownBody: {
@@ -317,6 +363,7 @@ export const GRPC_METHOD_COMPONENT_DEFINITION = {
   scopedChildren: {
     Field: scopedChild("Field"),
     Error: scopedChild("Error"),
+    Example: scopedChild("Example"),
     Proto: scopedChild("Proto"),
   },
 } satisfies ComponentDefinition;
