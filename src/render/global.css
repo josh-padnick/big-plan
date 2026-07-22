@@ -48,7 +48,8 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --diff-content-bg: #ffffff;
   --diff-hunk-bg: #f6f5f2;
   --diff-hunk-c: #8a857c;
-  --diff-header-bg: #efece3;
+  --header-bg: #ece7db;
+  --diff-header-bg: var(--header-bg);
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -76,7 +77,8 @@ Light and dark follow the reader's OS unless the theme control overrides it.
     --diff-content-bg: #1b1916;
     --diff-hunk-bg: #21201d;
     --diff-hunk-c: #8d887e;
-    --diff-header-bg: #2e2a22;
+    --header-bg: #332e24;
+    --diff-header-bg: var(--header-bg);
   }
 }
 
@@ -108,7 +110,8 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --diff-content-bg: #1b1916;
   --diff-hunk-bg: #21201d;
   --diff-hunk-c: #8d887e;
-  --diff-header-bg: #2e2a22;
+  --header-bg: #332e24;
+  --diff-header-bg: var(--header-bg);
   color-scheme: dark;
 }
 
@@ -138,6 +141,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --color-muted: var(--muted-c);
   --color-edge: var(--edge-c);
   --color-surface: var(--surface-c);
+  --color-header: var(--header-bg);
   --color-accent: var(--accent-c);
 }
 

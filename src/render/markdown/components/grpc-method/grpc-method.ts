@@ -226,7 +226,7 @@ const renderGrpcMethodFigure = ({
     {
       type: "element",
       tagName: "header",
-      properties: { className: ["bg-surface", "px-4", "py-3"] },
+      properties: { className: ["bg-header", "px-4", "py-3"] },
       children: [
         {
           type: "element",
