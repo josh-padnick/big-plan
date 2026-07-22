@@ -6,6 +6,9 @@
 // matches the mode the reader is browsing in. The height is per-embed,
 // sized so the shipped fixture needs no vertical scrolling in its default
 // state; anything wider or taller scrolls inside the frame, never the page.
+// The data-theme-frame marker enrolls each frame with the shared host script
+// (theme-frame-host.js), which expands a frame to cover the viewport while
+// its embedded document shows its full-screen dialog.
 type Props = {
   readonly light: string;
   readonly dark: string;
@@ -20,18 +23,22 @@ const { light, dark, title, height } = Astro.props;
   src={light}
   title={title}
   loading="lazy"
-  allowfullscreen
-  allow="fullscreen"
+  data-theme-frame
   class="dark:sl-hidden"
   style={`height: ${height}`}></iframe>
 <iframe
   src={dark}
   title={title}
   loading="lazy"
-  allowfullscreen
-  allow="fullscreen"
+  data-theme-frame
   class="light:sl-hidden"
   style={`height: ${height}`}></iframe>
+
+<!-- Hoisted and deduplicated by Astro: one host listener per page, however
+     many frames the page renders. -->
+<script>
+  import "./theme-frame-host.js";
+</script>
 
 <style>
   /* No display declaration here: Starlight's theme-variant sl-hidden rules

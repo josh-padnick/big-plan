@@ -6,7 +6,6 @@ import {
   ownedCodeDiffElements,
 } from "./code-diff-dom.browser.js";
 import {
-  fullScreenSupported,
   openComponentFullScreen,
   updateFullScreenControl,
 } from "../shared/full-screen.browser.js";
@@ -117,9 +116,7 @@ export const enhanceCodeDiffView = ({
     selector: "[data-diff-expand]",
   });
   toggleGroup?.removeAttribute("hidden");
-  if (fullScreenSupported({ component })) {
-    expand?.removeAttribute("hidden");
-  }
+  expand?.removeAttribute("hidden");
   applyDiffView({ component, view: initialView });
 
   expand?.addEventListener("click", () => {

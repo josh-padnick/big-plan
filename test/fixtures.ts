@@ -5,7 +5,7 @@
 // never from @playwright/test directly.
 
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -19,6 +19,7 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
   readonly componentsViewerUrl: string;
+  readonly embedHostUrl: string;
   readonly embedUrl: string;
   readonly sampleViewerUrl: string;
 };
@@ -95,7 +96,7 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     { scope: "worker" },
   ],
   // The embed document exercises the chromeless envelope the docs frame in
-  // iframes, where full screen goes through the browser Fullscreen API.
+  // iframes, where the full-screen dialog is announced to the host page.
   embedUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(join(tmpdir(), "big-plan-embed-"));
@@ -110,6 +111,50 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         "--embed",
       ]);
       await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  // A minimal host page framing the embed with the docs' real ThemeFrame
+  // host script inlined verbatim, so the cross-frame full-screen handshake
+  // is tested against the exact code the docs ship.
+  embedHostUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-embed-host-"));
+      const inputPath = join(outputDir, "embed.mdx");
+      const embedPath = join(outputDir, "embed.html");
+      const hostPath = join(outputDir, "host.html");
+      await writeFile(inputPath, EMBED_MDX, "utf8");
+      await execFileAsync(process.execPath, [
+        join(repoRoot, "bin", "big-plan.mjs"),
+        "render",
+        inputPath,
+        embedPath,
+        "--embed",
+      ]);
+      const hostScript = await readFile(
+        join(repoRoot, "docs", "src", "components", "theme-frame-host.js"),
+        "utf8",
+      );
+      await writeFile(
+        hostPath,
+        `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Embed host</title>
+<style>body { margin: 0; padding: 24px; }</style>
+<script type="module">${hostScript}</script>
+</head>
+<body>
+<p>Host page content above the frame.</p>
+<iframe data-theme-frame src="./embed.html" title="Live embed" style="width: 100%; height: 18rem; border: 1px solid #999; border-radius: 8px;"></iframe>
+</body>
+</html>
+`,
+        "utf8",
+      );
+      await use(pathToFileURL(hostPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
     { scope: "worker" },

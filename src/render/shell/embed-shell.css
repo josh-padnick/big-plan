@@ -1,15 +1,9 @@
 /*
 Embed-surface rules, scoped under the data-embed marker embed-shell.ts emits.
-On this surface the full-screen controls drive the browser Fullscreen API
-(the viewer's modal dialog could not escape the host iframe), so the
-fullscreened component supplies its own backdrop and scroll surface here.
+Full screen on this surface reuses the viewer's modal dialog while the embed
+announces the state to its host page (see full-screen.browser.ts), so no
+extra full-screen styling is needed here.
 */
-
-[data-embed] :fullscreen {
-  overflow: auto;
-  border-radius: 0;
-  background: var(--bg);
-}
 
 /* The diff header's copy feedback pops above the header, which the top edge
    of a height-fitted embed frame would clip; below the control it stays

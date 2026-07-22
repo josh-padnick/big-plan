@@ -1,58 +1,35 @@
-// Owns the shared full-screen behavior for review components. In the viewer
-// the component moves into a modal dialog and back without cloning, so
-// listeners and in-component state survive, with page-scroll restore and an
-// accessible dialog name taken from an existing caption when one exists. On
-// the embed surface (under the data-embed marker) a modal dialog could never
-// escape the host iframe, so the same control drives the browser Fullscreen
-// API instead, which the host grants via allowfullscreen.
+// Owns the shared full-screen behavior for review components: the component
+// moves into a modal dialog and back without cloning, so listeners and
+// in-component state survive, with page-scroll restore and an accessible
+// dialog name taken from an existing caption when one exists. On the embed
+// surface (under the data-embed marker) the same dialog opens, but alone it
+// would stay confined to the host iframe - so the embed additionally
+// announces its full-screen state to the host page, which (when it is a
+// cooperating host such as the docs' ThemeFrame) expands the iframe to cover
+// its viewport for the duration. Without a listening host the dialog simply
+// stays confined to the frame, which is the acceptable standalone fallback.
 
 let nextDialogLabelId = 1;
+
+// The cross-frame handshake type, mirrored by the docs' ThemeFrame host
+// script; keep the two in sync.
+const EMBED_FULLSCREEN_MESSAGE = "big-plan:embed-fullscreen";
 
 const isEmbedComponent = (component: HTMLElement): boolean =>
   component.closest("[data-embed]") !== null;
 
-/**
- * Whether the full-screen control can work for this component: always in the
- * viewer's dialog path, and only with an available Fullscreen API (the host
- * iframe must allow it) on the embed surface. Callers keep the control
- * hidden when this is false, so a denied embed degrades to no control.
- */
-export const fullScreenSupported = ({
-  component,
+// Announces embed full-screen state to the host page. The payload carries no
+// sensitive data and the embed stays host-agnostic, so "*" is an acceptable
+// target origin; a host that cares validates event.source instead.
+const postEmbedFullScreen = ({
+  active,
 }: {
-  readonly component: HTMLElement;
-}): boolean => !isEmbedComponent(component) || document.fullscreenEnabled;
-
-// Enters or exits browser full screen for an embedded component. The exit
-// path only requests it; state mirroring waits for fullscreenchange so Esc,
-// the control, and programmatic exits all converge on the same handler.
-const toggleEmbedFullScreen = ({
-  component,
-  onToggle,
-}: {
-  readonly component: HTMLElement;
-  readonly onToggle: (input: { readonly expanded: boolean }) => void;
+  readonly active: boolean;
 }): void => {
-  if (document.fullscreenElement === component) {
-    void document.exitFullscreen();
+  if (window.parent === window) {
     return;
   }
-  component
-    .requestFullscreen()
-    .then(() => {
-      onToggle({ expanded: true });
-      const onChange = (): void => {
-        if (document.fullscreenElement === component) {
-          return;
-        }
-        document.removeEventListener("fullscreenchange", onChange);
-        onToggle({ expanded: false });
-      };
-      document.addEventListener("fullscreenchange", onChange);
-    })
-    .catch(() => {
-      // The platform or host denied the request; the component stays inline.
-    });
+  window.parent.postMessage({ type: EMBED_FULLSCREEN_MESSAGE, active }, "*");
 };
 
 // Flips one expand control between its maximize and minimize affordances; the
@@ -92,14 +69,11 @@ export const openComponentFullScreen = ({
   readonly fallbackLabel: string;
   readonly onToggle: (input: { readonly expanded: boolean }) => void;
 }): void => {
-  if (isEmbedComponent(component)) {
-    toggleEmbedFullScreen({ component, onToggle });
-    return;
-  }
   const article = component.closest("article");
   if (article === null) {
     return;
   }
+  const embedded = isEmbedComponent(component);
   const scrollY = window.scrollY;
   const dialog = document.createElement("dialog");
   dialog.className = "component-dialog";
@@ -131,10 +105,25 @@ export const openComponentFullScreen = ({
     placeholder.before(component);
     placeholder.remove();
     dialog.remove();
+    // The close event fires for every exit path - the control, Esc's cancel,
+    // and the backdrop click - so the host deactivation can never be missed.
+    if (embedded) {
+      postEmbedFullScreen({ active: false });
+    }
     onToggle({ expanded: false });
     window.scrollTo({ top: scrollY });
   });
   dialog.showModal();
+  if (embedded) {
+    // The host expands the iframe to cover its viewport; viewport-relative
+    // sizing makes the dialog fill the frame both before the expansion lands
+    // and after, when the units re-resolve against the grown frame - so the
+    // result reads exactly like the viewer's modal.
+    dialog.style.width = "min(96vw, 100rem)";
+    dialog.style.height = "92vh";
+    postEmbedFullScreen({ active: true });
+    return;
+  }
   // Content-fit sizing can make the dialog match the inline component so
   // closely that full screen appears to do nothing; a slack band keeps the
   // modal visibly roomier until the viewport caps take over.

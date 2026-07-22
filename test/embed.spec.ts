@@ -1,48 +1,72 @@
-// Browser tests of the embed surface: the chromeless envelope drives the
-// components' full-screen control through the browser Fullscreen API and
-// keeps the copy feedback visible inside a height-fitted frame.
-// Render-health failures are enforced by fixtures.
+// Browser tests of the embed surface: the chromeless envelope reuses the
+// viewer's full-screen dialog while a cross-frame handshake lets the host
+// page expand the iframe into a viewport-covering overlay, and the copy
+// feedback stays visible inside a height-fitted frame. Render-health
+// failures are enforced by fixtures.
 
 import { boxOf, expect, test } from "./fixtures";
 
-test("should enter and exit browser full screen when the embed's control is used", async ({
+test("should expand the host frame into a viewport overlay when the embed goes full screen", async ({
   page,
-  embedUrl,
+  embedHostUrl,
 }) => {
-  await page.goto(embedUrl);
-  const diff = page.locator("[data-code-diff]");
-  const expand = diff.locator("[data-diff-expand]");
-  const fullscreenTag = () =>
-    page.evaluate(() => document.fullscreenElement?.tagName ?? null);
+  await page.goto(embedHostUrl);
+  const hostFrame = page.locator("iframe[data-theme-frame]");
+  const embed = page.frameLocator("iframe[data-theme-frame]");
+  const expand = embed.locator("[data-diff-expand]");
+  const dialog = embed.locator("dialog.component-dialog");
+  const viewport = page.viewportSize();
+  if (viewport === null) {
+    throw new Error("expected a page viewport");
+  }
+  const inlineBox = await boxOf(hostFrame);
 
-  await test.step("the control is revealed and offers full screen", async () => {
-    await expect(expand).toBeVisible();
-    await expect(expand).toHaveAttribute("aria-label", "View diff full screen");
-  });
-
-  await test.step("the control fullscreens the component itself", async () => {
+  await test.step("the control opens the same modal dialog the viewer uses", async () => {
     await expand.click();
-    await expect.poll(fullscreenTag).toBe("FIGURE");
+    await expect(dialog).toBeVisible();
     await expect(expand).toHaveAttribute("aria-label", "Exit full screen");
   });
 
-  await test.step("the control exits back to the inline component", async () => {
-    await expand.click();
-    await expect.poll(fullscreenTag).toBe(null);
-    await expect(expand).toHaveAttribute("aria-label", "View diff full screen");
-    await expect(diff).toBeVisible();
+  await test.step("the handshake expands the frame to cover the host viewport", async () => {
+    await expect
+      .poll(async () => await boxOf(hostFrame))
+      .toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
+    await expect(page.locator("html")).toHaveCSS("overflow", "hidden");
   });
 
-  await test.step("a browser-initiated exit (Esc's pathway) restores the control", async () => {
-    // The browser handles Esc itself and only reports the exit through
-    // fullscreenchange - the same event a synthetic exit raises here, since
-    // the harness cannot deliver a trusted Esc to the browser chrome.
+  await test.step("closing via the control restores the inline frame", async () => {
     await expand.click();
-    await expect.poll(fullscreenTag).toBe("FIGURE");
-    await page.evaluate(() => document.exitFullscreen());
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(async () => await boxOf(hostFrame)).toEqual(inlineBox);
+    await expect(page.locator("html")).not.toHaveCSS("overflow", "hidden");
     await expect(expand).toHaveAttribute("aria-label", "View diff full screen");
-    await expect.poll(fullscreenTag).toBe(null);
   });
+
+  await test.step("Esc inside the frame closes the dialog and restores too", async () => {
+    await expand.click();
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(async () => await boxOf(hostFrame)).toEqual(inlineBox);
+    await expect(page.locator("html")).not.toHaveCSS("overflow", "hidden");
+  });
+});
+
+test("should keep the dialog usable when no host is listening", async ({
+  page,
+  embedUrl,
+}) => {
+  // A standalone embed (or a non-ThemeFrame host) has nobody to expand the
+  // frame; the dialog still opens, confined, and closes cleanly.
+  await page.goto(embedUrl);
+  const expand = page.locator("[data-diff-expand]");
+  const dialog = page.locator("dialog.component-dialog");
+
+  await expand.click();
+  await expect(dialog).toBeVisible();
+  await expand.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator("[data-code-diff]")).toBeVisible();
 });
 
 test("should keep the copy feedback fully visible when copying inside an embed", async ({

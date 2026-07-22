@@ -16,10 +16,11 @@ import { BODY_CLASSES, type ShellResult } from "./shell.js";
 
 /**
  * Wraps rendered content in the embed surface: an <article> (which prose
- * styles scope to) inside a padded main region. The data-embed marker scopes
- * embed-only stylesheet rules and switches the components' full-screen
- * controls from the viewer's modal dialog (which cannot escape a host
- * iframe) to the browser Fullscreen API.
+ * styles and the full-screen dialogs scope to) inside a padded main region.
+ * The data-embed marker scopes embed-only stylesheet rules and makes the
+ * components' full-screen dialog announce itself to the host page, which a
+ * cooperating host answers by expanding the iframe (full-screen.browser.ts
+ * owns that handshake).
  */
 export const renderEmbedShell = ({
   contentHtml,

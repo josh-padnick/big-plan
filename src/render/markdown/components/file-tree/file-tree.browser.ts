@@ -4,7 +4,6 @@
 // JavaScript is unavailable.
 
 import {
-  fullScreenSupported,
   openComponentFullScreen,
   updateFullScreenControl,
 } from "../shared/full-screen.browser.js";
@@ -263,9 +262,7 @@ for (const component of document.querySelectorAll<HTMLElement>(
     ?.removeAttribute("hidden");
   const expand =
     component.querySelector<HTMLButtonElement>("[data-tree-expand]");
-  if (fullScreenSupported({ component })) {
-    expand?.removeAttribute("hidden");
-  }
+  expand?.removeAttribute("hidden");
   const changesToggle = component.querySelector<HTMLButtonElement>(
     "[data-tree-changes-toggle]",
   );
