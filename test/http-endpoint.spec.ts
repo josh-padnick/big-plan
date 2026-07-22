@@ -122,9 +122,9 @@ test("should review HTTP endpoint contracts", async ({
 
 test("should present the catalog request as HTTP JSON", async ({
   page,
-  httpEndpointViewerUrl,
+  apiEndpointsViewerUrl,
 }) => {
-  await page.goto(httpEndpointViewerUrl);
+  await page.goto(apiEndpointsViewerUrl);
   const endpoint = page
     .locator('[data-http-endpoint][data-http-method="POST"]')
     .first();

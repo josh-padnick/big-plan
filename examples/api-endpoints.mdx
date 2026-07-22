@@ -1,8 +1,8 @@
-# Catalog Refresh API Plan
+# Catalog API Endpoints Plan
 
-This plan proposes the catalog cache refresh API and exists to demonstrate `HttpEndpoint`'s major usage modes: the full contract treatment, a moderate read endpoint, request-body variations, compact surface-area enumeration, and a deprecated route.
+This plan proposes the catalog refresh API across its three transports and exists to demonstrate the protocol review cards: `HttpEndpoint`, `GraphqlOperation`, and `GrpcMethod`.
 
-## The queueing endpoint, in full
+## HTTP endpoints
 
 The write path gets the complete treatment: parameters in three locations with constraints beside the fields they govern, a request example, and success and failure responses.
 
@@ -84,8 +84,6 @@ Free-form operator note recorded on the refresh job for audit.
 
 </HttpEndpoint>
 
-## Reading a refresh
-
 The read path is a moderate card: a path parameter, one optional query parameter with a default, and two responses.
 
 <HttpEndpoint method="GET" path="/catalog/refresh/{refreshId}" summary="Read one refresh job" auth="Internal service token">
@@ -119,9 +117,7 @@ Includes per-key worker outcomes instead of the summary counts.
 
 </HttpEndpoint>
 
-## Body variations
-
-The request body is whatever the media type says it is; these endpoints show the shapes beyond a flat JSON object.
+The request body is whatever the media type says it is; the next endpoints show the shapes beyond a flat JSON object.
 
 <HttpEndpoint method="POST" path="/catalog/refresh/batch" summary="Queue many refreshes in one call" auth="Internal service token">
 
@@ -240,15 +236,11 @@ The refresh job the artifact belongs to.
 
 </HttpEndpoint>
 
-## The rest of the surface
-
 Header-only cards enumerate the remaining routes compactly; each is a legitimate bare `HttpEndpoint` whose contract detail can be filled in when its design review happens.
 
 <HttpEndpoint method="GET" path="/catalog/refresh" summary="List recent refresh jobs" auth="Internal service token" />
 
 <HttpEndpoint method="DELETE" path="/catalog/refresh/{refreshId}" summary="Cancel a queued refresh" auth="Internal service token" />
-
-## Retiring the flush-everything route
 
 <Callout type="warning" title="Deprecation">
 
@@ -258,3 +250,116 @@ The route stays available for one release with its deprecated styling making the
 </Callout>
 
 <HttpEndpoint method="POST" path="/catalog/refresh-all" summary="Replaced by the force flag on /catalog/refresh" auth="Internal service token" deprecated />
+
+## GraphQL operations
+
+Agent consoles that already speak GraphQL get the same queueing contract mirrored onto their native shape: a kind-badged operation with literal argument types, the payload convention, and an executable example.
+
+<GraphqlOperation kind="mutation" name="refreshCreate" access="Requires catalog write access">
+
+Queues a refresh through the GraphQL bridge, mirroring the HTTP queueing endpoint above.
+
+<Argument name="input" type="RefreshCreateInput!">
+
+The cache keys, the force flag, and the optional operator note.
+
+</Argument>
+
+<Returns type="RefreshCreatePayload">
+
+The created `refresh` plus a `userErrors` list following the mutation-payload convention.
+
+</Returns>
+
+<Operation>
+
+```graphql
+mutation refreshCreate($input: RefreshCreateInput!) {
+  refreshCreate(input: $input) {
+    refresh {
+      id
+      status
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}
+```
+
+</Operation>
+
+<Variables>
+
+```json
+{
+  "input": {
+    "cacheKeys": ["catalog:eu:electronics"],
+    "reason": "Stale prices reported by support"
+  }
+}
+```
+
+</Variables>
+
+<Response>
+
+```json
+{
+  "data": {
+    "refreshCreate": {
+      "refresh": { "id": "rfr_31c8", "status": "queued" },
+      "userErrors": []
+    }
+  }
+}
+```
+
+</Response>
+
+</GraphqlOperation>
+
+A header-only operation enumerates the read side compactly, exactly like a bare HTTP card.
+
+<GraphqlOperation kind="query" name="refresh" access="Requires catalog read access" />
+
+## gRPC methods
+
+Streaming consumers watch refreshes over the gRPC bridge instead of polling; the signature places the stream keyword and the badge names the kind.
+
+<GrpcMethod service="catalog.v1.RefreshService" name="WatchRefreshes" request="WatchRefreshesRequest" response="RefreshEvent" kind="serverStreaming">
+
+Streams refresh state changes as the worker pool processes jobs.
+
+<Field in="request" name="refresh_id" type="string">
+
+Optional. Watches one refresh job; absent means all jobs for the caller.
+
+</Field>
+
+<Field in="response" name="status" type="string">
+
+One of queued, running, done, or failed.
+
+</Field>
+
+<Error code="NOT_FOUND">
+
+The refresh job does not exist or the caller cannot see it.
+
+</Error>
+
+<Proto>
+
+```proto
+rpc WatchRefreshes(WatchRefreshesRequest) returns (stream RefreshEvent);
+```
+
+</Proto>
+
+</GrpcMethod>
+
+The unary read is a compact header-only method beside it.
+
+<GrpcMethod service="catalog.v1.RefreshService" name="GetRefresh" request="GetRefreshRequest" response="Refresh" />
