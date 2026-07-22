@@ -82,13 +82,17 @@ Every violation reports a positional diagnostic pointing at the offending fence 
 
 Each column is one line, `name type [settings]`:
 
-- The name must be a bare identifier; the type is opaque text and may contain spaces (`timestamp with time zone`) or array brackets (`text[]`).
-- Marker settings: `pk` (or `primary key`), `not null`, `null`, `unique`, `increment` (rendered as an Identity badge). Either primary-key spelling implies `not null`.
+- The name must be a unique bare identifier, and the fence must declare at least one column; the type is opaque text and may contain spaces (`timestamp with time zone`) or array brackets (`text[]`).
+- Marker settings are bare: `pk` (or `primary key`), `not null`, `null`, `unique`, `increment` (rendered as an Identity badge). Either primary-key spelling implies `not null`; combining `null` with `pk` or `not null` is rejected.
 - `default:` takes a number, `true`, `false`, `null`, a quoted string, or a backtick expression such as `` `now()` ``.
-- `note:` and `check:` take a single-line quoted value; notes render in the column's Comment cell, and checks render as `CHECK (...)` in its Constraints cell.
-- `ref: > table.column` declares a many-to-one foreign key; `delete:` and `update:` add referential actions (`cascade`, `restrict`, `set null`, `set default`, `no action`) and require the `ref:` on the same line.
+- `note:` and `check:` take a single-line quoted value, and a check cannot be empty; notes render in the column's Comment cell, and checks render as `CHECK (...)` in its Constraints cell.
+- `ref: > table.column` or `ref: > schema.table.column` declares a many-to-one foreign key; other relationship operators are outside the subset. `delete:` and `update:` add referential actions (`cascade`, `restrict`, `set null`, `set default`, `no action`) and require the `ref:` on the same line.
 
-Each `indexes` block entry is a column, a composite `(a, b)` tuple, or a backtick expression, with optional settings `unique`, `name:`, `type:` (`btree`, `hash`, `gin`, `gist`), `note:`, and the extension `where:` for a partial-index predicate.
+Each `indexes` block entry is a declared column, a composite `(a, b)` tuple whose members are declared columns or backtick expressions, or a backtick expression on its own.
+Every backtick expression must span its whole entry or tuple member.
+Its optional settings are the bare `unique` marker; a quoted, non-empty `name:` that must be unique in the table; `type:` (`btree`, `hash`, `gin`, `gist`); a quoted `note:`; and the extension `where:` with a non-empty quoted partial-index predicate.
+When an expression names a declared column directly, including as a double-quoted identifier, the column receives the matching `INDX n` pill.
+Only direct unqualified references drive those pills; SQL string literals are ignored.
 
 The table `Note:` is the table's comment, headed for `COMMENT ON TABLE`: one sentence saying what a single row represents.
 Operational behavior - pruning schedules, rollout plans, lifecycle narration - belongs in the prose around the component, not inside the schema.
@@ -97,3 +101,9 @@ Operational behavior - pruning schedules, rollout plans, lifecycle narration - b
 
 Triggers, row-level security, partitioning, storage parameters, collation, and grants are deliberately not part of the grammar.
 Capture them beside the component: exact DDL in a `sql` fence, decision-worthy rationale in a [`Callout`](/components/callout/), and one-line facts in the table `Note:`.
+
+## Reader controls
+
+The actions menu's Copy table name action copies the exact `name` attribute, while Copy source copies only the raw `dbml` fence.
+As MDX parses fenced content, copied source uses LF line endings and includes a trailing newline.
+The full-screen control opens a modal named by the table, keeps a tall schema's header in place while its body scrolls, and returns the reader to the same page position when it closes.
