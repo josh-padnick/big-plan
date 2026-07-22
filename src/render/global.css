@@ -17,6 +17,9 @@ Light and dark follow the reader's OS unless the theme control overrides it.
 @import "./markdown/components/code-diff/code-diff.css";
 @import "./markdown/components/code-snippet/code-snippet.css";
 @import "./markdown/components/file-tree/file-tree.css";
+@import "./markdown/components/graphql-operation/graphql-operation.css";
+@import "./markdown/components/grpc-method/grpc-method.css";
+@import "./markdown/components/http-endpoint/http-endpoint.css";
 
 /* Only authored source emits utility candidates; examples and docs do not. */
 @source "../";
@@ -45,7 +48,8 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --diff-content-bg: #ffffff;
   --diff-hunk-bg: #f6f5f2;
   --diff-hunk-c: #8a857c;
-  --diff-header-bg: #efece3;
+  --header-bg: #ece7db;
+  --diff-header-bg: var(--header-bg);
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -73,7 +77,8 @@ Light and dark follow the reader's OS unless the theme control overrides it.
     --diff-content-bg: #1b1916;
     --diff-hunk-bg: #21201d;
     --diff-hunk-c: #8d887e;
-    --diff-header-bg: #2e2a22;
+    --header-bg: #332e24;
+    --diff-header-bg: var(--header-bg);
   }
 }
 
@@ -105,7 +110,8 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --diff-content-bg: #1b1916;
   --diff-hunk-bg: #21201d;
   --diff-hunk-c: #8d887e;
-  --diff-header-bg: #2e2a22;
+  --header-bg: #332e24;
+  --diff-header-bg: var(--header-bg);
   color-scheme: dark;
 }
 
@@ -135,6 +141,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --color-muted: var(--muted-c);
   --color-edge: var(--edge-c);
   --color-surface: var(--surface-c);
+  --color-header: var(--header-bg);
   --color-accent: var(--accent-c);
 }
 
@@ -143,6 +150,24 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* The layout switches from stacked to sidebar-plus-column at this width. */
   --breakpoint-wide: 56rem;
+}
+
+/* Each TOC label word reserves its semibold width through a hidden bold
+   ghost, so the active section's bolding can never change where a label
+   wraps. */
+nav[aria-label="Contents"] .toc-word {
+  display: inline-block;
+  /* Top-align the word boxes: the block ghost would otherwise move each
+     span's baseline and inflate the line boxes. */
+  vertical-align: top;
+}
+nav[aria-label="Contents"] .toc-word::after {
+  content: attr(data-word);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 600;
 }
 
 /* Section navigation glides instead of jumping; readers who ask the OS for

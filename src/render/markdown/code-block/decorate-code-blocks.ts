@@ -57,6 +57,7 @@ const decorateCodeBlocks = (node: Root | Element): void => {
         type: "button",
         className: COPY_BUTTON_CLASSES.split(" "),
         ariaLabel: "Copy code",
+        title: "Copy code",
         ariaLive: "polite",
         "data-copy-code": "",
         "data-size": "xs",

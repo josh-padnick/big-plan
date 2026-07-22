@@ -1,0 +1,61 @@
+# Stale Read Diff Plan
+
+This plan proposes the stale-while-revalidate change and exists to demonstrate `CodeDiff`'s major usage modes: an annotated multi-hunk diff with gutters and a compact bare diff.
+
+## The annotated change
+
+The primary change carries file identity, line numbers, per-side line counts, and annotations anchored to the lines they explain.
+
+<CodeDiff file="src/catalog/read-through-cache.ts" showLineNumbers showLineCounts>
+
+```diff
+diff --git a/src/catalog/read-through-cache.ts b/src/catalog/read-through-cache.ts
+index 23ad911..890ce42 100644
+--- a/src/catalog/read-through-cache.ts
++++ b/src/catalog/read-through-cache.ts
+@@ -18,5 +18,8 @@ export const readCatalog = async (key: string) => {
+   const cached = await cache.get(key);
+-  if (cached !== null && cached.ageSeconds <= 60) {
++  if (cached !== null && cached.ageSeconds <= 150) {
++    if (cached.ageSeconds > 60) {
++      await refreshQueue.enqueueOnce(key);
++    }
+     return cached.value;
+   }
+
+@@ -31,4 +34,5 @@ export const readCatalog = async (key: string) => {
+   const value = await catalogOrigin.read(key);
+   await cache.put(key, value, { ttlSeconds: 300 });
++  metrics.increment("catalog_cache.origin_fallback");
+   return value;
+ };
+```
+
+<Annotation lines="20" side="new">
+I kept the `await` so a failed queue publish surfaces on the request path; flag it in review if tail latency matters more than that visibility.
+</Annotation>
+
+<Annotation lines="19-22" side="new">
+This range turns the age check into a stale-while-revalidate policy: under 60 seconds serves directly, 60 to 150 serves stale while a refresh runs, older falls through to the origin.
+</Annotation>
+
+<Annotation lines="19" side="old">
+The inline 60-second cutoff moves into the stale-window check above.
+</Annotation>
+
+</CodeDiff>
+
+## A compact configuration diff
+
+A small settings change needs no header chrome; the bare diff reads at a glance.
+
+<CodeDiff file="config/catalog-cache-worker.env">
+
+```diff
+-CATALOG_REFRESH_CONCURRENCY=8
+-CATALOG_REFRESH_TIMEOUT_MS=1000
++CATALOG_REFRESH_CONCURRENCY=12
++CATALOG_REFRESH_TIMEOUT_MS=750
+```
+
+</CodeDiff>

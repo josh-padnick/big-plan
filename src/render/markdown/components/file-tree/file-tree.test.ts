@@ -169,6 +169,26 @@ describe("renderFileTree", () => {
     expect(rendered).not.toContain('"tagName":"code"');
   });
 
+  it("should give toggle-less rows a hidden slightly-outdented spacer when siblings can fold", () => {
+    const { element, diagnostics } = render({
+      children: [
+        fence({ source: "src/\n  nested/\n    index.ts\n  helpers.ts\n" }),
+      ],
+    });
+    const rendered = JSON.stringify(element);
+    expect(diagnostics).toEqual([]);
+    // The two files and no one else stand in for a chevron; both foldable
+    // directories keep the real toggle, and both affordances start hidden so
+    // the script-free document is unchanged.
+    expect(rendered.match(/"data-tree-toggle-spacer":""/gu)).toHaveLength(2);
+    expect(rendered.match(/"data-tree-toggle":""/gu)).toHaveLength(2);
+    expect(
+      rendered.match(
+        /"file-tree-toggle-spacer","inline-flex","w-2","shrink-0"\],"hidden":true/gu,
+      ),
+    ).toHaveLength(2);
+  });
+
   it("should omit the figcaption when title is absent", () => {
     const { element, diagnostics } = render();
     expect(diagnostics).toEqual([]);

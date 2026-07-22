@@ -1,0 +1,454 @@
+# Catalog API Endpoints Plan
+
+This plan proposes the catalog refresh API across its three transports and exists to demonstrate the protocol review cards: `HttpEndpoint`, `GraphqlOperation`, and `GrpcMethod`.
+
+## HTTP endpoints
+
+### The queueing endpoint
+
+The write path gets the complete treatment: parameters in three locations with constraints beside the fields they govern, a request example, and success and failure responses.
+
+<HttpEndpoint method="POST" path="/catalog/refresh" summary="Queue a refresh for one or more cache keys" auth="Internal service token">
+
+Queues a deduplicated refresh job per cache key and returns immediately; the worker pool performs the refreshes asynchronously.
+
+<Param name="X-Request-Id" in="header" type="string">
+
+Correlates the enqueue with worker telemetry; generated server-side when absent.
+
+</Param>
+
+<Param name="cacheKeys" in="body" type="string[]" required>
+
+The keys to refresh.
+Constraints: at least 1 and at most 500 items; duplicates are ignored.
+
+</Param>
+
+<Param name="force" in="body" type="boolean" default="false">
+
+Refreshes keys even when their entries are still fresh.
+
+</Param>
+
+<Param name="reason" in="body" type="string">
+
+Free-form operator note recorded on the refresh job for audit.
+
+</Param>
+
+<Request contentType="application/json">
+
+```json
+{
+  "cacheKeys": ["catalog:eu:electronics", "catalog:eu:garden"],
+  "force": false,
+  "reason": "Stale prices reported by support"
+}
+```
+
+</Request>
+
+<Response status="202" label="Refresh queued">
+
+```json
+{
+  "refreshId": "rfr_31c8",
+  "status": "queued",
+  "estimatedStart": "2026-07-20T22:41:00Z"
+}
+```
+
+</Response>
+
+<Response status="400" label="Invalid request">
+
+```json
+{
+  "error": "cache_keys_empty"
+}
+```
+
+</Response>
+
+<Response status="401" label="Missing or invalid service token" />
+
+<Response status="409" label="Refresh already queued for every requested key">
+
+```json
+{
+  "error": "already_queued",
+  "refreshId": "rfr_2fa0"
+}
+```
+
+</Response>
+
+</HttpEndpoint>
+
+### Reading a refresh
+
+The read path is a moderate card: a path parameter, one optional query parameter with a default, and two responses.
+
+<HttpEndpoint method="GET" path="/catalog/refresh/{refreshId}" summary="Read one refresh job" auth="Internal service token">
+
+<Param name="refreshId" in="path" type="string" required>
+
+Identifier returned by the queueing endpoint.
+
+</Param>
+
+<Param name="verbose" in="query" type="boolean" default="false">
+
+Includes per-key worker outcomes instead of the summary counts.
+
+</Param>
+
+<Response status="200" label="Refresh job">
+
+```json
+{
+  "refreshId": "rfr_31c8",
+  "status": "running",
+  "completed": 412,
+  "failed": 3
+}
+```
+
+</Response>
+
+<Response status="404" label="Unknown refresh job" />
+
+</HttpEndpoint>
+
+### Body variations
+
+The request body is whatever the media type says it is; these endpoints show the shapes beyond a flat JSON object.
+
+<HttpEndpoint method="POST" path="/catalog/refresh/batch" summary="Queue many refreshes in one call" auth="Internal service token">
+
+The payload is a bare JSON array; fields describe the element shape with the `[].` prefix convention.
+
+<Param name="[].cacheKey" in="body" type="string" required>
+
+The key one batch entry refreshes.
+
+</Param>
+
+<Param name="[].force" in="body" type="boolean" default="false">
+
+Per-entry force flag.
+
+</Param>
+
+<Request contentType="application/json">
+
+```json
+[
+  { "cacheKey": "catalog:eu:electronics" },
+  { "cacheKey": "catalog:eu:garden", "force": true }
+]
+```
+
+</Request>
+
+<Response status="202" label="Batch queued" />
+
+</HttpEndpoint>
+
+<HttpEndpoint method="POST" path="/catalog/refresh/form" summary="Queue a refresh from the admin form" auth="Admin session cookie">
+
+Classic form transport: the fields are the pairs and the example shows the wire format.
+
+<Param name="cache_key" in="body" type="string" required>
+
+Single key submitted by the admin console.
+
+</Param>
+
+<Param name="reason" in="body" type="string">
+
+Free-form operator note.
+
+</Param>
+
+<Request contentType="application/x-www-form-urlencoded">
+
+```text
+cache_key=catalog%3Aeu%3Aelectronics&reason=Stale+prices
+```
+
+</Request>
+
+<Response status="303" label="Back to the console" />
+
+</HttpEndpoint>
+
+<HttpEndpoint method="POST" path="/catalog/import" summary="Import a catalog snapshot" auth="Internal service token">
+
+A multipart upload: the fields double as the parts list, and no example fence is needed.
+
+<Param name="snapshot" in="body" type="file (text/csv)" required>
+
+The CSV snapshot, at most 50 MB.
+
+</Param>
+
+<Param name="dryRun" in="body" type="boolean" default="true">
+
+Validates the snapshot without writing.
+
+</Param>
+
+<Response status="201" label="Snapshot imported" />
+
+</HttpEndpoint>
+
+<HttpEndpoint method="POST" path="/catalog/notes" summary="Append an operator note" auth="Admin session cookie">
+
+A plain-text body has no fields; the example is the value.
+
+<Request contentType="text/plain">
+
+```text
+Refreshed EU catalog after the pricing incident.
+```
+
+</Request>
+
+<Response status="204" label="Note recorded" />
+
+</HttpEndpoint>
+
+<HttpEndpoint method="PUT" path="/catalog/refresh/{refreshId}/artifact" summary="Attach the refresh report artifact" auth="Internal service token">
+
+A binary body: the media type says everything, so the fence carries a placeholder instead of bytes.
+
+<Param name="refreshId" in="path" type="string" required>
+
+The refresh job the artifact belongs to.
+
+</Param>
+
+<Request contentType="application/octet-stream">
+
+```text
+<binary payload>
+```
+
+</Request>
+
+<Response status="204" label="Artifact stored" />
+
+</HttpEndpoint>
+
+### The rest of the surface
+
+Header-only cards enumerate the remaining routes compactly; each is a legitimate bare `HttpEndpoint` whose contract detail can be filled in when its design review happens.
+
+<HttpEndpoint method="GET" path="/catalog/refresh" summary="List recent refresh jobs" auth="Internal service token" />
+
+<HttpEndpoint method="DELETE" path="/catalog/refresh/{refreshId}" summary="Cancel a queued refresh" auth="Internal service token" />
+
+### Retiring the flush-everything route
+
+<Callout type="warning" title="Deprecation">
+
+The old whole-catalog flush is replaced by the `force` flag on the queueing endpoint, which keeps refreshes deduplicated and bounded.
+The route stays available for one release with its deprecated styling making the state unmissable.
+
+</Callout>
+
+<HttpEndpoint method="POST" path="/catalog/refresh-all" summary="Replaced by the force flag on /catalog/refresh" auth="Internal service token" deprecated />
+
+## GraphQL operations
+
+### Queueing a refresh
+
+Agent consoles that already speak GraphQL get the same queueing contract mirrored onto their native shape: a kind-badged operation with literal argument types, the payload convention, and an executable example.
+
+<GraphqlOperation kind="mutation" name="refreshCreate" access="Requires catalog:write">
+
+Queues a refresh through the GraphQL bridge, mirroring the HTTP queueing endpoint above.
+
+<Argument name="input" type="RefreshCreateInput!">
+
+The cache keys to refresh, whether to force fresh entries, and an optional reason.
+
+</Argument>
+
+<Field in="input" name="cacheKeys" type="[String!]!">
+
+The cache entries to refresh; at least 1 and at most 500 items.
+
+</Field>
+
+<Field in="input" name="force" type="Boolean" default="false">
+
+Refreshes keys even when their entries are still fresh.
+
+</Field>
+
+<Field in="input" name="reason" type="String">
+
+Free-form reason recorded on the refresh job for audit.
+
+</Field>
+
+<Returns type="RefreshCreatePayload">
+
+The queued `refresh` plus a `userErrors` list following the mutation-payload convention.
+
+</Returns>
+
+<Field in="payload" name="refresh" type="Refresh">
+
+The queued refresh job; null when validation fails.
+
+</Field>
+
+<Field in="payload" name="userErrors" type="[UserError!]!">
+
+Field-anchored validation failures; empty on success.
+
+</Field>
+
+<Operation>
+
+```graphql
+mutation refreshCreate($input: RefreshCreateInput!) {
+  refreshCreate(input: $input) {
+    refresh {
+      id
+      status
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}
+```
+
+</Operation>
+
+<Variables>
+
+```json
+{
+  "input": {
+    "cacheKeys": ["catalog:eu:electronics"],
+    "reason": "Stale prices reported by support"
+  }
+}
+```
+
+</Variables>
+
+<Response label="Success">
+
+```json
+{
+  "data": {
+    "refreshCreate": {
+      "refresh": { "id": "rfr_31c8", "status": "queued" },
+      "userErrors": []
+    }
+  }
+}
+```
+
+</Response>
+
+<Response label="Validation error">
+
+```json
+{
+  "data": {
+    "refreshCreate": {
+      "refresh": null,
+      "userErrors": [
+        {
+          "field": ["input", "cacheKeys"],
+          "message": "At least one cache key is required."
+        }
+      ]
+    }
+  }
+}
+```
+
+</Response>
+
+</GraphqlOperation>
+
+### Reading over GraphQL
+
+A header-only operation enumerates the read side compactly, exactly like a bare HTTP card.
+
+<GraphqlOperation kind="query" name="refresh" access="Requires catalog:read" />
+
+## gRPC methods
+
+### Watching refreshes
+
+Streaming consumers watch refreshes over the gRPC bridge instead of polling; the signature places the stream keyword and the badge names the kind.
+
+<GrpcMethod service="catalog.v1.RefreshService" name="WatchRefreshes" request="WatchRefreshesRequest" response="RefreshEvent" kind="serverStreaming">
+
+Streams refresh state changes as the worker pool processes jobs.
+
+<Field in="request" name="refresh_id" type="string">
+
+Optional. Watches one refresh job; absent means all jobs for the caller.
+
+</Field>
+
+<Field in="response" name="status" type="string">
+
+One of queued, running, done, or failed.
+
+</Field>
+
+<Error code="NOT_FOUND">
+
+The refresh job does not exist or the caller cannot see it.
+
+</Error>
+
+<Example label="Request">
+
+```json
+{ "refresh_id": "rfr_31c8" }
+```
+
+</Example>
+
+<Example label="Stream">
+
+```text
+status: queued
+status: running
+status: done
+```
+
+</Example>
+
+<Proto>
+
+```proto
+service RefreshService {
+  rpc WatchRefreshes(WatchRefreshesRequest) returns (stream RefreshEvent);
+  rpc GetRefresh(GetRefreshRequest) returns (Refresh);
+}
+```
+
+</Proto>
+
+</GrpcMethod>
+
+### The unary read
+
+The unary read is a compact header-only method beside it.
+
+<GrpcMethod service="catalog.v1.RefreshService" name="GetRefresh" request="GetRefreshRequest" response="Refresh" />

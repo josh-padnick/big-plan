@@ -1,0 +1,165 @@
+---
+title: GraphqlOperation
+description: A component that renders one GraphQL query, mutation, or subscription as a kind-badged review card with arguments, return type, and executable examples.
+---
+
+import ThemeImage from "../../../components/ThemeImage.astro";
+import operationLight from "../../../assets/components/graphql-operation-light.png";
+import operationDark from "../../../assets/components/graphql-operation-dark.png";
+
+`GraphqlOperation` shows one proposed GraphQL capability - a query, mutation, or subscription - so a plan that introduces or changes a schema can be reviewed on the contract: what the operation takes, what it returns, and what running it actually looks like.
+
+## How it looks
+
+<ThemeImage
+  light={operationLight}
+  dark={operationDark}
+  alt="An operation card with a mutation kind badge, monospace name, access line, literal GraphQL argument types, and one-level input and payload field expansions"
+/>
+
+## When to use it
+
+Use `GraphqlOperation` when a plan proposes or changes a query, mutation, or subscription and the reviewer should judge its arguments, return shape, and an executable example with variables and response.
+
+### When not to use it
+
+- Loose GraphQL samples with no schema contract to review - use a plain `graphql` fence
+- Whole-schema SDL dumps - reference sites do not show SDL per entry, and neither does this card; describe type definitions in prose or a fence
+
+## Use cases
+
+- Propose a new mutation with its input, payload convention, and a copy-runnable example operation
+- Enumerate a planned schema surface compactly, since a header-only operation with just kind and name is valid
+
+## Usage
+
+````mdx
+<GraphqlOperation kind="mutation" name="commentCreate" access="Requires plan write access">
+
+Creates a comment anchored to a highlighted range of the plan.
+
+<Argument name="input" type="CommentCreateInput!">
+
+The plan id, the anchored range, and the markdown comment body.
+
+</Argument>
+
+<Field in="input" name="planId" type="ID!">
+
+The plan receiving the comment.
+
+</Field>
+
+<Field in="input" name="body" type="String!">
+
+The comment body as authored markdown.
+
+</Field>
+
+<Returns type="CommentCreatePayload">
+
+The created `comment` plus a `userErrors` list following the mutation-payload convention.
+
+</Returns>
+
+<Field in="payload" name="comment" type="Comment">
+
+The created comment; null when validation fails.
+
+</Field>
+
+<Field in="payload" name="userErrors" type="[UserError!]!">
+
+Field-anchored validation failures; empty on success.
+
+</Field>
+
+<Operation>
+
+```graphql
+mutation commentCreate($input: CommentCreateInput!) {
+  commentCreate(input: $input) {
+    comment {
+      id
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}
+```
+
+</Operation>
+
+<Variables>
+
+```json
+{ "input": { "planId": "pln_42", "body": "Keep the retry budget explicit." } }
+```
+
+</Variables>
+
+<Response label="Success">
+
+```json
+{ "data": { "commentCreate": { "comment": { "id": "cmt_8f3a" }, "userErrors": [] } } }
+```
+
+</Response>
+
+<Response label="Validation error">
+
+```json
+{
+  "data": {
+    "commentCreate": {
+      "comment": null,
+      "userErrors": [{ "field": ["input", "body"], "message": "Body is required." }]
+    }
+  }
+}
+```
+
+</Response>
+
+</GraphqlOperation>
+````
+
+## Authoring
+
+### Attributes
+
+| Attribute           | Type                                       | Required | Behavior                                                                     |
+| ------------------- | ------------------------------------------ | -------- | ----------------------------------------------------------------------------- |
+| `kind`              | enum: `query` `mutation` `subscription`    | Yes      | The spec's operation type; renders the kind badge beside the name.            |
+| `name`              | string (non-empty)                         | Yes      | The operation name, rendered monospace.                                       |
+| `access`            | string                                     | No       | Access requirement (scopes, permissions), rendered as a lock-annotated line.  |
+| `deprecated`        | bare boolean                               | No       | Renders a Deprecated badge and strikes the name.                              |
+| `deprecationReason` | string                                     | No       | The `@deprecated` reason, shown with the badge; invalid without `deprecated`. |
+
+The markdown body before the scoped children is the operation's description.
+
+### Argument
+
+Each `Argument` documents one argument: a required non-empty `name` and a required non-empty `type` rendered literally - GraphQL's `!` and `[...]` markers convey requiredness, so there is no separate required flag - plus a markdown body description.
+Duplicate argument names are rejected.
+
+### Field
+
+Each `Field` expands one level of the input or payload shape: a required `in` (`input` or `payload`) that seats it under Arguments or Returns, a required `name` and literal `type` (GraphQL's `!` and `[...]` markers convey requiredness), an optional `default`, and a markdown body.
+Duplicate `in`-plus-`name` identities are rejected; deeper nesting belongs to prose, not the card.
+
+### Returns
+
+At most one `Returns` names the required non-empty return `type` and carries a markdown walkthrough of the payload fields.
+
+### Operation, Variables, and Response
+
+`Operation` and `Variables` appear at most once; `Response` repeats with an optional `label` so a success example can sit beside the validation error that teaches how `userErrors` behaves.
+Each takes exactly one fence of its required language - an executable `graphql` operation, `json` variables, and `json` responses - and all render together under one labeled Example section.
+`Variables` without an `Operation` beside it is rejected, and every fence flows through the standard highlighting and copy pipeline.
+
+Component-specific violations report positional diagnostics, including a wrong-language or missing fence, duplicate arguments, repeated single-instance children, a `deprecationReason` without `deprecated`, and headings, footnotes, or nested components inside scoped-child bodies.
+
+`Argument`, `Field`, `Returns`, `Operation`, `Variables`, and `Response` outside a declaring `GraphqlOperation` stay unknown components.

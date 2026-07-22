@@ -115,14 +115,14 @@
   /* Guides sit well behind the content: indentation already carries the
      structure, so the lines only whisper it. */
   article .file-tree-children {
-    border-left-color: color-mix(in srgb, var(--color-edge) 55%, transparent);
+    border-left-color: color-mix(in srgb, var(--color-edge) 50%, transparent);
   }
   article .file-tree-children > .file-tree-item > .file-tree-row::before {
     position: absolute;
     top: 50%;
     left: -1.05rem;
     width: 0.75rem;
-    border-top: 1px solid color-mix(in srgb, var(--color-edge) 55%, transparent);
+    border-top: 1px solid color-mix(in srgb, var(--color-edge) 50%, transparent);
     content: "";
   }
   /* Git-status-style change tinting shared by the file name and its

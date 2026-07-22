@@ -1,0 +1,46 @@
+# Worker Contract Snippet Plan
+
+This plan walks the refresh worker's contract and exists to demonstrate `CodeSnippet`'s major usage modes: an annotated excerpt with file-absolute numbering and a file-identified excerpt without annotations.
+
+## The annotated excerpt
+
+The excerpt knows its real place in the file, and the annotations anchor to the file-absolute lines a reviewer can verify.
+
+<CodeSnippet file="src/catalog/refresh-worker.ts" startLine="42" showLineNumbers>
+
+```ts
+export const refreshCatalog = async (key: string): Promise<void> => {
+  const current = await catalogOrigin.read(key);
+  await cache.put(key, current, { ttlSeconds: 300 });
+  metrics.increment("catalog_cache.refresh_success");
+};
+```
+
+<Annotation lines="43">
+
+Resolve through `catalogOrigin` so refreshes use the same retries and tracing as synchronous fallbacks.
+
+</Annotation>
+
+<Annotation lines="44-45">
+
+The cache write must complete before success is recorded; otherwise dashboards can report a refresh that readers cannot observe.
+
+</Annotation>
+
+</CodeSnippet>
+
+## File identity without annotations
+
+When the point is where the code lives rather than what each line does, the file association alone earns the component.
+
+<CodeSnippet file="worker-pool/worker-config.ts">
+
+```ts
+export const workerConfig = {
+  concurrency: 12,
+  timeoutMs: 750,
+};
+```
+
+</CodeSnippet>

@@ -100,6 +100,32 @@ test("should navigate the rendered sample plan through the TOC without errors", 
       )
       .toBe(false);
   });
+
+  await test.step("becoming the current section never rewraps a TOC label", async () => {
+    const unstable = await page.evaluate(() => {
+      const links = Array.from(
+        document.querySelectorAll<HTMLAnchorElement>(
+          'nav[aria-label="Contents"] a[data-section-link]',
+        ),
+      ).filter((link) => link.getBoundingClientRect().height > 0);
+      const failures: Array<string> = [];
+      for (const link of links) {
+        const hadCurrent = link.getAttribute("aria-current");
+        link.removeAttribute("aria-current");
+        const inactive = link.getBoundingClientRect().height;
+        link.setAttribute("aria-current", "true");
+        const active = link.getBoundingClientRect().height;
+        if (hadCurrent === null) {
+          link.removeAttribute("aria-current");
+        }
+        if (inactive !== active) {
+          failures.push(link.textContent?.trim() ?? "");
+        }
+      }
+      return failures;
+    });
+    expect(unstable).toEqual([]);
+  });
 });
 
 test("should provide a compact sticky table of contents on mobile", async ({

@@ -40,6 +40,11 @@ const browserScripts = [
     name: "file-tree",
     exportName: "FILE_TREE_JS",
   },
+  {
+    directory: "markdown/components/http-endpoint",
+    name: "http-endpoint",
+    exportName: "HTTP_ENDPOINT_JS",
+  },
 ];
 
 const check = spawnSync(

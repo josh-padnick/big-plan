@@ -14,6 +14,7 @@ import { GLOBAL_CSS } from "../global.generated.js";
 import { CODE_DIFF_JS } from "../markdown/components/code-diff/code-diff.generated.js";
 import { CODE_SNIPPET_JS } from "../markdown/components/code-snippet/code-snippet.generated.js";
 import { FILE_TREE_JS } from "../markdown/components/file-tree/file-tree.generated.js";
+import { HTTP_ENDPOINT_JS } from "../markdown/components/http-endpoint/http-endpoint.generated.js";
 import { COPY_CODE_JS } from "../markdown/code-block/copy-code.generated.js";
 import { SCROLL_SPY_JS } from "./scroll-spy.generated.js";
 import { THEME_TOGGLE_JS } from "./theme-toggle.generated.js";
@@ -40,13 +41,13 @@ const BODY_CLASSES =
 // column (~70ch) above it. The no-TOC variant is always a single column.
 const LAYOUT_CLASSES =
   "grid grid-cols-[minmax(0,1fr)] justify-center gap-8 px-5 pt-16 pb-16 wide:gap-14 wide:px-6 wide:pt-12 wide:pb-20";
-const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[14rem_minmax(0,70ch)]`;
+const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,70ch)]`;
 const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,70ch)]`;
 
 const TOC_LINK_CLASSES =
-  "block border-l-2 border-edge px-3 py-[0.3rem] text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:font-semibold aria-[current=true]:text-accent";
+  "block border-l-2 border-edge px-3 py-[0.3rem] leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:font-semibold aria-[current=true]:text-accent";
 const MOBILE_TOC_LINK_CLASSES =
-  "block border-l-2 border-transparent px-5 py-2.5 text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:font-semibold aria-[current=true]:text-accent";
+  "block border-l-2 border-transparent px-5 py-2.5 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:font-semibold aria-[current=true]:text-accent";
 
 const THEME_TOGGLE_CLASSES =
   "fixed top-1.5 right-3 z-20 rounded-md border border-edge bg-surface px-3 py-1.5 text-xs font-semibold text-muted shadow-sm hover:text-ink focus:outline-2 focus:outline-offset-2 focus:outline-accent";
@@ -63,6 +64,19 @@ const createOverviewId = (contentIds: ReadonlyArray<string>): string => {
   return candidate;
 };
 
+// Sizes every label word at its semibold width via a hidden ::after ghost
+// (see the .toc-word rules), so the active section's bolding can never move
+// a label's line breaks; pseudo-element text stays out of copies and the
+// accessibility tree.
+const bufferedTocLabel = (label: string): string =>
+  label
+    .split(" ")
+    .map(
+      (word) =>
+        `<span class="toc-word" data-word="${escapeHtml(word)}">${escapeHtml(word)}</span>`,
+    )
+    .join(" ");
+
 // Builds links shared by both TOCs; ids are URI-encoded because slugs may
 // contain characters that are not literal-safe inside href values.
 const renderTocItems = ({
@@ -75,7 +89,7 @@ const renderTocItems = ({
   nav
     .map(
       (entry) =>
-        `<li><a class="${linkClasses}" data-section-link href="#${encodeURIComponent(entry.id)}">${escapeHtml(entry.label)}</a></li>`,
+        `<li><a class="${linkClasses}" data-section-link href="#${encodeURIComponent(entry.id)}">${bufferedTocLabel(entry.label)}</a></li>`,
     )
     .join("\n");
 
@@ -161,6 +175,7 @@ ${contentHtml}
           CODE_DIFF_JS,
           CODE_SNIPPET_JS,
           FILE_TREE_JS,
+          HTTP_ENDPOINT_JS,
           SCROLL_SPY_JS,
         ]
       : [
@@ -169,6 +184,7 @@ ${contentHtml}
           CODE_DIFF_JS,
           CODE_SNIPPET_JS,
           FILE_TREE_JS,
+          HTTP_ENDPOINT_JS,
         ],
     bodyClassName: BODY_CLASSES,
   };

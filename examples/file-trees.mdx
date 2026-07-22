@@ -1,0 +1,38 @@
+# Module Layout Plan
+
+This plan reshapes the catalog module and exists to demonstrate the file tree components: `FileTree` for plain hierarchies and `FileTreeDiff` for per-entry change review.
+
+## FileTree
+
+A plain hierarchy states where code lives today, with notes on the entries a reviewer should recognize.
+
+<FileTree title="Worker pool layout">
+
+```tree
+worker-pool/
+  refresh-worker.ts - Consumes deduplicated catalog refresh jobs.
+  worker-config.ts - Owns concurrency and timeout settings.
+```
+
+</FileTree>
+
+## FileTreeDiff
+
+The change tree carries per-entry status - additions, removals, modifications, and renames - with notes tucked behind hover hints and a combined or side-by-side view.
+
+<FileTreeDiff title="Planned changes">
+
+```tree
+src/
+  catalog/
+    catalog-origin.ts
+    refresh-worker.ts [modified] - Move refresh work behind the queue.
+    refresh-queue.ts [added] - Deduplicate refresh jobs by cache key.
+  metrics/ [removed] - The legacy metrics module retires with its counter.
+    legacy-cache-counter.ts [removed]
+ops/ -> deploy/ [renamed] - Match the platform team's naming.
+  runbook.md
+README.md [modified]
+```
+
+</FileTreeDiff>
