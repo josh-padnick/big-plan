@@ -12,10 +12,14 @@ export type IndexParticipation = {
 const escapeRegExp = (value: string): string =>
   value.replace(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`);
 
-// Quoted SQL literals are opaque to reference scanning: a predicate like
-// status = 'active' names no column called active.
-const withoutQuotedLiterals = (value: string): string =>
-  value.replace(/'[^']*'|"[^"]*"/gu, " ");
+// SQL string literals are opaque to reference scanning, while quoted
+// identifiers remain visible without their delimiters.
+const searchableSql = (value: string): string =>
+  value
+    .replace(/'(?:''|[^'])*'/gu, " ")
+    .replace(/"((?:""|[^"])*)"/gu, (_quoted, identifier: string) =>
+      identifier.replaceAll('""', '"'),
+    );
 
 // A column participates as a key when it is a plain entry or appears inside
 // an expression entry; predicate participation covers partial-index WHERE
@@ -40,13 +44,13 @@ export const indexParticipation = ({
     const isKey = index.columns.some(
       (entry) =>
         entry.replaceAll("`", "") === column.name ||
-        namePattern.test(withoutQuotedLiterals(entry)),
+        namePattern.test(searchableSql(entry)),
     );
     if (isKey) {
       found.push({ position, kind: "key" });
     } else if (
       index.where !== undefined &&
-      namePattern.test(withoutQuotedLiterals(index.where))
+      namePattern.test(searchableSql(index.where))
     ) {
       found.push({ position, kind: "predicate" });
     }

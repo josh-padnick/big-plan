@@ -797,7 +797,18 @@ export const parseTableSchema = ({
   // Membership is checkable only after every column line has parsed, since
   // DBML allows the indexes block before the columns it references.
   const columnNames = new Set(columns.map((column) => column.name));
+  const indexNames = new Set<string>();
   for (const { index, line } of indexes) {
+    if (index.name?.trim() === "") {
+      diagnostics.push({ line, message: "Index name must not be empty" });
+    } else if (index.name !== undefined && indexNames.has(index.name)) {
+      diagnostics.push({
+        line,
+        message: `Duplicate index name "${index.name}"`,
+      });
+    } else if (index.name !== undefined) {
+      indexNames.add(index.name);
+    }
     for (const column of index.columns) {
       if (!column.startsWith("`") && !columnNames.has(column)) {
         diagnostics.push({

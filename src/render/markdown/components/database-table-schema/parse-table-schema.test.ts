@@ -324,6 +324,26 @@ describe("parseTableSchema indexes", () => {
     expect(schema.indexes[0]?.where).toBe("status = 'live'");
   });
 
+  it("should diagnose an empty index name at its line", () => {
+    const { diagnostics } = parseTableSchema({
+      source: withColumns("indexes {\n  status [name: '']\n}\n"),
+    });
+    expect(diagnostics).toEqual([
+      { line: 4, message: "Index name must not be empty" },
+    ]);
+  });
+
+  it("should diagnose a duplicate index name at the repeated line", () => {
+    const { diagnostics } = parseTableSchema({
+      source: withColumns(
+        "indexes {\n  customer_id [name: 'lookup_idx']\n  status [name: 'lookup_idx']\n}\n",
+      ),
+    });
+    expect(diagnostics).toEqual([
+      { line: 5, message: 'Duplicate index name "lookup_idx"' },
+    ]);
+  });
+
   it("should diagnose a value on the unique index marker instead of enabling it", () => {
     const { schema, diagnostics } = parseTableSchema({
       source: withColumns("indexes {\n  status [unique: false]\n}\n"),

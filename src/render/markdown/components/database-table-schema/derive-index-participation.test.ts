@@ -60,6 +60,15 @@ describe("indexParticipation", () => {
     ).toEqual([{ position: 1, kind: "key" }]);
   });
 
+  it("should find a double-quoted identifier inside an expression entry", () => {
+    expect(
+      indexParticipation({
+        column: column("status"),
+        indexes: [index({ columns: ['`lower("status")`'] })],
+      }),
+    ).toEqual([{ position: 1, kind: "key" }]);
+  });
+
   it("should not match a column whose name is a substring of another", () => {
     expect(
       indexParticipation({
@@ -90,6 +99,17 @@ describe("indexParticipation", () => {
         ],
       }),
     ).toEqual([]);
+  });
+
+  it("should find a double-quoted identifier inside a predicate", () => {
+    expect(
+      indexParticipation({
+        column: column("status"),
+        indexes: [
+          index({ columns: ["cache_key"], where: "\"status\" = 'active'" }),
+        ],
+      }),
+    ).toEqual([{ position: 1, kind: "predicate" }]);
   });
 
   it("should ignore quoted literals inside an expression entry", () => {
