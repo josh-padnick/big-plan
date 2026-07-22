@@ -125,25 +125,6 @@ test("should present the catalog request as HTTP JSON", async ({
   httpEndpointViewerUrl,
 }) => {
   await page.goto(httpEndpointViewerUrl);
-  const endpoint = page.locator(
-    '[data-http-endpoint][data-http-method="POST"]',
-  );
-  await endpoint.getByRole("tab", { name: "Body" }).click();
-  const bodySection = endpoint.locator('[data-http-section="request-body"]');
-
-  await expect(bodySection.locator("[data-http-body-type]")).toHaveCount(0);
-  await expect(bodySection).toContainText("application/json");
-  await expect(bodySection).toContainText("cacheKeys");
-  await expect(bodySection.locator("pre code")).toContainText(
-    '"catalog:eu:electronics"',
-  );
-});
-
-test("should present the catalog request as HTTP JSON", async ({
-  page,
-  httpEndpointViewerUrl,
-}) => {
-  await page.goto(httpEndpointViewerUrl);
   const endpoint = page
     .locator('[data-http-endpoint][data-http-method="POST"]')
     .first();
