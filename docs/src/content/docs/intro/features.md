@@ -37,7 +37,6 @@ For what comes next, see the [roadmap](/intro/roadmap/).
 - `HttpEndpoint` components for HTTP contracts with location-grouped parameters, request examples, status-coded responses, and tabbed section navigation.
 - `GraphqlOperation` components for queries, mutations, and subscriptions with literal argument types and executable examples.
 - `GrpcMethod` components for streaming-aware proto signatures, request and response fields, canonical errors, and proto examples.
-- Closing `Review` checklists on every protocol card for the architectural questions to settle before implementation.
 
 ## Output
 

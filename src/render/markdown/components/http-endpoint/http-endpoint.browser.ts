@@ -10,7 +10,6 @@ const TAB_DEFINITIONS: ReadonlyArray<readonly [string, string]> = [
   ["header-params", "Headers"],
   ["request-body", "Body"],
   ["responses", "Responses"],
-  ["review", "Review"],
 ];
 
 const TAB_ORDER = new Map(
@@ -20,14 +19,9 @@ const TAB_LABELS = new Map(TAB_DEFINITIONS);
 
 let nextPanelId = 1;
 
-// A section's identity: the renderer stamps data-http-section on its own
-// sections, while the shared review checklist announces itself through its
-// inner data hook.
+// A section's identity comes from the renderer's data hook.
 const sectionKind = (section: HTMLElement): string | undefined =>
-  section.dataset.httpSection ??
-  (section.querySelector("[data-review-checklist]") !== null
-    ? "review"
-    : undefined);
+  section.dataset.httpSection;
 
 // The muted count beside a tab label: definition entries for parameter-ish
 // panels, response rows for the responses panel.
@@ -40,9 +34,6 @@ const sectionCount = ({
 }): number => {
   if (kind === "responses") {
     return section.querySelectorAll("[data-http-response]").length;
-  }
-  if (kind === "review") {
-    return 0;
   }
   return section.querySelectorAll("dt").length;
 };
@@ -89,16 +80,13 @@ for (const card of document.querySelectorAll<HTMLElement>(
     nextPanelId += 1;
     entry.section.id = panelId;
     entry.section.setAttribute("role", "tabpanel");
-    // The selected tab already names the panel, so the in-panel label (and
-    // the review checklist's icon row) would say it twice; the stacked
-    // no-JavaScript document keeps them as its only headings.
-    const reviewRow = entry.section.querySelector<HTMLElement>(
-      "[data-review-checklist]",
-    );
+    // The selected tab already names the panel, so the in-panel label would
+    // say it twice; the stacked no-JavaScript document keeps the label as its
+    // only heading.
     const label = entry.section.querySelector<HTMLElement>(
       ".card-section-label",
     );
-    (reviewRow ?? label)?.setAttribute("hidden", "");
+    label?.setAttribute("hidden", "");
 
     const tab = document.createElement("button");
     tab.type = "button";
