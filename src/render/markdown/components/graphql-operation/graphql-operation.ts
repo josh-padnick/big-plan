@@ -1,7 +1,7 @@
 // Exposes GraphqlOperation's component definition and renders its compiled
 // schema capability as an always-expanded, static operation review card.
 
-import type { Element, ElementContent, Text } from "hast";
+import type { Element, Text } from "hast";
 import { LOCK_ICON } from "../../../icons/lucide/lock.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import {
