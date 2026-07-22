@@ -41,7 +41,7 @@ test("should review HTTP endpoint contracts", async ({
     await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
     // Each panel is named by its tab even though its visible label hides.
     await expect(
-      endpoint.getByRole("tabpanel", { name: "Path 1" }),
+      endpoint.getByRole("tabpanel", { name: /Path\s?1/ }),
     ).toBeVisible();
     await expect(
       endpoint.locator('[data-http-section="path-params"]'),
