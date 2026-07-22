@@ -102,10 +102,14 @@ for (const card of document.querySelectorAll<HTMLElement>(
 
     const tab = document.createElement("button");
     tab.type = "button";
+    tab.id = `${panelId}-tab`;
     tab.className =
       "http-endpoint-tab cursor-pointer border-0 bg-transparent px-2.5 py-2 font-sans text-xs font-semibold";
     tab.setAttribute("role", "tab");
     tab.setAttribute("aria-controls", panelId);
+    // The panel's visible label hides once tabs name the sections, so the
+    // tab itself becomes the panel's accessible name.
+    entry.section.setAttribute("aria-labelledby", tab.id);
     tab.append(TAB_LABELS.get(entry.kind) ?? entry.kind);
     const count = sectionCount(entry);
     if (count > 0) {

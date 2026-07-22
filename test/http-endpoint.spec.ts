@@ -39,6 +39,10 @@ test("should review HTTP endpoint contracts", async ({
       "Responses3",
     ]);
     await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
+    // Each panel is named by its tab even though its visible label hides.
+    await expect(
+      endpoint.getByRole("tabpanel", { name: "Path 1" }),
+    ).toBeVisible();
     await expect(
       endpoint.locator('[data-http-section="path-params"]'),
     ).toBeVisible();
@@ -124,6 +128,25 @@ test("should present the catalog request as HTTP JSON", async ({
   const endpoint = page.locator(
     '[data-http-endpoint][data-http-method="POST"]',
   );
+  await endpoint.getByRole("tab", { name: "Body" }).click();
+  const bodySection = endpoint.locator('[data-http-section="request-body"]');
+
+  await expect(bodySection.locator("[data-http-body-type]")).toHaveCount(0);
+  await expect(bodySection).toContainText("application/json");
+  await expect(bodySection).toContainText("cacheKeys");
+  await expect(bodySection.locator("pre code")).toContainText(
+    '"catalog:eu:electronics"',
+  );
+});
+
+test("should present the catalog request as HTTP JSON", async ({
+  page,
+  httpEndpointViewerUrl,
+}) => {
+  await page.goto(httpEndpointViewerUrl);
+  const endpoint = page
+    .locator('[data-http-endpoint][data-http-method="POST"]')
+    .first();
   await endpoint.getByRole("tab", { name: "Body" }).click();
   const bodySection = endpoint.locator('[data-http-section="request-body"]');
 
