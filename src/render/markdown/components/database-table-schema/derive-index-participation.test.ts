@@ -69,6 +69,20 @@ describe("indexParticipation", () => {
     ).toEqual([{ position: 1, kind: "key" }]);
   });
 
+  it("should ignore non-column tokens inside expression entries", () => {
+    expect(
+      indexParticipation({
+        column: column("date"),
+        indexes: [
+          index({ columns: ["`date(occurred_at)`"] }),
+          index({ columns: ["`created_at::date`"] }),
+          index({ columns: ["`events.date`"] }),
+          index({ columns: ["`coalesce(date, CURRENT_DATE)`"] }),
+        ],
+      }),
+    ).toEqual([{ position: 4, kind: "key" }]);
+  });
+
   it("should not match a column whose name is a substring of another", () => {
     expect(
       indexParticipation({
@@ -110,6 +124,20 @@ describe("indexParticipation", () => {
         ],
       }),
     ).toEqual([{ position: 1, kind: "predicate" }]);
+  });
+
+  it("should ignore non-column tokens inside predicates", () => {
+    expect(
+      indexParticipation({
+        column: column("date"),
+        indexes: [
+          index({ columns: ["id"], where: "date  (occurred_at) IS NULL" }),
+          index({ columns: ["id"], where: "created_at::date IS NULL" }),
+          index({ columns: ["id"], where: "events.date IS NULL" }),
+          index({ columns: ["id"], where: "date IS NULL" }),
+        ],
+      }),
+    ).toEqual([{ position: 4, kind: "predicate" }]);
   });
 
   it("should ignore quoted literals inside an expression entry", () => {

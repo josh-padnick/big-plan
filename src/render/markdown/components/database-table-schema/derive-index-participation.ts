@@ -35,7 +35,7 @@ export const indexParticipation = ({
   // Lookarounds rather than \b: $ is a legal identifier character here, so a
   // name like amount$ still ends at a real boundary.
   const namePattern = new RegExp(
-    String.raw`(?<![\w$])${escapeRegExp(column.name)}(?![\w$])`,
+    String.raw`(?<![\w$.])(?<!::)${escapeRegExp(column.name)}(?![\w$])(?!\s*\()`,
     "u",
   );
   const found: Array<IndexParticipation> = [];
