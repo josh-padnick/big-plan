@@ -383,7 +383,9 @@ The plan does not exist or the caller cannot see it.
 <Proto>
 
 ```proto
-rpc WatchComments(WatchCommentsRequest) returns (stream Comment);
+service CommentService {
+  rpc WatchComments(WatchCommentsRequest) returns (stream Comment);
+}
 ```
 
 </Proto>

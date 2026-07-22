@@ -14,7 +14,7 @@ import operationDark from "../../../assets/components/graphql-operation-dark.png
 <ThemeImage
   light={operationLight}
   dark={operationDark}
-  alt="An operation card with a mutation kind badge, monospace name, access line, argument list with literal GraphQL types, and a return type walkthrough"
+  alt="An operation card with a mutation kind badge, monospace name, access line, literal GraphQL argument types, and one-level input and payload field expansions"
 />
 
 ## When to use it
@@ -44,11 +44,35 @@ The plan id, the anchored range, and the markdown comment body.
 
 </Argument>
 
+<Field in="input" name="planId" type="ID!">
+
+The plan receiving the comment.
+
+</Field>
+
+<Field in="input" name="body" type="String!">
+
+The comment body as authored markdown.
+
+</Field>
+
 <Returns type="CommentCreatePayload">
 
 The created `comment` plus a `userErrors` list following the mutation-payload convention.
 
 </Returns>
+
+<Field in="payload" name="comment" type="Comment">
+
+The created comment; null when validation fails.
+
+</Field>
+
+<Field in="payload" name="userErrors" type="[UserError!]!">
+
+Field-anchored validation failures; empty on success.
+
+</Field>
 
 <Operation>
 
@@ -76,10 +100,25 @@ mutation commentCreate($input: CommentCreateInput!) {
 
 </Variables>
 
-<Response>
+<Response label="Success">
 
 ```json
 { "data": { "commentCreate": { "comment": { "id": "cmt_8f3a" }, "userErrors": [] } } }
+```
+
+</Response>
+
+<Response label="Validation error">
+
+```json
+{
+  "data": {
+    "commentCreate": {
+      "comment": null,
+      "userErrors": [{ "field": ["input", "body"], "message": "Body is required." }]
+    }
+  }
+}
 ```
 
 </Response>

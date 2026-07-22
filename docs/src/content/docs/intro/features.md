@@ -35,8 +35,8 @@ For what comes next, see the [roadmap](/intro/roadmap/).
 - `FileTree` components for foldable plain hierarchies with optional per-entry notes.
 - `FileTreeDiff` components with entry-level change status, summaries, persisted combined or side-by-side views, a Planned-pane final-state switch, fold controls, note hints, and full-screen viewing.
 - `HttpEndpoint` components for HTTP contracts with location-grouped parameters, request examples, status-coded responses, and tabbed section navigation.
-- `GraphqlOperation` components for queries, mutations, and subscriptions with literal argument types and executable examples.
-- `GrpcMethod` components for streaming-aware proto signatures, request and response fields, canonical errors, and proto examples.
+- `GraphqlOperation` components for queries, mutations, and subscriptions with literal argument types, one-level input and payload fields, and grouped executable examples with repeatable labeled responses.
+- `GrpcMethod` components for streaming-aware proto signatures, message-typed request and response fields, gRPC status codes, grouped examples, and proto source.
 
 ## Output
 

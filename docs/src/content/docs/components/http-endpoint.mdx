@@ -44,6 +44,24 @@ Identifier of the plan receiving the comment.
 
 </Param>
 
+<Param name="includeContext" in="query" type="boolean" default="false">
+
+Includes the selected plan text in the response.
+
+</Param>
+
+<Param name="X-Big-Plan-Session" in="header" type="string" required>
+
+Session identifier issued by the local browser bridge.
+
+</Param>
+
+<Param name="body" in="body" type="string" required>
+
+Markdown comment text supplied by the reviewer.
+
+</Param>
+
 <Request contentType="application/json">
 
 ```json
@@ -115,6 +133,7 @@ Component-specific violations report positional diagnostics, including:
 ## Tabbed navigation
 
 With JavaScript enabled, a card with two or more sections folds them behind a tab bar - Path, Query, Headers, Body, Responses - with entry counts where applicable and an accent underline on the active tab.
+Click a tab or use Left Arrow, Right Arrow, Home, and End to move between sections.
 The stacked sections remain the server-rendered document, so readers without JavaScript, printouts, and text extraction always see the complete contract.
 
 ## Copy behavior

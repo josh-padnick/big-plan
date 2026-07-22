@@ -14,7 +14,7 @@ import methodDark from "../../../assets/components/grpc-method-dark.png";
 <ThemeImage
   light={methodLight}
   dark={methodDark}
-  alt="A method card with the service caption, a signature with a tinted stream keyword, a streaming badge, request and response field lists, an error code, and a proto fence"
+  alt="A method card with the service caption, a signature with a tinted stream keyword, a streaming badge, message-typed request and response field sections, a gRPC status code, and a service-block proto fence"
 />
 
 ## When to use it
@@ -56,10 +56,29 @@ The plan does not exist or the caller cannot see it.
 
 </Error>
 
+<Example label="Request">
+
+```json
+{ "plan_id": "plans/pln_42" }
+```
+
+</Example>
+
+<Example label="Stream">
+
+```text
+comment: cmt_8f3a
+comment: cmt_901b
+```
+
+</Example>
+
 <Proto>
 
 ```proto
-rpc WatchComments(WatchCommentsRequest) returns (stream Comment);
+service CommentService {
+  rpc WatchComments(WatchCommentsRequest) returns (stream Comment);
+}
 ```
 
 </Proto>
@@ -96,7 +115,7 @@ Duplicate codes are rejected.
 
 ### Example
 
-`Example` repeats with an optional `label` and exactly one fence, rendered together under one labeled Example section - typically a `json` request payload beside a `text` stream trace, since a stream's behavior over time is what streaming-unfamiliar reviewers need to see.
+`Example` repeats with an optional `label` and exactly one fenced code block with a declared language, rendered together under one labeled Example section - typically a `json` request payload beside a `text` stream trace, since a stream's behavior over time is what streaming-unfamiliar reviewers need to see.
 
 ### Proto
 
