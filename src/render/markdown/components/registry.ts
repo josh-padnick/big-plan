@@ -16,6 +16,7 @@ import { CALLOUT_COMPONENT_DEFINITION } from "./callout/callout.js";
 import { CODE_DIFF_COMPONENT_DEFINITION } from "./code-diff/code-diff.js";
 import { CODE_SNIPPET_COMPONENT_DEFINITION } from "./code-snippet/code-snippet.js";
 import { DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION } from "./database-table-schema/database-table-schema.js";
+import { DECISION_SET_COMPONENT_DEFINITION } from "./decision-set/decision-set.js";
 import { FILE_TREE_COMPONENT_DEFINITION } from "./file-tree/file-tree.js";
 import { FILE_TREE_DIFF_COMPONENT_DEFINITION } from "./file-tree/file-tree-diff.js";
 import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "./graphql-operation/graphql-operation.js";
@@ -34,6 +35,7 @@ export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
     CodeDiff: CODE_DIFF_COMPONENT_DEFINITION,
     CodeSnippet: CODE_SNIPPET_COMPONENT_DEFINITION,
     DatabaseTableSchema: DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION,
+    DecisionSet: DECISION_SET_COMPONENT_DEFINITION,
     FileTree: FILE_TREE_COMPONENT_DEFINITION,
     FileTreeDiff: FILE_TREE_DIFF_COMPONENT_DEFINITION,
     GraphqlOperation: GRAPHQL_OPERATION_COMPONENT_DEFINITION,

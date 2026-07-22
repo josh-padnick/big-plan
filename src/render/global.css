@@ -17,6 +17,7 @@ Light and dark follow the reader's OS unless the theme control overrides it.
 @import "./markdown/components/code-diff/code-diff.css";
 @import "./markdown/components/code-snippet/code-snippet.css";
 @import "./markdown/components/database-table-schema/database-table-schema.css";
+@import "./markdown/components/decision-set/decision-set.css";
 @import "./markdown/components/file-tree/file-tree.css";
 @import "./markdown/components/graphql-operation/graphql-operation.css";
 @import "./markdown/components/grpc-method/grpc-method.css";
@@ -44,6 +45,10 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --diff-add-bg: #e8f2e9;
   --diff-remove-c: #9a493f;
   --diff-remove-bg: #f6e8e4;
+  --decision-pro-c: #376b49;
+  --decision-pro-bg: #e8f2e9;
+  --decision-con-c: #9a493f;
+  --decision-con-bg: #f6e8e4;
   --annotation-c: #5965a8;
   --annotation-bg: #e4e8f7;
   --diff-content-bg: #ffffff;
@@ -73,6 +78,10 @@ Light and dark follow the reader's OS unless the theme control overrides it.
     --diff-add-bg: #1e2b21;
     --diff-remove-c: #df9184;
     --diff-remove-bg: #30211f;
+    --decision-pro-c: #8fc49d;
+    --decision-pro-bg: #1e2b21;
+    --decision-con-c: #df9184;
+    --decision-con-bg: #30211f;
     --annotation-c: #aab4f0;
     --annotation-bg: #2a2f4e;
     --diff-content-bg: #1b1916;
@@ -106,6 +115,10 @@ Light and dark follow the reader's OS unless the theme control overrides it.
   --diff-add-bg: #1e2b21;
   --diff-remove-c: #df9184;
   --diff-remove-bg: #30211f;
+  --decision-pro-c: #8fc49d;
+  --decision-pro-bg: #1e2b21;
+  --decision-con-c: #df9184;
+  --decision-con-bg: #30211f;
   --annotation-c: #aab4f0;
   --annotation-bg: #2a2f4e;
   --diff-content-bg: #1b1916;

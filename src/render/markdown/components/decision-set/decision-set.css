@@ -1,0 +1,54 @@
+/* DecisionSet status, outcome, option-state, and signed-tradeoff variants,
+   colocated with the component that emits these stable selector contracts. */
+
+@layer components {
+  article .decision-set-status-open,
+  article .decision-set-recommended-pill {
+    color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  }
+  article .decision-set-status-decided,
+  article .decision-set-outcome {
+    color: var(--decision-pro-c);
+    background: var(--decision-pro-bg);
+  }
+  article .decision-set-status-deferred {
+    color: var(--color-muted);
+    background: color-mix(in srgb, var(--color-muted) 14%, transparent);
+  }
+  article .decision-set-option-recommended {
+    border-color: color-mix(in srgb, var(--color-accent) 55%, var(--edge-c));
+    box-shadow: inset 3px 0 0 var(--color-accent);
+  }
+  article .decision-set-option-chosen {
+    border-color: color-mix(in srgb, var(--decision-pro-c) 55%, var(--edge-c));
+  }
+  article .decision-set-option-muted {
+    background: color-mix(in srgb, var(--surface-c) 55%, var(--bg));
+  }
+  article .decision-set-option-muted h4,
+  article .decision-set-option-muted .decision-set-option-marker {
+    color: var(--color-muted);
+  }
+  article .decision-set-option-marker {
+    color: var(--color-muted);
+    border-color: var(--edge-c);
+    background: var(--bg);
+  }
+  article .decision-set-option-marker-chosen {
+    color: var(--bg);
+    border-color: var(--decision-pro-c);
+    background: var(--decision-pro-c);
+  }
+  article .decision-set-tradeoff-pro {
+    color: var(--decision-pro-c);
+    background: var(--decision-pro-bg);
+  }
+  article .decision-set-tradeoff-con {
+    color: var(--decision-con-c);
+    background: var(--decision-con-bg);
+  }
+  article .decision-set-details > summary::marker {
+    color: var(--color-muted);
+  }
+}
