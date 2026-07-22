@@ -186,7 +186,7 @@ const splitSettingsGroup = ({
   const bracketIndexes = topLevelIndexes({
     value,
     matches: (character, index) =>
-      character === "[" && index > 0 && value[index - 1] === " ",
+      character === "[" && index > 0 && /\s/u.test(value[index - 1] ?? ""),
   });
   if (bracketIndexes === undefined) {
     diagnostics.push({ line, message: "Unterminated quote" });
@@ -227,7 +227,9 @@ const parseDefaultValue = ({
 }): string | undefined => {
   const inner = unquote(value);
   if (inner !== undefined) {
-    return `'${inner}'`;
+    // Embedded apostrophes double psql-style so the displayed literal stays
+    // valid SQL whatever quotes the author used.
+    return `'${inner.replaceAll("'", "''")}'`;
   }
   if (value.startsWith("`") && value.endsWith("`") && value.length > 1) {
     return value.slice(1, -1);
@@ -305,20 +307,32 @@ const applyColumnSetting = ({
   seen.add(canonical);
   switch (canonical) {
     case "pk":
-      column.primaryKey = true;
-      return;
     case "not null":
-      column.notNull = true;
-      return;
     case "null":
-      column.nullable = true;
-      return;
     case "unique":
-      column.unique = true;
+    case "increment": {
+      // Markers are pure flags; a value like pk: false would silently invert
+      // the authored semantics if the key alone enabled the constraint.
+      if (value !== undefined) {
+        diagnostics.push({
+          line,
+          message: `The "${key}" marker does not take a value`,
+        });
+        return;
+      }
+      if (canonical === "pk") {
+        column.primaryKey = true;
+      } else if (canonical === "not null") {
+        column.notNull = true;
+      } else if (canonical === "null") {
+        column.nullable = true;
+      } else if (canonical === "unique") {
+        column.unique = true;
+      } else {
+        column.identity = true;
+      }
       return;
-    case "increment":
-      column.identity = true;
-      return;
+    }
     case "default": {
       const parsed =
         value === undefined
@@ -468,6 +482,14 @@ const parseColumnLine = ({
         message: '"not null" and "null" contradict each other',
       });
     }
+    // Checked here rather than after the pk-implies-not-null fold below, so
+    // an explicit null next to pk fails loudly instead of being discarded.
+    if (column.primaryKey && column.nullable) {
+      diagnostics.push({
+        line,
+        message: '"pk" and "null" contradict each other',
+      });
+    }
   }
   return {
     name: column.name,
@@ -544,6 +566,18 @@ const parseIndexLine = ({
     });
     return undefined;
   }
+  // A leading backtick alone must not classify an entry as an expression, or
+  // trailing text after the closing backtick would render as if validated.
+  if (
+    columns.some((column) => column.includes("`") && !/^`[^`]+`$/u.test(column))
+  ) {
+    diagnostics.push({
+      line,
+      message:
+        "A backtick expression must span its whole index entry, like `lower(email)`",
+    });
+    return undefined;
+  }
   const index: {
     unique: boolean;
     name?: string;
@@ -564,7 +598,14 @@ const parseIndexLine = ({
     }
     seen.add(key);
     if (key === "unique") {
-      index.unique = true;
+      if (settingValue !== undefined) {
+        diagnostics.push({
+          line,
+          message: 'The "unique" marker does not take a value',
+        });
+      } else {
+        index.unique = true;
+      }
     } else if (key === "pk") {
       diagnostics.push({
         line,

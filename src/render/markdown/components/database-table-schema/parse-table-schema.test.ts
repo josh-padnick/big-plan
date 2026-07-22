@@ -62,6 +62,44 @@ describe("parseTableSchema columns", () => {
     });
   });
 
+  it.each(["pk", "not null", "null", "unique", "increment"])(
+    "should diagnose a value on the %s marker instead of enabling it",
+    (marker) => {
+      const { schema, diagnostics } = parseTableSchema({
+        source: `id bigint [${marker}: false]\n`,
+      });
+      expect(diagnostics).toEqual([
+        { line: 1, message: `The "${marker}" marker does not take a value` },
+      ]);
+      expect(schema.columns[0]).toMatchObject({
+        primaryKey: false,
+        notNull: false,
+        unique: false,
+        identity: false,
+      });
+    },
+  );
+
+  it("should diagnose pk next to an explicit null marker", () => {
+    const { diagnostics } = parseTableSchema({
+      source: "id bigint [pk, null]\n",
+    });
+    expect(diagnostics).toEqual([
+      { line: 1, message: '"pk" and "null" contradict each other' },
+    ]);
+  });
+
+  it("should separate a tab-preceded settings group from the type", () => {
+    const { schema, diagnostics } = parseTableSchema({
+      source: "id\tbigint\t[pk]\n",
+    });
+    expect(diagnostics).toEqual([]);
+    expect(schema.columns[0]).toMatchObject({
+      type: "bigint",
+      primaryKey: true,
+    });
+  });
+
   it.each([
     ["default: 'trialing'", "'trialing'"],
     ['default: "trialing"', "'trialing'"],
@@ -70,6 +108,8 @@ describe("parseTableSchema columns", () => {
     ["default: true", "true"],
     ["default: null", "null"],
     ["default: `now()`", "now()"],
+    [`default: "O'Reilly"`, "'O''Reilly'"],
+    [String.raw`default: 'O\'Reilly'`, "'O''Reilly'"],
   ])("should parse %s into display text %s", (setting, display) => {
     const { schema, diagnostics } = parseTableSchema({
       source: `status text [${setting}]\n`,
@@ -282,6 +322,30 @@ describe("parseTableSchema indexes", () => {
     });
     expect(diagnostics).toEqual([]);
     expect(schema.indexes[0]?.where).toBe("status = 'live'");
+  });
+
+  it("should diagnose a value on the unique index marker instead of enabling it", () => {
+    const { schema, diagnostics } = parseTableSchema({
+      source: withColumns("indexes {\n  status [unique: false]\n}\n"),
+    });
+    expect(diagnostics).toEqual([
+      { line: 4, message: 'The "unique" marker does not take a value' },
+    ]);
+    expect(schema.indexes[0]?.unique).toBe(false);
+  });
+
+  it("should diagnose an expression entry with text outside the backticks", () => {
+    const { schema, diagnostics } = parseTableSchema({
+      source: withColumns("indexes {\n  `lower(status)` trailing\n}\n"),
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 4,
+        message:
+          "A backtick expression must span its whole index entry, like `lower(email)`",
+      },
+    ]);
+    expect(schema.indexes).toEqual([]);
   });
 
   it("should diagnose an unknown index method and unknown setting", () => {
