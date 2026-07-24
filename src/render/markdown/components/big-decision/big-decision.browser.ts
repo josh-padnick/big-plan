@@ -98,6 +98,16 @@ for (const component of document.querySelectorAll<HTMLElement>(
   }
 
   const weights = rows.map(() => DEFAULT_WEIGHT);
+  const resetters: Array<() => void> = [];
+  let resetButton: HTMLButtonElement | null = null;
+
+  // The reset affordance appears only once the reader has diverged from the
+  // plan's default weighting, and restores it in one click.
+  const updateReset = (): void => {
+    if (resetButton !== null) {
+      resetButton.hidden = weights.every((weight) => weight === DEFAULT_WEIGHT);
+    }
+  };
 
   const recompute = (): void => {
     const totals = options.map((_, column) =>
@@ -155,7 +165,11 @@ for (const component of document.querySelectorAll<HTMLElement>(
         }
       }
       recompute();
+      updateReset();
     };
+    resetters.push(() => {
+      apply(DEFAULT_WEIGHT);
+    });
     for (let step = 1; step <= WEIGHT_MAX; step += 1) {
       const square = document.createElement("button");
       square.type = "button";
@@ -176,13 +190,27 @@ for (const component of document.querySelectorAll<HTMLElement>(
     apply(DEFAULT_WEIGHT);
   }
 
-  const legend = document.createElement("p");
+  const legend = document.createElement("div");
   legend.className =
-    "big-decision-weights-legend mt-1.5 mb-0 text-xs text-muted";
+    "big-decision-weights-legend mt-1.5 flex flex-wrap items-center gap-x-2 text-xs text-muted";
   legend.dataset.decisionWeightsLegend = "";
-  legend.textContent =
+  const legendText = document.createElement("span");
+  legendText.textContent =
     "Fill squares to weight what matters most; the Best fit tag follows your weights.";
+  resetButton = document.createElement("button");
+  resetButton.type = "button";
+  resetButton.className = "big-decision-weights-reset";
+  resetButton.dataset.decisionWeightsReset = "";
+  resetButton.textContent = "Reset weights";
+  resetButton.hidden = true;
+  resetButton.addEventListener("click", () => {
+    for (const reset of resetters) {
+      reset();
+    }
+  });
+  legend.append(legendText, resetButton);
   matrix.parentElement?.after(legend);
 
   recompute();
+  updateReset();
 }

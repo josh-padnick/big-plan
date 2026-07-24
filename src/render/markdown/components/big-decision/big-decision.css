@@ -85,13 +85,24 @@
     height: 0.625rem;
     padding: 0;
     cursor: pointer;
-    border: 1px solid color-mix(in srgb, var(--color-muted) 60%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-muted) 35%, transparent);
     border-radius: 0.125rem;
     background: transparent;
   }
   article .big-decision-weight[data-weight-filled] {
-    border-color: var(--color-accent);
-    background: color-mix(in srgb, var(--color-accent) 75%, var(--bg));
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 30%, var(--bg));
+  }
+  article .big-decision-weights-reset {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
   article .big-decision-bestfit {
     display: inline-flex;

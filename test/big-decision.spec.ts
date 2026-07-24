@@ -79,6 +79,8 @@ test("should review standalone plan decisions", async ({
     const options = openDecision.locator("thead [data-option]");
     await expect(options.nth(1)).toHaveAttribute("data-best-fit", "");
     await expect(options.nth(1)).toContainText("Best fit");
+    const reset = openDecision.locator("[data-decision-weights-reset]");
+    await expect(reset).toBeHidden();
     const setupWeights = openDecision
       .locator("[data-decision-weights]")
       .nth(1)
@@ -86,6 +88,11 @@ test("should review standalone plan decisions", async ({
     await setupWeights.nth(0).click();
     await expect(options.nth(0)).toHaveAttribute("data-best-fit", "");
     await expect(options.nth(1)).not.toHaveAttribute("data-best-fit", "");
+    await expect(reset).toBeVisible();
+    await reset.click();
+    await expect(options.nth(1)).toHaveAttribute("data-best-fit", "");
+    await expect(options.nth(0)).not.toHaveAttribute("data-best-fit", "");
+    await expect(reset).toBeHidden();
   });
 
   await test.step("an info disclosure expands its cell in place", async () => {
