@@ -1475,10 +1475,19 @@ test("should fold the schema's Indexes and DDL bands behind tabs", async ({
 
   await test.step("the tab bar names every band and selects Indexes first", async () => {
     await expect(tabs.getByRole("tab")).toHaveText([
-      "Indexes",
-      "Row security",
-      "Triggers",
+      /^Indexes$/,
+      /^Row security\s*DDL$/,
+      /^Triggers\s*DDL$/,
     ]);
+    // The badge marks exactly the verbatim-DDL tabs.
+    await expect(
+      tabs.getByRole("tab", { name: "Indexes" }).locator("[data-schema-badge]"),
+    ).toHaveCount(0);
+    await expect(
+      tabs
+        .getByRole("tab", { name: "Row security" })
+        .locator('[data-schema-badge="ddl"]'),
+    ).toHaveText("DDL");
     await expect(tabs.getByRole("tab", { name: "Indexes" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -1554,7 +1563,10 @@ test("should stack the labeled DDL bands when JavaScript is disabled", async ({
   await expect(ddlPanels.first()).toBeVisible();
   await expect(
     ddlPanels.first().locator(".table-schema-section-label"),
-  ).toHaveText("Row security");
+  ).toHaveText(/^Row security\s*DDL$/);
+  await expect(
+    ddlPanels.first().locator('[data-schema-badge="ddl"]'),
+  ).toBeVisible();
   await expect(ddlPanels.first()).toContainText("ENABLE ROW LEVEL SECURITY");
   await expect(ddlPanels.last()).toBeVisible();
   await expect(ddlPanels.last()).toContainText("CREATE TRIGGER");

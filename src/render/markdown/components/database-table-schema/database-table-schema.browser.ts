@@ -68,6 +68,16 @@ const enhanceSchemaTabs = (block: HTMLElement): void => {
         ? "Indexes"
         : (section.dataset.schemaDdlTitle ?? "DDL"),
     );
+    // The label's badge marks a verbatim-DDL band; the tab inherits it so the
+    // marker survives the fold.
+    const labelBadge = label?.querySelector('[data-schema-badge="ddl"]');
+    if (labelBadge !== null && labelBadge !== undefined) {
+      const tabBadge = labelBadge.cloneNode(true);
+      if (tabBadge instanceof HTMLElement) {
+        tabBadge.classList.add("ml-1.5");
+        tab.append(tabBadge);
+      }
+    }
     tab.addEventListener("click", () => {
       activate(index);
     });

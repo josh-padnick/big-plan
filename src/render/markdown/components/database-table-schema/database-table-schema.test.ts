@@ -393,6 +393,13 @@ describe("renderDatabaseTableSchema rendering", () => {
     expect(collectText(sections[0] ?? element)).toContain(
       "CREATE POLICY p ON t;",
     );
+    // Each band's label carries the DDL badge the tab enhancement clones.
+    expect(
+      queryAll(
+        sections[0] ?? element,
+        (candidate) => candidate.properties["data-schema-badge"] === "ddl",
+      ),
+    ).toHaveLength(1);
     // The Indexes band keeps its own section identity for the tab enhancement.
     expect(
       queryAll(

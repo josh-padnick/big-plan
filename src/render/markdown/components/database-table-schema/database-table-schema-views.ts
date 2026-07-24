@@ -470,9 +470,15 @@ const renderDdlSection = (section: CompiledDdlSection): Element => ({
           ...SECTION_LABEL_CLASSES.split(" "),
           "px-[0.75rem]",
           "mb-[0.1rem]",
+          "flex",
+          "items-center",
+          "gap-1.5",
         ],
       },
-      children: [text(section.title)],
+      // The badge marks the band as verbatim DDL wherever its label shows:
+      // in the stacked no-JavaScript reading here, and cloned into the tab
+      // by the enhancement.
+      children: [text(section.title), badge({ kind: "ddl", label: "DDL" })],
     },
     {
       type: "element",
