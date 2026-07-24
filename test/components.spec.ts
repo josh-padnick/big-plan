@@ -1504,6 +1504,18 @@ test("should fold the schema's Indexes and DDL bands behind tabs", async ({
     await expect(ddlPanels.first().locator("[data-copy-code]")).toBeVisible();
   });
 
+  await test.step("the DDL stays multi-line instead of one scrolling line", async () => {
+    const code = ddlPanels.first().locator("pre code");
+    expect(
+      await code.evaluate((element) => getComputedStyle(element).whiteSpace),
+    ).toBe("pre");
+    const metrics = await code.evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
+    }));
+    expect(metrics.height).toBeGreaterThan(metrics.lineHeight * 4);
+  });
+
   await test.step("arrow keys move the tab focus ring", async () => {
     await tabs.getByRole("tab", { name: "Row security" }).focus();
     await page.keyboard.press("ArrowRight");
