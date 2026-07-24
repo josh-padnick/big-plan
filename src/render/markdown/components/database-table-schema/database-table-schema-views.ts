@@ -231,6 +231,16 @@ const constraintsCell = (
   });
 };
 
+// Marks a grid-side index reference with the entry position it names, so the
+// enhancement can turn it into a jump control targeting the band below.
+const withIndxRef = (element: Element, position: number): Element => ({
+  ...element,
+  properties: {
+    ...element.properties,
+    "data-schema-indx": String(position),
+  },
+});
+
 // Key participation renders as an INDX pill matching the band below;
 // predicate-only participation is marked "WHERE INDX n" because the column
 // shapes the index without being indexed by it.
@@ -240,8 +250,11 @@ const indexMarkers = (
 ): ReadonlyArray<ElementContent> =>
   indexParticipation({ column, indexes }).map(({ position, kind }) =>
     kind === "key"
-      ? badge({ kind: "idx", label: indxLabel(position) })
-      : muted(`WHERE ${indxLabel(position)}`),
+      ? withIndxRef(
+          badge({ kind: "idx", label: indxLabel(position) }),
+          position,
+        )
+      : withIndxRef(muted(`WHERE ${indxLabel(position)}`), position),
   );
 
 // One row per column, always: comments live in their own grid column so a
@@ -365,7 +378,7 @@ const indexEntry = (index: TableIndex, offset: number): Element => ({
       "py-[0.5rem]",
       ...(offset === 0 ? [] : ["border-t", "border-edge"]),
     ],
-    "data-schema-index": "",
+    "data-schema-index": String(offset + 1),
   },
   children: [
     badge({ kind: "idx", label: indxLabel(offset + 1) }),

@@ -336,6 +336,14 @@ describe("renderDatabaseTableSchema rendering", () => {
       (candidate) => candidate.properties["data-schema-badge"] === "idx",
     )[0];
     expect(collectText(marker ?? element)).toBe("INDX 1");
+    // Grid-side references name their entry position so the enhancement can
+    // upgrade them into jump controls, and entries carry the matching number.
+    expect(marker?.properties["data-schema-indx"]).toBe("1");
+    const entry = queryAll(
+      element,
+      (candidate) => candidate.properties["data-schema-index"] !== undefined,
+    )[0];
+    expect(entry?.properties["data-schema-index"]).toBe("1");
     const idRow = queryAll(
       element,
       (candidate) => candidate.properties["data-schema-column"] === "id",
@@ -479,6 +487,30 @@ describe("renderDatabaseTableSchema rendering", () => {
         },
       ]);
     }
+  });
+
+  it("should ship a columns menu with a checkbox per hideable column", () => {
+    const { element } = render();
+    const toggles = queryAll(
+      element,
+      (candidate) =>
+        candidate.properties["data-schema-column-toggle"] !== undefined,
+    );
+    expect(
+      toggles.map((toggle) => toggle.properties["data-schema-column-toggle"]),
+    ).toEqual(["type", "constraints", "default", "comment"]);
+    for (const toggle of toggles) {
+      expect(toggle.properties.ariaChecked).toBe("true");
+    }
+    // The name column has no toggle: hiding the row identity would make the
+    // remaining cells unreadable.
+    expect(
+      queryAll(
+        element,
+        (candidate) =>
+          candidate.properties["data-schema-columns-button"] !== undefined,
+      ),
+    ).toHaveLength(1);
   });
 
   it("should carry the raw fence source for the copy control", () => {

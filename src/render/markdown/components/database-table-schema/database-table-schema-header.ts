@@ -3,6 +3,8 @@
 // enhanced actions menu with copy-name and copy-source controls.
 
 import type { Element, Text } from "hast";
+import { CHECK_ICON } from "../../../icons/lucide/check.js";
+import { COLUMNS_2_ICON } from "../../../icons/lucide/columns-2.js";
 import { COPY_ICON } from "../../../icons/lucide/copy.js";
 import { DATABASE_ICON } from "../../../icons/lucide/database.js";
 import { ELLIPSIS_ICON } from "../../../icons/lucide/ellipsis.js";
@@ -151,6 +153,76 @@ const actionsMenu = (): Element => ({
   ],
 });
 
+// The toggleable grid columns: the name column stays out because hiding the
+// row identity would make every remaining cell unreadable.
+const TOGGLEABLE_COLUMNS: ReadonlyArray<{
+  readonly key: string;
+  readonly label: string;
+}> = [
+  { key: "type", label: "Type" },
+  { key: "constraints", label: "Constraints" },
+  { key: "default", label: "Default" },
+  { key: "comment", label: "Comment" },
+];
+
+// Checkbox items ship checked server-side; the script owns the live state and
+// keeps the menu open across toggles so several columns flip in one visit.
+const columnsMenu = (): Element => ({
+  type: "element",
+  tagName: "span",
+  properties: {
+    className: ["table-schema-menu", "relative", "inline-flex"],
+    "data-schema-menu": "",
+  },
+  children: [
+    {
+      type: "element",
+      tagName: "button",
+      properties: {
+        type: "button",
+        className: BUTTON_CLASSES.split(" "),
+        ariaLabel: "Choose columns",
+        ariaHasPopup: "menu",
+        ariaExpanded: "false",
+        title: "Choose columns",
+        hidden: true,
+        "data-schema-columns-button": "",
+        "data-size": "xs",
+        "data-slot": "button",
+        "data-variant": "ghost",
+      },
+      children: [renderLucideIcon({ icon: COLUMNS_2_ICON, hidden: false })],
+    },
+    {
+      type: "element",
+      tagName: "div",
+      properties: {
+        className: MENU_LIST_CLASSES.split(" "),
+        role: "menu",
+        ariaLabel: "Visible columns",
+        hidden: true,
+        "data-schema-columns-list": "",
+      },
+      children: TOGGLEABLE_COLUMNS.map(({ key, label }) => ({
+        type: "element" as const,
+        tagName: "button",
+        properties: {
+          type: "button",
+          className: MENU_ITEM_CLASSES.split(" "),
+          role: "menuitemcheckbox",
+          ariaChecked: "true",
+          tabIndex: -1,
+          "data-schema-column-toggle": key,
+        },
+        children: [
+          renderLucideIcon({ icon: CHECK_ICON, hidden: false }),
+          text(label),
+        ],
+      })),
+    },
+  ],
+});
+
 // Progressive full-screen control; both icons ship server-side so the
 // browser script only toggles visibility.
 const expandButton = (): Element => ({
@@ -211,6 +283,7 @@ export const renderTableSchemaHeader = ({
           },
           children: [
             renderCopyFeedback({ dataAttribute: "data-schema-copy-message" }),
+            columnsMenu(),
             actionsMenu(),
             expandButton(),
           ],

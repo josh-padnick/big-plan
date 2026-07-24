@@ -89,6 +89,28 @@
     border-top: 0;
     border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
   }
+  /* INDX references upgrade to jump controls: same badge or muted-text look
+     as the inert spans they replace, plus pointer and accent hover. The
+     landed entry tints briefly; the tint transitions only for readers who
+     allow motion, and reads as a plain highlight otherwise. */
+  article .table-schema-index-jump {
+    cursor: pointer;
+    background: transparent;
+    padding: 0;
+    font: inherit;
+  }
+  article .table-schema-index-jump:hover {
+    color: var(--color-accent);
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+  article .table-schema-index-flash {
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    article [data-schema-index] {
+      transition: background-color 0.5s ease;
+    }
+  }
   /* Reorderable headers advertise the drag, and the drop target draws an
      accent insertion edge; both exist only once the script enables them. */
   article [data-schema-reorderable] .table-schema-head {

@@ -1625,7 +1625,137 @@ test("should reorder grid columns and remember the arrangement", async ({
     ).toHaveText(["Column", "Type", "Constraints", "Default", "Comment"]);
     expect(
       await page.evaluate(() =>
-        window.localStorage.getItem("big-plan:table-schema-column-order"),
+        window.localStorage.getItem("big-plan:table-schema-columns"),
+      ),
+    ).toBeNull();
+  });
+});
+
+test("should jump from an INDX reference to its flashed band entry", async ({
+  page,
+  tableSchemaViewerUrl,
+}) => {
+  await page.goto(tableSchemaViewerUrl);
+  const schema = page.locator("[data-database-table-schema]").first();
+  const tabs = schema.getByRole("tablist", { name: "Table schema sections" });
+  const firstEntry = schema.locator('[data-schema-index="1"]');
+
+  await test.step("the jump lands on the Indexes tab even from a DDL tab", async () => {
+    await tabs.getByRole("tab", { name: "Row security" }).click();
+    await expect(
+      schema.locator('[data-schema-section="indexes"]'),
+    ).toBeHidden();
+    await schema
+      .locator('[data-schema-column="customer_id"] [data-schema-indx="1"]')
+      .click();
+    await expect(tabs.getByRole("tab", { name: "Indexes" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(firstEntry).toBeInViewport();
+  });
+
+  await test.step("the landed entry flashes, then settles", async () => {
+    await expect(firstEntry).toHaveClass(/table-schema-index-flash/);
+    await expect(firstEntry).not.toHaveClass(/table-schema-index-flash/, {
+      timeout: 4_000,
+    });
+  });
+
+  await test.step("a predicate-only WHERE INDX reference jumps too", async () => {
+    const whereMarker = schema.locator(
+      '[data-schema-column="status"] [data-schema-indx="2"]',
+    );
+    await expect(whereMarker).toHaveText("WHERE INDX 2");
+    await whereMarker.click();
+    const secondEntry = schema.locator('[data-schema-index="2"]');
+    await expect(secondEntry).toBeInViewport();
+    await expect(secondEntry).toHaveClass(/table-schema-index-flash/);
+  });
+});
+
+test("should hide and show grid columns from the columns menu", async ({
+  page,
+  tableSchemaViewerUrl,
+}) => {
+  await page.goto(tableSchemaViewerUrl);
+  const schema = page.locator("[data-database-table-schema]").first();
+  const menu = schema.getByRole("menu", { name: "Visible columns" });
+  const visibleHeads = (index: number) =>
+    page
+      .locator(".table-schema-grid")
+      .nth(index)
+      .locator("thead th:not([hidden])");
+
+  await test.step("unchecking a column hides it in every grid without closing the menu", async () => {
+    await schema.locator("[data-schema-columns-button]").click();
+    await menu.getByRole("menuitemcheckbox", { name: "Constraints" }).click();
+    await expect(menu).toBeVisible();
+    await expect(
+      menu.getByRole("menuitemcheckbox", { name: "Constraints" }),
+    ).toHaveAttribute("aria-checked", "false");
+    await expect(visibleHeads(0)).toHaveText([
+      "Column",
+      "Type",
+      "Default",
+      "Comment",
+    ]);
+    await expect(visibleHeads(1)).toHaveText([
+      "Column",
+      "Type",
+      "Default",
+      "Comment",
+    ]);
+  });
+
+  await test.step("keyboard reordering steps over the hidden column", async () => {
+    await page.keyboard.press("Escape");
+    await visibleHeads(0).filter({ hasText: "Type" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(visibleHeads(0)).toHaveText([
+      "Column",
+      "Default",
+      "Type",
+      "Comment",
+    ]);
+  });
+
+  await test.step("the visibility and order survive a reload together", async () => {
+    await page.reload();
+    await expect(visibleHeads(0)).toHaveText([
+      "Column",
+      "Default",
+      "Type",
+      "Comment",
+    ]);
+  });
+
+  await test.step("rechecking restores the column at its remembered position", async () => {
+    await schema.locator("[data-schema-columns-button]").click();
+    await menu.getByRole("menuitemcheckbox", { name: "Constraints" }).click();
+    await expect(visibleHeads(0)).toHaveText([
+      "Column",
+      "Constraints",
+      "Default",
+      "Type",
+      "Comment",
+    ]);
+  });
+
+  await test.step("reset restores the authored layout and clears the preference", async () => {
+    await page.keyboard.press("Escape");
+    await schema.locator("[data-schema-menu-button]").click();
+    await schema.getByRole("menuitem", { name: "Reset column layout" }).click();
+    await expect(visibleHeads(0)).toHaveText([
+      "Column",
+      "Type",
+      "Constraints",
+      "Default",
+      "Comment",
+    ]);
+    expect(
+      await page.evaluate(() =>
+        window.localStorage.getItem("big-plan:table-schema-columns"),
       ),
     ).toBeNull();
   });
