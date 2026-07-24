@@ -137,6 +137,17 @@ test("should review standalone plan decisions", async ({
     await expect(decidedDecision).toContainText("Tool-owned cache directory");
   });
 
+  await test.step("a decision without criteria renders plain selectable options", async () => {
+    await expect(deferredDecision.locator("table")).toHaveCount(0);
+    const plain = deferredDecision.locator("[data-option]");
+    await expect(plain).toHaveCount(2);
+    await expect(plain.nth(0)).toHaveAttribute("role", "radio");
+    await expect(plain.nth(0)).toHaveAttribute("aria-checked", "true");
+    await expect(
+      deferredDecision.locator("[data-decision-weights]"),
+    ).toHaveCount(0);
+  });
+
   await test.step("the details drawer opens below the matrix", async () => {
     const drawer = openDecision.locator("[data-option-details]");
     await expect(drawer).toHaveCount(1);
@@ -168,7 +179,7 @@ test("should review standalone plan decisions", async ({
     const staticPage = await context.newPage();
     await staticPage.goto(bigDecisionViewerUrl);
     await expect(staticPage.locator("[data-big-decision]")).toHaveCount(3);
-    await expect(staticPage.locator("[data-score-tone]")).toHaveCount(20);
+    await expect(staticPage.locator("[data-score-tone]")).toHaveCount(16);
     await expect(staticPage.locator('[role="radio"]')).toHaveCount(0);
     await expect(
       staticPage.locator("[data-decision-expand]").first(),

@@ -30,11 +30,21 @@ Drop a criterion whose verdicts match across every option; a row that discrimina
 Treat "do nothing" as an ordinary option whenever the status quo is a legitimate choice, and state the decision's reversibility - what it costs to change course later is the fact a reviewer most needs.
 When the decision lands, mark the chosen option and keep the losing options visible so the outcome retains its alternatives.
 
+### Matrix or plain options?
+
+`BigDecision` renders two shapes, chosen by whether the decision declares criteria:
+
+- **Declare criteria and score them** when the options compete on shared, comparable dimensions - architecture and technology choices usually do. The matrix makes the comparison checkable and unlocks the reader-priority preview.
+- **Omit criteria for a plain option list** when the choice is qualitative or the options do not share dimensions - naming, tone, or direction calls where prose rationale carries the argument. The options render as a selectable multiple-choice list with their summaries and detail drawers, like a form question with substance.
+- If the choice is quick enough that a sentence per option settles it, it belongs in a [SmallDecisionSet](/components/small-decision-set/) instead.
+
+Forcing a matrix onto options with no shared criteria produces rows that discriminate nothing; forcing prose onto a real tradeoff hides the comparison. Pick the shape that matches the decision.
+
 ### When not to use it
 
 - Small end-of-plan questions with short answers - use [SmallDecisionSet](/components/small-decision-set/)
 - Implementation steps with no competing choice - use prose or a task list
-- A decision whose options share no comparable criteria - prose paragraphs argue it better than a forced matrix
+- A decision needing sign-off from a named approver - agreement flows arrive with the live review layer
 
 ## Use cases
 
