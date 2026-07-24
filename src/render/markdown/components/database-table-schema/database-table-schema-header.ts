@@ -4,7 +4,7 @@
 
 import type { Element, Text } from "hast";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
-import { COLUMNS_2_ICON } from "../../../icons/lucide/columns-2.js";
+import { COLUMNS_3_COG_ICON } from "../../../icons/lucide/columns-3-cog.js";
 import { COPY_ICON } from "../../../icons/lucide/copy.js";
 import { DATABASE_ICON } from "../../../icons/lucide/database.js";
 import { ELLIPSIS_ICON } from "../../../icons/lucide/ellipsis.js";
@@ -191,7 +191,7 @@ const columnsMenu = (): Element => ({
         "data-slot": "button",
         "data-variant": "ghost",
       },
-      children: [renderLucideIcon({ icon: COLUMNS_2_ICON, hidden: false })],
+      children: [renderLucideIcon({ icon: COLUMNS_3_COG_ICON, hidden: false })],
     },
     {
       type: "element",
