@@ -214,3 +214,76 @@ for (const component of document.querySelectorAll<HTMLElement>(
   recompute();
   updateReset();
 }
+
+// Info disclosures float as tooltips once JavaScript is available: hover or
+// focus shows the explanation beside its trigger without pushing layout, and
+// the native in-place expansion remains the no-JavaScript fallback.
+for (const info of document.querySelectorAll<HTMLElement>(
+  "details.big-decision-info",
+)) {
+  const summary = info.querySelector<HTMLElement>("summary");
+  const body = info.querySelector<HTMLElement>(".big-decision-info-body");
+  if (
+    summary === null ||
+    body === null ||
+    !(info instanceof HTMLDetailsElement)
+  ) {
+    continue;
+  }
+  info.classList.add("big-decision-info-floating");
+  body.setAttribute("role", "tooltip");
+
+  const open = (): void => {
+    info.open = true;
+    const anchor = summary.getBoundingClientRect();
+    body.style.left = "0px";
+    body.style.top = "0px";
+    const size = body.getBoundingClientRect();
+    const left = Math.max(
+      8,
+      Math.min(
+        anchor.left + anchor.width / 2 - size.width / 2,
+        window.innerWidth - size.width - 8,
+      ),
+    );
+    const below = anchor.bottom + 6;
+    const top =
+      below + size.height > window.innerHeight - 8
+        ? Math.max(8, anchor.top - size.height - 6)
+        : below;
+    body.style.left = `${left}px`;
+    body.style.top = `${top}px`;
+  };
+  const close = (): void => {
+    info.open = false;
+  };
+
+  info.addEventListener("pointerenter", open);
+  info.addEventListener("pointerleave", close);
+  summary.addEventListener("focus", open);
+  summary.addEventListener("blur", close);
+  summary.addEventListener("click", (event) => {
+    event.preventDefault();
+    if (info.open) {
+      close();
+    } else {
+      open();
+    }
+  });
+  summary.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      close();
+    }
+  });
+  // Repositioning on scroll keeps the tooltip anchored to its trigger, and
+  // avoids racing the browser's own scroll-into-view before a hover.
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (info.open) {
+        open();
+      }
+    },
+    { passive: true },
+  );
+}

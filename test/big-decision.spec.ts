@@ -63,10 +63,11 @@ test("should review standalone plan decisions", async ({
     await expect(
       section.getByText(/Reversibility is what it would cost/),
     ).toBeHidden();
-    await section.locator(".big-decision-info > summary").click();
+    await section.locator(".big-decision-info > summary").hover();
     await expect(
       section.getByText(/Reversibility is what it would cost/),
     ).toBeVisible();
+    await page.mouse.move(0, 0);
   });
 
   await test.step("importance squares recompute the best-fit option", async () => {
@@ -95,15 +96,26 @@ test("should review standalone plan decisions", async ({
     await expect(reset).toBeHidden();
   });
 
-  await test.step("an info disclosure expands its cell in place", async () => {
-    const info = openDecision.locator(".big-decision-info").first();
+  await test.step("hovering a dashed criterion term floats its tooltip", async () => {
+    const term = openDecision.locator(".big-decision-criterion-help").first();
     await expect(
-      info.getByText(/Selection anchors and their threads/),
+      term.getByText(/Selection anchors and their threads/),
     ).toBeHidden();
-    await info.locator("summary").click();
+    await term.locator("summary").hover();
     await expect(
-      info.getByText(/Selection anchors and their threads/),
+      term.getByText(/Selection anchors and their threads/),
     ).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(
+      term.getByText(/Selection anchors and their threads/),
+    ).toBeHidden();
+  });
+
+  await test.step("hovering a score's question mark floats its tooltip", async () => {
+    const info = openDecision.locator("td .big-decision-info").first();
+    await expect(info.getByText(/one atomic write/)).toBeHidden();
+    await info.locator("summary").hover();
+    await expect(info.getByText(/one atomic write/)).toBeVisible();
   });
 
   await test.step("the recommended option starts selected and one click moves it", async () => {

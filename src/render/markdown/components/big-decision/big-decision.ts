@@ -4,7 +4,7 @@
 
 import type { Element, ElementContent, Text } from "hast";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
-import { INFO_ICON } from "../../../icons/lucide/info.js";
+import { CIRCLE_QUESTION_MARK_ICON } from "../../../icons/lucide/circle-question-mark.js";
 import { MAXIMIZE_2_ICON } from "../../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../../icons/lucide/minimize-2.js";
 import { MINUS_ICON } from "../../../icons/lucide/minus.js";
@@ -101,7 +101,10 @@ const renderInfoDisclosure = (
             ],
           },
           children: [
-            renderLucideIcon({ icon: INFO_ICON, hidden: false }),
+            renderLucideIcon({
+              icon: CIRCLE_QUESTION_MARK_ICON,
+              hidden: false,
+            }),
             {
               type: "element",
               tagName: "span",
@@ -116,7 +119,6 @@ const renderInfoDisclosure = (
           properties: {
             className: [
               "big-decision-info-body",
-              "mt-1.5",
               "max-w-60",
               "text-xs",
               "font-normal",
@@ -303,11 +305,41 @@ const renderCriterionHeader = (
       "text-ink",
     ],
   },
-  children: [
-    text(criterion.title),
-    ...(criterion.detail.length === 0 ? [] : [text(" ")]),
-    ...renderInfoDisclosure(criterion.detail),
-  ],
+  children:
+    criterion.detail.length === 0
+      ? [text(criterion.title)]
+      : [
+          {
+            type: "element",
+            tagName: "details",
+            properties: {
+              className: ["big-decision-info", "big-decision-criterion-help"],
+            },
+            children: [
+              {
+                type: "element",
+                tagName: "summary",
+                properties: { className: ["cursor-help"] },
+                children: [text(criterion.title)],
+              },
+              {
+                type: "element",
+                tagName: "div",
+                properties: {
+                  className: [
+                    "big-decision-info-body",
+                    "max-w-60",
+                    "text-xs",
+                    "font-normal",
+                    "text-muted",
+                    "[&>:last-child]:mb-0",
+                  ],
+                },
+                children: [...criterion.detail],
+              },
+            ],
+          },
+        ],
 });
 
 // The comparison matrix: criteria as rows, options as columns, so competing

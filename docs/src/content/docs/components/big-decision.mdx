@@ -25,7 +25,7 @@ Every decision also rates its reversibility on a fixed scale, with a built-in ex
 
 Use `BigDecision` when a choice carries real tradeoffs a reviewer must weigh before implementation.
 Phrase the decision as a question, then name the criteria it actually turns on - the forces from the context paragraph - and score every option against every criterion.
-Keep verdicts terse: a verdict word plus a short qualifier, with longer reasoning behind the cell's info disclosure.
+Keep verdicts terse: a verdict word plus a short qualifier, with longer reasoning behind the cell's question-mark tooltip.
 Drop a criterion whose verdicts match across every option; a row that discriminates nothing is noise.
 Treat "do nothing" as an ordinary option whenever the status quo is a legitimate choice, and state the decision's reversibility - what it costs to change course later is the fact a reviewer most needs.
 When the decision lands, mark the chosen option and keep the losing options visible so the outcome retains its alternatives.
@@ -106,7 +106,7 @@ Declare one `Criterion` per row of the matrix, in the order the rows should read
 | --------- | ------------------ | -------- | -------------------------------------------------------------- |
 | `title`   | string (non-empty) | Yes      | Names the row; titles must be unique within the decision.      |
 
-Markdown in the body becomes the row's info disclosure - why this criterion matters.
+Markdown in the body becomes the criterion's tooltip - why it matters - shown on hover behind a dashed underline on the term.
 A decision with no criteria renders its options as a stacked list without a matrix.
 
 ### Option
@@ -130,12 +130,12 @@ Every option scores every declared criterion exactly once.
 | `verdict`   | string, at most 32 characters         | Yes      | The cell text: a verdict word plus a short qualifier.    |
 | `tone`      | enum: `good` `bad` `mixed` `neutral`  | No       | Colors the cell's icon; defaults to `neutral`.           |
 
-Markdown in the body becomes the cell's info disclosure for reasoning the verdict cannot carry.
+Markdown in the body becomes the cell's tooltip for reasoning the verdict cannot carry.
 A decided decision requires exactly one chosen option, and chosen options are invalid in open or deferred decisions.
 
 ### Reversibility
 
-At most one `Reversibility` element rates what changing course later would cost; it renders as its own section below the options with a built-in explainer.
+At most one `Reversibility` element rates what changing course later would cost; it renders as its own section below the options with a built-in explainer tooltip.
 
 | Attribute | Type                                        | Required | Behavior                                     |
 | --------- | ------------------------------------------- | -------- | -------------------------------------------- |

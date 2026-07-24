@@ -92,6 +92,8 @@ describe("BigDecision rendering", () => {
     expect(html).toContain('data-lucide="maximize-2"');
     expect(html).toContain("<strong>writers</strong>");
     expect(html).toContain("big-decision-info");
+    expect(html).toContain("big-decision-criterion-help");
+    expect(html).toContain('data-lucide="circle-question-mark"');
     expect(html).toContain("Why setup matters here.");
     expect(html).toContain("PostgreSQL details");
     expect(html).toContain("<code>code</code>");
