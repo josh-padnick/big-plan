@@ -1462,3 +1462,89 @@ test("should review a database table schema end to end", async ({
     expect(pageScrolls).toBe(false);
   });
 });
+
+test("should fold the schema's Indexes and DDL bands behind tabs", async ({
+  page,
+  tableSchemaViewerUrl,
+}) => {
+  await page.goto(tableSchemaViewerUrl);
+  const schema = page.locator("[data-database-table-schema]").first();
+  const tabs = schema.getByRole("tablist", { name: "Table schema sections" });
+  const indexesPanel = schema.locator('[data-schema-section="indexes"]');
+  const ddlPanels = schema.locator('[data-schema-section="ddl"]');
+
+  await test.step("the tab bar names every band and selects Indexes first", async () => {
+    await expect(tabs.getByRole("tab")).toHaveText([
+      "Indexes",
+      "Row security",
+      "Triggers",
+    ]);
+    await expect(tabs.getByRole("tab", { name: "Indexes" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(indexesPanel).toBeVisible();
+    await expect(ddlPanels.first()).toBeHidden();
+    // The tabs name the panels, so the in-panel labels retire.
+    await expect(
+      indexesPanel.locator(".table-schema-section-label"),
+    ).toBeHidden();
+  });
+
+  await test.step("selecting a DDL tab swaps the visible band", async () => {
+    await tabs.getByRole("tab", { name: "Row security" }).click();
+    await expect(indexesPanel).toBeHidden();
+    await expect(ddlPanels.first()).toBeVisible();
+    await expect(ddlPanels.first()).toContainText(
+      "CREATE POLICY subscriptions_tenant_read",
+    );
+  });
+
+  await test.step("the verbatim DDL keeps the shared code copy control", async () => {
+    await expect(ddlPanels.first().locator("[data-copy-code]")).toBeVisible();
+  });
+
+  await test.step("arrow keys move the tab focus ring", async () => {
+    await tabs.getByRole("tab", { name: "Row security" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(tabs.getByRole("tab", { name: "Triggers" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(ddlPanels.last()).toContainText(
+      "CREATE TRIGGER subscriptions_touch_updated",
+    );
+    await page.keyboard.press("Home");
+    await expect(indexesPanel).toBeVisible();
+  });
+
+  await test.step("a schema without DDL bands keeps its plain Indexes band", async () => {
+    const plain = page.locator("[data-database-table-schema]").nth(1);
+    await expect(plain.getByRole("tablist")).toHaveCount(0);
+    await expect(
+      plain.locator('[data-schema-section="indexes"]'),
+    ).toBeVisible();
+  });
+});
+
+test("should stack the labeled DDL bands when JavaScript is disabled", async ({
+  browser,
+  tableSchemaViewerUrl,
+}) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto(tableSchemaViewerUrl);
+  const schema = page.locator("[data-database-table-schema]").first();
+  await expect(schema.getByRole("tablist")).toHaveCount(0);
+  await expect(schema.locator('[data-schema-section="indexes"]')).toBeVisible();
+  const ddlPanels = schema.locator('[data-schema-section="ddl"]');
+  await expect(ddlPanels).toHaveCount(2);
+  await expect(ddlPanels.first()).toBeVisible();
+  await expect(
+    ddlPanels.first().locator(".table-schema-section-label"),
+  ).toHaveText("Row security");
+  await expect(ddlPanels.first()).toContainText("ENABLE ROW LEVEL SECURITY");
+  await expect(ddlPanels.last()).toBeVisible();
+  await expect(ddlPanels.last()).toContainText("CREATE TRIGGER");
+  await context.close();
+});

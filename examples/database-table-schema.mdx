@@ -30,7 +30,33 @@ indexes {
 Note: 'One row per subscription; canceled rows are kept for audit.'
 ```
 
+<Ddl title="Row security">
+
+```sql
+ALTER TABLE billing.subscriptions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY subscriptions_tenant_read ON billing.subscriptions
+  FOR SELECT USING (customer_id = current_setting('app.customer_id')::bigint);
+
+CREATE POLICY subscriptions_billing_write ON billing.subscriptions
+  FOR ALL TO billing_service USING (true) WITH CHECK (true);
+```
+
+</Ddl>
+
+<Ddl title="Triggers">
+
+```sql
+CREATE TRIGGER subscriptions_touch_updated
+  BEFORE UPDATE ON billing.subscriptions
+  FOR EACH ROW EXECUTE FUNCTION billing.touch_updated_at();
+```
+
+</Ddl>
+
 </DatabaseTableSchema>
+
+With JavaScript enabled the bands below the grid fold into tabs, `Indexes` selected first; without it every band renders stacked and labeled, so the policies and triggers stay reviewable everywhere.
 
 ## Composite keys and expression indexes
 
