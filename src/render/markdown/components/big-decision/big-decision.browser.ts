@@ -296,21 +296,17 @@ for (const component of document.querySelectorAll<HTMLElement>(
       reset();
     }
   });
-  const divergence = document.createElement("p");
-  divergence.className = "mt-1.5 mb-0 text-sm text-muted";
-  divergence.dataset.decisionDivergence = "";
-  divergence.hidden = true;
-  const divergenceText = document.createElement("span");
-  const divergenceButton = document.createElement("button");
-  divergenceButton.type = "button";
-  divergenceButton.className = "big-decision-popover-link";
-  divergenceButton.addEventListener("click", () => {
+  const selectButton = document.createElement("button");
+  selectButton.type = "button";
+  selectButton.className = "big-decision-popover-link";
+  selectButton.dataset.decisionDivergence = "";
+  selectButton.textContent = "Select";
+  selectButton.hidden = true;
+  selectButton.addEventListener("click", () => {
     if (leaderColumn !== null) {
       options[leaderColumn]?.click();
     }
   });
-  divergence.append(divergenceText, document.createTextNode(" "));
-  divergence.append(divergenceButton);
 
   const updateReset = (): void => {
     resetButton.hidden = priorities.every(
@@ -319,19 +315,13 @@ for (const component of document.querySelectorAll<HTMLElement>(
   };
 
   // The reader's own selection stays untouched; when it diverges from the
-  // computed leader, the footer offers the switch as an explicit action.
+  // computed leader, one inline Select offers the switch explicitly.
   const updateDivergence = (): void => {
     const selected = options.findIndex(
       (option) => option.dataset.optionSelected !== undefined,
     );
-    if (leaderColumn === null || selected === -1 || selected === leaderColumn) {
-      divergence.hidden = true;
-      return;
-    }
-    const name = optionName(options[leaderColumn] ?? document.body);
-    divergenceText.textContent = `Your priorities now favor ${name}.`;
-    divergenceButton.textContent = `Select ${name}`;
-    divergence.hidden = false;
+    selectButton.hidden =
+      leaderColumn === null || selected === -1 || selected === leaderColumn;
   };
 
   const recompute = (): void => {
@@ -364,17 +354,17 @@ for (const component of document.querySelectorAll<HTMLElement>(
     }
     if (leaderColumn === null) {
       bestMatchLine.textContent =
-        "Best match: none yet - the current priorities do not separate the options.";
+        "Best match: none - the current priorities do not separate the options.";
       whyPopover.details.hidden = true;
     } else {
       const name = optionName(options[leaderColumn] ?? document.body);
-      bestMatchLine.replaceChildren();
       const label = document.createElement("span");
       label.className = "font-semibold text-ink";
       label.textContent = `Best match: ${name}`;
-      bestMatchLine.append(
+      bestMatchLine.replaceChildren(
         label,
-        document.createTextNode(" Based on your current priorities."),
+        document.createTextNode(" "),
+        selectButton,
       );
       whyPopover.details.hidden = false;
       whyPopover.body.replaceChildren();
@@ -406,7 +396,7 @@ for (const component of document.querySelectorAll<HTMLElement>(
   actions.className =
     "mt-2 mb-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs";
   actions.append(whyPopover.details, howPopover.details, resetButton);
-  section.append(sectionLabel, bestMatchLine, divergence, actions);
+  section.append(sectionLabel, bestMatchLine, actions);
 
   for (const [index, row] of rows.entries()) {
     const rowHeader = row.querySelector("th");

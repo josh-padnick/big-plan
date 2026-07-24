@@ -81,7 +81,7 @@ test("should review standalone plan decisions", async ({
     await expect(options.nth(1)).toContainText("Best match");
     await expect(section).toContainText("Best match: SQLite");
     const divergence = section.locator("[data-decision-divergence]");
-    await expect(divergence).toContainText("Your priorities now favor SQLite");
+    await expect(divergence).toHaveText("Select");
     const setupPriority = openDecision
       .locator("[data-decision-weights]")
       .nth(1)
@@ -100,7 +100,7 @@ test("should review standalone plan decisions", async ({
     const options = openDecision.locator("thead [data-option]");
     const divergence = openDecision.locator("[data-decision-divergence]");
     await expect(divergence).toBeVisible();
-    await divergence.locator("button").click();
+    await divergence.click();
     await expect(options.nth(1)).toHaveAttribute("aria-checked", "true");
     await expect(divergence).toBeHidden();
   });
