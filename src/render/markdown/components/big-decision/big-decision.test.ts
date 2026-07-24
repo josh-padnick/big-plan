@@ -63,6 +63,11 @@ describe("BigDecision rendering", () => {
     expect(html).toContain("Managed store.");
     expect(html).toContain('data-decision-tradeoff="pro"');
     expect(html).toContain('data-decision-tradeoff="con"');
+    expect(html).toContain('data-tradeoff-group="pro"');
+    expect(html).toContain('data-tradeoff-group="con"');
+    expect(html).toContain(">Pros<");
+    expect(html).toContain(">Cons<");
+    expect(html).not.toContain("big-decision-option-recommended");
     expect(html).toContain("<strong>tooling</strong>");
     expect(html).toContain("<details");
     expect(html).toContain("<summary");

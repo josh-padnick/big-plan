@@ -65,6 +65,65 @@ const renderTradeoff = (tradeoff: CompiledBigDecisionTradeoff): Element => ({
   ],
 });
 
+// One labeled tradeoff group: a quiet Pros or Cons header above its signed
+// rows, rendered only when the option authored that side.
+const renderTradeoffGroup = ({
+  label,
+  kind,
+  tradeoffs,
+}: {
+  readonly label: "Pros" | "Cons";
+  readonly kind: CompiledBigDecisionTradeoff["kind"];
+  readonly tradeoffs: ReadonlyArray<CompiledBigDecisionTradeoff>;
+}): ReadonlyArray<Element> => {
+  const group = tradeoffs.filter((tradeoff) => tradeoff.kind === kind);
+  if (group.length === 0) {
+    return [];
+  }
+  return [
+    {
+      type: "element",
+      tagName: "div",
+      properties: {
+        className: ["mt-3"],
+        "data-tradeoff-group": kind,
+      },
+      children: [
+        {
+          type: "element",
+          tagName: "div",
+          properties: {
+            className: [
+              "text-[0.6875rem]",
+              "leading-4",
+              "font-bold",
+              "tracking-[0.08em]",
+              "uppercase",
+              "text-muted",
+            ],
+          },
+          children: [text(label)],
+        },
+        {
+          type: "element",
+          tagName: "ul",
+          properties: {
+            className: [
+              "mt-1.5",
+              "mb-0",
+              "grid",
+              "list-none",
+              "gap-1.5",
+              "p-0",
+            ],
+          },
+          children: group.map(renderTradeoff),
+        },
+      ],
+    },
+  ];
+};
+
 const optionMarker = (chosen: boolean): Element => ({
   type: "element",
   tagName: "span",
@@ -103,7 +162,6 @@ const renderOption = ({
     id: option.id,
     className: [
       "big-decision-option",
-      ...(option.recommended ? ["big-decision-option-recommended"] : []),
       ...(option.chosen ? ["big-decision-option-chosen"] : []),
       ...(muted ? ["big-decision-option-muted"] : []),
       "rounded-md",
@@ -172,25 +230,16 @@ const renderOption = ({
         },
       ],
     },
-    ...(option.tradeoffs.length === 0
-      ? []
-      : [
-          {
-            type: "element",
-            tagName: "ul",
-            properties: {
-              className: [
-                "mt-3",
-                "mb-0",
-                "grid",
-                "list-none",
-                "gap-1.5",
-                "p-0",
-              ],
-            },
-            children: option.tradeoffs.map(renderTradeoff),
-          } satisfies Element,
-        ]),
+    ...renderTradeoffGroup({
+      label: "Pros",
+      kind: "pro",
+      tradeoffs: option.tradeoffs,
+    }),
+    ...renderTradeoffGroup({
+      label: "Cons",
+      kind: "con",
+      tradeoffs: option.tradeoffs,
+    }),
     ...(option.detail.length === 0
       ? []
       : [

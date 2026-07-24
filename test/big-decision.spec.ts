@@ -36,13 +36,19 @@ test("should review standalone plan decisions", async ({
     );
   });
 
-  await test.step("the tradeoffs carry signed markers", async () => {
+  await test.step("the tradeoffs group under Pros and Cons headers with signed markers", async () => {
     const pros = page.locator('[data-decision-tradeoff="pro"]');
     const cons = page.locator('[data-decision-tradeoff="con"]');
     await expect(pros).toHaveCount(8);
     await expect(cons).toHaveCount(7);
     await expect(pros.locator('[data-lucide="check"]')).toHaveCount(8);
     await expect(cons.locator('[data-lucide="minus"]')).toHaveCount(7);
+    await expect(
+      page.locator('[data-tradeoff-group="pro"]').first(),
+    ).toContainText("Pros");
+    await expect(
+      page.locator('[data-tradeoff-group="con"]').first(),
+    ).toContainText("Cons");
   });
 
   await test.step("the recommended badge appears once per decision", async () => {

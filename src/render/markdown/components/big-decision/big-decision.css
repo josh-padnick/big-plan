@@ -16,12 +16,9 @@
     color: var(--color-muted);
     background: color-mix(in srgb, var(--color-muted) 14%, transparent);
   }
-  article .big-decision-option-recommended {
-    border-color: color-mix(in srgb, var(--color-accent) 55%, var(--edge-c));
-    box-shadow: inset 3px 0 0 var(--color-accent);
-  }
   article .big-decision-option-chosen {
     border-color: color-mix(in srgb, var(--decision-pro-c) 55%, var(--edge-c));
+    box-shadow: inset 3px 0 0 var(--decision-pro-c);
   }
   article .big-decision-option-muted {
     background: color-mix(in srgb, var(--surface-c) 55%, var(--bg));
