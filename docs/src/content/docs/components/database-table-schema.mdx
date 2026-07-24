@@ -25,7 +25,10 @@ The Constraints cell carries key badges, explicit nullability, foreign keys with
 The tinted Indexes band below the grid numbers each index (`INDX 1`, `INDX 2`, ...) and leads with its name; the columns, method, and partial predicate follow in demoted muted text with the invariant note beneath.
 A column that an index uses as a key carries the matching `INDX n` pill, while a column that only appears in a partial-index predicate is marked `WHERE INDX n`, so a reviewer can answer "is this column indexed?" without leaving the row.
 
-The rendering is optimized for Postgres but generic: column types are opaque text, so any engine's types render unchanged.
+Each `Ddl` child adds a titled band of verbatim SQL after the indexes - row security, triggers, partitioning, grants, whatever the schema grammar deliberately leaves out.
+When JavaScript is available and more than one band exists, the bands fold behind a tab bar with `Indexes` selected first; without it every band renders stacked and labeled, so nothing is ever hidden from a reader.
+
+The rendering is optimized for Postgres but generic: column types are opaque text, any engine's types render unchanged, and the component never parses `Ddl` SQL - it displays exactly what was authored.
 
 ## When to use it
 
@@ -33,9 +36,9 @@ Use `DatabaseTableSchema` whenever a plan proposes or modifies a table and the r
 
 ### When not to use it
 
-- Exact DDL the reader will execute - use a fenced `sql` block, which preserves every clause verbatim
+- Exact DDL the reader will execute standalone - use a fenced `sql` block, which preserves every clause verbatim outside the figure
 - Multi-table relationship overviews - render one component per table; a diagram of the whole schema is a different concern
-- Row-level security policies, triggers, or partitioning - put the `CREATE POLICY` or `CREATE TRIGGER` statements in a `sql` fence (or a [`CodeSnippet`](/components/code-snippet/) when line-anchored commentary helps) directly beneath the component, and one-line facts such as "RLS enabled; policies below" in the table `Note:`
+- Restating the columns grid as a `CREATE TABLE` inside a `Ddl` child - that creates a second source of truth the component cannot check against the grid; reserve `Ddl` for what the grammar deliberately leaves out
 
 ## Use cases
 
@@ -63,6 +66,14 @@ indexes {
 Note: 'One row per queued catalog refresh.'
 ```
 
+<Ddl title="Row security">
+
+```sql
+ALTER TABLE catalog.refresh_jobs ENABLE ROW LEVEL SECURITY;
+```
+
+</Ddl>
+
 </DatabaseTableSchema>
 ````
 
@@ -78,7 +89,12 @@ Any other attribute is a positional authoring error.
 
 ### Children
 
-The component takes exactly one fenced code block with the `dbml` language, and nothing else.
+The component takes exactly one fenced code block with the `dbml` language, followed by any number of `Ddl` children.
+
+### Ddl
+
+Each `Ddl` child carries one titled band of verbatim SQL: a required non-empty `title` attribute, unique within the component, and exactly one fenced code block with the `sql` language as its whole body.
+The component displays the statements exactly as authored - highlighted and copyable, never parsed or validated as SQL - so engine-specific DDL renders truthfully for any engine.
 
 ### Schema grammar
 
@@ -102,14 +118,14 @@ Only direct unqualified references drive those pills; SQL string literals are ig
 The table `Note:` is the table's comment, headed for `COMMENT ON TABLE`: one sentence saying what a single row represents.
 Operational behavior - pruning schedules, rollout plans, lifecycle narration - belongs in the prose around the component, not inside the schema.
 
-### What stays outside the component
+### What stays outside the grammar
 
-Triggers, row-level security, partitioning, storage parameters, collation, and grants are deliberately not part of the grammar.
-Capture them beside the component: exact DDL in a `sql` fence, decision-worthy rationale in a [`Callout`](/components/callout/), and one-line facts in the table `Note:`.
+Triggers, row-level security, partitioning, storage parameters, collation, and grants are deliberately not part of the schema grammar; they enter as verbatim SQL through `Ddl` children instead.
+Decision-worthy rationale still belongs in a [`Callout`](/components/callout/) beside the component, and one-line facts in the table `Note:`.
 
 ## Reader controls
 
-The grid and sections are fully server-rendered; JavaScript powers only the actions menu and the full-screen view, and a wide grid scrolls inside the figure instead of widening the page.
+The grid and sections are fully server-rendered; JavaScript powers only the actions menu, the full-screen view, and the tab bar that folds multiple bands, and a wide grid scrolls inside the figure instead of widening the page.
 The actions menu's Copy table name action copies the exact `name` attribute, while Copy source copies only the raw `dbml` fence.
 As MDX parses fenced content, copied source uses LF line endings and includes a trailing newline.
 The full-screen control opens a modal named by the table, keeps a tall schema's header in place while its body scrolls, and returns the reader to the same page position when it closes.
