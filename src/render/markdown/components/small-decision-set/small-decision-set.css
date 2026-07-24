@@ -1,0 +1,19 @@
+/* SmallDecisionSet question-number, option-marker, and recommended-tag
+   variants, colocated with the component that emits these selectors. */
+
+@layer components {
+  article .small-decision-number {
+    color: var(--color-accent);
+  }
+  article .small-decision-recommended-pill {
+    color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  }
+  article .small-decision-option-marker {
+    border-color: var(--edge-c);
+    background: var(--bg);
+  }
+  article .small-decision-list > li + li {
+    border-top: 1px solid var(--edge-c);
+  }
+}

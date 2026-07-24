@@ -1,5 +1,5 @@
-// Exposes DecisionSet's recursive scoped grammar and renders its compiled
-// decisions as a fully static review surface with native detail disclosure.
+// Exposes BigDecision's recursive scoped grammar and renders one weighty
+// decision as a standalone static review card with native detail disclosure.
 
 import type { Element, Text } from "hast";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
@@ -16,51 +16,34 @@ import {
   renderSectionLabel,
 } from "../shared/labeled-section/labeled-section.js";
 import {
-  compileDecisionSetComponent,
-  type CompiledDecision,
-  type CompiledDecisionOption,
-  type CompiledDecisionSet,
-  type CompiledDecisionTradeoff,
-  type DecisionStatus,
-} from "./compile-decision-set.js";
+  compileBigDecisionComponent,
+  type BigDecisionStatus,
+  type CompiledBigDecision,
+  type CompiledBigDecisionOption,
+  type CompiledBigDecisionTradeoff,
+} from "./compile-big-decision.js";
 
 const text = (value: string): Text => ({ type: "text", value });
 
-const statusPill = (status: DecisionStatus): Element =>
+const statusPill = (status: BigDecisionStatus): Element =>
   renderBadgePill({
     label: status,
-    classNames: ["decision-set-status-pill", `decision-set-status-${status}`],
+    classNames: ["big-decision-status-pill", `big-decision-status-${status}`],
     properties: { "data-decision-status": status },
   });
 
-const countLabel = ({
-  decisions,
-  openCount,
-}: {
-  readonly decisions: number;
-  readonly openCount: number;
-}): string => {
-  const decisionCount = `${decisions} decision${decisions === 1 ? "" : "s"}`;
-  return openCount === 0
-    ? decisionCount
-    : `${decisionCount} · ${openCount} open`;
-};
-
-// The signed glyph is decorative because the text remains the complete
-// tradeoff; tint and icon provide redundant scanning cues.
-const renderTradeoff = (tradeoff: CompiledDecisionTradeoff): Element => ({
+// Only the signed glyph carries the pro or con color; the text stays plain
+// prose ink so the list reads as tradeoffs rather than a code diff.
+const renderTradeoff = (tradeoff: CompiledBigDecisionTradeoff): Element => ({
   type: "element",
   tagName: "li",
   properties: {
     className: [
-      "decision-set-tradeoff",
-      `decision-set-tradeoff-${tradeoff.kind}`,
+      "big-decision-tradeoff",
+      `big-decision-tradeoff-${tradeoff.kind}`,
       "flex",
       "items-start",
       "gap-2",
-      "rounded-sm",
-      "px-2.5",
-      "py-2",
       "text-sm",
       "[&>svg]:mt-0.5",
       "[&>svg]:size-3.5",
@@ -87,8 +70,8 @@ const optionMarker = (chosen: boolean): Element => ({
   tagName: "span",
   properties: {
     className: [
-      "decision-set-option-marker",
-      ...(chosen ? ["decision-set-option-marker-chosen"] : []),
+      "big-decision-option-marker",
+      ...(chosen ? ["big-decision-option-marker-chosen"] : []),
       "inline-flex",
       "size-5",
       "shrink-0",
@@ -111,7 +94,7 @@ const renderOption = ({
   option,
   muted,
 }: {
-  readonly option: CompiledDecisionOption;
+  readonly option: CompiledBigDecisionOption;
   readonly muted: boolean;
 }): Element => ({
   type: "element",
@@ -119,10 +102,10 @@ const renderOption = ({
   properties: {
     id: option.id,
     className: [
-      "decision-set-option",
-      ...(option.recommended ? ["decision-set-option-recommended"] : []),
-      ...(option.chosen ? ["decision-set-option-chosen"] : []),
-      ...(muted ? ["decision-set-option-muted"] : []),
+      "big-decision-option",
+      ...(option.recommended ? ["big-decision-option-recommended"] : []),
+      ...(option.chosen ? ["big-decision-option-chosen"] : []),
+      ...(muted ? ["big-decision-option-muted"] : []),
       "rounded-md",
       "border",
       "border-edge",
@@ -157,7 +140,7 @@ const renderOption = ({
               children: [
                 {
                   type: "element",
-                  tagName: "h4",
+                  tagName: "p",
                   properties: {
                     className: ["m-0", "text-sm", "font-semibold", "text-ink"],
                   },
@@ -167,7 +150,7 @@ const renderOption = ({
                   ? [
                       renderBadgePill({
                         label: "Recommended",
-                        classNames: ["decision-set-recommended-pill"],
+                        classNames: ["big-decision-recommended-pill"],
                       }),
                     ]
                   : []),
@@ -216,7 +199,7 @@ const renderOption = ({
             tagName: "details",
             properties: {
               className: [
-                "decision-set-details",
+                "big-decision-details",
                 "mt-3",
                 "border-t",
                 "border-edge",
@@ -256,12 +239,12 @@ const renderOption = ({
   ],
 });
 
-const outcomeStrip = (option: CompiledDecisionOption): Element => ({
+const outcomeStrip = (option: CompiledBigDecisionOption): Element => ({
   type: "element",
   tagName: "div",
   properties: {
     className: [
-      "decision-set-outcome",
+      "big-decision-outcome",
       "mx-4",
       "mb-4",
       "flex",
@@ -283,32 +266,40 @@ const outcomeStrip = (option: CompiledDecisionOption): Element => ({
   ],
 });
 
-const renderDecision = (decision: CompiledDecision): Element => ({
+// One standalone bordered card: the header owns the status pill and question,
+// and the options section reuses the shared review-card section grammar.
+const renderBigDecisionFigure = ({
+  model,
+}: {
+  readonly model: CompiledBigDecision;
+}): Element => ({
   type: "element",
-  tagName: "section",
+  tagName: "figure",
   properties: {
-    id: decision.id,
+    id: model.id,
     className: [
-      "decision-set-decision",
+      "big-decision",
+      "mb-5",
+      "min-w-0",
       "overflow-hidden",
       "rounded-md",
       "border",
       "border-edge",
       "bg-paper",
     ],
-    "data-decision": "",
-    "data-decision-state": decision.status,
+    "data-big-decision": "",
+    "data-decision-state": model.status,
   },
   children: [
     {
       type: "element",
-      tagName: "header",
+      tagName: "figcaption",
       properties: { className: ["bg-header", "px-4", "py-3"] },
       children: [
-        statusPill(decision.status),
+        statusPill(model.status),
         {
           type: "element",
-          tagName: "h3",
+          tagName: "p",
           properties: {
             className: [
               "mt-2",
@@ -318,11 +309,11 @@ const renderDecision = (decision: CompiledDecision): Element => ({
               "text-ink",
             ],
           },
-          children: [text(decision.question)],
+          children: [text(model.question)],
         },
       ],
     },
-    ...(decision.context.length === 0
+    ...(model.context.length === 0
       ? []
       : [
           {
@@ -331,12 +322,12 @@ const renderDecision = (decision: CompiledDecision): Element => ({
             properties: {
               className: ["px-4", "py-4", "text-sm", "[&>:last-child]:mb-0"],
             },
-            children: [...decision.context],
+            children: [...model.context],
           } satisfies Element,
         ]),
-    ...(decision.chosenOption === undefined
+    ...(model.chosenOption === undefined
       ? []
-      : [outcomeStrip(decision.chosenOption)]),
+      : [outcomeStrip(model.chosenOption)]),
     renderCardSection({
       properties: { "data-decision-options": "" },
       children: [
@@ -345,10 +336,10 @@ const renderDecision = (decision: CompiledDecision): Element => ({
           type: "element",
           tagName: "div",
           properties: { className: ["mt-2.5", "grid", "gap-2.5"] },
-          children: decision.options.map((option) =>
+          children: model.options.map((option) =>
             renderOption({
               option,
-              muted: decision.status === "decided" && !option.chosen,
+              muted: model.status === "decided" && !option.chosen,
             }),
           ),
         },
@@ -357,102 +348,11 @@ const renderDecision = (decision: CompiledDecision): Element => ({
   ],
 });
 
-const renderDecisionSetFigure = ({
-  model,
-}: {
-  readonly model: CompiledDecisionSet;
-}): Element => ({
-  type: "element",
-  tagName: "figure",
-  properties: {
-    className: [
-      "decision-set",
-      "mb-5",
-      "min-w-0",
-      "overflow-hidden",
-      "rounded-md",
-      "border",
-      "border-edge",
-    ],
-    "data-decision-set": "",
-  },
-  children: [
-    {
-      type: "element",
-      tagName: "figcaption",
-      properties: {
-        className: [
-          "flex",
-          "flex-wrap",
-          "items-baseline",
-          "justify-between",
-          "gap-2",
-          "bg-header",
-          "px-4",
-          "py-3",
-        ],
-      },
-      children: [
-        ...(model.title === undefined
-          ? []
-          : [
-              {
-                type: "element",
-                tagName: "span",
-                properties: { className: ["font-semibold", "text-ink"] },
-                children: [text(model.title)],
-              } satisfies Element,
-            ]),
-        {
-          type: "element",
-          tagName: "span",
-          properties: {
-            className: [
-              "decision-set-summary",
-              "text-xs",
-              "font-semibold",
-              "text-muted",
-            ],
-          },
-          children: [
-            text(
-              countLabel({
-                decisions: model.decisions.length,
-                openCount: model.openCount,
-              }),
-            ),
-          ],
-        },
-      ],
-    },
-    ...(model.intro.length === 0
-      ? []
-      : [
-          {
-            type: "element",
-            tagName: "div",
-            properties: {
-              className: ["px-4", "py-4", "[&>:last-child]:mb-0"],
-            },
-            children: [...model.intro],
-          } satisfies Element,
-        ]),
-    {
-      type: "element",
-      tagName: "div",
-      properties: {
-        className: ["grid", "gap-3", "border-t", "border-edge", "p-3"],
-      },
-      children: model.decisions.map(renderDecision),
-    },
-  ],
-});
+/** Compiles and renders one BigDecision component. */
+export const renderBigDecision: ComponentRenderer = (input) =>
+  renderBigDecisionFigure({ model: compileBigDecisionComponent(input) });
 
-/** Compiles and renders one DecisionSet component. */
-export const renderDecisionSet: ComponentRenderer = (input) =>
-  renderDecisionSetFigure({ model: compileDecisionSetComponent(input) });
-
-const bodyPolicy = (name: "Decision" | "Option" | "Pro" | "Con") => ({
+const bodyPolicy = (name: "Option" | "Pro" | "Con") => ({
   prohibited: {
     heading: `${name} bodies cannot contain headings`,
     footnoteReference: `${name} bodies cannot contain footnote references`,
@@ -475,14 +375,8 @@ const optionDefinition = (): ScopedChildDefinition => ({
   },
 });
 
-const decisionDefinition = (): ScopedChildDefinition => ({
-  kind: "scoped-child",
-  markdownBody: bodyPolicy("Decision"),
+/** Declares BigDecision's renderer and recursively scoped authoring grammar. */
+export const BIG_DECISION_COMPONENT_DEFINITION = {
+  render: renderBigDecision,
   scopedChildren: { Option: optionDefinition() },
-});
-
-/** Declares DecisionSet's renderer and recursively scoped authoring grammar. */
-export const DECISION_SET_COMPONENT_DEFINITION = {
-  render: renderDecisionSet,
-  scopedChildren: { Decision: decisionDefinition() },
 } satisfies ComponentDefinition;

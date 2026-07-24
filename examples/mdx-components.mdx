@@ -31,9 +31,7 @@ It already has regional concurrency controls and the required service account.
 
 The queue boundary is the remaining architectural choice in this excerpt, so its options stay grouped with the tradeoffs the reviewer must judge.
 
-<DecisionSet title="Queue architecture">
-
-<Decision question="Where should refresh-job deduplication live?" status="open">
+<BigDecision question="Where should refresh-job deduplication live?" status="open">
 
 The enqueue path must collapse repeated refreshes for the same cache key without coupling request handlers to worker internals.
 
@@ -63,9 +61,47 @@ Every producer must reproduce the same race-prone check-and-publish sequence.
 
 </Option>
 
-</Decision>
+</BigDecision>
 
-</DecisionSet>
+## Remaining questions
+
+The smaller calls do not need tradeoff cards; they collect at the end as a compact question list.
+
+<SmallDecisionSet title="Open questions">
+
+<SmallDecision question="Should the refresh queue name include the region?">
+
+<Option title="Yes" recommended>
+
+Keeps queue dashboards separable per deployment from day one.
+
+</Option>
+
+<Option title="No">
+
+One name is simpler until a second region actually ships.
+
+</Option>
+
+</SmallDecision>
+
+<SmallDecision question="Backfill the cold cache before or after the cutover?">
+
+<Option title="Before">
+
+The first production reads hit a warm cache.
+
+</Option>
+
+<Option title="After" recommended>
+
+Avoids double-writing entries the cutover would invalidate anyway.
+
+</Option>
+
+</SmallDecision>
+
+</SmallDecisionSet>
 
 ## Planned file changes
 

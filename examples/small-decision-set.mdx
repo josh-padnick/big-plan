@@ -1,0 +1,64 @@
+# Review Rollout Questions
+
+This excerpt collects the smaller calls a reviewer settles at the end of a rollout plan.
+Each question is quick to answer, and none needs a full tradeoff card.
+
+## Open questions
+
+<SmallDecisionSet title="Open questions">
+
+Answer these before implementation starts; each defaults to the recommended option if unanswered.
+
+<SmallDecision question="Should the first release ship behind a feature flag?">
+
+The rollout risk is concentrated in the first week of traffic.
+
+<Option title="Yes" recommended>
+
+Keeps rollback one toggle away during the risky window, at the cost of a flag-cleanup follow-up.
+
+</Option>
+
+<Option title="No">
+
+Avoids the cleanup task, but a rollback means redeploying the previous build.
+
+</Option>
+
+</SmallDecision>
+
+<SmallDecision question="Which environment hosts the canary?">
+
+<Option title="Staging">
+
+Mirrors production topology closely enough for load signals.
+
+</Option>
+
+<Option title="Production, one region" recommended>
+
+Real traffic finds the failure modes staging cannot reproduce.
+
+</Option>
+
+<Option title="Skip the canary">
+
+Fastest path, acceptable only if the flag rollback stays available.
+
+</Option>
+
+</SmallDecision>
+
+<SmallDecision question="When do we remove the legacy endpoint?">
+
+<Option title="Same release" />
+
+<Option title="One release later" recommended>
+
+Gives integrators one cycle of overlap with both endpoints live.
+
+</Option>
+
+</SmallDecision>
+
+</SmallDecisionSet>

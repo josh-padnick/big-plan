@@ -20,7 +20,8 @@ type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
   readonly componentsViewerUrl: string;
   readonly apiEndpointsViewerUrl: string;
-  readonly decisionSetViewerUrl: string;
+  readonly bigDecisionViewerUrl: string;
+  readonly smallDecisionSetViewerUrl: string;
   readonly sampleViewerUrl: string;
   readonly tableSchemaViewerUrl: string;
 };
@@ -131,14 +132,31 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     },
     { scope: "worker" },
   ],
-  decisionSetViewerUrl: [
+  bigDecisionViewerUrl: [
     async ({}, use) => {
-      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-decision-set-"));
-      const outputPath = join(outputDir, "decision-set.html");
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-big-decision-"));
+      const outputPath = join(outputDir, "big-decision.html");
       await execFileAsync(process.execPath, [
         join(repoRoot, "bin", "big-plan.mjs"),
         "render",
-        join(repoRoot, "examples", "decision-set.mdx"),
+        join(repoRoot, "examples", "big-decision.mdx"),
+        outputPath,
+      ]);
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  smallDecisionSetViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-small-decision-set-"),
+      );
+      const outputPath = join(outputDir, "small-decision-set.html");
+      await execFileAsync(process.execPath, [
+        join(repoRoot, "bin", "big-plan.mjs"),
+        "render",
+        join(repoRoot, "examples", "small-decision-set.mdx"),
         outputPath,
       ]);
       await use(pathToFileURL(outputPath).href);

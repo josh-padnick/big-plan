@@ -165,9 +165,7 @@ CREATE POLICY refresh_jobs_service_all ON catalog.refresh_jobs
 </DatabaseTableSchema>
 `;
 
-const DECISION_SET_FIXTURE = `<DecisionSet title="Review storage decisions">
-
-<Decision question="Which persistence layer should back review comments?" status="open">
+const BIG_DECISION_FIXTURE = `<BigDecision question="Which persistence layer should back review comments?" status="open">
 
 Comments need durable identities and ordered replies without blocking a later multi-reviewer workflow.
 
@@ -195,9 +193,40 @@ The single-writer model adds a migration point before shared review scales.
 
 </Option>
 
-</Decision>
+</BigDecision>
+`;
 
-</DecisionSet>
+const SMALL_DECISION_SET_FIXTURE = `<SmallDecisionSet title="Open questions">
+
+<SmallDecision question="Should the first release ship behind a feature flag?">
+
+<Option title="Yes" recommended>
+
+Keeps rollback one toggle away during the risky window.
+
+</Option>
+
+<Option title="No">
+
+Avoids the flag-cleanup follow-up task.
+
+</Option>
+
+</SmallDecision>
+
+<SmallDecision question="When do we remove the legacy endpoint?">
+
+<Option title="Same release" />
+
+<Option title="One release later" recommended>
+
+Gives integrators one cycle of overlap.
+
+</Option>
+
+</SmallDecision>
+
+</SmallDecisionSet>
 `;
 
 /** Renders an MDX fixture through the CLI and returns the output HTML path. */
@@ -275,9 +304,14 @@ const shootFileTreeDiff = async (page, path) => {
   await page.locator("figure[data-file-tree-diff]").screenshot({ path });
 };
 
-/** Screenshots the DecisionSet figure element. */
-const shootDecisionSet = async (page, path) => {
-  await page.locator("figure[data-decision-set]").screenshot({ path });
+/** Screenshots the BigDecision figure element. */
+const shootBigDecision = async (page, path) => {
+  await page.locator("figure[data-big-decision]").screenshot({ path });
+};
+
+/** Screenshots the SmallDecisionSet figure element. */
+const shootSmallDecisionSet = async (page, path) => {
+  await page.locator("figure[data-small-decision-set]").screenshot({ path });
 };
 
 /** Switches the tree to the side-by-side view. */
@@ -316,10 +350,16 @@ const SHOTS = [
     shoot: shootFigure,
   },
   {
-    name: "decision-set",
-    mdx: DECISION_SET_FIXTURE,
-    base: "decision-set",
-    shoot: shootDecisionSet,
+    name: "big-decision",
+    mdx: BIG_DECISION_FIXTURE,
+    base: "big-decision",
+    shoot: shootBigDecision,
+  },
+  {
+    name: "small-decision-set",
+    mdx: SMALL_DECISION_SET_FIXTURE,
+    base: "small-decision-set",
+    shoot: shootSmallDecisionSet,
   },
   {
     name: "snippet",

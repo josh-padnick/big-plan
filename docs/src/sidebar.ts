@@ -30,6 +30,7 @@ export const SIDEBAR: readonly SidebarGroup[] = [
     label: "Components",
     items: [
       { label: "Overview", slug: "components" },
+      { label: "BigDecision", slug: "components/big-decision" },
       { label: "Callout", slug: "components/callout" },
       { label: "CodeDiff", slug: "components/code-diff" },
       { label: "CodeSnippet", slug: "components/code-snippet" },
@@ -37,12 +38,12 @@ export const SIDEBAR: readonly SidebarGroup[] = [
         label: "DatabaseTableSchema",
         slug: "components/database-table-schema",
       },
-      { label: "DecisionSet", slug: "components/decision-set" },
       { label: "FileTree", slug: "components/file-tree" },
       { label: "FileTreeDiff", slug: "components/file-tree-diff" },
       { label: "GraphqlOperation", slug: "components/graphql-operation" },
       { label: "GrpcMethod", slug: "components/grpc-method" },
       { label: "HttpEndpoint", slug: "components/http-endpoint" },
+      { label: "SmallDecisionSet", slug: "components/small-decision-set" },
     ],
   },
   {

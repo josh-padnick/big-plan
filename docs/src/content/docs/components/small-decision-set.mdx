@@ -1,0 +1,92 @@
+---
+title: SmallDecisionSet
+description: A compact component that collects a plan's small questions, each with two or more briefly explained options and at most one recommendation.
+---
+
+import ThemeImage from "../../../components/ThemeImage.astro";
+import smallDecisionSetLight from "../../../assets/components/small-decision-set-light.png";
+import smallDecisionSetDark from "../../../assets/components/small-decision-set-dark.png";
+
+`SmallDecisionSet` collects the small questions a plan poses to its reviewer - typically at the end - as one compact numbered list.
+Each question offers two or more options, and each option pairs its title with a short explanation, enough to answer quickly without a tradeoff card.
+A choice weighty enough to need pros and cons belongs in a standalone [BigDecision](/components/big-decision/) instead.
+
+## How it looks
+
+<ThemeImage
+  light={smallDecisionSetLight}
+  dark={smallDecisionSetDark}
+  alt="A numbered list of three open questions, each with compact option rows and a Recommended tag"
+/>
+
+## When to use it
+
+Use `SmallDecisionSet` for the quick calls that remain after the plan's substance is settled: rollout toggles, naming, sequencing, defaults.
+Phrase every question as a question, keep option explanations to a sentence or two, and mark the recommended answer so an agreeing reviewer can confirm at a glance.
+
+### When not to use it
+
+- A decision with real tradeoffs to weigh - use [BigDecision](/components/big-decision/)
+- A single yes/no confirmation the surrounding prose can carry
+- Questions with no concrete options yet - leave them as prose until the options exist
+
+## Use cases
+
+- Close a plan with the open questions a reviewer must answer before implementation starts
+- Collect scattered small calls into one place instead of burying them across sections
+- Show recommended defaults so review can be a fast confirmation pass
+
+## Usage
+
+````mdx
+<SmallDecisionSet title="Open questions">
+
+Answer these before implementation starts.
+
+<SmallDecision question="Should the first release ship behind a feature flag?">
+
+The rollout risk is concentrated in the first week.
+
+<Option title="Yes" recommended>
+
+Keeps rollback one toggle away during the risky window.
+
+</Option>
+
+<Option title="No">
+
+Avoids the flag-cleanup follow-up task.
+
+</Option>
+
+</SmallDecision>
+
+</SmallDecisionSet>
+````
+
+## Authoring
+
+### SmallDecisionSet
+
+An optional `title` labels the list, and the header always counts the questions.
+Introductory markdown before the first `SmallDecision` explains what the list covers.
+
+### SmallDecision
+
+Nest one or more `SmallDecision` elements directly inside the set.
+
+| Attribute  | Type               | Required | Behavior                                    |
+| ---------- | ------------------ | -------- | ------------------------------------------- |
+| `question` | string (non-empty) | Yes      | Renders as the numbered question line.      |
+
+Markdown before the first `Option` supplies optional context for the question.
+Each question needs at least two options.
+
+### Option
+
+| Attribute     | Type               | Required | Behavior                                                     |
+| ------------- | ------------------ | -------- | ------------------------------------------------------------ |
+| `title`       | string (non-empty) | Yes      | Names the option; titles must be unique within the question. |
+| `recommended` | bare boolean       | No       | Marks at most one option per question as Recommended.        |
+
+Markdown in the option body is the short always-visible explanation; an option may omit it when the title alone is enough.
