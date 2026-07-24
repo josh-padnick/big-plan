@@ -93,18 +93,23 @@
     border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
     background: color-mix(in srgb, var(--color-accent) 30%, var(--bg));
   }
-  article .big-decision-weights-reset {
+  article .big-decision-popover-link {
+    display: inline;
     padding: 0;
     border: 0;
     background: transparent;
     cursor: pointer;
+    list-style: none;
     font-size: 0.75rem;
     font-weight: 600;
     color: var(--color-accent);
     text-decoration: underline;
     text-underline-offset: 2px;
   }
-  article .big-decision-bestfit {
+  article .big-decision-popover-link::-webkit-details-marker {
+    display: none;
+  }
+  article .big-decision-bestmatch {
     display: inline-flex;
     align-items: center;
     padding: 0.125rem 0.5rem;

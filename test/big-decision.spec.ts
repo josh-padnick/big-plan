@@ -70,61 +70,60 @@ test("should review standalone plan decisions", async ({
     await page.mouse.move(0, 0);
   });
 
-  await test.step("importance squares recompute the best-fit option", async () => {
+  await test.step("labeled priorities recompute the best match", async () => {
     await expect(
-      openDecision.locator("[data-decision-weights-legend]"),
-    ).toBeVisible();
+      openDecision.locator("[data-decision-weights-header]"),
+    ).toContainText("Prioritize the criteria");
     await expect(openDecision.locator("[data-decision-weights]")).toHaveCount(
       4,
     );
+    await expect(
+      openDecision.locator("[data-decision-weight-label]").first(),
+    ).toHaveText("Priority: Medium");
     const options = openDecision.locator("thead [data-option]");
-    await expect(options.nth(1)).toHaveAttribute("data-best-fit", "");
-    await expect(options.nth(1)).toContainText("Best fit");
-    const reset = openDecision.locator("[data-decision-weights-reset]");
-    await expect(reset).toBeHidden();
-    const setupWeights = openDecision
+    await expect(options.nth(1)).toHaveAttribute("data-best-match", "");
+    await expect(options.nth(1)).toContainText("Best match");
+    const footer = openDecision.locator("[data-decision-weights-footer]");
+    await expect(footer).toContainText("Best match: SQLite");
+    const divergence = footer.locator("[data-decision-divergence]");
+    await expect(divergence).toContainText("Your priorities now favor SQLite");
+    const setupPriority = openDecision
       .locator("[data-decision-weights]")
       .nth(1)
       .locator("button");
-    await setupWeights.nth(0).click();
-    await expect(options.nth(0)).toHaveAttribute("data-best-fit", "");
-    await expect(options.nth(1)).not.toHaveAttribute("data-best-fit", "");
+    await setupPriority.nth(0).click();
+    await expect(
+      openDecision.locator("[data-decision-weight-label]").nth(1),
+    ).toHaveText("Priority: Low");
+    await expect(options.nth(0)).toHaveAttribute("data-best-match", "");
+    await expect(divergence).toBeHidden();
+    const reset = footer.locator("[data-decision-weights-reset]");
     await expect(reset).toBeVisible();
     await reset.click();
-    await expect(options.nth(1)).toHaveAttribute("data-best-fit", "");
-    await expect(options.nth(0)).not.toHaveAttribute("data-best-fit", "");
+    await expect(options.nth(1)).toHaveAttribute("data-best-match", "");
     await expect(reset).toBeHidden();
   });
 
-  await test.step("hovering a dashed criterion term floats its tooltip", async () => {
-    const term = openDecision.locator(".big-decision-criterion-help").first();
-    await expect(
-      term.getByText(/Selection anchors and their threads/),
-    ).toBeHidden();
-    await term.locator("summary").hover();
-    await expect(
-      term.getByText(/Selection anchors and their threads/),
-    ).toBeVisible();
-    await page.mouse.move(0, 0);
-    await expect(
-      term.getByText(/Selection anchors and their threads/),
-    ).toBeHidden();
-  });
-
-  await test.step("hovering a score's question mark floats its tooltip", async () => {
-    const info = openDecision.locator("td .big-decision-info").first();
-    await expect(info.getByText(/one atomic write/)).toBeHidden();
-    await info.locator("summary").hover();
-    await expect(info.getByText(/one atomic write/)).toBeVisible();
-  });
-
-  await test.step("the recommended option starts selected and one click moves it", async () => {
-    const options = openDecision.locator("[data-option]");
-    await expect(options.nth(0)).toHaveAttribute("aria-checked", "true");
-    await expect(options.nth(0)).toHaveAttribute("data-option-selected", "");
-    await options.nth(1).click();
+  await test.step("the divergence prompt aligns the selection explicitly", async () => {
+    const options = openDecision.locator("thead [data-option]");
+    const divergence = openDecision.locator("[data-decision-divergence]");
+    await expect(divergence).toBeVisible();
+    await divergence.locator("button").click();
     await expect(options.nth(1)).toHaveAttribute("aria-checked", "true");
-    await expect(options.nth(0)).toHaveAttribute("aria-checked", "false");
+    await expect(divergence).toBeHidden();
+  });
+
+  await test.step("the ranking popover opens on click, not hover", async () => {
+    const how = openDecision.locator(
+      "[data-decision-weights-header] .big-decision-info",
+    );
+    await expect(how.getByText(/never changes your selection/)).toBeHidden();
+    await how.locator("summary").hover();
+    await expect(how.getByText(/never changes your selection/)).toBeHidden();
+    await how.locator("summary").click();
+    await expect(how.getByText(/never changes your selection/)).toBeVisible();
+    await page.mouse.click(4, 4);
+    await expect(how.getByText(/never changes your selection/)).toBeHidden();
   });
 
   await test.step("a decided decision keeps its authored outcome unselectable", async () => {
