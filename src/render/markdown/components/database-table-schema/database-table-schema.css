@@ -1,0 +1,104 @@
+/* DatabaseTableSchema palette-dependent chrome: header band, dense
+   equal-height grid overrides of the prose table rules, plain in-figure code,
+   badge tints, the tinted Indexes band, and action-menu styles, colocated
+   with the component that owns them. */
+
+@layer components {
+  /* The figure paints its own background: inline it matches the page, and
+     inside the shared full-screen dialog (which is deliberately transparent)
+     it keeps the page from bleeding through the grid rows. */
+  article [data-database-table-schema] {
+    background: var(--bg);
+  }
+  article .table-schema-header {
+    background: var(--diff-header-bg);
+    border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0;
+  }
+  /* Inside the dialog the figure owns the vertical scroll for tall tables
+     and drops its inline bottom margin. */
+  article .component-dialog > [data-database-table-schema] {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+  article
+    .component-dialog
+    > [data-database-table-schema]
+    > .table-schema-body {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+  }
+  /* SQL fragments read as code, not chips: the prose inline-code chrome is
+     figure chrome here, so it comes off inside the component. */
+  article [data-database-table-schema] code {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    /* SQL fragments wrap as whole units between constraint runs, never
+       inside an expression; the grid's scroll container absorbs overflow in
+       the grid, and each Indexes-band definition line scrolls on its own. */
+    white-space: nowrap;
+  }
+  /* Row-scope name cells opt back out of the prose header treatment; the
+     column-head row keeps a quiet muted-label look that guides alignment
+     without competing with the table identity above it. */
+  article .table-schema-grid th {
+    background: transparent;
+  }
+  article .table-schema-head {
+    padding-top: 0.3rem;
+    padding-bottom: 0.3rem;
+    color: var(--color-muted);
+    font-weight: 500;
+  }
+  /* Denser rows than prose tables: answering "what columns exist and what
+     rules apply" should fit many columns on one screen. */
+  article .table-schema-grid th,
+  article .table-schema-grid td {
+    padding: 0.35rem 0.75rem;
+  }
+  article .table-schema-head-column {
+    width: 19%;
+  }
+  article .table-schema-head-type {
+    width: 14%;
+  }
+  article .table-schema-head-constraints {
+    width: 33%;
+  }
+  article .table-schema-head-default {
+    width: 11%;
+  }
+  article .table-schema-head-comment {
+    width: 23%;
+  }
+  /* The Indexes band is the one deliberate visual break below the grid. */
+  article .table-schema-section {
+    background: var(--diff-header-bg);
+    border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
+  }
+  article .table-schema-badge {
+    border-color: var(--color-edge);
+    color: var(--color-muted);
+  }
+  article .table-schema-badge[data-schema-badge="pk"] {
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+    color: var(--color-accent);
+  }
+  article .table-schema-menu-list {
+    background: var(--diff-header-bg);
+    box-shadow: 0 6px 18px rgb(12 10 8 / 0.18);
+  }
+  article .table-schema-menu-list[hidden],
+  article .table-schema-button[hidden] {
+    display: none;
+  }
+  article .table-schema-menu-item:hover,
+  article .table-schema-button:hover {
+    background: var(--color-edge);
+  }
+}

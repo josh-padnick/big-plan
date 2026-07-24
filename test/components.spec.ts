@@ -935,7 +935,7 @@ test("should fallback-copy Annotation code within a full-screen diff", async ({
     });
     document.execCommand = () => {
       const textarea = document.querySelector(
-        "textarea:not([data-diff-source]):not([data-snippet-source])",
+        "textarea:not([data-diff-source]):not([data-snippet-source]):not([data-schema-source])",
       );
       document.body.dataset.fallbackCopy =
         textarea instanceof HTMLTextAreaElement
@@ -1094,7 +1094,7 @@ test("should fallback-copy within a full-screen diff", async ({
     });
     document.execCommand = () => {
       const textareas = document.querySelectorAll(
-        "textarea:not([data-diff-source]):not([data-snippet-source])",
+        "textarea:not([data-diff-source]):not([data-snippet-source]):not([data-schema-source])",
       );
       const textarea = textareas.item(textareas.length - 1);
       document.body.dataset.fallbackCopy =
@@ -1111,7 +1111,9 @@ test("should fallback-copy within a full-screen diff", async ({
   const menuButton = expandedDiff.locator("[data-diff-menu-button]");
   await expect(page.locator("dialog.component-dialog[open]")).toHaveCount(1);
   await expect(
-    page.locator("textarea:not([data-diff-source]):not([data-snippet-source])"),
+    page.locator(
+      "textarea:not([data-diff-source]):not([data-snippet-source]):not([data-schema-source])",
+    ),
   ).toHaveCount(0);
   await menuButton.evaluate((button) => button.click());
   await expandedDiff
@@ -1233,13 +1235,230 @@ test("should preserve component content without controls when JavaScript is disa
     annotation.locator(".code-diff-annotation-body-clamped"),
   ).toHaveCount(0);
   await expect(page.locator(".code-diff-annotation-toggle")).toHaveCount(0);
-  const controls = page.locator(
-    "[data-diff-toggle-group], [data-diff-menu-button], [data-diff-expand]",
+  const schema = page.locator("[data-database-table-schema]");
+  await expect(schema.locator(".table-schema-name-table")).toHaveText(
+    "refresh_jobs",
   );
-  await expect(controls).toHaveCount(6);
+  await expect(schema.locator('[data-schema-badge="pk"]')).toBeVisible();
+  const controls = page.locator(
+    "[data-diff-toggle-group], [data-diff-menu-button], [data-diff-expand], [data-schema-menu-button], [data-schema-expand]",
+  );
+  await expect(controls).toHaveCount(8);
   for (const control of await controls.all()) {
     await expect(control).toBeHidden();
   }
 
   await context.close();
+});
+
+const RAW_TABLE_SCHEMA = [
+  "id           bigint      [pk, increment]",
+  "cache_key    text        [not null, note: 'The catalog cache key this job refreshes.']",
+  "requested_by bigint      [ref: > catalog.api_instances.id, delete: set null]",
+  "attempts     integer     [not null, default: 0, check: 'attempts <= 5']",
+  "status       text        [not null, default: 'queued', note: 'Allowed: queued | running | done | failed.']",
+  "enqueued_at  timestamptz [not null, default: `now()`]",
+  "",
+  "indexes {",
+  "  cache_key [unique, name: 'refresh_jobs_live_key_idx', where: 'status <> \\'done\\'', note: 'Ensures one unfinished job per cache key.']",
+  "  (status, enqueued_at) [name: 'refresh_jobs_scan_idx']",
+  "}",
+  "",
+  "Note: 'One row per queued catalog refresh.'",
+  "",
+].join("\n");
+
+test("should review a database table schema end to end", async ({
+  page,
+  componentsViewerUrl,
+}) => {
+  await page.goto(componentsViewerUrl);
+  const schema = page.locator("[data-database-table-schema]");
+  const menuButton = schema.locator("[data-schema-menu-button]");
+  const menu = schema.getByRole("menu", { name: "Table schema actions" });
+
+  await test.step("the header names the schema-qualified table", async () => {
+    await expect(schema.locator(".table-schema-name-schema")).toHaveText(
+      "catalog.",
+    );
+    await expect(schema.locator(".table-schema-name-table")).toHaveText(
+      "refresh_jobs",
+    );
+    await expect(schema.locator("[data-schema-table-note]")).toHaveText(
+      "One row per queued catalog refresh.",
+    );
+  });
+
+  await test.step("the grid answers columns, types, and rules in one row each", async () => {
+    await expect(
+      schema.locator(".table-schema-scroll").first().locator("thead th"),
+    ).toHaveText(["Column", "Type", "Constraints", "Default", "Comment"]);
+    await expect(
+      schema.locator('[data-schema-column="cache_key"] [data-schema-note]'),
+    ).toHaveText("The catalog cache key this job refreshes.");
+    await expect(
+      schema.locator(
+        '[data-schema-column="cache_key"] [data-schema-badge="idx"]',
+      ),
+    ).toHaveText("INDX 1");
+    const statusRow = schema.locator('[data-schema-column="status"]');
+    await expect(statusRow.locator('[data-schema-badge="idx"]')).toHaveText(
+      "INDX 2",
+    );
+    await expect(statusRow).toContainText("WHERE INDX 1");
+    await expect(schema.locator("[data-schema-column]")).toHaveCount(6);
+    const idRow = schema.locator('[data-schema-column="id"]');
+    await expect(idRow.locator('[data-schema-badge="pk"]')).toHaveText("PK");
+    await expect(idRow.locator('[data-schema-badge="identity"]')).toHaveText(
+      "Identity",
+    );
+    await expect(idRow).toContainText("not null");
+    await expect(schema.locator('[data-schema-column="status"]')).toContainText(
+      "'queued'",
+    );
+  });
+
+  await test.step("the foreign key and check live inside their columns' rows", async () => {
+    const fkRow = schema.locator('[data-schema-column="requested_by"]');
+    await expect(fkRow).toContainText("nullable");
+    const refLine = fkRow.locator("[data-schema-ref]");
+    await expect(refLine).toContainText("catalog.api_instances.id");
+    await expect(refLine).toContainText("ON DELETE SET NULL");
+    await expect(
+      schema.locator('[data-schema-column="attempts"] [data-schema-check]'),
+    ).toHaveText("CHECK (attempts <= 5)");
+  });
+
+  await test.step("the numbered band names each index and its invariant", async () => {
+    const indexes = schema.locator("[data-schema-index]");
+    await expect(indexes).toHaveCount(2);
+    await expect(
+      indexes.first().locator('[data-schema-badge="idx"]'),
+    ).toHaveText("INDX 1");
+    await expect(
+      indexes.first().locator(".table-schema-index-name"),
+    ).toHaveText("refresh_jobs_live_key_idx");
+    await expect(indexes.first()).toContainText("cache_key");
+    await expect(indexes.first()).toContainText("Unique");
+    await expect(indexes.first()).toContainText("WHERE status <> 'done'");
+    await expect(indexes.first()).toContainText(
+      "Ensures one unfinished job per cache key.",
+    );
+    await expect(
+      indexes.last().locator('[data-schema-badge="idx"]'),
+    ).toHaveText("INDX 2");
+    await expect(indexes.last()).toContainText("status, enqueued_at");
+    await expect(indexes.last()).toContainText("refresh_jobs_scan_idx");
+  });
+
+  await test.step("the actions menu copies the table name and raw source", async () => {
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: (value: string) => {
+            document.body.dataset.copiedSchema = value;
+            return Promise.resolve();
+          },
+        },
+      });
+    });
+    await expect(menuButton).toHaveAccessibleName("More actions");
+    await menuButton.click();
+    await expect(menu).toBeVisible();
+    await menu.getByRole("menuitem", { name: "Copy table name" }).click();
+    expect(await page.locator("body").getAttribute("data-copied-schema")).toBe(
+      "catalog.refresh_jobs",
+    );
+    await expect(menuButton).toHaveAccessibleName("Name copied!");
+    await menuButton.click();
+    await menu.getByRole("menuitem", { name: "Copy source" }).click();
+    expect(await page.locator("body").getAttribute("data-copied-schema")).toBe(
+      RAW_TABLE_SCHEMA,
+    );
+    await expect(menuButton).toHaveAccessibleName("Source copied!");
+  });
+
+  await test.step("full screen enlarges the schema and restores it on dismiss", async () => {
+    await schema.locator(".table-schema-index-list").evaluate((list) => {
+      const entry = list.querySelector("[data-schema-index]");
+      if (entry === null) {
+        throw new Error("Missing schema index entry");
+      }
+      for (let index = 0; index < 20; index += 1) {
+        list.append(entry.cloneNode(true));
+      }
+    });
+    const expand = schema.getByRole("button", {
+      name: "View table schema full screen",
+    });
+    await expand.scrollIntoViewIfNeeded();
+    await expand.click();
+    const dialog = page.locator("dialog.component-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAccessibleName("catalog.refresh_jobs");
+    await expect(
+      dialog.locator("[data-database-table-schema]"),
+    ).toHaveAttribute("data-schema-expanded", "");
+    await expect(
+      dialog.getByRole("button", { name: "Exit full screen" }),
+    ).toBeVisible();
+    const body = dialog.locator(".table-schema-body");
+    const header = dialog.locator(".table-schema-header");
+    const lastIndex = dialog.locator("[data-schema-index]").last();
+    const beforeScroll = await header.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
+    const bodyMetrics = await body.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      overflowY: getComputedStyle(element).overflowY,
+      scrollHeight: element.scrollHeight,
+    }));
+    expect(bodyMetrics.overflowY).toBe("auto");
+    expect(bodyMetrics.scrollHeight).toBeGreaterThan(bodyMetrics.clientHeight);
+    await lastIndex.scrollIntoViewIfNeeded();
+    await expect(lastIndex).toBeInViewport();
+    const afterScroll = await header.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
+    expect(await body.evaluate((element) => element.scrollTop)).toBeGreaterThan(
+      0,
+    );
+    expect(afterScroll).toBe(beforeScroll);
+    expect(
+      await dialog
+        .locator("[data-table-scroll-container]")
+        .evaluate((element) => getComputedStyle(element).overflowX),
+    ).toBe("auto");
+    expect(
+      await lastIndex
+        .locator(".table-schema-index-definition")
+        .evaluate((element) => getComputedStyle(element).overflowX),
+    ).toBe("auto");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("dialog.component-dialog")).toHaveCount(0);
+    await expect(schema).toBeVisible();
+    await expect(schema).not.toHaveAttribute("data-schema-expanded", "");
+    await schema.locator("[data-schema-index]").evaluateAll((indexes) => {
+      for (const index of indexes.slice(2)) {
+        index.remove();
+      }
+    });
+  });
+
+  await test.step("a narrow viewport scrolls the grid inside the figure", async () => {
+    await page.setViewportSize({ width: 420, height: 900 });
+    const container = schema.locator("[data-table-scroll-container]");
+    await expect(container).toHaveCount(1);
+    const overflow = await container.evaluate(
+      (element) => getComputedStyle(element).overflowX,
+    );
+    expect(overflow).toBe("auto");
+    const pageScrolls = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
+    );
+    expect(pageScrolls).toBe(false);
+  });
 });

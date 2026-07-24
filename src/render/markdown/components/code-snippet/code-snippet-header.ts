@@ -6,6 +6,7 @@ import type { Element, Text } from "hast";
 import { COPY_ICON } from "../../../icons/lucide/copy.js";
 import { ELLIPSIS_ICON } from "../../../icons/lucide/ellipsis.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import { renderCopyFeedback } from "../shared/copy-feedback/copy-feedback.js";
 import { renderFileIdentity } from "../shared/file-identity/file-identity.js";
 
 const HEADER_CLASSES =
@@ -123,17 +124,7 @@ export const renderCodeSnippetHeader = ({
         ],
       },
       children: [
-        {
-          type: "element",
-          tagName: "span",
-          properties: {
-            className: ["code-copy-message", "static", "h-6"],
-            ariaHidden: "true",
-            "data-snippet-copy-message": "",
-            hidden: true,
-          },
-          children: [text("Copied!")],
-        },
+        renderCopyFeedback({ dataAttribute: "data-snippet-copy-message" }),
         actionsMenu({ ...(filePath === undefined ? {} : { filePath }) }),
       ],
     },

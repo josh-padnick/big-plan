@@ -224,6 +224,14 @@ describe("compileMarkdown tables", () => {
     const bodyHtml = compileAndSerialize("> | a |\n> | - |\n> | 1 |\n");
     expect(bodyHtml).toContain("data-table-scroll-container");
   });
+
+  it("should not rewrap a component grid that ships its own scroll container", () => {
+    const bodyHtml = compileAndSerialize(
+      '<DatabaseTableSchema name="users">\n\n```dbml\nid bigint [pk]\n```\n\n</DatabaseTableSchema>\n',
+    );
+    const wrappers = bodyHtml.match(/data-table-scroll-container/g) ?? [];
+    expect(wrappers).toHaveLength(1);
+  });
 });
 
 describe("compileMarkdown code highlighting", () => {

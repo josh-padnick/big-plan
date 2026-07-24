@@ -10,7 +10,7 @@ Big Plan makes reviewing agent plans a first-class experience.
 Big Plan is built around one question: **what is the best way to review a plan and reach agreement on it, before an agent acts?**
 
 An agent writes its plan as structured MDX, and Big Plan renders it into a rich local review document.
-Today that means section navigation and typed callout, code, file-tree, HTTP, GraphQL, and gRPC review components; the planned review experience adds more components, live agent chat, highlight-to-comment threads, versioned change review, and full keyboard control.
+Today that means section navigation and typed callout, code-diff, code-snippet, database-table-schema, file-tree, HTTP, GraphQL, and gRPC review components; the planned review experience adds more components, live agent chat, highlight-to-comment threads, versioned change review, and full keyboard control.
 
 Big Plan focuses exclusively on that upfront moment of agreement - not code review, not project management.
 Everything runs locally, and the MDX file on your disk is the source of truth.
@@ -46,6 +46,7 @@ The full authoring contract lives in the documentation:
 
 To preview components locally, render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`.
 To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.
+To see every DatabaseTableSchema scenario in one document, render the [table-schema showcase](examples/database-table-schema.mdx).
 Generated previews remain ignored by Git.
 
 ## Development

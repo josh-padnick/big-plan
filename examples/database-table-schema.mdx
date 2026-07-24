@@ -1,0 +1,89 @@
+# DatabaseTableSchema Showcase
+
+This document exercises every major shape the `DatabaseTableSchema` component renders.
+Each section pairs one table with the scenario it demonstrates, from the full Postgres feature set down to the smallest useful declaration.
+
+## The full Postgres shape
+
+Everything at once: identity primary key, two foreign keys with referential actions, checks, number, string, boolean, and backtick-expression defaults, column and table notes, and three indexes including a named unique partial index.
+The `INDX` pills on column rows point at the numbered entries below; `status` shows the `WHERE INDX` marker because it shapes a partial predicate without being indexed by it.
+
+<DatabaseTableSchema name="billing.subscriptions">
+
+```dbml
+id           bigint        [pk, increment]
+customer_id  bigint        [not null, ref: > billing.customers.id, delete: cascade, update: restrict]
+plan_code    text          [not null, ref: > billing.plans.code, delete: restrict, note: 'Denormalized on purpose; plan renames must not rewrite history.']
+status       subscription_status [not null, default: 'trialing', note: 'Allowed: trialing | active | past_due | canceled.']
+seats        integer       [not null, default: 1, check: 'seats > 0']
+discount_pct numeric(5, 2) [default: 0, check: 'discount_pct BETWEEN 0 AND 100']
+metadata     jsonb         [not null, default: `'{}'::jsonb`]
+canceled_at  timestamptz   [note: 'Null while the subscription is live.']
+created_at   timestamptz   [not null, default: `now()`]
+
+indexes {
+  customer_id [name: 'subscriptions_customer_idx', note: 'Backs the customer dashboard.']
+  customer_id [unique, name: 'subscriptions_one_live_idx', where: 'status <> \'canceled\'', note: 'At most one live subscription per customer.']
+  (status, created_at) [name: 'subscriptions_lifecycle_idx']
+}
+
+Note: 'One row per subscription; canceled rows are kept for audit.'
+```
+
+</DatabaseTableSchema>
+
+## Composite keys and expression indexes
+
+Two `pk` markers form a composite primary key, an expression entry indexes a computed value, and a single-column index chooses the `hash` method.
+Array types like `text[]` stay part of the type text.
+
+<DatabaseTableSchema name="analytics.page_views">
+
+```dbml
+site_id     bigint  [pk]
+occurred_on date    [pk, note: 'Second half of the composite primary key.']
+path        text    [not null]
+tags        text[]  [not null, default: `'{}'::text[]`]
+view_count  integer [not null, default: 0]
+
+indexes {
+  `date_trunc('month', occurred_on)` [name: 'page_views_month_idx', note: 'Expression index backing monthly rollups.']
+  path [type: hash, name: 'page_views_path_idx']
+}
+
+Note: 'One row per site and day.'
+```
+
+</DatabaseTableSchema>
+
+## The minimal shape
+
+An unqualified table name, three columns, no indexes, no table note.
+The header shows no schema prefix, and the Indexes band simply does not render.
+
+<DatabaseTableSchema name="plan_codes">
+
+```dbml
+code    text    [pk]
+label   text    [not null]
+retired boolean [not null, default: false]
+```
+
+</DatabaseTableSchema>
+
+## Beyond Postgres
+
+Column types are opaque text, so other engines' declarations render unchanged; only the grammar around them is validated.
+
+<DatabaseTableSchema name="app_users">
+
+```dbml
+id           bigint unsigned [pk, increment]
+email        varchar(255)    [not null, unique]
+display_name varchar(100)    [not null]
+last_seen_at datetime        [note: 'Server local time; this engine has no timezone-aware type.']
+
+Note: 'Types are opaque text, so MySQL declarations render as written.'
+```
+
+</DatabaseTableSchema>

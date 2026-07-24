@@ -185,6 +185,31 @@ Without those safeguards, a popular expired key can multiply origin load across 
 
 </Callout>
 
+## Queue persistence
+
+Refresh jobs survive worker restarts in one Postgres table, and completed rows are pruned nightly.
+Deduplication rides the unique partial index: a cache key can hold at most one unfinished job, so a popular expired key enqueues once no matter how many readers race.
+
+<DatabaseTableSchema name="catalog.refresh_jobs">
+
+```dbml
+id           bigint      [pk, increment]
+cache_key    text        [not null, note: 'The catalog cache key this job refreshes.']
+requested_by bigint      [ref: > catalog.api_instances.id, delete: set null]
+attempts     integer     [not null, default: 0, check: 'attempts <= 5']
+status       text        [not null, default: 'queued', note: 'Allowed: queued | running | done | failed.']
+enqueued_at  timestamptz [not null, default: `now()`]
+
+indexes {
+  cache_key [unique, name: 'refresh_jobs_live_key_idx', where: 'status <> \'done\'', note: 'Ensures one unfinished job per cache key.']
+  (status, enqueued_at) [name: 'refresh_jobs_scan_idx']
+}
+
+Note: 'One row per queued catalog refresh.'
+```
+
+</DatabaseTableSchema>
+
 ## Local review API
 
 The local server exposes plan comments through the same bridge that keeps the rendered review surface connected to its authoring agent.
