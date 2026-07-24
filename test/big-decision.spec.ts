@@ -51,11 +51,41 @@ test("should review standalone plan decisions", async ({
     ).toBeVisible();
   });
 
-  await test.step("the reversibility line names the cost of changing course", async () => {
+  await test.step("the reversibility section rates the cost of changing course", async () => {
     await expect(page.locator("[data-decision-reversibility]")).toHaveCount(3);
+    const section = openDecision.locator("[data-decision-reversibility]");
+    await expect(section).toHaveAttribute(
+      "data-reversibility-rating",
+      "somewhat-hard",
+    );
+    await expect(section).toContainText("Somewhat hard to reverse");
+    await expect(section).toContainText("The repository layer isolates SQL");
     await expect(
-      openDecision.locator("[data-decision-reversibility]"),
-    ).toContainText("Moderate.");
+      section.getByText(/Reversibility is what it would cost/),
+    ).toBeHidden();
+    await section.locator(".big-decision-info > summary").click();
+    await expect(
+      section.getByText(/Reversibility is what it would cost/),
+    ).toBeVisible();
+  });
+
+  await test.step("importance squares recompute the best-fit option", async () => {
+    await expect(
+      openDecision.locator("[data-decision-weights-legend]"),
+    ).toBeVisible();
+    await expect(openDecision.locator("[data-decision-weights]")).toHaveCount(
+      4,
+    );
+    const options = openDecision.locator("thead [data-option]");
+    await expect(options.nth(1)).toHaveAttribute("data-best-fit", "");
+    await expect(options.nth(1)).toContainText("Best fit");
+    const setupWeights = openDecision
+      .locator("[data-decision-weights]")
+      .nth(1)
+      .locator("button");
+    await setupWeights.nth(0).click();
+    await expect(options.nth(0)).toHaveAttribute("data-best-fit", "");
+    await expect(options.nth(1)).not.toHaveAttribute("data-best-fit", "");
   });
 
   await test.step("an info disclosure expands its cell in place", async () => {
@@ -101,6 +131,20 @@ test("should review standalone plan decisions", async ({
     ).toBeVisible();
   });
 
+  await test.step("the decision expands to full screen and restores", async () => {
+    const expand = openDecision.locator("[data-decision-expand]");
+    await expect(expand).toBeVisible();
+    await expand.click();
+    const dialog = page.locator("dialog.component-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator("table.big-decision-matrix")).toBeVisible();
+    await dialog.locator("[data-decision-expand]").click();
+    await expect(dialog).toHaveCount(0);
+    await expect(
+      openDecision.locator("table.big-decision-matrix"),
+    ).toBeVisible();
+  });
+
   await test.step("every decision reads without JavaScript", async () => {
     const context = await browser.newContext({ javaScriptEnabled: false });
     const staticPage = await context.newPage();
@@ -108,6 +152,10 @@ test("should review standalone plan decisions", async ({
     await expect(staticPage.locator("[data-big-decision]")).toHaveCount(3);
     await expect(staticPage.locator("[data-score-tone]")).toHaveCount(20);
     await expect(staticPage.locator('[role="radio"]')).toHaveCount(0);
+    await expect(
+      staticPage.locator("[data-decision-expand]").first(),
+    ).toBeHidden();
+    await expect(staticPage.locator("[data-decision-weights]")).toHaveCount(0);
     await expect(staticPage.locator("body")).toContainText(
       "Chosen: Alongside the source plan",
     );

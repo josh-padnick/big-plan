@@ -5,6 +5,8 @@
 import type { Element, ElementContent, Text } from "hast";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
 import { INFO_ICON } from "../../../icons/lucide/info.js";
+import { MAXIMIZE_2_ICON } from "../../../icons/lucide/maximize-2.js";
+import { MINIMIZE_2_ICON } from "../../../icons/lucide/minimize-2.js";
 import { MINUS_ICON } from "../../../icons/lucide/minus.js";
 import { TRIANGLE_ALERT_ICON } from "../../../icons/lucide/triangle-alert.js";
 import { UNDO_2_ICON } from "../../../icons/lucide/undo-2.js";
@@ -22,15 +24,40 @@ import {
 } from "../shared/labeled-section/labeled-section.js";
 import {
   compileBigDecisionComponent,
+  type BigDecisionReversibilityRating,
   type BigDecisionStatus,
   type BigDecisionTone,
   type CompiledBigDecision,
   type CompiledBigDecisionCriterion,
   type CompiledBigDecisionOption,
+  type CompiledBigDecisionReversibility,
   type CompiledBigDecisionScore,
 } from "./compile-big-decision.js";
 
 const text = (value: string): Text => ({ type: "text", value });
+
+// Matches the file-tree control look so figure chrome reads as one family.
+const EXPAND_BUTTON_CLASSES =
+  "big-decision-expand inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+
+// Full screen stays unavailable without JavaScript; the in-column matrix
+// scrolls horizontally on its own, so the static document loses nothing.
+const expandButton = (): Element => ({
+  type: "element",
+  tagName: "button",
+  properties: {
+    type: "button",
+    className: EXPAND_BUTTON_CLASSES.split(" "),
+    ariaLabel: "View decision full screen",
+    title: "View decision full screen",
+    hidden: true,
+    "data-decision-expand": "",
+  },
+  children: [
+    renderLucideIcon({ icon: MAXIMIZE_2_ICON, hidden: false }),
+    renderLucideIcon({ icon: MINIMIZE_2_ICON, hidden: true }),
+  ],
+});
 
 const TONE_ICONS = {
   good: CHECK_ICON,
@@ -234,7 +261,7 @@ const renderScoreCell = (
                 "flex",
                 "items-start",
                 "gap-1.5",
-                "[&>svg]:mt-0.5",
+                "[&>svg]:mt-[3px]",
                 "[&>svg]:size-3.5",
                 "[&>svg]:shrink-0",
               ],
@@ -453,45 +480,90 @@ const outcomeStrip = (option: CompiledBigDecisionOption): Element => ({
   ],
 });
 
-// The cost of changing course later, surfaced beside the question because it
-// is the fact a reviewer most needs before committing.
-const reversibilityLine = (reversibility: string): Element => ({
-  type: "element",
-  tagName: "div",
-  properties: {
-    className: [
-      "big-decision-reversibility",
-      "flex",
-      "items-start",
-      "gap-2",
-      "px-4",
-      "pb-3.5",
-      "text-sm",
-      "text-muted",
-      "[&>svg]:mt-0.5",
-      "[&>svg]:size-3.5",
-      "[&>svg]:shrink-0",
-    ],
-    "data-decision-reversibility": "",
-  },
-  children: [
-    renderLucideIcon({ icon: UNDO_2_ICON, hidden: false }),
-    {
-      type: "element",
-      tagName: "span",
-      properties: {},
-      children: [
-        {
-          type: "element",
-          tagName: "span",
-          properties: { className: ["font-semibold", "text-ink"] },
-          children: [text("Reversibility: ")],
-        },
-        text(reversibility),
-      ],
+const REVERSIBILITY_PHRASES = {
+  easy: "Easy to reverse",
+  "somewhat-hard": "Somewhat hard to reverse",
+  hard: "Hard to reverse",
+} satisfies Record<BigDecisionReversibilityRating, string>;
+
+// One fixed explanation ships with the component so every decision teaches
+// the field the same way; authored bodies carry the decision-specific why.
+const REVERSIBILITY_EXPLAINER =
+  "Reversibility is what it would cost to change this decision after implementation starts. Hard-to-reverse choices deserve the most scrutiny now; easy ones can be settled quickly and revisited once there is evidence.";
+
+// The cost of changing course later gets its own section under the options:
+// a fixed rating vocabulary keeps decisions comparable, and the info
+// disclosure explains why the field exists at all.
+const renderReversibilitySection = (
+  reversibility: CompiledBigDecisionReversibility,
+): Element =>
+  renderCardSection({
+    properties: {
+      "data-decision-reversibility": "",
+      "data-reversibility-rating": reversibility.rating,
     },
-  ],
-});
+    children: [
+      renderSectionLabel("Reversibility"),
+      {
+        type: "element",
+        tagName: "div",
+        properties: {
+          className: [
+            `big-decision-reversibility-${reversibility.rating}`,
+            "mt-2.5",
+            "flex",
+            "items-start",
+            "gap-2",
+            "text-sm",
+            "[&>svg]:mt-[3px]",
+            "[&>svg]:size-3.5",
+            "[&>svg]:shrink-0",
+          ],
+        },
+        children: [
+          renderLucideIcon({ icon: UNDO_2_ICON, hidden: false }),
+          {
+            type: "element",
+            tagName: "span",
+            properties: { className: ["min-w-0"] },
+            children: [
+              {
+                type: "element",
+                tagName: "span",
+                properties: { className: ["font-semibold", "text-ink"] },
+                children: [text(REVERSIBILITY_PHRASES[reversibility.rating])],
+              },
+              text(" "),
+              ...renderInfoDisclosure([
+                {
+                  type: "element",
+                  tagName: "p",
+                  properties: {},
+                  children: [text(REVERSIBILITY_EXPLAINER)],
+                },
+              ]),
+              ...(reversibility.detail.length === 0
+                ? []
+                : [
+                    {
+                      type: "element",
+                      tagName: "div",
+                      properties: {
+                        className: [
+                          "mt-1",
+                          "text-muted",
+                          "[&>:last-child]:mb-0",
+                        ],
+                      },
+                      children: [...reversibility.detail],
+                    } satisfies Element,
+                  ]),
+            ],
+          },
+        ],
+      },
+    ],
+  });
 
 const renderBigDecisionFigure = ({
   model,
@@ -519,24 +591,42 @@ const renderBigDecisionFigure = ({
     {
       type: "element",
       tagName: "figcaption",
-      properties: { className: ["bg-header", "px-4", "py-3"] },
+      properties: {
+        className: [
+          "flex",
+          "items-start",
+          "justify-between",
+          "gap-3",
+          "bg-header",
+          "px-4",
+          "py-3",
+        ],
+      },
       children: [
-        statusPill(model.status),
         {
           type: "element",
-          tagName: "p",
-          properties: {
-            className: [
-              "mt-2",
-              "mb-0",
-              "text-base",
-              "font-semibold",
-              "text-ink",
-            ],
-            "data-decision-question": "",
-          },
-          children: [text(model.question)],
+          tagName: "div",
+          properties: { className: ["min-w-0"] },
+          children: [
+            statusPill(model.status),
+            {
+              type: "element",
+              tagName: "p",
+              properties: {
+                className: [
+                  "mt-2",
+                  "mb-0",
+                  "text-base",
+                  "font-semibold",
+                  "text-ink",
+                ],
+                "data-decision-question": "",
+              },
+              children: [text(model.question)],
+            },
+          ],
         },
+        expandButton(),
       ],
     },
     ...(model.context.length === 0
@@ -551,9 +641,6 @@ const renderBigDecisionFigure = ({
             children: [...model.context],
           } satisfies Element,
         ]),
-    ...(model.reversibility === undefined
-      ? []
-      : [reversibilityLine(model.reversibility)]),
     ...(model.chosenOption === undefined
       ? []
       : [outcomeStrip(model.chosenOption)]),
@@ -567,6 +654,9 @@ const renderBigDecisionFigure = ({
         ...renderDetailDrawers(model),
       ],
     }),
+    ...(model.reversibility === undefined
+      ? []
+      : [renderReversibilitySection(model.reversibility)]),
   ],
 });
 
@@ -574,7 +664,9 @@ const renderBigDecisionFigure = ({
 export const renderBigDecision: ComponentRenderer = (input) =>
   renderBigDecisionFigure({ model: compileBigDecisionComponent(input) });
 
-const bodyPolicy = (name: "Criterion" | "Option" | "Score") => ({
+const bodyPolicy = (
+  name: "Criterion" | "Option" | "Reversibility" | "Score",
+) => ({
   prohibited: {
     heading: `${name} bodies cannot contain headings`,
     footnoteReference: `${name} bodies cannot contain footnote references`,
@@ -599,11 +691,17 @@ const optionDefinition = (): ScopedChildDefinition => ({
   scopedChildren: { Score: scoreDefinition() },
 });
 
+const reversibilityDefinition = (): ScopedChildDefinition => ({
+  kind: "scoped-child",
+  markdownBody: bodyPolicy("Reversibility"),
+});
+
 /** Declares BigDecision's renderer and recursively scoped authoring grammar. */
 export const BIG_DECISION_COMPONENT_DEFINITION = {
   render: renderBigDecision,
   scopedChildren: {
     Criterion: criterionDefinition(),
     Option: optionDefinition(),
+    Reversibility: reversibilityDefinition(),
   },
 } satisfies ComponentDefinition;

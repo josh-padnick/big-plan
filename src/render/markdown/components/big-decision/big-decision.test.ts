@@ -9,7 +9,7 @@ const render = (markdown: string): string => {
   return serializeMarkdown({ root });
 };
 
-const OPEN_DECISION = `<BigDecision question="Which store?" status="open" reversibility="Cheap to change later.">
+const OPEN_DECISION = `<BigDecision question="Which store?" status="open">
 
 Context with a [link](https://example.com).
 
@@ -43,6 +43,12 @@ Long detail with \`code\`.
 
 </Option>
 
+<Reversibility rating="easy">
+
+Cheap to change later.
+
+</Reversibility>
+
 </BigDecision>
 `;
 
@@ -66,7 +72,10 @@ describe("BigDecision rendering", () => {
     expect(html).toContain('data-decision-question=""');
     expect(html).toContain('href="https://example.com"');
     expect(html).toContain('data-decision-reversibility=""');
+    expect(html).toContain('data-reversibility-rating="easy"');
+    expect(html).toContain("Easy to reverse");
     expect(html).toContain("Cheap to change later.");
+    expect(html).toContain("Reversibility is what it would cost");
     expect(html).toContain("<table");
     expect(html).toContain('id="criterion-setup"');
     expect(html).toContain('id="criterion-scale"');
@@ -79,6 +88,8 @@ describe("BigDecision rendering", () => {
     expect(html).toContain("Needs a server");
     expect(html).toContain('data-lucide="x"');
     expect(html).toContain('data-lucide="undo-2"');
+    expect(html).toContain('data-decision-expand=""');
+    expect(html).toContain('data-lucide="maximize-2"');
     expect(html).toContain("<strong>writers</strong>");
     expect(html).toContain("big-decision-info");
     expect(html).toContain("Why setup matters here.");

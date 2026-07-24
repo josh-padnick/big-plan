@@ -12,6 +12,7 @@ import type { DiagnosticCollector } from "../diagnostics.js";
 
 export type BigDecisionStatus = "open" | "decided" | "deferred";
 export type BigDecisionTone = "good" | "bad" | "mixed" | "neutral";
+export type BigDecisionReversibilityRating = "easy" | "somewhat-hard" | "hard";
 
 const BIG_DECISION_STATUSES: ReadonlyArray<BigDecisionStatus> = [
   "open",
@@ -24,6 +25,12 @@ const BIG_DECISION_TONES: ReadonlyArray<BigDecisionTone> = [
   "bad",
   "mixed",
   "neutral",
+];
+
+const REVERSIBILITY_RATINGS: ReadonlyArray<BigDecisionReversibilityRating> = [
+  "easy",
+  "somewhat-hard",
+  "hard",
 ];
 
 // The matrix stays scannable only while cells stay terse; the cap forces the
@@ -54,12 +61,17 @@ export type CompiledBigDecisionOption = {
   readonly scores: ReadonlyArray<CompiledBigDecisionScore | undefined>;
 };
 
+export type CompiledBigDecisionReversibility = {
+  readonly rating: BigDecisionReversibilityRating;
+  readonly detail: ReadonlyArray<ElementContent>;
+};
+
 export type CompiledBigDecision = {
   readonly id: string;
   readonly question: string;
   readonly status: BigDecisionStatus;
   readonly context: ReadonlyArray<ElementContent>;
-  readonly reversibility?: string;
+  readonly reversibility?: CompiledBigDecisionReversibility;
   readonly criteria: ReadonlyArray<CompiledBigDecisionCriterion>;
   readonly options: ReadonlyArray<CompiledBigDecisionOption>;
   readonly chosenOption?: CompiledBigDecisionOption;
@@ -68,7 +80,10 @@ export type CompiledBigDecision = {
 const BIG_DECISION_SCHEMA = {
   question: { kind: "string", required: true, nonEmpty: true },
   status: { kind: "enum", values: BIG_DECISION_STATUSES },
-  reversibility: { kind: "string" },
+} satisfies ComponentAttributeSchema;
+
+const REVERSIBILITY_SCHEMA = {
+  rating: { kind: "enum", values: REVERSIBILITY_RATINGS, required: true },
 } satisfies ComponentAttributeSchema;
 
 const CRITERION_SCHEMA = {
@@ -357,6 +372,38 @@ const validateDecisionOptions = ({
   }
 };
 
+// The rating vocabulary is fixed so every decision answers the same question
+// the same way; the body carries the decision-specific rationale.
+const compileReversibility = ({
+  children,
+  diagnostics,
+}: {
+  readonly children: ReadonlyArray<ScopedChild>;
+  readonly diagnostics: DiagnosticCollector;
+}): CompiledBigDecisionReversibility | undefined => {
+  for (const duplicate of children.slice(1)) {
+    diagnostics.add({
+      message: "BigDecision cannot contain more than one Reversibility",
+      position: duplicate.position,
+    });
+  }
+  const child = children[0];
+  if (child === undefined) {
+    return undefined;
+  }
+  const validated = validateComponentAttributes({
+    component: "Reversibility",
+    attributes: child.attributes,
+    position: child.position,
+    diagnostics,
+    schema: REVERSIBILITY_SCHEMA,
+  });
+  if (validated.rating === undefined) {
+    return undefined;
+  }
+  return { rating: validated.rating, detail: contentOf(child.children) };
+};
+
 const validateCriteria = ({
   children,
   diagnostics,
@@ -400,6 +447,10 @@ export const compileBigDecisionComponent = ({
   const criterionChildren = scopedChildren.filter(
     (child) => child.name === "Criterion",
   );
+  const reversibility = compileReversibility({
+    children: scopedChildren.filter((child) => child.name === "Reversibility"),
+    diagnostics,
+  });
   validateCriteria({ children: criterionChildren, diagnostics });
   const criterionIdCounts = new Map<string, number>();
   const criteria = criterionChildren.map((child) =>
@@ -436,9 +487,7 @@ export const compileBigDecisionComponent = ({
     question,
     status,
     context: contentOf(children),
-    ...(validated.reversibility === undefined
-      ? {}
-      : { reversibility: validated.reversibility }),
+    ...(reversibility === undefined ? {} : { reversibility }),
     criteria,
     options: optionEntries.map(({ option }) => option),
     ...(chosenOption === undefined ? {} : { chosenOption }),

@@ -11,6 +11,7 @@
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
+import { BIG_DECISION_JS } from "../markdown/components/big-decision/big-decision.generated.js";
 import { CODE_DIFF_JS } from "../markdown/components/code-diff/code-diff.generated.js";
 import { CODE_SNIPPET_JS } from "../markdown/components/code-snippet/code-snippet.generated.js";
 import { DATABASE_TABLE_SCHEMA_JS } from "../markdown/components/database-table-schema/database-table-schema.generated.js";
@@ -179,6 +180,7 @@ ${contentHtml}
           DATABASE_TABLE_SCHEMA_JS,
           FILE_TREE_JS,
           HTTP_ENDPOINT_JS,
+          BIG_DECISION_JS,
           OPTION_SELECT_JS,
           SCROLL_SPY_JS,
         ]
@@ -190,6 +192,7 @@ ${contentHtml}
           DATABASE_TABLE_SCHEMA_JS,
           FILE_TREE_JS,
           HTTP_ENDPOINT_JS,
+          BIG_DECISION_JS,
           OPTION_SELECT_JS,
         ],
     bodyClassName: BODY_CLASSES,

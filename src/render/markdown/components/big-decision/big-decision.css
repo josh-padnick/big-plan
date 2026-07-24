@@ -40,6 +40,11 @@
     border-color: var(--decision-pro-c);
     background: var(--decision-pro-c);
   }
+  /* The 1px height lets each header cell's card stretch to the tallest
+     option in the row, so columns share one baseline. */
+  article .big-decision-matrix thead th {
+    height: 1px;
+  }
   /* The prose stylesheet tints and borders markdown-table cells; the matrix
      draws its own row lines and keeps cells on the card background. */
   article .big-decision-matrix th,
@@ -63,6 +68,43 @@
   article .big-decision-tone-neutral > svg {
     color: var(--color-muted);
   }
+  article .big-decision-reversibility-easy > svg {
+    color: var(--decision-pro-c);
+  }
+  article .big-decision-reversibility-somewhat-hard > svg {
+    color: var(--callout-warning-c);
+  }
+  article .big-decision-reversibility-hard > svg {
+    color: var(--decision-con-c);
+  }
+  /* Script-created weighting squares and the computed Best fit tag; dashed
+     accent keeps the computed tag distinct from the authored Recommended
+     pill. */
+  article .big-decision-weight {
+    width: 0.625rem;
+    height: 0.625rem;
+    padding: 0;
+    cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--color-muted) 60%, transparent);
+    border-radius: 0.125rem;
+    background: transparent;
+  }
+  article .big-decision-weight[data-weight-filled] {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 75%, var(--bg));
+  }
+  article .big-decision-bestfit {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border: 1px dashed color-mix(in srgb, var(--color-accent) 60%, transparent);
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
   article .big-decision-info {
     display: inline;
   }
@@ -74,6 +116,11 @@
   }
   article .big-decision-info[open] > summary {
     color: var(--color-accent);
+  }
+  /* The reversibility section has the full column, so its explainer is not
+     bound to the matrix cells' narrow measure. */
+  article [data-decision-reversibility] .big-decision-info-body {
+    max-width: 60ch;
   }
   article .big-decision-details > summary::marker {
     color: var(--color-muted);

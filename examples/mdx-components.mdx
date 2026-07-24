@@ -31,7 +31,7 @@ It already has regional concurrency controls and the required service account.
 
 The queue boundary is the remaining architectural choice in this excerpt, so its options stay grouped with the tradeoffs the reviewer must judge.
 
-<BigDecision question="Where should refresh-job deduplication live?" status="open" reversibility="Moderate. Moving the check later means re-teaching every producer, so pick the boundary now.">
+<BigDecision question="Where should refresh-job deduplication live?" status="open">
 
 The enqueue path must collapse repeated refreshes for the same cache key without coupling request handlers to worker internals.
 
@@ -70,6 +70,12 @@ Every producer must reproduce the same race-prone check-and-publish sequence.
 <Score criterion="Telemetry" verdict="Existing logs" tone="good" />
 
 </Option>
+
+<Reversibility rating="somewhat-hard">
+
+Moving the check later means re-teaching every producer, so pick the boundary now.
+
+</Reversibility>
 
 </BigDecision>
 

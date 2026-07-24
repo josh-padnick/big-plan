@@ -35,7 +35,7 @@ const scoped = ({
   scopedChildren,
   line,
 }: {
-  readonly name: "Criterion" | "Option" | "Score";
+  readonly name: "Criterion" | "Option" | "Reversibility" | "Score";
   readonly attributes?: Readonly<Record<string, ComponentAttributeValue>>;
   readonly children?: ReadonlyArray<ElementContent>;
   readonly scopedChildren?: ReadonlyArray<ScopedChild>;
@@ -152,11 +152,7 @@ const diagnosticsFor = (markdown: string) => {
 describe("compileBigDecisionComponent", () => {
   it("should compile the complete matrix model when every layer is authored", () => {
     const { model, diagnostics } = compile({
-      attributes: {
-        question: "Which store?",
-        status: "open",
-        reversibility: "Cheap to change.",
-      },
+      attributes: { question: "Which store?", status: "open" },
       children: [paragraph("Context.")],
       scopedChildren: [
         criterion({
@@ -200,6 +196,12 @@ describe("compileBigDecisionComponent", () => {
             score({ criterion: "Scale", verdict: "Single writer", line: 10 }),
           ],
         }),
+        scoped({
+          name: "Reversibility",
+          attributes: { rating: "somewhat-hard" },
+          children: [paragraph("A migration, not a rewrite.")],
+          line: 11,
+        }),
       ],
     });
 
@@ -208,7 +210,7 @@ describe("compileBigDecisionComponent", () => {
       id: "decision-which-store",
       question: "Which store?",
       status: "open",
-      reversibility: "Cheap to change.",
+      reversibility: { rating: "somewhat-hard" },
       criteria: [
         { id: "criterion-setup", title: "Setup" },
         { id: "criterion-scale", title: "Scale" },
@@ -234,6 +236,7 @@ describe("compileBigDecisionComponent", () => {
       ],
     });
     expect(model.criteria[0]?.detail).toHaveLength(1);
+    expect(model.reversibility?.detail).toHaveLength(1);
     expect(model.options[0]?.scores[1]?.detail).toHaveLength(1);
     expect(model.chosenOption).toBeUndefined();
   });
@@ -255,6 +258,32 @@ describe("compileBigDecisionComponent", () => {
     });
     expect(diagnostics).toEqual([]);
     expect(model.chosenOption?.title).toBe("PostgreSQL");
+  });
+
+  it("should reject more than one Reversibility", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        option({ title: "A", line: 3 }),
+        option({ title: "B", line: 5 }),
+        scoped({
+          name: "Reversibility",
+          attributes: { rating: "easy" },
+          line: 7,
+        }),
+        scoped({
+          name: "Reversibility",
+          attributes: { rating: "hard" },
+          line: 9,
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 9,
+        column: 1,
+        message: "BigDecision cannot contain more than one Reversibility",
+      },
+    ]);
   });
 
   it("should reject a verdict that exceeds the terseness cap", () => {
@@ -444,6 +473,21 @@ describe("BigDecision end-to-end diagnostics", () => {
         line: 1,
         column: 1,
         message: 'Missing required attribute "question"; expected a string',
+      },
+    ]);
+  });
+
+  it("should reject an unknown reversibility rating with the enum voice", () => {
+    expect(
+      diagnosticsFor(
+        '<BigDecision question="Q?">\n\n<Option title="A" />\n\n<Option title="B" />\n\n<Reversibility rating="moderate" />\n\n</BigDecision>\n',
+      ),
+    ).toEqual([
+      {
+        line: 7,
+        column: 1,
+        message:
+          'Invalid value for attribute "rating"; expected one of: easy, somewhat-hard, hard',
       },
     ]);
   });

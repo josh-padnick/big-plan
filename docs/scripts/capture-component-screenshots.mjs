@@ -165,7 +165,7 @@ CREATE POLICY refresh_jobs_service_all ON catalog.refresh_jobs
 </DatabaseTableSchema>
 `;
 
-const BIG_DECISION_FIXTURE = `<BigDecision question="Which persistence layer should back review comments?" status="open" reversibility="Moderate. The repository layer isolates SQL, so swapping engines later costs a data migration, not a rewrite.">
+const BIG_DECISION_FIXTURE = `<BigDecision question="Which persistence layer should back review comments?" status="open">
 
 Comments need durable identities and ordered replies without blocking a later multi-reviewer workflow.
 
@@ -202,6 +202,12 @@ Transactions keep a thread and its anchor in one atomic write.
 <Score criterion="Concurrent reviewers" verdict="Single writer" tone="mixed" />
 
 </Option>
+
+<Reversibility rating="somewhat-hard">
+
+The repository layer isolates SQL, so swapping engines later costs a data migration.
+
+</Reversibility>
 
 </BigDecision>
 `;
