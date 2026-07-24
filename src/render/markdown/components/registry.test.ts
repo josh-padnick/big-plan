@@ -47,6 +47,11 @@ const NESTED_COMPONENT_DEFINITION = {
   scopedChildren: {
     Branch: {
       kind: "scoped-child",
+      markdownBody: {
+        prohibited: {
+          heading: "Branch bodies cannot contain headings",
+        },
+      },
       scopedChildren: {
         Leaf: {
           kind: "scoped-child",
@@ -178,6 +183,22 @@ describe("scoped child dispatch", () => {
         line: 4,
         column: 1,
         message: "Leaf bodies cannot contain headings",
+      },
+    ]);
+  });
+
+  it("should apply a parent body policy only outside its nested scoped children", () => {
+    const { diagnostics } = compileWithRegistry({
+      markdown:
+        "<NestedFixture>\n<Branch>\n# Branch heading\n<Leaf>\nClean leaf.\n</Leaf>\n</Branch>\n</NestedFixture>\n",
+      registry: NESTED_REGISTRY,
+    });
+
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: "Branch bodies cannot contain headings",
       },
     ]);
   });

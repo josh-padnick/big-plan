@@ -83,18 +83,28 @@ const prohibitedKind = ({
 
 // Applies a scoped child's declared content policy recursively. Registered
 // components are opaque after rejection so their internals add no secondary
-// diagnostics for content the parent contract already excludes.
+// diagnostics for content the parent contract already excludes, and declared
+// nested scoped children are skipped because their own policy governs them.
 const validateMarkdownBody = ({
   node,
   policy,
   diagnostics,
   registry,
+  nestedScopedNames,
 }: {
   readonly node: MarkdownNode;
   readonly policy: MarkdownBodyPolicy;
   readonly diagnostics: DiagnosticCollector;
   readonly registry: ComponentRegistry;
+  readonly nestedScopedNames: ReadonlySet<string>;
 }): void => {
+  if (
+    node.type === "mdxJsxFlowElement" &&
+    node.name !== null &&
+    nestedScopedNames.has(node.name)
+  ) {
+    return;
+  }
   const kind = prohibitedKind({ node, registry });
   const message = kind === undefined ? undefined : policy.prohibited[kind];
   if (message !== undefined) {
@@ -104,7 +114,13 @@ const validateMarkdownBody = ({
     return;
   }
   for (const child of markdownChildren(node)) {
-    validateMarkdownBody({ node: child, policy, diagnostics, registry });
+    validateMarkdownBody({
+      node: child,
+      policy,
+      diagnostics,
+      registry,
+      nestedScopedNames,
+    });
   }
 };
 
@@ -158,12 +174,16 @@ const validateRegisteredComponentMarkdown = ({
     if (scopedDefinition !== undefined) {
       const policy = scopedDefinition.markdownBody;
       if (policy !== undefined) {
+        const nestedScopedNames = new Set(
+          Object.keys(scopedDefinition.scopedChildren ?? {}),
+        );
         for (const bodyChild of markdownChildren(child)) {
           validateMarkdownBody({
             node: bodyChild,
             policy,
             diagnostics,
             registry,
+            nestedScopedNames,
           });
         }
       }
