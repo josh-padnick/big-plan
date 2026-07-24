@@ -48,7 +48,10 @@ const renderTableSchemaFigure = ({
       properties: { className: ["table-schema-body", "min-h-0"] },
       children: [
         renderTableSchemaGrid({ schema: model.schema }),
-        ...renderTableSchemaSections({ schema: model.schema }),
+        ...renderTableSchemaSections({
+          schema: model.schema,
+          ddlSections: model.ddlSections,
+        }),
       ],
     },
     {
@@ -71,4 +74,17 @@ export const renderDatabaseTableSchema: ComponentRenderer = (input) =>
 /** Declares DatabaseTableSchema's complete component integration contract. */
 export const DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION = {
   render: renderDatabaseTableSchema,
+  scopedChildren: {
+    Ddl: {
+      kind: "scoped-child",
+      markdownBody: {
+        prohibited: {
+          heading: "Ddl bodies cannot contain headings",
+          footnoteReference: "Ddl bodies cannot contain footnote references",
+          footnoteDefinition: "Ddl bodies cannot contain footnote definitions",
+          registeredComponent: "Ddl bodies cannot contain typed components",
+        },
+      },
+    },
+  },
 } satisfies ComponentDefinition;

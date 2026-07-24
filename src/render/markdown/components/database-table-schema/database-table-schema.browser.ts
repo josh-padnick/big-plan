@@ -1,11 +1,105 @@
 // Owns DatabaseTableSchema's progressively enhanced actions menu, the
-// name/source clipboard behavior, and full-screen viewing; the grid stays
-// readable without any of it.
+// name/source clipboard behavior, full-screen viewing, and the tab bar that
+// folds the Indexes and DDL bands; the grid stays readable without any of it.
 
 import {
   openComponentFullScreen,
   updateFullScreenControl,
 } from "../shared/full-screen/full-screen.browser.js";
+
+let nextSchemaPanelId = 1;
+
+// Folds the bands below the grid behind a tab bar when there is more than one,
+// following the HttpEndpoint pattern: the stacked sections stay the
+// no-JavaScript document, and each section's own label becomes its tab.
+const enhanceSchemaTabs = (block: HTMLElement): void => {
+  const body = block.querySelector<HTMLElement>(".table-schema-body");
+  if (body === null) {
+    return;
+  }
+  const sections = [
+    ...body.querySelectorAll<HTMLElement>(
+      ":scope > section[data-schema-section]",
+    ),
+  ];
+  if (sections.length < 2) {
+    return;
+  }
+
+  const bar = document.createElement("div");
+  bar.className =
+    "table-schema-tabs flex flex-wrap items-center gap-1 border-t border-edge px-2";
+  bar.setAttribute("role", "tablist");
+  bar.setAttribute("aria-label", "Table schema sections");
+
+  const tabs: Array<HTMLButtonElement> = [];
+  const activate = (index: number): void => {
+    for (const [position, section] of sections.entries()) {
+      const tab = tabs[position];
+      const active = position === index;
+      section.hidden = !active;
+      if (tab !== undefined) {
+        tab.setAttribute("aria-selected", active ? "true" : "false");
+        tab.tabIndex = active ? 0 : -1;
+      }
+    }
+  };
+
+  for (const [index, section] of sections.entries()) {
+    const panelId = `table-schema-panel-${nextSchemaPanelId}`;
+    nextSchemaPanelId += 1;
+    section.id = panelId;
+    section.setAttribute("role", "tabpanel");
+    const label = section.querySelector<HTMLElement>(
+      ".table-schema-section-label",
+    );
+    label?.setAttribute("hidden", "");
+
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.id = `${panelId}-tab`;
+    tab.className =
+      "table-schema-tab cursor-pointer border-0 bg-transparent px-2.5 py-2 font-sans text-xs font-semibold";
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-controls", panelId);
+    section.setAttribute("aria-labelledby", tab.id);
+    tab.append(
+      section.dataset.schemaSection === "indexes"
+        ? "Indexes"
+        : (section.dataset.schemaDdlTitle ?? "DDL"),
+    );
+    tab.addEventListener("click", () => {
+      activate(index);
+    });
+    tab.addEventListener("keydown", (event) => {
+      const destination =
+        event.key === "ArrowRight"
+          ? (index + 1) % sections.length
+          : event.key === "ArrowLeft"
+            ? (index - 1 + sections.length) % sections.length
+            : event.key === "Home"
+              ? 0
+              : event.key === "End"
+                ? sections.length - 1
+                : undefined;
+      if (destination === undefined) {
+        return;
+      }
+      event.preventDefault();
+      activate(destination);
+      tabs[destination]?.focus();
+    });
+    tabs.push(tab);
+    bar.append(tab);
+  }
+
+  const firstSection = sections[0];
+  if (firstSection !== undefined) {
+    body.insertBefore(bar, firstSection);
+  }
+  block.dataset.schemaTabbed = "";
+  activate(0);
+};
 
 const SCHEMA_MESSAGE_RESET_MS = 2_000;
 const schemaMessageTimers = new WeakMap<HTMLElement, number>();
@@ -83,6 +177,7 @@ const writeSchemaClipboard = async ({
 for (const block of document.querySelectorAll<HTMLElement>(
   "[data-database-table-schema]",
 )) {
+  enhanceSchemaTabs(block);
   const menuButton = block.querySelector<HTMLButtonElement>(
     "[data-schema-menu-button]",
   );

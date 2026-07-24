@@ -4,6 +4,7 @@
 // the psql \d+ tradition, and the tinted numbered Indexes band below.
 
 import type { Element, ElementContent, Text } from "hast";
+import type { CompiledDdlSection } from "./compile-database-table-schema.js";
 import { indexParticipation } from "./derive-index-participation.js";
 import type {
   TableColumn,
@@ -444,14 +445,63 @@ const indexEntry = (index: TableIndex, offset: number): Element => ({
   ],
 });
 
-/** Renders the numbered Indexes band below the grid; absent without indexes. */
+// One titled verbatim-DDL band: the label mirrors the Indexes band so the tab
+// enhancement can treat every section uniformly, and the fence children pass
+// through untouched for the downstream highlight and copy transforms.
+const renderDdlSection = (section: CompiledDdlSection): Element => ({
+  type: "element",
+  tagName: "section",
+  properties: {
+    className: [
+      "table-schema-section",
+      "border-t",
+      "border-edge",
+      "pt-[0.55rem]",
+    ],
+    "data-schema-section": "ddl",
+    "data-schema-ddl-title": section.title,
+  },
+  children: [
+    {
+      type: "element",
+      tagName: "p",
+      properties: {
+        className: [
+          ...SECTION_LABEL_CLASSES.split(" "),
+          "px-[0.75rem]",
+          "mb-[0.1rem]",
+        ],
+      },
+      children: [text(section.title)],
+    },
+    {
+      type: "element",
+      tagName: "div",
+      properties: {
+        className: [
+          "table-schema-ddl-body",
+          "min-w-0",
+          "px-[0.75rem]",
+          "pb-[0.6rem]",
+          "[&>:last-child]:mb-0",
+        ],
+      },
+      children: [...section.children],
+    },
+  ],
+});
+
+/** Renders the Indexes and DDL bands below the grid; absent without either. */
 export const renderTableSchemaSections = ({
   schema,
+  ddlSections = [],
 }: {
   readonly schema: TableSchema;
+  readonly ddlSections?: ReadonlyArray<CompiledDdlSection>;
 }): ReadonlyArray<Element> => {
+  const ddl = ddlSections.map((section) => renderDdlSection(section));
   if (schema.indexes.length === 0) {
-    return [];
+    return ddl;
   }
   return [
     {
@@ -464,6 +514,7 @@ export const renderTableSchemaSections = ({
           "border-edge",
           "pt-[0.55rem]",
         ],
+        "data-schema-section": "indexes",
       },
       children: [
         // A styled paragraph rather than a real heading keeps component
@@ -500,5 +551,6 @@ export const renderTableSchemaSections = ({
         },
       ],
     },
+    ...ddl,
   ];
 };

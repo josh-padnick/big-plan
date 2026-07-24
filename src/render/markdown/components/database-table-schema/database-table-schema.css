@@ -76,10 +76,34 @@
   article .table-schema-head-comment {
     width: 23%;
   }
-  /* The Indexes band is the one deliberate visual break below the grid. */
+  /* The bands are the deliberate visual break below the grid; only the last
+     one closes the figure's rounded corner, and a hidden tab panel gives its
+     place to the visible one. */
   article .table-schema-section {
     background: var(--diff-header-bg);
+  }
+  article .table-schema-section:last-child {
     border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
+  }
+  article [data-schema-tabbed] .table-schema-section {
+    border-top: 0;
+    border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
+  }
+  article .table-schema-tab {
+    color: var(--color-muted);
+    box-shadow: inset 0 -2px 0 transparent;
+  }
+  article .table-schema-tab:hover {
+    color: var(--color-ink);
+  }
+  article .table-schema-tab[aria-selected="true"] {
+    color: var(--color-ink);
+    box-shadow: inset 0 -2px 0 var(--color-accent);
+  }
+  /* Verbatim DDL reads as a plain code sheet on the band tint: the prose
+     block chrome stays, but the band supplies the surface. */
+  article .table-schema-ddl-body pre {
+    margin-bottom: 0;
   }
   article .table-schema-badge {
     border-color: var(--color-edge);
