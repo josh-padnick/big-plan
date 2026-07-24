@@ -70,34 +70,26 @@ test("should review standalone plan decisions", async ({
     await page.mouse.move(0, 0);
   });
 
-  await test.step("labeled priorities recompute the best match", async () => {
-    await expect(
-      openDecision.locator("[data-decision-weights-header]"),
-    ).toContainText("Prioritize the criteria");
+  await test.step("priority squares recompute the Best match section", async () => {
+    const section = openDecision.locator("[data-decision-best-match]");
+    await expect(section).toContainText("Best match");
     await expect(openDecision.locator("[data-decision-weights]")).toHaveCount(
       4,
     );
-    await expect(
-      openDecision.locator("[data-decision-weight-label]").first(),
-    ).toHaveText("Priority: Medium");
     const options = openDecision.locator("thead [data-option]");
     await expect(options.nth(1)).toHaveAttribute("data-best-match", "");
     await expect(options.nth(1)).toContainText("Best match");
-    const footer = openDecision.locator("[data-decision-weights-footer]");
-    await expect(footer).toContainText("Best match: SQLite");
-    const divergence = footer.locator("[data-decision-divergence]");
+    await expect(section).toContainText("Best match: SQLite");
+    const divergence = section.locator("[data-decision-divergence]");
     await expect(divergence).toContainText("Your priorities now favor SQLite");
     const setupPriority = openDecision
       .locator("[data-decision-weights]")
       .nth(1)
       .locator("button");
     await setupPriority.nth(0).click();
-    await expect(
-      openDecision.locator("[data-decision-weight-label]").nth(1),
-    ).toHaveText("Priority: Low");
     await expect(options.nth(0)).toHaveAttribute("data-best-match", "");
     await expect(divergence).toBeHidden();
-    const reset = footer.locator("[data-decision-weights-reset]");
+    const reset = section.locator("[data-decision-weights-reset]");
     await expect(reset).toBeVisible();
     await reset.click();
     await expect(options.nth(1)).toHaveAttribute("data-best-match", "");
@@ -114,9 +106,9 @@ test("should review standalone plan decisions", async ({
   });
 
   await test.step("the ranking popover opens on click, not hover", async () => {
-    const how = openDecision.locator(
-      "[data-decision-weights-header] .big-decision-info",
-    );
+    const how = openDecision
+      .locator("[data-decision-best-match] .big-decision-info")
+      .nth(1);
     await expect(how.getByText(/never changes your selection/)).toBeHidden();
     await how.locator("summary").hover();
     await expect(how.getByText(/never changes your selection/)).toBeHidden();

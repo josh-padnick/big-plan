@@ -446,13 +446,7 @@ const renderDetailDrawers = (
       type: "element",
       tagName: "details",
       properties: {
-        className: [
-          "big-decision-details",
-          "mt-2.5",
-          "border-t",
-          "border-edge",
-          "pt-2.5",
-        ],
+        className: ["big-decision-details"],
         "data-option-details": option.id,
       },
       children: [
@@ -535,7 +529,22 @@ const renderReversibilitySection = (
       "data-reversibility-rating": reversibility.rating,
     },
     children: [
-      renderSectionLabel("Reversibility"),
+      {
+        type: "element",
+        tagName: "div",
+        properties: { className: ["flex", "items-center", "gap-1.5"] },
+        children: [
+          renderSectionLabel("Reversibility"),
+          ...renderInfoDisclosure([
+            {
+              type: "element",
+              tagName: "p",
+              properties: {},
+              children: [text(REVERSIBILITY_EXPLAINER)],
+            },
+          ]),
+        ],
+      },
       {
         type: "element",
         tagName: "div",
@@ -565,15 +574,6 @@ const renderReversibilitySection = (
                 properties: { className: ["font-semibold", "text-ink"] },
                 children: [text(REVERSIBILITY_PHRASES[reversibility.rating])],
               },
-              text(" "),
-              ...renderInfoDisclosure([
-                {
-                  type: "element",
-                  tagName: "p",
-                  properties: {},
-                  children: [text(REVERSIBILITY_EXPLAINER)],
-                },
-              ]),
               ...(reversibility.detail.length === 0
                 ? []
                 : [
@@ -673,6 +673,28 @@ const renderBigDecisionFigure = ({
             children: [...model.context],
           } satisfies Element,
         ]),
+    ...(() => {
+      const drawers = renderDetailDrawers(model);
+      if (drawers.length === 0) {
+        return [];
+      }
+      return [
+        {
+          type: "element",
+          tagName: "div",
+          properties: {
+            className: [
+              "px-4",
+              "pb-3.5",
+              "[&>details]:mt-0",
+              "[&>details+details]:mt-2",
+            ],
+            "data-decision-drawers": "",
+          },
+          children: [...drawers],
+        } satisfies Element,
+      ];
+    })(),
     ...(model.chosenOption === undefined
       ? []
       : [outcomeStrip(model.chosenOption)]),
@@ -683,7 +705,6 @@ const renderBigDecisionFigure = ({
         model.criteria.length > 0
           ? renderMatrix(model)
           : renderOptionStack(model),
-        ...renderDetailDrawers(model),
       ],
     }),
     ...(model.reversibility === undefined

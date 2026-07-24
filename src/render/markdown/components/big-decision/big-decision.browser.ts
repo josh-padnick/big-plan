@@ -271,14 +271,20 @@ for (const component of document.querySelectorAll<HTMLElement>(
     return `${name} performs strongly on ${list} under the current priorities.`;
   };
 
-  // Footer chrome, assembled once and updated on every recompute.
-  const footer = document.createElement("div");
-  footer.className =
-    "big-decision-weights-footer mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted";
-  footer.dataset.decisionWeightsFooter = "";
-  const bestMatchLine = document.createElement("span");
+  // The Best match section gives every rank-related role a first-class home:
+  // the verdict, the explicit selection action, the explanation, the reset,
+  // and the how-ranking-works reference.
+  const section = document.createElement("section");
+  section.className = "border-t border-edge px-4 py-4";
+  section.dataset.decisionBestMatch = "";
+  const sectionLabel = document.createElement("div");
+  sectionLabel.className =
+    "card-section-label text-[0.6875rem] leading-4 font-bold tracking-[0.08em] uppercase text-ink/70";
+  sectionLabel.textContent = "Best match";
+  const bestMatchLine = document.createElement("p");
+  bestMatchLine.className = "mt-2.5 mb-0 text-sm text-muted";
   bestMatchLine.dataset.decisionBestMatchLine = "";
-  const whyPopover = createPopover({ label: "Why?" });
+  const whyPopover = createPopover({ label: "Why this match?" });
   const resetButton = document.createElement("button");
   resetButton.type = "button";
   resetButton.className = "big-decision-popover-link";
@@ -290,7 +296,8 @@ for (const component of document.querySelectorAll<HTMLElement>(
       reset();
     }
   });
-  const divergence = document.createElement("span");
+  const divergence = document.createElement("p");
+  divergence.className = "mt-1.5 mb-0 text-sm text-muted";
   divergence.dataset.decisionDivergence = "";
   divergence.hidden = true;
   const divergenceText = document.createElement("span");
@@ -304,7 +311,6 @@ for (const component of document.querySelectorAll<HTMLElement>(
   });
   divergence.append(divergenceText, document.createTextNode(" "));
   divergence.append(divergenceButton);
-  footer.append(bestMatchLine, whyPopover.details, resetButton, divergence);
 
   const updateReset = (): void => {
     resetButton.hidden = priorities.every(
@@ -383,20 +389,6 @@ for (const component of document.querySelectorAll<HTMLElement>(
     updateDivergence();
   };
 
-  // The control header teaches the interaction before the reader meets the
-  // priority controls themselves.
-  const header = document.createElement("div");
-  header.className = "big-decision-weights-header mt-2.5";
-  header.dataset.decisionWeightsHeader = "";
-  const headerTitle = document.createElement("p");
-  headerTitle.className = "m-0 text-xs font-semibold text-ink";
-  headerTitle.textContent = "Prioritize the criteria";
-  const headerHint = document.createElement("p");
-  headerHint.className =
-    "mt-0.5 mb-0 flex flex-wrap items-center gap-x-2 text-xs text-muted";
-  const headerHintText = document.createElement("span");
-  headerHintText.textContent =
-    "Higher-priority criteria have more influence on Best match.";
   const howPopover = createPopover({ label: "How ranking works" });
   const howHeading = document.createElement("p");
   howHeading.className = "m-0 font-semibold text-ink";
@@ -409,8 +401,12 @@ for (const component of document.querySelectorAll<HTMLElement>(
     howList.append(item);
   }
   howPopover.body.append(howHeading, howList);
-  headerHint.append(headerHintText, howPopover.details);
-  header.append(headerTitle, headerHint);
+
+  const actions = document.createElement("p");
+  actions.className =
+    "mt-2 mb-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs";
+  actions.append(whyPopover.details, howPopover.details, resetButton);
+  section.append(sectionLabel, bestMatchLine, divergence, actions);
 
   for (const [index, row] of rows.entries()) {
     const rowHeader = row.querySelector("th");
@@ -423,14 +419,9 @@ for (const component of document.querySelectorAll<HTMLElement>(
     group.setAttribute("role", "radiogroup");
     group.setAttribute("aria-label", `Priority of ${criterionName(row)}`);
     group.dataset.decisionWeights = "";
-    const label = document.createElement("span");
-    label.className = "big-decision-weight-label text-xs text-muted";
-    label.dataset.decisionWeightLabel = "";
     const squares: Array<HTMLButtonElement> = [];
     const apply = (priority: number): void => {
       priorities[index] = priority;
-      // Text carries the meaning; the squares stay a compact echo of it.
-      label.textContent = `Priority: ${PRIORITY_LABELS[priority - 1] ?? "Medium"}`;
       for (const [position, square] of squares.entries()) {
         square.setAttribute(
           "aria-checked",
@@ -466,14 +457,12 @@ for (const component of document.querySelectorAll<HTMLElement>(
       squares.push(square);
       squareRow.append(square);
     }
-    group.append(label, squareRow);
+    group.append(squareRow);
     rowHeader.append(group);
     apply(DEFAULT_PRIORITY);
   }
 
-  const wrapper = matrix.parentElement;
-  wrapper?.before(header);
-  wrapper?.after(footer);
+  component.querySelector("[data-decision-options]")?.after(section);
 
   // Selection happens in the shared option-select script; observing it keeps
   // the divergence prompt honest without coupling the two scripts.
