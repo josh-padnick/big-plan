@@ -1548,6 +1548,89 @@ test("should fold the schema's Indexes and DDL bands behind tabs", async ({
   });
 });
 
+test("should reorder grid columns and remember the arrangement", async ({
+  page,
+  tableSchemaViewerUrl,
+}) => {
+  await page.goto(tableSchemaViewerUrl);
+  const firstGrid = page.locator(".table-schema-grid").first();
+  const heads = firstGrid.locator("thead th");
+
+  await test.step("headers advertise the reorder affordance", async () => {
+    await expect(heads).toHaveText([
+      "Column",
+      "Type",
+      "Constraints",
+      "Default",
+      "Comment",
+    ]);
+    await expect(heads.first()).toHaveAttribute("draggable", "true");
+    expect(
+      await heads
+        .first()
+        .evaluate((element) => getComputedStyle(element).cursor),
+    ).toBe("grab");
+  });
+
+  await test.step("arrow keys walk a column across the grid", async () => {
+    await heads.filter({ hasText: "Type" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(heads).toHaveText([
+      "Column",
+      "Constraints",
+      "Type",
+      "Default",
+      "Comment",
+    ]);
+    // The body cells follow their head: the type cell sits third.
+    await expect(
+      firstGrid.locator("tbody tr").first().locator("td, th").nth(2),
+    ).toHaveClass(/table-schema-cell-type/);
+  });
+
+  await test.step("dragging a header drops it at the target column", async () => {
+    // The drag pair stays inside the scroll container's visible region;
+    // clipped headers cannot start a native drag reliably.
+    await heads
+      .filter({ hasText: "Constraints" })
+      .dragTo(heads.filter({ hasText: "Column" }));
+    await expect(heads).toHaveText([
+      "Constraints",
+      "Column",
+      "Type",
+      "Default",
+      "Comment",
+    ]);
+  });
+
+  await test.step("every schema on the page follows the same arrangement", async () => {
+    await expect(
+      page.locator(".table-schema-grid").nth(1).locator("thead th"),
+    ).toHaveText(["Constraints", "Column", "Type", "Default", "Comment"]);
+  });
+
+  await test.step("the arrangement survives a reload", async () => {
+    await page.reload();
+    await expect(
+      page.locator(".table-schema-grid").first().locator("thead th"),
+    ).toHaveText(["Constraints", "Column", "Type", "Default", "Comment"]);
+  });
+
+  await test.step("the actions menu resets to the authored layout", async () => {
+    const schema = page.locator("[data-database-table-schema]").first();
+    await schema.locator("[data-schema-menu-button]").click();
+    await schema.getByRole("menuitem", { name: "Reset column layout" }).click();
+    await expect(
+      page.locator(".table-schema-grid").first().locator("thead th"),
+    ).toHaveText(["Column", "Type", "Constraints", "Default", "Comment"]);
+    expect(
+      await page.evaluate(() =>
+        window.localStorage.getItem("big-plan:table-schema-column-order"),
+      ),
+    ).toBeNull();
+  });
+});
+
 test("should stack the labeled DDL bands when JavaScript is disabled", async ({
   browser,
   tableSchemaViewerUrl,

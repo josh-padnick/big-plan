@@ -8,7 +8,9 @@ import { DATABASE_ICON } from "../../../icons/lucide/database.js";
 import { ELLIPSIS_ICON } from "../../../icons/lucide/ellipsis.js";
 import { MAXIMIZE_2_ICON } from "../../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../../icons/lucide/minimize-2.js";
+import { ROTATE_CCW_ICON } from "../../../icons/lucide/rotate-ccw.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import type { LucideIcon } from "../../../icons/lucide-icon.js";
 import { renderCopyFeedback } from "../shared/copy-feedback/copy-feedback.js";
 
 const HEADER_CLASSES =
@@ -80,9 +82,11 @@ const tableIdentity = ({
 const menuItemButton = ({
   action,
   label,
+  icon = COPY_ICON,
 }: {
-  readonly action: "copy-name" | "copy-source";
+  readonly action: "copy-name" | "copy-source" | "reset-columns";
   readonly label: string;
+  readonly icon?: LucideIcon;
 }): Element => ({
   type: "element",
   tagName: "button",
@@ -93,7 +97,7 @@ const menuItemButton = ({
     tabIndex: -1,
     [`data-schema-${action}`]: "",
   },
-  children: [renderLucideIcon({ icon: COPY_ICON, hidden: false }), text(label)],
+  children: [renderLucideIcon({ icon, hidden: false }), text(label)],
 });
 
 // Actions remain unavailable without JavaScript, while the complete grid and
@@ -137,6 +141,11 @@ const actionsMenu = (): Element => ({
       children: [
         menuItemButton({ action: "copy-name", label: "Copy table name" }),
         menuItemButton({ action: "copy-source", label: "Copy source" }),
+        menuItemButton({
+          action: "reset-columns",
+          label: "Reset column layout",
+          icon: ROTATE_CCW_ICON,
+        }),
       ],
     },
   ],

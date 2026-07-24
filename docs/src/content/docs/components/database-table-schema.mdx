@@ -125,7 +125,8 @@ Decision-worthy rationale still belongs in a [`Callout`](/components/callout/) b
 
 ## Reader controls
 
-The grid and sections are fully server-rendered; JavaScript powers only the actions menu, the full-screen view, and the tab bar that folds multiple bands, and a wide grid scrolls inside the figure instead of widening the page.
+The grid and sections are fully server-rendered; JavaScript powers only the actions menu, the full-screen view, the tab bar that folds multiple bands, and column rearranging, and a wide grid scrolls inside the figure instead of widening the page.
+Grid columns rearrange by dragging a header or pressing arrow keys on a focused one; the arrangement applies to every schema in the document, persists locally in the browser, and the actions menu's Reset column layout restores the authored order.
 The actions menu's Copy table name action copies the exact `name` attribute, while Copy source copies only the raw `dbml` fence.
 As MDX parses fenced content, copied source uses LF line endings and includes a trailing newline.
 The full-screen control opens a modal named by the table, keeps a tall schema's header in place while its body scrolls, and returns the reader to the same page position when it closes.
