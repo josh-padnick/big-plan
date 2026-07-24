@@ -124,113 +124,12 @@ const renderTradeoffGroup = ({
   ];
 };
 
-const optionMarker = (chosen: boolean): Element => ({
-  type: "element",
-  tagName: "span",
-  properties: {
-    className: [
-      "big-decision-option-marker",
-      ...(chosen ? ["big-decision-option-marker-chosen"] : []),
-      "inline-flex",
-      "size-5",
-      "shrink-0",
-      "items-center",
-      "justify-center",
-      "rounded-full",
-      "border",
-      "[&_svg]:size-3",
-    ],
-    ariaHidden: "true",
-  },
-  children: chosen
-    ? [renderLucideIcon({ icon: CHECK_ICON, hidden: false })]
-    : [],
-});
-
-// A chosen card remains structurally identical to the alternatives; state
-// classes alter emphasis without hiding any rejected option.
-const renderOption = ({
-  option,
-  muted,
-}: {
-  readonly option: CompiledBigDecisionOption;
-  readonly muted: boolean;
-}): Element => ({
-  type: "element",
-  tagName: "article",
-  properties: {
-    id: option.id,
-    className: [
-      "big-decision-option",
-      ...(option.chosen ? ["big-decision-option-chosen"] : []),
-      ...(muted ? ["big-decision-option-muted"] : []),
-      "rounded-md",
-      "border",
-      "border-edge",
-      "bg-surface",
-      "px-3.5",
-      "py-3",
-    ],
-    "data-option": "",
-    ...(option.recommended ? { "data-option-recommended": "" } : {}),
-    ...(option.chosen ? { "data-option-chosen": "" } : {}),
-  },
-  children: [
-    {
-      type: "element",
-      tagName: "div",
-      properties: {
-        className: ["flex", "min-w-0", "items-start", "gap-2.5"],
-      },
-      children: [
-        optionMarker(option.chosen),
-        {
-          type: "element",
-          tagName: "div",
-          properties: { className: ["min-w-0", "flex-1"] },
-          children: [
-            {
-              type: "element",
-              tagName: "div",
-              properties: {
-                className: ["flex", "flex-wrap", "items-center", "gap-2"],
-              },
-              children: [
-                {
-                  type: "element",
-                  tagName: "p",
-                  properties: {
-                    className: ["m-0", "text-sm", "font-semibold", "text-ink"],
-                    "data-option-title": "",
-                  },
-                  children: [text(option.title)],
-                },
-                ...(option.recommended
-                  ? [
-                      renderBadgePill({
-                        label: "Recommended",
-                        classNames: ["big-decision-recommended-pill"],
-                      }),
-                    ]
-                  : []),
-              ],
-            },
-            ...(option.summary === undefined
-              ? []
-              : [
-                  {
-                    type: "element",
-                    tagName: "p",
-                    properties: {
-                      className: ["mt-1", "mb-0", "text-sm", "text-muted"],
-                    },
-                    children: [text(option.summary)],
-                  } satisfies Element,
-                ]),
-          ],
-        },
-      ],
-    },
+// The card body stays on the page background so tradeoffs and detail read as
+// prose; only the head row carries the surface tint that anchors the option.
+const renderOptionBody = (
+  option: CompiledBigDecisionOption,
+): ReadonlyArray<Element> => {
+  const body = [
     ...renderTradeoffGroup({
       label: "Pros",
       kind: "pro",
@@ -286,6 +185,135 @@ const renderOption = ({
             ],
           } satisfies Element,
         ]),
+  ];
+  if (body.length === 0) {
+    return [];
+  }
+  return [
+    {
+      type: "element",
+      tagName: "div",
+      properties: { className: ["px-3.5", "pb-3", "[&>:first-child]:mt-2.5"] },
+      children: body,
+    },
+  ];
+};
+
+const optionMarker = (chosen: boolean): Element => ({
+  type: "element",
+  tagName: "span",
+  properties: {
+    className: [
+      "big-decision-option-marker",
+      ...(chosen ? ["big-decision-option-marker-chosen"] : []),
+      "inline-flex",
+      "size-5",
+      "shrink-0",
+      "items-center",
+      "justify-center",
+      "rounded-full",
+      "border",
+      "[&_svg]:size-3",
+    ],
+    ariaHidden: "true",
+  },
+  children: chosen
+    ? [renderLucideIcon({ icon: CHECK_ICON, hidden: false })]
+    : [],
+});
+
+// A chosen card remains structurally identical to the alternatives; state
+// classes alter emphasis without hiding any rejected option.
+const renderOption = ({
+  option,
+  muted,
+}: {
+  readonly option: CompiledBigDecisionOption;
+  readonly muted: boolean;
+}): Element => ({
+  type: "element",
+  tagName: "article",
+  properties: {
+    id: option.id,
+    className: [
+      "big-decision-option",
+      ...(option.chosen ? ["big-decision-option-chosen"] : []),
+      ...(muted ? ["big-decision-option-muted"] : []),
+      "overflow-hidden",
+      "rounded-md",
+      "border",
+      "border-edge",
+    ],
+    "data-option": "",
+    ...(option.recommended ? { "data-option-recommended": "" } : {}),
+    ...(option.chosen ? { "data-option-chosen": "" } : {}),
+  },
+  children: [
+    {
+      type: "element",
+      tagName: "div",
+      properties: {
+        className: [
+          "big-decision-option-head",
+          "flex",
+          "min-w-0",
+          "items-start",
+          "gap-2.5",
+          "bg-surface",
+          "px-3.5",
+          "py-3",
+        ],
+      },
+      children: [
+        optionMarker(option.chosen),
+        {
+          type: "element",
+          tagName: "div",
+          properties: { className: ["min-w-0", "flex-1"] },
+          children: [
+            {
+              type: "element",
+              tagName: "div",
+              properties: {
+                className: ["flex", "flex-wrap", "items-center", "gap-2"],
+              },
+              children: [
+                {
+                  type: "element",
+                  tagName: "p",
+                  properties: {
+                    className: ["m-0", "text-sm", "font-semibold", "text-ink"],
+                    "data-option-title": "",
+                  },
+                  children: [text(option.title)],
+                },
+                ...(option.recommended
+                  ? [
+                      renderBadgePill({
+                        label: "Recommended",
+                        classNames: ["big-decision-recommended-pill"],
+                      }),
+                    ]
+                  : []),
+              ],
+            },
+            ...(option.summary === undefined
+              ? []
+              : [
+                  {
+                    type: "element",
+                    tagName: "p",
+                    properties: {
+                      className: ["mt-1", "mb-0", "text-sm", "text-muted"],
+                    },
+                    children: [text(option.summary)],
+                  } satisfies Element,
+                ]),
+          ],
+        },
+      ],
+    },
+    ...renderOptionBody(option),
   ],
 });
 

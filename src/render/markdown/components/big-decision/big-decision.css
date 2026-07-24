@@ -20,7 +20,7 @@
     border-color: color-mix(in srgb, var(--decision-pro-c) 55%, var(--edge-c));
     box-shadow: inset 3px 0 0 var(--decision-pro-c);
   }
-  article .big-decision-option-muted {
+  article .big-decision-option-muted .big-decision-option-head {
     background: color-mix(in srgb, var(--surface-c) 55%, var(--bg));
   }
   article .big-decision-option-muted p,
