@@ -1,13 +1,13 @@
 ---
 title: DatabaseTableSchema
-description: A component for one database table's schema, rendered as a psql-style columns grid with key badges, foreign keys, indexes, and checks.
+description: A component for one database table's schema, rendered as a psql-style columns grid with keys, indexes, checks, and titled verbatim-DDL bands.
 ---
 
 import ThemeImage from "../../../components/ThemeImage.astro";
 import tableSchemaLight from "../../../assets/components/database-table-schema-light.png";
 import tableSchemaDark from "../../../assets/components/database-table-schema-dark.png";
 
-`DatabaseTableSchema` shows one table's shape - columns, keys, constraints, defaults, and the indexes behind its access paths - as a dense psql-style grid, so a plan that proposes or changes a table can be reviewed on the schema itself instead of prose approximations of it.
+`DatabaseTableSchema` shows one table's shape - columns, keys, constraints, defaults, the indexes behind its access paths, and engine-specific DDL outside the schema grammar - as a dense psql-style grid with titled verbatim-SQL bands, so a plan that proposes or changes a table can be reviewed on the schema itself instead of prose approximations of it.
 
 ## How it looks
 
@@ -26,7 +26,7 @@ The tinted Indexes band below the grid numbers each index (`INDX 1`, `INDX 2`, .
 A column that an index uses as a key carries the matching `INDX n` pill, while a column that only appears in a partial-index predicate is marked `WHERE INDX n`, so a reviewer can answer "is this column indexed?" without leaving the row.
 
 Each `Ddl` child adds a titled band of verbatim SQL after the indexes - row security, triggers, partitioning, grants, whatever the schema grammar deliberately leaves out.
-When JavaScript is available and more than one band exists, the bands fold behind a tab bar with `Indexes` selected first; without it every band renders stacked and labeled, so nothing is ever hidden from a reader.
+When JavaScript is available and more than one band exists, the bands fold behind a tab bar with the first band selected (`Indexes` when the schema declares indexes); without it every band renders stacked and labeled, so nothing is ever hidden from a reader.
 
 The rendering is optimized for Postgres but generic: column types are opaque text, any engine's types render unchanged, and the component never parses `Ddl` SQL - it displays exactly what was authored.
 
@@ -93,7 +93,7 @@ The component takes exactly one fenced code block with the `dbml` language, foll
 
 ### Ddl
 
-Each `Ddl` child carries one titled band of verbatim SQL: a required non-empty `title` attribute, unique within the component, and exactly one fenced code block with the `sql` language as its whole body.
+Each `Ddl` child carries one titled band of verbatim SQL: a required non-empty `title` attribute, unique within the component after surrounding and repeated whitespace are normalized, and exactly one fenced code block with the `sql` language as its whole body.
 The component displays the statements exactly as authored - highlighted and copyable, never parsed or validated as SQL - so engine-specific DDL renders truthfully for any engine.
 
 ### Schema grammar
@@ -128,7 +128,8 @@ Decision-worthy rationale still belongs in a [`Callout`](/components/callout/) b
 The grid and sections are fully server-rendered; JavaScript powers only the actions menu, the columns menu, the full-screen view, the tab bar that folds multiple bands, column rearranging, and the index jump controls, and a wide grid scrolls inside the figure instead of widening the page.
 Grid columns rearrange by dragging a header or pressing arrow keys on a focused one, and the columns menu shows or hides every column except the row-identity Column itself.
 Order and visibility travel together as one locally persisted preference for every schema in the document: hiding a column keeps its place in the order, keyboard moves step over hidden columns, and the actions menu's Reset column layout restores the authored layout.
-With JavaScript available, an `INDX n` or `WHERE INDX n` reference becomes a jump control that reveals the Indexes band, scrolls to the numbered entry, and flashes it.
+Tabbed bands support Left Arrow, Right Arrow, Home, and End navigation.
+With JavaScript available, an `INDX n` or `WHERE INDX n` reference becomes a jump control that reveals the Indexes band, scrolls to and focuses the numbered entry, and flashes it.
 The actions menu's Copy table name action copies the exact `name` attribute, while Copy source copies only the raw `dbml` fence.
 As MDX parses fenced content, copied source uses LF line endings and includes a trailing newline.
 The full-screen control opens a modal named by the table, keeps a tall schema's header in place while its body scrolls, and returns the reader to the same page position when it closes.

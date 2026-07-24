@@ -1,6 +1,6 @@
-// Owns DatabaseTableSchema's progressively enhanced actions menu, the
-// name/source clipboard behavior, full-screen viewing, and the tab bar that
-// folds the Indexes and DDL bands; the grid stays readable without any of it.
+// Owns DatabaseTableSchema's progressively enhanced menus, clipboard and
+// full-screen actions, persisted column layout, index jumps, and the tab bar
+// that folds Indexes and DDL bands; the grid stays readable without any of it.
 
 import {
   openComponentFullScreen,
@@ -403,8 +403,8 @@ const enhanceSchemaTabs = (block: HTMLElement): void => {
 };
 
 // Turns each grid-side INDX reference into a jump control: activate the
-// Indexes tab when the band is folded away, bring the entry into view, and
-// flash it so the reader sees what the reference named.
+// Indexes tab when the band is folded away, bring the entry into view and
+// focus, and flash it so the reader sees what the reference named.
 const FLASH_RESET_MS = 1_600;
 const flashTimers = new WeakMap<HTMLElement, number>();
 

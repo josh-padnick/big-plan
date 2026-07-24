@@ -1,7 +1,7 @@
 // Renders DatabaseTableSchema's body: an equal-height columns grid whose
 // Constraints cell carries keys, nullability, foreign keys, checks, and
 // numbered INDX references in one separated inline run, a Comment column in
-// the psql \d+ tradition, and the tinted numbered Indexes band below.
+// the psql \d+ tradition, plus numbered Indexes and titled verbatim-DDL bands.
 
 import type { Element, ElementContent, Text } from "hast";
 import type { CompiledDdlSection } from "./compile-database-table-schema.js";

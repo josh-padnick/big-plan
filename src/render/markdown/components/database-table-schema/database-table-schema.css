@@ -1,7 +1,7 @@
 /* DatabaseTableSchema palette-dependent chrome: header band, dense
    equal-height grid overrides of the prose table rules, plain in-figure code,
-   badge tints, the tinted Indexes band, and action-menu styles, colocated
-   with the component that owns them. */
+   badge tints, Indexes and DDL bands, tabs, column controls, index jumps, and
+   menu styles, colocated with the component that owns them. */
 
 @layer components {
   /* The figure paints its own background: inline it matches the page, and

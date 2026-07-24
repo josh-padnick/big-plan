@@ -1,5 +1,5 @@
-// Tests DatabaseTableSchema's attribute and fence validation plus the
-// rendered header identity, grid rows, badges, sections, and raw copy source.
+// Tests DatabaseTableSchema's parent and Ddl validation plus its rendered
+// header, grid rows, badges, section bands, column controls, and copy source.
 
 import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";

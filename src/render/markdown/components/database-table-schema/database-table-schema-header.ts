@@ -1,6 +1,6 @@
 // Renders DatabaseTableSchema's caption: the table identity with its muted
-// schema prefix, the transient copy-feedback slot, and the progressively
-// enhanced actions menu with copy-name and copy-source controls.
+// schema prefix, table note, transient feedback, and progressively enhanced
+// columns, actions, and full-screen controls.
 
 import type { Element, Text } from "hast";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
