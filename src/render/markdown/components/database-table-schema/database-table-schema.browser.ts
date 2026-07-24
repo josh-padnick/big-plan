@@ -432,6 +432,8 @@ const jumpToIndex = ({
   // The page's smooth-unless-reduced-motion scroll preference comes from the
   // global scroll-behavior rule, so the default behavior inherits it.
   entry.scrollIntoView({ block: "center" });
+  entry.tabIndex = -1;
+  entry.focus({ preventScroll: true });
   const previousTimer = flashTimers.get(entry);
   if (previousTimer !== undefined) {
     window.clearTimeout(previousTimer);

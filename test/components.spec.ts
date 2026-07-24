@@ -1672,14 +1672,18 @@ test("should jump from an INDX reference to its flashed band entry", async ({
     await expect(
       schema.locator('[data-schema-section="indexes"]'),
     ).toBeHidden();
-    await schema
-      .locator('[data-schema-column="customer_id"] [data-schema-indx="1"]')
-      .click();
+    const firstMarker = schema.locator(
+      '[data-schema-column="customer_id"] [data-schema-indx="1"]',
+    );
+    await firstMarker.focus();
+    await firstMarker.press("Enter");
     await expect(tabs.getByRole("tab", { name: "Indexes" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
     await expect(firstEntry).toBeInViewport();
+    await expect(firstEntry).toHaveAttribute("tabindex", "-1");
+    await expect(firstEntry).toBeFocused();
   });
 
   await test.step("the landed entry flashes, then settles", async () => {
