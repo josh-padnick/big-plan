@@ -93,14 +93,15 @@ const compileDdlSections = ({
     if (title === undefined) {
       continue;
     }
-    if (seenTitles.has(title)) {
+    const titleKey = title.replace(/\s+/gu, " ").trim();
+    if (seenTitles.has(titleKey)) {
       diagnostics.add({
         message: `Duplicate Ddl title "${title}"`,
         position: child.position,
       });
       continue;
     }
-    seenTitles.add(title);
+    seenTitles.add(titleKey);
     sections.push({ title, children });
   }
   return sections;

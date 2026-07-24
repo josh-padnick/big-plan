@@ -254,7 +254,14 @@ const enhanceColumnReordering = (block: HTMLElement): void => {
         return;
       }
       event.preventDefault();
-      moveColumn({ key: draggedKey, toIndex: columnOrder.indexOf(key) });
+      const keyBeingDragged = draggedKey;
+      const orderWithoutDragged = columnOrder.filter(
+        (columnKey) => columnKey !== keyBeingDragged,
+      );
+      moveColumn({
+        key: keyBeingDragged,
+        toIndex: orderWithoutDragged.indexOf(key),
+      });
       draggedKey = undefined;
     });
     head.addEventListener("keydown", (event) => {
@@ -317,8 +324,21 @@ const enhanceSchemaTabs = (block: HTMLElement): void => {
   };
 
   for (const [index, section] of sections.entries()) {
-    const panelId = `table-schema-panel-${nextSchemaPanelId}`;
-    nextSchemaPanelId += 1;
+    let panelId: string;
+    let tabId: string;
+    while (true) {
+      const candidatePanelId = `table-schema-panel-${nextSchemaPanelId}`;
+      const candidateTabId = `${candidatePanelId}-tab`;
+      nextSchemaPanelId += 1;
+      if (
+        document.getElementById(candidatePanelId) === null &&
+        document.getElementById(candidateTabId) === null
+      ) {
+        panelId = candidatePanelId;
+        tabId = candidateTabId;
+        break;
+      }
+    }
     section.id = panelId;
     section.setAttribute("role", "tabpanel");
     const label = section.querySelector<HTMLElement>(
@@ -328,7 +348,7 @@ const enhanceSchemaTabs = (block: HTMLElement): void => {
 
     const tab = document.createElement("button");
     tab.type = "button";
-    tab.id = `${panelId}-tab`;
+    tab.id = tabId;
     tab.className =
       "table-schema-tab cursor-pointer border-0 bg-transparent px-2.5 py-2 font-sans text-xs font-semibold";
     tab.setAttribute("role", "tab");

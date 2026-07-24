@@ -5,7 +5,7 @@
 // never from @playwright/test directly.
 
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -106,11 +106,23 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
   tableSchemaViewerUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(join(tmpdir(), "big-plan-table-schema-"));
+      const inputPath = join(outputDir, "table-schema.mdx");
       const outputPath = join(outputDir, "table-schema.html");
+      const examplePath = join(
+        repoRoot,
+        "examples",
+        "database-table-schema.mdx",
+      );
+      const source = await readFile(examplePath, "utf8");
+      await writeFile(
+        inputPath,
+        `${source}\n## Table Schema Panel 1\n\n## Table Schema Panel 2 Tab\n`,
+        "utf8",
+      );
       await execFileAsync(process.execPath, [
         join(repoRoot, "bin", "big-plan.mjs"),
         "render",
-        join(repoRoot, "examples", "database-table-schema.mdx"),
+        inputPath,
         outputPath,
       ]);
       await use(pathToFileURL(outputPath).href);

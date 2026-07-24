@@ -1500,6 +1500,20 @@ test("should fold the schema's Indexes and DDL bands behind tabs", async ({
     ).toBeHidden();
   });
 
+  await test.step("tab ids avoid authored document ids", async () => {
+    await expect(indexesPanel).toHaveAttribute("id", "table-schema-panel-3");
+    await expect(tabs.getByRole("tab", { name: "Indexes" })).toHaveAttribute(
+      "id",
+      "table-schema-panel-3-tab",
+    );
+    expect(
+      await page.locator("[id]").evaluateAll((elements) => {
+        const ids = elements.map((element) => element.id);
+        return new Set(ids).size === ids.length;
+      }),
+    ).toBe(true);
+  });
+
   await test.step("selecting a DDL tab swaps the visible band", async () => {
     await tabs.getByRole("tab", { name: "Row security" }).click();
     await expect(indexesPanel).toBeHidden();
@@ -1603,17 +1617,30 @@ test("should reorder grid columns and remember the arrangement", async ({
     ]);
   });
 
+  await test.step("dragging right inserts before the indicated target", async () => {
+    await heads
+      .filter({ hasText: "Constraints" })
+      .dragTo(heads.filter({ hasText: "Type" }));
+    await expect(heads).toHaveText([
+      "Column",
+      "Constraints",
+      "Type",
+      "Default",
+      "Comment",
+    ]);
+  });
+
   await test.step("every schema on the page follows the same arrangement", async () => {
     await expect(
       page.locator(".table-schema-grid").nth(1).locator("thead th"),
-    ).toHaveText(["Constraints", "Column", "Type", "Default", "Comment"]);
+    ).toHaveText(["Column", "Constraints", "Type", "Default", "Comment"]);
   });
 
   await test.step("the arrangement survives a reload", async () => {
     await page.reload();
     await expect(
       page.locator(".table-schema-grid").first().locator("thead th"),
-    ).toHaveText(["Constraints", "Column", "Type", "Default", "Comment"]);
+    ).toHaveText(["Column", "Constraints", "Type", "Default", "Comment"]);
   });
 
   await test.step("the actions menu resets to the authored layout", async () => {

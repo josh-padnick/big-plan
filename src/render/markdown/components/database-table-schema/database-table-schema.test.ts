@@ -460,6 +460,28 @@ describe("renderDatabaseTableSchema rendering", () => {
     ).toHaveLength(1);
   });
 
+  it("should diagnose whitespace-equivalent Ddl titles", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [
+        ddlChild(),
+        ddlChild({ title: "  Row \n\t security  " }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: 'Duplicate Ddl title "  Row \n\t security  "',
+      },
+    ]);
+    expect(
+      queryAll(
+        element,
+        (candidate) => candidate.properties["data-schema-section"] === "ddl",
+      ),
+    ).toHaveLength(1);
+  });
+
   it("should diagnose a Ddl body that is not exactly one sql fence", () => {
     const prose: ElementContent = {
       type: "element",
