@@ -87,6 +87,25 @@ test("should review standalone plan decisions", async ({
     await expect(decidedDecision).toContainText("Tool-owned cache directory");
   });
 
+  await test.step("clicking an option previews a local selection", async () => {
+    await expect(openDecision).toHaveAttribute("data-option-select", "");
+    const openOptions = openDecision.locator("[data-option]");
+    await openOptions.nth(1).click();
+    await expect(openOptions.nth(1)).toHaveAttribute("aria-checked", "true");
+    await expect(openOptions.nth(1)).toHaveAttribute(
+      "data-option-selected",
+      "",
+    );
+    await openOptions.nth(0).click();
+    await expect(openOptions.nth(0)).toHaveAttribute("aria-checked", "true");
+    await expect(openOptions.nth(1)).toHaveAttribute("aria-checked", "false");
+  });
+
+  await test.step("a decided decision keeps its authored outcome unselectable", async () => {
+    await expect(decidedDecision.locator('[role="radiogroup"]')).toHaveCount(0);
+    await expect(decidedDecision.locator('[role="radio"]')).toHaveCount(0);
+  });
+
   await test.step("every decision reads without JavaScript", async () => {
     const context = await browser.newContext({ javaScriptEnabled: false });
     const staticPage = await context.newPage();

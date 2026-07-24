@@ -16,6 +16,7 @@ import { CODE_SNIPPET_JS } from "../markdown/components/code-snippet/code-snippe
 import { DATABASE_TABLE_SCHEMA_JS } from "../markdown/components/database-table-schema/database-table-schema.generated.js";
 import { FILE_TREE_JS } from "../markdown/components/file-tree/file-tree.generated.js";
 import { HTTP_ENDPOINT_JS } from "../markdown/components/http-endpoint/http-endpoint.generated.js";
+import { OPTION_SELECT_JS } from "../markdown/components/shared/option-select/option-select.generated.js";
 import { COPY_CODE_JS } from "../markdown/code-block/copy-code.generated.js";
 import { SCROLL_SPY_JS } from "./scroll-spy.generated.js";
 import { THEME_TOGGLE_JS } from "./theme-toggle.generated.js";
@@ -178,6 +179,7 @@ ${contentHtml}
           DATABASE_TABLE_SCHEMA_JS,
           FILE_TREE_JS,
           HTTP_ENDPOINT_JS,
+          OPTION_SELECT_JS,
           SCROLL_SPY_JS,
         ]
       : [
@@ -188,6 +190,7 @@ ${contentHtml}
           DATABASE_TABLE_SCHEMA_JS,
           FILE_TREE_JS,
           HTTP_ENDPOINT_JS,
+          OPTION_SELECT_JS,
         ],
     bodyClassName: BODY_CLASSES,
   };

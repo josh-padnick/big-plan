@@ -1,0 +1,94 @@
+// Owns the local option-selection preview shared by BigDecision and
+// SmallDecisionSet. The server renders every option as static content - that
+// IS the no-JavaScript document - and this enhancement turns each undecided
+// decision's options into a radio group so a reader can mark the option they
+// would choose. The selection lives only in the page; the future live layer
+// will transport it to the authoring agent.
+
+const decisionRoots = document.querySelectorAll<HTMLElement>(
+  "[data-big-decision], [data-small-decision]",
+);
+
+for (const root of decisionRoots) {
+  // A decided decision's outcome is authored; reader selection would only
+  // contradict the recorded choice.
+  if (root.dataset.decisionState === "decided") {
+    continue;
+  }
+  const group = root.querySelector<HTMLElement>("[data-decision-options]");
+  if (group === null) {
+    continue;
+  }
+  const options = [...group.querySelectorAll<HTMLElement>("[data-option]")];
+  if (options.length < 2) {
+    continue;
+  }
+
+  const question = root
+    .querySelector("[data-decision-question]")
+    ?.textContent?.trim();
+  group.setAttribute("role", "radiogroup");
+  if (question !== undefined && question !== "") {
+    group.setAttribute("aria-label", question);
+  }
+
+  const select = (index: number): void => {
+    for (const [position, option] of options.entries()) {
+      const selected = position === index;
+      option.setAttribute("aria-checked", selected ? "true" : "false");
+      option.tabIndex = selected || (index === -1 && position === 0) ? 0 : -1;
+      if (selected) {
+        option.dataset.optionSelected = "";
+      } else {
+        delete option.dataset.optionSelected;
+      }
+    }
+  };
+
+  for (const [index, option] of options.entries()) {
+    option.setAttribute("role", "radio");
+    option.classList.add("cursor-pointer");
+    const title = option
+      .querySelector("[data-option-title]")
+      ?.textContent?.trim();
+    if (title !== undefined && title !== "") {
+      option.setAttribute("aria-label", title);
+    }
+    option.addEventListener("click", (event) => {
+      // The details disclosure keeps its own click semantics; opening the
+      // deeper layer should not read as choosing the option.
+      if (
+        event.target instanceof Element &&
+        event.target.closest("details") !== null
+      ) {
+        return;
+      }
+      select(index);
+    });
+    option.addEventListener("keydown", (event) => {
+      if (event.target !== option) {
+        return;
+      }
+      if (event.key === " " || event.key === "Enter") {
+        event.preventDefault();
+        select(index);
+        return;
+      }
+      const destination =
+        event.key === "ArrowDown" || event.key === "ArrowRight"
+          ? (index + 1) % options.length
+          : event.key === "ArrowUp" || event.key === "ArrowLeft"
+            ? (index - 1 + options.length) % options.length
+            : undefined;
+      if (destination === undefined) {
+        return;
+      }
+      event.preventDefault();
+      select(destination);
+      options[destination]?.focus();
+    });
+  }
+
+  select(-1);
+  root.dataset.optionSelect = "";
+}

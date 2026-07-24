@@ -46,4 +46,22 @@
   article .big-decision-details > summary::marker {
     color: var(--color-muted);
   }
+  article .big-decision-option[data-option-selected] {
+    border-color: color-mix(in srgb, var(--decision-pro-c) 55%, var(--edge-c));
+    box-shadow: inset 3px 0 0 var(--decision-pro-c);
+  }
+  article
+    .big-decision-option[data-option-selected]
+    .big-decision-option-marker {
+    border-color: var(--decision-pro-c);
+  }
+  article
+    .big-decision-option[data-option-selected]
+    .big-decision-option-marker::after {
+    content: "";
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    background: var(--decision-pro-c);
+  }
 }

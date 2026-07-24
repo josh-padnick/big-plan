@@ -16,4 +16,16 @@
   article .small-decision-list > li + li {
     border-top: 1px solid var(--edge-c);
   }
+  article li[data-option-selected] .small-decision-option-marker {
+    align-items: center;
+    justify-content: center;
+    border-color: var(--color-accent);
+  }
+  article li[data-option-selected] .small-decision-option-marker::after {
+    content: "";
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    background: var(--color-accent);
+  }
 }

@@ -67,6 +67,7 @@ const renderOption = (option: CompiledSmallDecisionOption): Element => ({
               tagName: "span",
               properties: {
                 className: ["text-sm", "font-semibold", "text-ink"],
+                "data-option-title": "",
               },
               children: [text(option.title)],
             },
@@ -143,6 +144,7 @@ const renderDecision = ({
           tagName: "p",
           properties: {
             className: ["m-0", "text-sm", "font-semibold", "text-ink"],
+            "data-decision-question": "",
           },
           children: [text(decision.question)],
         },

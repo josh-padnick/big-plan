@@ -201,6 +201,7 @@ const renderOption = ({
                   tagName: "p",
                   properties: {
                     className: ["m-0", "text-sm", "font-semibold", "text-ink"],
+                    "data-option-title": "",
                   },
                   children: [text(option.title)],
                 },
@@ -357,6 +358,7 @@ const renderBigDecisionFigure = ({
               "font-semibold",
               "text-ink",
             ],
+            "data-decision-question": "",
           },
           children: [text(model.question)],
         },

@@ -124,9 +124,9 @@ describe("renderDocument affordances", () => {
     expect(html).not.toContain("@import");
   });
 
-  it("should inline one stylesheet plus the theme, copy, diff, snippet, table-schema, file-tree, http-endpoint, and scroll-spy scripts when rendering", () => {
+  it("should inline one stylesheet plus the theme, copy, diff, snippet, table-schema, file-tree, http-endpoint, option-select, and scroll-spy scripts when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
-    expect(html.match(/<script>/g)).toHaveLength(8);
+    expect(html.match(/<script>/g)).toHaveLength(9);
     expect(html).toContain("data-theme-toggle");
     expect(html).toContain("data-copy-code");
   });
