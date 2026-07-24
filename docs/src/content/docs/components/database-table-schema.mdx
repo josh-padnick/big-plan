@@ -7,12 +7,7 @@ import ThemeImage from "../../../components/ThemeImage.astro";
 import tableSchemaLight from "../../../assets/components/database-table-schema-light.png";
 import tableSchemaDark from "../../../assets/components/database-table-schema-dark.png";
 
-`DatabaseTableSchema` renders one table's schema from a compact, validated DBML subset: a header band with the schema-qualified name and table note, and a dense `Column | Type | Constraints | Default | Comment` grid in which every column is exactly one equal-rhythm row.
-The Constraints cell carries key badges, explicit nullability, foreign keys with their actions, check expressions, and numbered index references beside the column they govern.
-The tinted Indexes band below the grid numbers each index (`INDX 1`, `INDX 2`, ...) and leads with its name; the columns, method, and partial predicate follow in demoted muted text with the invariant note beneath.
-A column that an index uses as a key carries the matching `INDX n` pill, while a column that only appears in a partial-index predicate is marked `WHERE INDX n`, so a reviewer can answer "is this column indexed?" without leaving the row.
-It is optimized for Postgres but generic: column types are opaque text, so any engine's types render unchanged.
-The grid and sections are fully server-rendered; JavaScript only powers the actions menu (copy table name, copy source) and a full-screen view that gives a wide schema the whole viewport, and a wide grid scrolls inside the figure instead of widening the page.
+`DatabaseTableSchema` shows one table's shape - columns, keys, constraints, defaults, and the indexes behind its access paths - as a dense psql-style grid, so a plan that proposes or changes a table can be reviewed on the schema itself instead of prose approximations of it.
 
 ## How it looks
 
@@ -21,6 +16,16 @@ The grid and sections are fully server-rendered; JavaScript only powers the acti
   dark={tableSchemaDark}
   alt="A table schema figure with a schema-qualified header, a dense columns grid whose Constraints cells carry PK and FK badges, foreign keys, and checks, and an Indexes section"
 />
+
+## Anatomy
+
+The figure opens with a header band carrying the schema-qualified name and table note, above a `Column | Type | Constraints | Default | Comment` grid in which every column is exactly one equal-rhythm row.
+The Constraints cell carries key badges, explicit nullability, foreign keys with their actions, check expressions, and numbered index references beside the column they govern.
+
+The tinted Indexes band below the grid numbers each index (`INDX 1`, `INDX 2`, ...) and leads with its name; the columns, method, and partial predicate follow in demoted muted text with the invariant note beneath.
+A column that an index uses as a key carries the matching `INDX n` pill, while a column that only appears in a partial-index predicate is marked `WHERE INDX n`, so a reviewer can answer "is this column indexed?" without leaving the row.
+
+The rendering is optimized for Postgres but generic: column types are opaque text, so any engine's types render unchanged.
 
 ## When to use it
 
@@ -104,6 +109,7 @@ Capture them beside the component: exact DDL in a `sql` fence, decision-worthy r
 
 ## Reader controls
 
+The grid and sections are fully server-rendered; JavaScript powers only the actions menu and the full-screen view, and a wide grid scrolls inside the figure instead of widening the page.
 The actions menu's Copy table name action copies the exact `name` attribute, while Copy source copies only the raw `dbml` fence.
 As MDX parses fenced content, copied source uses LF line endings and includes a trailing newline.
 The full-screen control opens a modal named by the table, keeps a tall schema's header in place while its body scrolls, and returns the reader to the same page position when it closes.
