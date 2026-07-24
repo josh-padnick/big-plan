@@ -89,6 +89,12 @@ for (const root of decisionRoots) {
     });
   }
 
-  select(-1);
+  // Accepting the agent's recommendation should cost zero clicks, so the
+  // recommended option starts selected; changing it stays one click.
+  select(
+    options.findIndex(
+      (option) => option.dataset.optionRecommended !== undefined,
+    ),
+  );
   root.dataset.optionSelect = "";
 }

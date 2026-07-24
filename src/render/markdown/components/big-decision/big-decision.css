@@ -1,8 +1,11 @@
-/* BigDecision status, outcome, option-state, and signed-tradeoff variants,
-   colocated with the component that emits these stable selector contracts. */
+/* BigDecision status, outcome, option-state, matrix, verdict-tone, and info
+   disclosure variants, colocated with the component that emits them. */
 
 @layer components {
-  article .big-decision-status-open,
+  article .big-decision-status-open {
+    color: var(--callout-warning-c);
+    background: color-mix(in srgb, var(--callout-warning-c) 14%, transparent);
+  }
   article .big-decision-recommended-pill {
     color: var(--color-accent);
     background: color-mix(in srgb, var(--color-accent) 14%, transparent);
@@ -20,7 +23,7 @@
     border-color: color-mix(in srgb, var(--decision-pro-c) 55%, var(--edge-c));
     box-shadow: inset 3px 0 0 var(--decision-pro-c);
   }
-  article .big-decision-option-muted .big-decision-option-head {
+  article .big-decision-option-muted {
     background: color-mix(in srgb, var(--surface-c) 55%, var(--bg));
   }
   article .big-decision-option-muted p,
@@ -37,11 +40,40 @@
     border-color: var(--decision-pro-c);
     background: var(--decision-pro-c);
   }
-  article .big-decision-tradeoff-pro > svg {
+  /* The prose stylesheet tints and borders markdown-table cells; the matrix
+     draws its own row lines and keeps cells on the card background. */
+  article .big-decision-matrix th,
+  article .big-decision-matrix td {
+    border-bottom: 0;
+    background: transparent;
+  }
+  article .big-decision-matrix-row > th,
+  article .big-decision-matrix-row > td {
+    border-top: 1px solid var(--edge-c);
+  }
+  article .big-decision-tone-good > svg {
     color: var(--decision-pro-c);
   }
-  article .big-decision-tradeoff-con > svg {
+  article .big-decision-tone-bad > svg {
     color: var(--decision-con-c);
+  }
+  article .big-decision-tone-mixed > svg {
+    color: var(--callout-warning-c);
+  }
+  article .big-decision-tone-neutral > svg {
+    color: var(--color-muted);
+  }
+  article .big-decision-info {
+    display: inline;
+  }
+  article .big-decision-info > summary {
+    list-style: none;
+  }
+  article .big-decision-info > summary::-webkit-details-marker {
+    display: none;
+  }
+  article .big-decision-info[open] > summary {
+    color: var(--color-accent);
   }
   article .big-decision-details > summary::marker {
     color: var(--color-muted);

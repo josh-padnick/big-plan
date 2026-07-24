@@ -1,5 +1,5 @@
-// Browser journey for BigDecision's standalone card: status pills, option
-// states, signed tradeoffs, native disclosure, no-JavaScript readability,
+// Browser journey for BigDecision's criteria matrix: status pills, verdict
+// cells, info disclosures, selection preview, no-JavaScript readability,
 // and light/dark palettes.
 
 import { expect, test } from "./fixtures";
@@ -20,7 +20,6 @@ test("should review standalone plan decisions", async ({
   const deferredDecision = decisions.filter({
     has: page.locator('[data-decision-status="deferred"]'),
   });
-  const details = openDecision.locator("details");
 
   await test.step("each decision stands alone with its status pill", async () => {
     await expect(decisions).toHaveCount(3);
@@ -32,78 +31,74 @@ test("should review standalone plan decisions", async ({
     await expect(openDecision).toContainText("PostgreSQL");
     await expect(decidedDecision).toContainText("Alongside the source plan");
     await expect(deferredDecision).toContainText(
-      "Wait for signed-in reviewer identities",
+      "Wait for signed-in identities",
     );
   });
 
-  await test.step("the tradeoffs group under Pros and Cons headers with signed markers", async () => {
-    const pros = page.locator('[data-decision-tradeoff="pro"]');
-    const cons = page.locator('[data-decision-tradeoff="con"]');
-    await expect(pros).toHaveCount(8);
-    await expect(cons).toHaveCount(7);
-    await expect(pros.locator('[data-lucide="check"]')).toHaveCount(8);
-    await expect(cons.locator('[data-lucide="minus"]')).toHaveCount(7);
+  await test.step("the matrix compares every option across the criteria", async () => {
+    const matrix = openDecision.locator("table.big-decision-matrix");
+    await expect(matrix).toBeVisible();
+    await expect(matrix.locator("tbody th")).toHaveCount(4);
+    await expect(matrix.locator("thead [data-option]")).toHaveCount(3);
+    await expect(matrix.locator("[data-score-tone]")).toHaveCount(12);
     await expect(
-      page.locator('[data-tradeoff-group="pro"]').first(),
-    ).toContainText("Pros");
-    await expect(
-      page.locator('[data-tradeoff-group="con"]').first(),
-    ).toContainText("Cons");
-  });
-
-  await test.step("the recommended badge appears once per decision", async () => {
-    for (const decision of await decisions.all()) {
-      await expect(
-        decision.locator(".big-decision-recommended-pill"),
-      ).toHaveCount(1);
-    }
-  });
-
-  await test.step("the details disclosure opens and closes natively", async () => {
-    await expect(details).toHaveCount(1);
-    await expect(details).toHaveJSProperty("open", false);
-    await expect(
-      details.getByText(/The repository layer will own/),
-    ).toBeHidden();
-    await details.getByText("Details", { exact: true }).click();
-    await expect(details).toHaveJSProperty("open", true);
-    await expect(
-      details.getByText(/The repository layer will own/),
+      matrix.locator('[data-score-tone="bad"] [data-lucide="x"]').first(),
     ).toBeVisible();
-    await details.getByText("Details", { exact: true }).click();
-    await expect(details).toHaveJSProperty("open", false);
+    await expect(
+      matrix
+        .locator('[data-score-tone="mixed"] [data-lucide="triangle-alert"]')
+        .first(),
+    ).toBeVisible();
   });
 
-  await test.step("the decided outcome keeps losing options visible", async () => {
+  await test.step("the reversibility line names the cost of changing course", async () => {
+    await expect(page.locator("[data-decision-reversibility]")).toHaveCount(3);
+    await expect(
+      openDecision.locator("[data-decision-reversibility]"),
+    ).toContainText("Moderate.");
+  });
+
+  await test.step("an info disclosure expands its cell in place", async () => {
+    const info = openDecision.locator(".big-decision-info").first();
+    await expect(
+      info.getByText(/Selection anchors and their threads/),
+    ).toBeHidden();
+    await info.locator("summary").click();
+    await expect(
+      info.getByText(/Selection anchors and their threads/),
+    ).toBeVisible();
+  });
+
+  await test.step("the recommended option starts selected and one click moves it", async () => {
+    const options = openDecision.locator("[data-option]");
+    await expect(options.nth(0)).toHaveAttribute("aria-checked", "true");
+    await expect(options.nth(0)).toHaveAttribute("data-option-selected", "");
+    await options.nth(1).click();
+    await expect(options.nth(1)).toHaveAttribute("aria-checked", "true");
+    await expect(options.nth(0)).toHaveAttribute("aria-checked", "false");
+  });
+
+  await test.step("a decided decision keeps its authored outcome unselectable", async () => {
     await expect(decidedDecision.locator("[data-decision-outcome]")).toHaveText(
       "Chosen: Alongside the source plan",
     );
-    await expect(decidedDecision.locator("[data-option-chosen]")).toHaveCount(
-      1,
-    );
+    await expect(decidedDecision.locator('[role="radio"]')).toHaveCount(0);
     await expect(
       decidedDecision.locator(".big-decision-option-muted"),
     ).toHaveCount(1);
     await expect(decidedDecision).toContainText("Tool-owned cache directory");
   });
 
-  await test.step("clicking an option previews a local selection", async () => {
-    await expect(openDecision).toHaveAttribute("data-option-select", "");
-    const openOptions = openDecision.locator("[data-option]");
-    await openOptions.nth(1).click();
-    await expect(openOptions.nth(1)).toHaveAttribute("aria-checked", "true");
-    await expect(openOptions.nth(1)).toHaveAttribute(
-      "data-option-selected",
-      "",
-    );
-    await openOptions.nth(0).click();
-    await expect(openOptions.nth(0)).toHaveAttribute("aria-checked", "true");
-    await expect(openOptions.nth(1)).toHaveAttribute("aria-checked", "false");
-  });
-
-  await test.step("a decided decision keeps its authored outcome unselectable", async () => {
-    await expect(decidedDecision.locator('[role="radiogroup"]')).toHaveCount(0);
-    await expect(decidedDecision.locator('[role="radio"]')).toHaveCount(0);
+  await test.step("the details drawer opens below the matrix", async () => {
+    const drawer = openDecision.locator("[data-option-details]");
+    await expect(drawer).toHaveCount(1);
+    await expect(
+      drawer.getByText(/The initial schema needs only/),
+    ).toBeHidden();
+    await drawer.getByText("PostgreSQL details").click();
+    await expect(
+      drawer.getByText(/The initial schema needs only/),
+    ).toBeVisible();
   });
 
   await test.step("every decision reads without JavaScript", async () => {
@@ -111,21 +106,20 @@ test("should review standalone plan decisions", async ({
     const staticPage = await context.newPage();
     await staticPage.goto(bigDecisionViewerUrl);
     await expect(staticPage.locator("[data-big-decision]")).toHaveCount(3);
+    await expect(staticPage.locator("[data-score-tone]")).toHaveCount(20);
+    await expect(staticPage.locator('[role="radio"]')).toHaveCount(0);
     await expect(staticPage.locator("body")).toContainText(
       "Chosen: Alongside the source plan",
     );
+    const staticInfo = staticPage.locator(".big-decision-info").first();
+    await staticInfo.locator("summary").click();
     await expect(
-      staticPage.locator('[data-decision-tradeoff="pro"]'),
-    ).toHaveCount(8);
-    const staticDetails = staticPage.locator("details");
-    await staticDetails.getByText("Details", { exact: true }).click();
-    await expect(
-      staticDetails.getByText(/The repository layer will own/),
+      staticInfo.getByText(/Selection anchors and their threads/),
     ).toBeVisible();
     await context.close();
   });
 
-  await test.step("both themes keep pills and tints legible", async () => {
+  await test.step("both themes keep pills and verdict icons legible", async () => {
     for (const theme of ["light", "dark"]) {
       const palette = await page
         .locator("[data-big-decision]")
@@ -134,8 +128,7 @@ test("should review standalone plan decisions", async ({
           document.documentElement.dataset.theme = selectedTheme;
           return [
             ...decision.querySelectorAll(
-              ".big-decision-status-pill, .big-decision-recommended-pill, " +
-                ".big-decision-tradeoff",
+              ".big-decision-status-pill, .big-decision-recommended-pill",
             ),
           ].map((element) => {
             const style = getComputedStyle(element);
@@ -146,6 +139,15 @@ test("should review standalone plan decisions", async ({
       expect(
         palette.every(({ color, background }) => color !== background),
       ).toBe(true);
+      const goodColor = await page
+        .locator(".big-decision-tone-good > svg")
+        .first()
+        .evaluate((element) => getComputedStyle(element).color);
+      const badColor = await page
+        .locator(".big-decision-tone-bad > svg")
+        .first()
+        .evaluate((element) => getComputedStyle(element).color);
+      expect(goodColor).not.toBe(badColor);
     }
   });
 });

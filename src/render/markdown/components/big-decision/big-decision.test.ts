@@ -1,5 +1,5 @@
-// Tests BigDecision's static HAST anatomy, state emphasis, native disclosure,
-// and end-to-end rendering of the recursively scoped grammar.
+// Tests BigDecision's static matrix anatomy, state emphasis, info
+// disclosures, and end-to-end rendering of the criteria grammar.
 
 import { describe, expect, it } from "vitest";
 import { compileMarkdown, serializeMarkdown } from "../../convert.js";
@@ -9,38 +9,46 @@ const render = (markdown: string): string => {
   return serializeMarkdown({ root });
 };
 
-const OPEN_DECISION = `<BigDecision question="Which store?" status="open">
+const OPEN_DECISION = `<BigDecision question="Which store?" status="open" reversibility="Cheap to change later.">
 
 Context with a [link](https://example.com).
 
-<Option title="PostgreSQL" recommended summary="Managed store.">
+<Criterion title="Setup">
 
-<Pro>
-Mature **tooling**.
-</Pro>
+Why setup matters here.
 
-<Con>
-Needs a server.
-</Con>
+</Criterion>
+
+<Criterion title="Scale" />
+
+<Option title="PostgreSQL" recommended summary="The team already runs it.">
+
+<Score criterion="Setup" verdict="Needs a server" tone="bad" />
+
+<Score criterion="Scale" verdict="Ready" tone="good">
+
+Concurrent **writers** work today.
+
+</Score>
 
 Long detail with \`code\`.
 
 </Option>
 
-<Option title="SQLite" />
+<Option title="SQLite">
+
+<Score criterion="Setup" verdict="Zero setup" tone="good" />
+
+<Score criterion="Scale" verdict="Single writer" tone="mixed" />
+
+</Option>
 
 </BigDecision>
 `;
 
 const DECIDED_DECISION = `<BigDecision question="Which store?" status="decided">
 
-<Option title="PostgreSQL" chosen summary="Managed store.">
-
-<Pro>
-Mature tooling.
-</Pro>
-
-</Option>
+<Option title="PostgreSQL" chosen summary="The team already runs it." />
 
 <Option title="SQLite" summary="Embedded database." />
 
@@ -48,29 +56,33 @@ Mature tooling.
 `;
 
 describe("BigDecision rendering", () => {
-  it("should render the complete static anatomy when the decision is open", () => {
+  it("should render the complete matrix anatomy when criteria are declared", () => {
     const html = render(OPEN_DECISION);
 
     expect(html).toContain('data-big-decision=""');
     expect(html).toContain('data-decision-state="open"');
     expect(html).toContain('id="decision-which-store"');
     expect(html).toContain('data-decision-status="open"');
-    expect(html).toContain("Which store?");
+    expect(html).toContain('data-decision-question=""');
     expect(html).toContain('href="https://example.com"');
+    expect(html).toContain('data-decision-reversibility=""');
+    expect(html).toContain("Cheap to change later.");
+    expect(html).toContain("<table");
+    expect(html).toContain('id="criterion-setup"');
+    expect(html).toContain('id="criterion-scale"');
     expect(html).toContain('id="option-postgresql"');
     expect(html).toContain('data-option-recommended=""');
     expect(html).toContain("Recommended");
-    expect(html).toContain("Managed store.");
-    expect(html).toContain('data-decision-tradeoff="pro"');
-    expect(html).toContain('data-decision-tradeoff="con"');
-    expect(html).toContain('data-tradeoff-group="pro"');
-    expect(html).toContain('data-tradeoff-group="con"');
-    expect(html).toContain(">Pros<");
-    expect(html).toContain(">Cons<");
-    expect(html).not.toContain("big-decision-option-recommended");
-    expect(html).toContain("<strong>tooling</strong>");
-    expect(html).toContain("<details");
-    expect(html).toContain("<summary");
+    expect(html).toContain('data-score-tone="bad"');
+    expect(html).toContain('data-score-tone="good"');
+    expect(html).toContain('data-score-tone="mixed"');
+    expect(html).toContain("Needs a server");
+    expect(html).toContain('data-lucide="x"');
+    expect(html).toContain('data-lucide="undo-2"');
+    expect(html).toContain("<strong>writers</strong>");
+    expect(html).toContain("big-decision-info");
+    expect(html).toContain("Why setup matters here.");
+    expect(html).toContain("PostgreSQL details");
     expect(html).toContain("<code>code</code>");
     expect(html).not.toContain("data-decision-outcome");
   });
@@ -86,18 +98,17 @@ describe("BigDecision rendering", () => {
     expect(html).toContain("Embedded database.");
   });
 
-  it("should omit the details disclosure when an option has only tradeoffs", () => {
+  it("should render a stacked fallback when no criteria are declared", () => {
     const html = render(DECIDED_DECISION);
-    expect(html).not.toContain("<details");
-  });
-
-  it("should render no summary paragraph when an option omits it", () => {
-    const html = render(
-      '<BigDecision question="Q?">\n\n<Option title="A" />\n\n<Option title="B" summary="Explains B." />\n\n</BigDecision>\n',
-    );
-    expect(html).toContain("Explains B.");
+    expect(html).not.toContain("<table");
     const optionCount = html.split('data-option=""').length - 1;
     expect(optionCount).toBe(2);
+  });
+
+  it("should omit info disclosures when a score has no body", () => {
+    const html = render(DECIDED_DECISION);
+    expect(html).not.toContain("big-decision-info");
+    expect(html).not.toContain("<details");
   });
 
   it("should render the recommended pill exactly once per decision", () => {

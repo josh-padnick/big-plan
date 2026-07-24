@@ -18,7 +18,7 @@ A component's attributes are strings or bare booleans, structured data arrives a
 | [CodeDiff](/components/code-diff/)                        | Review one file's unified diff with switchable views, gutters, and line-anchored annotations.                        |
 | [CodeSnippet](/components/code-snippet/)                  | Inspect existing code with optional file identity, file-absolute line numbers, and annotations.                      |
 | [DatabaseTableSchema](/components/database-table-schema/) | Review one table's DBML-subset schema and titled verbatim DDL.                                                       |
-| [BigDecision](/components/big-decision/)                  | Review one weighty decision with lifecycle status, options, signed tradeoffs, a recommendation, and an outcome.      |
+| [BigDecision](/components/big-decision/)                  | Review one weighty decision as a scored criteria matrix with lifecycle status, a recommendation, and an outcome.     |
 | [SmallDecisionSet](/components/small-decision-set/)       | Collect a plan's small questions as a compact numbered list of briefly explained options.                            |
 | [FileTree](/components/file-tree/)                        | Show a plain file hierarchy with optional per-entry notes.                                                           |
 | [FileTreeDiff](/components/file-tree-diff/)               | Review per-entry change status as a combined tree or before-and-after views.                                         |
@@ -26,7 +26,7 @@ A component's attributes are strings or bare booleans, structured data arrives a
 | [GrpcMethod](/components/grpc-method/)                    | Review one gRPC method headed by its proto signature, with message fields, status codes, and grouped examples.       |
 | [HttpEndpoint](/components/http-endpoint/)                | Review one HTTP endpoint's contract: parameters, request body, and status-coded responses.                           |
 
-Scoped child components are valid only inside their declaring parent: `Annotation` in `CodeDiff` and `CodeSnippet`; `Ddl` in `DatabaseTableSchema`; `Option`, `Pro`, and `Con` in `BigDecision`; `SmallDecision` and `Option` in `SmallDecisionSet`; `Param`, `Request`, and `Response` in `HttpEndpoint`; `Argument`, `Field`, `Returns`, `Operation`, `Variables`, and `Response` in `GraphqlOperation`; `Field`, `Error`, `Example`, and `Proto` in `GrpcMethod`.
+Scoped child components are valid only inside their declaring parent: `Annotation` in `CodeDiff` and `CodeSnippet`; `Ddl` in `DatabaseTableSchema`; `Criterion`, `Option`, and `Score` in `BigDecision`; `SmallDecision` and `Option` in `SmallDecisionSet`; `Param`, `Request`, and `Response` in `HttpEndpoint`; `Argument`, `Field`, `Returns`, `Operation`, `Variables`, and `Response` in `GraphqlOperation`; `Field`, `Error`, `Example`, and `Proto` in `GrpcMethod`.
 
 ## Coming next
 

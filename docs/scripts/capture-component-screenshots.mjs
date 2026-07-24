@@ -165,31 +165,41 @@ CREATE POLICY refresh_jobs_service_all ON catalog.refresh_jobs
 </DatabaseTableSchema>
 `;
 
-const BIG_DECISION_FIXTURE = `<BigDecision question="Which persistence layer should back review comments?" status="open">
+const BIG_DECISION_FIXTURE = `<BigDecision question="Which persistence layer should back review comments?" status="open" reversibility="Moderate. The repository layer isolates SQL, so swapping engines later costs a data migration, not a rewrite.">
 
 Comments need durable identities and ordered replies without blocking a later multi-reviewer workflow.
 
-<Option title="PostgreSQL" recommended summary="Use the relational store the team already operates.">
+<Criterion title="Anchor integrity">
 
-<Pro>
-Transactions keep threads and their selection anchors consistent.
-</Pro>
+Selection anchors and their threads must stay consistent through crashes.
 
-<Con>
-Local development requires a database process.
-</Con>
+</Criterion>
+
+<Criterion title="Local-first setup" />
+
+<Criterion title="Concurrent reviewers" />
+
+<Option title="PostgreSQL" recommended summary="The relational store the team already operates.">
+
+<Score criterion="Anchor integrity" verdict="Strong" tone="good">
+
+Transactions keep a thread and its anchor in one atomic write.
+
+</Score>
+
+<Score criterion="Local-first setup" verdict="Needs a server" tone="bad" />
+
+<Score criterion="Concurrent reviewers" verdict="Ready" tone="good" />
 
 </Option>
 
-<Option title="SQLite" summary="Keep review state in one embedded database.">
+<Option title="SQLite" summary="One embedded database beside the local server.">
 
-<Pro>
-The zero-service setup matches the local-first installation story.
-</Pro>
+<Score criterion="Anchor integrity" verdict="Strong" tone="good" />
 
-<Con>
-The single-writer model adds a migration point before shared review scales.
-</Con>
+<Score criterion="Local-first setup" verdict="Zero setup" tone="good" />
+
+<Score criterion="Concurrent reviewers" verdict="Single writer" tone="mixed" />
 
 </Option>
 

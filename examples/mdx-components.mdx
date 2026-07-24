@@ -31,33 +31,43 @@ It already has regional concurrency controls and the required service account.
 
 The queue boundary is the remaining architectural choice in this excerpt, so its options stay grouped with the tradeoffs the reviewer must judge.
 
-<BigDecision question="Where should refresh-job deduplication live?" status="open">
+<BigDecision question="Where should refresh-job deduplication live?" status="open" reversibility="Moderate. Moving the check later means re-teaching every producer, so pick the boundary now.">
 
 The enqueue path must collapse repeated refreshes for the same cache key without coupling request handlers to worker internals.
 
-<Option title="Queue adapter" recommended summary="Make deduplication part of the catalog queue's enqueue contract.">
+<Criterion title="Idempotency guarantee" />
 
-<Pro>
-Every producer gets the same idempotency guarantee.
-</Pro>
+<Criterion title="Queue stays transport-only" />
 
-<Con>
-The adapter must expose enough telemetry to distinguish a new job from a duplicate.
-</Con>
+<Criterion title="Telemetry" />
 
-Keep the deduplication key scoped by region so a refresh in one deployment cannot suppress the equivalent job in another.
+<Option title="Queue adapter" recommended summary="Deduplication joins the enqueue contract.">
+
+<Score criterion="Idempotency guarantee" verdict="Every producer" tone="good" />
+
+<Score criterion="Queue stays transport-only" verdict="No" tone="bad" />
+
+<Score criterion="Telemetry" verdict="Needs new events" tone="mixed">
+
+The adapter must distinguish a new job from a suppressed duplicate.
+
+</Score>
+
+Keep the deduplication key scoped by region so one deployment cannot suppress another's refresh.
 
 </Option>
 
-<Option title="Request handler" summary="Check for an in-flight job before each route publishes.">
+<Option title="Request handler" summary="Each route checks for an in-flight job first.">
 
-<Pro>
-The queue abstraction stays transport-only.
-</Pro>
+<Score criterion="Idempotency guarantee" verdict="Per producer" tone="bad">
 
-<Con>
 Every producer must reproduce the same race-prone check-and-publish sequence.
-</Con>
+
+</Score>
+
+<Score criterion="Queue stays transport-only" verdict="Yes" tone="good" />
+
+<Score criterion="Telemetry" verdict="Existing logs" tone="good" />
 
 </Option>
 

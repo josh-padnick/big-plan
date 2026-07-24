@@ -50,16 +50,23 @@ test("should review a compact question list", async ({
     await expect(bareOption).toContainText("Same release");
   });
 
-  await test.step("clicking an option previews a local selection per question", async () => {
+  await test.step("the recommended answers start selected", async () => {
+    for (const question of await questions.all()) {
+      const selected = question.locator('[aria-checked="true"]');
+      await expect(selected).toHaveCount(1);
+      await expect(selected).toHaveAttribute("data-option-recommended", "");
+    }
+  });
+
+  await test.step("clicking an option moves the selection within its question", async () => {
     const firstOptions = questions.nth(0).locator("[data-option]");
-    await firstOptions.nth(0).click();
     await expect(firstOptions.nth(0)).toHaveAttribute("aria-checked", "true");
     await firstOptions.nth(1).click();
     await expect(firstOptions.nth(1)).toHaveAttribute("aria-checked", "true");
     await expect(firstOptions.nth(0)).toHaveAttribute("aria-checked", "false");
-    await expect(questions.nth(1).locator('[aria-checked="true"]')).toHaveCount(
-      0,
-    );
+    await expect(
+      questions.nth(1).locator('[aria-checked="true"]'),
+    ).toHaveAttribute("data-option-recommended", "");
   });
 
   await test.step("arrow keys move the selection within one question", async () => {

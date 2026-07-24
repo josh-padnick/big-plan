@@ -1,4 +1,4 @@
-// Tests BigDecision's pure nested compiler and end-to-end positional
+// Tests BigDecision's pure criteria-matrix compiler and end-to-end positional
 // diagnostics across the complete authoring-validation matrix.
 
 import type { Element, ElementContent } from "hast";
@@ -35,7 +35,7 @@ const scoped = ({
   scopedChildren,
   line,
 }: {
-  readonly name: "Option" | "Pro" | "Con";
+  readonly name: "Criterion" | "Option" | "Score";
   readonly attributes?: Readonly<Record<string, ComponentAttributeValue>>;
   readonly children?: ReadonlyArray<ElementContent>;
   readonly scopedChildren?: ReadonlyArray<ScopedChild>;
@@ -48,6 +48,41 @@ const scoped = ({
   position: positionAt(line),
 });
 
+const criterion = ({
+  title,
+  line,
+  detail = [],
+}: {
+  readonly title: string;
+  readonly line: number;
+  readonly detail?: ReadonlyArray<ElementContent>;
+}): ScopedChild =>
+  scoped({ name: "Criterion", attributes: { title }, children: detail, line });
+
+const score = ({
+  criterion: criterionTitle,
+  verdict,
+  tone,
+  line,
+  detail = [],
+}: {
+  readonly criterion: string;
+  readonly verdict: string;
+  readonly tone?: string;
+  readonly line: number;
+  readonly detail?: ReadonlyArray<ElementContent>;
+}): ScopedChild =>
+  scoped({
+    name: "Score",
+    attributes: {
+      criterion: criterionTitle,
+      verdict,
+      ...(tone === undefined ? {} : { tone }),
+    },
+    children: detail,
+    line,
+  });
+
 const option = ({
   title,
   line,
@@ -55,7 +90,7 @@ const option = ({
   chosen = false,
   summary,
   detail = [],
-  tradeoffs = [],
+  scores = [],
 }: {
   readonly title: string;
   readonly line: number;
@@ -63,7 +98,7 @@ const option = ({
   readonly chosen?: boolean;
   readonly summary?: string;
   readonly detail?: ReadonlyArray<ElementContent>;
-  readonly tradeoffs?: ReadonlyArray<ScopedChild>;
+  readonly scores?: ReadonlyArray<ScopedChild>;
 }): ScopedChild =>
   scoped({
     name: "Option",
@@ -74,27 +109,27 @@ const option = ({
       ...(chosen ? { chosen: true } : {}),
     },
     children: detail,
-    scopedChildren: tradeoffs,
+    scopedChildren: scores,
     line,
   });
 
 const compile = ({
   attributes = { question: "Which store?" },
   children = [],
-  options = [
+  scopedChildren = [
     option({ title: "PostgreSQL", line: 3 }),
     option({ title: "SQLite", line: 7 }),
   ],
 }: {
   readonly attributes?: Readonly<Record<string, ComponentAttributeValue>>;
   readonly children?: ReadonlyArray<ElementContent>;
-  readonly options?: ReadonlyArray<ScopedChild>;
+  readonly scopedChildren?: ReadonlyArray<ScopedChild>;
 } = {}) => {
   const diagnostics = createDiagnosticCollector();
   const model = compileBigDecisionComponent({
     attributes,
     children,
-    scopedChildren: options,
+    scopedChildren,
     position: POSITION,
     diagnostics,
   });
@@ -115,31 +150,56 @@ const diagnosticsFor = (markdown: string) => {
 };
 
 describe("compileBigDecisionComponent", () => {
-  it("should compile the complete nested model when every layer is authored", () => {
+  it("should compile the complete matrix model when every layer is authored", () => {
     const { model, diagnostics } = compile({
-      attributes: { question: "Which store?", status: "open" },
+      attributes: {
+        question: "Which store?",
+        status: "open",
+        reversibility: "Cheap to change.",
+      },
       children: [paragraph("Context.")],
-      options: [
+      scopedChildren: [
+        criterion({
+          title: "Setup",
+          line: 2,
+          detail: [paragraph("Why setup matters.")],
+        }),
+        criterion({ title: "Scale", line: 3 }),
         option({
           title: "PostgreSQL",
-          line: 3,
+          line: 4,
           recommended: true,
-          summary: "Managed store.",
+          summary: "The team already runs it.",
           detail: [paragraph("Longer detail.")],
-          tradeoffs: [
-            scoped({
-              name: "Pro",
-              children: [paragraph("Mature tooling.")],
-              line: 4,
-            }),
-            scoped({
-              name: "Con",
-              children: [paragraph("Needs a server.")],
+          scores: [
+            score({
+              criterion: "Setup",
+              verdict: "Needs a server",
+              tone: "bad",
               line: 5,
+            }),
+            score({
+              criterion: "Scale",
+              verdict: "Ready",
+              tone: "good",
+              line: 6,
+              detail: [paragraph("Concurrent writers work today.")],
             }),
           ],
         }),
-        option({ title: "SQLite", line: 8 }),
+        option({
+          title: "SQLite",
+          line: 8,
+          scores: [
+            score({
+              criterion: "Setup",
+              verdict: "Zero setup",
+              tone: "good",
+              line: 9,
+            }),
+            score({ criterion: "Scale", verdict: "Single writer", line: 10 }),
+          ],
+        }),
       ],
     });
 
@@ -148,19 +208,33 @@ describe("compileBigDecisionComponent", () => {
       id: "decision-which-store",
       question: "Which store?",
       status: "open",
+      reversibility: "Cheap to change.",
+      criteria: [
+        { id: "criterion-setup", title: "Setup" },
+        { id: "criterion-scale", title: "Scale" },
+      ],
       options: [
         {
           id: "option-postgresql",
           title: "PostgreSQL",
-          summary: "Managed store.",
           recommended: true,
-          chosen: false,
-          tradeoffs: [{ kind: "pro" }, { kind: "con" }],
+          scores: [
+            { verdict: "Needs a server", tone: "bad" },
+            { verdict: "Ready", tone: "good" },
+          ],
         },
-        { id: "option-sqlite", title: "SQLite", recommended: false },
+        {
+          id: "option-sqlite",
+          title: "SQLite",
+          scores: [
+            { verdict: "Zero setup", tone: "good" },
+            { verdict: "Single writer", tone: "neutral" },
+          ],
+        },
       ],
     });
-    expect(model.context).toHaveLength(1);
+    expect(model.criteria[0]?.detail).toHaveLength(1);
+    expect(model.options[0]?.scores[1]?.detail).toHaveLength(1);
     expect(model.chosenOption).toBeUndefined();
   });
 
@@ -168,12 +242,13 @@ describe("compileBigDecisionComponent", () => {
     const { model, diagnostics } = compile();
     expect(diagnostics).toEqual([]);
     expect(model.status).toBe("open");
+    expect(model.criteria).toEqual([]);
   });
 
   it("should expose the chosen option when the decision is decided", () => {
     const { model, diagnostics } = compile({
       attributes: { question: "Which store?", status: "decided" },
-      options: [
+      scopedChildren: [
         option({ title: "PostgreSQL", line: 3, chosen: true }),
         option({ title: "SQLite", line: 7 }),
       ],
@@ -182,22 +257,124 @@ describe("compileBigDecisionComponent", () => {
     expect(model.chosenOption?.title).toBe("PostgreSQL");
   });
 
-  it("should deduplicate option ids when titles repeat while diagnosing", () => {
-    const { model } = compile({
-      options: [
-        option({ title: "Same", line: 3 }),
-        option({ title: "Same", line: 7 }),
+  it("should reject a verdict that exceeds the terseness cap", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        criterion({ title: "Setup", line: 2 }),
+        option({
+          title: "A",
+          line: 3,
+          scores: [
+            score({
+              criterion: "Setup",
+              verdict: "This verdict is a full sentence that defeats scanning",
+              line: 4,
+            }),
+          ],
+        }),
+        option({
+          title: "B",
+          line: 6,
+          scores: [score({ criterion: "Setup", verdict: "Fine", line: 7 })],
+        }),
       ],
     });
-    expect(model.options.map(({ id }) => id)).toEqual([
-      "option-same",
-      "option-same-2",
+    expect(diagnostics).toEqual([
+      {
+        line: 4,
+        column: 1,
+        message:
+          "Score verdict must stay within 32 characters; move longer reasoning into the Score body",
+      },
+    ]);
+  });
+
+  it("should reject a score for an unknown criterion", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        criterion({ title: "Setup", line: 2 }),
+        option({
+          title: "A",
+          line: 3,
+          scores: [
+            score({ criterion: "Setup", verdict: "Fine", line: 4 }),
+            score({ criterion: "Speed", verdict: "Fast", line: 5 }),
+          ],
+        }),
+        option({
+          title: "B",
+          line: 7,
+          scores: [score({ criterion: "Setup", verdict: "Fine", line: 8 })],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message: 'Score references unknown criterion "Speed"',
+      },
+    ]);
+  });
+
+  it("should reject a duplicate score and report the missing one once", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        criterion({ title: "Setup", line: 2 }),
+        option({
+          title: "A",
+          line: 3,
+          scores: [
+            score({ criterion: "Setup", verdict: "Fine", line: 4 }),
+            score({ criterion: "Setup", verdict: "Again", line: 5 }),
+          ],
+        }),
+        option({ title: "B", line: 7 }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message: 'Duplicate Score for criterion "Setup" in Option "A"',
+      },
+      {
+        line: 7,
+        column: 1,
+        message: 'Option "B" is missing a Score for criterion "Setup"',
+      },
+    ]);
+  });
+
+  it("should reject duplicate criterion titles", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        criterion({ title: "Setup", line: 2 }),
+        criterion({ title: "Setup", line: 3 }),
+        option({
+          title: "A",
+          line: 4,
+          scores: [score({ criterion: "Setup", verdict: "Fine", line: 5 })],
+        }),
+        option({
+          title: "B",
+          line: 7,
+          scores: [score({ criterion: "Setup", verdict: "Fine", line: 8 })],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: 'Duplicate Criterion title "Setup" in BigDecision',
+      },
     ]);
   });
 
   it("should reject a decision with fewer than two options", () => {
     const { diagnostics } = compile({
-      options: [option({ title: "Only", line: 3 })],
+      scopedChildren: [option({ title: "Only", line: 3 })],
     });
     expect(diagnostics).toEqual([
       {
@@ -208,25 +385,9 @@ describe("compileBigDecisionComponent", () => {
     ]);
   });
 
-  it("should reject duplicate option titles at the duplicate's position", () => {
-    const { diagnostics } = compile({
-      options: [
-        option({ title: "Same", line: 3 }),
-        option({ title: "Same", line: 7 }),
-      ],
-    });
-    expect(diagnostics).toEqual([
-      {
-        line: 7,
-        column: 1,
-        message: 'Duplicate Option title "Same" in BigDecision',
-      },
-    ]);
-  });
-
   it("should reject more than one recommended option", () => {
     const { diagnostics } = compile({
-      options: [
+      scopedChildren: [
         option({ title: "A", line: 3, recommended: true }),
         option({ title: "B", line: 7, recommended: true }),
       ],
@@ -241,26 +402,20 @@ describe("compileBigDecisionComponent", () => {
   });
 
   it("should reject a chosen option when the decision is not decided", () => {
-    for (const status of [undefined, "deferred"]) {
-      const { diagnostics } = compile({
-        attributes: {
-          question: "Which store?",
-          ...(status === undefined ? {} : { status }),
-        },
-        options: [
-          option({ title: "A", line: 3, chosen: true }),
-          option({ title: "B", line: 7 }),
-        ],
-      });
-      expect(diagnostics).toEqual([
-        {
-          line: 3,
-          column: 1,
-          message:
-            'A chosen Option requires its BigDecision to have status "decided"',
-        },
-      ]);
-    }
+    const { diagnostics } = compile({
+      scopedChildren: [
+        option({ title: "A", line: 3, chosen: true }),
+        option({ title: "B", line: 7 }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message:
+          'A chosen Option requires its BigDecision to have status "decided"',
+      },
+    ]);
   });
 
   it("should reject a decided decision without a chosen option", () => {
@@ -273,23 +428,6 @@ describe("compileBigDecisionComponent", () => {
         column: 1,
         message:
           'A BigDecision with status "decided" must contain exactly one chosen Option',
-      },
-    ]);
-  });
-
-  it("should reject a decided decision with two chosen options", () => {
-    const { diagnostics } = compile({
-      attributes: { question: "Which store?", status: "decided" },
-      options: [
-        option({ title: "A", line: 3, chosen: true }),
-        option({ title: "B", line: 7, chosen: true }),
-      ],
-    });
-    expect(diagnostics).toEqual([
-      {
-        line: 7,
-        column: 1,
-        message: "BigDecision cannot contain more than one chosen Option",
       },
     ]);
   });
@@ -310,59 +448,45 @@ describe("BigDecision end-to-end diagnostics", () => {
     ]);
   });
 
-  it("should reject an unknown status value with the enum voice", () => {
+  it("should reject an unknown tone with the enum voice", () => {
     expect(
       diagnosticsFor(
-        '<BigDecision question="Q?" status="settled">\n\n<Option title="A" />\n\n<Option title="B" />\n\n</BigDecision>\n',
+        '<BigDecision question="Q?">\n\n<Criterion title="Setup" />\n\n<Option title="A">\n\n<Score criterion="Setup" verdict="Fine" tone="great" />\n\n</Option>\n\n<Option title="B">\n\n<Score criterion="Setup" verdict="Fine" />\n\n</Option>\n\n</BigDecision>\n',
       ),
     ).toEqual([
       {
-        line: 1,
+        line: 7,
         column: 1,
         message:
-          'Invalid value for attribute "status"; expected one of: open, decided, deferred',
+          'Invalid value for attribute "tone"; expected one of: good, bad, mixed, neutral',
       },
     ]);
   });
 
-  it("should reject an unknown attribute on an option", () => {
+  it("should leave Score unknown when it skips its Option parent", () => {
     expect(
       diagnosticsFor(
-        '<BigDecision question="Q?">\n\n<Option title="A" weight="3" />\n\n<Option title="B" />\n\n</BigDecision>\n',
+        '<BigDecision question="Q?">\n\n<Score criterion="Setup" verdict="Fine" />\n\n<Option title="A" />\n\n<Option title="B" />\n\n</BigDecision>\n',
       ),
     ).toEqual([
       {
         line: 3,
         column: 1,
-        message: 'Unknown attribute "weight" on Option',
+        message: 'Unknown component "Score"',
       },
     ]);
   });
 
-  it("should leave Pro unknown when it skips its Option parent", () => {
+  it("should enforce the Score body policy against headings", () => {
     expect(
       diagnosticsFor(
-        '<BigDecision question="Q?">\n\n<Pro>\nStranded.\n</Pro>\n\n<Option title="A" />\n\n<Option title="B" />\n\n</BigDecision>\n',
+        '<BigDecision question="Q?">\n\n<Criterion title="Setup" />\n\n<Option title="A">\n\n<Score criterion="Setup" verdict="Fine">\n\n# Heading\n\n</Score>\n\n</Option>\n\n<Option title="B">\n\n<Score criterion="Setup" verdict="Fine" />\n\n</Option>\n\n</BigDecision>\n',
       ),
     ).toEqual([
       {
-        line: 3,
+        line: 9,
         column: 1,
-        message: 'Unknown component "Pro"',
-      },
-    ]);
-  });
-
-  it("should enforce the Pro body policy against headings", () => {
-    expect(
-      diagnosticsFor(
-        '<BigDecision question="Q?">\n\n<Option title="A">\n\n<Pro>\n# Heading\n</Pro>\n\n</Option>\n\n<Option title="B" />\n\n</BigDecision>\n',
-      ),
-    ).toEqual([
-      {
-        line: 6,
-        column: 1,
-        message: "Pro bodies cannot contain headings",
+        message: "Score bodies cannot contain headings",
       },
     ]);
   });
