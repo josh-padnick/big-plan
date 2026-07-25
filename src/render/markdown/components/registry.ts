@@ -284,18 +284,19 @@ const normalizeAttributes = ({
 type ParentNode = Root | Element | MdxJsxFlowElement;
 
 const collectExistingIds = (
-  node: Root | Element,
+  node: ParentNode,
   ids: Array<string> = [],
 ): ReadonlyArray<string> => {
   for (const child of node.children) {
-    if (child.type !== "element") {
-      continue;
+    if (child.type === "element") {
+      const id = child.properties.id;
+      if (typeof id === "string") {
+        ids.push(id);
+      }
     }
-    const id = child.properties.id;
-    if (typeof id === "string") {
-      ids.push(id);
+    if (child.type === "element" || child.type === "mdxJsxFlowElement") {
+      collectExistingIds(child, ids);
     }
-    collectExistingIds(child, ids);
   }
   return ids;
 };

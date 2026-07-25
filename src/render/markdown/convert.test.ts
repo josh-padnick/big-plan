@@ -231,6 +231,43 @@ describe("compileMarkdown component ids", () => {
     expect(new Set(elementIds).size).toBe(elementIds.length);
   });
 
+  it("should preserve heading ids nested inside decision components", () => {
+    const { elementIds, sections } = compileMarkdown({
+      markdown: `<BigDecision question="Foo">
+
+## Decision Foo
+
+<Option title="A" />
+
+<Option title="B" />
+
+</BigDecision>
+
+<SmallDecisionSet title="Foo">
+
+## Small Decision Set Foo
+
+<SmallDecision question="Bar?">
+
+<Option title="A" />
+
+<Option title="B" />
+
+</SmallDecision>
+
+</SmallDecisionSet>
+`,
+    });
+
+    expect(sections).toEqual([
+      { id: "decision-foo", text: "Decision Foo" },
+      { id: "small-decision-set-foo", text: "Small Decision Set Foo" },
+    ]);
+    expect(elementIds).toContain("decision-foo-2");
+    expect(elementIds).toContain("small-decision-set-foo-2");
+    expect(new Set(elementIds).size).toBe(elementIds.length);
+  });
+
   it("should namespace repeated decision components across one document", () => {
     const repeatedDecisions = `<BigDecision question="Same?">
 
