@@ -232,12 +232,51 @@ test("should review standalone plan decisions", async ({
     });
   });
 
+  await test.step("full-screen view scrolls tall decisions", async () => {
+    await openDecision.evaluate((decision) => {
+      const spacer = document.createElement("div");
+      spacer.dataset.tallDecisionTest = "";
+      spacer.style.height = "150vh";
+      decision.append(spacer);
+    });
+    await openDecision.locator("[data-decision-expand]").click();
+    const dialog = page.locator("dialog.component-dialog");
+    await expect(dialog).toBeVisible();
+    const dimensions = await openDecision.evaluate((decision) => ({
+      clientHeight: decision.clientHeight,
+      overflowY: getComputedStyle(decision).overflowY,
+      scrollHeight: decision.scrollHeight,
+    }));
+    expect(dimensions.overflowY).toBe("auto");
+    expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight);
+    await openDecision.evaluate((decision) => {
+      decision.scrollTop = decision.scrollHeight;
+    });
+    await expect
+      .poll(() => openDecision.evaluate((decision) => decision.scrollTop))
+      .toBeGreaterThan(0);
+    await openDecision.locator("[data-decision-expand]").click();
+    await expect(dialog).toHaveCount(0);
+    await openDecision
+      .locator("[data-tall-decision-test]")
+      .evaluate((spacer) => {
+        spacer.remove();
+      });
+  });
+
   await test.step("lifecycle actions are placeholders for the live layer", async () => {
     const actions = openDecision.locator("[data-decision-actions]");
     const note = actions.locator("[data-decision-action-note]");
-    await expect(note).toBeHidden();
+    await expect(note).toHaveRole("status");
+    await expect(note).toHaveAttribute("aria-live", "polite");
+    await expect(note).toHaveText("");
     await actions.locator("[data-decision-submit]").click();
     await expect(note).toBeVisible();
+    await note.evaluate((status) => {
+      status.textContent = "";
+    });
+    await actions.locator("[data-decision-defer]").click();
+    await expect(note).toContainText("later deliverable");
     const suggest = openDecision.locator("[data-decision-suggest]");
     await suggest.click();
     const form = openDecision.locator("[data-decision-suggest-form]");
@@ -247,17 +286,18 @@ test("should review standalone plan decisions", async ({
     await expect(form).toBeHidden();
     await expect(suggest).toBeVisible();
     await expect(suggest).toBeFocused();
-    await expect(
-      openDecision.locator("[data-decision-suggest-note]"),
-    ).toBeVisible();
+    const suggestNote = openDecision.locator("[data-decision-suggest-note]");
+    await expect(suggestNote).toHaveRole("status");
+    await expect(suggestNote).toHaveAttribute("aria-live", "polite");
+    await expect(suggestNote).toBeVisible();
     await suggest.click();
     await form.getByRole("button", { name: "Cancel" }).click();
     await expect(form).toBeHidden();
     await expect(suggest).toBeFocused();
-    await expect(actions.locator("[data-decision-defer]")).toBeVisible();
-    await expect(
-      decidedDecision.locator("[data-decision-reopen]"),
-    ).toBeVisible();
+    const decidedNote = decidedDecision.locator("[data-decision-action-note]");
+    await expect(decidedNote).toHaveRole("status");
+    await decidedDecision.locator("[data-decision-reopen]").click();
+    await expect(decidedNote).toContainText("later deliverable");
     await expect(
       deferredDecision.locator("[data-decision-reopen]"),
     ).toBeVisible();

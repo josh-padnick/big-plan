@@ -481,12 +481,14 @@ for (const component of document.querySelectorAll<HTMLElement>(
   const row = document.createElement("div");
   row.className = "flex flex-wrap items-center gap-x-3 gap-y-1";
   const note = document.createElement("p");
-  note.className = "mt-1.5 mb-0 text-xs text-muted";
+  note.className = "mb-0 text-xs text-muted";
   note.dataset.decisionActionNote = "";
-  note.hidden = true;
-  note.textContent = ACTION_NOTE;
+  note.setAttribute("role", "status");
+  note.setAttribute("aria-live", "polite");
+  note.setAttribute("aria-atomic", "true");
   const showNote = (): void => {
-    note.hidden = false;
+    note.classList.add("mt-1.5");
+    note.textContent = ACTION_NOTE;
   };
 
   if (state === "open") {
@@ -506,10 +508,11 @@ for (const component of document.querySelectorAll<HTMLElement>(
     suggest.dataset.decisionSuggest = "";
     suggest.textContent = "Suggest another option";
     const suggestNote = document.createElement("p");
-    suggestNote.className = "mt-1.5 mb-0 text-xs text-muted";
+    suggestNote.className = "mb-0 text-xs text-muted";
     suggestNote.dataset.decisionSuggestNote = "";
-    suggestNote.hidden = true;
-    suggestNote.textContent = ACTION_NOTE;
+    suggestNote.setAttribute("role", "status");
+    suggestNote.setAttribute("aria-live", "polite");
+    suggestNote.setAttribute("aria-atomic", "true");
 
     // The form builds lazily on first use so the static DOM stays lean.
     let suggestForm: HTMLFormElement | null = null;
@@ -555,7 +558,8 @@ for (const component of document.querySelectorAll<HTMLElement>(
         suggest.hidden = false;
         suggest.focus();
         form.hidden = true;
-        suggestNote.hidden = false;
+        suggestNote.classList.add("mt-1.5");
+        suggestNote.textContent = ACTION_NOTE;
         titleInput.value = "";
         whyInput.value = "";
       });
