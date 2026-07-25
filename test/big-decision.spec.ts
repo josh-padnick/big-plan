@@ -232,6 +232,37 @@ test("should review standalone plan decisions", async ({
     });
   });
 
+  await test.step("floating details scroll long explanations", async () => {
+    const info = openDecision.locator(".big-decision-criterion-help").first();
+    const body = info.locator(".big-decision-info-body");
+    await body.evaluate((element) => {
+      const spacer = document.createElement("div");
+      spacer.dataset.tallInfoTest = "";
+      spacer.style.height = "150vh";
+      element.append(spacer);
+    });
+    await info.locator("summary").focus();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Enter");
+    const dimensions = await body.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      overflowY: getComputedStyle(element).overflowY,
+      scrollHeight: element.scrollHeight,
+    }));
+    expect(dimensions.overflowY).toBe("auto");
+    expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight);
+    await body.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect
+      .poll(() => body.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0);
+    await page.keyboard.press("Escape");
+    await body.locator("[data-tall-info-test]").evaluate((spacer) => {
+      spacer.remove();
+    });
+  });
+
   await test.step("full-screen view scrolls tall decisions", async () => {
     await openDecision.evaluate((decision) => {
       const spacer = document.createElement("div");
@@ -357,4 +388,41 @@ test("should review standalone plan decisions", async ({
       expect(goodColor).not.toBe(badColor);
     }
   });
+});
+
+test("should isolate nested decision enhancements", async ({
+  page,
+  nestedDecisionViewerUrl,
+}) => {
+  await page.goto(nestedDecisionViewerUrl);
+  const decisions = page.locator("[data-big-decision]");
+  await expect(decisions).toHaveCount(2);
+
+  for (const decision of await decisions.all()) {
+    const ownedState = await decision.evaluate((root) => {
+      const owned = (selector: string) =>
+        [...root.querySelectorAll(selector)].filter(
+          (element) =>
+            element.closest("[data-big-decision], [data-small-decision]") ===
+            root,
+        );
+      return {
+        actions: owned("[data-decision-actions]").length,
+        expandControls: owned("[data-decision-expand]").filter(
+          (element) => element instanceof HTMLElement && !element.hidden,
+        ).length,
+        optionGroups: owned('[data-decision-options][role="radiogroup"]')
+          .length,
+        scoreRows: owned("[data-decision-score-row]").length,
+        suggestControls: owned("[data-decision-suggest]").length,
+      };
+    });
+    expect(ownedState).toEqual({
+      actions: 1,
+      expandControls: 1,
+      optionGroups: 1,
+      scoreRows: 1,
+      suggestControls: 1,
+    });
+  }
 });

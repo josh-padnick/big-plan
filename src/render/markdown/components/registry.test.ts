@@ -50,6 +50,7 @@ const NESTED_COMPONENT_DEFINITION = {
       markdownBody: {
         prohibited: {
           heading: "Branch bodies cannot contain headings",
+          registeredComponent: "Branch bodies cannot contain typed components",
         },
       },
       scopedChildren: {
@@ -197,6 +198,22 @@ describe("scoped child dispatch", () => {
     expect(diagnostics).toEqual([
       {
         line: 3,
+        column: 1,
+        message: "Branch bodies cannot contain headings",
+      },
+    ]);
+  });
+
+  it("should reset parent suppression at a declared child boundary", () => {
+    const { diagnostics } = compileWithRegistry({
+      markdown:
+        "<NestedFixture>\n<Branch>\n<Leaf>\n<NestedFixture>\n<Branch>\n# Nested component heading\n</Branch>\n</NestedFixture>\n</Leaf>\n</Branch>\n</NestedFixture>\n",
+      registry: NESTED_REGISTRY,
+    });
+
+    expect(diagnostics).toEqual([
+      {
+        line: 6,
         column: 1,
         message: "Branch bodies cannot contain headings",
       },

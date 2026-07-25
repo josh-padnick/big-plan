@@ -5,6 +5,11 @@
 // would choose. The selection lives only in the page; the future live layer
 // will transport it to the authoring agent.
 
+import {
+  ownedDecisionElement,
+  ownedDecisionElements,
+} from "../decision-dom/decision-dom.browser.js";
+
 const decisionRoots = document.querySelectorAll<HTMLElement>(
   "[data-big-decision], [data-small-decision]",
 );
@@ -31,11 +36,17 @@ for (const root of decisionRoots) {
   if (root.dataset.decisionState === "decided") {
     continue;
   }
-  const group = root.querySelector<HTMLElement>("[data-decision-options]");
+  const group = ownedDecisionElement<HTMLElement>({
+    root,
+    selector: "[data-decision-options]",
+  });
   if (group === null) {
     continue;
   }
-  const options = [...group.querySelectorAll<HTMLElement>("[data-option]")];
+  const options = ownedDecisionElements<HTMLElement>({
+    root,
+    selector: "[data-option]",
+  });
   if (options.length < 2) {
     continue;
   }
@@ -47,9 +58,10 @@ for (const root of decisionRoots) {
     continue;
   }
 
-  const question = root
-    .querySelector("[data-decision-question]")
-    ?.textContent?.trim();
+  const question = ownedDecisionElement<HTMLElement>({
+    root,
+    selector: "[data-decision-question]",
+  })?.textContent?.trim();
   group.setAttribute("role", "radiogroup");
   if (question !== undefined && question !== "") {
     group.setAttribute("aria-label", question);

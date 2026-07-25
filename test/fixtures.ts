@@ -21,6 +21,7 @@ type WorkerFixtures = {
   readonly componentsViewerUrl: string;
   readonly apiEndpointsViewerUrl: string;
   readonly bigDecisionViewerUrl: string;
+  readonly nestedDecisionViewerUrl: string;
   readonly smallDecisionSetViewerUrl: string;
   readonly sampleViewerUrl: string;
   readonly tableSchemaViewerUrl: string;
@@ -47,6 +48,39 @@ retry();
 </Annotation>
 
 </CodeDiff>
+`;
+
+const NESTED_DECISION_MDX = `# Nested decisions
+
+<BigDecision question="Which outer option should win?" status="open">
+
+The outer context introduces a complete decision.
+
+<BigDecision question="Which inner option should win?" status="open">
+
+<Criterion title="Inner criterion" />
+
+<Option title="Inner A" recommended summary="First inner option.">
+<Score criterion="Inner criterion" verdict="Strong" tone="good" />
+</Option>
+
+<Option title="Inner B" summary="Second inner option.">
+<Score criterion="Inner criterion" verdict="Weak" tone="bad" />
+</Option>
+
+</BigDecision>
+
+<Criterion title="Outer criterion" />
+
+<Option title="Outer A" recommended summary="First outer option.">
+<Score criterion="Outer criterion" verdict="Strong" tone="good" />
+</Option>
+
+<Option title="Outer B" summary="Second outer option.">
+<Score criterion="Outer criterion" verdict="Weak" tone="bad" />
+</Option>
+
+</BigDecision>
 `;
 
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
@@ -140,6 +174,25 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         join(repoRoot, "bin", "big-plan.mjs"),
         "render",
         join(repoRoot, "examples", "big-decision.mdx"),
+        outputPath,
+      ]);
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  nestedDecisionViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-nested-decision-"),
+      );
+      const inputPath = join(outputDir, "nested-decision.mdx");
+      const outputPath = join(outputDir, "nested-decision.html");
+      await writeFile(inputPath, NESTED_DECISION_MDX, "utf8");
+      await execFileAsync(process.execPath, [
+        join(repoRoot, "bin", "big-plan.mjs"),
+        "render",
+        inputPath,
         outputPath,
       ]);
       await use(pathToFileURL(outputPath).href);

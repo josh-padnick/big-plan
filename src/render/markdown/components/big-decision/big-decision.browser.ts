@@ -8,6 +8,7 @@ import {
   openComponentFullScreen,
   updateFullScreenControl,
 } from "../shared/full-screen/full-screen.browser.js";
+import { ownedDecisionElement } from "../shared/decision-dom/decision-dom.browser.js";
 
 const EXPAND_LABEL = "View decision full screen";
 
@@ -24,9 +25,10 @@ const applyDecisionExpandedState = ({
   } else {
     delete component.dataset.decisionExpanded;
   }
-  const button = component.querySelector<HTMLButtonElement>(
-    "[data-decision-expand]",
-  );
+  const button = ownedDecisionElement<HTMLButtonElement>({
+    root: component,
+    selector: "[data-decision-expand]",
+  });
   if (button !== null) {
     updateFullScreenControl({ button, expanded, expandLabel: EXPAND_LABEL });
   }
@@ -35,9 +37,10 @@ const applyDecisionExpandedState = ({
 for (const component of document.querySelectorAll<HTMLElement>(
   "[data-big-decision]",
 )) {
-  const button = component.querySelector<HTMLButtonElement>(
-    "[data-decision-expand]",
-  );
+  const button = ownedDecisionElement<HTMLButtonElement>({
+    root: component,
+    selector: "[data-decision-expand]",
+  });
   if (button === null) {
     continue;
   }
@@ -50,9 +53,10 @@ for (const component of document.querySelectorAll<HTMLElement>(
     }
     openComponentFullScreen({
       component,
-      labelElement: component.querySelector<HTMLElement>(
-        "[data-decision-question]",
-      ),
+      labelElement: ownedDecisionElement<HTMLElement>({
+        root: component,
+        selector: "[data-decision-question]",
+      }),
       fallbackLabel: "Decision",
       onToggle: ({ expanded }) =>
         applyDecisionExpandedState({ component, expanded }),
@@ -169,7 +173,7 @@ const PRIORITY_MAX = PRIORITY_LABELS.length;
 const DEFAULT_PRIORITY = 2;
 
 const criterionName = (row: HTMLTableRowElement): string => {
-  const header = row.querySelector("th");
+  const header = row.querySelector(":scope > th");
   // A criterion with an explanation wraps its title in the help disclosure;
   // reading the whole cell would drag the tooltip body into the name.
   const helpTitle = header?.querySelector(
@@ -189,15 +193,18 @@ for (const component of document.querySelectorAll<HTMLElement>(
   if (component.dataset.decisionState === "decided") {
     continue;
   }
-  const matrix = component.querySelector<HTMLTableElement>(
-    "table.big-decision-matrix",
-  );
+  const matrix = ownedDecisionElement<HTMLTableElement>({
+    root: component,
+    selector: "table.big-decision-matrix",
+  });
   if (matrix === null) {
     continue;
   }
-  const rows = [...matrix.querySelectorAll<HTMLTableRowElement>("tbody tr")];
+  const rows = [
+    ...matrix.querySelectorAll<HTMLTableRowElement>(":scope > tbody > tr"),
+  ];
   const options = [
-    ...matrix.querySelectorAll<HTMLElement>("thead [data-option]"),
+    ...matrix.querySelectorAll<HTMLElement>(":scope > thead [data-option]"),
   ];
   if (rows.length === 0 || options.length < 2) {
     continue;
@@ -216,7 +223,8 @@ for (const component of document.querySelectorAll<HTMLElement>(
     readonly index: number;
     readonly column: number;
   }): number => {
-    const cell = row.querySelectorAll("td")[column];
+    const cell =
+      row.querySelectorAll<HTMLTableCellElement>(":scope > td")[column];
     const tone = cell?.dataset.scoreTone;
     const value = tone === undefined ? 0 : (TONE_VALUES[tone] ?? 0);
     return (priorities[index] ?? 0) * value;
@@ -334,7 +342,7 @@ for (const component of document.querySelectorAll<HTMLElement>(
     scoreRow.append(cell);
     return cell;
   });
-  matrix.querySelector("tbody")?.append(scoreRow);
+  matrix.querySelector(":scope > tbody")?.append(scoreRow);
 
   const recompute = (): void => {
     const totals = options.map((_, column) =>
@@ -391,7 +399,7 @@ for (const component of document.querySelectorAll<HTMLElement>(
   section.append(sectionSummary, breakdownBody, actions);
 
   for (const [index, row] of rows.entries()) {
-    const rowHeader = row.querySelector("th");
+    const rowHeader = row.querySelector(":scope > th");
     if (rowHeader === null) {
       continue;
     }
@@ -457,7 +465,10 @@ for (const component of document.querySelectorAll<HTMLElement>(
     apply(DEFAULT_PRIORITY);
   }
 
-  component.querySelector("[data-decision-options]")?.after(section);
+  ownedDecisionElement({
+    root: component,
+    selector: "[data-decision-options]",
+  })?.after(section);
 
   recompute();
   updateReset();
@@ -574,9 +585,10 @@ for (const component of document.querySelectorAll<HTMLElement>(
       suggest.hidden = true;
       suggestForm.querySelector("input")?.focus();
     });
-    const optionsSection = component.querySelector<HTMLElement>(
-      "[data-decision-options]",
-    );
+    const optionsSection = ownedDecisionElement<HTMLElement>({
+      root: component,
+      selector: "[data-decision-options]",
+    });
     optionsSection?.append(suggest, suggestNote);
 
     const defer = document.createElement("button");

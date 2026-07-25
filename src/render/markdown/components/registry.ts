@@ -199,7 +199,6 @@ const validateRegisteredComponentMarkdown = ({
         registry,
         parentDefinition: scopedDefinition,
         suppressRegisteredComponents:
-          suppressRegisteredComponents ||
           policy?.prohibited.registeredComponent !== undefined,
       });
       continue;
