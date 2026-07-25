@@ -176,7 +176,7 @@ const createPopover = ({
   summary.textContent = label;
   const body = document.createElement("div");
   body.className = `big-decision-info-body ${
-    wide ? "max-w-96" : "max-w-60"
+    wide ? "max-w-[30rem]" : "max-w-60"
   } text-xs font-normal text-muted`;
   details.append(summary, body);
   enhanceFloatingInfo({ info: details, hover: false });
@@ -205,7 +205,13 @@ const HOW_RANKING_POINTS: ReadonlyArray<string> = [
 
 const criterionName = (row: HTMLTableRowElement): string => {
   const header = row.querySelector("th");
-  return header?.childNodes[0]?.textContent?.trim() || "this criterion";
+  // A criterion with an explanation wraps its title in the help disclosure;
+  // reading the whole cell would drag the tooltip body into the name.
+  const helpTitle = header?.querySelector(
+    ".big-decision-criterion-help > summary",
+  );
+  const source = helpTitle ?? header?.childNodes[0];
+  return source?.textContent?.trim() || "this criterion";
 };
 
 const optionName = (option: HTMLElement): string =>
@@ -314,9 +320,6 @@ for (const component of document.querySelectorAll<HTMLElement>(
   sectionLabel.className =
     "card-section-label text-[0.6875rem] leading-4 font-bold tracking-[0.08em] uppercase text-ink/70";
   sectionLabel.textContent = "Ranking";
-  const bestMatchLine = document.createElement("p");
-  bestMatchLine.className = "mt-2.5 mb-0 text-sm text-muted";
-  bestMatchLine.dataset.decisionBestMatchLine = "";
   const whyPopover = createPopover({ label: "Why this match?", wide: true });
   const resetButton = document.createElement("button");
   resetButton.type = "button";
@@ -333,7 +336,6 @@ for (const component of document.querySelectorAll<HTMLElement>(
   selectButton.type = "button";
   selectButton.className = "big-decision-popover-link font-normal";
   selectButton.dataset.decisionDivergence = "";
-  selectButton.textContent = "Select";
   selectButton.hidden = true;
   selectButton.addEventListener("click", () => {
     if (leaderColumn !== null) {
@@ -355,7 +357,28 @@ for (const component of document.querySelectorAll<HTMLElement>(
     );
     selectButton.hidden =
       leaderColumn === null || selected === -1 || selected === leaderColumn;
+    if (!selectButton.hidden && leaderColumn !== null) {
+      selectButton.textContent = `Select ${optionName(
+        options[leaderColumn] ?? document.body,
+      )}`;
+    }
   };
+
+  const scoreRow = document.createElement("tr");
+  scoreRow.className = "big-decision-matrix-row big-decision-score-row";
+  scoreRow.dataset.decisionScoreRow = "";
+  const scoreName = document.createElement("th");
+  scoreName.setAttribute("scope", "row");
+  scoreName.className = "px-3 py-2.5 text-left text-sm";
+  scoreName.textContent = "Score";
+  scoreRow.append(scoreName);
+  const scoreCells = options.map(() => {
+    const cell = document.createElement("td");
+    cell.className = "px-3 py-2.5 text-sm";
+    scoreRow.append(cell);
+    return cell;
+  });
+  matrix.querySelector("tbody")?.append(scoreRow);
 
   const recompute = (): void => {
     const totals = options.map((_, column) =>
@@ -389,20 +412,17 @@ for (const component of document.querySelectorAll<HTMLElement>(
         tag?.remove();
       }
     }
+    for (const [column, cell] of scoreCells.entries()) {
+      cell.textContent = signed(totals[column] ?? 0);
+      cell.classList.toggle(
+        "big-decision-score-leader",
+        column === leaderColumn,
+      );
+    }
     if (leaderColumn === null) {
-      bestMatchLine.textContent =
-        "Best match: none - the current priorities do not separate the options.";
       whyPopover.details.hidden = true;
     } else {
       const name = optionName(options[leaderColumn] ?? document.body);
-      const label = document.createElement("span");
-      label.className = "font-semibold text-ink";
-      label.textContent = `Best match: ${name}`;
-      bestMatchLine.replaceChildren(
-        label,
-        document.createTextNode(" "),
-        selectButton,
-      );
       whyPopover.details.hidden = false;
       whyPopover.body.replaceChildren();
       const heading = document.createElement("p");
@@ -433,8 +453,13 @@ for (const component of document.querySelectorAll<HTMLElement>(
   const actions = document.createElement("p");
   actions.className =
     "mt-2 mb-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs";
-  actions.append(whyPopover.details, howPopover.details, resetButton);
-  section.append(sectionLabel, bestMatchLine, actions);
+  actions.append(
+    selectButton,
+    whyPopover.details,
+    howPopover.details,
+    resetButton,
+  );
+  section.append(sectionLabel, actions);
 
   for (const [index, row] of rows.entries()) {
     const rowHeader = row.querySelector("th");

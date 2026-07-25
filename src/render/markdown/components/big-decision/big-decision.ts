@@ -5,6 +5,7 @@
 import type { Element, ElementContent, Text } from "hast";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
 import { CIRCLE_QUESTION_MARK_ICON } from "../../../icons/lucide/circle-question-mark.js";
+import { INFO_ICON } from "../../../icons/lucide/info.js";
 import { MAXIMIZE_2_ICON } from "../../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../../icons/lucide/minimize-2.js";
 import { MINUS_ICON } from "../../../icons/lucide/minus.js";
@@ -12,6 +13,7 @@ import { TRIANGLE_ALERT_ICON } from "../../../icons/lucide/triangle-alert.js";
 import { UNDO_2_ICON } from "../../../icons/lucide/undo-2.js";
 import { X_ICON } from "../../../icons/lucide/x.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import type { LucideIcon } from "../../../icons/lucide-icon.js";
 import {
   type ComponentDefinition,
   type ComponentRenderer,
@@ -78,6 +80,7 @@ const statusPill = (status: BigDecisionStatus): Element =>
 // floating popover would clip.
 const renderInfoDisclosure = (
   detail: ReadonlyArray<ElementContent>,
+  icon: LucideIcon = INFO_ICON,
 ): ReadonlyArray<Element> => {
   if (detail.length === 0) {
     return [];
@@ -101,10 +104,7 @@ const renderInfoDisclosure = (
             ],
           },
           children: [
-            renderLucideIcon({
-              icon: CIRCLE_QUESTION_MARK_ICON,
-              hidden: false,
-            }),
+            renderLucideIcon({ icon, hidden: false }),
             {
               type: "element",
               tagName: "span",
@@ -573,14 +573,17 @@ const renderReversibilitySection = (
         properties: { className: ["flex", "items-center", "gap-1.5"] },
         children: [
           renderSectionLabel("Reversibility"),
-          ...renderInfoDisclosure([
-            {
-              type: "element",
-              tagName: "p",
-              properties: {},
-              children: [text(REVERSIBILITY_EXPLAINER)],
-            },
-          ]),
+          ...renderInfoDisclosure(
+            [
+              {
+                type: "element",
+                tagName: "p",
+                properties: {},
+                children: [text(REVERSIBILITY_EXPLAINER)],
+              },
+            ],
+            CIRCLE_QUESTION_MARK_ICON,
+          ),
         ],
       },
       {

@@ -37,7 +37,9 @@ test("should review standalone plan decisions", async ({
   await test.step("the matrix compares every option across the criteria", async () => {
     const matrix = openDecision.locator("table.big-decision-matrix");
     await expect(matrix).toBeVisible();
-    await expect(matrix.locator("tbody th")).toHaveCount(4);
+    await expect(
+      matrix.locator("tbody tr:not([data-decision-score-row]) th"),
+    ).toHaveCount(4);
     await expect(matrix.locator("thead [data-option]")).toHaveCount(3);
     await expect(matrix.locator("[data-score-tone]")).toHaveCount(12);
     await expect(
@@ -80,15 +82,23 @@ test("should review standalone plan decisions", async ({
     await expect(
       openDecision.locator("[data-option-decorators]").nth(1),
     ).toContainText("Best match");
-    await expect(section).toContainText("Best match: SQLite");
+    const scoreRow = openDecision.locator("[data-decision-score-row]");
+    await expect(scoreRow.locator("td")).toHaveText(["+8", "+10", "-4"]);
+    await expect(scoreRow.locator("td").nth(1)).toHaveClass(
+      /big-decision-score-leader/,
+    );
     const divergence = section.locator("[data-decision-divergence]");
-    await expect(divergence).toHaveText("Select");
+    await expect(divergence).toHaveText("Select SQLite");
     const setupPriority = openDecision
       .locator("[data-decision-weights]")
       .nth(1)
       .locator("button");
     await setupPriority.nth(0).click();
     await expect(options.nth(0)).toHaveAttribute("data-best-match", "");
+    await expect(scoreRow.locator("td")).toHaveText(["+10", "+8", "-6"]);
+    await expect(scoreRow.locator("td").nth(0)).toHaveClass(
+      /big-decision-score-leader/,
+    );
     await expect(divergence).toBeHidden();
     const reset = section.locator("[data-decision-weights-reset]");
     await expect(reset).toBeVisible();

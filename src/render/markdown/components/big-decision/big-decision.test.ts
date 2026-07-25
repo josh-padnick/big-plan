@@ -100,6 +100,7 @@ describe("BigDecision rendering", () => {
     expect(html).toContain("big-decision-info");
     expect(html).toContain("big-decision-criterion-help");
     expect(html).toContain('data-lucide="circle-question-mark"');
+    expect(html).toContain('data-lucide="info"');
     expect(html).toContain("Why setup matters here.");
     expect(html).toContain('data-option-details="option-postgresql"');
     expect(html).toContain('data-decision-details=""');

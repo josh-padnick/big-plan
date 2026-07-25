@@ -10,7 +10,7 @@ import bigDecisionDark from "../../../assets/components/big-decision-dark.png";
 `BigDecision` presents one consequential choice as a comparison a reviewer can actually check: the question and its context, the criteria the decision turns on, and every option scored against every criterion in a matrix, so competing verdicts sit side by side instead of a scroll apart.
 Place it in the plan section where the decision belongs; the smaller end-of-plan questions belong in [SmallDecisionSet](/components/small-decision-set/) instead.
 While a decision is undecided, the recommended option starts selected and a click moves the reader's local selection; recording the choice arrives with the live review layer, and decided decisions stay static.
-A full-screen control gives a wide matrix the whole viewport when the reading column crowds it, and priority squares under each criterion let the reader state what matters most - a dashed Best match tag follows the weighted comparison, always distinct from the agent's solid Recommended pill and from the reader's own selection, and a Ranking section under the options carries the Best match verdict, its score breakdown, the explicit Select action, the reset, and how ranking works.
+A full-screen control gives a wide matrix the whole viewport when the reading column crowds it, and priority squares under each criterion let the reader state what matters most - a dashed Best match tag follows the weighted comparison, always distinct from the agent's solid Recommended pill and from the reader's own selection, a live Score row at the foot of the matrix totals every option and highlights the Best match as priorities change, and a Ranking section carries the explicit Select action, the arithmetic breakdown, the reset, and how ranking works.
 Every decision also rates its reversibility on a fixed scale, with a built-in explainer behind an info icon.
 
 ## How it looks
@@ -25,7 +25,7 @@ Every decision also rates its reversibility on a fixed scale, with a built-in ex
 
 Use `BigDecision` when a choice carries real tradeoffs a reviewer must weigh before implementation.
 Phrase the decision as a question, then name the criteria it actually turns on - the forces from the context paragraph - and score every option against every criterion.
-Keep verdicts terse: a verdict word plus a short qualifier, with longer reasoning behind the cell's question-mark tooltip.
+Keep verdicts terse: a verdict word plus a short qualifier, with longer reasoning behind the cell's info tooltip.
 Drop a criterion whose verdicts match across every option; a row that discriminates nothing is noise.
 Treat "do nothing" as an ordinary option whenever the status quo is a legitimate choice, and state the decision's reversibility - what it costs to change course later is the fact a reviewer most needs.
 When the decision lands, mark the chosen option and keep the losing options visible so the outcome retains its alternatives.
