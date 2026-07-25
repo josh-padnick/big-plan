@@ -639,7 +639,7 @@ type SchemaMessageState = {
 };
 const schemaMessageStates = new WeakMap<HTMLElement, SchemaMessageState>();
 
-// Flashes transient clipboard feedback through the same header convention as
+// Flashes transient action feedback through the same header convention as
 // CodeSnippet while routing the accessible name through the initiating control.
 const showSchemaMessage = ({
   block,

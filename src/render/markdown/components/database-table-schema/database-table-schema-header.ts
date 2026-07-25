@@ -217,7 +217,7 @@ const columnsMenu = (): Element => ({
         })),
         // Reset lives beside the toggles it reverts; it also restores the
         // authored order, so the layout has one home. The separator keeps
-        // the destructive action visually apart from the checkboxes.
+        // the reset action visually apart from the checkboxes.
         {
           type: "element" as const,
           tagName: "div",
