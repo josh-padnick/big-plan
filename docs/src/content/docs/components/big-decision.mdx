@@ -24,7 +24,7 @@ Every decision also rates its reversibility on a fixed scale, with a built-in ex
 ## When to use it
 
 Use `BigDecision` when a choice carries real tradeoffs a reviewer must weigh before implementation.
-Phrase the decision as a question, then name the criteria it actually turns on - the forces from the context paragraph - and score every option against every criterion.
+Phrase the decision as a question, then name the criteria it actually turns on - the forces from the context paragraph - explain each one in its body, and score every option against every criterion.
 Keep verdicts terse: a verdict word plus a short qualifier, with longer reasoning behind the cell's info tooltip.
 Drop a criterion whose verdicts match across every option; a row that discriminates nothing is noise.
 Treat "do nothing" as an ordinary option whenever the status quo is a legitimate choice, and state the decision's reversibility - what it costs to change course later is the fact a reviewer most needs.
@@ -117,6 +117,8 @@ Declare one `Criterion` per row of the matrix, in the order the rows should read
 | `title`   | string (non-empty) | Yes      | Names the row; titles must be unique within the decision.      |
 
 Markdown in the body becomes the criterion's tooltip - why it matters - shown on hover behind a dashed underline on the term.
+The body is optional but strongly recommended: an unexplained criterion asks the reviewer to trust the row instead of checking it, and the dashed underline is the reader's signal that the reasoning is one hover away.
+Reserve bare criteria for terms the plan's audience could not possibly read two ways.
 A decision with no criteria renders its options as a stacked list without a matrix.
 
 ### Option
