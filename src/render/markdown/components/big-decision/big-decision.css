@@ -7,6 +7,9 @@
     background: color-mix(in srgb, var(--callout-warning-c) 14%, transparent);
   }
   article .big-decision-recommended-pill {
+    /* The transparent border matches the Best match pill's dashed one, so
+       both decorators occupy identical heights and cards stay aligned. */
+    border: 1px solid transparent;
     color: var(--color-accent);
     background: color-mix(in srgb, var(--color-accent) 14%, transparent);
   }

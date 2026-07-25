@@ -299,7 +299,7 @@ const renderOptionColumn = ({
                 "big-decision-option-decorators",
                 "mb-1",
                 "flex",
-                "min-h-5",
+                "min-h-[1.375rem]",
                 "flex-wrap",
                 "items-center",
                 "gap-1.5",
