@@ -49,12 +49,48 @@ export type ScopedChild = {
   readonly position: NodePosition;
 };
 
+export type ComponentIdAllocator = {
+  readonly allocate: (input: {
+    readonly prefix: string;
+    readonly label: string;
+    readonly fallbackId: string;
+  }) => string;
+};
+
+/** Creates one authored-order id namespace for a rendered document. */
+export const createComponentIdAllocator = (): ComponentIdAllocator => {
+  const used = new Set<string>();
+  const nextSuffixes = new Map<string, number>();
+  return {
+    allocate: ({ prefix, label, fallbackId }) => {
+      const slug = label
+        .trim()
+        .toLowerCase()
+        .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
+        .replace(/\s+/gu, "-")
+        .replace(/-+/gu, "-")
+        .replace(/^-|-$/gu, "");
+      const preferredId = slug === "" ? fallbackId : `${prefix}-${slug}`;
+      let id = preferredId;
+      let nextSuffix = nextSuffixes.get(preferredId) ?? 2;
+      while (used.has(id)) {
+        id = `${preferredId}-${nextSuffix}`;
+        nextSuffix += 1;
+      }
+      used.add(id);
+      nextSuffixes.set(preferredId, nextSuffix);
+      return id;
+    },
+  };
+};
+
 export type ComponentRenderer = (input: {
   readonly attributes: Readonly<Record<string, ComponentAttributeValue>>;
   readonly children: ReadonlyArray<ElementContent>;
   readonly scopedChildren: ReadonlyArray<ScopedChild>;
   readonly position: NodePosition;
   readonly diagnostics: DiagnosticCollector;
+  readonly ids?: ComponentIdAllocator;
 }) => Element;
 
 export type MarkdownBodyNodeKind =

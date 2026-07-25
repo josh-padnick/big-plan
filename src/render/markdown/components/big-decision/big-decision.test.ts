@@ -83,9 +83,9 @@ describe("BigDecision rendering", () => {
     expect(html).toContain("Cheap to change later.");
     expect(html).toContain("Reversibility is what it would cost");
     expect(html).toContain("<table");
-    expect(html).toContain('id="criterion-setup"');
-    expect(html).toContain('id="criterion-scale"');
-    expect(html).toContain('id="option-postgresql"');
+    expect(html).toContain('id="decision-which-store-criterion-setup"');
+    expect(html).toContain('id="decision-which-store-criterion-scale"');
+    expect(html).toContain('id="decision-which-store-option-postgresql"');
     expect(html).toContain('data-option-recommended=""');
     expect(html).toContain("Recommended");
     expect(html).toContain('data-score-tone="bad"');
@@ -102,7 +102,9 @@ describe("BigDecision rendering", () => {
     expect(html).toContain('data-lucide="circle-question-mark"');
     expect(html).toContain('data-lucide="info"');
     expect(html).toContain("Why setup matters here.");
-    expect(html).toContain('data-option-details="option-postgresql"');
+    expect(html).toContain(
+      'data-option-details="decision-which-store-option-postgresql"',
+    );
     expect(html).toContain('data-decision-details=""');
     expect(html).toContain("Question-level long form.");
     expect(html).toContain('data-option-decorators=""');

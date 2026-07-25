@@ -230,6 +230,7 @@ const renderSmallDecisionSetFigure = ({
   type: "element",
   tagName: "figure",
   properties: {
+    id: model.id,
     className: [
       "small-decision-set",
       "mb-5",

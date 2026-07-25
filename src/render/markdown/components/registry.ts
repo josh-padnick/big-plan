@@ -12,12 +12,15 @@ import type {
   ScopedChild,
   ScopedChildDefinition,
 } from "./component-contract.js";
+import {
+  createComponentIdAllocator,
+  type ComponentIdAllocator,
+} from "./component-contract.js";
 import { BIG_DECISION_COMPONENT_DEFINITION } from "./big-decision/big-decision.js";
 import { CALLOUT_COMPONENT_DEFINITION } from "./callout/callout.js";
 import { CODE_DIFF_COMPONENT_DEFINITION } from "./code-diff/code-diff.js";
 import { CODE_SNIPPET_COMPONENT_DEFINITION } from "./code-snippet/code-snippet.js";
 import { DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION } from "./database-table-schema/database-table-schema.js";
-import { DECISION_SET_COMPONENT_DEFINITION } from "./decision-set/decision-set.js";
 import { FILE_TREE_COMPONENT_DEFINITION } from "./file-tree/file-tree.js";
 import { FILE_TREE_DIFF_COMPONENT_DEFINITION } from "./file-tree/file-tree-diff.js";
 import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "./graphql-operation/graphql-operation.js";
@@ -38,7 +41,6 @@ export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
     CodeDiff: CODE_DIFF_COMPONENT_DEFINITION,
     CodeSnippet: CODE_SNIPPET_COMPONENT_DEFINITION,
     DatabaseTableSchema: DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION,
-    DecisionSet: DECISION_SET_COMPONENT_DEFINITION,
     FileTree: FILE_TREE_COMPONENT_DEFINITION,
     FileTreeDiff: FILE_TREE_DIFF_COMPONENT_DEFINITION,
     GraphqlOperation: GRAPHQL_OPERATION_COMPONENT_DEFINITION,
@@ -287,10 +289,12 @@ const renderFlowElement = ({
   node,
   diagnostics,
   registry,
+  ids,
 }: {
   readonly node: MdxJsxFlowElement;
   readonly diagnostics: DiagnosticCollector;
   readonly registry: ComponentRegistry;
+  readonly ids: ComponentIdAllocator;
 }): Element | undefined => {
   const name = node.name;
   const definition = definitionFor({ name, registry });
@@ -306,6 +310,7 @@ const renderFlowElement = ({
     scopedDefinitions: definition?.scopedChildren,
     diagnostics,
     registry,
+    ids,
   });
   if (definition === undefined) {
     return undefined;
@@ -316,6 +321,7 @@ const renderFlowElement = ({
     scopedChildren,
     position: node.position,
     diagnostics,
+    ids,
   });
 };
 
@@ -325,11 +331,13 @@ const renderChildren = ({
   scopedDefinitions,
   diagnostics,
   registry,
+  ids,
 }: {
   readonly parent: ParentNode;
   readonly scopedDefinitions?: ScopedParentDefinition["scopedChildren"];
   readonly diagnostics: DiagnosticCollector;
   readonly registry: ComponentRegistry;
+  readonly ids: ComponentIdAllocator;
 }): ReadonlyArray<ScopedChild> => {
   const scopedChildren: Array<ScopedChild> = [];
   let index = 0;
@@ -354,6 +362,7 @@ const renderChildren = ({
         scopedDefinitions: scopedDefinition.scopedChildren,
         diagnostics,
         registry,
+        ids,
       });
       scopedChildren.push({
         name: childName,
@@ -368,13 +377,14 @@ const renderChildren = ({
       continue;
     }
     if (child.type === "element") {
-      renderChildren({ parent: child, diagnostics, registry });
+      renderChildren({ parent: child, diagnostics, registry, ids });
     }
     if (child.type === "mdxJsxFlowElement") {
       const rendered = renderFlowElement({
         node: child,
         diagnostics,
         registry,
+        ids,
       });
       parent.children.splice(
         index,
@@ -429,6 +439,11 @@ export const rehypeRenderComponents =
     readonly registry?: ComponentRegistry;
   }) =>
   (tree: Root): void => {
-    renderChildren({ parent: tree, diagnostics, registry });
+    renderChildren({
+      parent: tree,
+      diagnostics,
+      registry,
+      ids: createComponentIdAllocator(),
+    });
     reportSurvivors({ parent: tree, diagnostics });
   };

@@ -212,12 +212,12 @@ describe("compileBigDecisionComponent", () => {
       status: "open",
       reversibility: { rating: "somewhat-hard" },
       criteria: [
-        { id: "criterion-setup", title: "Setup" },
-        { id: "criterion-scale", title: "Scale" },
+        { id: "decision-which-store-criterion-setup", title: "Setup" },
+        { id: "decision-which-store-criterion-scale", title: "Scale" },
       ],
       options: [
         {
-          id: "option-postgresql",
+          id: "decision-which-store-option-postgresql",
           title: "PostgreSQL",
           recommended: true,
           scores: [
@@ -226,7 +226,7 @@ describe("compileBigDecisionComponent", () => {
           ],
         },
         {
-          id: "option-sqlite",
+          id: "decision-which-store-option-sqlite",
           title: "SQLite",
           scores: [
             { verdict: "Zero setup", tone: "good" },

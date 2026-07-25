@@ -146,17 +146,29 @@ describe("compileSmallDecisionSetComponent", () => {
 
     expect(diagnostics).toEqual([]);
     expect(model).toMatchObject({
+      id: "small-decision-set-open-questions",
       title: "Open questions",
       decisions: [
         {
-          id: "question-ship-now",
+          id: "small-decision-set-open-questions-question-ship-now",
           question: "Ship now?",
           options: [
-            { id: "option-yes", title: "Yes", recommended: true },
-            { id: "option-no", title: "No", recommended: false },
+            {
+              id: "small-decision-set-open-questions-question-ship-now-option-yes",
+              title: "Yes",
+              recommended: true,
+            },
+            {
+              id: "small-decision-set-open-questions-question-ship-now-option-no",
+              title: "No",
+              recommended: false,
+            },
           ],
         },
-        { id: "question-rename-later", question: "Rename later?" },
+        {
+          id: "small-decision-set-open-questions-question-rename-later",
+          question: "Rename later?",
+        },
       ],
     });
     expect(model.intro).toHaveLength(1);
@@ -172,8 +184,8 @@ describe("compileSmallDecisionSetComponent", () => {
       ],
     });
     expect(model.decisions.map(({ id }) => id)).toEqual([
-      "question-same",
-      "question-same-2",
+      "small-decision-set-question-same",
+      "small-decision-set-question-same-2",
     ]);
   });
 

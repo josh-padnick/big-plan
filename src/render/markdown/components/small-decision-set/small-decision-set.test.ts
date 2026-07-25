@@ -50,8 +50,13 @@ describe("SmallDecisionSet rendering", () => {
     expect(html).toContain("Open questions");
     expect(html).toContain("2 questions");
     expect(html).toContain("Answer these before implementation starts.");
-    expect(html).toContain('id="question-ship-behind-a-flag"');
-    expect(html).toContain('id="question-rename-the-cli-now"');
+    expect(html).toContain('id="small-decision-set-open-questions"');
+    expect(html).toContain(
+      'id="small-decision-set-open-questions-question-ship-behind-a-flag"',
+    );
+    expect(html).toContain(
+      'id="small-decision-set-open-questions-question-rename-the-cli-now"',
+    );
     expect(html).toContain(">1.<");
     expect(html).toContain(">2.<");
   });
@@ -59,7 +64,9 @@ describe("SmallDecisionSet rendering", () => {
   it("should render option rows with details and recommended tags", () => {
     const html = render(QUESTION_SET);
 
-    expect(html).toContain('id="option-yes"');
+    expect(html).toContain(
+      'id="small-decision-set-open-questions-question-ship-behind-a-flag-option-yes"',
+    );
     expect(html).toContain("Keeps rollback one toggle away");
     const recommendedCount =
       html.split("small-decision-recommended-pill").length - 1;

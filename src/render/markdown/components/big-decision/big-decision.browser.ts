@@ -404,10 +404,9 @@ for (const component of document.querySelectorAll<HTMLElement>(
     const apply = (priority: number): void => {
       priorities[index] = priority;
       for (const [position, square] of squares.entries()) {
-        square.setAttribute(
-          "aria-checked",
-          position + 1 === priority ? "true" : "false",
-        );
+        const selected = position + 1 === priority;
+        square.setAttribute("aria-checked", selected ? "true" : "false");
+        square.tabIndex = selected ? 0 : -1;
         if (position < priority) {
           square.dataset.weightFilled = "";
         } else {
@@ -434,6 +433,20 @@ for (const component of document.querySelectorAll<HTMLElement>(
       square.title = `Priority: ${PRIORITY_LABELS[step - 1]}`;
       square.addEventListener("click", () => {
         apply(step);
+      });
+      square.addEventListener("keydown", (event) => {
+        const destination =
+          event.key === "ArrowDown" || event.key === "ArrowRight"
+            ? step % PRIORITY_MAX
+            : event.key === "ArrowUp" || event.key === "ArrowLeft"
+              ? (step - 2 + PRIORITY_MAX) % PRIORITY_MAX
+              : undefined;
+        if (destination === undefined) {
+          return;
+        }
+        event.preventDefault();
+        apply(destination + 1);
+        squares[destination]?.focus();
       });
       squares.push(square);
       squareRow.append(square);

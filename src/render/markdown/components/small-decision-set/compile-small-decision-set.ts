@@ -3,8 +3,10 @@
 
 import type { ElementContent } from "hast";
 import {
+  createComponentIdAllocator,
   validateComponentAttributes,
   type ComponentAttributeSchema,
+  type ComponentIdAllocator,
   type ComponentRenderer,
   type ScopedChild,
 } from "../component-contract.js";
@@ -25,6 +27,7 @@ export type CompiledSmallDecision = {
 };
 
 export type CompiledSmallDecisionSet = {
+  readonly id: string;
   readonly title?: string;
   readonly intro: ReadonlyArray<ElementContent>;
   readonly decisions: ReadonlyArray<CompiledSmallDecision>;
@@ -51,45 +54,16 @@ const contentOf = (
 ): ReadonlyArray<ElementContent> =>
   children.filter((node) => !isWhitespace(node));
 
-// Matches the familiar heading-slug shape while keeping this component's id
-// allocation independent from the document-wide heading transform.
-const slugify = (value: string): string =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
-    .replace(/\s+/gu, "-")
-    .replace(/-+/gu, "-")
-    .replace(/^-|-$/gu, "");
-
-// Allocates suffixes from authored order so repeated labels never create
-// duplicate document ids, including while invalid input is being diagnosed.
-const allocateId = ({
-  prefix,
-  label,
-  fallback,
-  counts,
-}: {
-  readonly prefix: string;
-  readonly label: string;
-  readonly fallback: string;
-  readonly counts: Map<string, number>;
-}): string => {
-  const slug = slugify(label) || fallback;
-  const base = `${prefix}-${slug}`;
-  const count = (counts.get(base) ?? 0) + 1;
-  counts.set(base, count);
-  return count === 1 ? base : `${base}-${count}`;
-};
-
 const compileOption = ({
   child,
   diagnostics,
-  idCounts,
+  idPrefix,
+  ids,
 }: {
   readonly child: ScopedChild;
   readonly diagnostics: DiagnosticCollector;
-  readonly idCounts: Map<string, number>;
+  readonly idPrefix: string;
+  readonly ids: ComponentIdAllocator;
 }): CompiledSmallDecisionOption => {
   const validated = validateComponentAttributes({
     component: "Option",
@@ -100,11 +74,10 @@ const compileOption = ({
   });
   const title = validated.title ?? "";
   return {
-    id: allocateId({
-      prefix: "option",
+    id: ids.allocate({
+      prefix: `${idPrefix}-option`,
       label: title,
-      fallback: "option",
-      counts: idCounts,
+      fallbackId: `${idPrefix}-option`,
     }),
     title,
     recommended: validated.recommended === true,
@@ -160,13 +133,13 @@ const validateDecisionOptions = ({
 const compileDecision = ({
   child,
   diagnostics,
-  decisionIdCounts,
-  optionIdCounts,
+  idPrefix,
+  ids,
 }: {
   readonly child: ScopedChild;
   readonly diagnostics: DiagnosticCollector;
-  readonly decisionIdCounts: Map<string, number>;
-  readonly optionIdCounts: Map<string, number>;
+  readonly idPrefix: string;
+  readonly ids: ComponentIdAllocator;
 }): CompiledSmallDecision => {
   const validated = validateComponentAttributes({
     component: "SmallDecision",
@@ -176,6 +149,11 @@ const compileDecision = ({
     schema: SMALL_DECISION_SCHEMA,
   });
   const question = validated.question ?? "";
+  const id = ids.allocate({
+    prefix: `${idPrefix}-question`,
+    label: question,
+    fallbackId: `${idPrefix}-question`,
+  });
   const optionEntries = (child.scopedChildren ?? [])
     .filter((nested) => nested.name === "Option")
     .map((nested) => ({
@@ -183,17 +161,13 @@ const compileDecision = ({
       option: compileOption({
         child: nested,
         diagnostics,
-        idCounts: optionIdCounts,
+        idPrefix: id,
+        ids,
       }),
     }));
   validateDecisionOptions({ child, entries: optionEntries, diagnostics });
   return {
-    id: allocateId({
-      prefix: "question",
-      label: question,
-      fallback: "question",
-      counts: decisionIdCounts,
-    }),
+    id,
     question,
     context: contentOf(child.children),
     options: optionEntries.map(({ option }) => option),
@@ -207,6 +181,7 @@ export const compileSmallDecisionSetComponent = ({
   scopedChildren,
   position,
   diagnostics,
+  ids = createComponentIdAllocator(),
 }: Parameters<ComponentRenderer>[0]): CompiledSmallDecisionSet => {
   const validated = validateComponentAttributes({
     component: "SmallDecisionSet",
@@ -224,17 +199,21 @@ export const compileSmallDecisionSetComponent = ({
       position,
     });
   }
-  const decisionIdCounts = new Map<string, number>();
-  const optionIdCounts = new Map<string, number>();
+  const id = ids.allocate({
+    prefix: "small-decision-set",
+    label: validated.title ?? "",
+    fallbackId: "small-decision-set",
+  });
   return {
+    id,
     ...(validated.title === undefined ? {} : { title: validated.title }),
     intro: contentOf(children),
     decisions: decisionChildren.map((child) =>
       compileDecision({
         child,
         diagnostics,
-        decisionIdCounts,
-        optionIdCounts,
+        idPrefix: id,
+        ids,
       }),
     ),
   };

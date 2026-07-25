@@ -3,8 +3,10 @@
 
 import type { ElementContent } from "hast";
 import {
+  createComponentIdAllocator,
   validateComponentAttributes,
   type ComponentAttributeSchema,
+  type ComponentIdAllocator,
   type ComponentRenderer,
   type ScopedChild,
 } from "../component-contract.js";
@@ -114,46 +116,16 @@ const contentOf = (
 ): ReadonlyArray<ElementContent> =>
   children.filter((node) => !isWhitespace(node));
 
-// Matches the familiar heading-slug shape while keeping this component's id
-// allocation independent from the document-wide heading transform.
-const slugify = (value: string): string =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
-    .replace(/\s+/gu, "-")
-    .replace(/-+/gu, "-")
-    .replace(/^-|-$/gu, "");
-
-// Allocates suffixes from authored order so repeated labels never create
-// duplicate ids inside one decision, including while invalid input is being
-// diagnosed.
-const allocateId = ({
-  prefix,
-  label,
-  fallback,
-  counts,
-}: {
-  readonly prefix: string;
-  readonly label: string;
-  readonly fallback: string;
-  readonly counts: Map<string, number>;
-}): string => {
-  const slug = slugify(label) || fallback;
-  const base = `${prefix}-${slug}`;
-  const count = (counts.get(base) ?? 0) + 1;
-  counts.set(base, count);
-  return count === 1 ? base : `${base}-${count}`;
-};
-
 const compileCriterion = ({
   child,
   diagnostics,
-  idCounts,
+  idPrefix,
+  ids,
 }: {
   readonly child: ScopedChild;
   readonly diagnostics: DiagnosticCollector;
-  readonly idCounts: Map<string, number>;
+  readonly idPrefix: string;
+  readonly ids: ComponentIdAllocator;
 }): CompiledBigDecisionCriterion => {
   const validated = validateComponentAttributes({
     component: "Criterion",
@@ -164,11 +136,10 @@ const compileCriterion = ({
   });
   const title = validated.title ?? "";
   return {
-    id: allocateId({
-      prefix: "criterion",
+    id: ids.allocate({
+      prefix: `${idPrefix}-criterion`,
       label: title,
-      fallback: "criterion",
-      counts: idCounts,
+      fallbackId: `${idPrefix}-criterion`,
     }),
     title,
     detail: contentOf(child.children),
@@ -265,12 +236,14 @@ const compileOption = ({
   child,
   criteria,
   diagnostics,
-  idCounts,
+  idPrefix,
+  ids,
 }: {
   readonly child: ScopedChild;
   readonly criteria: ReadonlyArray<CompiledBigDecisionCriterion>;
   readonly diagnostics: DiagnosticCollector;
-  readonly idCounts: Map<string, number>;
+  readonly idPrefix: string;
+  readonly ids: ComponentIdAllocator;
 }): CompiledBigDecisionOption => {
   const validated = validateComponentAttributes({
     component: "Option",
@@ -284,11 +257,10 @@ const compileOption = ({
     .filter((nested) => nested.name === "Score")
     .map((nested) => compileScore({ child: nested, diagnostics }));
   return {
-    id: allocateId({
-      prefix: "option",
+    id: ids.allocate({
+      prefix: `${idPrefix}-option`,
       label: title,
-      fallback: "option",
-      counts: idCounts,
+      fallbackId: `${idPrefix}-option`,
     }),
     title,
     ...(validated.summary === undefined ? {} : { summary: validated.summary }),
@@ -466,6 +438,7 @@ export const compileBigDecisionComponent = ({
   scopedChildren,
   position,
   diagnostics,
+  ids = createComponentIdAllocator(),
 }: Parameters<ComponentRenderer>[0]): CompiledBigDecision => {
   const validated = validateComponentAttributes({
     component: "BigDecision",
@@ -476,6 +449,11 @@ export const compileBigDecisionComponent = ({
   });
   const question = validated.question ?? "";
   const status = validated.status ?? "open";
+  const id = ids.allocate({
+    prefix: "decision",
+    label: question,
+    fallbackId: "decision",
+  });
   const criterionChildren = scopedChildren.filter(
     (child) => child.name === "Criterion",
   );
@@ -488,11 +466,9 @@ export const compileBigDecisionComponent = ({
     diagnostics,
   });
   validateCriteria({ children: criterionChildren, diagnostics });
-  const criterionIdCounts = new Map<string, number>();
   const criteria = criterionChildren.map((child) =>
-    compileCriterion({ child, diagnostics, idCounts: criterionIdCounts }),
+    compileCriterion({ child, diagnostics, idPrefix: id, ids }),
   );
-  const optionIdCounts = new Map<string, number>();
   const optionEntries = scopedChildren
     .filter((child) => child.name === "Option")
     .map((child) => ({
@@ -501,7 +477,8 @@ export const compileBigDecisionComponent = ({
         child,
         criteria,
         diagnostics,
-        idCounts: optionIdCounts,
+        idPrefix: id,
+        ids,
       }),
     }));
   validateDecisionOptions({
@@ -514,12 +491,7 @@ export const compileBigDecisionComponent = ({
     ({ option }) => option.chosen,
   )?.option;
   return {
-    id: allocateId({
-      prefix: "decision",
-      label: question,
-      fallback: "decision",
-      counts: new Map<string, number>(),
-    }),
+    id,
     question,
     status,
     context: contentOf(children),

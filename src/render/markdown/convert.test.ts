@@ -211,6 +211,66 @@ describe("compileMarkdown sections", () => {
   });
 });
 
+describe("compileMarkdown component ids", () => {
+  it("should namespace repeated decision components across one document", () => {
+    const repeatedDecisions = `<BigDecision question="Same?">
+
+<Option title="A" />
+
+<Option title="B" />
+
+</BigDecision>
+
+<BigDecision question="Same?">
+
+<Option title="A" />
+
+<Option title="B" />
+
+</BigDecision>
+
+<SmallDecisionSet title="Same">
+
+<SmallDecision question="Same?">
+
+<Option title="A" />
+
+<Option title="B" />
+
+</SmallDecision>
+
+</SmallDecisionSet>
+
+<SmallDecisionSet title="Same">
+
+<SmallDecision question="Same?">
+
+<Option title="A" />
+
+<Option title="B" />
+
+</SmallDecision>
+
+</SmallDecisionSet>
+`;
+    const { elementIds } = compileMarkdown({ markdown: repeatedDecisions });
+
+    expect(elementIds).toContain("decision-same");
+    expect(elementIds).toContain("decision-same-option-a");
+    expect(elementIds).toContain("decision-same-2");
+    expect(elementIds).toContain("decision-same-2-option-a");
+    expect(elementIds).toContain("small-decision-set-same");
+    expect(elementIds).toContain(
+      "small-decision-set-same-question-same-option-a",
+    );
+    expect(elementIds).toContain("small-decision-set-same-2");
+    expect(elementIds).toContain(
+      "small-decision-set-same-2-question-same-option-a",
+    );
+    expect(new Set(elementIds).size).toBe(elementIds.length);
+  });
+});
+
 describe("compileMarkdown tables", () => {
   it("should wrap each table in a scroll container when the document has tables", () => {
     const bodyHtml = compileAndSerialize(

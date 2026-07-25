@@ -32,6 +32,16 @@ test("should review standalone plan decisions", async ({
     await expect(deferredDecision).toContainText(
       "Wait for signed-in identities",
     );
+    await expect(openDecision).toHaveAttribute(
+      "id",
+      "decision-which-persistence-layer-should-back-review-comments",
+    );
+    await expect(
+      openDecision.locator("thead [data-option]").first(),
+    ).toHaveAttribute(
+      "id",
+      "decision-which-persistence-layer-should-back-review-comments-option-postgresql",
+    );
   });
 
   await test.step("the matrix compares every option across the criteria", async () => {
@@ -100,6 +110,25 @@ test("should review standalone plan decisions", async ({
     await reset.click();
     await expect(options.nth(1)).toHaveAttribute("data-best-match", "");
     await expect(reset).toBeHidden();
+  });
+
+  await test.step("priority squares use one arrow-key tab stop", async () => {
+    const priority = openDecision
+      .locator("[data-decision-weights]")
+      .first()
+      .locator("button");
+    await expect(priority.nth(0)).toHaveAttribute("tabindex", "-1");
+    await expect(priority.nth(1)).toHaveAttribute("tabindex", "0");
+    await expect(priority.nth(2)).toHaveAttribute("tabindex", "-1");
+    await priority.nth(1).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(priority.nth(2)).toHaveAttribute("aria-checked", "true");
+    await expect(priority.nth(2)).toHaveAttribute("tabindex", "0");
+    await expect(priority.nth(2)).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(priority.nth(0)).toHaveAttribute("aria-checked", "true");
+    await expect(priority.nth(0)).toBeFocused();
+    await priority.nth(1).click();
   });
 
   await test.step("the open Score section shows live arithmetic", async () => {

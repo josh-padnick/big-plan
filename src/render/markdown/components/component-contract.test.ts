@@ -1,8 +1,12 @@
-// Tests the component contract's centralized static attribute validation.
+// Tests the component contract's static attribute validation and document id
+// allocation.
 
 import { describe, expect, it } from "vitest";
 import { createDiagnosticCollector } from "./diagnostics.js";
-import { validateComponentAttributes } from "./component-contract.js";
+import {
+  createComponentIdAllocator,
+  validateComponentAttributes,
+} from "./component-contract.js";
 
 const POSITION = {
   start: { line: 3, column: 1, offset: 10 },
@@ -106,5 +110,22 @@ describe("validateComponentAttributes", () => {
       { tone: "calm", compact: true },
     );
     expect(messages).toEqual(['Unknown attribute "compact" on Sample']);
+  });
+});
+
+describe("createComponentIdAllocator", () => {
+  it("should avoid collisions between duplicate suffixes and authored slugs", () => {
+    const ids = createComponentIdAllocator();
+    const allocate = (label: string) =>
+      ids.allocate({ prefix: "decision", label, fallbackId: "decision" });
+
+    expect([
+      allocate("Choice"),
+      allocate("Choice"),
+      allocate("Choice 2"),
+    ]).toEqual(["decision-choice", "decision-choice-2", "decision-choice-2-2"]);
+    expect([allocate("Route 2"), allocate("Route"), allocate("Route")]).toEqual(
+      ["decision-route-2", "decision-route", "decision-route-3"],
+    );
   });
 });

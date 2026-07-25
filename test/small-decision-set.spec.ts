@@ -14,6 +14,10 @@ test("should review a compact question list", async ({
 
   await test.step("the header counts the questions", async () => {
     await expect(set).toBeVisible();
+    await expect(set).toHaveAttribute(
+      "id",
+      "small-decision-set-open-questions",
+    );
     await expect(set.locator(".small-decision-set-summary")).toHaveText(
       "3 questions",
     );
@@ -46,7 +50,9 @@ test("should review a compact question list", async ({
   });
 
   await test.step("an option without detail stays a clean single row", async () => {
-    const bareOption = page.locator("#option-same-release");
+    const bareOption = page.locator(
+      "#small-decision-set-open-questions-question-when-do-we-remove-the-legacy-endpoint-option-same-release",
+    );
     await expect(bareOption).toContainText("Same release");
   });
 
