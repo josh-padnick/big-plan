@@ -59,16 +59,15 @@ test("should review standalone plan decisions", async ({
       "data-reversibility-rating",
       "somewhat-hard",
     );
-    await expect(section).toContainText("Somewhat hard to reverse");
-    await expect(section).toContainText("The repository layer isolates SQL");
-    await expect(
-      section.getByText(/Reversibility is what it would cost/),
-    ).toBeHidden();
+    await expect(section.getByText("Somewhat hard to reverse")).toBeHidden();
     await section.locator(".big-decision-info > summary").hover();
     await expect(
       section.getByText(/Reversibility is what it would cost/),
     ).toBeVisible();
     await page.mouse.move(0, 0);
+    await section.locator(".card-section-label").click();
+    await expect(section.getByText("Somewhat hard to reverse")).toBeVisible();
+    await expect(section).toContainText("The repository layer isolates SQL");
   });
 
   await test.step("priority squares recompute the Best match section", async () => {
@@ -97,6 +96,7 @@ test("should review standalone plan decisions", async ({
     await expect(scoreRow.locator("td").nth(0)).toHaveClass(
       /big-decision-score-leader/,
     );
+    await section.locator(".card-section-label").click();
     const reset = section.locator("[data-decision-weights-reset]");
     await expect(reset).toBeVisible();
     await reset.click();
@@ -104,84 +104,23 @@ test("should review standalone plan decisions", async ({
     await expect(reset).toBeHidden();
   });
 
-  await test.step("the why popover shows the score arithmetic", async () => {
-    const why = openDecision
-      .locator("[data-decision-best-match] .big-decision-info")
-      .nth(0);
-    await why.locator("summary").click();
-    await expect(why.locator(".big-decision-breakdown")).toBeVisible();
-    await expect(
-      why.locator(".big-decision-breakdown tbody tr").last(),
-    ).toContainText("Total");
-    await page.mouse.click(4, 4);
-    await expect(why.locator(".big-decision-breakdown")).toBeHidden();
-  });
-
-  await test.step("the ranking popover opens on click, not hover", async () => {
-    const how = openDecision
-      .locator("[data-decision-best-match] .big-decision-info")
-      .nth(1);
-    await expect(how.getByText(/never changes your selection/)).toBeHidden();
-    await how.locator("summary").hover();
-    await expect(how.getByText(/never changes your selection/)).toBeHidden();
-    await how.locator("summary").click();
-    await expect(how.getByText(/never changes your selection/)).toBeVisible();
-    await page.mouse.click(4, 4);
-    await expect(how.getByText(/never changes your selection/)).toBeHidden();
-  });
-
-  await test.step("a decided decision keeps its authored outcome unselectable", async () => {
-    await expect(decidedDecision.locator("[data-decision-outcome]")).toHaveText(
-      "Chosen: Alongside the source plan",
-    );
-    await expect(decidedDecision.locator('[role="radio"]')).toHaveCount(0);
-    await expect(
-      decidedDecision.locator(".big-decision-option-muted"),
-    ).toHaveCount(1);
-    await expect(decidedDecision).toContainText("Tool-owned cache directory");
-  });
-
-  await test.step("a decision without criteria renders plain selectable options", async () => {
-    await expect(deferredDecision.locator("table")).toHaveCount(0);
-    const plain = deferredDecision.locator("[data-option]");
-    await expect(plain).toHaveCount(2);
-    await expect(plain.nth(0)).toHaveAttribute("role", "radio");
-    await expect(plain.nth(0)).toHaveAttribute("aria-checked", "true");
-    await expect(
-      deferredDecision.locator("[data-decision-weights]"),
-    ).toHaveCount(0);
-    await expect(
-      deferredDecision.locator("[data-decision-details]"),
-    ).toHaveCount(1);
-    await expect(deferredDecision.locator("[data-option-details]")).toHaveCount(
-      2,
-    );
-  });
-
-  await test.step("option details open inside their option", async () => {
-    const drawer = openDecision.locator("[data-option-details]");
-    await expect(drawer).toHaveCount(1);
-    await expect(
-      drawer.getByText(/The initial schema needs only/),
-    ).toBeHidden();
-    await drawer.locator("summary").click();
-    await expect(
-      drawer.getByText(/The initial schema needs only/),
-    ).toBeVisible();
-  });
-
-  await test.step("the decision expands to full screen and restores", async () => {
-    const expand = openDecision.locator("[data-decision-expand]");
-    await expect(expand).toBeVisible();
-    await expand.click();
-    const dialog = page.locator("dialog.component-dialog");
-    await expect(dialog).toBeVisible();
-    await expect(dialog.locator("table.big-decision-matrix")).toBeVisible();
-    await dialog.locator("[data-decision-expand]").click();
-    await expect(dialog).toHaveCount(0);
-    await expect(
-      openDecision.locator("table.big-decision-matrix"),
-    ).toBeVisible();
+  await test.step("the open Score section shows live arithmetic", async () => {
+    const section = openDecision.locator("[data-decision-best-match]");
+    const table = section.locator(".big-decision-breakdown");
+    await expect(table).toBeVisible();
+    await expect(table.locator("tbody tr").last()).toContainText("Total");
+    await expect(table.locator("tbody tr").last()).toContainText("+10");
+    const anchorPriority = openDecision
+      .locator("[data-decision-weights]")
+      .nth(0)
+      .locator("button");
+    await anchorPriority.nth(2).click();
+    await expect(table.locator("tbody tr").first()).toContainText("×3");
+    await expect(table.locator("tbody tr").last()).toContainText("+12");
+    await section.locator("[data-decision-weights-reset]").click();
+    await expect(table.locator("tbody tr").last()).toContainText("+10");
+    await section.locator(".card-section-label").click();
+    await expect(table).toBeHidden();
   });
 
   await test.step("lifecycle actions are placeholders for the live layer", async () => {

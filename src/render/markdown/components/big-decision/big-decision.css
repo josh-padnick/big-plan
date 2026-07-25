@@ -156,7 +156,8 @@
   article [data-decision-reversibility] .big-decision-info-body {
     max-width: 60ch;
   }
-  article .big-decision-details > summary::marker {
+  article .big-decision-details > summary::marker,
+  article .big-decision-section-toggle > summary::marker {
     color: var(--color-muted);
   }
   article .big-decision-option[data-option-selected] {

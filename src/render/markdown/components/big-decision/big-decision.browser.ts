@@ -1,8 +1,8 @@
 // Owns BigDecision's browser enhancements: full-screen viewing, floating
-// help (hover tooltips on server-rendered terms, click popovers on script
-// chrome), and the priority preview - labeled Low/Medium/High controls per
-// criterion that recompute a Best match, explain why, and offer to align the
-// reader's selection without ever changing it silently.
+// help (hover tooltips on server-rendered terms), and the priority preview:
+// per-criterion importance squares recompute a live Score row, a Best match
+// decorator, and an inline how-we-computed-scores breakdown, never touching
+// the reader's own selection.
 
 import {
   openComponentFullScreen,
@@ -61,14 +61,11 @@ for (const component of document.querySelectorAll<HTMLElement>(
 }
 
 // Floats one details element's body at a fixed position beside its summary,
-// so help never pushes layout or clips in the matrix scroller. Tooltips also
-// open on hover; popovers only on click and keyboard focus.
+// so help never pushes layout or clips in the matrix scroller.
 const enhanceFloatingInfo = ({
   info,
-  hover,
 }: {
   readonly info: HTMLDetailsElement;
-  readonly hover: boolean;
 }): void => {
   const summary = info.querySelector<HTMLElement>("summary");
   const body = info.querySelector<HTMLElement>(".big-decision-info-body");
@@ -103,21 +100,8 @@ const enhanceFloatingInfo = ({
     info.open = false;
   };
 
-  if (hover) {
-    info.addEventListener("pointerenter", open);
-    info.addEventListener("pointerleave", close);
-  } else {
-    // A click-mode popover also dismisses from anywhere outside it.
-    document.addEventListener("pointerdown", (event) => {
-      if (
-        info.open &&
-        event.target instanceof Node &&
-        !info.contains(event.target)
-      ) {
-        close();
-      }
-    });
-  }
+  info.addEventListener("pointerenter", open);
+  info.addEventListener("pointerleave", close);
   // Only keyboard focus opens; a mouse click also focuses, and letting that
   // open would make the click handler immediately toggle it shut.
   summary.addEventListener("focus", () => {
@@ -156,32 +140,9 @@ for (const info of document.querySelectorAll<HTMLElement>(
   "details.big-decision-info",
 )) {
   if (info instanceof HTMLDetailsElement) {
-    enhanceFloatingInfo({ info, hover: true });
+    enhanceFloatingInfo({ info });
   }
 }
-
-// Builds one script-owned popover: a link-styled summary plus a floating
-// body, reusing the shared details grammar so styling and dismissal match.
-const createPopover = ({
-  label,
-  wide = false,
-}: {
-  readonly label: string;
-  readonly wide?: boolean;
-}): { readonly details: HTMLDetailsElement; readonly body: HTMLElement } => {
-  const details = document.createElement("details");
-  details.className = "big-decision-info";
-  const summary = document.createElement("summary");
-  summary.className = "big-decision-popover-link";
-  summary.textContent = label;
-  const body = document.createElement("div");
-  body.className = `big-decision-info-body ${
-    wide ? "max-w-[30rem]" : "max-w-60"
-  } text-xs font-normal text-muted`;
-  details.append(summary, body);
-  enhanceFloatingInfo({ info: details, hover: false });
-  return { details, body };
-};
 
 // The priority preview: tones become coarse values, the reader sets a
 // labeled priority per criterion, and the footer names the Best match with
@@ -196,12 +157,6 @@ const TONE_VALUES: Readonly<Record<string, number>> = {
 const PRIORITY_LABELS: ReadonlyArray<string> = ["Low", "Medium", "High"];
 const PRIORITY_MAX = PRIORITY_LABELS.length;
 const DEFAULT_PRIORITY = 2;
-
-const HOW_RANKING_POINTS: ReadonlyArray<string> = [
-  "Each option is scored against every criterion.",
-  "Priority controls how strongly a criterion affects the comparison.",
-  "Changing priorities updates Best match; it never changes your selection.",
-];
 
 const criterionName = (row: HTMLTableRowElement): string => {
   const header = row.querySelector("th");
@@ -310,16 +265,26 @@ for (const component of document.querySelectorAll<HTMLElement>(
     return table;
   };
 
-  // The Score section gives every score-related role a first-class home:
-  // the explanation, the reset, and the how-scoring-works reference.
-  const section = document.createElement("section");
-  section.className = "border-t border-edge px-4 py-4";
+  // The Score section folds behind its label: expanding it shows the live
+  // per-criterion arithmetic and the priorities reset.
+  const section = document.createElement("details");
+  section.className =
+    "big-decision-section-toggle border-t border-edge px-4 py-4";
   section.dataset.decisionBestMatch = "";
-  const sectionLabel = document.createElement("div");
+  const sectionSummary = document.createElement("summary");
+  sectionSummary.className = "cursor-pointer";
+  const sectionLabel = document.createElement("span");
   sectionLabel.className =
     "card-section-label text-[0.6875rem] leading-4 font-bold tracking-[0.08em] uppercase text-ink/70";
   sectionLabel.textContent = "Score";
-  const whyPopover = createPopover({ label: "Why this match?", wide: true });
+  sectionSummary.append(sectionLabel);
+  const breakdownBody = document.createElement("div");
+  breakdownBody.className = "mt-2 text-xs text-muted";
+  breakdownBody.dataset.decisionBreakdown = "";
+  const breakdownLegend = document.createElement("p");
+  breakdownLegend.className = "mt-1.5 mb-0";
+  breakdownLegend.textContent =
+    "Each cell is tone value × priority. Tones: good +2, mixed +1, neutral 0, bad -2.";
   const resetButton = document.createElement("button");
   resetButton.type = "button";
   resetButton.className = "big-decision-popover-link";
@@ -410,41 +375,13 @@ for (const component of document.querySelectorAll<HTMLElement>(
         column === leaderColumn,
       );
     }
-    if (leaderColumn === null) {
-      whyPopover.details.hidden = true;
-    } else {
-      const name = optionName(options[leaderColumn] ?? document.body);
-      whyPopover.details.hidden = false;
-      whyPopover.body.replaceChildren();
-      const heading = document.createElement("p");
-      heading.className = "m-0 font-semibold text-ink";
-      heading.textContent = `Why ${name} is the best match`;
-      const legend = document.createElement("p");
-      legend.className = "mt-1.5 mb-0";
-      legend.textContent =
-        "Each cell is tone value × priority. Tones: good +2, mixed +1, neutral 0, bad -2.";
-      whyPopover.body.append(heading, buildBreakdown(), legend);
-    }
+    breakdownBody.replaceChildren(buildBreakdown(), breakdownLegend);
   };
 
-  const howPopover = createPopover({ label: "How scoring works" });
-  const howHeading = document.createElement("p");
-  howHeading.className = "m-0 font-semibold text-ink";
-  howHeading.textContent = "How scoring works";
-  const howList = document.createElement("ul");
-  howList.className = "mt-1 mb-0 list-disc pl-4";
-  for (const point of HOW_RANKING_POINTS) {
-    const item = document.createElement("li");
-    item.textContent = point;
-    howList.append(item);
-  }
-  howPopover.body.append(howHeading, howList);
-
   const actions = document.createElement("p");
-  actions.className =
-    "mt-2 mb-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs";
-  actions.append(whyPopover.details, howPopover.details, resetButton);
-  section.append(sectionLabel, actions);
+  actions.className = "mt-2.5 mb-0 text-xs";
+  actions.append(resetButton);
+  section.append(sectionSummary, breakdownBody, actions);
 
   for (const [index, row] of rows.entries()) {
     const rowHeader = row.querySelector("th");

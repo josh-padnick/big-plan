@@ -560,83 +560,103 @@ const REVERSIBILITY_EXPLAINER =
 // disclosure explains why the field exists at all.
 const renderReversibilitySection = (
   reversibility: CompiledBigDecisionReversibility,
-): Element =>
-  renderCardSection({
-    properties: {
-      "data-decision-reversibility": "",
-      "data-reversibility-rating": reversibility.rating,
-    },
-    children: [
-      {
-        type: "element",
-        tagName: "div",
-        properties: { className: ["flex", "items-center", "gap-1.5"] },
-        children: [
-          renderSectionLabel("Reversibility"),
-          ...renderInfoDisclosure(
-            [
-              {
-                type: "element",
-                tagName: "p",
-                properties: {},
-                children: [text(REVERSIBILITY_EXPLAINER)],
-              },
-            ],
-            CIRCLE_QUESTION_MARK_ICON,
-          ),
-        ],
-      },
-      {
-        type: "element",
-        tagName: "div",
-        properties: {
-          className: [
-            `big-decision-reversibility-${reversibility.rating}`,
-            "mt-2.5",
-            "flex",
-            "items-start",
-            "gap-2",
-            "text-sm",
-            "[&>svg]:mt-[calc((1lh-0.875rem)/2)]",
-            "[&>svg]:size-3.5",
-            "[&>svg]:shrink-0",
-          ],
-        },
-        children: [
-          renderLucideIcon({ icon: UNDO_2_ICON, hidden: false }),
-          {
-            type: "element",
-            tagName: "span",
-            properties: { className: ["min-w-0"] },
-            children: [
-              {
-                type: "element",
-                tagName: "span",
-                properties: { className: ["font-semibold", "text-ink"] },
-                children: [text(REVERSIBILITY_PHRASES[reversibility.rating])],
-              },
-              ...(reversibility.detail.length === 0
-                ? []
-                : [
-                    {
-                      type: "element",
-                      tagName: "div",
-                      properties: {
-                        className: [
-                          "mt-1",
-                          "text-muted",
-                          "[&>:last-child]:mb-0",
-                        ],
-                      },
-                      children: [...reversibility.detail],
-                    } satisfies Element,
-                  ]),
+): Element => ({
+  type: "element",
+  tagName: "details",
+  properties: {
+    className: [
+      "big-decision-section-toggle",
+      "border-t",
+      "border-edge",
+      "px-4",
+      "py-4",
+    ],
+    "data-decision-reversibility": "",
+    "data-reversibility-rating": reversibility.rating,
+  },
+  children: [
+    {
+      type: "element",
+      tagName: "summary",
+      properties: { className: ["cursor-pointer"] },
+      children: [
+        {
+          type: "element",
+          tagName: "span",
+          properties: {
+            className: [
+              "card-section-label",
+              "text-[0.6875rem]",
+              "leading-4",
+              "font-bold",
+              "tracking-[0.08em]",
+              "uppercase",
+              "text-ink/70",
             ],
           },
+          children: [text("Reversibility")],
+        },
+        text(" "),
+        ...renderInfoDisclosure(
+          [
+            {
+              type: "element",
+              tagName: "p",
+              properties: {},
+              children: [text(REVERSIBILITY_EXPLAINER)],
+            },
+          ],
+          CIRCLE_QUESTION_MARK_ICON,
+        ),
+      ],
+    },
+    {
+      type: "element",
+      tagName: "div",
+      properties: {
+        className: [
+          `big-decision-reversibility-${reversibility.rating}`,
+          "mt-2.5",
+          "flex",
+          "items-start",
+          "gap-2",
+          "text-sm",
+          "[&>svg]:mt-[calc((1lh-0.875rem)/2)]",
+          "[&>svg]:size-3.5",
+          "[&>svg]:shrink-0",
         ],
       },
-    ],
-  });
+      children: [
+        renderLucideIcon({ icon: UNDO_2_ICON, hidden: false }),
+        {
+          type: "element",
+          tagName: "span",
+          properties: { className: ["min-w-0"] },
+          children: [
+            {
+              type: "element",
+              tagName: "span",
+              properties: { className: ["font-semibold", "text-ink"] },
+              children: [text(REVERSIBILITY_PHRASES[reversibility.rating])],
+            },
+            ...(reversibility.detail.length === 0
+              ? []
+              : [
+                  {
+                    type: "element",
+                    tagName: "div",
+                    properties: {
+                      className: ["mt-1", "text-muted", "[&>:last-child]:mb-0"],
+                    },
+                    children: [...reversibility.detail],
+                  } satisfies Element,
+                ]),
+          ],
+        },
+      ],
+    },
+  ],
+});
 
 const renderBigDecisionFigure = ({
   model,

@@ -10,7 +10,7 @@ import bigDecisionDark from "../../../assets/components/big-decision-dark.png";
 `BigDecision` presents one consequential choice as a comparison a reviewer can actually check: the question and its context, the criteria the decision turns on, and every option scored against every criterion in a matrix, so competing verdicts sit side by side instead of a scroll apart.
 Place it in the plan section where the decision belongs; the smaller end-of-plan questions belong in [SmallDecisionSet](/components/small-decision-set/) instead.
 While a decision is undecided, the recommended option starts selected and a click moves the reader's local selection; recording the choice arrives with the live review layer, and decided decisions stay static.
-A full-screen control gives a wide matrix the whole viewport when the reading column crowds it, and priority squares under each criterion let the reader state what matters most - a dashed Best match tag follows the weighted comparison, always distinct from the agent's solid Recommended pill and from the reader's own selection, a live Score row at the foot of the matrix totals every option and highlights the Best match as priorities change, and a Score section carries the arithmetic breakdown, the priorities reset, and how scoring works.
+A full-screen control gives a wide matrix the whole viewport when the reading column crowds it, and priority squares under each criterion let the reader state what matters most - a dashed Best match tag follows the weighted comparison, always distinct from the agent's solid Recommended pill and from the reader's own selection, a live Score row at the foot of the matrix totals every option and highlights the Best match as priorities change, and collapsible Score and Reversibility sections keep the card clean - Score expands to the live per-criterion arithmetic and the priorities reset.
 Every decision also rates its reversibility on a fixed scale, with a built-in explainer behind an info icon.
 
 ## How it looks
@@ -152,7 +152,7 @@ A decided decision requires exactly one chosen option, and chosen options are in
 
 ### Reversibility
 
-At most one `Reversibility` element rates what changing course later would cost; it renders as its own section below the options with a built-in explainer tooltip.
+At most one `Reversibility` element rates what changing course later would cost; it renders as a collapsible section below the options, with the built-in explainer tooltip on its always-visible label.
 
 | Attribute | Type                                        | Required | Behavior                                     |
 | --------- | ------------------------------------------- | -------- | -------------------------------------------- |
@@ -177,7 +177,7 @@ The browser-side priority preview keeps its arithmetic deliberately coarse and v
 - The authoring agent assigns each cell's tone; the reader never edits ratings, only priorities.
 - Every criterion starts at medium priority; the three squares set low, medium, or high, multiplying a tone's contribution by 1, 2, or 3.
 - Tones contribute good +2, mixed +1, neutral 0, and bad -2; the option with the highest weighted sum is the Best match.
-- A tie across all options shows no Best match; otherwise the Why-this-match popover shows the per-criterion arithmetic and totals so the ranking can be verified.
+- A tie across all options shows no Best match; the collapsed Score section expands to the live per-criterion arithmetic and totals so the ranking can be verified as priorities change.
 - Changing priorities never changes the reader's selection.
 - Priorities are a session-local reading aid: they are not saved into the document, and the agent's Recommended pill never moves.
 - Without JavaScript the matrix is fully readable and none of the priority controls appear.
