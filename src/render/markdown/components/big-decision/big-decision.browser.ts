@@ -360,7 +360,7 @@ for (const component of document.querySelectorAll<HTMLElement>(
     );
     const best = Math.max(...totals);
     const leaders = totals.filter((total) => total === best).length;
-    leaderColumn = leaders < options.length ? totals.indexOf(best) : null;
+    leaderColumn = leaders === 1 ? totals.indexOf(best) : null;
     for (const [column, option] of options.entries()) {
       const isLeader = column === leaderColumn;
       // When the leader is also the recommendation, the Recommended pill and

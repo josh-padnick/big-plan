@@ -456,3 +456,47 @@ test("should isolate nested decision enhancements", async ({
     await expect(page.locator("dialog.component-dialog")).toHaveCount(0);
   });
 });
+
+test("should withhold Best match when top scores tie", async ({
+  page,
+  bigDecisionViewerUrl,
+}) => {
+  await page.goto(bigDecisionViewerUrl);
+  const decision = page.locator(
+    '[data-big-decision][data-decision-state="open"]',
+  );
+  const matrix = decision.locator("table.big-decision-matrix");
+  await matrix.evaluate((table) => {
+    const tones = [
+      ["good", "mixed", "mixed"],
+      ["mixed", "good", "neutral"],
+      ["neutral", "neutral", "neutral"],
+      ["neutral", "neutral", "neutral"],
+    ];
+    for (const [rowIndex, row] of [
+      ...table.querySelectorAll(":scope > tbody > tr"),
+    ].entries()) {
+      for (const [column, tone] of (tones[rowIndex] ?? []).entries()) {
+        const cell = row.querySelectorAll(":scope > td")[column];
+        if (cell instanceof HTMLElement) {
+          cell.dataset.scoreTone = tone;
+        }
+      }
+    }
+  });
+  await decision
+    .locator("[data-decision-weights]")
+    .first()
+    .locator("button")
+    .nth(1)
+    .click();
+
+  const scoreRow = decision.locator("[data-decision-score-row]");
+  await expect(scoreRow.locator("td")).toHaveText(["+6", "+6", "+2"]);
+  await expect(decision.locator("[data-best-match]")).toHaveCount(0);
+  await expect(decision.locator(".big-decision-bestmatch")).toHaveCount(0);
+  await expect(scoreRow.locator(".big-decision-score-leader")).toHaveCount(0);
+  await expect(decision.locator(".big-decision-breakdown-leader")).toHaveCount(
+    0,
+  );
+});
