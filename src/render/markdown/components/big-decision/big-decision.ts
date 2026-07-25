@@ -174,7 +174,7 @@ const renderOptionHead = ({
       ...(option.chosen ? ["big-decision-option-chosen"] : []),
       ...(muted ? ["big-decision-option-muted"] : []),
       "flex",
-      "h-full",
+      "flex-1",
       "min-w-44",
       "items-start",
       "gap-2.5",
@@ -214,14 +214,6 @@ const renderOptionHead = ({
               },
               children: [text(option.title)],
             },
-            ...(option.recommended
-              ? [
-                  renderBadgePill({
-                    label: "Recommended",
-                    classNames: ["big-decision-recommended-pill"],
-                  }),
-                ]
-              : []),
           ],
         },
         ...(option.summary === undefined
@@ -236,8 +228,96 @@ const renderOptionHead = ({
                 children: [text(option.summary)],
               } satisfies Element,
             ]),
+        ...(option.detail.length === 0
+          ? []
+          : [
+              {
+                type: "element",
+                tagName: "details",
+                properties: {
+                  className: ["big-decision-details", "mt-1.5"],
+                  "data-option-details": option.id,
+                },
+                children: [
+                  {
+                    type: "element",
+                    tagName: "summary",
+                    properties: {
+                      className: [
+                        "cursor-pointer",
+                        "text-xs",
+                        "font-semibold",
+                        "text-muted",
+                      ],
+                    },
+                    children: [text("Details")],
+                  },
+                  {
+                    type: "element",
+                    tagName: "div",
+                    properties: {
+                      className: [
+                        "mt-1.5",
+                        "text-xs",
+                        "text-muted",
+                        "[&>:last-child]:mb-0",
+                      ],
+                    },
+                    children: [...option.detail],
+                  },
+                ],
+              } satisfies Element,
+            ]),
       ],
     },
+  ],
+});
+
+// Status pills decorate the option from above its box: Recommended is
+// server-rendered, and the runtime Best match tag joins the same row. Matrix
+// columns always reserve the row so cards top-align.
+const renderOptionColumn = ({
+  option,
+  muted,
+  reserveDecorators,
+}: {
+  readonly option: CompiledBigDecisionOption;
+  readonly muted: boolean;
+  readonly reserveDecorators: boolean;
+}): Element => ({
+  type: "element",
+  tagName: "div",
+  properties: { className: ["flex", "h-full", "min-w-0", "flex-col"] },
+  children: [
+    ...(reserveDecorators || option.recommended
+      ? [
+          {
+            type: "element",
+            tagName: "div",
+            properties: {
+              className: [
+                "big-decision-option-decorators",
+                "mb-1",
+                "flex",
+                "min-h-5",
+                "flex-wrap",
+                "items-center",
+                "gap-1.5",
+              ],
+              "data-option-decorators": "",
+            },
+            children: option.recommended
+              ? [
+                  renderBadgePill({
+                    label: "Recommended",
+                    classNames: ["big-decision-recommended-pill"],
+                  }),
+                ]
+              : [],
+          } satisfies Element,
+        ]
+      : []),
+    renderOptionHead({ option, muted }),
   ],
 });
 
@@ -390,9 +470,10 @@ const renderMatrix = (model: CompiledBigDecision): Element => ({
                     className: ["px-1.5", "py-1.5", "align-top"],
                   },
                   children: [
-                    renderOptionHead({
+                    renderOptionColumn({
                       option,
                       muted: model.status === "decided" && !option.chosen,
+                      reserveDecorators: true,
                     }),
                   ],
                 })),
@@ -428,56 +509,13 @@ const renderOptionStack = (model: CompiledBigDecision): Element => ({
   tagName: "div",
   properties: { className: ["mt-2.5", "grid", "gap-2.5"] },
   children: model.options.map((option) =>
-    renderOptionHead({
+    renderOptionColumn({
       option,
       muted: model.status === "decided" && !option.chosen,
+      reserveDecorators: false,
     }),
   ),
 });
-
-// Long-form option detail collects below the comparison so every column stays
-// the same height; each drawer names its option.
-const renderDetailDrawers = (
-  model: CompiledBigDecision,
-): ReadonlyArray<Element> =>
-  model.options
-    .filter((option) => option.detail.length > 0)
-    .map((option) => ({
-      type: "element",
-      tagName: "details",
-      properties: {
-        className: ["big-decision-details"],
-        "data-option-details": option.id,
-      },
-      children: [
-        {
-          type: "element",
-          tagName: "summary",
-          properties: {
-            className: [
-              "cursor-pointer",
-              "text-xs",
-              "font-semibold",
-              "text-muted",
-            ],
-          },
-          children: [text(`${option.title} details`)],
-        },
-        {
-          type: "element",
-          tagName: "div",
-          properties: {
-            className: [
-              "mt-2.5",
-              "text-sm",
-              "text-muted",
-              "[&>:last-child]:mb-0",
-            ],
-          },
-          children: [...option.detail],
-        },
-      ],
-    }));
 
 const outcomeStrip = (option: CompiledBigDecisionOption): Element => ({
   type: "element",
@@ -673,28 +711,53 @@ const renderBigDecisionFigure = ({
             children: [...model.context],
           } satisfies Element,
         ]),
-    ...(() => {
-      const drawers = renderDetailDrawers(model);
-      if (drawers.length === 0) {
-        return [];
-      }
-      return [
-        {
-          type: "element",
-          tagName: "div",
-          properties: {
-            className: [
-              "px-4",
-              "pb-3.5",
-              "[&>details]:mt-0",
-              "[&>details+details]:mt-2",
+    ...(model.detail.length === 0
+      ? []
+      : [
+          {
+            type: "element",
+            tagName: "div",
+            properties: { className: ["px-4", "pb-3.5"] },
+            children: [
+              {
+                type: "element",
+                tagName: "details",
+                properties: {
+                  className: ["big-decision-details"],
+                  "data-decision-details": "",
+                },
+                children: [
+                  {
+                    type: "element",
+                    tagName: "summary",
+                    properties: {
+                      className: [
+                        "cursor-pointer",
+                        "text-xs",
+                        "font-semibold",
+                        "text-muted",
+                      ],
+                    },
+                    children: [text("Details")],
+                  },
+                  {
+                    type: "element",
+                    tagName: "div",
+                    properties: {
+                      className: [
+                        "mt-2",
+                        "text-sm",
+                        "text-muted",
+                        "[&>:last-child]:mb-0",
+                      ],
+                    },
+                    children: [...model.detail],
+                  },
+                ],
+              } satisfies Element,
             ],
-            "data-decision-drawers": "",
-          },
-          children: [...drawers],
-        } satisfies Element,
-      ];
-    })(),
+          } satisfies Element,
+        ]),
     ...(model.chosenOption === undefined
       ? []
       : [outcomeStrip(model.chosenOption)]),
@@ -718,7 +781,7 @@ export const renderBigDecision: ComponentRenderer = (input) =>
   renderBigDecisionFigure({ model: compileBigDecisionComponent(input) });
 
 const bodyPolicy = (
-  name: "Criterion" | "Option" | "Reversibility" | "Score",
+  name: "Criterion" | "Details" | "Option" | "Reversibility" | "Score",
 ) => ({
   prohibited: {
     heading: `${name} bodies cannot contain headings`,
@@ -754,6 +817,10 @@ export const BIG_DECISION_COMPONENT_DEFINITION = {
   render: renderBigDecision,
   scopedChildren: {
     Criterion: criterionDefinition(),
+    Details: {
+      kind: "scoped-child",
+      markdownBody: bodyPolicy("Details"),
+    },
     Option: optionDefinition(),
     Reversibility: reversibilityDefinition(),
   },

@@ -71,6 +71,7 @@ export type CompiledBigDecision = {
   readonly question: string;
   readonly status: BigDecisionStatus;
   readonly context: ReadonlyArray<ElementContent>;
+  readonly detail: ReadonlyArray<ElementContent>;
   readonly reversibility?: CompiledBigDecisionReversibility;
   readonly criteria: ReadonlyArray<CompiledBigDecisionCriterion>;
   readonly options: ReadonlyArray<CompiledBigDecisionOption>;
@@ -85,6 +86,8 @@ const BIG_DECISION_SCHEMA = {
 const REVERSIBILITY_SCHEMA = {
   rating: { kind: "enum", values: REVERSIBILITY_RATINGS, required: true },
 } satisfies ComponentAttributeSchema;
+
+const DETAILS_SCHEMA = {} satisfies ComponentAttributeSchema;
 
 const CRITERION_SCHEMA = {
   title: { kind: "string", required: true, nonEmpty: true },
@@ -372,6 +375,35 @@ const validateDecisionOptions = ({
   }
 };
 
+// Question-level long-form collects behind one Details drawer; a second
+// Details element is an authoring error, not a merge.
+const compileDetails = ({
+  children,
+  diagnostics,
+}: {
+  readonly children: ReadonlyArray<ScopedChild>;
+  readonly diagnostics: DiagnosticCollector;
+}): ReadonlyArray<ElementContent> => {
+  for (const duplicate of children.slice(1)) {
+    diagnostics.add({
+      message: "BigDecision cannot contain more than one Details",
+      position: duplicate.position,
+    });
+  }
+  const child = children[0];
+  if (child === undefined) {
+    return [];
+  }
+  validateComponentAttributes({
+    component: "Details",
+    attributes: child.attributes,
+    position: child.position,
+    diagnostics,
+    schema: DETAILS_SCHEMA,
+  });
+  return contentOf(child.children);
+};
+
 // The rating vocabulary is fixed so every decision answers the same question
 // the same way; the body carries the decision-specific rationale.
 const compileReversibility = ({
@@ -451,6 +483,10 @@ export const compileBigDecisionComponent = ({
     children: scopedChildren.filter((child) => child.name === "Reversibility"),
     diagnostics,
   });
+  const detail = compileDetails({
+    children: scopedChildren.filter((child) => child.name === "Details"),
+    diagnostics,
+  });
   validateCriteria({ children: criterionChildren, diagnostics });
   const criterionIdCounts = new Map<string, number>();
   const criteria = criterionChildren.map((child) =>
@@ -487,6 +523,7 @@ export const compileBigDecisionComponent = ({
     question,
     status,
     context: contentOf(children),
+    detail,
     ...(reversibility === undefined ? {} : { reversibility }),
     criteria,
     options: optionEntries.map(({ option }) => option),

@@ -164,8 +164,10 @@ for (const info of document.querySelectorAll<HTMLElement>(
 // body, reusing the shared details grammar so styling and dismissal match.
 const createPopover = ({
   label,
+  wide = false,
 }: {
   readonly label: string;
+  readonly wide?: boolean;
 }): { readonly details: HTMLDetailsElement; readonly body: HTMLElement } => {
   const details = document.createElement("details");
   details.className = "big-decision-info";
@@ -173,8 +175,9 @@ const createPopover = ({
   summary.className = "big-decision-popover-link";
   summary.textContent = label;
   const body = document.createElement("div");
-  body.className =
-    "big-decision-info-body max-w-60 text-xs font-normal text-muted";
+  body.className = `big-decision-info-body ${
+    wide ? "max-w-96" : "max-w-60"
+  } text-xs font-normal text-muted`;
   details.append(summary, body);
   enhanceFloatingInfo({ info: details, hover: false });
   return { details, body };
@@ -248,27 +251,57 @@ for (const component of document.querySelectorAll<HTMLElement>(
     return (priorities[index] ?? 0) * value;
   };
 
-  // The generated reasoning names the winner's strongest weighted criteria
-  // instead of exposing scores, which would imply false precision.
-  const explainLeader = (column: number): string => {
-    const strengths = rows
-      .map((row, index) => ({
-        title: criterionName(row),
-        value: contribution({ row, index, column }),
-      }))
-      .filter(({ value }) => value > 0)
-      .sort((left, right) => right.value - left.value)
-      .slice(0, 2)
-      .map(({ title }) => title);
-    const name = optionName(options[column] ?? document.body);
-    if (strengths.length === 0) {
-      return `${name} leads narrowly; no criterion currently works strongly in its favor.`;
+  const signed = (value: number): string =>
+    value > 0 ? `+${value}` : `${value}`;
+
+  // The explanation shows the arithmetic itself - tone value times priority
+  // per cell, totals per option - so the reader can verify the ranking.
+  const buildBreakdown = (): HTMLTableElement => {
+    const table = document.createElement("table");
+    table.className = "big-decision-breakdown mt-1.5 w-full";
+    const head = document.createElement("tr");
+    head.append(document.createElement("th"));
+    for (const option of options) {
+      const cell = document.createElement("th");
+      cell.textContent = optionName(option);
+      head.append(cell);
     }
-    const list =
-      strengths.length === 1
-        ? strengths[0]
-        : `${strengths[0]} and ${strengths[1]}`;
-    return `${name} performs strongly on ${list} under the current priorities.`;
+    const thead = document.createElement("thead");
+    thead.append(head);
+    table.append(thead);
+    const body = document.createElement("tbody");
+    const totals = options.map(() => 0);
+    for (const [index, row] of rows.entries()) {
+      const line = document.createElement("tr");
+      const name = document.createElement("th");
+      name.setAttribute("scope", "row");
+      name.textContent = `${criterionName(row)} ×${priorities[index] ?? 0}`;
+      line.append(name);
+      for (const [column] of options.entries()) {
+        const value = contribution({ row, index, column });
+        totals[column] = (totals[column] ?? 0) + value;
+        const cell = document.createElement("td");
+        cell.textContent = signed(value);
+        line.append(cell);
+      }
+      body.append(line);
+    }
+    const totalLine = document.createElement("tr");
+    const totalName = document.createElement("th");
+    totalName.setAttribute("scope", "row");
+    totalName.textContent = "Total";
+    totalLine.append(totalName);
+    for (const [column] of options.entries()) {
+      const cell = document.createElement("td");
+      cell.textContent = signed(totals[column] ?? 0);
+      if (column === leaderColumn) {
+        cell.className = "big-decision-breakdown-leader";
+      }
+      totalLine.append(cell);
+    }
+    body.append(totalLine);
+    table.append(body);
+    return table;
   };
 
   // The Best match section gives every rank-related role a first-class home:
@@ -280,11 +313,11 @@ for (const component of document.querySelectorAll<HTMLElement>(
   const sectionLabel = document.createElement("div");
   sectionLabel.className =
     "card-section-label text-[0.6875rem] leading-4 font-bold tracking-[0.08em] uppercase text-ink/70";
-  sectionLabel.textContent = "Best match";
+  sectionLabel.textContent = "Ranking";
   const bestMatchLine = document.createElement("p");
   bestMatchLine.className = "mt-2.5 mb-0 text-sm text-muted";
   bestMatchLine.dataset.decisionBestMatchLine = "";
-  const whyPopover = createPopover({ label: "Why this match?" });
+  const whyPopover = createPopover({ label: "Why this match?", wide: true });
   const resetButton = document.createElement("button");
   resetButton.type = "button";
   resetButton.className = "big-decision-popover-link";
@@ -298,7 +331,7 @@ for (const component of document.querySelectorAll<HTMLElement>(
   });
   const selectButton = document.createElement("button");
   selectButton.type = "button";
-  selectButton.className = "big-decision-popover-link";
+  selectButton.className = "big-decision-popover-link font-normal";
   selectButton.dataset.decisionDivergence = "";
   selectButton.textContent = "Select";
   selectButton.hidden = true;
@@ -336,16 +369,20 @@ for (const component of document.querySelectorAll<HTMLElement>(
     leaderColumn = leaders < options.length ? totals.indexOf(best) : null;
     for (const [column, option] of options.entries()) {
       const leads = column === leaderColumn;
-      let tag = option.querySelector<HTMLElement>(".big-decision-bestmatch");
+      let tag =
+        option.parentElement?.querySelector<HTMLElement>(
+          ".big-decision-bestmatch",
+        ) ?? null;
       if (leads) {
         option.dataset.bestMatch = "";
         if (tag === null) {
           tag = document.createElement("span");
           tag.className = "big-decision-bestmatch";
           tag.textContent = "Best match";
-          option
-            .querySelector("[data-option-title]")
-            ?.parentElement?.append(tag);
+          (
+            option.parentElement?.querySelector("[data-option-decorators]") ??
+            option
+          ).append(tag);
         }
       } else {
         delete option.dataset.bestMatch;
@@ -371,10 +408,11 @@ for (const component of document.querySelectorAll<HTMLElement>(
       const heading = document.createElement("p");
       heading.className = "m-0 font-semibold text-ink";
       heading.textContent = `Why ${name} is the best match`;
-      const reason = document.createElement("p");
-      reason.className = "mt-1 mb-0";
-      reason.textContent = explainLeader(leaderColumn);
-      whyPopover.body.append(heading, reason);
+      const legend = document.createElement("p");
+      legend.className = "mt-1.5 mb-0";
+      legend.textContent =
+        "Each cell is tone value × priority. Tones: good +2, mixed +1, neutral 0, bad -2.";
+      whyPopover.body.append(heading, buildBreakdown(), legend);
     }
     updateDivergence();
   };

@@ -35,7 +35,7 @@ const scoped = ({
   scopedChildren,
   line,
 }: {
-  readonly name: "Criterion" | "Option" | "Reversibility" | "Score";
+  readonly name: "Criterion" | "Details" | "Option" | "Reversibility" | "Score";
   readonly attributes?: Readonly<Record<string, ComponentAttributeValue>>;
   readonly children?: ReadonlyArray<ElementContent>;
   readonly scopedChildren?: ReadonlyArray<ScopedChild>;
@@ -258,6 +258,24 @@ describe("compileBigDecisionComponent", () => {
     });
     expect(diagnostics).toEqual([]);
     expect(model.chosenOption?.title).toBe("PostgreSQL");
+  });
+
+  it("should reject more than one Details", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        option({ title: "A", line: 3 }),
+        option({ title: "B", line: 5 }),
+        scoped({ name: "Details", line: 7 }),
+        scoped({ name: "Details", line: 9 }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 9,
+        column: 1,
+        message: "BigDecision cannot contain more than one Details",
+      },
+    ]);
   });
 
   it("should reject more than one Reversibility", () => {

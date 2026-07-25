@@ -174,6 +174,28 @@
     border-radius: 9999px;
     background: var(--decision-pro-c);
   }
+  article .big-decision-breakdown th,
+  article .big-decision-breakdown td {
+    background: transparent;
+    border-bottom: 0;
+    padding: 0.125rem 0.625rem 0.125rem 0;
+    font-size: 0.75rem;
+    font-weight: 400;
+    text-align: left;
+    color: var(--color-muted);
+  }
+  article .big-decision-breakdown thead th {
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  article .big-decision-breakdown tbody tr:last-child th,
+  article .big-decision-breakdown tbody tr:last-child td {
+    border-top: 1px solid var(--edge-c);
+    font-weight: 600;
+  }
+  article .big-decision-breakdown-leader {
+    color: var(--color-ink);
+  }
   /* Script-enhanced tooltip mode: the body floats above the page at a fixed
      position, so it never pushes layout or clips in the matrix scroller. */
   article .big-decision-info-floating > .big-decision-info-body {

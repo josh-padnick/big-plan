@@ -78,7 +78,9 @@ test("should review standalone plan decisions", async ({
     );
     const options = openDecision.locator("thead [data-option]");
     await expect(options.nth(1)).toHaveAttribute("data-best-match", "");
-    await expect(options.nth(1)).toContainText("Best match");
+    await expect(
+      openDecision.locator("[data-option-decorators]").nth(1),
+    ).toContainText("Best match");
     await expect(section).toContainText("Best match: SQLite");
     const divergence = section.locator("[data-decision-divergence]");
     await expect(divergence).toHaveText("Select");
@@ -103,6 +105,19 @@ test("should review standalone plan decisions", async ({
     await divergence.click();
     await expect(options.nth(1)).toHaveAttribute("aria-checked", "true");
     await expect(divergence).toBeHidden();
+  });
+
+  await test.step("the why popover shows the score arithmetic", async () => {
+    const why = openDecision
+      .locator("[data-decision-best-match] .big-decision-info")
+      .nth(0);
+    await why.locator("summary").click();
+    await expect(why.locator(".big-decision-breakdown")).toBeVisible();
+    await expect(
+      why.locator(".big-decision-breakdown tbody tr").last(),
+    ).toContainText("Total");
+    await page.mouse.click(4, 4);
+    await expect(why.locator(".big-decision-breakdown")).toBeHidden();
   });
 
   await test.step("the ranking popover opens on click, not hover", async () => {
@@ -138,15 +153,21 @@ test("should review standalone plan decisions", async ({
     await expect(
       deferredDecision.locator("[data-decision-weights]"),
     ).toHaveCount(0);
+    await expect(
+      deferredDecision.locator("[data-decision-details]"),
+    ).toHaveCount(1);
+    await expect(deferredDecision.locator("[data-option-details]")).toHaveCount(
+      2,
+    );
   });
 
-  await test.step("the details drawer opens below the matrix", async () => {
+  await test.step("option details open inside their option", async () => {
     const drawer = openDecision.locator("[data-option-details]");
     await expect(drawer).toHaveCount(1);
     await expect(
       drawer.getByText(/The initial schema needs only/),
     ).toBeHidden();
-    await drawer.getByText("PostgreSQL details").click();
+    await drawer.locator("summary").click();
     await expect(
       drawer.getByText(/The initial schema needs only/),
     ).toBeVisible();

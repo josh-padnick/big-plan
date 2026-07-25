@@ -43,6 +43,12 @@ Long detail with \`code\`.
 
 </Option>
 
+<Details>
+
+Question-level long form.
+
+</Details>
+
 <Reversibility rating="easy">
 
 Cheap to change later.
@@ -95,7 +101,10 @@ describe("BigDecision rendering", () => {
     expect(html).toContain("big-decision-criterion-help");
     expect(html).toContain('data-lucide="circle-question-mark"');
     expect(html).toContain("Why setup matters here.");
-    expect(html).toContain("PostgreSQL details");
+    expect(html).toContain('data-option-details="option-postgresql"');
+    expect(html).toContain('data-decision-details=""');
+    expect(html).toContain("Question-level long form.");
+    expect(html).toContain('data-option-decorators=""');
     expect(html).toContain("<code>code</code>");
     expect(html).not.toContain("data-decision-outcome");
   });

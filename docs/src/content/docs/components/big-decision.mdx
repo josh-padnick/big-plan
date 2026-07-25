@@ -10,7 +10,7 @@ import bigDecisionDark from "../../../assets/components/big-decision-dark.png";
 `BigDecision` presents one consequential choice as a comparison a reviewer can actually check: the question and its context, the criteria the decision turns on, and every option scored against every criterion in a matrix, so competing verdicts sit side by side instead of a scroll apart.
 Place it in the plan section where the decision belongs; the smaller end-of-plan questions belong in [SmallDecisionSet](/components/small-decision-set/) instead.
 While a decision is undecided, the recommended option starts selected and a click moves the reader's local selection; recording the choice arrives with the live review layer, and decided decisions stay static.
-A full-screen control gives a wide matrix the whole viewport when the reading column crowds it, and priority squares under each criterion let the reader state what matters most - a dashed Best match tag follows the weighted comparison, always distinct from the agent's solid Recommended pill and from the reader's own selection, and a Best match section under the options carries the verdict, its explanation, the explicit selection action, the reset, and how ranking works.
+A full-screen control gives a wide matrix the whole viewport when the reading column crowds it, and priority squares under each criterion let the reader state what matters most - a dashed Best match tag follows the weighted comparison, always distinct from the agent's solid Recommended pill and from the reader's own selection, and a Ranking section under the options carries the Best match verdict, its score breakdown, the explicit Select action, the reset, and how ranking works.
 Every decision also rates its reversibility on a fixed scale, with a built-in explainer behind an info icon.
 
 ## How it looks
@@ -128,7 +128,12 @@ A decision with no criteria renders its options as a stacked list without a matr
 | `recommended` | bare boolean       | No       | Marks at most one option; it starts selected for the reader. |
 | `chosen`      | bare boolean       | No       | Marks the single outcome of a `decided` decision.            |
 
-Markdown in an option body outside its scores becomes a named details drawer below the matrix.
+Markdown in an option body outside its scores becomes a Details drawer inside the option card.
+
+### Details
+
+At most one `Details` element holds question-level long-form content; it renders as a Details drawer under the context prose.
+Both the question and each option can carry details this way.
 
 ### Score
 
@@ -160,7 +165,7 @@ The browser-side priority preview keeps its arithmetic deliberately coarse, and 
 - The authoring agent assigns each cell's tone; the reader never edits ratings, only priorities.
 - Every criterion starts at medium priority; the three squares set low, medium, or high, multiplying a tone's contribution by 1, 2, or 3.
 - Tones contribute good +2, mixed +1, neutral 0, and bad -2; the option with the highest weighted sum is the Best match.
-- A tie across all options shows no Best match, and the footer explains the leading option in words rather than numbers.
+- A tie across all options shows no Best match; otherwise the Why-this-match popover shows the per-criterion arithmetic and totals so the ranking can be verified.
 - Changing priorities never changes the reader's selection; when the two diverge, the footer offers the switch as an explicit action.
 - Priorities are a session-local reading aid: they are not saved into the document, and the agent's Recommended pill never moves.
 - Without JavaScript the matrix is fully readable and none of the priority controls appear.
