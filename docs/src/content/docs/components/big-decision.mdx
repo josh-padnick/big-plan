@@ -10,7 +10,7 @@ import bigDecisionDark from "../../../assets/components/big-decision-dark.png";
 `BigDecision` presents one consequential choice as a comparison a reviewer can actually check: the question and its context, the criteria the decision turns on, and every option scored against every criterion in a matrix, so competing verdicts sit side by side instead of a scroll apart.
 Place it in the plan section where the decision belongs; the smaller end-of-plan questions belong in [SmallDecisionSet](/components/small-decision-set/) instead.
 While a decision is undecided, the recommended option starts selected and a click moves the reader's local selection; recording the choice arrives with the live review layer, and decided decisions stay static.
-A full-screen control gives a wide matrix the whole viewport when the reading column crowds it, and priority squares under each criterion let the reader state what matters most - a dashed Best match tag follows the weighted comparison, always distinct from the agent's solid Recommended pill and from the reader's own selection, a live Score row at the foot of the matrix totals every option and highlights the Best match as priorities change, and collapsible Score and Reversibility sections keep the card clean - Score expands to the live per-criterion arithmetic and the priorities reset.
+A full-screen control gives a wide matrix the whole viewport when the reading column crowds it, and priority squares under each criterion let the reader state what matters most - a dashed Best match tag follows the weighted comparison, always distinct from the agent's solid Recommended pill and from the reader's own selection, a live Score row at the foot of the matrix totals every option and highlights the Best match as priorities change, and the Score section stays folded until asked - expanding to the live per-criterion arithmetic and the priorities reset - while the reversibility rating reads in full every time.
 Every decision also rates its reversibility on a fixed scale, with a built-in explainer behind an info icon.
 
 ## How it looks
@@ -152,7 +152,7 @@ A decided decision requires exactly one chosen option, and chosen options are in
 
 ### Reversibility
 
-At most one `Reversibility` element rates what changing course later would cost; it renders as a collapsible section below the options, with the built-in explainer tooltip on its always-visible label.
+At most one `Reversibility` element rates what changing course later would cost; it renders as an always-visible section below the options, with the built-in explainer tooltip on its label.
 
 | Attribute | Type                                        | Required | Behavior                                     |
 | --------- | ------------------------------------------- | -------- | -------------------------------------------- |
