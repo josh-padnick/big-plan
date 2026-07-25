@@ -73,7 +73,6 @@ const enhanceFloatingInfo = ({
     return;
   }
   info.classList.add("big-decision-info-floating");
-  body.setAttribute("role", "tooltip");
 
   const open = (): void => {
     info.open = true;
@@ -134,17 +133,17 @@ const enhanceFloatingInfo = ({
       close();
     }
   });
+  const reposition = (): void => {
+    if (info.open) {
+      open();
+    }
+  };
   // Repositioning on scroll keeps the body anchored to its trigger, and
   // avoids racing the browser's own scroll-into-view before a hover.
-  window.addEventListener(
-    "scroll",
-    () => {
-      if (info.open) {
-        open();
-      }
-    },
-    { passive: true },
-  );
+  document.addEventListener("scroll", reposition, {
+    capture: true,
+    passive: true,
+  });
 };
 
 for (const info of document.querySelectorAll<HTMLElement>(

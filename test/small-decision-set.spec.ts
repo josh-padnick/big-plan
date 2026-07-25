@@ -79,6 +79,21 @@ test("should review a compact question list", async ({
     ).toHaveAttribute("data-option-recommended", "");
   });
 
+  await test.step("interactive option content does not change selection", async () => {
+    const firstOptions = questions.nth(0).locator("[data-option]");
+    const controls = firstOptions.locator("[data-option-control]");
+    await firstOptions.nth(0).evaluate((option) => {
+      const link = document.createElement("a");
+      link.href = "#option-link";
+      link.textContent = "Read more";
+      option.append(link);
+    });
+    await firstOptions.nth(0).getByRole("link", { name: "Read more" }).click();
+    await expect(controls.nth(1)).toHaveAttribute("aria-checked", "true");
+    await expect(controls.nth(0)).toHaveAttribute("aria-checked", "false");
+    await expect(controls.nth(1)).not.toBeFocused();
+  });
+
   await test.step("arrow keys move the selection within one question", async () => {
     const controls = questions.nth(0).locator("[data-option-control]");
     await controls.nth(1).focus();

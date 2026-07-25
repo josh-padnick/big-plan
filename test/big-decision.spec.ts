@@ -168,6 +168,10 @@ test("should review standalone plan decisions", async ({
 
   await test.step("tooltip links remain reachable while focus stays inside", async () => {
     const info = openDecision.locator(".big-decision-criterion-help").first();
+    await expect(info.locator(".big-decision-info-body")).not.toHaveAttribute(
+      "role",
+      "tooltip",
+    );
     await info.evaluate((details) => {
       const body = details.querySelector(".big-decision-info-body");
       const link = document.createElement("a");
@@ -185,6 +189,47 @@ test("should review standalone plan decisions", async ({
     await expect(info).toHaveAttribute("open", "");
     await page.keyboard.press("Tab");
     await expect(info).not.toHaveAttribute("open", "");
+  });
+
+  await test.step("floating details follow horizontal matrix scrolling", async () => {
+    const scroller = openDecision.locator(".overflow-x-auto").first();
+    const info = openDecision.locator(".big-decision-criterion-help").first();
+    const summary = info.locator("summary");
+    const body = info.locator(".big-decision-info-body");
+    const matrix = scroller.locator("table");
+    await matrix.evaluate((element) => {
+      element.style.minWidth = "80rem";
+    });
+    await summary.focus();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Enter");
+    await expect(info).toHaveAttribute("open", "");
+    const initialLeft = await body.evaluate((element) =>
+      Number.parseFloat(element.style.left),
+    );
+    const initialAnchorLeft = await summary.evaluate(
+      (element) => element.getBoundingClientRect().left,
+    );
+    await scroller.evaluate((element) => {
+      element.scrollLeft = 100;
+    });
+    await expect
+      .poll(() => scroller.evaluate((element) => element.scrollLeft))
+      .toBe(100);
+    await expect
+      .poll(() =>
+        summary.evaluate((element) => element.getBoundingClientRect().left),
+      )
+      .toBeLessThan(initialAnchorLeft);
+    await expect
+      .poll(() =>
+        body.evaluate((element) => Number.parseFloat(element.style.left)),
+      )
+      .toBeLessThan(initialLeft);
+    await page.keyboard.press("Escape");
+    await matrix.evaluate((element) => {
+      element.style.removeProperty("min-width");
+    });
   });
 
   await test.step("lifecycle actions are placeholders for the live layer", async () => {

@@ -9,6 +9,22 @@ const decisionRoots = document.querySelectorAll<HTMLElement>(
   "[data-big-decision], [data-small-decision]",
 );
 
+const INTERACTIVE_ELEMENT_SELECTOR = [
+  "a[href]",
+  "area[href]",
+  "button",
+  "input",
+  "label",
+  "select",
+  "summary",
+  "textarea",
+  "audio[controls]",
+  "video[controls]",
+  "[contenteditable]",
+  "[role]",
+  "[tabindex]",
+].join(", ");
+
 for (const root of decisionRoots) {
   // A decided decision's outcome is authored; reader selection would only
   // contradict the recorded choice.
@@ -69,13 +85,18 @@ for (const root of decisionRoots) {
       control.setAttribute("aria-describedby", descriptionIds.join(" "));
     }
     option.addEventListener("click", (event) => {
-      // The details disclosure keeps its own click semantics; opening the
-      // deeper layer should not read as choosing the option.
-      if (
-        event.target instanceof Element &&
-        event.target.closest("details") !== null
-      ) {
-        return;
+      if (event.target instanceof Element) {
+        const interactiveTarget = event.target.closest(
+          INTERACTIVE_ELEMENT_SELECTOR,
+        );
+        if (
+          interactiveTarget !== null &&
+          option.contains(interactiveTarget) &&
+          interactiveTarget !== control &&
+          !control.contains(interactiveTarget)
+        ) {
+          return;
+        }
       }
       select(index);
       control.focus();
