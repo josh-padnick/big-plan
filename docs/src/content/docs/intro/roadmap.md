@@ -12,10 +12,11 @@ Big Plan is pre-alpha and is being built in the open, one registry capability at
 - **Code and file-tree review.** [`CodeSnippet`](/components/code-snippet/) inspects annotated excerpts of existing code with file-absolute line numbers, while [`FileTree`](/components/file-tree/) and [`FileTreeDiff`](/components/file-tree-diff/) show plain hierarchies and per-entry change status with combined or side-by-side views.
 - **API contract review.** [`HttpEndpoint`](/components/http-endpoint/), [`GraphqlOperation`](/components/graphql-operation/), and [`GrpcMethod`](/components/grpc-method/) render protocol-native contracts with validated fields, examples, and errors.
 - **Table schema review.** [`DatabaseTableSchema`](/components/database-table-schema/) renders one table's validated DBML-subset schema with titled verbatim-DDL bands.
+- **Decision review.** [`BigDecision`](/components/big-decision/) presents a weighty choice as a criteria matrix or substantive option list, while [`SmallDecisionSet`](/components/small-decision-set/) collects compact end-of-plan questions; recommendations start locally selected, and decision priorities can be reweighted in the browser.
 
 ## Planned components
 
-- **`Decision`.** Options-considered cards with nested `Option` children.
+- **`DatabaseSchema`.** A structured schema card rendered from a fenced YAML child.
 - **`Diagram`.** Diagram source rendered to inline SVG at build time, preserving the no-external-requests invariant.
 
 ## Planned review experience
@@ -23,7 +24,7 @@ Big Plan is pre-alpha and is being built in the open, one registry capability at
 - A local review server with a live bridge to the authoring agent.
 - Highlight-to-comment threads the agent replies to in place.
 - Versioned change review across plan revisions.
-- Full keyboard control, and interactive components such as forms once the live server exists.
+- Full keyboard control, plus transport-backed review actions and persisted feedback once the live server exists.
 
 ## Follow along
 

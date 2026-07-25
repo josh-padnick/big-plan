@@ -24,7 +24,7 @@ The full contract lives in [Authoring plans](/for-agents/authoring-plans/).
 
 ## Components render to HTML
 
-[`Callout`](/components/callout/), [`CodeDiff`](/components/code-diff/), [`CodeSnippet`](/components/code-snippet/), [`DatabaseTableSchema`](/components/database-table-schema/), [`FileTree`](/components/file-tree/), [`FileTreeDiff`](/components/file-tree-diff/), [`GraphqlOperation`](/components/graphql-operation/), [`GrpcMethod`](/components/grpc-method/), and [`HttpEndpoint`](/components/http-endpoint/) come from a closed, built-in registry.
+[`BigDecision`](/components/big-decision/), [`Callout`](/components/callout/), [`CodeDiff`](/components/code-diff/), [`CodeSnippet`](/components/code-snippet/), [`DatabaseTableSchema`](/components/database-table-schema/), [`FileTree`](/components/file-tree/), [`FileTreeDiff`](/components/file-tree-diff/), [`GraphqlOperation`](/components/graphql-operation/), [`GrpcMethod`](/components/grpc-method/), [`HttpEndpoint`](/components/http-endpoint/), and [`SmallDecisionSet`](/components/small-decision-set/) come from a closed, built-in registry.
 When the renderer meets a component, the registry renders it to plain HTML on the server: the component's markup and styles are baked into the output document, no plan-authored code is evaluated or shipped, and built-in scripts provide only progressive enhancement.
 Everything else renders as ordinary markdown prose.
 
@@ -47,7 +47,7 @@ An MDX syntax error can stop parsing before component validation begins, so fix 
 ## One self-contained file
 
 The rendered document embeds everything it needs: styles, scripts, branding, and favicons.
-It makes no external requests, works offline, and stays readable with JavaScript disabled; scripts only enhance navigation, theme switching, code-copy controls, `CodeDiff`, `CodeSnippet`, `DatabaseTableSchema`, `FileTree`, and `FileTreeDiff` interactions, and `HttpEndpoint`'s tabbed section navigation.
+It makes no external requests, works offline, and stays readable with JavaScript disabled; scripts only enhance navigation, theme switching, code-copy controls, `BigDecision`, `CodeDiff`, `CodeSnippet`, `DatabaseTableSchema`, `FileTree`, `FileTreeDiff`, and `SmallDecisionSet` interactions, and `HttpEndpoint`'s tabbed section navigation.
 Nothing about rendering or reviewing a plan touches a server, an account, or anyone else's machine.
 
 ## What comes next

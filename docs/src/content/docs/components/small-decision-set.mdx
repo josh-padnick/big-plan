@@ -9,7 +9,7 @@ import smallDecisionSetDark from "../../../assets/components/small-decision-set-
 
 `SmallDecisionSet` collects the small questions a plan poses to its reviewer - typically at the end - as one compact numbered list.
 Each question offers two or more options, and each option pairs its title with a short explanation, enough to answer quickly without a tradeoff card.
-A choice weighty enough to need pros and cons belongs in a standalone [BigDecision](/components/big-decision/) instead.
+A choice weighty enough to need a structured tradeoff comparison belongs in a standalone [BigDecision](/components/big-decision/) instead.
 The recommended answer starts locally selected and a click moves it, so agreeing costs zero clicks; recording the answers arrives with the live review layer.
 
 ## How it looks
@@ -91,3 +91,6 @@ Each question needs at least two options.
 | `recommended` | bare boolean       | No       | Marks at most one option per question as Recommended.        |
 
 Markdown in the option body is the short always-visible explanation; an option may omit it when the title alone is enough.
+
+`SmallDecision` must be a direct `SmallDecisionSet` child, and `Option` must be a direct `SmallDecision` child.
+Their markdown bodies accept prose, lists, inline formatting, and plain fenced code, but reject headings, footnotes, and typed components with positional diagnostics.

@@ -1,17 +1,17 @@
 ---
 title: BigDecision
-description: A standalone component that reviews one weighty decision as a criteria matrix - options as columns, decision criteria as rows, terse scored verdicts - with lifecycle status, a recommendation, reversibility, and a recorded outcome.
+description: A standalone component that reviews one weighty decision as a criteria matrix or substantive option list, with lifecycle status, a recommendation, optional reversibility, and a recorded outcome.
 ---
 
 import ThemeImage from "../../../components/ThemeImage.astro";
 import bigDecisionLight from "../../../assets/components/big-decision-light.png";
 import bigDecisionDark from "../../../assets/components/big-decision-dark.png";
 
-`BigDecision` presents one consequential choice as a comparison a reviewer can actually check: the question and its context, the criteria the decision turns on, and every option scored against every criterion in a matrix, so competing verdicts sit side by side instead of a scroll apart.
+`BigDecision` presents one consequential choice as a comparison a reviewer can actually check: a criteria matrix when the options share comparable dimensions, or a substantive option list when prose rationale carries the argument.
 Place it in the plan section where the decision belongs; the smaller end-of-plan questions belong in [SmallDecisionSet](/components/small-decision-set/) instead.
 While a decision is undecided, the recommended option starts selected and a click moves the reader's local selection; recording the choice arrives with the live review layer, and decided decisions stay static.
-A full-screen control gives a wide matrix the whole viewport when the reading column crowds it, and priority squares under each criterion let the reader state what matters most - a dashed Best match tag follows the weighted comparison, always distinct from the agent's solid Recommended pill and from the reader's own selection, a live Score row at the foot of the matrix totals every option and highlights the Best match as priorities change, and the Score section stays folded until asked - expanding to the live per-criterion arithmetic and the priorities reset - while the reversibility rating reads in full every time.
-Every decision also rates its reversibility on a fixed scale, with a built-in explainer behind an info icon.
+A full-screen control gives a wide matrix the whole viewport when the reading column crowds it, and priority squares under each criterion let the reader state what matters most - a dashed Best match tag follows the weighted comparison, always distinct from the agent's solid Recommended pill and from the reader's own selection, a live Score row at the foot of the matrix totals every option and highlights the Best match as priorities change, and the Score section stays folded until asked - expanding to the live per-criterion arithmetic and the priorities reset - while an authored reversibility rating reads in full every time.
+A decision can rate its reversibility on a fixed scale, with a built-in explainer behind an info icon.
 
 ## How it looks
 
@@ -103,7 +103,7 @@ The repository layer isolates SQL, so swapping engines later costs a data migrat
 | Attribute       | Type                              | Required | Behavior                                                            |
 | --------------- | --------------------------------- | -------- | ------------------------------------------------------------------- |
 | `question` | string (non-empty)                | Yes      | Renders the question in the card header.    |
-| `status`   | enum: `open` `decided` `deferred` | No       | Drives the status pill; defaults to `open`. |
+| `status`   | enum: `open` `decided` `deferred` | No       | Sets the lifecycle state; `decided` and `deferred` render a pill. Defaults to `open`. |
 
 Markdown before the first scoped child supplies the context and forces that make the choice meaningful.
 Each decision needs at least two options.
@@ -127,7 +127,7 @@ A decision with no criteria renders its options as a stacked list without a matr
 | ------------- | ------------------ | -------- | ------------------------------------------------------------ |
 | `title`       | string (non-empty) | Yes      | Names the column; titles must be unique within the decision. |
 | `summary`     | string             | No       | The one-sentence rationale under the option name.            |
-| `recommended` | bare boolean       | No       | Marks at most one option; it starts selected for the reader. |
+| `recommended` | bare boolean       | No       | Marks at most one option; it starts selected while the decision is undecided. |
 | `chosen`      | bare boolean       | No       | Marks the single outcome of a `decided` decision.            |
 
 Markdown in an option body outside its scores becomes a Details drawer inside the option card.
@@ -135,7 +135,7 @@ Markdown in an option body outside its scores becomes a Details drawer inside th
 ### Details
 
 At most one `Details` element holds question-level long-form content; it renders as a Details drawer under the context prose.
-Both the question and each option can carry details this way.
+An option gets its own Details drawer from ordinary markdown in the `Option` body outside its `Score` children; do not nest a `Details` element inside an option.
 
 ### Score
 
@@ -159,6 +159,9 @@ At most one `Reversibility` element rates what changing course later would cost;
 | `rating`  | enum: `easy` `somewhat-hard` `hard`         | Yes      | Renders the fixed rating phrase and its tint. |
 
 Markdown in the body is the decision-specific rationale shown under the rating.
+
+`Criterion`, `Details`, `Option`, and `Reversibility` must be direct `BigDecision` children, and `Score` must be a direct `Option` child.
+Their markdown bodies accept prose, lists, inline formatting, and plain fenced code, but reject headings, footnotes, and typed components with positional diagnostics.
 
 ## Lifecycle
 
