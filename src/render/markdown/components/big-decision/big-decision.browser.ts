@@ -222,6 +222,9 @@ for (const component of document.querySelectorAll<HTMLElement>(
     table.className = "big-decision-breakdown mt-1.5 w-full";
     const head = document.createElement("tr");
     head.append(document.createElement("th"));
+    const priorityHead = document.createElement("th");
+    priorityHead.textContent = "Priority";
+    head.append(priorityHead);
     for (const option of options) {
       const cell = document.createElement("th");
       cell.textContent = optionName(option);
@@ -236,8 +239,11 @@ for (const component of document.querySelectorAll<HTMLElement>(
       const line = document.createElement("tr");
       const name = document.createElement("th");
       name.setAttribute("scope", "row");
-      name.textContent = `${criterionName(row)} ×${priorities[index] ?? 0}`;
+      name.textContent = criterionName(row);
       line.append(name);
+      const priorityCell = document.createElement("td");
+      priorityCell.textContent = `×${priorities[index] ?? 0}`;
+      line.append(priorityCell);
       for (const [column] of options.entries()) {
         const value = contribution({ row, index, column });
         totals[column] = (totals[column] ?? 0) + value;
@@ -251,7 +257,7 @@ for (const component of document.querySelectorAll<HTMLElement>(
     const totalName = document.createElement("th");
     totalName.setAttribute("scope", "row");
     totalName.textContent = "Total";
-    totalLine.append(totalName);
+    totalLine.append(totalName, document.createElement("td"));
     for (const [column] of options.entries()) {
       const cell = document.createElement("td");
       cell.textContent = signed(totals[column] ?? 0);
