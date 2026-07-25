@@ -32,7 +32,7 @@ For what comes next, see the [roadmap](/intro/roadmap/).
 - `Callout` components for notes, tips, warnings, and dangers.
 - `CodeDiff` components with optional line numbers and change counts, unified and side-by-side views, scoped line annotations, copy actions, and full-screen viewing.
 - `CodeSnippet` components for excerpts with optional file identity, file-absolute line numbers, scoped annotations, and copy actions.
-- `DatabaseTableSchema` components for one table's schema: a psql-style columns grid with key badges, foreign keys, indexes, checks, copy actions, and full-screen viewing.
+- `DatabaseTableSchema` components for one table's schema: a psql-style columns grid with key badges, foreign keys, indexes, checks, titled verbatim-DDL bands behind tabs, jump-linked `INDX` references, a persisted reorder-and-hide column layout, copy actions, and full-screen viewing.
 - `FileTree` components for foldable plain hierarchies with optional per-entry notes.
 - `FileTreeDiff` components with entry-level change status, summaries, persisted combined or side-by-side views, a Planned-pane final-state switch, fold controls, note hints, and full-screen viewing.
 - `HttpEndpoint` components for HTTP contracts with location-grouped parameters, request examples, status-coded responses, and tabbed section navigation.

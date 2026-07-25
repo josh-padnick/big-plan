@@ -151,6 +151,17 @@ indexes {
 Note: 'One row per queued catalog refresh.'
 \`\`\`
 
+<Ddl title="Row security">
+
+\`\`\`sql
+ALTER TABLE catalog.refresh_jobs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY refresh_jobs_service_all ON catalog.refresh_jobs
+  FOR ALL TO catalog_service USING (true) WITH CHECK (true);
+\`\`\`
+
+</Ddl>
+
 </DatabaseTableSchema>
 `;
 

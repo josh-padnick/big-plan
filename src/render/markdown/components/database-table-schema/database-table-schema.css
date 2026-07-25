@@ -1,7 +1,7 @@
 /* DatabaseTableSchema palette-dependent chrome: header band, dense
    equal-height grid overrides of the prose table rules, plain in-figure code,
-   badge tints, the tinted Indexes band, and action-menu styles, colocated
-   with the component that owns them. */
+   badge tints, Indexes and DDL bands, tabs, column controls, index jumps, and
+   menu styles, colocated with the component that owns them. */
 
 @layer components {
   /* The figure paints its own background: inline it matches the page, and
@@ -76,10 +76,92 @@
   article .table-schema-head-comment {
     width: 23%;
   }
-  /* The Indexes band is the one deliberate visual break below the grid. */
+  /* The bands are the deliberate visual break below the grid; only the last
+     one closes the figure's rounded corner, and a hidden tab panel gives its
+     place to the visible one. */
   article .table-schema-section {
-    background: var(--diff-header-bg);
+    background: var(--color-surface);
+  }
+  article .table-schema-section:last-child {
     border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
+  }
+  article [data-schema-tabbed] .table-schema-section {
+    border-top: 0;
+    border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
+  }
+  /* INDX references upgrade to jump controls: same badge or muted-text look
+     as the inert spans they replace, plus pointer and accent hover. The
+     landed entry tints briefly; the tint transitions only for readers who
+     allow motion, and reads as a plain highlight otherwise. */
+  article .table-schema-index-jump {
+    cursor: pointer;
+    background: transparent;
+    padding: 0;
+    font: inherit;
+  }
+  article .table-schema-index-jump:hover {
+    color: var(--color-accent);
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+  article .table-schema-index-flash {
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    article [data-schema-index] {
+      transition: background-color 0.5s ease;
+    }
+  }
+  /* Reorderable headers advertise the drag, and the drop target draws an
+     accent insertion edge; both exist only once the script enables them.
+     The grippers stay invisible until the pointer or keyboard reaches the
+     header row, keeping the muted label row quiet at rest. */
+  article [data-schema-reorderable] .table-schema-head {
+    cursor: grab;
+  }
+  article .table-schema-head [data-lucide="grip-vertical"] {
+    width: 0.7rem;
+    height: 0.7rem;
+    margin-left: 0.3rem;
+    vertical-align: -0.12rem;
+    display: inline-block;
+    opacity: 0;
+  }
+  article [data-schema-reorderable] thead:hover [data-lucide="grip-vertical"],
+  article .table-schema-head:focus-visible [data-lucide="grip-vertical"] {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    article .table-schema-head [data-lucide="grip-vertical"] {
+      transition: opacity 0.15s ease;
+    }
+  }
+  article .table-schema-head-drop-before {
+    box-shadow: inset 2px 0 0 var(--color-accent);
+  }
+  article .table-schema-head-drop-after {
+    box-shadow: inset -2px 0 0 var(--color-accent);
+  }
+  article .table-schema-tab {
+    color: var(--color-muted);
+    box-shadow: inset 0 -2px 0 transparent;
+  }
+  article .table-schema-tab:hover {
+    color: var(--color-ink);
+  }
+  article .table-schema-tab[aria-selected="true"] {
+    color: var(--color-ink);
+    box-shadow: inset 0 -2px 0 var(--color-accent);
+  }
+  /* Verbatim DDL reads as a plain code sheet on the band tint: the prose
+     block chrome stays, but the band supplies the surface. The figure-wide
+     nowrap rule serves the grid's inline SQL fragments; a DDL fence is real
+     multi-line source, so it restores pre-formatting and scrolls in place. */
+  article .table-schema-ddl-body pre {
+    margin-bottom: 0;
+    overflow-x: auto;
+  }
+  article .table-schema-ddl-body code {
+    white-space: pre;
   }
   article .table-schema-badge {
     border-color: var(--color-edge);
@@ -96,6 +178,9 @@
   article .table-schema-menu-list[hidden],
   article .table-schema-button[hidden] {
     display: none;
+  }
+  article .table-schema-menu-separator {
+    background: var(--color-edge);
   }
   article .table-schema-menu-item:hover,
   article .table-schema-button:hover {

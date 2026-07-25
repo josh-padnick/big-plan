@@ -17,14 +17,14 @@ A component's attributes are strings or bare booleans, structured data arrives a
 | [Callout](/components/callout/)                           | Surface a note, tip, warning, or danger so reviewers cannot miss it.                                                 |
 | [CodeDiff](/components/code-diff/)                        | Review one file's unified diff with switchable views, gutters, and line-anchored annotations.                        |
 | [CodeSnippet](/components/code-snippet/)                  | Inspect existing code with optional file identity, file-absolute line numbers, and annotations.                      |
-| [DatabaseTableSchema](/components/database-table-schema/) | Review one table's columns, keys, foreign keys, indexes, and checks from a DBML-subset fence.                        |
+| [DatabaseTableSchema](/components/database-table-schema/) | Review one table's DBML-subset schema and titled verbatim DDL.                                                       |
 | [FileTree](/components/file-tree/)                        | Show a plain file hierarchy with optional per-entry notes.                                                           |
 | [FileTreeDiff](/components/file-tree-diff/)               | Review per-entry change status as a combined tree or before-and-after views.                                         |
 | [GraphqlOperation](/components/graphql-operation/)        | Review one GraphQL query, mutation, or subscription with one-level input and payload shapes and executable examples. |
 | [GrpcMethod](/components/grpc-method/)                    | Review one gRPC method headed by its proto signature, with message fields, status codes, and grouped examples.       |
 | [HttpEndpoint](/components/http-endpoint/)                | Review one HTTP endpoint's contract: parameters, request body, and status-coded responses.                           |
 
-Scoped child components are valid only inside their declaring parent: `Annotation` in `CodeDiff` and `CodeSnippet`; `Param`, `Request`, and `Response` in `HttpEndpoint`; `Argument`, `Field`, `Returns`, `Operation`, `Variables`, and `Response` in `GraphqlOperation`; `Field`, `Error`, `Example`, and `Proto` in `GrpcMethod`.
+Scoped child components are valid only inside their declaring parent: `Annotation` in `CodeDiff` and `CodeSnippet`; `Ddl` in `DatabaseTableSchema`; `Param`, `Request`, and `Response` in `HttpEndpoint`; `Argument`, `Field`, `Returns`, `Operation`, `Variables`, and `Response` in `GraphqlOperation`; `Field`, `Error`, `Example`, and `Proto` in `GrpcMethod`.
 
 ## Coming next
 

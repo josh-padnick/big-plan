@@ -1462,3 +1462,400 @@ test("should review a database table schema end to end", async ({
     expect(pageScrolls).toBe(false);
   });
 });
+
+test("should fold the schema's Indexes and DDL bands behind tabs", async ({
+  page,
+  tableSchemaViewerUrl,
+}) => {
+  await page.goto(tableSchemaViewerUrl);
+  const schema = page.locator("[data-database-table-schema]").first();
+  const tabs = schema.getByRole("tablist", { name: "Table schema sections" });
+  const indexesPanel = schema.locator('[data-schema-section="indexes"]');
+  const ddlPanels = schema.locator('[data-schema-section="ddl"]');
+
+  await test.step("the tab bar names every band and selects Indexes first", async () => {
+    await expect(tabs.getByRole("tab")).toHaveText([
+      /^Indexes$/,
+      /^Row security\s*DDL$/,
+      /^Triggers\s*DDL$/,
+    ]);
+    // The badge marks exactly the verbatim-DDL tabs.
+    await expect(
+      tabs.getByRole("tab", { name: "Indexes" }).locator("[data-schema-badge]"),
+    ).toHaveCount(0);
+    await expect(
+      tabs
+        .getByRole("tab", { name: "Row security" })
+        .locator('[data-schema-badge="ddl"]'),
+    ).toHaveText("DDL");
+    await expect(tabs.getByRole("tab", { name: "Indexes" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(indexesPanel).toBeVisible();
+    await expect(ddlPanels.first()).toBeHidden();
+    // The tabs name the panels, so the in-panel labels retire.
+    await expect(
+      indexesPanel.locator(".table-schema-section-label"),
+    ).toBeHidden();
+  });
+
+  await test.step("tab ids avoid authored document ids", async () => {
+    await expect(indexesPanel).toHaveAttribute("id", "table-schema-panel-3");
+    await expect(tabs.getByRole("tab", { name: "Indexes" })).toHaveAttribute(
+      "id",
+      "table-schema-panel-3-tab",
+    );
+    expect(
+      await page.locator("[id]").evaluateAll((elements) => {
+        const ids = elements.map((element) => element.id);
+        return new Set(ids).size === ids.length;
+      }),
+    ).toBe(true);
+  });
+
+  await test.step("selecting a DDL tab swaps the visible band", async () => {
+    await tabs.getByRole("tab", { name: "Row security" }).click();
+    await expect(indexesPanel).toBeHidden();
+    await expect(ddlPanels.first()).toBeVisible();
+    await expect(ddlPanels.first()).toContainText(
+      "CREATE POLICY subscriptions_tenant_read",
+    );
+  });
+
+  await test.step("the verbatim DDL keeps the shared code copy control", async () => {
+    await expect(ddlPanels.first().locator("[data-copy-code]")).toBeVisible();
+  });
+
+  await test.step("the DDL stays multi-line instead of one scrolling line", async () => {
+    const code = ddlPanels.first().locator("pre code");
+    expect(
+      await code.evaluate((element) => getComputedStyle(element).whiteSpace),
+    ).toBe("pre");
+    const metrics = await code.evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
+    }));
+    expect(metrics.height).toBeGreaterThan(metrics.lineHeight * 4);
+  });
+
+  await test.step("arrow keys move the tab focus ring", async () => {
+    await tabs.getByRole("tab", { name: "Row security" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(tabs.getByRole("tab", { name: "Triggers" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(ddlPanels.last()).toContainText(
+      "CREATE TRIGGER subscriptions_touch_updated",
+    );
+    await page.keyboard.press("Home");
+    await expect(indexesPanel).toBeVisible();
+  });
+
+  await test.step("a schema without DDL bands keeps its plain Indexes band", async () => {
+    const plain = page.locator("[data-database-table-schema]").nth(1);
+    await expect(plain.getByRole("tablist")).toHaveCount(0);
+    await expect(
+      plain.locator('[data-schema-section="indexes"]'),
+    ).toBeVisible();
+  });
+});
+
+test("should reorder grid columns and remember the arrangement", async ({
+  page,
+  tableSchemaViewerUrl,
+}) => {
+  await page.goto(tableSchemaViewerUrl);
+  const firstGrid = page.locator(".table-schema-grid").first();
+  const heads = firstGrid.locator("thead th");
+
+  await test.step("headers advertise the reorder affordance", async () => {
+    await expect(heads).toHaveText([
+      "Column",
+      "Type",
+      "Constraints",
+      "Default",
+      "Comment",
+    ]);
+    await expect(heads.first()).toHaveAttribute("draggable", "true");
+    expect(
+      await heads
+        .first()
+        .evaluate((element) => getComputedStyle(element).cursor),
+    ).toBe("grab");
+    // The gripper stays quiet at rest and reveals when the pointer reaches
+    // the header row.
+    const gripper = heads.first().locator('[data-lucide="grip-vertical"]');
+    expect(
+      await gripper.evaluate((element) => getComputedStyle(element).opacity),
+    ).toBe("0");
+    await heads.first().hover();
+    await expect
+      .poll(async () =>
+        gripper.evaluate((element) => getComputedStyle(element).opacity),
+      )
+      .toBe("1");
+  });
+
+  await test.step("arrow keys walk a column across the grid", async () => {
+    await heads.filter({ hasText: "Type" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(heads).toHaveText([
+      "Column",
+      "Constraints",
+      "Type",
+      "Default",
+      "Comment",
+    ]);
+    // The body cells follow their head: the type cell sits third.
+    await expect(
+      firstGrid.locator("tbody tr").first().locator("td, th").nth(2),
+    ).toHaveClass(/table-schema-cell-type/);
+  });
+
+  await test.step("dragging onto a target's left half inserts before it", async () => {
+    // The drag pair stays inside the scroll container's visible region;
+    // clipped headers cannot start a native drag reliably.
+    await heads
+      .filter({ hasText: "Constraints" })
+      .dragTo(heads.filter({ hasText: "Column" }), {
+        targetPosition: { x: 1, y: 1 },
+      });
+    await expect(heads).toHaveText([
+      "Constraints",
+      "Column",
+      "Type",
+      "Default",
+      "Comment",
+    ]);
+  });
+
+  await test.step("dragging onto the right neighbor's right half moves after it", async () => {
+    const columnHead = heads.filter({ hasText: "Column" });
+    const columnBounds = await columnHead.boundingBox();
+    if (columnBounds === null) {
+      throw new Error("Missing Column header bounds");
+    }
+    await heads.filter({ hasText: "Constraints" }).dragTo(columnHead, {
+      targetPosition: { x: columnBounds.width - 1, y: 1 },
+    });
+    await expect(heads).toHaveText([
+      "Column",
+      "Constraints",
+      "Type",
+      "Default",
+      "Comment",
+    ]);
+  });
+
+  await test.step("dragging onto the final column's right half lands after it", async () => {
+    const commentHead = heads.filter({ hasText: "Comment" });
+    await commentHead.scrollIntoViewIfNeeded();
+    const commentBounds = await commentHead.boundingBox();
+    if (commentBounds === null) {
+      throw new Error("Missing Comment header bounds");
+    }
+    await heads.filter({ hasText: "Constraints" }).dragTo(commentHead, {
+      targetPosition: { x: commentBounds.width - 1, y: 1 },
+    });
+    await expect(heads).toHaveText([
+      "Column",
+      "Type",
+      "Default",
+      "Comment",
+      "Constraints",
+    ]);
+  });
+
+  await test.step("every schema on the page follows the same arrangement", async () => {
+    await expect(
+      page.locator(".table-schema-grid").nth(1).locator("thead th"),
+    ).toHaveText(["Column", "Type", "Default", "Comment", "Constraints"]);
+  });
+
+  await test.step("the arrangement survives a reload", async () => {
+    await page.reload();
+    await expect(
+      page.locator(".table-schema-grid").first().locator("thead th"),
+    ).toHaveText(["Column", "Type", "Default", "Comment", "Constraints"]);
+  });
+
+  await test.step("the columns menu resets to the authored layout", async () => {
+    const schema = page.locator("[data-database-table-schema]").first();
+    const columnsButton = schema.locator("[data-schema-columns-button]");
+    const actionsButton = schema.locator("[data-schema-menu-button]");
+    await columnsButton.click();
+    await schema.getByRole("menuitem", { name: "Reset column layout" }).click();
+    await expect(
+      page.locator(".table-schema-grid").first().locator("thead th"),
+    ).toHaveText(["Column", "Type", "Constraints", "Default", "Comment"]);
+    await expect(columnsButton).toBeFocused();
+    await expect(columnsButton).toHaveAccessibleName("Columns reset");
+    await expect(actionsButton).toHaveAccessibleName("More actions");
+    expect(
+      await page.evaluate(() =>
+        window.localStorage.getItem("big-plan:table-schema-columns"),
+      ),
+    ).toBeNull();
+  });
+});
+
+test("should jump from an INDX reference to its flashed band entry", async ({
+  page,
+  tableSchemaViewerUrl,
+}) => {
+  await page.goto(tableSchemaViewerUrl);
+  const schema = page.locator("[data-database-table-schema]").first();
+  const tabs = schema.getByRole("tablist", { name: "Table schema sections" });
+  const firstEntry = schema.locator('[data-schema-index="1"]');
+
+  await test.step("the jump lands on the Indexes tab even from a DDL tab", async () => {
+    await tabs.getByRole("tab", { name: "Row security" }).click();
+    await expect(
+      schema.locator('[data-schema-section="indexes"]'),
+    ).toBeHidden();
+    const firstMarker = schema.locator(
+      '[data-schema-column="customer_id"] [data-schema-indx="1"]',
+    );
+    await firstMarker.focus();
+    await firstMarker.press("Enter");
+    await expect(tabs.getByRole("tab", { name: "Indexes" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(firstEntry).toBeInViewport();
+    await expect(firstEntry).toHaveAttribute("tabindex", "-1");
+    await expect(firstEntry).toBeFocused();
+  });
+
+  await test.step("the landed entry flashes, then settles", async () => {
+    await expect(firstEntry).toHaveClass(/table-schema-index-flash/);
+    await expect(firstEntry).not.toHaveClass(/table-schema-index-flash/, {
+      timeout: 4_000,
+    });
+  });
+
+  await test.step("a predicate-only WHERE INDX reference jumps too", async () => {
+    const whereMarker = schema.locator(
+      '[data-schema-column="status"] [data-schema-indx="2"]',
+    );
+    await expect(whereMarker).toHaveText("WHERE INDX 2");
+    await whereMarker.click();
+    const secondEntry = schema.locator('[data-schema-index="2"]');
+    await expect(secondEntry).toBeInViewport();
+    await expect(secondEntry).toHaveClass(/table-schema-index-flash/);
+  });
+});
+
+test("should hide and show grid columns from the columns menu", async ({
+  page,
+  tableSchemaViewerUrl,
+}) => {
+  await page.goto(tableSchemaViewerUrl);
+  const schema = page.locator("[data-database-table-schema]").first();
+  const menu = schema.getByRole("menu", { name: "Visible columns" });
+  const visibleHeads = (index: number) =>
+    page
+      .locator(".table-schema-grid")
+      .nth(index)
+      .locator("thead th:not([hidden])");
+
+  await test.step("unchecking a column hides it in every grid without closing the menu", async () => {
+    await schema.locator("[data-schema-columns-button]").click();
+    await menu.getByRole("menuitemcheckbox", { name: "Constraints" }).click();
+    await expect(menu).toBeVisible();
+    await expect(
+      menu.getByRole("menuitemcheckbox", { name: "Constraints" }),
+    ).toHaveAttribute("aria-checked", "false");
+    await expect(visibleHeads(0)).toHaveText([
+      "Column",
+      "Type",
+      "Default",
+      "Comment",
+    ]);
+    await expect(visibleHeads(1)).toHaveText([
+      "Column",
+      "Type",
+      "Default",
+      "Comment",
+    ]);
+  });
+
+  await test.step("keyboard reordering steps over the hidden column", async () => {
+    await page.keyboard.press("Escape");
+    await visibleHeads(0).filter({ hasText: "Type" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(visibleHeads(0)).toHaveText([
+      "Column",
+      "Default",
+      "Type",
+      "Comment",
+    ]);
+  });
+
+  await test.step("the visibility and order survive a reload together", async () => {
+    await page.reload();
+    await expect(visibleHeads(0)).toHaveText([
+      "Column",
+      "Default",
+      "Type",
+      "Comment",
+    ]);
+  });
+
+  await test.step("rechecking restores the column at its remembered position", async () => {
+    await schema.locator("[data-schema-columns-button]").click();
+    await menu.getByRole("menuitemcheckbox", { name: "Constraints" }).click();
+    await expect(visibleHeads(0)).toHaveText([
+      "Column",
+      "Constraints",
+      "Default",
+      "Type",
+      "Comment",
+    ]);
+  });
+
+  await test.step("reset restores the authored layout and clears the preference", async () => {
+    await page.keyboard.press("Escape");
+    await schema.locator("[data-schema-columns-button]").click();
+    await schema.getByRole("menuitem", { name: "Reset column layout" }).click();
+    await expect(visibleHeads(0)).toHaveText([
+      "Column",
+      "Type",
+      "Constraints",
+      "Default",
+      "Comment",
+    ]);
+    expect(
+      await page.evaluate(() =>
+        window.localStorage.getItem("big-plan:table-schema-columns"),
+      ),
+    ).toBeNull();
+  });
+});
+
+test("should stack the labeled DDL bands when JavaScript is disabled", async ({
+  browser,
+  tableSchemaViewerUrl,
+}) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto(tableSchemaViewerUrl);
+  const schema = page.locator("[data-database-table-schema]").first();
+  await expect(schema.getByRole("tablist")).toHaveCount(0);
+  await expect(schema.locator('[data-schema-section="indexes"]')).toBeVisible();
+  const ddlPanels = schema.locator('[data-schema-section="ddl"]');
+  await expect(ddlPanels).toHaveCount(2);
+  await expect(ddlPanels.first()).toBeVisible();
+  await expect(
+    ddlPanels.first().locator(".table-schema-section-label"),
+  ).toHaveText(/^Row security\s*DDL$/);
+  await expect(
+    ddlPanels.first().locator('[data-schema-badge="ddl"]'),
+  ).toBeVisible();
+  await expect(ddlPanels.first()).toContainText("ENABLE ROW LEVEL SECURITY");
+  await expect(ddlPanels.last()).toBeVisible();
+  await expect(ddlPanels.last()).toContainText("CREATE TRIGGER");
+  await context.close();
+});

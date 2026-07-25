@@ -1,9 +1,12 @@
 // Renders DatabaseTableSchema's body: an equal-height columns grid whose
 // Constraints cell carries keys, nullability, foreign keys, checks, and
 // numbered INDX references in one separated inline run, a Comment column in
-// the psql \d+ tradition, and the tinted numbered Indexes band below.
+// the psql \d+ tradition, plus numbered Indexes and titled verbatim-DDL bands.
 
 import type { Element, ElementContent, Text } from "hast";
+import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import { GRIP_VERTICAL_ICON } from "../../../icons/lucide/grip-vertical.js";
+import type { CompiledDdlSection } from "./compile-database-table-schema.js";
 import { indexParticipation } from "./derive-index-participation.js";
 import type {
   TableColumn,
@@ -230,6 +233,16 @@ const constraintsCell = (
   });
 };
 
+// Marks a grid-side index reference with the entry position it names, so the
+// enhancement can turn it into a jump control targeting the band below.
+const withIndxRef = (element: Element, position: number): Element => ({
+  ...element,
+  properties: {
+    ...element.properties,
+    "data-schema-indx": String(position),
+  },
+});
+
 // Key participation renders as an INDX pill matching the band below;
 // predicate-only participation is marked "WHERE INDX n" because the column
 // shapes the index without being indexed by it.
@@ -239,8 +252,11 @@ const indexMarkers = (
 ): ReadonlyArray<ElementContent> =>
   indexParticipation({ column, indexes }).map(({ position, kind }) =>
     kind === "key"
-      ? badge({ kind: "idx", label: indxLabel(position) })
-      : muted(`WHERE ${indxLabel(position)}`),
+      ? withIndxRef(
+          badge({ kind: "idx", label: indxLabel(position) }),
+          position,
+        )
+      : withIndxRef(muted(`WHERE ${indxLabel(position)}`), position),
   );
 
 // One row per column, always: comments live in their own grid column so a
@@ -329,7 +345,15 @@ export const renderTableSchemaGrid = ({
                   tagName: "th",
                   className: `table-schema-head table-schema-head-${key} text-[0.625rem] uppercase tracking-wider`,
                   properties: { scope: "col" },
-                  children: [text(label)],
+                  // The gripper ships hidden: it advertises a JavaScript-only
+                  // drag, so the static document must never show it.
+                  children: [
+                    text(label),
+                    renderLucideIcon({
+                      icon: GRIP_VERTICAL_ICON,
+                      hidden: true,
+                    }),
+                  ],
                 }),
               ),
             },
@@ -364,7 +388,7 @@ const indexEntry = (index: TableIndex, offset: number): Element => ({
       "py-[0.5rem]",
       ...(offset === 0 ? [] : ["border-t", "border-edge"]),
     ],
-    "data-schema-index": "",
+    "data-schema-index": String(offset + 1),
   },
   children: [
     badge({ kind: "idx", label: indxLabel(offset + 1) }),
@@ -444,14 +468,69 @@ const indexEntry = (index: TableIndex, offset: number): Element => ({
   ],
 });
 
-/** Renders the numbered Indexes band below the grid; absent without indexes. */
+// One titled verbatim-DDL band: the label mirrors the Indexes band so the tab
+// enhancement can treat every section uniformly, and the fence children pass
+// through untouched for the downstream highlight and copy transforms.
+const renderDdlSection = (section: CompiledDdlSection): Element => ({
+  type: "element",
+  tagName: "section",
+  properties: {
+    className: [
+      "table-schema-section",
+      "border-t",
+      "border-edge",
+      "pt-[0.55rem]",
+    ],
+    "data-schema-section": "ddl",
+    "data-schema-ddl-title": section.title,
+  },
+  children: [
+    {
+      type: "element",
+      tagName: "p",
+      properties: {
+        className: [
+          ...SECTION_LABEL_CLASSES.split(" "),
+          "px-[0.75rem]",
+          "mb-[0.1rem]",
+          "flex",
+          "items-center",
+          "gap-1.5",
+        ],
+      },
+      // The badge marks the band as verbatim DDL wherever its label shows:
+      // in the stacked no-JavaScript reading here, and cloned into the tab
+      // by the enhancement.
+      children: [text(section.title), badge({ kind: "ddl", label: "DDL" })],
+    },
+    {
+      type: "element",
+      tagName: "div",
+      properties: {
+        className: [
+          "table-schema-ddl-body",
+          "min-w-0",
+          "px-[0.75rem]",
+          "pb-[0.6rem]",
+          "[&>:last-child]:mb-0",
+        ],
+      },
+      children: [...section.children],
+    },
+  ],
+});
+
+/** Renders the Indexes and DDL bands below the grid; absent without either. */
 export const renderTableSchemaSections = ({
   schema,
+  ddlSections = [],
 }: {
   readonly schema: TableSchema;
+  readonly ddlSections?: ReadonlyArray<CompiledDdlSection>;
 }): ReadonlyArray<Element> => {
+  const ddl = ddlSections.map((section) => renderDdlSection(section));
   if (schema.indexes.length === 0) {
-    return [];
+    return ddl;
   }
   return [
     {
@@ -464,6 +543,7 @@ export const renderTableSchemaSections = ({
           "border-edge",
           "pt-[0.55rem]",
         ],
+        "data-schema-section": "indexes",
       },
       children: [
         // A styled paragraph rather than a real heading keeps component
@@ -500,5 +580,6 @@ export const renderTableSchemaSections = ({
         },
       ],
     },
+    ...ddl,
   ];
 };

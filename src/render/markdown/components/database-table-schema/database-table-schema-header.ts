@@ -1,14 +1,18 @@
 // Renders DatabaseTableSchema's caption: the table identity with its muted
-// schema prefix, the transient copy-feedback slot, and the progressively
-// enhanced actions menu with copy-name and copy-source controls.
+// schema prefix, table note, transient feedback, and progressively enhanced
+// columns, actions, and full-screen controls.
 
 import type { Element, Text } from "hast";
+import { CHECK_ICON } from "../../../icons/lucide/check.js";
+import { COLUMNS_3_COG_ICON } from "../../../icons/lucide/columns-3-cog.js";
 import { COPY_ICON } from "../../../icons/lucide/copy.js";
 import { DATABASE_ICON } from "../../../icons/lucide/database.js";
 import { ELLIPSIS_ICON } from "../../../icons/lucide/ellipsis.js";
 import { MAXIMIZE_2_ICON } from "../../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../../icons/lucide/minimize-2.js";
+import { ROTATE_CCW_ICON } from "../../../icons/lucide/rotate-ccw.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import type { LucideIcon } from "../../../icons/lucide-icon.js";
 import { renderCopyFeedback } from "../shared/copy-feedback/copy-feedback.js";
 
 const HEADER_CLASSES =
@@ -80,9 +84,11 @@ const tableIdentity = ({
 const menuItemButton = ({
   action,
   label,
+  icon = COPY_ICON,
 }: {
-  readonly action: "copy-name" | "copy-source";
+  readonly action: "copy-name" | "copy-source" | "reset-columns";
   readonly label: string;
+  readonly icon?: LucideIcon;
 }): Element => ({
   type: "element",
   tagName: "button",
@@ -93,7 +99,7 @@ const menuItemButton = ({
     tabIndex: -1,
     [`data-schema-${action}`]: "",
   },
-  children: [renderLucideIcon({ icon: COPY_ICON, hidden: false }), text(label)],
+  children: [renderLucideIcon({ icon, hidden: false }), text(label)],
 });
 
 // Actions remain unavailable without JavaScript, while the complete grid and
@@ -137,6 +143,96 @@ const actionsMenu = (): Element => ({
       children: [
         menuItemButton({ action: "copy-name", label: "Copy table name" }),
         menuItemButton({ action: "copy-source", label: "Copy source" }),
+      ],
+    },
+  ],
+});
+
+// The toggleable grid columns: the name column stays out because hiding the
+// row identity would make every remaining cell unreadable.
+const TOGGLEABLE_COLUMNS: ReadonlyArray<{
+  readonly key: string;
+  readonly label: string;
+}> = [
+  { key: "type", label: "Type" },
+  { key: "constraints", label: "Constraints" },
+  { key: "default", label: "Default" },
+  { key: "comment", label: "Comment" },
+];
+
+// Checkbox items ship checked server-side; the script owns the live state and
+// keeps the menu open across toggles so several columns flip in one visit.
+const columnsMenu = (): Element => ({
+  type: "element",
+  tagName: "span",
+  properties: {
+    className: ["table-schema-menu", "relative", "inline-flex"],
+    "data-schema-menu": "",
+  },
+  children: [
+    {
+      type: "element",
+      tagName: "button",
+      properties: {
+        type: "button",
+        className: BUTTON_CLASSES.split(" "),
+        ariaLabel: "Choose columns",
+        ariaHasPopup: "menu",
+        ariaExpanded: "false",
+        title: "Choose columns",
+        hidden: true,
+        "data-schema-columns-button": "",
+        "data-size": "xs",
+        "data-slot": "button",
+        "data-variant": "ghost",
+      },
+      children: [renderLucideIcon({ icon: COLUMNS_3_COG_ICON, hidden: false })],
+    },
+    {
+      type: "element",
+      tagName: "div",
+      properties: {
+        className: MENU_LIST_CLASSES.split(" "),
+        role: "menu",
+        ariaLabel: "Visible columns",
+        hidden: true,
+        "data-schema-columns-list": "",
+      },
+      children: [
+        ...TOGGLEABLE_COLUMNS.map(({ key, label }) => ({
+          type: "element" as const,
+          tagName: "button",
+          properties: {
+            type: "button",
+            className: MENU_ITEM_CLASSES.split(" "),
+            role: "menuitemcheckbox",
+            ariaChecked: "true",
+            tabIndex: -1,
+            "data-schema-column-toggle": key,
+          },
+          children: [
+            renderLucideIcon({ icon: CHECK_ICON, hidden: false }),
+            text(label),
+          ],
+        })),
+        // Reset lives beside the toggles it reverts; it also restores the
+        // authored order, so the layout has one home. The separator keeps
+        // the reset action visually apart from the checkboxes.
+        {
+          type: "element" as const,
+          tagName: "div",
+          properties: {
+            className: ["table-schema-menu-separator", "-mx-1", "my-1", "h-px"],
+            role: "separator",
+            ariaOrientation: "horizontal",
+          },
+          children: [],
+        },
+        menuItemButton({
+          action: "reset-columns",
+          label: "Reset column layout",
+          icon: ROTATE_CCW_ICON,
+        }),
       ],
     },
   ],
@@ -202,6 +298,7 @@ export const renderTableSchemaHeader = ({
           },
           children: [
             renderCopyFeedback({ dataAttribute: "data-schema-copy-message" }),
+            columnsMenu(),
             actionsMenu(),
             expandButton(),
           ],

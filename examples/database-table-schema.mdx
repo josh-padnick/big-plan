@@ -5,7 +5,7 @@ Each section pairs one table with the scenario it demonstrates, from the full Po
 
 ## The full Postgres shape
 
-Everything at once: identity primary key, two foreign keys with referential actions, checks, number, string, boolean, and backtick-expression defaults, column and table notes, and three indexes including a named unique partial index.
+Everything at once: identity primary key, two foreign keys with referential actions, checks, number, string, boolean, and backtick-expression defaults, column and table notes, three indexes including a named unique partial index, and titled verbatim DDL for row security and a trigger.
 The `INDX` pills on column rows point at the numbered entries below; `status` shows the `WHERE INDX` marker because it shapes a partial predicate without being indexed by it.
 
 <DatabaseTableSchema name="billing.subscriptions">
@@ -30,7 +30,33 @@ indexes {
 Note: 'One row per subscription; canceled rows are kept for audit.'
 ```
 
+<Ddl title="Row security">
+
+```sql
+ALTER TABLE billing.subscriptions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY subscriptions_tenant_read ON billing.subscriptions
+  FOR SELECT USING (customer_id = current_setting('app.customer_id')::bigint);
+
+CREATE POLICY subscriptions_billing_write ON billing.subscriptions
+  FOR ALL TO billing_service USING (true) WITH CHECK (true);
+```
+
+</Ddl>
+
+<Ddl title="Triggers">
+
+```sql
+CREATE TRIGGER subscriptions_touch_updated
+  BEFORE UPDATE ON billing.subscriptions
+  FOR EACH ROW EXECUTE FUNCTION billing.touch_updated_at();
+```
+
+</Ddl>
+
 </DatabaseTableSchema>
+
+With JavaScript enabled the bands below the grid fold into tabs, `Indexes` selected first; without it every band renders stacked and labeled, so the policies and triggers stay reviewable everywhere.
 
 ## Composite keys and expression indexes
 

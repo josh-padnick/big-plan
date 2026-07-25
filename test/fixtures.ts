@@ -5,7 +5,7 @@
 // never from @playwright/test directly.
 
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -21,6 +21,7 @@ type WorkerFixtures = {
   readonly componentsViewerUrl: string;
   readonly apiEndpointsViewerUrl: string;
   readonly sampleViewerUrl: string;
+  readonly tableSchemaViewerUrl: string;
 };
 
 const ANNOTATION_CODE_MDX = `# Annotation code
@@ -93,6 +94,35 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         join(repoRoot, "bin", "big-plan.mjs"),
         "render",
         join(repoRoot, "examples", "api-endpoints.mdx"),
+        outputPath,
+      ]);
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  // The schema showcase carries the DDL-band shapes the component journeys
+  // exercise, which the general components example deliberately keeps out.
+  tableSchemaViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-table-schema-"));
+      const inputPath = join(outputDir, "table-schema.mdx");
+      const outputPath = join(outputDir, "table-schema.html");
+      const examplePath = join(
+        repoRoot,
+        "examples",
+        "database-table-schema.mdx",
+      );
+      const source = await readFile(examplePath, "utf8");
+      await writeFile(
+        inputPath,
+        `${source}\n## Table Schema Panel 1\n\n## Table Schema Panel 2 Tab\n`,
+        "utf8",
+      );
+      await execFileAsync(process.execPath, [
+        join(repoRoot, "bin", "big-plan.mjs"),
+        "render",
+        inputPath,
         outputPath,
       ]);
       await use(pathToFileURL(outputPath).href);

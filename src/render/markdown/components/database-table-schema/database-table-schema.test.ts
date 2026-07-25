@@ -1,5 +1,5 @@
-// Tests DatabaseTableSchema's attribute and fence validation plus the
-// rendered header identity, grid rows, badges, sections, and raw copy source.
+// Tests DatabaseTableSchema's parent and Ddl validation plus its rendered
+// header, grid rows, badges, section bands, column controls, and copy source.
 
 import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
@@ -48,18 +48,35 @@ const fence = ({
   ],
 });
 
+const ddlChild = ({
+  title = "Row security",
+  children = [fence({ language: "sql", source: "CREATE POLICY p ON t;" })],
+}: {
+  readonly title?: string;
+  readonly children?: ReadonlyArray<ElementContent>;
+} = {}) => ({
+  name: "Ddl",
+  attributes: { title },
+  children,
+  position: POSITION,
+});
+
 const render = ({
   attributes = { name: "public.subscriptions" },
   children = [fence()],
+  scopedChildren = [],
 }: {
   readonly attributes?: Readonly<Record<string, string | boolean>>;
   readonly children?: ReadonlyArray<ElementContent>;
+  readonly scopedChildren?: Parameters<
+    typeof renderDatabaseTableSchema
+  >[0]["scopedChildren"];
 } = {}) => {
   const diagnostics = createDiagnosticCollector();
   const element = renderDatabaseTableSchema({
     attributes,
     children,
-    scopedChildren: [],
+    scopedChildren,
     position: POSITION,
     diagnostics,
   });
@@ -319,6 +336,14 @@ describe("renderDatabaseTableSchema rendering", () => {
       (candidate) => candidate.properties["data-schema-badge"] === "idx",
     )[0];
     expect(collectText(marker ?? element)).toBe("INDX 1");
+    // Grid-side references name their entry position so the enhancement can
+    // upgrade them into jump controls, and entries carry the matching number.
+    expect(marker?.properties["data-schema-indx"]).toBe("1");
+    const entry = queryAll(
+      element,
+      (candidate) => candidate.properties["data-schema-index"] !== undefined,
+    )[0];
+    expect(entry?.properties["data-schema-index"]).toBe("1");
     const idRow = queryAll(
       element,
       (candidate) => candidate.properties["data-schema-column"] === "id",
@@ -351,6 +376,184 @@ describe("renderDatabaseTableSchema rendering", () => {
         hasClass(candidate, "table-schema-sections"),
       ),
     ).toHaveLength(0);
+  });
+
+  it("should render one titled verbatim section per Ddl child in authored order", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [
+        ddlChild({ title: "Row security" }),
+        ddlChild({
+          title: "Triggers",
+          children: [
+            fence({ language: "sql", source: "CREATE TRIGGER trg ON t;" }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const sections = queryAll(
+      element,
+      (candidate) => candidate.properties["data-schema-section"] === "ddl",
+    );
+    expect(
+      sections.map((section) => section.properties["data-schema-ddl-title"]),
+    ).toEqual(["Row security", "Triggers"]);
+    expect(collectText(sections[0] ?? element)).toContain(
+      "CREATE POLICY p ON t;",
+    );
+    // Each band's label carries the DDL badge the tab enhancement clones.
+    expect(
+      queryAll(
+        sections[0] ?? element,
+        (candidate) => candidate.properties["data-schema-badge"] === "ddl",
+      ),
+    ).toHaveLength(1);
+    // The Indexes band keeps its own section identity for the tab enhancement.
+    expect(
+      queryAll(
+        element,
+        (candidate) =>
+          candidate.properties["data-schema-section"] === "indexes",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("should render DDL sections when the schema declares no indexes", () => {
+    const { element, diagnostics } = render({
+      children: [fence({ source: "id bigint [pk]\n" })],
+      scopedChildren: [ddlChild()],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(
+      queryAll(
+        element,
+        (candidate) => candidate.properties["data-schema-section"] === "ddl",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("should diagnose a Ddl missing its title", () => {
+    const { diagnostics } = render({
+      scopedChildren: [{ ...ddlChild(), attributes: {} }],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: 'Missing required attribute "title"; expected a string',
+      },
+    ]);
+  });
+
+  it("should diagnose duplicate Ddl titles", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [ddlChild(), ddlChild()],
+    });
+    expect(diagnostics).toEqual([
+      { line: 3, column: 1, message: 'Duplicate Ddl title "Row security"' },
+    ]);
+    expect(
+      queryAll(
+        element,
+        (candidate) => candidate.properties["data-schema-section"] === "ddl",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("should diagnose whitespace-equivalent Ddl titles", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [
+        ddlChild(),
+        ddlChild({ title: "  Row \n\t security  " }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: 'Duplicate Ddl title "  Row \n\t security  "',
+      },
+    ]);
+    expect(
+      queryAll(
+        element,
+        (candidate) => candidate.properties["data-schema-section"] === "ddl",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("should diagnose a Ddl body that is not exactly one sql fence", () => {
+    const prose: ElementContent = {
+      type: "element",
+      tagName: "p",
+      properties: {},
+      children: [{ type: "text", value: "Enable policies first." }],
+    };
+    const wrongLanguage = render({
+      scopedChildren: [ddlChild({ children: [fence({ language: "js" })] })],
+    });
+    const extraContent = render({
+      scopedChildren: [
+        ddlChild({
+          children: [prose, fence({ language: "sql", source: "SELECT 1;" })],
+        }),
+      ],
+    });
+    for (const { diagnostics } of [wrongLanguage, extraContent]) {
+      expect(diagnostics).toEqual([
+        {
+          line: 3,
+          column: 1,
+          message:
+            "Ddl expects exactly one fenced code block with language sql and no other content",
+        },
+      ]);
+    }
+  });
+
+  it("should ship a columns menu with a checkbox per hideable column", () => {
+    const { element } = render();
+    const toggles = queryAll(
+      element,
+      (candidate) =>
+        candidate.properties["data-schema-column-toggle"] !== undefined,
+    );
+    expect(
+      toggles.map((toggle) => toggle.properties["data-schema-column-toggle"]),
+    ).toEqual(["type", "constraints", "default", "comment"]);
+    for (const toggle of toggles) {
+      expect(toggle.properties.ariaChecked).toBe("true");
+    }
+    // The name column has no toggle: hiding the row identity would make the
+    // remaining cells unreadable.
+    expect(
+      queryAll(
+        element,
+        (candidate) =>
+          candidate.properties["data-schema-columns-button"] !== undefined,
+      ),
+    ).toHaveLength(1);
+    // A separator keeps the reset action visually apart from the toggles.
+    const columnsList = queryAll(
+      element,
+      (candidate) =>
+        candidate.properties["data-schema-columns-list"] !== undefined,
+    )[0];
+    const listChildren = (columnsList?.children ?? []).filter(
+      (child) => child.type === "element",
+    );
+    expect(
+      listChildren.map((child) =>
+        child.type === "element" ? child.properties.role : undefined,
+      ),
+    ).toEqual([
+      "menuitemcheckbox",
+      "menuitemcheckbox",
+      "menuitemcheckbox",
+      "menuitemcheckbox",
+      "separator",
+      "menuitem",
+    ]);
   });
 
   it("should carry the raw fence source for the copy control", () => {
