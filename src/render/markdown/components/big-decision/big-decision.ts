@@ -439,7 +439,10 @@ const renderCriterionHeader = (
 const renderMatrix = (model: CompiledBigDecision): Element => ({
   type: "element",
   tagName: "div",
-  properties: { className: ["relative", "mt-2.5", "overflow-x-auto"] },
+  properties: {
+    "data-table-scroll-container": "",
+    className: ["relative", "mt-2.5", "overflow-x-auto"],
+  },
   children: [
     {
       type: "element",

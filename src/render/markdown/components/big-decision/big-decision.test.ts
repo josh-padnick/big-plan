@@ -83,6 +83,7 @@ describe("BigDecision rendering", () => {
     expect(html).toContain("Cheap to change later.");
     expect(html).toContain("Reversibility is what it would cost");
     expect(html).toContain("<table");
+    expect(html.split("data-table-scroll-container").length - 1).toBe(1);
     expect(html).toContain('id="decision-which-store-criterion-setup"');
     expect(html).toContain('id="decision-which-store-criterion-scale"');
     expect(html).toContain('id="decision-which-store-option-postgresql"');
