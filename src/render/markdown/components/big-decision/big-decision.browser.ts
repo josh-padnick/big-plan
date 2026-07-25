@@ -310,16 +310,15 @@ for (const component of document.querySelectorAll<HTMLElement>(
     return table;
   };
 
-  // The Best match section gives every rank-related role a first-class home:
-  // the verdict, the explicit selection action, the explanation, the reset,
-  // and the how-ranking-works reference.
+  // The Score section gives every score-related role a first-class home:
+  // the explanation, the reset, and the how-scoring-works reference.
   const section = document.createElement("section");
   section.className = "border-t border-edge px-4 py-4";
   section.dataset.decisionBestMatch = "";
   const sectionLabel = document.createElement("div");
   sectionLabel.className =
     "card-section-label text-[0.6875rem] leading-4 font-bold tracking-[0.08em] uppercase text-ink/70";
-  sectionLabel.textContent = "Ranking";
+  sectionLabel.textContent = "Score";
   const whyPopover = createPopover({ label: "Why this match?", wide: true });
   const resetButton = document.createElement("button");
   resetButton.type = "button";
@@ -349,21 +348,6 @@ for (const component of document.querySelectorAll<HTMLElement>(
     );
   };
 
-  // The reader's own selection stays untouched; when it diverges from the
-  // computed leader, one inline Select offers the switch explicitly.
-  const updateDivergence = (): void => {
-    const selected = options.findIndex(
-      (option) => option.dataset.optionSelected !== undefined,
-    );
-    selectButton.hidden =
-      leaderColumn === null || selected === -1 || selected === leaderColumn;
-    if (!selectButton.hidden && leaderColumn !== null) {
-      selectButton.textContent = `Select ${optionName(
-        options[leaderColumn] ?? document.body,
-      )}`;
-    }
-  };
-
   const scoreRow = document.createElement("tr");
   scoreRow.className = "big-decision-matrix-row big-decision-score-row";
   scoreRow.dataset.decisionScoreRow = "";
@@ -391,13 +375,21 @@ for (const component of document.querySelectorAll<HTMLElement>(
     const leaders = totals.filter((total) => total === best).length;
     leaderColumn = leaders < options.length ? totals.indexOf(best) : null;
     for (const [column, option] of options.entries()) {
-      const leads = column === leaderColumn;
+      const isLeader = column === leaderColumn;
+      // When the leader is also the recommendation, the Recommended pill and
+      // the highlighted Score cell already say it; a second pill just stacks.
+      const showTag =
+        isLeader && option.dataset.optionRecommended === undefined;
+      if (isLeader) {
+        option.dataset.bestMatch = "";
+      } else {
+        delete option.dataset.bestMatch;
+      }
       let tag =
         option.parentElement?.querySelector<HTMLElement>(
           ".big-decision-bestmatch",
         ) ?? null;
-      if (leads) {
-        option.dataset.bestMatch = "";
+      if (showTag) {
         if (tag === null) {
           tag = document.createElement("span");
           tag.className = "big-decision-bestmatch";
@@ -408,7 +400,6 @@ for (const component of document.querySelectorAll<HTMLElement>(
           ).append(tag);
         }
       } else {
-        delete option.dataset.bestMatch;
         tag?.remove();
       }
     }
@@ -434,13 +425,12 @@ for (const component of document.querySelectorAll<HTMLElement>(
         "Each cell is tone value × priority. Tones: good +2, mixed +1, neutral 0, bad -2.";
       whyPopover.body.append(heading, buildBreakdown(), legend);
     }
-    updateDivergence();
   };
 
-  const howPopover = createPopover({ label: "How ranking works" });
+  const howPopover = createPopover({ label: "How scoring works" });
   const howHeading = document.createElement("p");
   howHeading.className = "m-0 font-semibold text-ink";
-  howHeading.textContent = "How ranking works";
+  howHeading.textContent = "How scoring works";
   const howList = document.createElement("ul");
   howList.className = "mt-1 mb-0 list-disc pl-4";
   for (const point of HOW_RANKING_POINTS) {
@@ -453,12 +443,7 @@ for (const component of document.querySelectorAll<HTMLElement>(
   const actions = document.createElement("p");
   actions.className =
     "mt-2 mb-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs";
-  actions.append(
-    selectButton,
-    whyPopover.details,
-    howPopover.details,
-    resetButton,
-  );
+  actions.append(whyPopover.details, howPopover.details, resetButton);
   section.append(sectionLabel, actions);
 
   for (const [index, row] of rows.entries()) {
@@ -517,18 +502,6 @@ for (const component of document.querySelectorAll<HTMLElement>(
 
   component.querySelector("[data-decision-options]")?.after(section);
 
-  // Selection happens in the shared option-select script; observing it keeps
-  // the divergence prompt honest without coupling the two scripts.
-  const observer = new MutationObserver(() => {
-    updateDivergence();
-  });
-  for (const option of options) {
-    observer.observe(option, {
-      attributes: true,
-      attributeFilter: ["data-option-selected"],
-    });
-  }
-
   recompute();
   updateReset();
 }
@@ -567,24 +540,29 @@ for (const component of document.querySelectorAll<HTMLElement>(
     submit.textContent = "Submit";
     submit.addEventListener("click", showNote);
 
+    // Suggest another option lives with the options themselves: the link
+    // sits under the matrix (above the Score section) and toggles an inline
+    // form in place rather than floating a dialog.
     const suggest = document.createElement("button");
     suggest.type = "button";
-    suggest.className = "big-decision-popover-link font-normal";
+    suggest.className = "big-decision-popover-link mt-2.5 font-normal";
     suggest.dataset.decisionSuggest = "";
     suggest.textContent = "Suggest another option";
+    const suggestNote = document.createElement("p");
+    suggestNote.className = "mt-1.5 mb-0 text-xs text-muted";
+    suggestNote.dataset.decisionSuggestNote = "";
+    suggestNote.hidden = true;
+    suggestNote.textContent = ACTION_NOTE;
 
-    // The dialog builds lazily on first use so the static DOM stays lean.
-    let dialog: HTMLDialogElement | null = null;
-    const buildDialog = (): HTMLDialogElement => {
-      const built = document.createElement("dialog");
-      built.className = "big-decision-suggest-dialog";
+    // The form builds lazily on first use so the static DOM stays lean.
+    let suggestForm: HTMLFormElement | null = null;
+    const buildSuggestForm = (): HTMLFormElement => {
       const form = document.createElement("form");
-      form.method = "dialog";
-      const heading = document.createElement("p");
-      heading.className = "m-0 text-sm font-semibold text-ink";
-      heading.textContent = "Suggest another option";
+      form.className =
+        "mt-2.5 max-w-96 rounded-md border border-edge bg-surface p-3";
+      form.dataset.decisionSuggestForm = "";
       const titleLabel = document.createElement("label");
-      titleLabel.className = "mt-2.5 block text-xs font-semibold text-muted";
+      titleLabel.className = "block text-xs font-semibold text-muted";
       titleLabel.textContent = "Option";
       const titleInput = document.createElement("input");
       titleInput.type = "text";
@@ -599,40 +577,44 @@ for (const component of document.querySelectorAll<HTMLElement>(
       whyInput.className = "big-decision-suggest-input mt-1 w-full";
       whyLabel.append(whyInput);
       const buttons = document.createElement("div");
-      buttons.className = "mt-3 flex items-center justify-end gap-x-3";
+      buttons.className = "mt-3 flex items-center gap-x-3";
+      const send = document.createElement("button");
+      send.type = "submit";
+      send.className = "big-decision-action-primary";
+      send.textContent = "Submit";
       const cancel = document.createElement("button");
       cancel.type = "button";
       cancel.className = "big-decision-popover-link font-normal";
       cancel.textContent = "Cancel";
       cancel.addEventListener("click", () => {
-        built.close("");
+        form.hidden = true;
+        suggest.hidden = false;
       });
-      const send = document.createElement("button");
-      send.type = "submit";
-      send.className = "big-decision-action-primary";
-      send.textContent = "Submit";
-      buttons.append(cancel, send);
-      form.append(heading, titleLabel, whyLabel, buttons);
-      form.addEventListener("submit", () => {
-        built.close("submitted");
-      });
-      built.append(form);
-      built.addEventListener("close", () => {
-        if (built.returnValue === "submitted") {
-          showNote();
-        }
+      buttons.append(send, cancel);
+      form.append(titleLabel, whyLabel, buttons);
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        form.hidden = true;
+        suggest.hidden = false;
+        suggestNote.hidden = false;
         titleInput.value = "";
         whyInput.value = "";
-        built.remove();
-        dialog = null;
       });
-      return built;
+      return form;
     };
     suggest.addEventListener("click", () => {
-      dialog = dialog ?? buildDialog();
-      section.append(dialog);
-      dialog.showModal();
+      suggestForm = suggestForm ?? buildSuggestForm();
+      if (suggestForm.parentElement === null) {
+        suggestNote.before(suggestForm);
+      }
+      suggestForm.hidden = false;
+      suggest.hidden = true;
+      suggestForm.querySelector("input")?.focus();
     });
+    const optionsSection = component.querySelector<HTMLElement>(
+      "[data-decision-options]",
+    );
+    optionsSection?.append(suggest, suggestNote);
 
     const defer = document.createElement("button");
     defer.type = "button";
@@ -641,7 +623,7 @@ for (const component of document.querySelectorAll<HTMLElement>(
     defer.textContent = "Defer";
     defer.addEventListener("click", showNote);
 
-    row.append(submit, suggest, defer);
+    row.append(submit, defer);
     section.append(row, note);
   } else {
     const reopen = document.createElement("button");

@@ -73,7 +73,7 @@ test("should review standalone plan decisions", async ({
 
   await test.step("priority squares recompute the Best match section", async () => {
     const section = openDecision.locator("[data-decision-best-match]");
-    await expect(section).toContainText("Best match");
+    await expect(section).toContainText("Score");
     await expect(openDecision.locator("[data-decision-weights]")).toHaveCount(
       4,
     );
@@ -87,8 +87,6 @@ test("should review standalone plan decisions", async ({
     await expect(scoreRow.locator("td").nth(1)).toHaveClass(
       /big-decision-score-leader/,
     );
-    const divergence = section.locator("[data-decision-divergence]");
-    await expect(divergence).toHaveText("Select SQLite");
     const setupPriority = openDecision
       .locator("[data-decision-weights]")
       .nth(1)
@@ -99,21 +97,11 @@ test("should review standalone plan decisions", async ({
     await expect(scoreRow.locator("td").nth(0)).toHaveClass(
       /big-decision-score-leader/,
     );
-    await expect(divergence).toBeHidden();
     const reset = section.locator("[data-decision-weights-reset]");
     await expect(reset).toBeVisible();
     await reset.click();
     await expect(options.nth(1)).toHaveAttribute("data-best-match", "");
     await expect(reset).toBeHidden();
-  });
-
-  await test.step("the divergence prompt aligns the selection explicitly", async () => {
-    const options = openDecision.locator("thead [data-option]");
-    const divergence = openDecision.locator("[data-decision-divergence]");
-    await expect(divergence).toBeVisible();
-    await divergence.click();
-    await expect(options.nth(1)).toHaveAttribute("aria-checked", "true");
-    await expect(divergence).toBeHidden();
   });
 
   await test.step("the why popover shows the score arithmetic", async () => {
@@ -202,12 +190,17 @@ test("should review standalone plan decisions", async ({
     await expect(note).toBeHidden();
     await actions.locator("[data-decision-submit]").click();
     await expect(note).toBeVisible();
-    await actions.locator("[data-decision-suggest]").click();
-    const dialog = openDecision.locator("dialog.big-decision-suggest-dialog");
-    await expect(dialog).toBeVisible();
-    await dialog.locator("input").fill("Managed document store");
-    await dialog.getByRole("button", { name: "Submit" }).click();
-    await expect(dialog).toBeHidden();
+    const suggest = openDecision.locator("[data-decision-suggest]");
+    await suggest.click();
+    const form = openDecision.locator("[data-decision-suggest-form]");
+    await expect(form).toBeVisible();
+    await form.locator("input").fill("Managed document store");
+    await form.getByRole("button", { name: "Submit" }).click();
+    await expect(form).toBeHidden();
+    await expect(suggest).toBeVisible();
+    await expect(
+      openDecision.locator("[data-decision-suggest-note]"),
+    ).toBeVisible();
     await expect(actions.locator("[data-decision-defer]")).toBeVisible();
     await expect(
       decidedDecision.locator("[data-decision-reopen]"),

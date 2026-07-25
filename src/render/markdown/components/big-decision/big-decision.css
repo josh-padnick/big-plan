@@ -216,17 +216,6 @@
     font-size: 0.75rem;
     font-weight: 600;
   }
-  article .big-decision-suggest-dialog {
-    width: min(26rem, 90vw);
-    padding: 1rem;
-    border: 1px solid var(--edge-c);
-    border-radius: 0.5rem;
-    background: var(--bg);
-    color: var(--ink-c);
-  }
-  article .big-decision-suggest-dialog::backdrop {
-    background: rgb(0 0 0 / 0.35);
-  }
   article .big-decision-suggest-input {
     display: block;
     padding: 0.375rem 0.5rem;

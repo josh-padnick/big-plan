@@ -10,7 +10,7 @@ import bigDecisionDark from "../../../assets/components/big-decision-dark.png";
 `BigDecision` presents one consequential choice as a comparison a reviewer can actually check: the question and its context, the criteria the decision turns on, and every option scored against every criterion in a matrix, so competing verdicts sit side by side instead of a scroll apart.
 Place it in the plan section where the decision belongs; the smaller end-of-plan questions belong in [SmallDecisionSet](/components/small-decision-set/) instead.
 While a decision is undecided, the recommended option starts selected and a click moves the reader's local selection; recording the choice arrives with the live review layer, and decided decisions stay static.
-A full-screen control gives a wide matrix the whole viewport when the reading column crowds it, and priority squares under each criterion let the reader state what matters most - a dashed Best match tag follows the weighted comparison, always distinct from the agent's solid Recommended pill and from the reader's own selection, a live Score row at the foot of the matrix totals every option and highlights the Best match as priorities change, and a Ranking section carries the explicit Select action, the arithmetic breakdown, the reset, and how ranking works.
+A full-screen control gives a wide matrix the whole viewport when the reading column crowds it, and priority squares under each criterion let the reader state what matters most - a dashed Best match tag follows the weighted comparison, always distinct from the agent's solid Recommended pill and from the reader's own selection, a live Score row at the foot of the matrix totals every option and highlights the Best match as priorities change, and a Score section carries the arithmetic breakdown, the priorities reset, and how scoring works.
 Every decision also rates its reversibility on a fixed scale, with a built-in explainer behind an info icon.
 
 ## How it looks
@@ -162,20 +162,20 @@ Markdown in the body is the decision-specific rationale shown under the rating.
 
 A decision moves through three statuses, and the reader's actions render as placeholders until the live review layer can transport them:
 
-- **open** (the default) shows no status pill. Readers get a Submit button for their selection, a Suggest-another-option dialog for choices the plan missed, and a tertiary Defer action.
+- **open** (the default) shows no status pill. Readers get a Submit button for their selection, an inline Suggest-another-option form under the options for choices the plan missed, and a tertiary Defer action.
 - **decided** shows the pill, requires exactly one chosen option, leads with the outcome strip, and offers Re-open.
 - **deferred** shows the pill, records why in the context, and offers Re-open.
 
 Every action currently answers with a coming-soon note; wiring them to the authoring agent arrives with the live layer.
 
-## Ranking
+## Scoring
 
-The browser-side priority preview keeps its arithmetic deliberately coarse, and these are its rules:
+The browser-side priority preview keeps its arithmetic deliberately coarse and verifiable, and these are its rules:
 
 - The authoring agent assigns each cell's tone; the reader never edits ratings, only priorities.
 - Every criterion starts at medium priority; the three squares set low, medium, or high, multiplying a tone's contribution by 1, 2, or 3.
 - Tones contribute good +2, mixed +1, neutral 0, and bad -2; the option with the highest weighted sum is the Best match.
 - A tie across all options shows no Best match; otherwise the Why-this-match popover shows the per-criterion arithmetic and totals so the ranking can be verified.
-- Changing priorities never changes the reader's selection; when the two diverge, the footer offers the switch as an explicit action.
+- Changing priorities never changes the reader's selection.
 - Priorities are a session-local reading aid: they are not saved into the document, and the agent's Recommended pill never moves.
 - Without JavaScript the matrix is fully readable and none of the priority controls appear.
