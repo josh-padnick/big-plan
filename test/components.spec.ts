@@ -1614,12 +1614,14 @@ test("should reorder grid columns and remember the arrangement", async ({
     ).toHaveClass(/table-schema-cell-type/);
   });
 
-  await test.step("dragging a header drops it at the target column", async () => {
+  await test.step("dragging onto a target's left half inserts before it", async () => {
     // The drag pair stays inside the scroll container's visible region;
     // clipped headers cannot start a native drag reliably.
     await heads
       .filter({ hasText: "Constraints" })
-      .dragTo(heads.filter({ hasText: "Column" }));
+      .dragTo(heads.filter({ hasText: "Column" }), {
+        targetPosition: { x: 1, y: 1 },
+      });
     await expect(heads).toHaveText([
       "Constraints",
       "Column",
@@ -1629,39 +1631,68 @@ test("should reorder grid columns and remember the arrangement", async ({
     ]);
   });
 
-  await test.step("dragging right inserts before the indicated target", async () => {
-    await heads
-      .filter({ hasText: "Constraints" })
-      .dragTo(heads.filter({ hasText: "Type" }));
+  await test.step("dragging onto the right neighbor's right half moves after it", async () => {
+    const columnHead = heads.filter({ hasText: "Column" });
+    const columnBounds = await columnHead.boundingBox();
+    if (columnBounds === null) {
+      throw new Error("Missing Column header bounds");
+    }
+    await heads.filter({ hasText: "Constraints" }).dragTo(columnHead, {
+      targetPosition: { x: columnBounds.width - 1, y: 1 },
+    });
     await expect(heads).toHaveText([
       "Column",
       "Constraints",
       "Type",
       "Default",
       "Comment",
+    ]);
+  });
+
+  await test.step("dragging onto the final column's right half lands after it", async () => {
+    const commentHead = heads.filter({ hasText: "Comment" });
+    await commentHead.scrollIntoViewIfNeeded();
+    const commentBounds = await commentHead.boundingBox();
+    if (commentBounds === null) {
+      throw new Error("Missing Comment header bounds");
+    }
+    await heads.filter({ hasText: "Constraints" }).dragTo(commentHead, {
+      targetPosition: { x: commentBounds.width - 1, y: 1 },
+    });
+    await expect(heads).toHaveText([
+      "Column",
+      "Type",
+      "Default",
+      "Comment",
+      "Constraints",
     ]);
   });
 
   await test.step("every schema on the page follows the same arrangement", async () => {
     await expect(
       page.locator(".table-schema-grid").nth(1).locator("thead th"),
-    ).toHaveText(["Column", "Constraints", "Type", "Default", "Comment"]);
+    ).toHaveText(["Column", "Type", "Default", "Comment", "Constraints"]);
   });
 
   await test.step("the arrangement survives a reload", async () => {
     await page.reload();
     await expect(
       page.locator(".table-schema-grid").first().locator("thead th"),
-    ).toHaveText(["Column", "Constraints", "Type", "Default", "Comment"]);
+    ).toHaveText(["Column", "Type", "Default", "Comment", "Constraints"]);
   });
 
   await test.step("the columns menu resets to the authored layout", async () => {
     const schema = page.locator("[data-database-table-schema]").first();
-    await schema.locator("[data-schema-columns-button]").click();
+    const columnsButton = schema.locator("[data-schema-columns-button]");
+    const actionsButton = schema.locator("[data-schema-menu-button]");
+    await columnsButton.click();
     await schema.getByRole("menuitem", { name: "Reset column layout" }).click();
     await expect(
       page.locator(".table-schema-grid").first().locator("thead th"),
     ).toHaveText(["Column", "Type", "Constraints", "Default", "Comment"]);
+    await expect(columnsButton).toBeFocused();
+    await expect(columnsButton).toHaveAccessibleName("Columns reset");
+    await expect(actionsButton).toHaveAccessibleName("More actions");
     expect(
       await page.evaluate(() =>
         window.localStorage.getItem("big-plan:table-schema-columns"),

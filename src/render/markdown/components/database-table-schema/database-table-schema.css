@@ -135,8 +135,11 @@
       transition: opacity 0.15s ease;
     }
   }
-  article .table-schema-head-drop {
+  article .table-schema-head-drop-before {
     box-shadow: inset 2px 0 0 var(--color-accent);
+  }
+  article .table-schema-head-drop-after {
+    box-shadow: inset -2px 0 0 var(--color-accent);
   }
   article .table-schema-tab {
     color: var(--color-muted);

@@ -127,7 +127,7 @@ Decision-worthy rationale still belongs in a [`Callout`](/components/callout/) b
 
 The grid and sections are fully server-rendered; JavaScript powers only the actions menu, the columns menu, the full-screen view, the tab bar that folds multiple bands, column rearranging, and the index jump controls, and a wide grid scrolls inside the figure instead of widening the page.
 Grid columns rearrange by dragging a header or pressing arrow keys on a focused one, and the columns menu shows or hides every column except the row-identity Column itself.
-Order and visibility travel together as one locally persisted preference for every schema in the document: hiding a column keeps its place in the order, keyboard moves step over hidden columns, and the actions menu's Reset column layout restores the authored layout.
+Order and visibility travel together as one locally persisted preference for every schema in the document: hiding a column keeps its place in the order, keyboard moves step over hidden columns, and Reset column layout sits in the columns menu below the toggles, separated by a rule.
 Tabbed bands support Left Arrow, Right Arrow, Home, and End navigation.
 With JavaScript available, an `INDX n` or `WHERE INDX n` reference becomes a jump control that reveals the Indexes band, scrolls to and focuses the numbered entry, and flashes it.
 The actions menu's Copy table name action copies the exact `name` attribute, while Copy source copies only the raw `dbml` fence.

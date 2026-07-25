@@ -212,6 +212,37 @@ const toggleColumn = (key: SchemaColumnKey): void => {
   persistColumnLayout();
 };
 
+type ColumnDropSide = "before" | "after";
+
+const columnDropSide = ({
+  head,
+  pointerX,
+}: {
+  readonly head: HTMLElement;
+  readonly pointerX: number;
+}): ColumnDropSide => {
+  const bounds = head.getBoundingClientRect();
+  return pointerX < bounds.left + bounds.width / 2 ? "before" : "after";
+};
+
+const clearColumnDropIndicator = (head: HTMLElement): void => {
+  head.classList.remove(
+    "table-schema-head-drop-before",
+    "table-schema-head-drop-after",
+  );
+};
+
+const showColumnDropIndicator = ({
+  head,
+  side,
+}: {
+  readonly head: HTMLElement;
+  readonly side: ColumnDropSide;
+}): void => {
+  clearColumnDropIndicator(head);
+  head.classList.add(`table-schema-head-drop-${side}`);
+};
+
 // Column headers reorder by drag or by arrow keys; the moved header keeps
 // focus so keyboard readers can walk a column across the grid.
 const enhanceColumnReordering = (block: HTMLElement): void => {
@@ -240,19 +271,24 @@ const enhanceColumnReordering = (block: HTMLElement): void => {
     });
     head.addEventListener("dragend", () => {
       draggedKey = undefined;
-      head.classList.remove("table-schema-head-drop");
+      for (const candidate of heads) {
+        clearColumnDropIndicator(candidate);
+      }
     });
     head.addEventListener("dragover", (event) => {
       if (draggedKey !== undefined && draggedKey !== key) {
         event.preventDefault();
-        head.classList.add("table-schema-head-drop");
+        showColumnDropIndicator({
+          head,
+          side: columnDropSide({ head, pointerX: event.clientX }),
+        });
       }
     });
     head.addEventListener("dragleave", () => {
-      head.classList.remove("table-schema-head-drop");
+      clearColumnDropIndicator(head);
     });
     head.addEventListener("drop", (event) => {
-      head.classList.remove("table-schema-head-drop");
+      clearColumnDropIndicator(head);
       if (draggedKey === undefined || draggedKey === key) {
         return;
       }
@@ -261,9 +297,11 @@ const enhanceColumnReordering = (block: HTMLElement): void => {
       const orderWithoutDragged = columnOrder.filter(
         (columnKey) => columnKey !== keyBeingDragged,
       );
+      const targetIndex = orderWithoutDragged.indexOf(key);
+      const side = columnDropSide({ head, pointerX: event.clientX });
       moveColumn({
         key: keyBeingDragged,
-        toIndex: orderWithoutDragged.indexOf(key),
+        toIndex: targetIndex + (side === "after" ? 1 : 0),
       });
       draggedKey = undefined;
     });
@@ -594,37 +632,44 @@ const wireSchemaMenu = ({
 };
 
 const SCHEMA_MESSAGE_RESET_MS = 2_000;
-const schemaMessageTimers = new WeakMap<HTMLElement, number>();
+type SchemaMessageState = {
+  readonly button: HTMLButtonElement | null;
+  readonly stableLabel: string;
+  readonly timer: number;
+};
+const schemaMessageStates = new WeakMap<HTMLElement, SchemaMessageState>();
 
 // Flashes transient clipboard feedback through the same header convention as
-// CodeSnippet while retaining the stable actions-menu label between operations.
+// CodeSnippet while routing the accessible name through the initiating control.
 const showSchemaMessage = ({
   block,
+  button,
   message,
+  stableLabel,
 }: {
   readonly block: HTMLElement;
+  readonly button: HTMLButtonElement | null;
   readonly message: string;
+  readonly stableLabel: string;
 }): void => {
   const slot = block.querySelector<HTMLElement>("[data-schema-copy-message]");
   if (slot === null) {
     return;
   }
-  const previousTimer = schemaMessageTimers.get(slot);
-  if (previousTimer !== undefined) {
-    window.clearTimeout(previousTimer);
+  const previous = schemaMessageStates.get(slot);
+  if (previous !== undefined) {
+    window.clearTimeout(previous.timer);
+    previous.button?.setAttribute("aria-label", previous.stableLabel);
   }
-  const menuButton = block.querySelector<HTMLButtonElement>(
-    "[data-schema-menu-button]",
-  );
   slot.textContent = message;
   slot.hidden = false;
-  menuButton?.setAttribute("aria-label", message);
+  button?.setAttribute("aria-label", message);
   const timer = window.setTimeout(() => {
     slot.hidden = true;
-    menuButton?.setAttribute("aria-label", "More actions");
-    schemaMessageTimers.delete(slot);
+    button?.setAttribute("aria-label", stableLabel);
+    schemaMessageStates.delete(slot);
   }, SCHEMA_MESSAGE_RESET_MS);
-  schemaMessageTimers.set(slot, timer);
+  schemaMessageStates.set(slot, { button, stableLabel, timer });
 };
 
 // Keeps copy available for local file previews where Clipboard API access is
@@ -743,9 +788,19 @@ for (const block of document.querySelectorAll<HTMLElement>(
     menuButton?.focus();
     try {
       await writeSchemaClipboard({ schemaBlock: block, value });
-      showSchemaMessage({ block, message: successMessage });
+      showSchemaMessage({
+        block,
+        button: menuButton,
+        message: successMessage,
+        stableLabel: "More actions",
+      });
     } catch {
-      showSchemaMessage({ block, message: "Could not copy" });
+      showSchemaMessage({
+        block,
+        button: menuButton,
+        message: "Could not copy",
+        stableLabel: "More actions",
+      });
     }
   };
 
@@ -779,7 +834,12 @@ for (const block of document.querySelectorAll<HTMLElement>(
       columnsMenuControl.setOpen({ open: false });
       columnsButton?.focus();
       resetColumnLayout();
-      showSchemaMessage({ block, message: "Columns reset" });
+      showSchemaMessage({
+        block,
+        button: columnsButton,
+        message: "Columns reset",
+        stableLabel: "Choose columns",
+      });
     });
 }
 
