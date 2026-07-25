@@ -188,6 +188,22 @@ describe("scoped child dispatch", () => {
     ]);
   });
 
+  it("should report a prohibited registered component exactly once", () => {
+    const { diagnostics } = compileWithRegistry({
+      markdown:
+        "<NestedFixture>\n<Branch>\n<NestedFixture>\nInner.\n</NestedFixture>\n</Branch>\n</NestedFixture>\n",
+      registry: NESTED_REGISTRY,
+    });
+
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: "Branch bodies cannot contain typed components",
+      },
+    ]);
+  });
+
   it("should apply a parent body policy only outside its nested scoped children", () => {
     const { diagnostics } = compileWithRegistry({
       markdown:
