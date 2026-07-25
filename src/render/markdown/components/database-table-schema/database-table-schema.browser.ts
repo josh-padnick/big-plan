@@ -231,6 +231,9 @@ const enhanceColumnReordering = (block: HTMLElement): void => {
     head.draggable = true;
     head.tabIndex = 0;
     head.title = "Drag or use arrow keys to reorder columns";
+    head
+      .querySelector('[data-lucide="grip-vertical"]')
+      ?.removeAttribute("hidden");
     head.addEventListener("dragstart", (event) => {
       draggedKey = key;
       event.dataTransfer?.setData("text/plain", key);
@@ -684,10 +687,10 @@ for (const block of document.querySelectorAll<HTMLElement>(
     "[data-schema-columns-button]",
   );
   columnsButton?.removeAttribute("hidden");
-  wireSchemaMenu({
+  const columnsMenuControl = wireSchemaMenu({
     button: columnsButton,
     list: block.querySelector<HTMLElement>("[data-schema-columns-list]"),
-    itemsSelector: '[role="menuitemcheckbox"]',
+    itemsSelector: '[role="menuitemcheckbox"], [role="menuitem"]',
   });
   // Checkbox toggles keep the menu open so several columns flip in one visit.
   for (const toggle of block.querySelectorAll<HTMLButtonElement>(
@@ -773,8 +776,8 @@ for (const block of document.querySelectorAll<HTMLElement>(
   block
     .querySelector<HTMLButtonElement>("[data-schema-reset-columns]")
     ?.addEventListener("click", () => {
-      actionsMenuControl.setOpen({ open: false });
-      menuButton?.focus();
+      columnsMenuControl.setOpen({ open: false });
+      columnsButton?.focus();
       resetColumnLayout();
       showSchemaMessage({ block, message: "Columns reset" });
     });

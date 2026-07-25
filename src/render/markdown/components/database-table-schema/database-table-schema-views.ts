@@ -4,6 +4,8 @@
 // the psql \d+ tradition, plus numbered Indexes and titled verbatim-DDL bands.
 
 import type { Element, ElementContent, Text } from "hast";
+import { renderLucideIcon } from "../../../icons/lucide-icon.js";
+import { GRIP_VERTICAL_ICON } from "../../../icons/lucide/grip-vertical.js";
 import type { CompiledDdlSection } from "./compile-database-table-schema.js";
 import { indexParticipation } from "./derive-index-participation.js";
 import type {
@@ -343,7 +345,15 @@ export const renderTableSchemaGrid = ({
                   tagName: "th",
                   className: `table-schema-head table-schema-head-${key} text-[0.625rem] uppercase tracking-wider`,
                   properties: { scope: "col" },
-                  children: [text(label)],
+                  // The gripper ships hidden: it advertises a JavaScript-only
+                  // drag, so the static document must never show it.
+                  children: [
+                    text(label),
+                    renderLucideIcon({
+                      icon: GRIP_VERTICAL_ICON,
+                      hidden: true,
+                    }),
+                  ],
                 }),
               ),
             },

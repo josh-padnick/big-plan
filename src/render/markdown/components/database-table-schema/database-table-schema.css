@@ -80,7 +80,7 @@
      one closes the figure's rounded corner, and a hidden tab panel gives its
      place to the visible one. */
   article .table-schema-section {
-    background: var(--diff-header-bg);
+    background: var(--color-surface);
   }
   article .table-schema-section:last-child {
     border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
@@ -112,9 +112,28 @@
     }
   }
   /* Reorderable headers advertise the drag, and the drop target draws an
-     accent insertion edge; both exist only once the script enables them. */
+     accent insertion edge; both exist only once the script enables them.
+     The grippers stay invisible until the pointer or keyboard reaches the
+     header row, keeping the muted label row quiet at rest. */
   article [data-schema-reorderable] .table-schema-head {
     cursor: grab;
+  }
+  article .table-schema-head [data-lucide="grip-vertical"] {
+    width: 0.7rem;
+    height: 0.7rem;
+    margin-left: 0.3rem;
+    vertical-align: -0.12rem;
+    display: inline-block;
+    opacity: 0;
+  }
+  article [data-schema-reorderable] thead:hover [data-lucide="grip-vertical"],
+  article .table-schema-head:focus-visible [data-lucide="grip-vertical"] {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    article .table-schema-head [data-lucide="grip-vertical"] {
+      transition: opacity 0.15s ease;
+    }
   }
   article .table-schema-head-drop {
     box-shadow: inset 2px 0 0 var(--color-accent);

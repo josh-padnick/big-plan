@@ -1584,6 +1584,18 @@ test("should reorder grid columns and remember the arrangement", async ({
         .first()
         .evaluate((element) => getComputedStyle(element).cursor),
     ).toBe("grab");
+    // The gripper stays quiet at rest and reveals when the pointer reaches
+    // the header row.
+    const gripper = heads.first().locator('[data-lucide="grip-vertical"]');
+    expect(
+      await gripper.evaluate((element) => getComputedStyle(element).opacity),
+    ).toBe("0");
+    await heads.first().hover();
+    await expect
+      .poll(async () =>
+        gripper.evaluate((element) => getComputedStyle(element).opacity),
+      )
+      .toBe("1");
   });
 
   await test.step("arrow keys walk a column across the grid", async () => {
@@ -1643,9 +1655,9 @@ test("should reorder grid columns and remember the arrangement", async ({
     ).toHaveText(["Column", "Constraints", "Type", "Default", "Comment"]);
   });
 
-  await test.step("the actions menu resets to the authored layout", async () => {
+  await test.step("the columns menu resets to the authored layout", async () => {
     const schema = page.locator("[data-database-table-schema]").first();
-    await schema.locator("[data-schema-menu-button]").click();
+    await schema.locator("[data-schema-columns-button]").click();
     await schema.getByRole("menuitem", { name: "Reset column layout" }).click();
     await expect(
       page.locator(".table-schema-grid").first().locator("thead th"),
@@ -1775,7 +1787,7 @@ test("should hide and show grid columns from the columns menu", async ({
 
   await test.step("reset restores the authored layout and clears the preference", async () => {
     await page.keyboard.press("Escape");
-    await schema.locator("[data-schema-menu-button]").click();
+    await schema.locator("[data-schema-columns-button]").click();
     await schema.getByRole("menuitem", { name: "Reset column layout" }).click();
     await expect(visibleHeads(0)).toHaveText([
       "Column",

@@ -143,11 +143,6 @@ const actionsMenu = (): Element => ({
       children: [
         menuItemButton({ action: "copy-name", label: "Copy table name" }),
         menuItemButton({ action: "copy-source", label: "Copy source" }),
-        menuItemButton({
-          action: "reset-columns",
-          label: "Reset column layout",
-          icon: ROTATE_CCW_ICON,
-        }),
       ],
     },
   ],
@@ -203,22 +198,31 @@ const columnsMenu = (): Element => ({
         hidden: true,
         "data-schema-columns-list": "",
       },
-      children: TOGGLEABLE_COLUMNS.map(({ key, label }) => ({
-        type: "element" as const,
-        tagName: "button",
-        properties: {
-          type: "button",
-          className: MENU_ITEM_CLASSES.split(" "),
-          role: "menuitemcheckbox",
-          ariaChecked: "true",
-          tabIndex: -1,
-          "data-schema-column-toggle": key,
-        },
-        children: [
-          renderLucideIcon({ icon: CHECK_ICON, hidden: false }),
-          text(label),
-        ],
-      })),
+      children: [
+        ...TOGGLEABLE_COLUMNS.map(({ key, label }) => ({
+          type: "element" as const,
+          tagName: "button",
+          properties: {
+            type: "button",
+            className: MENU_ITEM_CLASSES.split(" "),
+            role: "menuitemcheckbox",
+            ariaChecked: "true",
+            tabIndex: -1,
+            "data-schema-column-toggle": key,
+          },
+          children: [
+            renderLucideIcon({ icon: CHECK_ICON, hidden: false }),
+            text(label),
+          ],
+        })),
+        // Reset lives beside the toggles it reverts; it also restores the
+        // authored order, so the layout has one home.
+        menuItemButton({
+          action: "reset-columns",
+          label: "Reset column layout",
+          icon: ROTATE_CCW_ICON,
+        }),
+      ],
     },
   ],
 });
