@@ -533,6 +533,27 @@ describe("renderDatabaseTableSchema rendering", () => {
           candidate.properties["data-schema-columns-button"] !== undefined,
       ),
     ).toHaveLength(1);
+    // A separator keeps the reset action visually apart from the toggles.
+    const columnsList = queryAll(
+      element,
+      (candidate) =>
+        candidate.properties["data-schema-columns-list"] !== undefined,
+    )[0];
+    const listChildren = (columnsList?.children ?? []).filter(
+      (child) => child.type === "element",
+    );
+    expect(
+      listChildren.map((child) =>
+        child.type === "element" ? child.properties.role : undefined,
+      ),
+    ).toEqual([
+      "menuitemcheckbox",
+      "menuitemcheckbox",
+      "menuitemcheckbox",
+      "menuitemcheckbox",
+      "separator",
+      "menuitem",
+    ]);
   });
 
   it("should carry the raw fence source for the copy control", () => {

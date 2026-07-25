@@ -216,7 +216,18 @@ const columnsMenu = (): Element => ({
           ],
         })),
         // Reset lives beside the toggles it reverts; it also restores the
-        // authored order, so the layout has one home.
+        // authored order, so the layout has one home. The separator keeps
+        // the destructive action visually apart from the checkboxes.
+        {
+          type: "element" as const,
+          tagName: "div",
+          properties: {
+            className: ["table-schema-menu-separator", "-mx-1", "my-1", "h-px"],
+            role: "separator",
+            ariaOrientation: "horizontal",
+          },
+          children: [],
+        },
         menuItemButton({
           action: "reset-columns",
           label: "Reset column layout",
