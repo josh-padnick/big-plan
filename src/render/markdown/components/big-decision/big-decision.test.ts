@@ -100,6 +100,9 @@ describe("BigDecision rendering", () => {
     expect(html).toContain('data-score-tone="bad"');
     expect(html).toContain('data-score-tone="good"');
     expect(html).toContain('data-score-tone="mixed"');
+    expect(html).toContain('<span class="sr-only">Tone: bad.</span>');
+    expect(html).toContain('<span class="sr-only">Tone: good.</span>');
+    expect(html).toContain('<span class="sr-only">Tone: mixed.</span>');
     expect(html).toContain("Needs a server");
     expect(html).toContain('data-lucide="x"');
     expect(html).toContain('data-lucide="undo-2"');

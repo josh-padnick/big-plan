@@ -93,6 +93,22 @@ test("should review standalone plan decisions", async ({
     await page.mouse.move(0, 0);
   });
 
+  await test.step("touch opens floating details on the first tap", async () => {
+    const info = openDecision.locator(".big-decision-criterion-help").first();
+    await info.evaluate((details) => {
+      details.dispatchEvent(
+        new PointerEvent("pointerenter", { pointerType: "touch" }),
+      );
+      details
+        .querySelector("summary")
+        ?.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+    });
+    await expect(info).toHaveAttribute("open", "");
+    await page.keyboard.press("Escape");
+  });
+
   await test.step("priority squares recompute the Best match section", async () => {
     const section = openDecision.locator("[data-decision-best-match]");
     await expect(section).toContainText("Score");
@@ -425,4 +441,18 @@ test("should isolate nested decision enhancements", async ({
       suggestControls: 1,
     });
   }
+
+  await test.step("nested decisions preserve ancestor full-screen state", async () => {
+    const outer = page.locator("#decision-which-outer-option-should-win");
+    const inner = page.locator("#decision-which-inner-option-should-win");
+    await outer.locator(":scope > figcaption [data-decision-expand]").click();
+    await expect(page.locator("dialog.component-dialog[open]")).toHaveCount(1);
+    await inner.locator(":scope > figcaption [data-decision-expand]").click();
+    await expect(page.locator("dialog.component-dialog[open]")).toHaveCount(2);
+    await inner.locator(":scope > figcaption [data-decision-expand]").click();
+    await expect(page.locator("dialog.component-dialog[open]")).toHaveCount(1);
+    await expect(outer).toHaveAttribute("data-decision-expanded", "");
+    await outer.locator(":scope > figcaption [data-decision-expand]").click();
+    await expect(page.locator("dialog.component-dialog")).toHaveCount(0);
+  });
 });

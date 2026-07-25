@@ -46,9 +46,12 @@ for (const component of document.querySelectorAll<HTMLElement>(
   }
   button.hidden = false;
   button.addEventListener("click", () => {
-    const openDialog = component.closest("dialog");
-    if (openDialog !== null) {
-      openDialog.close();
+    const parent = component.parentElement;
+    if (
+      parent instanceof HTMLDialogElement &&
+      parent.classList.contains("component-dialog")
+    ) {
+      parent.close();
       return;
     }
     openComponentFullScreen({
@@ -103,7 +106,11 @@ const enhanceFloatingInfo = ({
     info.open = false;
   };
 
-  info.addEventListener("pointerenter", open);
+  info.addEventListener("pointerenter", (event) => {
+    if (event.pointerType !== "touch") {
+      open();
+    }
+  });
   info.addEventListener("pointerleave", () => {
     if (!info.matches(":focus-within")) {
       close();

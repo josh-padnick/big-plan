@@ -359,6 +359,12 @@ const renderScoreCell = (
               {
                 type: "element",
                 tagName: "span",
+                properties: { className: ["sr-only"] },
+                children: [text(`Tone: ${score.tone}.`)],
+              },
+              {
+                type: "element",
+                tagName: "span",
                 properties: { className: ["min-w-0"] },
                 children: [
                   text(score.verdict),

@@ -419,6 +419,43 @@ describe("compileBigDecisionComponent", () => {
     ]);
   });
 
+  it("should reject option and criterion titles duplicated by whitespace", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        criterion({ title: "Setup", line: 2 }),
+        criterion({ title: " Setup ", line: 3 }),
+        option({
+          title: "A",
+          line: 4,
+          scores: [
+            score({ criterion: "Setup", verdict: "Fine", line: 5 }),
+            score({ criterion: " Setup ", verdict: "Fine", line: 6 }),
+          ],
+        }),
+        option({
+          title: " A ",
+          line: 8,
+          scores: [
+            score({ criterion: "Setup", verdict: "Fine", line: 9 }),
+            score({ criterion: " Setup ", verdict: "Fine", line: 10 }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: 'Duplicate Criterion title "Setup" in BigDecision',
+      },
+      {
+        line: 8,
+        column: 1,
+        message: 'Duplicate Option title "A" in BigDecision',
+      },
+    ]);
+  });
+
   it("should reject a decision with fewer than two options", () => {
     const { diagnostics } = compile({
       scopedChildren: [option({ title: "Only", line: 3 })],

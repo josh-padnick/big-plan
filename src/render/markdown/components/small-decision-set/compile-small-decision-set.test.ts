@@ -233,6 +233,26 @@ describe("compileSmallDecisionSetComponent", () => {
     ]);
   });
 
+  it("should reject option titles duplicated by whitespace", () => {
+    const { diagnostics } = compile({
+      decisions: [
+        question({
+          options: [
+            option({ title: "Same", line: 4 }),
+            option({ title: " Same ", line: 6 }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 6,
+        column: 1,
+        message: 'Duplicate Option title "Same" in SmallDecision',
+      },
+    ]);
+  });
+
   it("should reject more than one recommended option", () => {
     const { diagnostics } = compile({
       decisions: [

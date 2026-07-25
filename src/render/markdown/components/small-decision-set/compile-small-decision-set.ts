@@ -127,16 +127,20 @@ const validateDecisionOptions = ({
   const titles = new Set<string>();
   for (const entry of entries) {
     const authoredTitle = entry.child.attributes["title"];
-    if (typeof authoredTitle !== "string" || authoredTitle.trim() === "") {
+    if (typeof authoredTitle !== "string") {
       continue;
     }
-    if (titles.has(authoredTitle)) {
+    const title = authoredTitle.trim();
+    if (title === "") {
+      continue;
+    }
+    if (titles.has(title)) {
       diagnostics.add({
-        message: `Duplicate Option title "${authoredTitle}" in SmallDecision`,
+        message: `Duplicate Option title "${title}" in SmallDecision`,
         position: entry.child.position,
       });
     }
-    titles.add(authoredTitle);
+    titles.add(title);
   }
 
   const recommended = entries.filter(({ option }) => option.recommended);
