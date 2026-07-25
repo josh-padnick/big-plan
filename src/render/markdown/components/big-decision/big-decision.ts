@@ -562,41 +562,19 @@ const renderReversibilitySection = (
   reversibility: CompiledBigDecisionReversibility,
 ): Element => ({
   type: "element",
-  tagName: "details",
+  tagName: "section",
   properties: {
-    className: [
-      "big-decision-section-toggle",
-      "border-t",
-      "border-edge",
-      "px-4",
-      "py-4",
-    ],
+    className: ["border-t", "border-edge", "px-4", "py-4"],
     "data-decision-reversibility": "",
     "data-reversibility-rating": reversibility.rating,
   },
   children: [
     {
       type: "element",
-      tagName: "summary",
-      properties: { className: ["cursor-pointer"] },
+      tagName: "div",
+      properties: { className: ["flex", "items-center", "gap-1.5"] },
       children: [
-        {
-          type: "element",
-          tagName: "span",
-          properties: {
-            className: [
-              "card-section-label",
-              "text-[0.6875rem]",
-              "leading-4",
-              "font-bold",
-              "tracking-[0.08em]",
-              "uppercase",
-              "text-ink/70",
-            ],
-          },
-          children: [text("Reversibility")],
-        },
-        text(" "),
+        renderSectionLabel("Reversibility"),
         ...renderInfoDisclosure(
           [
             {

@@ -59,15 +59,13 @@ test("should review standalone plan decisions", async ({
       "data-reversibility-rating",
       "somewhat-hard",
     );
-    await expect(section.getByText("Somewhat hard to reverse")).toBeHidden();
+    await expect(section.getByText("Somewhat hard to reverse")).toBeVisible();
+    await expect(section).toContainText("The repository layer isolates SQL");
     await section.locator(".big-decision-info > summary").hover();
     await expect(
       section.getByText(/Reversibility is what it would cost/),
     ).toBeVisible();
     await page.mouse.move(0, 0);
-    await section.locator(".card-section-label").click();
-    await expect(section.getByText("Somewhat hard to reverse")).toBeVisible();
-    await expect(section).toContainText("The repository layer isolates SQL");
   });
 
   await test.step("priority squares recompute the Best match section", async () => {

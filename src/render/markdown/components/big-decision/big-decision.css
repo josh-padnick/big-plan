@@ -159,6 +159,7 @@
   article .big-decision-details > summary::marker,
   article .big-decision-section-toggle > summary::marker {
     color: var(--color-muted);
+    font-size: 0.625rem;
   }
   article .big-decision-option[data-option-selected] {
     border-color: color-mix(in srgb, var(--decision-pro-c) 55%, var(--edge-c));
