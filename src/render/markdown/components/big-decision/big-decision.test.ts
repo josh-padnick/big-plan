@@ -86,6 +86,15 @@ describe("BigDecision rendering", () => {
     expect(html).toContain('id="decision-which-store-criterion-setup"');
     expect(html).toContain('id="decision-which-store-criterion-scale"');
     expect(html).toContain('id="decision-which-store-option-postgresql"');
+    expect(html).toContain('data-option-control=""');
+    expect(html).toContain('id="decision-which-store-option-postgresql-title"');
+    expect(html).toContain(
+      'id="decision-which-store-option-postgresql-summary"',
+    );
+    expect(html).toContain(
+      'id="decision-which-store-option-postgresql-details"',
+    );
+    expect(html).toContain('data-option-description=""');
     expect(html).toContain('data-option-recommended=""');
     expect(html).toContain("Recommended");
     expect(html).toContain('data-score-tone="bad"');

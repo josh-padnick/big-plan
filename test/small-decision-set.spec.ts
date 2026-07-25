@@ -58,29 +58,44 @@ test("should review a compact question list", async ({
 
   await test.step("the recommended answers start selected", async () => {
     for (const question of await questions.all()) {
-      const selected = question.locator('[aria-checked="true"]');
+      const selected = question.locator("[data-option-selected]");
       await expect(selected).toHaveCount(1);
       await expect(selected).toHaveAttribute("data-option-recommended", "");
+      await expect(
+        selected.locator('[data-option-control][aria-checked="true"]'),
+      ).toHaveCount(1);
     }
   });
 
   await test.step("clicking an option moves the selection within its question", async () => {
     const firstOptions = questions.nth(0).locator("[data-option]");
-    await expect(firstOptions.nth(0)).toHaveAttribute("aria-checked", "true");
+    const controls = firstOptions.locator("[data-option-control]");
+    await expect(controls.nth(0)).toHaveAttribute("aria-checked", "true");
     await firstOptions.nth(1).click();
-    await expect(firstOptions.nth(1)).toHaveAttribute("aria-checked", "true");
-    await expect(firstOptions.nth(0)).toHaveAttribute("aria-checked", "false");
+    await expect(controls.nth(1)).toHaveAttribute("aria-checked", "true");
+    await expect(controls.nth(0)).toHaveAttribute("aria-checked", "false");
     await expect(
-      questions.nth(1).locator('[aria-checked="true"]'),
+      questions.nth(1).locator("[data-option-selected]"),
     ).toHaveAttribute("data-option-recommended", "");
   });
 
   await test.step("arrow keys move the selection within one question", async () => {
-    const firstOptions = questions.nth(0).locator("[data-option]");
-    await firstOptions.nth(1).focus();
+    const controls = questions.nth(0).locator("[data-option-control]");
+    await controls.nth(1).focus();
     await page.keyboard.press("ArrowUp");
-    await expect(firstOptions.nth(0)).toHaveAttribute("aria-checked", "true");
-    await expect(firstOptions.nth(0)).toBeFocused();
+    await expect(controls.nth(0)).toHaveAttribute("aria-checked", "true");
+    await expect(controls.nth(0)).toBeFocused();
+  });
+
+  await test.step("radio controls name and describe each option", async () => {
+    const firstOption = questions.nth(0).locator("[data-option]").first();
+    const control = firstOption.locator("[data-option-control]");
+    await expect(control).toHaveRole("radio");
+    await expect(control).toHaveAccessibleName("Yes");
+    await expect(control).toHaveAccessibleDescription(
+      /Keeps rollback one toggle away/,
+    );
+    await expect(firstOption).not.toHaveAttribute("role", "radio");
   });
 
   await test.step("the complete list reads without JavaScript", async () => {

@@ -283,6 +283,23 @@ const normalizeAttributes = ({
 
 type ParentNode = Root | Element | MdxJsxFlowElement;
 
+const collectExistingIds = (
+  node: Root | Element,
+  ids: Array<string> = [],
+): ReadonlyArray<string> => {
+  for (const child of node.children) {
+    if (child.type !== "element") {
+      continue;
+    }
+    const id = child.properties.id;
+    if (typeof id === "string") {
+      ids.push(id);
+    }
+    collectExistingIds(child, ids);
+  }
+  return ids;
+};
+
 // Reports an unknown name, validates attributes, recursively prepares direct
 // scoped children, then dispatches a registered global component.
 const renderFlowElement = ({
@@ -443,7 +460,9 @@ export const rehypeRenderComponents =
       parent: tree,
       diagnostics,
       registry,
-      ids: createComponentIdAllocator(),
+      ids: createComponentIdAllocator({
+        reservedIds: collectExistingIds(tree),
+      }),
     });
     reportSurvivors({ parent: tree, diagnostics });
   };

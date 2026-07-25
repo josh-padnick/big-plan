@@ -149,6 +149,7 @@ const optionMarker = (chosen: boolean): Element => ({
       "border",
       "[&_svg]:size-3",
     ],
+    "data-option-control": "",
     ariaHidden: "true",
   },
   children: chosen
@@ -209,6 +210,7 @@ const renderOptionHead = ({
               type: "element",
               tagName: "p",
               properties: {
+                id: option.titleId,
                 className: ["m-0", "text-sm", "font-semibold", "text-ink"],
                 "data-option-title": "",
               },
@@ -223,7 +225,9 @@ const renderOptionHead = ({
                 type: "element",
                 tagName: "p",
                 properties: {
+                  id: option.summaryId,
                   className: ["mt-1", "mb-0", "text-sm", "text-muted"],
+                  "data-option-description": "",
                 },
                 children: [text(option.summary)],
               } satisfies Element,
@@ -256,12 +260,14 @@ const renderOptionHead = ({
                     type: "element",
                     tagName: "div",
                     properties: {
+                      id: option.detailId,
                       className: [
                         "mt-1.5",
                         "text-xs",
                         "text-muted",
                         "[&>:last-child]:mb-0",
                       ],
+                      "data-option-description": "",
                     },
                     children: [...option.detail],
                   },

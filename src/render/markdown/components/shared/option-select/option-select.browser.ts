@@ -23,6 +23,13 @@ for (const root of decisionRoots) {
   if (options.length < 2) {
     continue;
   }
+  const entries = options.flatMap((option) => {
+    const control = option.querySelector<HTMLElement>("[data-option-control]");
+    return control === null ? [] : [{ option, control }];
+  });
+  if (entries.length !== options.length) {
+    continue;
+  }
 
   const question = root
     .querySelector("[data-decision-question]")
@@ -33,10 +40,10 @@ for (const root of decisionRoots) {
   }
 
   const select = (index: number): void => {
-    for (const [position, option] of options.entries()) {
+    for (const [position, { option, control }] of entries.entries()) {
       const selected = position === index;
-      option.setAttribute("aria-checked", selected ? "true" : "false");
-      option.tabIndex = selected || (index === -1 && position === 0) ? 0 : -1;
+      control.setAttribute("aria-checked", selected ? "true" : "false");
+      control.tabIndex = selected || (index === -1 && position === 0) ? 0 : -1;
       if (selected) {
         option.dataset.optionSelected = "";
       } else {
@@ -45,14 +52,21 @@ for (const root of decisionRoots) {
     }
   };
 
-  for (const [index, option] of options.entries()) {
-    option.setAttribute("role", "radio");
+  for (const [index, { option, control }] of entries.entries()) {
+    control.removeAttribute("aria-hidden");
+    control.setAttribute("role", "radio");
     option.classList.add("cursor-pointer");
-    const title = option
-      .querySelector("[data-option-title]")
-      ?.textContent?.trim();
-    if (title !== undefined && title !== "") {
-      option.setAttribute("aria-label", title);
+    const title = option.querySelector<HTMLElement>("[data-option-title]");
+    if (title?.id !== undefined && title.id !== "") {
+      control.setAttribute("aria-labelledby", title.id);
+    }
+    const descriptionIds = [
+      ...option.querySelectorAll<HTMLElement>("[data-option-description]"),
+    ]
+      .map((description) => description.id)
+      .filter((id) => id !== "");
+    if (descriptionIds.length > 0) {
+      control.setAttribute("aria-describedby", descriptionIds.join(" "));
     }
     option.addEventListener("click", (event) => {
       // The details disclosure keeps its own click semantics; opening the
@@ -64,9 +78,10 @@ for (const root of decisionRoots) {
         return;
       }
       select(index);
+      control.focus();
     });
-    option.addEventListener("keydown", (event) => {
-      if (event.target !== option) {
+    control.addEventListener("keydown", (event) => {
+      if (event.target !== control) {
         return;
       }
       if (event.key === " " || event.key === "Enter") {
@@ -85,7 +100,7 @@ for (const root of decisionRoots) {
       }
       event.preventDefault();
       select(destination);
-      options[destination]?.focus();
+      entries[destination]?.control.focus();
     });
   }
 

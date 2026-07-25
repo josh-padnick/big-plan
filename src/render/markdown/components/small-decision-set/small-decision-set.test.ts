@@ -67,6 +67,14 @@ describe("SmallDecisionSet rendering", () => {
     expect(html).toContain(
       'id="small-decision-set-open-questions-question-ship-behind-a-flag-option-yes"',
     );
+    expect(html).toContain('data-option-control=""');
+    expect(html).toContain(
+      'id="small-decision-set-open-questions-question-ship-behind-a-flag-option-yes-title"',
+    );
+    expect(html).toContain(
+      'id="small-decision-set-open-questions-question-ship-behind-a-flag-option-yes-details"',
+    );
+    expect(html).toContain('data-option-description=""');
     expect(html).toContain("Keeps rollback one toggle away");
     const recommendedCount =
       html.split("small-decision-recommended-pill").length - 1;

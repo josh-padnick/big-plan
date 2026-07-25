@@ -197,8 +197,8 @@ export const compileMarkdown = ({
         "mdxJsxTextElement",
       ],
     })
-    .use(rehypeRenderComponents, { diagnostics })
     .use(rehypeSlug)
+    .use(rehypeRenderComponents, { diagnostics })
     // Detection stays opt-in through the fence language: undeclared and
     // unknown languages remain readable without guessed tokenization.
     .use(rehypeHighlight)

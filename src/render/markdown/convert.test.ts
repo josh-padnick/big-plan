@@ -212,6 +212,25 @@ describe("compileMarkdown sections", () => {
 });
 
 describe("compileMarkdown component ids", () => {
+  it("should preserve heading ids when a decision would use the same id", () => {
+    const { elementIds, sections } = compileMarkdown({
+      markdown: `<BigDecision question="Foo">
+
+<Option title="A" />
+
+<Option title="B" />
+
+</BigDecision>
+
+## Decision Foo
+`,
+    });
+
+    expect(sections).toEqual([{ id: "decision-foo", text: "Decision Foo" }]);
+    expect(elementIds).toContain("decision-foo-2");
+    expect(new Set(elementIds).size).toBe(elementIds.length);
+  });
+
   it("should namespace repeated decision components across one document", () => {
     const repeatedDecisions = `<BigDecision question="Same?">
 

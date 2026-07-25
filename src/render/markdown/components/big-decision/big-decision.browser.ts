@@ -101,7 +101,11 @@ const enhanceFloatingInfo = ({
   };
 
   info.addEventListener("pointerenter", open);
-  info.addEventListener("pointerleave", close);
+  info.addEventListener("pointerleave", () => {
+    if (!info.matches(":focus-within")) {
+      close();
+    }
+  });
   // Only keyboard focus opens; a mouse click also focuses, and letting that
   // open would make the click handler immediately toggle it shut.
   summary.addEventListener("focus", () => {
@@ -109,7 +113,14 @@ const enhanceFloatingInfo = ({
       open();
     }
   });
-  summary.addEventListener("blur", close);
+  info.addEventListener("focusout", (event) => {
+    if (
+      !(event.relatedTarget instanceof Node) ||
+      !info.contains(event.relatedTarget)
+    ) {
+      close();
+    }
+  });
   summary.addEventListener("click", (event) => {
     event.preventDefault();
     if (info.open) {
@@ -298,18 +309,9 @@ for (const component of document.querySelectorAll<HTMLElement>(
   resetButton.textContent = "Reset priorities";
   resetButton.hidden = true;
   resetButton.addEventListener("click", () => {
+    sectionSummary.focus();
     for (const reset of resetters) {
       reset();
-    }
-  });
-  const selectButton = document.createElement("button");
-  selectButton.type = "button";
-  selectButton.className = "big-decision-popover-link font-normal";
-  selectButton.dataset.decisionDivergence = "";
-  selectButton.hidden = true;
-  selectButton.addEventListener("click", () => {
-    if (leaderColumn !== null) {
-      options[leaderColumn]?.click();
     }
   });
 
@@ -543,15 +545,17 @@ for (const component of document.querySelectorAll<HTMLElement>(
       cancel.className = "big-decision-popover-link font-normal";
       cancel.textContent = "Cancel";
       cancel.addEventListener("click", () => {
-        form.hidden = true;
         suggest.hidden = false;
+        suggest.focus();
+        form.hidden = true;
       });
       buttons.append(send, cancel);
       form.append(titleLabel, whyLabel, buttons);
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        form.hidden = true;
         suggest.hidden = false;
+        suggest.focus();
+        form.hidden = true;
         suggestNote.hidden = false;
         titleInput.value = "";
         whyInput.value = "";

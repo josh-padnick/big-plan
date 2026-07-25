@@ -62,6 +62,21 @@ test("should review standalone plan decisions", async ({
     ).toBeVisible();
   });
 
+  await test.step("option markers expose radio semantics without hiding details", async () => {
+    const option = openDecision.locator("thead [data-option]").first();
+    const control = option.locator("[data-option-control]");
+    await expect(control).toHaveRole("radio");
+    await expect(control).toHaveAccessibleName("PostgreSQL");
+    await expect(control).toHaveAccessibleDescription(
+      /relational store the team already operates/,
+    );
+    await expect(option).not.toHaveAttribute("role", "radio");
+    await expect(option.locator("details")).toHaveCount(1);
+    await option.click();
+    await expect(control).toHaveAttribute("aria-checked", "true");
+    await expect(control).toBeFocused();
+  });
+
   await test.step("the reversibility section rates the cost of changing course", async () => {
     await expect(page.locator("[data-decision-reversibility]")).toHaveCount(3);
     const section = openDecision.locator("[data-decision-reversibility]");
@@ -110,6 +125,7 @@ test("should review standalone plan decisions", async ({
     await reset.click();
     await expect(options.nth(1)).toHaveAttribute("data-best-match", "");
     await expect(reset).toBeHidden();
+    await expect(section.locator("summary")).toBeFocused();
   });
 
   await test.step("priority squares use one arrow-key tab stop", async () => {
@@ -150,6 +166,27 @@ test("should review standalone plan decisions", async ({
     await expect(table).toBeHidden();
   });
 
+  await test.step("tooltip links remain reachable while focus stays inside", async () => {
+    const info = openDecision.locator(".big-decision-criterion-help").first();
+    await info.evaluate((details) => {
+      const body = details.querySelector(".big-decision-info-body");
+      const link = document.createElement("a");
+      link.href = "#tooltip-proof";
+      link.textContent = "Tooltip proof";
+      body?.append(link);
+    });
+    await info.locator("summary").focus();
+    await page.keyboard.press("Enter");
+    await expect(info).toHaveAttribute("open", "");
+    await page.keyboard.press("Tab");
+    await expect(
+      info.getByRole("link", { name: "Tooltip proof" }),
+    ).toBeFocused();
+    await expect(info).toHaveAttribute("open", "");
+    await page.keyboard.press("Tab");
+    await expect(info).not.toHaveAttribute("open", "");
+  });
+
   await test.step("lifecycle actions are placeholders for the live layer", async () => {
     const actions = openDecision.locator("[data-decision-actions]");
     const note = actions.locator("[data-decision-action-note]");
@@ -164,9 +201,14 @@ test("should review standalone plan decisions", async ({
     await form.getByRole("button", { name: "Submit" }).click();
     await expect(form).toBeHidden();
     await expect(suggest).toBeVisible();
+    await expect(suggest).toBeFocused();
     await expect(
       openDecision.locator("[data-decision-suggest-note]"),
     ).toBeVisible();
+    await suggest.click();
+    await form.getByRole("button", { name: "Cancel" }).click();
+    await expect(form).toBeHidden();
+    await expect(suggest).toBeFocused();
     await expect(actions.locator("[data-decision-defer]")).toBeVisible();
     await expect(
       decidedDecision.locator("[data-decision-reopen]"),

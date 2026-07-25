@@ -32,6 +32,7 @@ const optionMarker = (): Element => ({
       "rounded-full",
       "border",
     ],
+    "data-option-control": "",
     ariaHidden: "true",
   },
   children: [],
@@ -66,6 +67,7 @@ const renderOption = (option: CompiledSmallDecisionOption): Element => ({
               type: "element",
               tagName: "span",
               properties: {
+                id: option.titleId,
                 className: ["text-sm", "font-semibold", "text-ink"],
                 "data-option-title": "",
               },
@@ -88,12 +90,14 @@ const renderOption = (option: CompiledSmallDecisionOption): Element => ({
                 type: "element",
                 tagName: "div",
                 properties: {
+                  id: option.detailId,
                   className: [
                     "mt-0.5",
                     "text-sm",
                     "text-muted",
                     "[&>:last-child]:mb-0",
                   ],
+                  "data-option-description": "",
                 },
                 children: [...option.detail],
               } satisfies Element,

@@ -58,8 +58,12 @@ export type ComponentIdAllocator = {
 };
 
 /** Creates one authored-order id namespace for a rendered document. */
-export const createComponentIdAllocator = (): ComponentIdAllocator => {
-  const used = new Set<string>();
+export const createComponentIdAllocator = ({
+  reservedIds = [],
+}: {
+  readonly reservedIds?: ReadonlyArray<string>;
+} = {}): ComponentIdAllocator => {
+  const used = new Set(reservedIds);
   const nextSuffixes = new Map<string, number>();
   return {
     allocate: ({ prefix, label, fallbackId }) => {

@@ -14,8 +14,10 @@ import type { DiagnosticCollector } from "../diagnostics.js";
 
 export type CompiledSmallDecisionOption = {
   readonly id: string;
+  readonly titleId: string;
   readonly title: string;
   readonly recommended: boolean;
+  readonly detailId?: string;
   readonly detail: ReadonlyArray<ElementContent>;
 };
 
@@ -73,15 +75,31 @@ const compileOption = ({
     schema: OPTION_SCHEMA,
   });
   const title = validated.title ?? "";
+  const id = ids.allocate({
+    prefix: `${idPrefix}-option`,
+    label: title,
+    fallbackId: `${idPrefix}-option`,
+  });
+  const detail = contentOf(child.children);
+  const detailId =
+    detail.length === 0
+      ? undefined
+      : ids.allocate({
+          prefix: id,
+          label: "details",
+          fallbackId: `${id}-details`,
+        });
   return {
-    id: ids.allocate({
-      prefix: `${idPrefix}-option`,
-      label: title,
-      fallbackId: `${idPrefix}-option`,
+    id,
+    titleId: ids.allocate({
+      prefix: id,
+      label: "title",
+      fallbackId: `${id}-title`,
     }),
     title,
     recommended: validated.recommended === true,
-    detail: contentOf(child.children),
+    ...(detailId === undefined ? {} : { detailId }),
+    detail,
   };
 };
 

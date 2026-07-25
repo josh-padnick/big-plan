@@ -53,10 +53,13 @@ export type CompiledBigDecisionScore = {
 
 export type CompiledBigDecisionOption = {
   readonly id: string;
+  readonly titleId: string;
   readonly title: string;
+  readonly summaryId?: string;
   readonly summary?: string;
   readonly recommended: boolean;
   readonly chosen: boolean;
+  readonly detailId?: string;
   readonly detail: ReadonlyArray<ElementContent>;
   // Aligned with the decision's criteria order; a hole is an authoring error
   // that has already been diagnosed.
@@ -253,20 +256,47 @@ const compileOption = ({
     schema: OPTION_SCHEMA,
   });
   const title = validated.title ?? "";
+  const id = ids.allocate({
+    prefix: `${idPrefix}-option`,
+    label: title,
+    fallbackId: `${idPrefix}-option`,
+  });
+  const titleId = ids.allocate({
+    prefix: id,
+    label: "title",
+    fallbackId: `${id}-title`,
+  });
+  const summaryId =
+    validated.summary === undefined
+      ? undefined
+      : ids.allocate({
+          prefix: id,
+          label: "summary",
+          fallbackId: `${id}-summary`,
+        });
+  const detail = contentOf(child.children);
+  const detailId =
+    detail.length === 0
+      ? undefined
+      : ids.allocate({
+          prefix: id,
+          label: "details",
+          fallbackId: `${id}-details`,
+        });
   const scoreEntries = (child.scopedChildren ?? [])
     .filter((nested) => nested.name === "Score")
     .map((nested) => compileScore({ child: nested, diagnostics }));
   return {
-    id: ids.allocate({
-      prefix: `${idPrefix}-option`,
-      label: title,
-      fallbackId: `${idPrefix}-option`,
-    }),
+    id,
+    titleId,
     title,
-    ...(validated.summary === undefined ? {} : { summary: validated.summary }),
+    ...(validated.summary === undefined || summaryId === undefined
+      ? {}
+      : { summaryId, summary: validated.summary }),
     recommended: validated.recommended === true,
     chosen: validated.chosen === true,
-    detail: contentOf(child.children),
+    ...(detailId === undefined ? {} : { detailId }),
+    detail,
     scores: alignScores({
       child,
       optionTitle: title,

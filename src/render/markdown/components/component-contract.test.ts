@@ -128,4 +128,18 @@ describe("createComponentIdAllocator", () => {
       ["decision-route-2", "decision-route", "decision-route-3"],
     );
   });
+
+  it("should avoid ids reserved by another document transform", () => {
+    const ids = createComponentIdAllocator({
+      reservedIds: ["decision-choice", "decision-choice-2"],
+    });
+
+    expect(
+      ids.allocate({
+        prefix: "decision",
+        label: "Choice",
+        fallbackId: "decision",
+      }),
+    ).toBe("decision-choice-3");
+  });
 });
