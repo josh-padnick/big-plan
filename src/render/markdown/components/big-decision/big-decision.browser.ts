@@ -507,3 +507,126 @@ for (const component of document.querySelectorAll<HTMLElement>(
   recompute();
   updateReset();
 }
+
+// Decision lifecycle actions. Every control here is a placeholder for the
+// live review layer: it renders the intended interaction and answers with
+// the same coming-soon note.
+// TODO(live-review): transport Submit, Suggest another option, Defer, and
+// Re-open to the authoring agent once the local server and chat bridge land.
+const ACTION_NOTE =
+  "This action connects to the live review session in a later deliverable.";
+
+for (const component of document.querySelectorAll<HTMLElement>(
+  "[data-big-decision]",
+)) {
+  const state = component.dataset.decisionState;
+  const section = document.createElement("section");
+  section.className = "border-t border-edge px-4 py-3";
+  section.dataset.decisionActions = "";
+  const row = document.createElement("div");
+  row.className = "flex flex-wrap items-center gap-x-3 gap-y-1";
+  const note = document.createElement("p");
+  note.className = "mt-1.5 mb-0 text-xs text-muted";
+  note.dataset.decisionActionNote = "";
+  note.hidden = true;
+  note.textContent = ACTION_NOTE;
+  const showNote = (): void => {
+    note.hidden = false;
+  };
+
+  if (state === "open") {
+    const submit = document.createElement("button");
+    submit.type = "button";
+    submit.className = "big-decision-action-primary";
+    submit.dataset.decisionSubmit = "";
+    submit.textContent = "Submit";
+    submit.addEventListener("click", showNote);
+
+    const suggest = document.createElement("button");
+    suggest.type = "button";
+    suggest.className = "big-decision-popover-link font-normal";
+    suggest.dataset.decisionSuggest = "";
+    suggest.textContent = "Suggest another option";
+
+    // The dialog builds lazily on first use so the static DOM stays lean.
+    let dialog: HTMLDialogElement | null = null;
+    const buildDialog = (): HTMLDialogElement => {
+      const built = document.createElement("dialog");
+      built.className = "big-decision-suggest-dialog";
+      const form = document.createElement("form");
+      form.method = "dialog";
+      const heading = document.createElement("p");
+      heading.className = "m-0 text-sm font-semibold text-ink";
+      heading.textContent = "Suggest another option";
+      const titleLabel = document.createElement("label");
+      titleLabel.className = "mt-2.5 block text-xs font-semibold text-muted";
+      titleLabel.textContent = "Option";
+      const titleInput = document.createElement("input");
+      titleInput.type = "text";
+      titleInput.required = true;
+      titleInput.className = "big-decision-suggest-input mt-1 w-full";
+      titleLabel.append(titleInput);
+      const whyLabel = document.createElement("label");
+      whyLabel.className = "mt-2.5 block text-xs font-semibold text-muted";
+      whyLabel.textContent = "Why it belongs here (optional)";
+      const whyInput = document.createElement("textarea");
+      whyInput.rows = 3;
+      whyInput.className = "big-decision-suggest-input mt-1 w-full";
+      whyLabel.append(whyInput);
+      const buttons = document.createElement("div");
+      buttons.className = "mt-3 flex items-center justify-end gap-x-3";
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "big-decision-popover-link font-normal";
+      cancel.textContent = "Cancel";
+      cancel.addEventListener("click", () => {
+        built.close("");
+      });
+      const send = document.createElement("button");
+      send.type = "submit";
+      send.className = "big-decision-action-primary";
+      send.textContent = "Submit";
+      buttons.append(cancel, send);
+      form.append(heading, titleLabel, whyLabel, buttons);
+      form.addEventListener("submit", () => {
+        built.close("submitted");
+      });
+      built.append(form);
+      built.addEventListener("close", () => {
+        if (built.returnValue === "submitted") {
+          showNote();
+        }
+        titleInput.value = "";
+        whyInput.value = "";
+        built.remove();
+        dialog = null;
+      });
+      return built;
+    };
+    suggest.addEventListener("click", () => {
+      dialog = dialog ?? buildDialog();
+      section.append(dialog);
+      dialog.showModal();
+    });
+
+    const defer = document.createElement("button");
+    defer.type = "button";
+    defer.className = "big-decision-popover-link font-normal";
+    defer.dataset.decisionDefer = "";
+    defer.textContent = "Defer";
+    defer.addEventListener("click", showNote);
+
+    row.append(submit, suggest, defer);
+    section.append(row, note);
+  } else {
+    const reopen = document.createElement("button");
+    reopen.type = "button";
+    reopen.className = "big-decision-popover-link";
+    reopen.dataset.decisionReopen = "";
+    reopen.textContent = "Re-open";
+    reopen.addEventListener("click", showNote);
+    row.append(reopen);
+    section.append(row, note);
+  }
+  component.append(section);
+}

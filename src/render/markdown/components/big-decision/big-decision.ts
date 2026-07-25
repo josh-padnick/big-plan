@@ -678,7 +678,7 @@ const renderBigDecisionFigure = ({
           tagName: "div",
           properties: { className: ["min-w-0"] },
           children: [
-            statusPill(model.status),
+            ...(model.status === "open" ? [] : [statusPill(model.status)]),
             {
               type: "element",
               tagName: "p",
@@ -686,6 +686,7 @@ const renderBigDecisionFigure = ({
                 className: [
                   "mt-2",
                   "mb-0",
+                  "first:mt-0",
                   "text-base",
                   "font-semibold",
                   "text-ink",

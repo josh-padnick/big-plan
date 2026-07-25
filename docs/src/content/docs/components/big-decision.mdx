@@ -158,6 +158,16 @@ At most one `Reversibility` element rates what changing course later would cost;
 
 Markdown in the body is the decision-specific rationale shown under the rating.
 
+## Lifecycle
+
+A decision moves through three statuses, and the reader's actions render as placeholders until the live review layer can transport them:
+
+- **open** (the default) shows no status pill. Readers get a Submit button for their selection, a Suggest-another-option dialog for choices the plan missed, and a tertiary Defer action.
+- **decided** shows the pill, requires exactly one chosen option, leads with the outcome strip, and offers Re-open.
+- **deferred** shows the pill, records why in the context, and offers Re-open.
+
+Every action currently answers with a coming-soon note; wiring them to the authoring agent arrives with the live layer.
+
 ## Ranking
 
 The browser-side priority preview keeps its arithmetic deliberately coarse, and these are its rules:

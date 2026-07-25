@@ -11,20 +11,19 @@ test("should review standalone plan decisions", async ({
 }) => {
   await page.goto(bigDecisionViewerUrl);
   const decisions = page.locator("[data-big-decision]");
-  const openDecision = decisions.filter({
-    has: page.locator('[data-decision-status="open"]'),
-  });
-  const decidedDecision = decisions.filter({
-    has: page.locator('[data-decision-status="decided"]'),
-  });
-  const deferredDecision = decisions.filter({
-    has: page.locator('[data-decision-status="deferred"]'),
-  });
+  const openDecision = page.locator(
+    '[data-big-decision][data-decision-state="open"]',
+  );
+  const decidedDecision = page.locator(
+    '[data-big-decision][data-decision-state="decided"]',
+  );
+  const deferredDecision = page.locator(
+    '[data-big-decision][data-decision-state="deferred"]',
+  );
 
   await test.step("each decision stands alone with its status pill", async () => {
     await expect(decisions).toHaveCount(3);
     await expect(page.locator("[data-decision-status]")).toHaveText([
-      "open",
       "decided",
       "deferred",
     ]);
@@ -187,6 +186,27 @@ test("should review standalone plan decisions", async ({
     ).toBeVisible();
   });
 
+  await test.step("lifecycle actions are placeholders for the live layer", async () => {
+    const actions = openDecision.locator("[data-decision-actions]");
+    const note = actions.locator("[data-decision-action-note]");
+    await expect(note).toBeHidden();
+    await actions.locator("[data-decision-submit]").click();
+    await expect(note).toBeVisible();
+    await actions.locator("[data-decision-suggest]").click();
+    const dialog = openDecision.locator("dialog.big-decision-suggest-dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.locator("input").fill("Managed document store");
+    await dialog.getByRole("button", { name: "Submit" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(actions.locator("[data-decision-defer]")).toBeVisible();
+    await expect(
+      decidedDecision.locator("[data-decision-reopen]"),
+    ).toBeVisible();
+    await expect(
+      deferredDecision.locator("[data-decision-reopen]"),
+    ).toBeVisible();
+  });
+
   await test.step("every decision reads without JavaScript", async () => {
     const context = await browser.newContext({ javaScriptEnabled: false });
     const staticPage = await context.newPage();
@@ -198,6 +218,7 @@ test("should review standalone plan decisions", async ({
       staticPage.locator("[data-decision-expand]").first(),
     ).toBeHidden();
     await expect(staticPage.locator("[data-decision-weights]")).toHaveCount(0);
+    await expect(staticPage.locator("[data-decision-actions]")).toHaveCount(0);
     await expect(staticPage.locator("body")).toContainText(
       "Chosen: Alongside the source plan",
     );
