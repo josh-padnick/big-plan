@@ -34,6 +34,7 @@ The default output therefore sits next to the input.
 
 When the output argument is present, the CLI resolves it against the current working directory.
 It creates the output file's parent directories recursively before writing UTF-8 HTML or JSON.
+Neither command permits the output to resolve to the input file, including through a symbolic link or hard link, so derived output cannot overwrite the canonical MDX source.
 
 ## Document metadata
 
@@ -80,6 +81,9 @@ Usage: big-plan compile <input.mdx> [output.json]
 
 If the input cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
 The read error covers any failure to read the input file.
+
+If the output would overwrite the input file, the command raises a structured `VALIDATION_ERROR` with the message `Output path would overwrite the input MDX file` and the command-specific usage line.
+The input file is left unchanged.
 
 If parsing or component validation fails, the command raises a structured `VALIDATION_ERROR` with `Cannot render document with invalid MDX` or `Cannot compile document with invalid MDX`, according to the command.
 Its help entries contain every collected authoring diagnostic as `line:column message`, and no output file is written.
