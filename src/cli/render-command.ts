@@ -34,6 +34,11 @@ const parseRenderArgs = (
       index += 1;
       continue;
     }
+    if (arg === "--renderer" && args[index + 1] === undefined) {
+      throw new AxiError("Missing value for --renderer", "VALIDATION_ERROR", [
+        USAGE,
+      ]);
+    }
     const value =
       arg === "--renderer"
         ? args[index + 1]

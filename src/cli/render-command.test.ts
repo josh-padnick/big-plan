@@ -74,6 +74,24 @@ describe("renderCommand validation", () => {
   });
 });
 
+describe("renderCommand renderer flag", () => {
+  it("should reject a --renderer flag with no value instead of treating it as a path", async () => {
+    const inputPath = join(tempDirectory, "plan.mdx");
+    await writeFile(inputPath, "# Plan\n\n## S\n", "utf8");
+    await expect(
+      renderCommand([inputPath, "--renderer"]),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("should reject an unknown renderer value", async () => {
+    const inputPath = join(tempDirectory, "plan.mdx");
+    await writeFile(inputPath, "# Plan\n\n## S\n", "utf8");
+    await expect(
+      renderCommand([inputPath, "--renderer", "handlebars"]),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+});
+
 describe("renderCommand output", () => {
   it("should refuse an output path that would overwrite the input", async () => {
     const inputPath = join(tempDirectory, "plan.mdx");
