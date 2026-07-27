@@ -1,6 +1,5 @@
-// The renderer's public entry point: composes the MDX pipeline, the review
-// shell, and the page envelope into one MDX-in, complete-HTML-out
-// function.
+// The renderer's public entry point: composes the shared MDX pipeline into
+// either a validated plan model or a complete HTML review document.
 
 import type { Section } from "./markdown/convert.js";
 import { compileMarkdown, serializeMarkdown } from "./markdown/convert.js";
@@ -52,7 +51,7 @@ export type PlanModel = {
 };
 
 /**
- * Compiles one plan into its validated model without rendering markup: the
+ * Compiles one plan into its validated model without serializing HTML: the
  * document title, the section outline, and every component instance's plan
  * model in document order. Diagnostics hard-fail exactly as rendering does,
  * so a model is only ever produced for a valid plan.

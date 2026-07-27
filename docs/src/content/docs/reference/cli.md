@@ -33,13 +33,13 @@ An input without an extension receives the suffix at the end.
 The default output therefore sits next to the input.
 
 When the output argument is present, the CLI resolves it against the current working directory.
-It creates the output file's parent directories recursively before writing UTF-8 HTML.
+It creates the output file's parent directories recursively before writing UTF-8 HTML or JSON.
 
 ## Document metadata
 
-The renderer chooses the document title from the MDX content.
+Both commands choose the document title from the MDX content.
 The input filename without its extension is the fallback title.
-The reported section count comes from the rendered document's level-two sections.
+The reported section count comes from the document's level-two sections.
 
 ## The compiled plan model
 
@@ -71,20 +71,21 @@ After writing the file, each command returns a structured result for `axi-sdk-js
 
 ## Errors
 
-If the input argument is missing, either command raises a structured `VALIDATION_ERROR` with the message `Missing input MDX file` and its usage line.
+If the input argument is missing, either command raises a structured `VALIDATION_ERROR` with the message `Missing input MDX file` and its command-specific usage line.
 
 ```text
 Usage: big-plan render <input.mdx> [output.html]
+Usage: big-plan compile <input.mdx> [output.json]
 ```
 
 If the input cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
 The read error covers any failure to read the input file.
 
-If parsing or component validation fails, the command raises a structured `VALIDATION_ERROR` with the message `Cannot render document with invalid MDX`.
+If parsing or component validation fails, the command raises a structured `VALIDATION_ERROR` with `Cannot render document with invalid MDX` or `Cannot compile document with invalid MDX`, according to the command.
 Its help entries contain every collected authoring diagnostic as `line:column message`, and no output file is written.
 
 ## Top-level help and version
 
-The CLI configures top-level help that lists the render command and its default output behavior.
+The CLI configures top-level help that lists both commands and their default output behavior.
 It also reads the package version for version output.
 If that version cannot be read from the package metadata, version reporting is left unconfigured instead of crashing the CLI.

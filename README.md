@@ -17,15 +17,16 @@ Everything runs locally, and the MDX file on your disk is the source of truth.
 
 ## Usage
 
-Render a static-subset MDX plan document into a single self-contained themed HTML document:
+Render a static-subset MDX plan document as self-contained themed HTML, or compile its validated plan model as JSON:
 
 ```sh
 npx big-plan render <file.mdx> [output.html]
 npx big-plan compile <file.mdx> [output.json]
 ```
 
-The output defaults to `<file>.html` next to the input.
-It embeds all styling, behavior, and branding assets, makes no external requests, and stays readable with JavaScript disabled.
+Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.model.json`.
+Both sit next to the input, while the MDX file remains the canonical source and JSON is always derived output.
+The rendered HTML embeds all styling, behavior, and branding assets, makes no external requests, and stays readable with JavaScript disabled.
 A responsive table of contents built from the document's level-two headings tracks the reader through the page, and the light/dark theme follows the OS preference until the reader chooses one.
 
 Plans are prose plus validated components, like this callout:

@@ -74,9 +74,13 @@ describe("compileCommand output", () => {
     expect(result["sections"]).toBe(1);
     expect(result["components"]).toBe(1);
 
-    const parsed: unknown = JSON.parse(
-      await readFile(join(tempDirectory, "plan.model.json"), "utf8"),
+    const serialized = await readFile(
+      join(tempDirectory, "plan.model.json"),
+      "utf8",
     );
+    expect(serialized.startsWith('{\n  "title"')).toBe(true);
+    expect(serialized.endsWith("\n")).toBe(true);
+    const parsed: unknown = JSON.parse(serialized);
     expect(parsed).toMatchObject({
       title: "Rollout plan",
       components: [

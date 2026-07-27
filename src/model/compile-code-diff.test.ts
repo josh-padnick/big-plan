@@ -46,8 +46,11 @@ describe("compileCodeDiffComponent", () => {
     expect(model.annotations[0]).toMatchObject({
       id: "annotation-1",
       lines: "8",
+      startLine: 8,
+      endLine: 8,
       side: "new",
       target: { kind: "add", newLineNumber: 8, text: "audit();" },
     });
+    expect(() => JSON.stringify(model)).not.toThrow();
   });
 });

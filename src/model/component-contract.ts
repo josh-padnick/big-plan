@@ -120,8 +120,8 @@ export type ComponentModelCompiler = (
 
 export type ComponentDefinition = {
   readonly render: ComponentRenderer;
-  // Optional because plan-model exposure rolls out per component; rendering
-  // never requires it.
+  // Optional so isolated registries can remain render-only; rendering never
+  // requires model exposure.
   readonly compile?: ComponentModelCompiler;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
 };
