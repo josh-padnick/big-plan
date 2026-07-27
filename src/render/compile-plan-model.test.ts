@@ -95,15 +95,15 @@ describe("compilePlanModel", () => {
     expect(plan.components).toHaveLength(1);
   });
 
-  it("should collect a nested component as its own entry", () => {
+  it("should list a parent before its nested component in document order", () => {
     const plan = compilePlanModel({
       markdown:
         '<BigDecision question="Q?">\n\n<Callout type="note">\n\nNested context.\n\n</Callout>\n\n<Option title="A" />\n\n<Option title="B" />\n\n</BigDecision>\n',
       fallbackTitle: "x",
     });
     expect(plan.components.map(({ component }) => component)).toEqual([
-      "Callout",
       "BigDecision",
+      "Callout",
     ]);
   });
 

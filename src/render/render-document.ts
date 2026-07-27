@@ -65,5 +65,24 @@ export const compilePlanModel = ({
 }): PlanModel => {
   const components: Array<CollectedComponentModel> = [];
   const { sections, title } = compileMarkdown({ markdown, models: components });
-  return { title: title ?? fallbackTitle, sections, components };
+  return {
+    title: title ?? fallbackTitle,
+    sections,
+    components: sortedBySourcePosition(components),
+  };
 };
+
+// Collection happens child-first (a component's nested children finish
+// rendering before it does), so document order - the contract the compile
+// command documents - is restored by source position; the sort is stable, so
+// entries without positions keep their collection order at the end.
+const sortedBySourcePosition = (
+  components: ReadonlyArray<CollectedComponentModel>,
+): ReadonlyArray<CollectedComponentModel> =>
+  [...components].sort(
+    (a, b) =>
+      (a.line ?? Number.MAX_SAFE_INTEGER) -
+        (b.line ?? Number.MAX_SAFE_INTEGER) ||
+      (a.column ?? Number.MAX_SAFE_INTEGER) -
+        (b.column ?? Number.MAX_SAFE_INTEGER),
+  );
