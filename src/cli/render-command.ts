@@ -6,13 +6,57 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 import { AxiError } from "axi-sdk-js";
+import type { RendererKind } from "../render/render-document.js";
 import {
   MarkdownDiagnosticsError,
   renderDocument,
 } from "../render/render-document.js";
 import { createOutputPathGuard } from "./output-path-guard.js";
 
-const USAGE = "Usage: big-plan render <input.mdx> [output.html]";
+const USAGE =
+  "Usage: big-plan render <input.mdx> [output.html] [--renderer vanilla|react]";
+
+// Splits --renderer out of the positional arguments. The flag selects the
+// in-progress React SSR target, which falls back to the vanilla renderer per
+// unported component; parity between the two is test-pinned.
+const parseRenderArgs = (
+  args: ReadonlyArray<string>,
+): {
+  readonly positional: ReadonlyArray<string>;
+  readonly renderer: RendererKind;
+} => {
+  const positional: Array<string> = [];
+  let renderer: RendererKind = "vanilla";
+  let index = 0;
+  while (index < args.length) {
+    const arg = args[index];
+    if (arg === undefined) {
+      index += 1;
+      continue;
+    }
+    const value =
+      arg === "--renderer"
+        ? args[index + 1]
+        : arg.startsWith("--renderer=")
+          ? arg.slice("--renderer=".length)
+          : undefined;
+    if (value === undefined) {
+      positional.push(arg);
+      index += 1;
+      continue;
+    }
+    if (value !== "vanilla" && value !== "react") {
+      throw new AxiError(
+        `Unknown renderer "${value}" - expected vanilla or react`,
+        "VALIDATION_ERROR",
+        [USAGE],
+      );
+    }
+    renderer = value;
+    index += arg === "--renderer" ? 2 : 1;
+  }
+  return { positional, renderer };
+};
 
 // Defaults the output to sit next to the input: <input>.html.
 const defaultOutputPath = (inputPath: string): string => {
@@ -27,13 +71,14 @@ const defaultOutputPath = (inputPath: string): string => {
 export const renderCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
-  const inputArg = args[0];
+  const { positional, renderer } = parseRenderArgs(args);
+  const inputArg = positional[0];
   if (inputArg === undefined) {
     throw new AxiError("Missing input MDX file", "VALIDATION_ERROR", [USAGE]);
   }
 
   const inputPath = resolve(inputArg);
-  const outputPath = resolve(args[1] ?? defaultOutputPath(inputPath));
+  const outputPath = resolve(positional[1] ?? defaultOutputPath(inputPath));
   const writeGuardedOutput = createOutputPathGuard({
     inputPath,
     outputPath,
@@ -56,6 +101,7 @@ export const renderCommand = async (
     renderedDocument = renderDocument({
       markdown,
       fallbackTitle: basename(inputPath, extname(inputPath)),
+      renderer,
     });
   } catch (error: unknown) {
     if (!(error instanceof MarkdownDiagnosticsError)) {

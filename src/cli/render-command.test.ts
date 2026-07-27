@@ -30,7 +30,9 @@ describe("renderCommand validation", () => {
     await expect(renderCommand([])).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
       message: "Missing input MDX file",
-      suggestions: ["Usage: big-plan render <input.mdx> [output.html]"],
+      suggestions: [
+        "Usage: big-plan render <input.mdx> [output.html] [--renderer vanilla|react]",
+      ],
     });
   });
 
