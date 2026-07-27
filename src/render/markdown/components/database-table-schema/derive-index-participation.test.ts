@@ -3,7 +3,10 @@
 
 import { describe, expect, it } from "vitest";
 import { indexParticipation } from "./derive-index-participation.js";
-import type { TableColumn, TableIndex } from "./parse-table-schema.js";
+import type {
+  TableColumn,
+  TableIndex,
+} from "../../../../model/parse-table-schema.js";
 
 const column = (name: string): TableColumn => ({
   name,

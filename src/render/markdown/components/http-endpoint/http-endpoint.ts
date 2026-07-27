@@ -9,7 +9,7 @@ import {
   type ComponentDefinition,
   type ComponentRenderer,
   type ScopedChildDefinition,
-} from "../component-contract.js";
+} from "../../../../model/component-contract.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
 import {
   renderCardSection,
@@ -23,7 +23,7 @@ import {
   type CompiledHttpParam,
   type CompiledHttpRequest,
   type CompiledHttpResponse,
-} from "./compile-http-endpoint.js";
+} from "../../../../model/compile-http-endpoint.js";
 
 const text = (value: string): Text => ({ type: "text", value });
 

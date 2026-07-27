@@ -6,11 +6,11 @@ import type { Element, Text } from "hast";
 import {
   type ComponentDefinition,
   type ComponentRenderer,
-} from "../component-contract.js";
+} from "../../../../model/component-contract.js";
 import {
   compileCodeSnippetComponent,
   type CompiledCodeSnippet,
-} from "./compile-code-snippet.js";
+} from "../../../../model/compile-code-snippet.js";
 import { renderCodeSnippetHeader } from "./code-snippet-header.js";
 import { renderCodeSnippetRows } from "./code-snippet-views.js";
 

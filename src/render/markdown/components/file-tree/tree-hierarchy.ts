@@ -14,9 +14,12 @@ import { FOLDER_ICON } from "../../../icons/lucide/folder.js";
 import { MESSAGE_SQUARE_ICON } from "../../../icons/lucide/message-square.js";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import type { LucideIcon } from "../../../icons/lucide-icon.js";
-import { countTreeChanges } from "./derive-tree-view.js";
-import type { TreeChangeCounts } from "./derive-tree-view.js";
-import type { TreeBadge, TreeEntry } from "./parse-tree-text.js";
+import { countTreeChanges } from "../../../../model/derive-tree-view.js";
+import type { TreeChangeCounts } from "../../../../model/derive-tree-view.js";
+import type {
+  TreeBadge,
+  TreeEntry,
+} from "../../../../model/parse-tree-text.js";
 
 // How an entry's authored note reaches the reader: FileTree keeps notes in
 // the row because they are its content, while FileTreeDiff keeps rows

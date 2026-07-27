@@ -6,14 +6,14 @@ import { renderAnnotationCard } from "../shared/annotation-card/annotation-card.
 import type {
   CodeDiffSide,
   ResolvedCodeDiffAnnotation,
-} from "./compile-code-diff.js";
-import { pairDiffLines } from "./unified-diff.js";
+} from "../../../../model/compile-code-diff.js";
+import { pairDiffLines } from "../../../../model/unified-diff.js";
 import type {
   DiffHunk,
   DiffLine,
   SplitDiffRow,
   UnifiedDiff,
-} from "./unified-diff.js";
+} from "../../../../model/unified-diff.js";
 
 type AnchoredAnnotation = ResolvedCodeDiffAnnotation;
 

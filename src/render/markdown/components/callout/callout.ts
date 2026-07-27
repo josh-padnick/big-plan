@@ -9,7 +9,7 @@ import {
   type ComponentAttributeSchema,
   type ComponentDefinition,
   type ComponentRenderer,
-} from "../component-contract.js";
+} from "../../../../model/component-contract.js";
 import { INFO_ICON } from "../../../icons/lucide/info.js";
 import { LIGHTBULB_ICON } from "../../../icons/lucide/lightbulb.js";
 import { OCTAGON_ALERT_ICON } from "../../../icons/lucide/octagon-alert.js";

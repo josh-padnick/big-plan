@@ -6,13 +6,13 @@
 import type { Element, ElementContent, Text } from "hast";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import { GRIP_VERTICAL_ICON } from "../../../icons/lucide/grip-vertical.js";
-import type { CompiledDdlSection } from "./compile-database-table-schema.js";
+import type { CompiledDdlSection } from "../../../../model/compile-database-table-schema.js";
 import { indexParticipation } from "./derive-index-participation.js";
 import type {
   TableColumn,
   TableIndex,
   TableSchema,
-} from "./parse-table-schema.js";
+} from "../../../../model/parse-table-schema.js";
 
 const BADGE_CLASSES =
   "table-schema-badge inline-flex shrink-0 items-center rounded-full border px-[0.4rem] py-px align-middle font-sans text-[0.625rem] font-semibold uppercase tracking-wide";

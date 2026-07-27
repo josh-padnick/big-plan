@@ -7,8 +7,8 @@ import {
   type ComponentAttributeSchema,
   type ComponentRenderer,
   type ScopedChild,
-} from "../component-contract.js";
-import type { DiagnosticCollector } from "../diagnostics.js";
+} from "./component-contract.js";
+import type { DiagnosticCollector } from "./diagnostics.js";
 
 export type GrpcStreamingKind =
   "unary" | "serverStreaming" | "clientStreaming" | "bidiStreaming";

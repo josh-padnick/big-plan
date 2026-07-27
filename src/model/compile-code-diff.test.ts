@@ -2,9 +2,12 @@
 // render-ready model shared by the header and diff-view modules.
 
 import { describe, expect, it } from "vitest";
-import { createDiagnosticCollector } from "../diagnostics.js";
+import { createDiagnosticCollector } from "./diagnostics.js";
 import { compileCodeDiffComponent } from "./compile-code-diff.js";
-import { annotation, fence } from "./code-diff-test-fixtures.js";
+import {
+  annotation,
+  fence,
+} from "../render/markdown/components/code-diff/code-diff-test-fixtures.js";
 
 const POSITION = {
   start: { line: 3, column: 1, offset: 10 },

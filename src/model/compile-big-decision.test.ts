@@ -3,12 +3,15 @@
 
 import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
-import { compileMarkdown, MarkdownDiagnosticsError } from "../../convert.js";
+import {
+  compileMarkdown,
+  MarkdownDiagnosticsError,
+} from "../render/markdown/convert.js";
 import type {
   ComponentAttributeValue,
   ScopedChild,
-} from "../component-contract.js";
-import { createDiagnosticCollector } from "../diagnostics.js";
+} from "./component-contract.js";
+import { createDiagnosticCollector } from "./diagnostics.js";
 import { compileBigDecisionComponent } from "./compile-big-decision.js";
 
 const POSITION = {

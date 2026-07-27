@@ -11,11 +11,11 @@ import type {
   MarkdownBodyPolicy,
   ScopedChild,
   ScopedChildDefinition,
-} from "./component-contract.js";
+} from "../../../model/component-contract.js";
 import {
   createComponentIdAllocator,
   type ComponentIdAllocator,
-} from "./component-contract.js";
+} from "../../../model/component-contract.js";
 import { BIG_DECISION_COMPONENT_DEFINITION } from "./big-decision/big-decision.js";
 import { CALLOUT_COMPONENT_DEFINITION } from "./callout/callout.js";
 import { CODE_DIFF_COMPONENT_DEFINITION } from "./code-diff/code-diff.js";
@@ -27,7 +27,7 @@ import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "./graphql-operation/grap
 import { GRPC_METHOD_COMPONENT_DEFINITION } from "./grpc-method/grpc-method.js";
 import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "./http-endpoint/http-endpoint.js";
 import { SMALL_DECISION_SET_COMPONENT_DEFINITION } from "./small-decision-set/small-decision-set.js";
-import type { DiagnosticCollector } from "./diagnostics.js";
+import type { DiagnosticCollector } from "../../../model/diagnostics.js";
 
 type MdxJsxFlowElement = Extract<
   RootContent,

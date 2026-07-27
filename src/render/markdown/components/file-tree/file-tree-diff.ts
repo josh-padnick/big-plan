@@ -12,13 +12,16 @@ import type { LucideIcon } from "../../../icons/lucide-icon.js";
 import {
   type ComponentDefinition,
   type ComponentRenderer,
-} from "../component-contract.js";
+} from "../../../../model/component-contract.js";
 import {
   compileFileTreeDiff,
   type CompiledFileTreeDiff,
-} from "./compile-file-tree.js";
-import { countTreeChanges, deriveTreeView } from "./derive-tree-view.js";
-import type { TreeEntry } from "./parse-tree-text.js";
+} from "../../../../model/compile-file-tree.js";
+import {
+  countTreeChanges,
+  deriveTreeView,
+} from "../../../../model/derive-tree-view.js";
+import type { TreeEntry } from "../../../../model/parse-tree-text.js";
 import {
   renderTreeChangeCounts,
   renderTreeFoldControls,

@@ -8,7 +8,7 @@ import {
   type ComponentDefinition,
   type ComponentRenderer,
   type ScopedChildDefinition,
-} from "../component-contract.js";
+} from "../../../../model/component-contract.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
 import {
   renderCardSection,
@@ -25,7 +25,7 @@ import {
   type CompiledGraphqlOperation,
   type CompiledGraphqlResponse,
   type CompiledGraphqlReturns,
-} from "./compile-graphql-operation.js";
+} from "../../../../model/compile-graphql-operation.js";
 
 const text = (value: string): Text => ({ type: "text", value });
 

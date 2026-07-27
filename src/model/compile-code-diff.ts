@@ -8,8 +8,8 @@ import {
   type ComponentAttributeSchema,
   type ComponentRenderer,
   type ScopedChild,
-} from "../component-contract.js";
-import type { DiagnosticCollector } from "../diagnostics.js";
+} from "./component-contract.js";
+import type { DiagnosticCollector } from "./diagnostics.js";
 import { parseUnifiedDiff } from "./unified-diff.js";
 import type { DiffLine, UnifiedDiff } from "./unified-diff.js";
 

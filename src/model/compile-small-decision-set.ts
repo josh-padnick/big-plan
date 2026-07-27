@@ -9,8 +9,8 @@ import {
   type ComponentIdAllocator,
   type ComponentRenderer,
   type ScopedChild,
-} from "../component-contract.js";
-import type { DiagnosticCollector } from "../diagnostics.js";
+} from "./component-contract.js";
+import type { DiagnosticCollector } from "./diagnostics.js";
 
 export type CompiledSmallDecisionOption = {
   readonly id: string;

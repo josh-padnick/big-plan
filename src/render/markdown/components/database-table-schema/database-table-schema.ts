@@ -6,11 +6,11 @@ import type { Element, Text } from "hast";
 import {
   type ComponentDefinition,
   type ComponentRenderer,
-} from "../component-contract.js";
+} from "../../../../model/component-contract.js";
 import {
   compileDatabaseTableSchema,
   type CompiledDatabaseTableSchema,
-} from "./compile-database-table-schema.js";
+} from "../../../../model/compile-database-table-schema.js";
 import { renderTableSchemaHeader } from "./database-table-schema-header.js";
 import {
   renderTableSchemaGrid,

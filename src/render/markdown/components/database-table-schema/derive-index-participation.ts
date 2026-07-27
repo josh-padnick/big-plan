@@ -2,7 +2,10 @@
 // numbered INDX references: which indexes use a column as a key entry and
 // which only reference it from a partial-index predicate.
 
-import type { TableColumn, TableIndex } from "./parse-table-schema.js";
+import type {
+  TableColumn,
+  TableIndex,
+} from "../../../../model/parse-table-schema.js";
 
 export type IndexParticipation = {
   readonly position: number;

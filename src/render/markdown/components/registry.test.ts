@@ -15,9 +15,9 @@ import {
 import type {
   ComponentDefinition,
   ComponentRenderer,
-} from "./component-contract.js";
-import { createDiagnosticCollector } from "./diagnostics.js";
-import type { ComponentDiagnostic } from "./diagnostics.js";
+} from "../../../model/component-contract.js";
+import { createDiagnosticCollector } from "../../../model/diagnostics.js";
+import type { ComponentDiagnostic } from "../../../model/diagnostics.js";
 import {
   rehypeRenderComponents,
   remarkValidateComponents,
