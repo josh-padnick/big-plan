@@ -3,7 +3,7 @@
 // and the structured result runAxiCli() prints. Content decisions, including
 // the document title, belong to the renderer.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import {
@@ -34,7 +34,7 @@ export const renderCommand = async (
 
   const inputPath = resolve(inputArg);
   const outputPath = resolve(args[1] ?? defaultOutputPath(inputPath));
-  const assertOutputDoesNotAliasInput = createOutputPathGuard({
+  const writeGuardedOutput = createOutputPathGuard({
     inputPath,
     outputPath,
     usage: USAGE,
@@ -72,9 +72,8 @@ export const renderCommand = async (
   }
   const { html, title, sections } = renderedDocument;
 
-  await assertOutputDoesNotAliasInput();
   await mkdir(dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, html, "utf8");
+  await writeGuardedOutput(html);
 
   return {
     rendered: outputPath,

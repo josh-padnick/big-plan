@@ -4,7 +4,7 @@
 // JSON is the same validated model the renderer consumes, so structure can
 // never drift from rendering.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import {
@@ -35,7 +35,7 @@ export const compileCommand = async (
 
   const inputPath = resolve(inputArg);
   const outputPath = resolve(args[1] ?? defaultOutputPath(inputPath));
-  const assertOutputDoesNotAliasInput = createOutputPathGuard({
+  const writeGuardedOutput = createOutputPathGuard({
     inputPath,
     outputPath,
     usage: USAGE,
@@ -72,9 +72,8 @@ export const compileCommand = async (
     );
   }
 
-  await assertOutputDoesNotAliasInput();
   await mkdir(dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(model, null, 2)}\n`, "utf8");
+  await writeGuardedOutput(`${JSON.stringify(model, null, 2)}\n`);
 
   return {
     compiled: outputPath,
