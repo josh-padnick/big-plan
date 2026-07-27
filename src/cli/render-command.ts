@@ -44,6 +44,13 @@ export const renderCommand = async (
   }
 
   const outputPath = resolve(args[1] ?? defaultOutputPath(inputPath));
+  if (outputPath === inputPath) {
+    throw new AxiError(
+      "Output path would overwrite the input MDX file",
+      "VALIDATION_ERROR",
+      [USAGE],
+    );
+  }
   let renderedDocument;
   try {
     renderedDocument = renderDocument({

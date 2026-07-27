@@ -56,6 +56,16 @@ describe("renderCommand validation", () => {
 });
 
 describe("renderCommand output", () => {
+  it("should refuse an output path that would overwrite the input", async () => {
+    const inputPath = join(tempDirectory, "plan.mdx");
+    const source = "# Adapter plan\n\n## Rollout\n";
+    await writeFile(inputPath, source, "utf8");
+    await expect(renderCommand([inputPath, inputPath])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+    expect(await readFile(inputPath, "utf8")).toBe(source);
+  });
+
   it("should write beside the input when the output argument is omitted", async () => {
     const inputPath = join(tempDirectory, "plan.md");
     const outputPath = join(tempDirectory, "plan.html");

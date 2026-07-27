@@ -49,6 +49,15 @@ describe("compileCommand validation", () => {
     ).rejects.toMatchObject({ code: "INPUT_NOT_FOUND" });
   });
 
+  it("should refuse an output path that would overwrite the input", async () => {
+    const inputPath = join(tempDirectory, "plan.mdx");
+    await writeFile(inputPath, PLAN, "utf8");
+    await expect(compileCommand([inputPath, inputPath])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+    expect(await readFile(inputPath, "utf8")).toBe(PLAN);
+  });
+
   it("should surface positional diagnostics when the MDX is invalid", async () => {
     const inputPath = join(tempDirectory, "invalid.mdx");
     await writeFile(
