@@ -3,6 +3,7 @@
 // shape of the emitted plan-model JSON.
 
 import {
+  chmod,
   link,
   mkdir,
   mkdtemp,
@@ -83,6 +84,29 @@ describe("compileCommand validation", () => {
     );
     expect(await readFile(inputPath, "utf8")).toBe(PLAN);
   });
+
+  it.each([
+    ["symbolic link", symlink],
+    ["hard link", link],
+  ])(
+    "should report an overwrite error for a non-writable input aliased by %s",
+    async (_, alias) => {
+      const inputPath = join(tempDirectory, "plan.mdx");
+      const outputPath = join(tempDirectory, "model.json");
+      await writeFile(inputPath, PLAN, "utf8");
+      await alias(inputPath, outputPath);
+      await chmod(inputPath, 0o400);
+
+      await expect(
+        compileCommand([inputPath, outputPath]),
+      ).rejects.toMatchObject({
+        code: "VALIDATION_ERROR",
+        message: "Output path would overwrite the input MDX file",
+        suggestions: ["Usage: big-plan compile <input.mdx> [output.json]"],
+      });
+      expect(await readFile(inputPath, "utf8")).toBe(PLAN);
+    },
+  );
 
   it("should refuse a case-only alias on a case-insensitive filesystem", async () => {
     const inputPath = join(tempDirectory, "plan.mdx");
@@ -177,6 +201,20 @@ describe("compileCommand output", () => {
     const result = await compileCommand([inputPath, outputPath]);
 
     expect(result["compiled"]).toBe(outputPath);
+    const parsed: unknown = JSON.parse(await readFile(outputPath, "utf8"));
+    expect(parsed).toMatchObject({ title: "Rollout plan" });
+  });
+
+  it("should replace an existing write-only output file", async () => {
+    const inputPath = join(tempDirectory, "plan.mdx");
+    const outputPath = join(tempDirectory, "model.json");
+    await writeFile(inputPath, PLAN, "utf8");
+    await writeFile(outputPath, "old content", "utf8");
+    await chmod(outputPath, 0o200);
+
+    await compileCommand([inputPath, outputPath]);
+
+    await chmod(outputPath, 0o600);
     const parsed: unknown = JSON.parse(await readFile(outputPath, "utf8"));
     expect(parsed).toMatchObject({ title: "Rollout plan" });
   });

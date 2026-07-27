@@ -7,6 +7,7 @@
 // the input.
 
 import { constants } from "node:fs";
+import type { FileHandle } from "node:fs/promises";
 import { open, stat } from "node:fs/promises";
 import { AxiError } from "axi-sdk-js";
 
@@ -23,6 +24,65 @@ const overwriteError = (usage: string): AxiError =>
     [usage],
   );
 
+const errorCode = (error: unknown): unknown =>
+  error instanceof Error && "code" in error ? error.code : undefined;
+
+const identitiesMatch = ({
+  first,
+  second,
+}: {
+  readonly first: { readonly dev: bigint; readonly ino: bigint };
+  readonly second: { readonly dev: bigint; readonly ino: bigint };
+}): boolean => first.dev === second.dev && first.ino === second.ino;
+
+// Compares path identities when permissions prevent opening the output.
+const pathsAlias = async ({
+  inputPath,
+  outputPath,
+}: Pick<
+  OutputPathGuardOptions,
+  "inputPath" | "outputPath"
+>): Promise<boolean> => {
+  const inputIdentity = await stat(inputPath, { bigint: true });
+  try {
+    const outputIdentity = await stat(outputPath, { bigint: true });
+    return identitiesMatch({ first: inputIdentity, second: outputIdentity });
+  } catch (error: unknown) {
+    if (errorCode(error) === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+};
+
+// Opens the writable inode used by the guard while preserving alias errors
+// when permissions prohibit acquiring a handle.
+const openOutput = async ({
+  inputPath,
+  outputPath,
+  usage,
+}: OutputPathGuardOptions): Promise<FileHandle> => {
+  try {
+    return await open(outputPath, constants.O_WRONLY | constants.O_CREAT);
+  } catch (error: unknown) {
+    const code = errorCode(error);
+    if (code !== "EACCES" && code !== "EPERM") {
+      throw error;
+    }
+
+    let aliasesInput: boolean;
+    try {
+      aliasesInput = await pathsAlias({ inputPath, outputPath });
+    } catch {
+      throw error;
+    }
+    if (aliasesInput) {
+      throw overwriteError(usage);
+    }
+    throw error;
+  }
+};
+
 // Rejects a lexical collision immediately and returns the writer that
 // callers use in place of a bare writeFile once output content exists.
 export const createOutputPathGuard = ({
@@ -37,16 +97,13 @@ export const createOutputPathGuard = ({
   return async (content: string): Promise<void> => {
     // No O_TRUNC: if the output path aliases the input, opening must not
     // destroy it before the identity comparison below can refuse.
-    const handle = await open(outputPath, constants.O_RDWR | constants.O_CREAT);
+    const handle = await openOutput({ inputPath, outputPath, usage });
     try {
       const [inputIdentity, outputIdentity] = await Promise.all([
         stat(inputPath, { bigint: true }),
         handle.stat({ bigint: true }),
       ]);
-      if (
-        inputIdentity.dev === outputIdentity.dev &&
-        inputIdentity.ino === outputIdentity.ino
-      ) {
+      if (identitiesMatch({ first: inputIdentity, second: outputIdentity })) {
         throw overwriteError(usage);
       }
       await handle.truncate(0);
