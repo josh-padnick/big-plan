@@ -93,4 +93,5 @@ export const renderFileTree: ComponentRenderer = (input) =>
 /** Declares FileTree's complete component integration contract. */
 export const FILE_TREE_COMPONENT_DEFINITION = {
   render: renderFileTree,
+  compile: compileFileTree,
 } satisfies ComponentDefinition;

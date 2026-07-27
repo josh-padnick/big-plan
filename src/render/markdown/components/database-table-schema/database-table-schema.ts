@@ -74,6 +74,7 @@ export const renderDatabaseTableSchema: ComponentRenderer = (input) =>
 /** Declares DatabaseTableSchema's complete component integration contract. */
 export const DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION = {
   render: renderDatabaseTableSchema,
+  compile: compileDatabaseTableSchema,
   scopedChildren: {
     Ddl: {
       kind: "scoped-child",

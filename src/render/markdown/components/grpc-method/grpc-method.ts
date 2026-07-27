@@ -360,6 +360,7 @@ const scopedChild = (
 /** Declares GrpcMethod's renderer and direct-child contract blocks. */
 export const GRPC_METHOD_COMPONENT_DEFINITION = {
   render: renderGrpcMethod,
+  compile: compileGrpcMethodComponent,
   scopedChildren: {
     Field: scopedChild("Field"),
     Error: scopedChild("Error"),

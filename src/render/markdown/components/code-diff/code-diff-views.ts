@@ -105,8 +105,7 @@ const annotationCoversLine = ({
   if (lineNumber === undefined) {
     return false;
   }
-  const value = BigInt(lineNumber);
-  return value >= annotation.startLine && value <= annotation.endLine;
+  return lineNumber >= annotation.startLine && lineNumber <= annotation.endLine;
 };
 
 const lineNumberCell = (

@@ -832,6 +832,7 @@ const reversibilityDefinition = (): ScopedChildDefinition => ({
 /** Declares BigDecision's renderer and recursively scoped authoring grammar. */
 export const BIG_DECISION_COMPONENT_DEFINITION = {
   render: renderBigDecision,
+  compile: compileBigDecisionComponent,
   scopedChildren: {
     Criterion: criterionDefinition(),
     Details: {

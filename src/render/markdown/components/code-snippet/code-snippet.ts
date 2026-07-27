@@ -73,6 +73,7 @@ export const renderCodeSnippet: ComponentRenderer = (input) =>
 /** Declares CodeSnippet's renderer and direct-child Annotation contract. */
 export const CODE_SNIPPET_COMPONENT_DEFINITION = {
   render: renderCodeSnippet,
+  compile: compileCodeSnippetComponent,
   scopedChildren: {
     Annotation: {
       kind: "scoped-child",

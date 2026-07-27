@@ -328,5 +328,6 @@ const smallDecisionDefinition = (): ScopedChildDefinition => ({
 /** Declares SmallDecisionSet's renderer and scoped authoring grammar. */
 export const SMALL_DECISION_SET_COMPONENT_DEFINITION = {
   render: renderSmallDecisionSet,
+  compile: compileSmallDecisionSetComponent,
   scopedChildren: { SmallDecision: smallDecisionDefinition() },
 } satisfies ComponentDefinition;

@@ -374,6 +374,7 @@ const scopedChild = (
 /** Declares GraphqlOperation's renderer and direct-child contract blocks. */
 export const GRAPHQL_OPERATION_COMPONENT_DEFINITION = {
   render: renderGraphqlOperation,
+  compile: compileGraphqlOperationComponent,
   scopedChildren: {
     Argument: scopedChild("Argument"),
     Field: scopedChild("Field"),

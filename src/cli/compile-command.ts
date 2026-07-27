@@ -1,30 +1,31 @@
-// Implements `big-plan render <input.mdx> [output.html]`: the I/O boundary
-// around the pure renderer, owning argument validation, file reads/writes,
-// and the structured result runAxiCli() prints. Content decisions, including
-// the document title, belong to the renderer.
+// Implements `big-plan compile <input.mdx> [output.json]`: the I/O boundary
+// around the pure plan-model compiler, owning argument validation, file
+// reads/writes, and the structured result runAxiCli() prints. The emitted
+// JSON is the same validated model the renderer consumes, so structure can
+// never drift from rendering.
 
 import { mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import {
   MarkdownDiagnosticsError,
-  renderDocument,
+  compilePlanModel,
 } from "../render/render-document.js";
 import { createOutputPathGuard } from "./output-path-guard.js";
 
-const USAGE = "Usage: big-plan render <input.mdx> [output.html]";
+const USAGE = "Usage: big-plan compile <input.mdx> [output.json]";
 
-// Defaults the output to sit next to the input: <input>.html.
+// Defaults the output to sit next to the input: <input>.model.json.
 const defaultOutputPath = (inputPath: string): string => {
   const extension = extname(inputPath);
   const withoutExtension =
     extension.length > 0 ? inputPath.slice(0, -extension.length) : inputPath;
-  return `${withoutExtension}.html`;
+  return `${withoutExtension}.model.json`;
 };
 
-// Reads the input MDX, renders the viewer HTML, writes it out, and
-// returns the structured summary runAxiCli() serializes for the caller.
-export const renderCommand = async (
+// Reads the input MDX, compiles the validated plan model, writes it as JSON,
+// and returns the structured summary runAxiCli() serializes for the caller.
+export const compileCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
   const inputArg = args[0];
@@ -51,9 +52,9 @@ export const renderCommand = async (
     );
   }
 
-  let renderedDocument;
+  let model;
   try {
-    renderedDocument = renderDocument({
+    model = compilePlanModel({
       markdown,
       fallbackTitle: basename(inputPath, extname(inputPath)),
     });
@@ -62,7 +63,7 @@ export const renderCommand = async (
       throw error;
     }
     throw new AxiError(
-      "Cannot render document with invalid MDX",
+      "Cannot compile document with invalid MDX",
       "VALIDATION_ERROR",
       error.diagnostics.map(
         ({ line, column, message }) =>
@@ -70,15 +71,17 @@ export const renderCommand = async (
       ),
     );
   }
-  const { html, title, sections } = renderedDocument;
 
   await mkdir(dirname(outputPath), { recursive: true });
-  await writeGuardedOutput(html);
+  await writeGuardedOutput(`${JSON.stringify(model, null, 2)}\n`);
 
   return {
-    rendered: outputPath,
-    title,
-    sections: sections.length,
-    help: [`Open ${outputPath} in your browser to review the document`],
+    compiled: outputPath,
+    title: model.title,
+    sections: model.sections.length,
+    components: model.components.length,
+    help: [
+      `The JSON at ${outputPath} holds the validated plan model: title, section outline, and every component instance's compiled model in document order`,
+    ],
   };
 };

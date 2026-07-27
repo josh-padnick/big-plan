@@ -4,6 +4,7 @@
 
 import { readFile } from "node:fs/promises";
 import { runAxiCli } from "axi-sdk-js";
+import { compileCommand } from "./compile-command.js";
 import { renderCommand } from "./render-command.js";
 
 // The README tagline verbatim, so the CLI and the docs never drift apart.
@@ -13,9 +14,12 @@ const DESCRIPTION =
 const TOP_LEVEL_HELP = `big-plan - ${DESCRIPTION}
 
 Usage:
-  big-plan render <input.mdx> [output.html]  Render an MDX plan to a
-                                            single self-contained HTML file
-                                            (defaults to <input>.html)
+  big-plan render <input.mdx> [output.html]   Render an MDX plan to a
+                                             single self-contained HTML file
+                                             (defaults to <input>.html)
+  big-plan compile <input.mdx> [output.json]  Compile an MDX plan to its
+                                             validated plan model as JSON
+                                             (defaults to <input>.model.json)
 `;
 
 // Reads this package's own version for --version output, tolerating a missing
@@ -52,6 +56,7 @@ export const main = async (): Promise<void> => {
     }),
     commands: {
       render: (args) => renderCommand(args),
+      compile: (args) => compileCommand(args),
     },
   });
 };

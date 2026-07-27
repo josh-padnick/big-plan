@@ -113,8 +113,16 @@ export type ScopedChildDefinition = {
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
 };
 
+/** Compiles one authored component into its plan model without rendering. */
+export type ComponentModelCompiler = (
+  input: Parameters<ComponentRenderer>[0],
+) => unknown;
+
 export type ComponentDefinition = {
   readonly render: ComponentRenderer;
+  // Optional so isolated registries can remain render-only; rendering never
+  // requires model exposure.
+  readonly compile?: ComponentModelCompiler;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
 };
 

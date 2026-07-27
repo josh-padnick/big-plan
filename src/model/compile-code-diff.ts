@@ -26,7 +26,12 @@ type Annotation = {
   readonly position: NodePosition;
 };
 
-export type ResolvedCodeDiffAnnotation = Annotation & {
+export type ResolvedCodeDiffAnnotation = Omit<
+  Annotation,
+  "startLine" | "endLine"
+> & {
+  readonly startLine: number;
+  readonly endLine: number;
   readonly id: string;
   readonly target: DiffLine;
 };
@@ -292,7 +297,13 @@ const resolveAnnotation = ({
     });
     return undefined;
   }
-  return { ...annotation, id, target };
+  return {
+    ...annotation,
+    startLine: Number(annotation.startLine),
+    endLine: Number(annotation.endLine),
+    id,
+    target,
+  };
 };
 
 // Resolves valid scoped children into stable line targets while preserving
