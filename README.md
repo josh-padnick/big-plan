@@ -21,6 +21,7 @@ Render a static-subset MDX plan document into a single self-contained themed HTM
 
 ```sh
 npx big-plan render <file.mdx> [output.html]
+npx big-plan compile <file.mdx> [output.json]
 ```
 
 The output defaults to `<file>.html` next to the input.
@@ -42,7 +43,7 @@ The full authoring contract lives in the documentation:
 - [Authoring plans](docs/src/content/docs/for-agents/authoring-plans.md) - the accepted MDX subset and its hard-fail positional diagnostics.
 - [Components](docs/src/content/docs/components/index.md) - the complete built-in component reference.
 - [Features](docs/src/content/docs/intro/features.md) - the reader-facing viewer capabilities.
-- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan render` in detail.
+- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan render` and `big-plan compile` in detail.
 
 To preview components locally, render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`.
 To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.

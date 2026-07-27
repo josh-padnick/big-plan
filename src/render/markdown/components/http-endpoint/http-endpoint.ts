@@ -446,6 +446,7 @@ const scopedChild = (
 /** Declares HttpEndpoint's renderer and direct-child API contract blocks. */
 export const HTTP_ENDPOINT_COMPONENT_DEFINITION = {
   render: renderHttpEndpoint,
+  compile: compileHttpEndpointComponent,
   scopedChildren: {
     Param: scopedChild("Param"),
     Request: scopedChild("Request"),

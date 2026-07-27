@@ -5,11 +5,13 @@ import type { Element } from "hast";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import type { LucideIcon } from "../../../icons/lucide-icon.js";
 import {
-  validateComponentAttributes,
-  type ComponentAttributeSchema,
   type ComponentDefinition,
   type ComponentRenderer,
 } from "../../../../model/component-contract.js";
+import {
+  compileCalloutComponent,
+  type CalloutType,
+} from "../../../../model/compile-callout.js";
 import { INFO_ICON } from "../../../icons/lucide/info.js";
 import { LIGHTBULB_ICON } from "../../../icons/lucide/lightbulb.js";
 import { OCTAGON_ALERT_ICON } from "../../../icons/lucide/octagon-alert.js";
@@ -37,20 +39,7 @@ const CALLOUT_CONFIGS = {
     defaultTitle: "Danger",
     icon: OCTAGON_ALERT_ICON,
   },
-} satisfies Readonly<Record<string, CalloutConfig>>;
-
-function objectKeys<const Value extends object>(
-  value: Value,
-): ReadonlyArray<Extract<keyof Value, string>>;
-function objectKeys(value: object): ReadonlyArray<string> {
-  return Object.keys(value);
-}
-
-const CALLOUT_TYPES = objectKeys(CALLOUT_CONFIGS);
-const CALLOUT_SCHEMA = {
-  type: { kind: "enum", values: CALLOUT_TYPES, required: true },
-  title: { kind: "string" },
-} satisfies ComponentAttributeSchema;
+} satisfies Readonly<Record<CalloutType, CalloutConfig>>;
 
 const CALLOUT_CLASSES =
   // Border colors come from the stylesheet's [data-callout] rules; a
@@ -62,28 +51,17 @@ const TITLE_CLASSES = "callout-title text-sm leading-5";
 const BODY_CLASSES = "callout-body text-ink";
 
 // Validates and renders one Callout behind its feature-owned definition.
-const renderCallout: ComponentRenderer = ({
-  attributes,
-  children,
-  position,
-  diagnostics,
-}): Element => {
-  const validated = validateComponentAttributes({
-    component: "Callout",
-    attributes,
-    position,
-    diagnostics,
-    schema: CALLOUT_SCHEMA,
-  });
-  const type = validated.type ?? "note";
-  const config = CALLOUT_CONFIGS[type];
-  const title = validated.title ?? config.defaultTitle;
+const renderCallout: ComponentRenderer = (input): Element => {
+  const model = compileCalloutComponent(input);
+  const config = CALLOUT_CONFIGS[model.type];
+  const title = model.title ?? config.defaultTitle;
+  const children = model.body;
 
   return {
     type: "element",
     tagName: "aside",
     properties: {
-      "data-callout": type,
+      "data-callout": model.type,
       className: CALLOUT_CLASSES.split(" "),
     },
     children: [
@@ -117,4 +95,5 @@ const renderCallout: ComponentRenderer = ({
 /** Declares Callout's complete component integration contract. */
 export const CALLOUT_COMPONENT_DEFINITION = {
   render: renderCallout,
+  compile: compileCalloutComponent,
 } satisfies ComponentDefinition;

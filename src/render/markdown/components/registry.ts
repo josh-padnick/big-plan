@@ -27,6 +27,7 @@ import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "./graphql-operation/grap
 import { GRPC_METHOD_COMPONENT_DEFINITION } from "./grpc-method/grpc-method.js";
 import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "./http-endpoint/http-endpoint.js";
 import { SMALL_DECISION_SET_COMPONENT_DEFINITION } from "./small-decision-set/small-decision-set.js";
+import { createDiagnosticCollector } from "../../../model/diagnostics.js";
 import type { DiagnosticCollector } from "../../../model/diagnostics.js";
 
 type MdxJsxFlowElement = Extract<
@@ -50,6 +51,24 @@ export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
   };
 
 export type ComponentRegistry = Readonly<Record<string, ComponentDefinition>>;
+
+/** One collected component instance: its name, position, and plan model. */
+export type CollectedComponentModel = {
+  readonly component: string;
+  readonly line?: number;
+  readonly column?: number;
+  readonly model: unknown;
+};
+
+// The collector compiles with its own allocator (same reservations, same
+// call order, therefore identical ids) and a discarded diagnostics
+// collector, because the render path has already reported every authoring
+// error once.
+type ModelCollector = {
+  readonly collected: Array<CollectedComponentModel>;
+  readonly ids: ComponentIdAllocator;
+  readonly diagnostics: DiagnosticCollector;
+};
 
 export const REGISTERED_COMPONENT_NAMES: ReadonlySet<string> = new Set(
   Object.keys(COMPONENT_REGISTRY),
@@ -307,11 +326,13 @@ const renderFlowElement = ({
   diagnostics,
   registry,
   ids,
+  models,
 }: {
   readonly node: MdxJsxFlowElement;
   readonly diagnostics: DiagnosticCollector;
   readonly registry: ComponentRegistry;
   readonly ids: ComponentIdAllocator;
+  readonly models?: ModelCollector;
 }): Element | undefined => {
   const name = node.name;
   const definition = definitionFor({ name, registry });
@@ -328,9 +349,33 @@ const renderFlowElement = ({
     diagnostics,
     registry,
     ids,
+    ...(models === undefined ? {} : { models }),
   });
   if (definition === undefined) {
     return undefined;
+  }
+  if (
+    models !== undefined &&
+    definition.compile !== undefined &&
+    name !== null
+  ) {
+    models.collected.push({
+      component: name,
+      ...(node.position === undefined
+        ? {}
+        : {
+            line: node.position.start.line,
+            column: node.position.start.column,
+          }),
+      model: definition.compile({
+        attributes,
+        children: node.children,
+        scopedChildren,
+        position: node.position,
+        diagnostics: models.diagnostics,
+        ids: models.ids,
+      }),
+    });
   }
   return definition.render({
     attributes,
@@ -349,12 +394,14 @@ const renderChildren = ({
   diagnostics,
   registry,
   ids,
+  models,
 }: {
   readonly parent: ParentNode;
   readonly scopedDefinitions?: ScopedParentDefinition["scopedChildren"];
   readonly diagnostics: DiagnosticCollector;
   readonly registry: ComponentRegistry;
   readonly ids: ComponentIdAllocator;
+  readonly models?: ModelCollector;
 }): ReadonlyArray<ScopedChild> => {
   const scopedChildren: Array<ScopedChild> = [];
   let index = 0;
@@ -380,6 +427,7 @@ const renderChildren = ({
         diagnostics,
         registry,
         ids,
+        ...(models === undefined ? {} : { models }),
       });
       scopedChildren.push({
         name: childName,
@@ -394,7 +442,13 @@ const renderChildren = ({
       continue;
     }
     if (child.type === "element") {
-      renderChildren({ parent: child, diagnostics, registry, ids });
+      renderChildren({
+        parent: child,
+        diagnostics,
+        registry,
+        ids,
+        ...(models === undefined ? {} : { models }),
+      });
     }
     if (child.type === "mdxJsxFlowElement") {
       const rendered = renderFlowElement({
@@ -402,6 +456,7 @@ const renderChildren = ({
         diagnostics,
         registry,
         ids,
+        ...(models === undefined ? {} : { models }),
       });
       parent.children.splice(
         index,
@@ -451,18 +506,28 @@ export const rehypeRenderComponents =
   ({
     diagnostics,
     registry = COMPONENT_REGISTRY,
+    models,
   }: {
     readonly diagnostics: DiagnosticCollector;
     readonly registry?: ComponentRegistry;
+    readonly models?: Array<CollectedComponentModel>;
   }) =>
   (tree: Root): void => {
+    const reservedIds = collectExistingIds(tree);
     renderChildren({
       parent: tree,
       diagnostics,
       registry,
-      ids: createComponentIdAllocator({
-        reservedIds: collectExistingIds(tree),
-      }),
+      ids: createComponentIdAllocator({ reservedIds }),
+      ...(models === undefined
+        ? {}
+        : {
+            models: {
+              collected: models,
+              ids: createComponentIdAllocator({ reservedIds }),
+              diagnostics: createDiagnosticCollector(),
+            },
+          }),
     });
     reportSurvivors({ parent: tree, diagnostics });
   };

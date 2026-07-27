@@ -17,7 +17,7 @@ Everything runs locally, and the file on disk is the source of truth.
 ## Current state
 
 Deliverable 2 is shipped in this repo: MDX plan documents with components, building on the static markdown viewer from deliverable 1.
-`big-plan render <input.mdx> [output.html]` converts a static-subset MDX plan document into a single self-contained themed HTML document with a responsive table of contents built from level-two headings.
+`big-plan render <input.mdx> [output.html]` converts a static-subset MDX plan document into a single self-contained themed HTML document, and `big-plan compile <input.mdx> [output.json]` emits the same validated plan model as JSON for agents and tools with a responsive table of contents built from level-two headings.
 Wide screens use a sticky sidebar; narrower screens use a sticky `Sections` disclosure showing the section count.
 Both navigation variants track the current section while the reader scrolls, including short final sections at the bottom of the page, and section links scroll smoothly unless the reader has requested reduced motion.
 The static subset rejects imports, exports, expressions, and unsupported attributes with hard-fail diagnostics carrying line and column positions, while the built-in BigDecision, Callout, CodeDiff, CodeSnippet, DatabaseTableSchema, FileTree, FileTreeDiff, GraphqlOperation, GrpcMethod, HttpEndpoint, and SmallDecisionSet components provide validated plan-native presentation.

@@ -62,6 +62,7 @@ export const renderCodeDiff: ComponentRenderer = (input) =>
 /** Declares CodeDiff's renderer and direct-child Annotation contract. */
 export const CODE_DIFF_COMPONENT_DEFINITION = {
   render: renderCodeDiff,
+  compile: compileCodeDiffComponent,
   scopedChildren: {
     Annotation: {
       kind: "scoped-child",

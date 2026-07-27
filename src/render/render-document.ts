@@ -5,6 +5,7 @@
 import type { Section } from "./markdown/convert.js";
 import { compileMarkdown, serializeMarkdown } from "./markdown/convert.js";
 export { MarkdownDiagnosticsError } from "./markdown/convert.js";
+import type { CollectedComponentModel } from "./markdown/convert.js";
 import { renderPage } from "./page.js";
 import { renderShell } from "./shell/shell.js";
 
@@ -42,4 +43,28 @@ export const renderDocument = ({
     bodyHtml: shell.html,
   });
   return { html, title: resolvedTitle, sections };
+};
+
+export type PlanModel = {
+  readonly title: string;
+  readonly sections: ReadonlyArray<Section>;
+  readonly components: ReadonlyArray<CollectedComponentModel>;
+};
+
+/**
+ * Compiles one plan into its validated model without rendering markup: the
+ * document title, the section outline, and every component instance's plan
+ * model in document order. Diagnostics hard-fail exactly as rendering does,
+ * so a model is only ever produced for a valid plan.
+ */
+export const compilePlanModel = ({
+  markdown,
+  fallbackTitle,
+}: {
+  readonly markdown: string;
+  readonly fallbackTitle: string;
+}): PlanModel => {
+  const components: Array<CollectedComponentModel> = [];
+  const { sections, title } = compileMarkdown({ markdown, models: components });
+  return { title: title ?? fallbackTitle, sections, components };
 };
