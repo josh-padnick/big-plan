@@ -2,8 +2,8 @@
 // components: a file icon, a muted directory prefix, and an emphasized file
 // name; class-for-class with the vanilla shared piece.
 
-import { FILE_ICON } from "../../render/icons/lucide/file.js";
-import { lucideIconToReact } from "../lucide-icon.js";
+import { FILE_ICON } from "../../../render/icons/lucide/file.js";
+import { lucideIconToReact } from "../../lucide-icon.js";
 
 const IDENTITY_CLASSES =
   "file-identity flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted";

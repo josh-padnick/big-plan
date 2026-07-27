@@ -8,15 +8,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type {
   CompiledCodeSnippet,
   CompiledCodeSnippetAnnotation,
-} from "../model/compile-code-snippet.js";
-import type { HighlightedLine } from "../model/split-highlighted-lines.js";
-import { COPY_ICON } from "../render/icons/lucide/copy.js";
-import { ELLIPSIS_ICON } from "../render/icons/lucide/ellipsis.js";
-import { hastContentToReact } from "./hast-content.js";
-import { lucideIconToReact } from "./lucide-icon.js";
-import { AnnotationCard } from "./shared/annotation-card.js";
-import { CopyFeedback } from "./shared/copy-feedback.js";
-import { FileIdentity } from "./shared/file-identity.js";
+} from "../../model/compile-code-snippet.js";
+import type { HighlightedLine } from "../../model/split-highlighted-lines.js";
+import { COPY_ICON } from "../../render/icons/lucide/copy.js";
+import { ELLIPSIS_ICON } from "../../render/icons/lucide/ellipsis.js";
+import { hastContentToReact } from "../hast-content.js";
+import { lucideIconToReact } from "../lucide-icon.js";
+import { AnnotationCard } from "../shared/annotation-card/annotation-card.js";
+import { CopyFeedback } from "../shared/copy-feedback/copy-feedback.js";
+import { FileIdentity } from "../shared/file-identity/file-identity.js";
 
 const FIGURE_CLASSES =
   "code-snippet mb-5 min-w-0 rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]";

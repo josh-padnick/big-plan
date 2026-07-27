@@ -5,14 +5,17 @@
 // until the vanilla renderer is deleted.
 
 import { renderToStaticMarkup } from "react-dom/server";
-import type { CalloutType, CompiledCallout } from "../model/compile-callout.js";
-import type { LucideIcon } from "../render/icons/lucide-icon.js";
-import { INFO_ICON } from "../render/icons/lucide/info.js";
-import { LIGHTBULB_ICON } from "../render/icons/lucide/lightbulb.js";
-import { OCTAGON_ALERT_ICON } from "../render/icons/lucide/octagon-alert.js";
-import { TRIANGLE_ALERT_ICON } from "../render/icons/lucide/triangle-alert.js";
-import { hastContentToReact } from "./hast-content.js";
-import { lucideIconToReact } from "./lucide-icon.js";
+import type {
+  CalloutType,
+  CompiledCallout,
+} from "../../model/compile-callout.js";
+import type { LucideIcon } from "../../render/icons/lucide-icon.js";
+import { INFO_ICON } from "../../render/icons/lucide/info.js";
+import { LIGHTBULB_ICON } from "../../render/icons/lucide/lightbulb.js";
+import { OCTAGON_ALERT_ICON } from "../../render/icons/lucide/octagon-alert.js";
+import { TRIANGLE_ALERT_ICON } from "../../render/icons/lucide/triangle-alert.js";
+import { hastContentToReact } from "../hast-content.js";
+import { lucideIconToReact } from "../lucide-icon.js";
 
 type CalloutConfig = {
   readonly defaultTitle: string;

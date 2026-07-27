@@ -5,9 +5,9 @@
 // is deliberately narrower than HAST Properties so ports stay honest.
 
 import type { ElementContent } from "hast";
-import { MESSAGE_SQUARE_ICON } from "../../render/icons/lucide/message-square.js";
-import { hastContentToReact } from "../hast-content.js";
-import { lucideIconToReact } from "../lucide-icon.js";
+import { MESSAGE_SQUARE_ICON } from "../../../render/icons/lucide/message-square.js";
+import { hastContentToReact } from "../../hast-content.js";
+import { lucideIconToReact } from "../../lucide-icon.js";
 
 const CARD_CLASSES =
   "annotation-card flex min-w-0 gap-2 px-3 py-2 font-sans text-sm leading-normal whitespace-normal [&>svg]:size-4 [&>svg]:shrink-0";

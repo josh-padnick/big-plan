@@ -11,7 +11,7 @@ import {
   compileCodeSnippetComponent,
   type CompiledCodeSnippet,
 } from "../../../../model/compile-code-snippet.js";
-import { renderCodeSnippetStatic } from "../../../../react/code-snippet.js";
+import { renderCodeSnippetStatic } from "../../../../react/code-snippet/code-snippet.js";
 import { renderCodeSnippetHeader } from "./code-snippet-header.js";
 import { renderCodeSnippetRows } from "./code-snippet-views.js";
 
