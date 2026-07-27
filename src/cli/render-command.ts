@@ -10,6 +10,7 @@ import {
   MarkdownDiagnosticsError,
   renderDocument,
 } from "../render/render-document.js";
+import { createOutputPathGuard } from "./output-path-guard.js";
 
 const USAGE = "Usage: big-plan render <input.mdx> [output.html]";
 
@@ -32,6 +33,13 @@ export const renderCommand = async (
   }
 
   const inputPath = resolve(inputArg);
+  const outputPath = resolve(args[1] ?? defaultOutputPath(inputPath));
+  const assertOutputDoesNotAliasInput = createOutputPathGuard({
+    inputPath,
+    outputPath,
+    usage: USAGE,
+  });
+
   let markdown: string;
   try {
     markdown = await readFile(inputPath, "utf8");
@@ -43,14 +51,6 @@ export const renderCommand = async (
     );
   }
 
-  const outputPath = resolve(args[1] ?? defaultOutputPath(inputPath));
-  if (outputPath === inputPath) {
-    throw new AxiError(
-      "Output path would overwrite the input MDX file",
-      "VALIDATION_ERROR",
-      [USAGE],
-    );
-  }
   let renderedDocument;
   try {
     renderedDocument = renderDocument({
@@ -72,6 +72,7 @@ export const renderCommand = async (
   }
   const { html, title, sections } = renderedDocument;
 
+  await assertOutputDoesNotAliasInput();
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, html, "utf8");
 

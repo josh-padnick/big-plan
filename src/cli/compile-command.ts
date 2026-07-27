@@ -11,6 +11,7 @@ import {
   MarkdownDiagnosticsError,
   compilePlanModel,
 } from "../render/render-document.js";
+import { createOutputPathGuard } from "./output-path-guard.js";
 
 const USAGE = "Usage: big-plan compile <input.mdx> [output.json]";
 
@@ -33,6 +34,13 @@ export const compileCommand = async (
   }
 
   const inputPath = resolve(inputArg);
+  const outputPath = resolve(args[1] ?? defaultOutputPath(inputPath));
+  const assertOutputDoesNotAliasInput = createOutputPathGuard({
+    inputPath,
+    outputPath,
+    usage: USAGE,
+  });
+
   let markdown: string;
   try {
     markdown = await readFile(inputPath, "utf8");
@@ -44,14 +52,6 @@ export const compileCommand = async (
     );
   }
 
-  const outputPath = resolve(args[1] ?? defaultOutputPath(inputPath));
-  if (outputPath === inputPath) {
-    throw new AxiError(
-      "Output path would overwrite the input MDX file",
-      "VALIDATION_ERROR",
-      [USAGE],
-    );
-  }
   let model;
   try {
     model = compilePlanModel({
@@ -72,6 +72,7 @@ export const compileCommand = async (
     );
   }
 
+  await assertOutputDoesNotAliasInput();
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(model, null, 2)}\n`, "utf8");
 

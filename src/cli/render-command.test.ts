@@ -1,7 +1,15 @@
 // Exercises the render command through its real filesystem adapter: argument
 // and MDX validation failures, output placement, and nested directory creation.
 
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  link,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -53,6 +61,15 @@ describe("renderCommand validation", () => {
       message: `Cannot read input file: ${inputPath}`,
     });
   });
+
+  it("should reject a lexical collision before reading a missing input", async () => {
+    const inputPath = join(tempDirectory, "missing.mdx");
+
+    await expect(renderCommand([inputPath, inputPath])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "Output path would overwrite the input MDX file",
+    });
+  });
 });
 
 describe("renderCommand output", () => {
@@ -62,6 +79,43 @@ describe("renderCommand output", () => {
     await writeFile(inputPath, source, "utf8");
     await expect(renderCommand([inputPath, inputPath])).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
+    });
+    expect(await readFile(inputPath, "utf8")).toBe(source);
+  });
+
+  it.each([
+    ["symbolic link", symlink],
+    ["hard link", link],
+  ])("should refuse an output %s that aliases the input", async (_, alias) => {
+    const inputPath = join(tempDirectory, "plan.mdx");
+    const outputPath = join(tempDirectory, "plan.html");
+    const source = "# Adapter plan\n\n## Rollout\n";
+    await writeFile(inputPath, source, "utf8");
+    await alias(inputPath, outputPath);
+
+    await expect(renderCommand([inputPath, outputPath])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "Output path would overwrite the input MDX file",
+    });
+    expect(await readFile(inputPath, "utf8")).toBe(source);
+  });
+
+  it("should refuse a case-only alias on a case-insensitive filesystem", async () => {
+    const inputPath = join(tempDirectory, "plan.mdx");
+    const outputPath = join(tempDirectory, "PLAN.MDX");
+    const source = "# Adapter plan\n\n## Rollout\n";
+    await writeFile(inputPath, source, "utf8");
+    try {
+      if ((await realpath(outputPath)) !== (await realpath(inputPath))) {
+        return;
+      }
+    } catch {
+      return;
+    }
+
+    await expect(renderCommand([inputPath, outputPath])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "Output path would overwrite the input MDX file",
     });
     expect(await readFile(inputPath, "utf8")).toBe(source);
   });
