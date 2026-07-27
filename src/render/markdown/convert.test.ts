@@ -211,6 +211,122 @@ describe("compileMarkdown sections", () => {
   });
 });
 
+describe("compileMarkdown component ids", () => {
+  it("should preserve heading ids when a decision would use the same id", () => {
+    const { elementIds, sections } = compileMarkdown({
+      markdown: `<BigDecision question="Foo">
+
+<Option title="A" />
+
+<Option title="B" />
+
+</BigDecision>
+
+## Decision Foo
+`,
+    });
+
+    expect(sections).toEqual([{ id: "decision-foo", text: "Decision Foo" }]);
+    expect(elementIds).toContain("decision-foo-2");
+    expect(new Set(elementIds).size).toBe(elementIds.length);
+  });
+
+  it("should preserve heading ids nested inside decision components", () => {
+    const { elementIds, sections } = compileMarkdown({
+      markdown: `<BigDecision question="Foo">
+
+## Decision Foo
+
+<Option title="A" />
+
+<Option title="B" />
+
+</BigDecision>
+
+<SmallDecisionSet title="Foo">
+
+## Small Decision Set Foo
+
+<SmallDecision question="Bar?">
+
+<Option title="A" />
+
+<Option title="B" />
+
+</SmallDecision>
+
+</SmallDecisionSet>
+`,
+    });
+
+    expect(sections).toEqual([
+      { id: "decision-foo", text: "Decision Foo" },
+      { id: "small-decision-set-foo", text: "Small Decision Set Foo" },
+    ]);
+    expect(elementIds).toContain("decision-foo-2");
+    expect(elementIds).toContain("small-decision-set-foo-2");
+    expect(new Set(elementIds).size).toBe(elementIds.length);
+  });
+
+  it("should namespace repeated decision components across one document", () => {
+    const repeatedDecisions = `<BigDecision question="Same?">
+
+<Option title="A" />
+
+<Option title="B" />
+
+</BigDecision>
+
+<BigDecision question="Same?">
+
+<Option title="A" />
+
+<Option title="B" />
+
+</BigDecision>
+
+<SmallDecisionSet title="Same">
+
+<SmallDecision question="Same?">
+
+<Option title="A" />
+
+<Option title="B" />
+
+</SmallDecision>
+
+</SmallDecisionSet>
+
+<SmallDecisionSet title="Same">
+
+<SmallDecision question="Same?">
+
+<Option title="A" />
+
+<Option title="B" />
+
+</SmallDecision>
+
+</SmallDecisionSet>
+`;
+    const { elementIds } = compileMarkdown({ markdown: repeatedDecisions });
+
+    expect(elementIds).toContain("decision-same");
+    expect(elementIds).toContain("decision-same-option-a");
+    expect(elementIds).toContain("decision-same-2");
+    expect(elementIds).toContain("decision-same-2-option-a");
+    expect(elementIds).toContain("small-decision-set-same");
+    expect(elementIds).toContain(
+      "small-decision-set-same-question-same-option-a",
+    );
+    expect(elementIds).toContain("small-decision-set-same-2");
+    expect(elementIds).toContain(
+      "small-decision-set-same-2-question-same-option-a",
+    );
+    expect(new Set(elementIds).size).toBe(elementIds.length);
+  });
+});
+
 describe("compileMarkdown tables", () => {
   it("should wrap each table in a scroll container when the document has tables", () => {
     const bodyHtml = compileAndSerialize(

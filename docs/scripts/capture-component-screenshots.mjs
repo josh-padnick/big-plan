@@ -165,6 +165,86 @@ CREATE POLICY refresh_jobs_service_all ON catalog.refresh_jobs
 </DatabaseTableSchema>
 `;
 
+const BIG_DECISION_FIXTURE = `<BigDecision question="Which persistence layer should back review comments?" status="open">
+
+Comments need durable identities and ordered replies without blocking a later multi-reviewer workflow.
+
+<Criterion title="Anchor integrity">
+
+Selection anchors and their threads must stay consistent through crashes.
+
+</Criterion>
+
+<Criterion title="Local-first setup" />
+
+<Criterion title="Concurrent reviewers" />
+
+<Option title="PostgreSQL" recommended summary="The relational store the team already operates.">
+
+<Score criterion="Anchor integrity" verdict="Strong" tone="good">
+
+Transactions keep a thread and its anchor in one atomic write.
+
+</Score>
+
+<Score criterion="Local-first setup" verdict="Needs a server" tone="bad" />
+
+<Score criterion="Concurrent reviewers" verdict="Ready" tone="good" />
+
+</Option>
+
+<Option title="SQLite" summary="One embedded database beside the local server.">
+
+<Score criterion="Anchor integrity" verdict="Strong" tone="good" />
+
+<Score criterion="Local-first setup" verdict="Zero setup" tone="good" />
+
+<Score criterion="Concurrent reviewers" verdict="Single writer" tone="mixed" />
+
+</Option>
+
+<Reversibility rating="somewhat-hard">
+
+The repository layer isolates SQL, so swapping engines later costs a data migration.
+
+</Reversibility>
+
+</BigDecision>
+`;
+
+const SMALL_DECISION_SET_FIXTURE = `<SmallDecisionSet title="Open questions">
+
+<SmallDecision question="Should the first release ship behind a feature flag?">
+
+<Option title="Yes" recommended>
+
+Keeps rollback one toggle away during the risky window.
+
+</Option>
+
+<Option title="No">
+
+Avoids the flag-cleanup follow-up task.
+
+</Option>
+
+</SmallDecision>
+
+<SmallDecision question="When do we remove the legacy endpoint?">
+
+<Option title="Same release" />
+
+<Option title="One release later" recommended>
+
+Gives integrators one cycle of overlap.
+
+</Option>
+
+</SmallDecision>
+
+</SmallDecisionSet>
+`;
+
 /** Renders an MDX fixture through the CLI and returns the output HTML path. */
 const renderFixture = ({ dir, name, mdx }) => {
   const input = join(dir, `${name}.mdx`);
@@ -240,6 +320,16 @@ const shootFileTreeDiff = async (page, path) => {
   await page.locator("figure[data-file-tree-diff]").screenshot({ path });
 };
 
+/** Screenshots the BigDecision figure element. */
+const shootBigDecision = async (page, path) => {
+  await page.locator("figure[data-big-decision]").screenshot({ path });
+};
+
+/** Screenshots the SmallDecisionSet figure element. */
+const shootSmallDecisionSet = async (page, path) => {
+  await page.locator("figure[data-small-decision-set]").screenshot({ path });
+};
+
 /** Switches the tree to the side-by-side view. */
 const openSideBySide = async (page) => {
   await page.click('[data-tree-set-view="before-after"]');
@@ -274,6 +364,18 @@ const SHOTS = [
     mdx: ANNOTATION_FIXTURE,
     base: "annotation-card",
     shoot: shootFigure,
+  },
+  {
+    name: "big-decision",
+    mdx: BIG_DECISION_FIXTURE,
+    base: "big-decision",
+    shoot: shootBigDecision,
+  },
+  {
+    name: "small-decision-set",
+    mdx: SMALL_DECISION_SET_FIXTURE,
+    base: "small-decision-set",
+    shoot: shootSmallDecisionSet,
   },
   {
     name: "snippet",

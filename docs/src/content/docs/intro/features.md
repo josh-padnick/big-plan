@@ -29,6 +29,7 @@ For what comes next, see the [roadmap](/intro/roadmap/).
 
 - A static subset of MDX: standard Markdown and GFM plus a closed component registry, without executable imports, exports, or expressions.
 - Positional diagnostics that aggregate recoverable unsupported syntax, unknown components, invalid attributes, and malformed component content after MDX parses.
+- `BigDecision` components for weighty choices, rendered as scored criteria matrices or substantive option lists with lifecycle state, recommendations, optional reversibility, outcomes, and reader-controlled priority previews.
 - `Callout` components for notes, tips, warnings, and dangers.
 - `CodeDiff` components with optional line numbers and change counts, unified and side-by-side views, scoped line annotations, copy actions, and full-screen viewing.
 - `CodeSnippet` components for excerpts with optional file identity, file-absolute line numbers, scoped annotations, and copy actions.
@@ -38,12 +39,13 @@ For what comes next, see the [roadmap](/intro/roadmap/).
 - `HttpEndpoint` components for HTTP contracts with location-grouped parameters, request examples, status-coded responses, and tabbed section navigation.
 - `GraphqlOperation` components for queries, mutations, and subscriptions with literal argument types, one-level input and payload fields, and grouped executable examples with repeatable labeled responses.
 - `GrpcMethod` components for streaming-aware proto signatures, message-typed request and response fields, gRPC status codes, grouped examples, and proto source.
+- `SmallDecisionSet` components for compact numbered lists of briefly explained options, with locally selectable recommendations.
 
 ## Output
 
 - One self-contained HTML file: styling, behavior, and branding embedded.
 - No external requests, ever.
-- Readable with JavaScript disabled; scripts only enhance navigation, theming, code-copy controls, `CodeDiff`, `CodeSnippet`, `DatabaseTableSchema`, `FileTree`, and `FileTreeDiff` interactions, and `HttpEndpoint`'s tabbed section navigation.
+- Readable with JavaScript disabled; scripts only enhance navigation, theming, code-copy controls, `BigDecision`, `CodeDiff`, `CodeSnippet`, `DatabaseTableSchema`, `FileTree`, `FileTreeDiff`, and `SmallDecisionSet` interactions, and `HttpEndpoint`'s tabbed section navigation.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 
 See the [CLI reference](/reference/cli/) for command details.

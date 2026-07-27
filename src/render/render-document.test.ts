@@ -124,9 +124,9 @@ describe("renderDocument affordances", () => {
     expect(html).not.toContain("@import");
   });
 
-  it("should inline one stylesheet plus the theme, copy, diff, snippet, table-schema, file-tree, http-endpoint, and scroll-spy scripts when rendering", () => {
+  it("should inline one stylesheet plus the theme, copy, diff, snippet, table-schema, file-tree, http-endpoint, big-decision, option-select, and scroll-spy scripts when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
-    expect(html.match(/<script>/g)).toHaveLength(8);
+    expect(html.match(/<script>/g)).toHaveLength(10);
     expect(html).toContain("data-theme-toggle");
     expect(html).toContain("data-copy-code");
   });
@@ -174,9 +174,9 @@ describe("renderDocument shell", () => {
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("</html>");
     expect(html).not.toContain("<nav");
-    expect(html.match(/<script>/g)).toHaveLength(7);
-    // The reading column keeps its ~70ch measure even without a sidebar.
-    expect(html).toContain("wide:grid-cols-[minmax(0,70ch)]");
+    expect(html.match(/<script>/g)).toHaveLength(9);
+    // The reading column keeps its ~74ch measure even without a sidebar.
+    expect(html).toContain("wide:grid-cols-[minmax(0,74ch)]");
   });
 
   it("should omit the TOC when the document has headings but no h2s", () => {

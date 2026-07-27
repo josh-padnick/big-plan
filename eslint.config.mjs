@@ -98,7 +98,7 @@ export default tseslint.config(
       shell: {
         files: ["src/render/shell/**/*.ts"],
         imports: ["**/shell/**"],
-        mayImport: ["escapeHtml", "codeBlock", "components"],
+        mayImport: ["escapeHtml", "codeBlock", "components", "componentShared"],
       },
       page: {
         files: ["src/render/page.ts"],

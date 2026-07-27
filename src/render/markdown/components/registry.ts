@@ -10,7 +10,13 @@ import type {
   MarkdownBodyNodeKind,
   MarkdownBodyPolicy,
   ScopedChild,
+  ScopedChildDefinition,
 } from "./component-contract.js";
+import {
+  createComponentIdAllocator,
+  type ComponentIdAllocator,
+} from "./component-contract.js";
+import { BIG_DECISION_COMPONENT_DEFINITION } from "./big-decision/big-decision.js";
 import { CALLOUT_COMPONENT_DEFINITION } from "./callout/callout.js";
 import { CODE_DIFF_COMPONENT_DEFINITION } from "./code-diff/code-diff.js";
 import { CODE_SNIPPET_COMPONENT_DEFINITION } from "./code-snippet/code-snippet.js";
@@ -20,6 +26,7 @@ import { FILE_TREE_DIFF_COMPONENT_DEFINITION } from "./file-tree/file-tree-diff.
 import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "./graphql-operation/graphql-operation.js";
 import { GRPC_METHOD_COMPONENT_DEFINITION } from "./grpc-method/grpc-method.js";
 import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "./http-endpoint/http-endpoint.js";
+import { SMALL_DECISION_SET_COMPONENT_DEFINITION } from "./small-decision-set/small-decision-set.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
 
 type MdxJsxFlowElement = Extract<
@@ -29,6 +36,7 @@ type MdxJsxFlowElement = Extract<
 
 export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
   {
+    BigDecision: BIG_DECISION_COMPONENT_DEFINITION,
     Callout: CALLOUT_COMPONENT_DEFINITION,
     CodeDiff: CODE_DIFF_COMPONENT_DEFINITION,
     CodeSnippet: CODE_SNIPPET_COMPONENT_DEFINITION,
@@ -38,7 +46,10 @@ export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
     GraphqlOperation: GRAPHQL_OPERATION_COMPONENT_DEFINITION,
     GrpcMethod: GRPC_METHOD_COMPONENT_DEFINITION,
     HttpEndpoint: HTTP_ENDPOINT_COMPONENT_DEFINITION,
+    SmallDecisionSet: SMALL_DECISION_SET_COMPONENT_DEFINITION,
   };
+
+export type ComponentRegistry = Readonly<Record<string, ComponentDefinition>>;
 
 export const REGISTERED_COMPONENT_NAMES: ReadonlySet<string> = new Set(
   Object.keys(COMPONENT_REGISTRY),
@@ -48,37 +59,59 @@ const markdownChildren = (
   node: MarkdownRoot | MarkdownNode,
 ): ReadonlyArray<MarkdownNode> => ("children" in node ? node.children : []);
 
-const registeredComponentName = (node: MarkdownNode): string | undefined =>
+const registeredComponentName = ({
+  node,
+  registry,
+}: {
+  readonly node: MarkdownNode;
+  readonly registry: ComponentRegistry;
+}): string | undefined =>
   node.type === "mdxJsxFlowElement" &&
   node.name !== null &&
-  REGISTERED_COMPONENT_NAMES.has(node.name)
+  Object.hasOwn(registry, node.name)
     ? node.name
     : undefined;
 
-const prohibitedKind = (
-  node: MarkdownNode,
-): MarkdownBodyNodeKind | undefined =>
+const prohibitedKind = ({
+  node,
+  registry,
+}: {
+  readonly node: MarkdownNode;
+  readonly registry: ComponentRegistry;
+}): MarkdownBodyNodeKind | undefined =>
   node.type === "heading" ||
   node.type === "footnoteReference" ||
   node.type === "footnoteDefinition"
     ? node.type
-    : registeredComponentName(node) === undefined
+    : registeredComponentName({ node, registry }) === undefined
       ? undefined
       : "registeredComponent";
 
 // Applies a scoped child's declared content policy recursively. Registered
 // components are opaque after rejection so their internals add no secondary
-// diagnostics for content the parent contract already excludes.
+// diagnostics for content the parent contract already excludes, and declared
+// nested scoped children are skipped because their own policy governs them.
 const validateMarkdownBody = ({
   node,
   policy,
   diagnostics,
+  registry,
+  nestedScopedNames,
 }: {
   readonly node: MarkdownNode;
   readonly policy: MarkdownBodyPolicy;
   readonly diagnostics: DiagnosticCollector;
+  readonly registry: ComponentRegistry;
+  readonly nestedScopedNames: ReadonlySet<string>;
 }): void => {
-  const kind = prohibitedKind(node);
+  if (
+    node.type === "mdxJsxFlowElement" &&
+    node.name !== null &&
+    nestedScopedNames.has(node.name)
+  ) {
+    return;
+  }
+  const kind = prohibitedKind({ node, registry });
   const message = kind === undefined ? undefined : policy.prohibited[kind];
   if (message !== undefined) {
     diagnostics.add({ message, position: node.position });
@@ -87,52 +120,107 @@ const validateMarkdownBody = ({
     return;
   }
   for (const child of markdownChildren(node)) {
-    validateMarkdownBody({ node: child, policy, diagnostics });
+    validateMarkdownBody({
+      node: child,
+      policy,
+      diagnostics,
+      registry,
+      nestedScopedNames,
+    });
   }
 };
 
-// Finds registered parents anywhere in Markdown and applies each direct
-// scoped child's declarative body policy before Markdown becomes HAST.
+type ScopedParentDefinition = ComponentDefinition | ScopedChildDefinition;
+
+const definitionFor = ({
+  name,
+  registry,
+}: {
+  readonly name: string | null;
+  readonly registry: ComponentRegistry;
+}): ComponentDefinition | undefined =>
+  name !== null && Object.hasOwn(registry, name) ? registry[name] : undefined;
+
+const scopedDefinitionFor = ({
+  definitions,
+  name,
+}: {
+  readonly definitions: ScopedParentDefinition["scopedChildren"];
+  readonly name: string | null;
+}): ScopedChildDefinition | undefined =>
+  name !== null && definitions !== undefined && Object.hasOwn(definitions, name)
+    ? definitions[name]
+    : undefined;
+
+// Carries the matched definition down the authored hierarchy so each level
+// sees only the scoped names declared by its direct parent.
 const validateRegisteredComponentMarkdown = ({
   node,
   diagnostics,
+  registry,
+  parentDefinition,
+  suppressRegisteredComponents = false,
 }: {
   readonly node: MarkdownRoot | MarkdownNode;
   readonly diagnostics: DiagnosticCollector;
+  readonly registry: ComponentRegistry;
+  readonly parentDefinition?: ScopedParentDefinition;
+  readonly suppressRegisteredComponents?: boolean;
 }): void => {
-  const componentName =
-    node.type === "root" ? undefined : registeredComponentName(node);
   const definition =
-    componentName === undefined ? undefined : COMPONENT_REGISTRY[componentName];
+    parentDefinition ??
+    (node.type === "mdxJsxFlowElement"
+      ? definitionFor({ name: node.name, registry })
+      : undefined);
   for (const child of markdownChildren(node)) {
-    const scopedDefinition =
-      child.type !== "mdxJsxFlowElement" || child.name === null
-        ? undefined
-        : definition?.scopedChildren?.[child.name];
+    const scopedDefinition = scopedDefinitionFor({
+      definitions: definition?.scopedChildren,
+      name: child.type === "mdxJsxFlowElement" ? child.name : null,
+    });
     if (scopedDefinition !== undefined) {
       const policy = scopedDefinition.markdownBody;
       if (policy !== undefined) {
+        const nestedScopedNames = new Set(
+          Object.keys(scopedDefinition.scopedChildren ?? {}),
+        );
         for (const bodyChild of markdownChildren(child)) {
           validateMarkdownBody({
             node: bodyChild,
             policy,
             diagnostics,
+            registry,
+            nestedScopedNames,
           });
         }
       }
-      if (policy?.prohibited.registeredComponent !== undefined) {
-        continue;
-      }
+      validateRegisteredComponentMarkdown({
+        node: child,
+        diagnostics,
+        registry,
+        parentDefinition: scopedDefinition,
+        suppressRegisteredComponents:
+          policy?.prohibited.registeredComponent !== undefined,
+      });
+      continue;
     }
-    validateRegisteredComponentMarkdown({ node: child, diagnostics });
+    if (suppressRegisteredComponents) {
+      continue;
+    }
+    validateRegisteredComponentMarkdown({ node: child, diagnostics, registry });
   }
 };
 
 /** Applies every component's declarative pre-HAST Markdown policy. */
 export const remarkValidateComponents =
-  ({ diagnostics }: { readonly diagnostics: DiagnosticCollector }) =>
+  ({
+    diagnostics,
+    registry = COMPONENT_REGISTRY,
+  }: {
+    readonly diagnostics: DiagnosticCollector;
+    readonly registry?: ComponentRegistry;
+  }) =>
   (tree: MarkdownRoot): void => {
-    validateRegisteredComponentMarkdown({ node: tree, diagnostics });
+    validateRegisteredComponentMarkdown({ node: tree, diagnostics, registry });
   };
 
 const isMdxNodeType = (type: string): boolean => type.startsWith("mdx");
@@ -192,35 +280,41 @@ const normalizeAttributes = ({
   return Object.fromEntries(attributes);
 };
 
-const definitionFor = (name: string | null): ComponentDefinition | undefined =>
-  name !== null && Object.hasOwn(COMPONENT_REGISTRY, name)
-    ? COMPONENT_REGISTRY[name]
-    : undefined;
-
-const declaresScopedChild = ({
-  definitions,
-  name,
-}: {
-  readonly definitions: ComponentDefinition["scopedChildren"];
-  readonly name: string | null;
-}): boolean =>
-  name !== null &&
-  definitions !== undefined &&
-  Object.hasOwn(definitions, name);
-
 type ParentNode = Root | Element | MdxJsxFlowElement;
+
+const collectExistingIds = (
+  node: ParentNode,
+  ids: Array<string> = [],
+): ReadonlyArray<string> => {
+  for (const child of node.children) {
+    if (child.type === "element") {
+      const id = child.properties.id;
+      if (typeof id === "string") {
+        ids.push(id);
+      }
+    }
+    if (child.type === "element" || child.type === "mdxJsxFlowElement") {
+      collectExistingIds(child, ids);
+    }
+  }
+  return ids;
+};
 
 // Reports an unknown name, validates attributes, recursively prepares direct
 // scoped children, then dispatches a registered global component.
 const renderFlowElement = ({
   node,
   diagnostics,
+  registry,
+  ids,
 }: {
   readonly node: MdxJsxFlowElement;
   readonly diagnostics: DiagnosticCollector;
+  readonly registry: ComponentRegistry;
+  readonly ids: ComponentIdAllocator;
 }): Element | undefined => {
   const name = node.name;
-  const definition = definitionFor(name);
+  const definition = definitionFor({ name, registry });
   if (definition === undefined) {
     diagnostics.add({
       message: `Unknown component "${name ?? "<fragment>"}"`,
@@ -232,6 +326,8 @@ const renderFlowElement = ({
     parent: node,
     scopedDefinitions: definition?.scopedChildren,
     diagnostics,
+    registry,
+    ids,
   });
   if (definition === undefined) {
     return undefined;
@@ -242,6 +338,7 @@ const renderFlowElement = ({
     scopedChildren,
     position: node.position,
     diagnostics,
+    ids,
   });
 };
 
@@ -250,10 +347,14 @@ const renderChildren = ({
   parent,
   scopedDefinitions,
   diagnostics,
+  registry,
+  ids,
 }: {
   readonly parent: ParentNode;
-  readonly scopedDefinitions?: ComponentDefinition["scopedChildren"];
+  readonly scopedDefinitions?: ScopedParentDefinition["scopedChildren"];
   readonly diagnostics: DiagnosticCollector;
+  readonly registry: ComponentRegistry;
+  readonly ids: ComponentIdAllocator;
 }): ReadonlyArray<ScopedChild> => {
   const scopedChildren: Array<ScopedChild> = [];
   let index = 0;
@@ -264,26 +365,44 @@ const renderChildren = ({
       continue;
     }
     const childName = child.type === "mdxJsxFlowElement" ? child.name : null;
+    const scopedDefinition = scopedDefinitionFor({
+      definitions: scopedDefinitions,
+      name: childName,
+    });
     if (
       child.type === "mdxJsxFlowElement" &&
       childName !== null &&
-      declaresScopedChild({ definitions: scopedDefinitions, name: childName })
+      scopedDefinition !== undefined
     ) {
-      renderChildren({ parent: child, diagnostics });
+      const nestedScopedChildren = renderChildren({
+        parent: child,
+        scopedDefinitions: scopedDefinition.scopedChildren,
+        diagnostics,
+        registry,
+        ids,
+      });
       scopedChildren.push({
         name: childName,
         attributes: normalizeAttributes({ node: child, diagnostics }),
         children: child.children,
+        ...(nestedScopedChildren.length === 0
+          ? {}
+          : { scopedChildren: nestedScopedChildren }),
         position: child.position,
       });
       parent.children.splice(index, 1);
       continue;
     }
     if (child.type === "element") {
-      renderChildren({ parent: child, diagnostics });
+      renderChildren({ parent: child, diagnostics, registry, ids });
     }
     if (child.type === "mdxJsxFlowElement") {
-      const rendered = renderFlowElement({ node: child, diagnostics });
+      const rendered = renderFlowElement({
+        node: child,
+        diagnostics,
+        registry,
+        ids,
+      });
       parent.children.splice(
         index,
         1,
@@ -329,8 +448,21 @@ const reportSurvivors = ({
 
 /** Creates the rehype transform that validates and dispatches components. */
 export const rehypeRenderComponents =
-  ({ diagnostics }: { readonly diagnostics: DiagnosticCollector }) =>
+  ({
+    diagnostics,
+    registry = COMPONENT_REGISTRY,
+  }: {
+    readonly diagnostics: DiagnosticCollector;
+    readonly registry?: ComponentRegistry;
+  }) =>
   (tree: Root): void => {
-    renderChildren({ parent: tree, diagnostics });
+    renderChildren({
+      parent: tree,
+      diagnostics,
+      registry,
+      ids: createComponentIdAllocator({
+        reservedIds: collectExistingIds(tree),
+      }),
+    });
     reportSurvivors({ parent: tree, diagnostics });
   };

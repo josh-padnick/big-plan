@@ -1,0 +1,186 @@
+---
+title: BigDecision
+description: A standalone component that reviews one weighty decision as a criteria matrix or substantive option list, with lifecycle status, a recommendation, optional reversibility, and a recorded outcome.
+---
+
+import ThemeImage from "../../../components/ThemeImage.astro";
+import bigDecisionLight from "../../../assets/components/big-decision-light.png";
+import bigDecisionDark from "../../../assets/components/big-decision-dark.png";
+
+`BigDecision` presents one consequential choice as a comparison a reviewer can actually check: a criteria matrix when the options share comparable dimensions, or a substantive option list when prose rationale carries the argument.
+Place it in the plan section where the decision belongs; the smaller end-of-plan questions belong in [SmallDecisionSet](/components/small-decision-set/) instead.
+While a decision is undecided, the recommended option starts selected and a click moves the reader's local selection; recording the choice arrives with the live review layer, and decided decisions stay static.
+A full-screen control gives a wide matrix the whole viewport when the reading column crowds it, and priority squares under each criterion let the reader state what matters most - a dashed Best match tag follows the weighted comparison, always distinct from the agent's solid Recommended pill and from the reader's own selection, a live Score row at the foot of the matrix totals every option and highlights the Best match as priorities change, and the Score section stays folded until asked - expanding to the live per-criterion arithmetic and the priorities reset - while an authored reversibility rating reads in full every time.
+A decision can rate its reversibility on a fixed scale, with a built-in explainer behind an info icon.
+
+## How it looks
+
+<ThemeImage
+  light={bigDecisionLight}
+  dark={bigDecisionDark}
+  alt="An open decision card comparing options in a criteria matrix with scored verdicts, a Recommended badge, and a reversibility line"
+/>
+
+## When to use it
+
+Use `BigDecision` when a choice carries real tradeoffs a reviewer must weigh before implementation.
+Phrase the decision as a question, then name the criteria it actually turns on - the forces from the context paragraph - explain each one in its body, and score every option against every criterion.
+Keep verdicts terse: a verdict word plus a short qualifier, with longer reasoning behind the cell's info tooltip.
+Drop a criterion whose verdicts match across every option; a row that discriminates nothing is noise.
+Treat "do nothing" as an ordinary option whenever the status quo is a legitimate choice, and state the decision's reversibility - what it costs to change course later is the fact a reviewer most needs.
+When the decision lands, mark the chosen option and keep the losing options visible so the outcome retains its alternatives.
+
+### Matrix or plain options?
+
+`BigDecision` renders two shapes, chosen by whether the decision declares criteria:
+
+- **Declare criteria and score them** when the options compete on shared, comparable dimensions - architecture and technology choices usually do. The matrix makes the comparison checkable and unlocks the reader-priority preview.
+- **Omit criteria for a plain option list** when the choice is qualitative or the options do not share dimensions - naming, tone, or direction calls where prose rationale carries the argument. The options render as a selectable multiple-choice list with their summaries and detail drawers, like a form question with substance.
+- If the choice is quick enough that a sentence per option settles it, it belongs in a [SmallDecisionSet](/components/small-decision-set/) instead.
+
+Forcing a matrix onto options with no shared criteria produces rows that discriminate nothing; forcing prose onto a real tradeoff hides the comparison. Pick the shape that matches the decision.
+
+### When not to use it
+
+- Small end-of-plan questions with short answers - use [SmallDecisionSet](/components/small-decision-set/)
+- Implementation steps with no competing choice - use prose or a task list
+- A decision needing sign-off from a named approver - agreement flows arrive with the live review layer
+
+## Use cases
+
+- Ask for agreement on an open architecture choice while making the criteria, the recommendation, and the accepted downsides checkable
+- Record a decided choice without erasing the alternatives that reviewers considered
+- Preserve a deferred choice and its current context so later work can resume from a clear boundary
+
+## Usage
+
+````mdx
+<BigDecision question="Which persistence layer should back review comments?" status="open">
+
+Comments need durable identities and ordered replies without blocking a later multi-reviewer workflow.
+
+<Criterion title="Anchor integrity">
+
+Selection anchors and their threads must stay consistent through crashes.
+
+</Criterion>
+
+<Criterion title="Local-first setup" />
+
+<Option title="PostgreSQL" recommended summary="The relational store the team already operates.">
+
+<Score criterion="Anchor integrity" verdict="Strong" tone="good">
+
+Transactions keep a thread and its anchor in one atomic write.
+
+</Score>
+
+<Score criterion="Local-first setup" verdict="Needs a server" tone="bad" />
+
+</Option>
+
+<Option title="SQLite" summary="One embedded database beside the local server.">
+
+<Score criterion="Anchor integrity" verdict="Strong" tone="good" />
+
+<Score criterion="Local-first setup" verdict="Zero setup" tone="good" />
+
+</Option>
+
+<Reversibility rating="somewhat-hard">
+
+The repository layer isolates SQL, so swapping engines later costs a data migration.
+
+</Reversibility>
+
+</BigDecision>
+````
+
+## Authoring
+
+### BigDecision
+
+| Attribute       | Type                              | Required | Behavior                                                            |
+| --------------- | --------------------------------- | -------- | ------------------------------------------------------------------- |
+| `question` | string (non-empty)                | Yes      | Renders the question in the card header.    |
+| `status`   | enum: `open` `decided` `deferred` | No       | Sets the lifecycle state; `decided` and `deferred` render a pill. Defaults to `open`. |
+
+Markdown before the first scoped child supplies the context and forces that make the choice meaningful.
+Each decision needs at least two options.
+
+### Criterion
+
+Declare one `Criterion` per row of the matrix, in the order the rows should read.
+
+| Attribute | Type               | Required | Behavior                                                       |
+| --------- | ------------------ | -------- | -------------------------------------------------------------- |
+| `title`   | string (non-empty) | Yes      | Names the row; titles must be unique within the decision.      |
+
+Markdown in the body becomes the criterion's tooltip - why it matters - shown on hover behind a dashed underline on the term.
+The body is optional but strongly recommended: an unexplained criterion asks the reviewer to trust the row instead of checking it, and the dashed underline is the reader's signal that the reasoning is one hover away.
+Reserve bare criteria for terms the plan's audience could not possibly read two ways.
+A decision with no criteria renders its options as a stacked list without a matrix.
+
+### Option
+
+| Attribute     | Type               | Required | Behavior                                                     |
+| ------------- | ------------------ | -------- | ------------------------------------------------------------ |
+| `title`       | string (non-empty) | Yes      | Names the column; titles must be unique within the decision. |
+| `summary`     | string             | No       | The one-sentence rationale under the option name.            |
+| `recommended` | bare boolean       | No       | Marks at most one option; it starts selected while the decision is undecided. |
+| `chosen`      | bare boolean       | No       | Marks the single outcome of a `decided` decision.            |
+
+Markdown in an option body outside its scores becomes a Details drawer inside the option card.
+
+### Details
+
+At most one `Details` element holds question-level long-form content; it renders as a Details drawer under the context prose.
+An option gets its own Details drawer from ordinary markdown in the `Option` body outside its `Score` children; do not nest a `Details` element inside an option.
+
+### Score
+
+Every option scores every declared criterion exactly once.
+
+| Attribute   | Type                                  | Required | Behavior                                                 |
+| ----------- | ------------------------------------- | -------- | -------------------------------------------------------- |
+| `criterion` | string matching a declared criterion  | Yes      | Binds the cell to its row.                               |
+| `verdict`   | string, at most 32 characters         | Yes      | The cell text: a verdict word plus a short qualifier.    |
+| `tone`      | enum: `good` `bad` `mixed` `neutral`  | No       | Colors the cell's icon; defaults to `neutral`.           |
+
+Markdown in the body becomes the cell's tooltip for reasoning the verdict cannot carry.
+A decided decision requires exactly one chosen option, and chosen options are invalid in open or deferred decisions.
+
+### Reversibility
+
+At most one `Reversibility` element rates what changing course later would cost; it renders as an always-visible section below the options, with the built-in explainer tooltip on its label.
+
+| Attribute | Type                                        | Required | Behavior                                     |
+| --------- | ------------------------------------------- | -------- | -------------------------------------------- |
+| `rating`  | enum: `easy` `somewhat-hard` `hard`         | Yes      | Renders the fixed rating phrase and its tint. |
+
+Markdown in the body is the decision-specific rationale shown under the rating.
+
+`Criterion`, `Details`, `Option`, and `Reversibility` must be direct `BigDecision` children, and `Score` must be a direct `Option` child.
+Their markdown bodies accept prose, lists, inline formatting, and plain fenced code, but reject headings, footnotes, and typed components with positional diagnostics.
+
+## Lifecycle
+
+A decision moves through three statuses, and the reader's actions render as placeholders until the live review layer can transport them:
+
+- **open** (the default) shows no status pill. Readers get a Submit button for their selection, an inline Suggest-another-option form under the options for choices the plan missed, and a tertiary Defer action.
+- **decided** shows the pill, requires exactly one chosen option, leads with the outcome strip, and offers Re-open.
+- **deferred** shows the pill, records why in the context, and offers Re-open.
+
+Every action currently answers with a coming-soon note; wiring them to the authoring agent arrives with the live layer.
+
+## Scoring
+
+The browser-side priority preview keeps its arithmetic deliberately coarse and verifiable, and these are its rules:
+
+- The authoring agent assigns each cell's tone; the reader never edits ratings, only priorities.
+- Every criterion starts at medium priority; the three squares set low, medium, or high, multiplying a tone's contribution by 1, 2, or 3.
+- Tones contribute good +2, mixed +1, neutral 0, and bad -2; the option with the highest weighted sum is the Best match.
+- A tie for the highest score shows no Best match; the collapsed Score section expands to the live per-criterion arithmetic and totals so the ranking can be verified as priorities change.
+- Changing priorities never changes the reader's selection.
+- Priorities are a session-local reading aid: they are not saved into the document, and the agent's Recommended pill never moves.
+- Without JavaScript the matrix is fully readable and none of the priority controls appear.

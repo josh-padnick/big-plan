@@ -1,12 +1,106 @@
-// Tests that scoped component names dispatch only for direct children of the
-// declaring global component while preserving supported Markdown bodies.
+// Tests recursive scoped dispatch, direct-parent name boundaries, and scoped
+// Markdown body policies without coupling the capability to a product component.
 
+import type { Root } from "hast";
+import remarkMdx from "remark-mdx";
+import remarkParse from "remark-parse";
+import remarkRehype from "remark-rehype";
+import { unified } from "unified";
 import { describe, expect, it } from "vitest";
 import {
   compileMarkdown,
   MarkdownDiagnosticsError,
   serializeMarkdown,
 } from "../convert.js";
+import type {
+  ComponentDefinition,
+  ComponentRenderer,
+} from "./component-contract.js";
+import { createDiagnosticCollector } from "./diagnostics.js";
+import type { ComponentDiagnostic } from "./diagnostics.js";
+import {
+  rehypeRenderComponents,
+  remarkValidateComponents,
+} from "./registry.js";
+import type { ComponentRegistry } from "./registry.js";
+
+const renderNestedFixture: ComponentRenderer = ({ scopedChildren }) => {
+  const branch = scopedChildren[0];
+  const leaf = branch?.scopedChildren?.[0];
+  return {
+    type: "element",
+    tagName: "section",
+    properties: {
+      ...(branch?.attributes["id"] === undefined
+        ? {}
+        : { "data-branch-id": branch.attributes["id"] }),
+      ...(leaf?.attributes["label"] === undefined
+        ? {}
+        : { "data-leaf-label": leaf.attributes["label"] }),
+    },
+    children: leaf === undefined ? [] : [...leaf.children],
+  };
+};
+
+const NESTED_COMPONENT_DEFINITION = {
+  render: renderNestedFixture,
+  scopedChildren: {
+    Branch: {
+      kind: "scoped-child",
+      markdownBody: {
+        prohibited: {
+          heading: "Branch bodies cannot contain headings",
+          registeredComponent: "Branch bodies cannot contain typed components",
+        },
+      },
+      scopedChildren: {
+        Leaf: {
+          kind: "scoped-child",
+          markdownBody: {
+            prohibited: {
+              heading: "Leaf bodies cannot contain headings",
+            },
+          },
+        },
+      },
+    },
+  },
+} satisfies ComponentDefinition;
+
+const NESTED_REGISTRY = {
+  NestedFixture: NESTED_COMPONENT_DEFINITION,
+} satisfies ComponentRegistry;
+
+// Runs the production remark and rehype transforms against an isolated
+// synthetic registry so capability tests cannot alter shipped definitions.
+const compileWithRegistry = ({
+  markdown,
+  registry,
+}: {
+  readonly markdown: string;
+  readonly registry: ComponentRegistry;
+}): {
+  readonly root: Root;
+  readonly diagnostics: ReadonlyArray<ComponentDiagnostic>;
+} => {
+  const diagnostics = createDiagnosticCollector();
+  const processor = unified()
+    .use(remarkParse)
+    .use(remarkMdx)
+    .use(remarkValidateComponents, { diagnostics, registry })
+    .use(remarkRehype, {
+      passThrough: [
+        "mdxjsEsm",
+        "mdxFlowExpression",
+        "mdxTextExpression",
+        "mdxJsxFlowElement",
+        "mdxJsxTextElement",
+      ],
+    })
+    .use(rehypeRenderComponents, { diagnostics, registry });
+  const root: Root = processor.runSync(processor.parse(markdown));
+  return { root, diagnostics: diagnostics.diagnostics };
+};
 
 // Extracts typed author diagnostics while preserving renderer defects.
 const diagnosticsFor = (markdown: string) => {
@@ -30,6 +124,114 @@ describe("scoped child dispatch", () => {
         line: 1,
         column: 1,
         message: 'Unknown component "Annotation"',
+      },
+    ]);
+  });
+
+  it("should dispatch a grandchild through its direct scoped parent", () => {
+    const { root, diagnostics } = compileWithRegistry({
+      markdown:
+        '<NestedFixture>\n<Branch id="decision">\n<Leaf label="keep">\nLeaf with **formatting**.\n</Leaf>\n</Branch>\n</NestedFixture>\n',
+      registry: NESTED_REGISTRY,
+    });
+
+    expect(diagnostics).toEqual([]);
+    expect(serializeMarkdown({ root })).toBe(
+      '<section data-branch-id="decision" data-leaf-label="keep"><p>Leaf with <strong>formatting</strong>.</p></section>',
+    );
+  });
+
+  it("should leave an undeclared name unknown within a nested scope", () => {
+    const { diagnostics } = compileWithRegistry({
+      markdown:
+        "<NestedFixture>\n<Branch>\n<Undeclared>\nText.\n</Undeclared>\n</Branch>\n</NestedFixture>\n",
+      registry: NESTED_REGISTRY,
+    });
+
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: 'Unknown component "Undeclared"',
+      },
+    ]);
+  });
+
+  it("should leave a grandchild name unknown when it skips its parent", () => {
+    const { diagnostics } = compileWithRegistry({
+      markdown: "<NestedFixture>\n<Leaf>\nText.\n</Leaf>\n</NestedFixture>\n",
+      registry: NESTED_REGISTRY,
+    });
+
+    expect(diagnostics).toEqual([
+      {
+        line: 2,
+        column: 1,
+        message: 'Unknown component "Leaf"',
+      },
+    ]);
+  });
+
+  it("should enforce a nested scoped child's Markdown body policy", () => {
+    const { diagnostics } = compileWithRegistry({
+      markdown:
+        "<NestedFixture>\n<Branch>\n<Leaf>\n# Nested heading\n</Leaf>\n</Branch>\n</NestedFixture>\n",
+      registry: NESTED_REGISTRY,
+    });
+
+    expect(diagnostics).toEqual([
+      {
+        line: 4,
+        column: 1,
+        message: "Leaf bodies cannot contain headings",
+      },
+    ]);
+  });
+
+  it("should report a prohibited registered component exactly once", () => {
+    const { diagnostics } = compileWithRegistry({
+      markdown:
+        "<NestedFixture>\n<Branch>\n<NestedFixture>\nInner.\n</NestedFixture>\n</Branch>\n</NestedFixture>\n",
+      registry: NESTED_REGISTRY,
+    });
+
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: "Branch bodies cannot contain typed components",
+      },
+    ]);
+  });
+
+  it("should apply a parent body policy only outside its nested scoped children", () => {
+    const { diagnostics } = compileWithRegistry({
+      markdown:
+        "<NestedFixture>\n<Branch>\n# Branch heading\n<Leaf>\nClean leaf.\n</Leaf>\n</Branch>\n</NestedFixture>\n",
+      registry: NESTED_REGISTRY,
+    });
+
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: "Branch bodies cannot contain headings",
+      },
+    ]);
+  });
+
+  it("should reset parent suppression at a declared child boundary", () => {
+    const { diagnostics } = compileWithRegistry({
+      markdown:
+        "<NestedFixture>\n<Branch>\n<Leaf>\n<NestedFixture>\n<Branch>\n# Nested component heading\n</Branch>\n</NestedFixture>\n</Leaf>\n</Branch>\n</NestedFixture>\n",
+      registry: NESTED_REGISTRY,
+    });
+
+    expect(diagnostics).toEqual([
+      {
+        line: 6,
+        column: 1,
+        message: "Branch bodies cannot contain headings",
       },
     ]);
   });

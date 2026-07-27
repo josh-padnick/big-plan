@@ -46,6 +46,16 @@ const browserScripts = [
     exportName: "FILE_TREE_JS",
   },
   {
+    directory: "markdown/components/big-decision",
+    name: "big-decision",
+    exportName: "BIG_DECISION_JS",
+  },
+  {
+    directory: "markdown/components/shared/option-select",
+    name: "option-select",
+    exportName: "OPTION_SELECT_JS",
+  },
+  {
     directory: "markdown/components/http-endpoint",
     name: "http-endpoint",
     exportName: "HTTP_ENDPOINT_JS",
