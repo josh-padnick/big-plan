@@ -5,11 +5,11 @@ import type { Element } from "hast";
 import {
   type ComponentDefinition,
   type ComponentRenderer,
-} from "../component-contract.js";
+} from "../../../../model/component-contract.js";
 import {
   compileCodeDiffComponent,
   type CompiledCodeDiff,
-} from "./compile-code-diff.js";
+} from "../../../../model/compile-code-diff.js";
 import { renderCodeDiffHeader } from "./code-diff-header.js";
 import { renderCodeDiffViews } from "./code-diff-views.js";
 

@@ -53,6 +53,15 @@ export default tseslint.config(
     // A layer: where its files live, which import specifiers reach it, and
     // what it MAY import. Everything else known to the model is banned.
     const LAYERS = {
+      // The framework-free plan model: compiled component models, shared
+      // attribute validation, diagnostics, and pure fence parsers. This is
+      // the contract every render target (and the future review app)
+      // consumes; it imports nothing project-local by construction.
+      model: {
+        files: ["src/model/**/*.ts"],
+        imports: ["**/model/**"],
+        mayImport: [],
+      },
       escapeHtml: {
         files: ["src/render/escape-html.ts"],
         imports: ["**/escape-html.js"],
@@ -80,7 +89,7 @@ export default tseslint.config(
         files: ["src/render/markdown/components/**/*.ts"],
         ignores: ["src/render/markdown/components/shared/**/*.ts"],
         imports: ["**/markdown/components/**"],
-        mayImport: ["icons", "componentShared"],
+        mayImport: ["icons", "componentShared", "model"],
       },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
@@ -93,7 +102,7 @@ export default tseslint.config(
         imports: ["**/markdown/*.js"],
         // Deliberately not escapeHtml: markdown escapes through
         // rehype-stringify, never by hand.
-        mayImport: ["codeBlock", "components"],
+        mayImport: ["codeBlock", "components", "model"],
       },
       shell: {
         files: ["src/render/shell/**/*.ts"],
@@ -122,7 +131,7 @@ export default tseslint.config(
 
     // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
-      ["escapeHtml", "icons"],
+      ["model", "escapeHtml", "icons"],
       ["codeBlock", "page", "componentShared"],
       ["components"],
       ["markdown", "shell"],
@@ -239,6 +248,12 @@ export default tseslint.config(
       })
       .filter((block) => block !== null);
   })(),
+  {
+    // Model tests exercise the full authoring pipeline end to end, so they
+    // may reach up into the markdown layer; production model code cannot.
+    files: ["src/model/*.test.ts"],
+    rules: { "no-restricted-imports": "off" },
+  },
   {
     // Browser-side scripts run in the viewer, not Node.
     files: ["src/**/*.browser.ts"],

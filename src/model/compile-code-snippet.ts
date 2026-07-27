@@ -8,8 +8,8 @@ import {
   type ComponentAttributeSchema,
   type ComponentRenderer,
   type ScopedChild,
-} from "../component-contract.js";
-import type { DiagnosticCollector } from "../diagnostics.js";
+} from "./component-contract.js";
+import type { DiagnosticCollector } from "./diagnostics.js";
 import { splitHighlightedLines } from "./split-highlighted-lines.js";
 import type { HighlightedLine } from "./split-highlighted-lines.js";
 

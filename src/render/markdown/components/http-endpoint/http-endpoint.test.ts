@@ -4,8 +4,8 @@
 import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
 import { compileMarkdown, MarkdownDiagnosticsError } from "../../convert.js";
-import type { ScopedChild } from "../component-contract.js";
-import { createDiagnosticCollector } from "../diagnostics.js";
+import type { ScopedChild } from "../../../../model/component-contract.js";
+import { createDiagnosticCollector } from "../../../../model/diagnostics.js";
 import { renderHttpEndpoint } from "./http-endpoint.js";
 
 const POSITION = {

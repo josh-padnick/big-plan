@@ -18,7 +18,7 @@ import {
   type ComponentDefinition,
   type ComponentRenderer,
   type ScopedChildDefinition,
-} from "../component-contract.js";
+} from "../../../../model/component-contract.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
 import {
   renderCardSection,
@@ -34,7 +34,7 @@ import {
   type CompiledBigDecisionOption,
   type CompiledBigDecisionReversibility,
   type CompiledBigDecisionScore,
-} from "./compile-big-decision.js";
+} from "../../../../model/compile-big-decision.js";
 
 const text = (value: string): Text => ({ type: "text", value });
 

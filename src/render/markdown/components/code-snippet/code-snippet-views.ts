@@ -6,8 +6,8 @@ import { renderAnnotationCard } from "../shared/annotation-card/annotation-card.
 import type {
   CompiledCodeSnippet,
   CompiledCodeSnippetAnnotation,
-} from "./compile-code-snippet.js";
-import type { HighlightedLine } from "./split-highlighted-lines.js";
+} from "../../../../model/compile-code-snippet.js";
+import type { HighlightedLine } from "../../../../model/split-highlighted-lines.js";
 
 const LINE_CLASSES = "code-snippet-line grid min-w-max whitespace-pre";
 

@@ -3,8 +3,8 @@
 
 import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
-import type { ScopedChild } from "../component-contract.js";
-import { createDiagnosticCollector } from "../diagnostics.js";
+import type { ScopedChild } from "../../../../model/component-contract.js";
+import { createDiagnosticCollector } from "../../../../model/diagnostics.js";
 import { renderGrpcMethod } from "./grpc-method.js";
 
 const POSITION = {

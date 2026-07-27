@@ -6,7 +6,7 @@ import {
   validateComponentAttributes,
   type ComponentAttributeSchema,
   type ComponentRenderer,
-} from "../component-contract.js";
+} from "./component-contract.js";
 import { hasTreeChanges } from "./derive-tree-view.js";
 import { parseTreeText } from "./parse-tree-text.js";
 import type { TreeEntry } from "./parse-tree-text.js";

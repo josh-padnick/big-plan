@@ -6,14 +6,14 @@ import {
   type ComponentDefinition,
   type ComponentRenderer,
   type ScopedChildDefinition,
-} from "../component-contract.js";
+} from "../../../../model/component-contract.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
 import {
   compileSmallDecisionSetComponent,
   type CompiledSmallDecision,
   type CompiledSmallDecisionOption,
   type CompiledSmallDecisionSet,
-} from "./compile-small-decision-set.js";
+} from "../../../../model/compile-small-decision-set.js";
 
 const text = (value: string): Text => ({ type: "text", value });
 

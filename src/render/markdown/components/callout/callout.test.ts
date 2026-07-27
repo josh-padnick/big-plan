@@ -3,7 +3,7 @@
 
 import type { ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
-import { createDiagnosticCollector } from "../diagnostics.js";
+import { createDiagnosticCollector } from "../../../../model/diagnostics.js";
 import { CALLOUT_COMPONENT_DEFINITION } from "./callout.js";
 
 const POSITION = {

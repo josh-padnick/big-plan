@@ -15,8 +15,8 @@ import { rehypeDecorateCodeBlocks } from "./code-block/decorate-code-blocks.js";
 import {
   createDiagnosticCollector,
   diagnosticFromParseError,
-} from "./components/diagnostics.js";
-import type { ComponentDiagnostic } from "./components/diagnostics.js";
+} from "../../model/diagnostics.js";
+import type { ComponentDiagnostic } from "../../model/diagnostics.js";
 import {
   rehypeRenderComponents,
   remarkValidateComponents,

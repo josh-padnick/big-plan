@@ -2,11 +2,11 @@
 // assertions shared by the diagnostics and rendering behavior suites.
 
 import type { Element, ElementContent } from "hast";
-import { createDiagnosticCollector } from "../diagnostics.js";
+import { createDiagnosticCollector } from "../../../../model/diagnostics.js";
 import type {
   ComponentAttributeValue,
   ScopedChild,
-} from "../component-contract.js";
+} from "../../../../model/component-contract.js";
 import { renderCodeDiff } from "./code-diff.js";
 
 const POSITION = {

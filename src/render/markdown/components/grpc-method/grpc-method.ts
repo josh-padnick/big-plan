@@ -7,7 +7,7 @@ import {
   type ComponentDefinition,
   type ComponentRenderer,
   type ScopedChildDefinition,
-} from "../component-contract.js";
+} from "../../../../model/component-contract.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
 import {
   renderCardSection,
@@ -23,7 +23,7 @@ import {
   type CompiledGrpcField,
   type CompiledGrpcMethod,
   type GrpcStreamingKind,
-} from "./compile-grpc-method.js";
+} from "../../../../model/compile-grpc-method.js";
 
 const text = (value: string): Text => ({ type: "text", value });
 

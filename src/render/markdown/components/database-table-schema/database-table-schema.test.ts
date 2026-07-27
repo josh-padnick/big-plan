@@ -3,7 +3,7 @@
 
 import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
-import { createDiagnosticCollector } from "../diagnostics.js";
+import { createDiagnosticCollector } from "../../../../model/diagnostics.js";
 import { renderDatabaseTableSchema } from "./database-table-schema.js";
 
 const POSITION = {

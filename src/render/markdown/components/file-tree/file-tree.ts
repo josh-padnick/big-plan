@@ -6,8 +6,11 @@ import type { Element, Text } from "hast";
 import {
   type ComponentDefinition,
   type ComponentRenderer,
-} from "../component-contract.js";
-import { compileFileTree, type CompiledFileTree } from "./compile-file-tree.js";
+} from "../../../../model/component-contract.js";
+import {
+  compileFileTree,
+  type CompiledFileTree,
+} from "../../../../model/compile-file-tree.js";
 import {
   renderTreeFoldControls,
   renderTreeHierarchy,
