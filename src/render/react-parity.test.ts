@@ -23,6 +23,43 @@ Escaping cases: a < b & "quoted" text with an apostrophe's edge.
 </Callout>
 `;
 
+const SNIPPET_PLAN = `# Plan
+
+## The change
+
+<CodeSnippet file="src/cache/read.ts" startLine="18" showLineNumbers>
+
+\`\`\`ts
+const cached = await cache.get(key);
+if (cached !== null && cached.ageSeconds <= 60) {
+  return cached.value;
+}
+return readOrigin(key);
+\`\`\`
+
+<Annotation lines="19-21">
+
+The fresh window serves directly; everything else falls through.
+
+</Annotation>
+
+<Annotation lines="22">
+
+Origin reads stay *unmetered* for now.
+
+</Annotation>
+
+</CodeSnippet>
+
+<CodeSnippet showLineNumbers>
+
+\`\`\`sh
+bun run build
+\`\`\`
+
+</CodeSnippet>
+`;
+
 const UNPORTED_PLAN = `# Plan
 
 ## Question
@@ -52,6 +89,20 @@ describe("react renderer parity", () => {
       renderer: "react",
     });
     expect(react.html).toContain('data-callout="tip"');
+    expect(react.html).toBe(vanilla.html);
+  });
+
+  it("should render a byte-identical document for annotated, numbered, and bare CodeSnippets", () => {
+    const vanilla = renderDocument({
+      markdown: SNIPPET_PLAN,
+      fallbackTitle: "x",
+    });
+    const react = renderDocument({
+      markdown: SNIPPET_PLAN,
+      fallbackTitle: "x",
+      renderer: "react",
+    });
+    expect(react.html).toContain("data-snippet-annotation=");
     expect(react.html).toBe(vanilla.html);
   });
 

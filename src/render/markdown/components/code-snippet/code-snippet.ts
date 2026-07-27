@@ -11,6 +11,7 @@ import {
   compileCodeSnippetComponent,
   type CompiledCodeSnippet,
 } from "../../../../model/compile-code-snippet.js";
+import { renderCodeSnippetStatic } from "../../../../react/code-snippet.js";
 import { renderCodeSnippetHeader } from "./code-snippet-header.js";
 import { renderCodeSnippetRows } from "./code-snippet-views.js";
 
@@ -74,6 +75,8 @@ export const renderCodeSnippet: ComponentRenderer = (input) =>
 export const CODE_SNIPPET_COMPONENT_DEFINITION = {
   render: renderCodeSnippet,
   compile: compileCodeSnippetComponent,
+  renderStatic: (input) =>
+    renderCodeSnippetStatic(compileCodeSnippetComponent(input)),
   scopedChildren: {
     Annotation: {
       kind: "scoped-child",
