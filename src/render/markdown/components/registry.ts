@@ -357,6 +357,7 @@ const renderFlowElement = ({
     registry,
     ids,
     ...(models === undefined ? {} : { models }),
+    ...(renderer === undefined ? {} : { renderer }),
   });
   if (definition === undefined) {
     return undefined;

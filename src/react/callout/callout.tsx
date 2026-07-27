@@ -1,6 +1,6 @@
 // The React port of Callout: renders the compiled model into the same
 // semantic panel the vanilla renderer emits, class-for-class. The visual
-// constants are duplicated from the vanilla renderer on purpose - the two
+// classes are duplicated from the vanilla renderer on purpose - the two
 // coexist only during the port, and the parity test holds them identical
 // until the vanilla renderer is deleted.
 
@@ -29,26 +29,24 @@ const CALLOUT_CONFIGS = {
   danger: { defaultTitle: "Danger", icon: OCTAGON_ALERT_ICON },
 } satisfies Readonly<Record<CalloutType, CalloutConfig>>;
 
-const CALLOUT_CLASSES =
-  // Border colors come from the stylesheet's [data-callout] rules; a
-  // border-edge utility here would win the cascade and flatten the accent.
-  "callout mb-5 rounded-md border border-l-4 px-4 py-3";
-const HEADER_CLASSES =
-  "callout-header mb-2 flex items-center gap-2 font-semibold [&_svg]:size-4 [&_svg]:shrink-0";
-const TITLE_CLASSES = "callout-title text-sm leading-5";
-const BODY_CLASSES = "callout-body text-ink";
-
 const CalloutView = ({ model }: { readonly model: CompiledCallout }) => {
   const config = CALLOUT_CONFIGS[model.type];
   return (
-    <aside data-callout={model.type} className={CALLOUT_CLASSES}>
-      <header className={HEADER_CLASSES}>
+    // Border colors come from the stylesheet's [data-callout] rules; a
+    // border-edge utility here would win the cascade and flatten the accent.
+    <aside
+      data-callout={model.type}
+      className="callout mb-5 rounded-md border border-l-4 px-4 py-3"
+    >
+      <header className="callout-header mb-2 flex items-center gap-2 font-semibold [&_svg]:size-4 [&_svg]:shrink-0">
         {lucideIconToReact({ icon: config.icon, hidden: false })}
-        <span className={TITLE_CLASSES}>
+        <span className="callout-title text-sm leading-5">
           {model.title ?? config.defaultTitle}
         </span>
       </header>
-      <div className={BODY_CLASSES}>{hastContentToReact(model.body)}</div>
+      <div className="callout-body text-ink">
+        {hastContentToReact(model.body)}
+      </div>
     </aside>
   );
 };

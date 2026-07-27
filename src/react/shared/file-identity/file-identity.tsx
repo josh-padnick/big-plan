@@ -5,9 +5,6 @@
 import { FILE_ICON } from "../../../render/icons/lucide/file.js";
 import { lucideIconToReact } from "../../lucide-icon.js";
 
-const IDENTITY_CLASSES =
-  "file-identity flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted";
-
 // The explicit label keeps the accessible name the exact file path,
 // independent of the styled dir/name split below.
 export const FileIdentity = ({ filePath }: { readonly filePath: string }) => {
@@ -17,7 +14,10 @@ export const FileIdentity = ({ filePath }: { readonly filePath: string }) => {
   const fileName =
     lastSlashIndex === -1 ? filePath : filePath.slice(lastSlashIndex + 1);
   return (
-    <span className={IDENTITY_CLASSES} aria-label={filePath}>
+    <span
+      className="file-identity flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted"
+      aria-label={filePath}
+    >
       {lucideIconToReact({ icon: FILE_ICON, hidden: false })}
       <span className="file-identity-path min-w-0 truncate">
         {fileDir === "" ? null : (

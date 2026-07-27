@@ -1,6 +1,6 @@
 // The React port of CodeSnippet: the outer figure, file-identity caption
 // with progressive copy controls, numbered highlighted rows with anchored
-// annotation cards, and the hidden raw-source copy target. Class constants
+// annotation cards, and the hidden raw-source copy target. Class strings
 // are duplicated from the vanilla renderer on purpose; the parity test holds
 // the two byte-identical until the vanilla renderer is deleted.
 
@@ -18,18 +18,6 @@ import { AnnotationCard } from "../shared/annotation-card/annotation-card.js";
 import { CopyFeedback } from "../shared/copy-feedback/copy-feedback.js";
 import { FileIdentity } from "../shared/file-identity/file-identity.js";
 
-const FIGURE_CLASSES =
-  "code-snippet mb-5 min-w-0 rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]";
-const HEADER_CLASSES =
-  "code-snippet-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem]";
-const BUTTON_CLASSES =
-  "code-snippet-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
-const MENU_LIST_CLASSES =
-  "code-snippet-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge p-1";
-const MENU_ITEM_CLASSES =
-  "code-snippet-menu-item flex w-full cursor-pointer items-center gap-[0.45rem] whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-[0.3rem] text-left text-xs text-ink [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted";
-const LINE_CLASSES = "code-snippet-line grid min-w-max whitespace-pre";
-
 const MenuItemButton = ({
   action,
   label,
@@ -39,7 +27,7 @@ const MenuItemButton = ({
 }) => (
   <button
     type="button"
-    className={MENU_ITEM_CLASSES}
+    className="code-snippet-menu-item flex w-full cursor-pointer items-center gap-[0.45rem] whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-[0.3rem] text-left text-xs text-ink [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted"
     role="menuitem"
     tabIndex={-1}
     {...{ [`data-snippet-${action}`]: "" }}
@@ -55,7 +43,7 @@ const ActionsMenu = ({ filePath }: { readonly filePath?: string }) => (
   <span className="code-snippet-menu relative inline-flex" data-snippet-menu="">
     <button
       type="button"
-      className={BUTTON_CLASSES}
+      className="code-snippet-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
       aria-label="More actions"
       aria-haspopup="menu"
       aria-expanded="false"
@@ -69,7 +57,7 @@ const ActionsMenu = ({ filePath }: { readonly filePath?: string }) => (
       {lucideIconToReact({ icon: ELLIPSIS_ICON, hidden: false })}
     </button>
     <div
-      className={MENU_LIST_CLASSES}
+      className="code-snippet-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge p-1"
       role="menu"
       aria-label="Code snippet actions"
       hidden
@@ -84,7 +72,7 @@ const ActionsMenu = ({ filePath }: { readonly filePath?: string }) => (
 );
 
 const SnippetHeader = ({ filePath }: { readonly filePath?: string }) => (
-  <figcaption className={HEADER_CLASSES}>
+  <figcaption className="code-snippet-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem]">
     {filePath === undefined ? (
       <span className="code-snippet-label text-xs font-semibold text-muted">
         Code snippet
@@ -114,7 +102,7 @@ const CodeLine = ({
   readonly annotated: string | undefined;
 }) => (
   <div
-    className={LINE_CLASSES}
+    className="code-snippet-line grid min-w-max whitespace-pre"
     data-snippet-line={lineNumber}
     {...(annotated === undefined
       ? {}
@@ -203,7 +191,7 @@ const CodeSnippetView = ({
   readonly model: CompiledCodeSnippet;
 }) => (
   <figure
-    className={FIGURE_CLASSES}
+    className="code-snippet mb-5 min-w-0 rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]"
     data-code-snippet=""
     {...(model.filePath === undefined
       ? {}
