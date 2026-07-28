@@ -11,6 +11,7 @@ import {
   compileDatabaseTableSchema,
   type CompiledDatabaseTableSchema,
 } from "../../../../model/compile-database-table-schema.js";
+import { renderDatabaseTableSchemaStatic } from "../../../../react/database-table-schema/database-table-schema.js";
 import { renderTableSchemaHeader } from "./database-table-schema-header.js";
 import {
   renderTableSchemaGrid,
@@ -75,6 +76,8 @@ export const renderDatabaseTableSchema: ComponentRenderer = (input) =>
 export const DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION = {
   render: renderDatabaseTableSchema,
   compile: compileDatabaseTableSchema,
+  renderStatic: (input) =>
+    renderDatabaseTableSchemaStatic(compileDatabaseTableSchema(input)),
   scopedChildren: {
     Ddl: {
       kind: "scoped-child",

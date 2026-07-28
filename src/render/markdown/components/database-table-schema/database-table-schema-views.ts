@@ -7,7 +7,7 @@ import type { Element, ElementContent, Text } from "hast";
 import { renderLucideIcon } from "../../../icons/lucide-icon.js";
 import { GRIP_VERTICAL_ICON } from "../../../icons/lucide/grip-vertical.js";
 import type { CompiledDdlSection } from "../../../../model/compile-database-table-schema.js";
-import { indexParticipation } from "./derive-index-participation.js";
+import { indexParticipation } from "../../../../model/derive-index-participation.js";
 import type {
   TableColumn,
   TableIndex,

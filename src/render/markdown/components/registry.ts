@@ -324,11 +324,16 @@ const collectExistingIds = (
   return ids;
 };
 
-// The HTML parser only knows `hidden` as a boolean on HTML elements; on SVG
-// elements it round-trips as the string "", which the serializer would emit
-// as hidden="" where the vanilla renderer emits bare hidden. The two are
-// spec-identical, so normalize to the boolean the vanilla HAST carries.
-const normalizeHiddenAttributes = (nodes: ReadonlyArray<RootContent>): void => {
+// Restores the property conventions the authored HAST uses after an HTML
+// round trip, so later transforms treat React-rendered fragments exactly
+// like vanilla ones. Two parser artifacts are involved: `hidden` on SVG
+// elements round-trips as the string "" (spec-identical to the boolean the
+// vanilla HAST carries, but serialized differently), and data-* attributes
+// come back as camelCase dataset keys where authored HAST and the transforms
+// that inspect it use the dashed form.
+const normalizeReparsedProperties = (
+  nodes: ReadonlyArray<RootContent>,
+): void => {
   for (const node of nodes) {
     if (node.type !== "element") {
       continue;
@@ -336,7 +341,15 @@ const normalizeHiddenAttributes = (nodes: ReadonlyArray<RootContent>): void => {
     if (node.properties["hidden"] === "") {
       node.properties["hidden"] = true;
     }
-    normalizeHiddenAttributes(node.children);
+    const renamed: Element["properties"] = {};
+    for (const key of Object.keys(node.properties)) {
+      const dashed = /^data[A-Z]/.test(key)
+        ? key.replace(/[A-Z]/g, (upper) => `-${upper.toLowerCase()}`)
+        : key;
+      renamed[dashed] = node.properties[key];
+    }
+    node.properties = renamed;
+    normalizeReparsedProperties(node.children);
   }
 };
 
@@ -413,7 +426,7 @@ const renderFlowElement = ({
     // Reparsing routes the React output through the same final serializer as
     // everything else, so escaping and formatting can never diverge by path.
     const fragment = fromHtml(rendered, { fragment: true });
-    normalizeHiddenAttributes(fragment.children);
+    normalizeReparsedProperties(fragment.children);
     const first = fragment.children.find(
       (child): child is Element => child.type === "element",
     );
