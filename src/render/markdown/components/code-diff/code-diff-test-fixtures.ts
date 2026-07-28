@@ -164,7 +164,7 @@ export const renderCodeDiffFixture = ({
   readonly scopedChildren?: ReadonlyArray<ScopedChild>;
 } = {}) => {
   const diagnostics = createDiagnosticCollector();
-  // The React port renders a string; reparsing mirrors the registry's own
+  // The static renderer returns a string; reparsing mirrors the registry's own
   // splice so traversal assertions keep exercising the shipped markup.
   const html = CODE_DIFF_COMPONENT_DEFINITION.renderStatic({
     attributes,

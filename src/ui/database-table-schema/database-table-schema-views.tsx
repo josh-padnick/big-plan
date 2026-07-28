@@ -1,8 +1,5 @@
-// The React port of DatabaseTableSchema's body: the equal-height columns
-// grid whose Constraints cell carries keys, nullability, foreign keys,
-// checks, and numbered INDX references in one separated inline run, plus the
-// numbered Indexes and titled verbatim-DDL bands; markup mirrors the vanilla
-// renderer class-for-class until the vanilla side is deleted.
+// Renders DatabaseTableSchema's equal-height columns grid, constraints,
+// numbered index references, indexes, and titled verbatim-DDL bands.
 
 import type { ReactNode } from "react";
 import type { CompiledDdlSection } from "../../model/compile-database-table-schema.js";
@@ -192,8 +189,8 @@ const ConstraintsCell = ({
     <td className="table-schema-cell-constraints text-[0.8125rem]">
       <span className="table-schema-constraints flex flex-wrap items-center gap-x-[0.45rem] gap-y-[0.2rem]">
         {base.map((item, index) => group(item, index))}
-        {/* display: contents keeps the ref wrapper addressable for tests
-            and scripts while its groups participate in the cell's flex run. */}
+        {/* display: contents keeps the ref wrapper addressable while its
+            groups participate in the cell's flex run. */}
         {fkItems.length === 0 ? null : (
           <span className="contents" data-schema-ref="">
             {fkItems.map((item, index) => group(item, 100 + index))}
@@ -262,8 +259,7 @@ export const TableSchemaGrid = ({
               scope="col"
               className={`table-schema-head table-schema-head-${key} text-[0.625rem] uppercase tracking-wider`}
             >
-              {/* The gripper ships hidden: it advertises a JavaScript-only
-                  drag, so the static document must never show it. */}
+              {/* The gripper ships hidden for the live review application. */}
               {label}
               {lucideIconToReact({ icon: GRIP_VERTICAL_ICON, hidden: true })}
             </th>
@@ -345,18 +341,17 @@ const IndexEntry = ({
   </li>
 );
 
-// One titled verbatim-DDL band: the label mirrors the Indexes band so the tab
-// enhancement can treat every section uniformly, and the fence children pass
-// through untouched for the downstream highlight and copy transforms.
+// One titled verbatim-DDL band: the label mirrors the Indexes band so the live
+// application can treat every section uniformly, and the fence children pass
+// through untouched for downstream highlighting.
 const DdlSection = ({ section }: { readonly section: CompiledDdlSection }) => (
   <section
     className="table-schema-section border-t border-edge pt-[0.55rem]"
     data-schema-section="ddl"
     data-schema-ddl-title={section.title}
   >
-    {/* The badge marks the band as verbatim DDL wherever its label shows:
-        in the stacked no-JavaScript reading here, and cloned into the tab
-        by the enhancement. */}
+    {/* The badge marks the band as verbatim DDL in both the inert stack and
+        the live application's tab. */}
     <p
       className={`${SECTION_LABEL_CLASSES} px-[0.75rem] mb-[0.1rem] flex items-center gap-1.5`}
     >

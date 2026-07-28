@@ -1,7 +1,5 @@
-// The React port of FileTree: the outer figure, optional title header with
-// fold controls, and the plain semantic hierarchy through the shared tree
-// port; markup mirrors the vanilla renderer class-for-class until the
-// vanilla side is deleted.
+// Renders FileTree's outer figure, optional title header, and semantic
+// hierarchy through the shared tree component.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CompiledFileTree } from "../../model/compile-file-tree.js";
@@ -34,6 +32,6 @@ const FileTreeView = ({ model }: { readonly model: CompiledFileTree }) => (
   </figure>
 );
 
-/** Renders one compiled FileTree to static HTML via the React port. */
+/** Renders one compiled FileTree to static HTML. */
 export const renderFileTreeStatic = (model: CompiledFileTree): string =>
   renderToStaticMarkup(<FileTreeView model={model} />);

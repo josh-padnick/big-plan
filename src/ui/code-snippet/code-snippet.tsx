@@ -1,8 +1,5 @@
-// The React port of CodeSnippet: the outer figure, file-identity caption
-// with progressive copy controls, numbered highlighted rows with anchored
-// annotation cards, and the hidden raw-source copy target. Class strings
-// are duplicated from the vanilla renderer on purpose; the parity test holds
-// the two byte-identical until the vanilla renderer is deleted.
+// Renders CodeSnippet's file identity, numbered highlighted rows, anchored
+// annotation cards, and hidden live-review source and controls.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import type {
@@ -37,8 +34,8 @@ const MenuItemButton = ({
   </button>
 );
 
-// Actions remain unavailable without JavaScript, while the complete code and
-// every annotation stay readable in the server-rendered figure.
+// Actions remain reserved for the live review application, while the complete
+// code and every annotation stay readable in the server-rendered figure.
 const ActionsMenu = ({ filePath }: { readonly filePath?: string }) => (
   <span className="code-snippet-menu relative inline-flex" data-snippet-menu="">
     <button
@@ -218,6 +215,6 @@ const CodeSnippetView = ({
   </figure>
 );
 
-/** Renders one compiled CodeSnippet to static HTML via the React port. */
+/** Renders one compiled CodeSnippet to static HTML. */
 export const renderCodeSnippetStatic = (model: CompiledCodeSnippet): string =>
   renderToStaticMarkup(<CodeSnippetView model={model} />);

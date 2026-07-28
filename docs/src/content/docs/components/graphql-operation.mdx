@@ -28,7 +28,7 @@ Use `GraphqlOperation` when a plan proposes or changes a query, mutation, or sub
 
 ## Use cases
 
-- Propose a new mutation with its input, payload convention, and a copy-runnable example operation
+- Propose a new mutation with its input, payload convention, and an executable example operation
 - Enumerate a planned schema surface compactly, since a header-only operation with just kind and name is valid
 
 ## Usage
@@ -158,7 +158,7 @@ At most one `Returns` names the required non-empty return `type` and carries a m
 
 `Operation` and `Variables` appear at most once; `Response` repeats with an optional `label` so a success example can sit beside the validation error that teaches how `userErrors` behaves.
 Each takes exactly one fence of its required language - an executable `graphql` operation, `json` variables, and `json` responses - and all render together under one labeled Example section.
-`Variables` without an `Operation` beside it is rejected, and every fence flows through the standard highlighting and copy pipeline.
+`Variables` without an `Operation` beside it is rejected, and every fence flows through the standard highlighting pipeline.
 
 Component-specific violations report positional diagnostics, including a wrong-language or missing fence, duplicate arguments, repeated single-instance children, a `deprecationReason` without `deprecated`, and headings, footnotes, or nested components inside scoped-child bodies.
 

@@ -3,7 +3,7 @@ Element-scoped styles for the plain markdown elements the transform emits.
 Markdown-generated markup carries no class attributes for utilities to
 target, so the reading column is styled with element selectors scoped to
 <article>, using the same design tokens as the shell's utility classes.
-Enhanced markup with emitted classes (code-block controls, syntax tokens)
+Enhanced markup with emitted classes (syntax tokens and typed components)
 is styled by its owning module, not here.
 */
 

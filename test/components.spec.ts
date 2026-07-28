@@ -1,6 +1,5 @@
-// Browser tests of the built-in components' reader interactions, responsive
-// layouts, clipboard behavior, full-screen dialogs, and no-JavaScript fallbacks.
-// Render-health failures are enforced by fixtures.
+// Browser tests of the built-in components' inert content and responsive
+// layouts. Render-health failures are enforced by fixtures.
 
 import { expect, test } from "./fixtures";
 

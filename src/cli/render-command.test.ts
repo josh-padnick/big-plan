@@ -34,6 +34,35 @@ describe("renderCommand validation", () => {
     });
   });
 
+  it.each(["--renderer", "--renderer=react", "--unknown"])(
+    "should reject the unknown option %s before writing output",
+    async (option) => {
+      const inputPath = join(tempDirectory, "plan.mdx");
+      await writeFile(inputPath, "# Plan\n", "utf8");
+
+      await expect(
+        renderCommand([inputPath, option, "react"]),
+      ).rejects.toMatchObject({
+        code: "VALIDATION_ERROR",
+        message: `Unknown option "${option}"`,
+        suggestions: ["Usage: big-plan render <input.mdx> [output.html]"],
+      });
+    },
+  );
+
+  it("should reject excess positional arguments", async () => {
+    const inputPath = join(tempDirectory, "plan.mdx");
+    await writeFile(inputPath, "# Plan\n", "utf8");
+
+    await expect(
+      renderCommand([inputPath, "plan.html", "extra"]),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "Too many arguments",
+      suggestions: ["Usage: big-plan render <input.mdx> [output.html]"],
+    });
+  });
+
   it("should list every positional diagnostic when the MDX is invalid", async () => {
     const inputPath = join(tempDirectory, "invalid.mdx");
     await writeFile(

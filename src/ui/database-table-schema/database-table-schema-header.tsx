@@ -1,7 +1,5 @@
-// The React port of DatabaseTableSchema's caption: the table identity with
-// its muted schema prefix, table note, transient feedback, and progressively
-// enhanced columns, actions, and full-screen controls; markup mirrors the
-// vanilla renderer class-for-class until the vanilla side is deleted.
+// Renders DatabaseTableSchema's caption: table identity, table note, and
+// hidden controls reserved for the live review application.
 
 import { CHECK_ICON } from "../../render/icons/lucide/check.js";
 import { COLUMNS_3_COG_ICON } from "../../render/icons/lucide/columns-3-cog.js";
@@ -74,8 +72,8 @@ const MenuItemButton = ({
   </button>
 );
 
-// Actions remain unavailable without JavaScript, while the complete grid and
-// every section stay readable in the server-rendered figure.
+// Actions remain reserved for the live review application, while the complete
+// grid and every section stay readable in the server-rendered figure.
 const ActionsMenu = () => (
   <span className="table-schema-menu relative inline-flex" data-schema-menu="">
     <button
@@ -118,8 +116,8 @@ const TOGGLEABLE_COLUMNS: ReadonlyArray<{
   { key: "comment", label: "Comment" },
 ];
 
-// Checkbox items ship checked server-side; the script owns the live state and
-// keeps the menu open across toggles so several columns flip in one visit.
+// Checkbox items ship checked server-side; the live application owns their
+// state and keeps the menu open across consecutive toggles.
 const ColumnsMenu = () => (
   <span className="table-schema-menu relative inline-flex" data-schema-menu="">
     <button
@@ -175,8 +173,8 @@ const ColumnsMenu = () => (
   </span>
 );
 
-// Progressive full-screen control; both icons ship server-side so the
-// browser script only toggles visibility.
+// Both full-screen icons ship server-side so the live application only
+// toggles visibility.
 const ExpandButton = () => (
   <button
     type="button"

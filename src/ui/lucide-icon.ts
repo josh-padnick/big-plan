@@ -1,6 +1,5 @@
 // Renders Lucide icons inside React components by reusing the icons layer's
-// HAST construction, so the React target inlines the exact SVG markup the
-// vanilla renderer ships instead of maintaining a parallel icon pipeline.
+// HAST construction instead of maintaining a parallel icon pipeline.
 
 import type { ReactNode } from "react";
 import type { LucideIcon } from "../render/icons/lucide-icon.js";

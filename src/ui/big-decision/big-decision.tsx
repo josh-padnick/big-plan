@@ -1,9 +1,6 @@
-// The React port of BigDecision: one weighty decision as a standalone
-// comparison card - options as columns, criteria as rows, terse tone-scored
-// verdict cells with inline info disclosures, the decided outcome strip, and
-// the rated reversibility section; markup mirrors the vanilla renderer
-// class-for-class until the vanilla side is deleted. Every id flows from the
-// compiled model, so anchors match the browser scripts' targets.
+// Renders one weighty decision as a standalone comparison card: options,
+// criteria, verdict disclosures, the decided outcome, and reversibility.
+// Every id flows from the compiled model for stable anchors and hydration.
 
 import type { ElementContent } from "hast";
 import type { ReactNode } from "react";
@@ -43,8 +40,8 @@ const TONE_ICONS = {
   neutral: MINUS_ICON,
 } satisfies Record<BigDecisionTone, typeof CHECK_ICON>;
 
-// Full screen stays unavailable without JavaScript; the in-column matrix
-// scrolls horizontally on its own, so the static document loses nothing.
+// Full screen stays reserved for the live review application; the in-column
+// matrix scrolls horizontally, so the inert document loses nothing.
 // Matches the file-tree control look so figure chrome reads as one family.
 const ExpandButton = () => (
   <button
@@ -111,7 +108,7 @@ const OptionMarker = ({ chosen }: { readonly chosen: boolean }) => (
   </span>
 );
 
-// One option header card: the selectable identity a reader clicks, whether it
+// One option header card: the option identity a reader evaluates, whether it
 // sits at the top of a matrix column or in the no-criteria stacked fallback.
 const OptionHead = ({
   option,
@@ -453,6 +450,6 @@ const BigDecisionView = ({
   </figure>
 );
 
-/** Renders one compiled BigDecision to static HTML via the React port. */
+/** Renders one compiled BigDecision to static HTML. */
 export const renderBigDecisionStatic = (model: CompiledBigDecision): string =>
   renderToStaticMarkup(<BigDecisionView model={model} />);

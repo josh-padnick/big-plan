@@ -9,7 +9,7 @@ import { fromHtml } from "hast-util-from-html";
 import { normalizeReparsedProperties } from "../registry.js";
 import { CODE_SNIPPET_COMPONENT_DEFINITION } from "./code-snippet.js";
 
-// The React port renders a string; reparsing mirrors the registry's own
+// The static renderer returns a string; reparsing mirrors the registry's own
 // splice so traversal assertions keep exercising the shipped markup.
 const parseRenderedElement = (html: string): Element => {
   const fragment = fromHtml(html, { fragment: true });
@@ -184,7 +184,7 @@ describe("renderCodeSnippet attributes", () => {
         line: 3,
         column: 1,
         message:
-          "A bare CodeSnippet duplicates a plain markdown fence, which already provides highlighting and a copy control",
+          "A bare CodeSnippet duplicates a plain markdown fence, which already provides syntax highlighting",
       },
     ]);
   });

@@ -1,7 +1,5 @@
-// The React port of FileTreeDiff: the server-rendered combined change tree
-// plus the derived before/after hierarchy panes the browser view control
-// reveals; markup mirrors the vanilla renderer class-for-class until the
-// vanilla side is deleted.
+// Renders FileTreeDiff's combined change tree plus the derived before/after
+// hierarchy panes reserved for the live review application.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CompiledFileTreeDiff } from "../../model/compile-file-tree.js";
@@ -77,8 +75,8 @@ const ViewToggleGroup = () => (
   </span>
 );
 
-// Full screen stays unavailable without JavaScript, like the view toggle; the
-// server-rendered combined tree needs neither.
+// Full screen stays reserved for the live review application, like the view
+// toggle; the server-rendered combined tree needs neither.
 const ExpandButton = () => (
   <button
     type="button"
@@ -155,7 +153,7 @@ const CombinedView = ({
 // The switch shape and data-slot/data-state contract come from the shadcn/ui
 // registry Switch (sm size), translated to static markup with this palette:
 // primary -> accent, input -> edge, background -> paper. State transitions are
-// driven by the component's browser script instead of Radix.
+// driven by the live review application instead of Radix.
 const SWITCH_CLASSES =
   "file-tree-changes-toggle inline-flex h-3.5 w-6 shrink-0 cursor-pointer items-center rounded-full border border-transparent shadow-xs transition-all outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 data-[state=checked]:bg-accent data-[state=unchecked]:bg-edge";
 const SWITCH_THUMB_CLASSES =
@@ -296,6 +294,6 @@ const FileTreeDiffView = ({
   </figure>
 );
 
-/** Renders one compiled FileTreeDiff to static HTML via the React port. */
+/** Renders one compiled FileTreeDiff to static HTML. */
 export const renderFileTreeDiffStatic = (model: CompiledFileTreeDiff): string =>
   renderToStaticMarkup(<FileTreeDiffView model={model} />);

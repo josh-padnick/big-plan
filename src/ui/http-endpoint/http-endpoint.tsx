@@ -1,7 +1,5 @@
-// The React port of HttpEndpoint: the server-expanded API review card -
-// method/path header with auth, description, parameter location sections,
-// request body with example, and status-coded responses; markup mirrors the
-// vanilla renderer class-for-class until the vanilla side is deleted.
+// Renders an expanded HttpEndpoint review card with auth, description,
+// location-grouped parameters, request examples, and status-coded responses.
 
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -274,6 +272,6 @@ const HttpEndpointView = ({
   </figure>
 );
 
-/** Renders one compiled HttpEndpoint to static HTML via the React port. */
+/** Renders one compiled HttpEndpoint to static HTML. */
 export const renderHttpEndpointStatic = (model: CompiledHttpEndpoint): string =>
   renderToStaticMarkup(<HttpEndpointView model={model} />);

@@ -1,6 +1,5 @@
 // Bridges compiled plan models to React: converts the HAST subtrees the
-// model layer carries (prose bodies, icon elements) into React nodes, so
-// React ports render the same markup the vanilla renderer emits without
+// model layer carries (prose bodies, icon elements) into React nodes without
 // reimplementing prose conversion.
 
 import type { ElementContent, Root } from "hast";

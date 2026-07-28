@@ -1,8 +1,6 @@
-// The React port of the annotation card shared by every component that
-// anchors reviewer notes to lines: one aside with the message-square glyph, a
-// line-range badge, and a markdown body. Callers keep their own anchoring and
-// pass hook classes and data attributes through; the data-attribute surface
-// is deliberately narrower than HAST Properties so ports stay honest.
+// Owns the annotation card shared by every component that anchors reviewer
+// notes to lines. Callers keep their anchoring and pass hook classes and data
+// attributes through a deliberately narrow interface.
 
 import type { ElementContent } from "hast";
 import { MESSAGE_SQUARE_ICON } from "../../../render/icons/lucide/message-square.js";

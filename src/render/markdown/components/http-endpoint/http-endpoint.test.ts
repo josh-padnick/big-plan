@@ -10,7 +10,7 @@ import { fromHtml } from "hast-util-from-html";
 import { normalizeReparsedProperties } from "../registry.js";
 import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "./http-endpoint.js";
 
-// The React port renders a string; reparsing mirrors the registry's own
+// The static renderer returns a string; reparsing mirrors the registry's own
 // splice so traversal assertions keep exercising the shipped markup.
 const parseRenderedElement = (html: string): Element => {
   const fragment = fromHtml(html, { fragment: true });

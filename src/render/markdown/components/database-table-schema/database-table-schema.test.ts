@@ -8,7 +8,7 @@ import { fromHtml } from "hast-util-from-html";
 import { normalizeReparsedProperties } from "../registry.js";
 import { DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION } from "./database-table-schema.js";
 
-// The React port renders a string; reparsing mirrors the registry's own
+// The static renderer returns a string; reparsing mirrors the registry's own
 // splice so traversal assertions keep exercising the shipped markup.
 const parseRenderedElement = (html: string): Element => {
   const fragment = fromHtml(html, { fragment: true });
@@ -574,7 +574,7 @@ describe("renderDatabaseTableSchema rendering", () => {
     ]);
   });
 
-  it("should carry the raw fence source for the copy control", () => {
+  it("should carry the raw fence source for the live review application", () => {
     const { element } = render();
     const textarea = queryAll(
       element,

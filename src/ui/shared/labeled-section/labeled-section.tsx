@@ -1,8 +1,4 @@
-// The React port of the labeled card-section grammar shared by the protocol
-// review cards: the uppercase section label, the top-bordered section
-// wrapper, the stacked definition entry pairing one identity row with its
-// markdown body, and the quiet example sublabel; class-for-class with the
-// vanilla shared piece.
+// Owns the labeled card-section grammar shared by protocol review cards.
 
 import type { ElementContent } from "hast";
 import type { ReactNode } from "react";

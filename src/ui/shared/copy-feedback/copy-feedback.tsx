@@ -1,6 +1,4 @@
-// The React port of the transient copy-feedback slot shared by figure
-// headers; class-for-class with the vanilla shared piece, held identical by
-// the parity tests until the vanilla renderer is deleted.
+// Owns the hidden copy-feedback slot reserved for live review figure headers.
 
 /** Renders one hidden feedback slot keyed by its component data attribute. */
 export const CopyFeedback = ({

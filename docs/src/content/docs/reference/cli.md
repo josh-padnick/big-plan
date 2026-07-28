@@ -9,7 +9,7 @@ The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors,
 ## Commands
 
 ```text
-big-plan render <input.mdx> [output.html] [--renderer vanilla|react]
+big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
 ```
 
@@ -19,7 +19,7 @@ The output argument is optional for both commands.
 The equivalent package runner forms are:
 
 ```sh
-npx big-plan render <input.mdx> [output.html] [--renderer vanilla|react]
+npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
 ```
 
@@ -75,13 +75,11 @@ After writing the file, each command returns a structured result for `axi-sdk-js
 If the input argument is missing, either command raises a structured `VALIDATION_ERROR` with the message `Missing input MDX file` and its command-specific usage line.
 
 ```text
-Usage: big-plan render <input.mdx> [output.html] [--renderer vanilla|react]
+Usage: big-plan render <input.mdx> [output.html]
 Usage: big-plan compile <input.mdx> [output.json]
 ```
 
-If `--renderer` has no value, `render` raises a structured `VALIDATION_ERROR` with the message `Missing value for --renderer`.
-If its value is not `vanilla` or `react`, `render` instead reports `Unknown renderer "<value>" - expected vanilla or react`.
-Both errors include the `render` usage line, and no output file is written.
+Unknown options and excess positional arguments raise a structured `VALIDATION_ERROR`, include the command's usage line, and write no output.
 
 If the input cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
 The read error covers any failure to read the input file.

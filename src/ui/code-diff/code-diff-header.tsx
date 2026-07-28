@@ -1,6 +1,5 @@
-// The React port of CodeDiff's caption: file identity, line-count summary,
-// view selector, copy actions, and full-screen control; markup mirrors the
-// vanilla renderer class-for-class until the vanilla side is deleted.
+// Renders CodeDiff's caption: file identity, line-count summary, and hidden
+// controls reserved for the live review application.
 
 import { COLUMNS_2_ICON } from "../../render/icons/lucide/columns-2.js";
 import { COPY_ICON } from "../../render/icons/lucide/copy.js";
@@ -130,8 +129,8 @@ const ViewToggleButton = ({
   </button>
 );
 
-// Opens the component alone in a near-full-screen modal dialog; the browser
-// script moves the figure rather than cloning it, so state survives.
+// The live review application can reveal this control and move the figure
+// into its full-screen dialog without cloning it.
 const ExpandControlButton = () => (
   <button
     type="button"

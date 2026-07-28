@@ -426,7 +426,7 @@ const renderFlowElement = ({
     return first;
   }
   diagnostics.add({
-    message: `Internal error: React port of "${name ?? "<fragment>"}" produced no element`,
+    message: `Internal error: static renderer for "${name ?? "<fragment>"}" produced no element`,
     position: node.position,
   });
   return undefined;

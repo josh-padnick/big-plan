@@ -1,8 +1,7 @@
 // Owns the review shell: the reading surface a rendered document lives in -
-// the branding bar, layout grid, theme control, responsive desktop and mobile
-// navigation, code-block and component controls, and content region. It
-// produces body-level markup plus the styles and progressive-enhancement
-// styles the markup needs, as data;
+// the branding bar, layout grid, responsive desktop and mobile navigation,
+// and content region. It produces body-level markup plus the styles the
+// markup needs, as data;
 // packaging into a complete document is page.ts's job. Authored markup is
 // styled with Tailwind utilities; the compiled stylesheet (including the
 // element-scoped styles from markdown/prose.css) comes from the generated
@@ -23,7 +22,6 @@ export type NavEntry = {
 export type ShellResult = {
   readonly html: string;
   readonly styles: string;
-  readonly scripts: ReadonlyArray<string>;
   readonly bodyClassName: string;
 };
 
@@ -94,7 +92,7 @@ ${items}
 </nav>`;
 };
 
-// Builds the sticky, progressively enhanced mobile TOC.
+// Builds the sticky mobile TOC as a native disclosure.
 const renderMobileToc = ({
   nav,
   overviewId,
@@ -122,9 +120,8 @@ ${items}
 
 /**
  * Wraps rendered content in the review shell: the layout grid and branding
- * bar, responsive navigation when nav entries exist, theme control, and
- * code-block and component controls. Returns markup plus the styles and
- * progressive-enhancement scripts the caller packages into a page.
+ * bar, responsive navigation when nav entries exist, and content region.
+ * Returns markup plus the styles the caller packages into a page.
  */
 export const renderShell = ({
   nav,
@@ -157,7 +154,6 @@ ${contentHtml}
   return {
     html,
     styles: GLOBAL_CSS,
-    scripts: [],
     bodyClassName: BODY_CLASSES,
   };
 };

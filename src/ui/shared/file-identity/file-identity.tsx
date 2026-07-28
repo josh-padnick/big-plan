@@ -1,6 +1,4 @@
-// The React port of the file-identity caption shared by file-associated
-// components: a file icon, a muted directory prefix, and an emphasized file
-// name; class-for-class with the vanilla shared piece.
+// Owns the file-identity caption shared by file-associated components.
 
 import { FILE_ICON } from "../../../render/icons/lucide/file.js";
 import { lucideIconToReact } from "../../lucide-icon.js";

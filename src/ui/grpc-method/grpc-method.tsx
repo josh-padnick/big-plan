@@ -1,7 +1,5 @@
-// The React port of GrpcMethod: the always-expanded RPC review card headed
-// by the authentic proto signature, with message-typed field sections, gRPC
-// status codes, grouped examples, and proto source; markup mirrors the
-// vanilla renderer class-for-class until the vanilla side is deleted.
+// Renders an always-expanded GrpcMethod review card with the authentic proto
+// signature, message-typed fields, status codes, examples, and proto source.
 
 import type { ElementContent } from "hast";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -216,6 +214,6 @@ const GrpcMethodView = ({ model }: { readonly model: CompiledGrpcMethod }) => (
   </figure>
 );
 
-/** Renders one compiled GrpcMethod to static HTML via the React port. */
+/** Renders one compiled GrpcMethod to static HTML. */
 export const renderGrpcMethodStatic = (model: CompiledGrpcMethod): string =>
   renderToStaticMarkup(<GrpcMethodView model={model} />);

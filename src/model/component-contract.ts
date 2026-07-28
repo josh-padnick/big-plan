@@ -118,10 +118,7 @@ export type ComponentModelCompiler = (
   input: Parameters<ComponentRenderer>[0],
 ) => unknown;
 
-/**
- * Renders one component instance to a static HTML string. React ports
- * implement this; the contract stays framework-free by speaking in strings.
- */
+/** Renders one component instance to a static HTML string. */
 export type ComponentStaticRenderer = (
   input: Parameters<ComponentRenderer>[0],
 ) => string;

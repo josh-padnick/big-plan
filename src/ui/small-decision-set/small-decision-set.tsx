@@ -1,8 +1,6 @@
-// The React port of SmallDecisionSet: the compact numbered question list a
-// plan poses to its reviewer, with option markers awaiting the live layer;
-// markup mirrors the vanilla renderer class-for-class until the vanilla side
-// is deleted. Every id comes from the compiled model, so the React path
-// carries the same anchors the browser script and section links target.
+// Renders the compact numbered question list a plan poses to its reviewer,
+// with decorative option markers awaiting the live review application.
+// Every id comes from the compiled model for stable anchors and hydration.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import type {
@@ -132,7 +130,7 @@ const SmallDecisionSetView = ({
   </figure>
 );
 
-/** Renders one compiled SmallDecisionSet to static HTML via the React port. */
+/** Renders one compiled SmallDecisionSet to static HTML. */
 export const renderSmallDecisionSetStatic = (
   model: CompiledSmallDecisionSet,
 ): string => renderToStaticMarkup(<SmallDecisionSetView model={model} />);

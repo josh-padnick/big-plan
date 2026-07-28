@@ -1,7 +1,5 @@
-// The React port of the semantic nested-list hierarchy shared by FileTree
-// and every FileTreeDiff view, parameterized by displayed names and change
-// markers; markup mirrors the vanilla tree renderer class-for-class, held
-// identical by the parity tests until the vanilla renderer is deleted.
+// Owns the semantic nested-list hierarchy shared by FileTree and every
+// FileTreeDiff view, parameterized by displayed names and change markers.
 
 import type { ReactNode } from "react";
 import { countTreeChanges } from "../../../model/derive-tree-view.js";
@@ -101,10 +99,10 @@ const DirectorySummary = ({
   );
 };
 
-// A server-rendered but hidden control; the browser script reveals it, so
-// documents without JavaScript stay fully expanded with no dead affordance.
+// A server-rendered but hidden control; the live review application reveals
+// it, so inert documents stay fully expanded with no dead affordance.
 // Rows without a toggle (files and childless directories) carry an equally
-// hidden spacer revealed by the same script, so revealing the chevrons never
+// hidden spacer revealed at the same time, so revealing the chevrons never
 // pushes foldable rows a full chevron out of column with their siblings. The
 // spacer is deliberately 6px narrower than the chevron: a slight outdent
 // keeps files from reading as over-indented under their folder rows.
@@ -209,10 +207,9 @@ const NoteElement = ({
       </span>
     );
   }
-  // The title attribute is the no-JavaScript fallback; the browser script
-  // upgrades it to an instant tooltip on hover, focus, or tap. The visually
-  // hidden text keeps the note in the accessibility tree and in copied
-  // selections.
+  // The title attribute gives inert exports a native hint; the live review
+  // application can upgrade it. The visually hidden text keeps the note in
+  // the accessibility tree and in copied selections.
   return (
     <button
       type="button"

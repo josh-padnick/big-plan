@@ -37,7 +37,6 @@ export const renderDocument = ({
   const html = renderPage({
     title: resolvedTitle,
     styles: shell.styles,
-    scripts: shell.scripts,
     bodyClassName: shell.bodyClassName,
     bodyHtml: shell.html,
   });

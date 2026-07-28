@@ -11,7 +11,6 @@ import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
-import { rehypeDecorateCodeBlocks } from "./code-block/decorate-code-blocks.js";
 import {
   createDiagnosticCollector,
   diagnosticFromParseError,
@@ -209,7 +208,6 @@ export const compileMarkdown = ({
     // Detection stays opt-in through the fence language: undeclared and
     // unknown languages remain readable without guessed tokenization.
     .use(rehypeHighlight)
-    .use(rehypeDecorateCodeBlocks)
     .use(rehypeWrapTables);
   // Only parsing reflects author mistakes; a transform that throws is a
   // renderer defect and must surface as an internal error, not as a

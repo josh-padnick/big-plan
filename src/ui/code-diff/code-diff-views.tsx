@@ -1,7 +1,5 @@
-// The React port of CodeDiff's unified and split views: line semantics,
-// gutters, annotation cards, side-localized spacers, and hunk presentation;
-// markup mirrors the vanilla renderer class-for-class until the vanilla side
-// is deleted.
+// Renders CodeDiff's unified and split views with line semantics, gutters,
+// annotation cards, side-localized spacers, and hunk presentation.
 
 import type { ReactNode } from "react";
 import type {
@@ -33,8 +31,8 @@ const annotationLineLabel = (annotation: AnchoredAnnotation): string =>
     ? `Line ${annotation.lines}`
     : `Lines ${annotation.lines}`;
 
-// Unlike the vanilla renderer, no clone is needed: downstream Markdown
-// transforms decorate the reparsed HAST, never the model's subtrees.
+// No clone is needed: downstream Markdown transforms decorate the reparsed
+// HAST, never the model's subtrees.
 const annotationCard = (annotation: AnchoredAnnotation): ReactNode => (
   <AnnotationCard
     label={annotationLineLabel(annotation)}
@@ -364,7 +362,7 @@ const DiffView = ({
   </div>
 );
 
-/** Renders both static diff views so JavaScript only selects between them. */
+/** Renders both static diff views for the live application to select. */
 export const CodeDiffViews = ({
   diff,
   showLineNumbers,

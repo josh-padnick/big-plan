@@ -1,7 +1,7 @@
-// Implements `big-plan render <input.mdx> [output.html] [--renderer
-// vanilla|react]`: the I/O boundary around the pure renderer, owning argument
-// validation, file reads/writes, and the structured result runAxiCli() prints.
-// Content decisions, including the document title, belong to the renderer.
+// Implements `big-plan render <input.mdx> [output.html]`: the I/O boundary
+// around the pure renderer, owning argument validation, file reads/writes,
+// and the structured result runAxiCli() prints. Content decisions, including
+// the document title, belong to the renderer.
 
 import { mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
@@ -13,6 +13,21 @@ import {
 import { createOutputPathGuard } from "./output-path-guard.js";
 
 const USAGE = "Usage: big-plan render <input.mdx> [output.html]";
+
+// Validates the command's option-free, two-position argument contract.
+const validateArgs = (args: ReadonlyArray<string>): void => {
+  const unknownOption = args.find((arg) => arg.startsWith("-") && arg !== "-");
+  if (unknownOption !== undefined) {
+    throw new AxiError(
+      `Unknown option "${unknownOption}"`,
+      "VALIDATION_ERROR",
+      [USAGE],
+    );
+  }
+  if (args.length > 2) {
+    throw new AxiError("Too many arguments", "VALIDATION_ERROR", [USAGE]);
+  }
+};
 
 // Defaults the output to sit next to the input: <input>.html.
 const defaultOutputPath = (inputPath: string): string => {
@@ -27,6 +42,7 @@ const defaultOutputPath = (inputPath: string): string => {
 export const renderCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
+  validateArgs(args);
   const inputArg = args[0];
   if (inputArg === undefined) {
     throw new AxiError("Missing input MDX file", "VALIDATION_ERROR", [USAGE]);

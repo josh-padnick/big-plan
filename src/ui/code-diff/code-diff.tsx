@@ -1,6 +1,5 @@
-// The React port of CodeDiff: the outer figure around the caption, both
-// static views, and the hidden raw-source copy target; markup mirrors the
-// vanilla renderer class-for-class until the vanilla side is deleted.
+// Renders a compiled CodeDiff as a static figure with both review views and
+// the hidden source consumed by the live review application.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CompiledCodeDiff } from "../../model/compile-code-diff.js";
@@ -30,6 +29,6 @@ const CodeDiffView = ({ model }: { readonly model: CompiledCodeDiff }) => (
   </figure>
 );
 
-/** Renders one compiled CodeDiff to static HTML via the React port. */
+/** Renders one compiled CodeDiff to static HTML. */
 export const renderCodeDiffStatic = (model: CompiledCodeDiff): string =>
   renderToStaticMarkup(<CodeDiffView model={model} />);

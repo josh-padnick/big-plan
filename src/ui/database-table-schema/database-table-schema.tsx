@@ -1,7 +1,5 @@
-// The React port of DatabaseTableSchema: the outer figure around the header,
-// columns grid, labeled sections, and hidden raw-source copy target; markup
-// mirrors the vanilla renderer class-for-class until the vanilla side is
-// deleted.
+// Renders DatabaseTableSchema's outer figure, columns grid, labeled sections,
+// and hidden source consumed by the live review application.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CompiledDatabaseTableSchema } from "../../model/compile-database-table-schema.js";
@@ -44,7 +42,7 @@ const TableSchemaView = ({
   </figure>
 );
 
-/** Renders one compiled DatabaseTableSchema to static HTML via the React port. */
+/** Renders one compiled DatabaseTableSchema to static HTML. */
 export const renderDatabaseTableSchemaStatic = (
   model: CompiledDatabaseTableSchema,
 ): string => renderToStaticMarkup(<TableSchemaView model={model} />);

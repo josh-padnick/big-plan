@@ -1,7 +1,5 @@
-// The React port of GraphqlOperation: the always-expanded operation review
-// card - kind-badged header, arguments and returns with one-level field
-// expansions, and the grouped executable example; markup mirrors the vanilla
-// renderer class-for-class until the vanilla side is deleted.
+// Renders an always-expanded GraphqlOperation review card with arguments,
+// return fields, and grouped executable examples.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import type {
@@ -236,7 +234,7 @@ const ExampleSection = ({
   </CardSection>
 );
 
-/** Renders one compiled GraphqlOperation to static HTML via the React port. */
+/** Renders one compiled GraphqlOperation to static HTML. */
 export const renderGraphqlOperationStatic = (
   model: CompiledGraphqlOperation,
 ): string => renderToStaticMarkup(<GraphqlOperationView model={model} />);

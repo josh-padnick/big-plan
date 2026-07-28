@@ -1,8 +1,4 @@
-// The React port of Callout: renders the compiled model into the same
-// semantic panel the vanilla renderer emits, class-for-class. The visual
-// classes are duplicated from the vanilla renderer on purpose - the two
-// coexist only during the port, and the parity test holds them identical
-// until the vanilla renderer is deleted.
+// Renders a compiled Callout as a semantic, type-tinted panel.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import type {
@@ -51,6 +47,6 @@ const CalloutView = ({ model }: { readonly model: CompiledCallout }) => {
   );
 };
 
-/** Renders one compiled Callout to static HTML via the React port. */
+/** Renders one compiled Callout to static HTML. */
 export const renderCalloutStatic = (model: CompiledCallout): string =>
   renderToStaticMarkup(<CalloutView model={model} />);

@@ -2,7 +2,6 @@
 // integration, section extraction, and Markdown transforms.
 
 import { describe, expect, it } from "vitest";
-import { CODE_BLOCK_SELECTOR } from "./code-block/decorate-code-blocks.js";
 import {
   compileMarkdown,
   MarkdownDiagnosticsError,
@@ -375,21 +374,13 @@ describe("compileMarkdown code highlighting", () => {
     );
   });
 
-  it("should add a shadcn copy button to every block code element", () => {
+  it("should render block code without script-dependent controls", () => {
     const bodyHtml = compileAndSerialize(
       "```sql\nSELECT 1;\n```\n\n```\nplain block\n```\n",
     );
-    expect(bodyHtml.match(new RegExp(CODE_BLOCK_SELECTOR, "g"))).toHaveLength(
-      2,
-    );
-    expect(bodyHtml.match(/data-copy-code/g)).toHaveLength(2);
-    expect(bodyHtml).toContain('data-slot="button"');
-    expect(bodyHtml).toContain('data-variant="ghost"');
-    expect(bodyHtml).toContain('data-size="xs"');
-    expect(bodyHtml).toContain('aria-label="Copy code"');
-    expect(bodyHtml).toContain('data-lucide="copy"');
-    expect(bodyHtml).toContain('data-lucide="check" hidden');
-    expect(bodyHtml).toContain('data-copy-message="" hidden>Copied!</span>');
+    expect(bodyHtml.match(/<pre>/g)).toHaveLength(2);
+    expect(bodyHtml).not.toContain("<button");
+    expect(bodyHtml).not.toContain("data-copy-code");
   });
 });
 
@@ -406,8 +397,7 @@ describe("compileMarkdown Callout components", () => {
     expect(bodyHtml).toContain("<li>pending</li>");
     expect(bodyHtml).toContain('<code class="hljs language-sql">');
     expect(bodyHtml).toContain('<span class="hljs-keyword">SELECT</span>');
-    expect(bodyHtml).toContain(CODE_BLOCK_SELECTOR);
-    expect(bodyHtml).toContain("data-copy-code");
+    expect(bodyHtml).not.toContain("data-copy-code");
   });
 });
 
@@ -441,7 +431,7 @@ describe("compileMarkdown CodeDiff components", () => {
     expect(bodyHtml).toContain('data-lucide="message-square"');
     expect(bodyHtml).toContain("Use the <code>retry</code> metric prefix.");
     expect(bodyHtml).not.toContain("hljs");
-    expect(bodyHtml).not.toContain(CODE_BLOCK_SELECTOR);
+    expect(bodyHtml).not.toContain("data-copy-code");
   });
 
   it("should diagnose a top-level Annotation as an unknown component", () => {
@@ -524,9 +514,8 @@ describe("compileMarkdown CodeDiff components", () => {
     );
     expect(bodyHtml).toContain("Review the <code>retry</code> path.");
     expect(bodyHtml).toContain("<li>Keep the fallback</li>");
-    expect(bodyHtml.match(new RegExp(CODE_BLOCK_SELECTOR, "gu"))).toHaveLength(
-      2,
-    );
+    expect(bodyHtml.match(/<code class="hljs language-ts">/gu)).toHaveLength(2);
+    expect(bodyHtml).not.toContain("data-copy-code");
   });
 
   it("should position malformed diff diagnostics at a nested fence column", () => {

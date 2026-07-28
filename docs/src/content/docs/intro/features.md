@@ -9,43 +9,41 @@ For what comes next, see the [roadmap](/intro/roadmap/).
 ## Reading experience
 
 - One reading column with warm, paper-like light and dark palettes.
-- A theme control that follows your OS preference until you override it, then remembers your choice locally.
+- A palette that follows your OS preference through CSS alone.
 - A sticky branding bar whose logo follows the active theme.
 
 ## Navigation
 
 - A table of contents built from the plan's level-two headings.
 - A sticky sidebar on wide screens; a compact sticky `Sections` menu on narrow ones.
-- Both track the section you're reading as you scroll.
 - Section links scroll smoothly, unless you've asked your OS for reduced motion.
 
 ## Code
 
 - Syntax highlighting for fenced code blocks with a declared language.
 - Unknown and undeclared languages stay plain and readable.
-- A copy control on every block code sample.
 
 ## Plan authoring
 
 - A static subset of MDX: standard Markdown and GFM plus a closed component registry, without executable imports, exports, or expressions.
 - Positional diagnostics that aggregate recoverable unsupported syntax, unknown components, invalid attributes, and malformed component content after MDX parses.
-- `BigDecision` components for weighty choices, rendered as scored criteria matrices or substantive option lists with lifecycle state, recommendations, optional reversibility, outcomes, and reader-controlled priority previews.
+- `BigDecision` components for weighty choices, rendered as scored criteria matrices or substantive option lists with lifecycle state, recommendations, optional reversibility, and outcomes.
 - `Callout` components for notes, tips, warnings, and dangers.
-- `CodeDiff` components with optional line numbers and change counts, unified and side-by-side views, scoped line annotations, copy actions, and full-screen viewing.
-- `CodeSnippet` components for excerpts with optional file identity, file-absolute line numbers, scoped annotations, and copy actions.
-- `DatabaseTableSchema` components for one table's schema: a psql-style columns grid with key badges, foreign keys, indexes, checks, titled verbatim-DDL bands behind tabs, jump-linked `INDX` references, a persisted reorder-and-hide column layout, copy actions, and full-screen viewing.
-- `FileTree` components for foldable plain hierarchies with optional per-entry notes.
-- `FileTreeDiff` components with entry-level change status, summaries, persisted combined or side-by-side views, a Planned-pane final-state switch, fold controls, note hints, and full-screen viewing.
-- `HttpEndpoint` components for HTTP contracts with location-grouped parameters, request examples, status-coded responses, and tabbed section navigation.
+- `CodeDiff` components with optional line numbers and change counts, a unified view, and scoped line annotations.
+- `CodeSnippet` components for excerpts with optional file identity, file-absolute line numbers, and scoped annotations.
+- `DatabaseTableSchema` components for one table's schema: a psql-style columns grid with key badges, foreign keys, indexes, checks, and titled verbatim-DDL bands.
+- `FileTree` components for plain hierarchies with optional per-entry notes.
+- `FileTreeDiff` components with entry-level change status, summaries, and a combined change tree.
+- `HttpEndpoint` components for HTTP contracts with location-grouped parameters, request examples, and status-coded responses.
 - `GraphqlOperation` components for queries, mutations, and subscriptions with literal argument types, one-level input and payload fields, and grouped executable examples with repeatable labeled responses.
 - `GrpcMethod` components for streaming-aware proto signatures, message-typed request and response fields, gRPC status codes, grouped examples, and proto source.
-- `SmallDecisionSet` components for compact numbered lists of briefly explained options, with locally selectable recommendations.
+- `SmallDecisionSet` components for compact numbered lists of briefly explained options, with recommendations marked inline.
 
 ## Output
 
-- One self-contained HTML file: styling, behavior, and branding embedded.
+- One self-contained HTML file with styling and branding embedded.
+- Zero scripts and no script-dependent controls.
 - No external requests, ever.
-- Readable with JavaScript disabled; scripts only enhance navigation, theming, code-copy controls, `BigDecision`, `CodeDiff`, `CodeSnippet`, `DatabaseTableSchema`, `FileTree`, `FileTreeDiff`, and `SmallDecisionSet` interactions, and `HttpEndpoint`'s tabbed section navigation.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 
 See the [CLI reference](/reference/cli/) for command details.
