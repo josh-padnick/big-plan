@@ -11,15 +11,15 @@ import {
   type ComponentIdAllocator,
 } from "../../../components/_authoring/contract.js";
 import type { DiagnosticCollector } from "../../../components/_authoring/diagnostics.js";
-import { reactToHast } from "./react-hast-adapter.js";
-import type { ReactHastAdapter } from "./react-hast-adapter.js";
 import {
   COMPONENT_REGISTRY,
   definitionFor,
   scopedDefinitionFor,
   type ComponentRegistry,
   type ScopedParentDefinition,
-} from "./registry.js";
+} from "../../../components/_registration/registry.js";
+import { reactToHast } from "./react-hast-adapter.js";
+import type { ReactHastAdapter } from "./react-hast-adapter.js";
 
 type MdxJsxFlowElement = Extract<
   RootContent,

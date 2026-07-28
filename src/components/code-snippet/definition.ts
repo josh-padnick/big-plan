@@ -3,7 +3,7 @@
 
 import { compileCodeSnippetComponent } from "./compile.js";
 import { CodeSnippet } from "./view.js";
-import { defineComponent } from "../../render/markdown/component-pipeline/define-component.js";
+import { defineComponent } from "../_registration/define-component.js";
 
 /** Declares CodeSnippet's renderer and direct-child Annotation contract. */
 export const CODE_SNIPPET_COMPONENT_DEFINITION = defineComponent({

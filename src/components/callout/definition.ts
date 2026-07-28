@@ -3,7 +3,7 @@
 
 import { compileCalloutComponent } from "./compile.js";
 import { Callout } from "./view.js";
-import { defineComponent } from "../../render/markdown/component-pipeline/define-component.js";
+import { defineComponent } from "../_registration/define-component.js";
 
 /** Declares Callout's complete component integration contract. */
 export const CALLOUT_COMPONENT_DEFINITION = defineComponent({

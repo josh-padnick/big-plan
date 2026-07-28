@@ -1,14 +1,12 @@
-// The renderer's public entry point: composes the shared MDX pipeline into
-// either a validated plan model or a complete HTML review document.
+// The renderer's HTML entry point: composes the shared MDX pipeline into a
+// complete, self-contained review document.
 
 import type { Section } from "./markdown/compile-markdown.js";
 import {
   compileMarkdown,
-  compileMarkdownModel,
   serializeMarkdown,
 } from "./markdown/compile-markdown.js";
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
-import type { CollectedComponentModel } from "./markdown/compile-markdown.js";
 import { renderPage } from "./page.js";
 import { renderShell } from "./shell/shell.js";
 
@@ -46,45 +44,3 @@ export const renderDocument = ({
   });
   return { html, title: resolvedTitle, sections };
 };
-
-export type PlanModel = {
-  readonly title: string;
-  readonly sections: ReadonlyArray<Section>;
-  readonly components: ReadonlyArray<CollectedComponentModel>;
-};
-
-/**
- * Compiles one plan into its validated model without serializing HTML: the
- * document title, the section outline, and every component instance's plan
- * model in document order. Diagnostics hard-fail exactly as rendering does,
- * so a model is only ever produced for a valid plan.
- */
-export const compilePlanModel = ({
-  markdown,
-  fallbackTitle,
-}: {
-  readonly markdown: string;
-  readonly fallbackTitle: string;
-}): PlanModel => {
-  const { sections, title, components } = compileMarkdownModel({ markdown });
-  return {
-    title: title ?? fallbackTitle,
-    sections,
-    components: sortedBySourcePosition(components),
-  };
-};
-
-// Collection happens child-first (a component's nested children finish
-// rendering before it does), so document order - the contract the compile
-// command documents - is restored by source position; the sort is stable, so
-// entries without positions keep their collection order at the end.
-const sortedBySourcePosition = (
-  components: ReadonlyArray<CollectedComponentModel>,
-): ReadonlyArray<CollectedComponentModel> =>
-  [...components].sort(
-    (a, b) =>
-      (a.line ?? Number.MAX_SAFE_INTEGER) -
-        (b.line ?? Number.MAX_SAFE_INTEGER) ||
-      (a.column ?? Number.MAX_SAFE_INTEGER) -
-        (b.column ?? Number.MAX_SAFE_INTEGER),
-  );

@@ -16,12 +16,12 @@ import {
 import type { ComponentCompilerInput } from "../../../components/_authoring/contract.js";
 import { createDiagnosticCollector } from "../../../components/_authoring/diagnostics.js";
 import type { ComponentDiagnostic } from "../../../components/_authoring/diagnostics.js";
+import { defineComponent } from "../../../components/_registration/define-component.js";
+import type { ComponentRegistry } from "../../../components/_registration/registry.js";
 import { hastContentToReact } from "../../../components/_shared/hast-content/hast-content.js";
-import { defineComponent } from "./define-component.js";
 import { rehypeRenderComponents } from "./deliver.js";
 import type { CollectedComponentModel } from "./deliver.js";
 import type { ReactHastAdapter } from "./react-hast-adapter.js";
-import type { ComponentRegistry } from "./registry.js";
 import { remarkValidateComponents } from "./validate-authoring.js";
 
 type NestedFixtureModel = {

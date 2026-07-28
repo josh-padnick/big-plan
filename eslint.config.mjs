@@ -90,11 +90,6 @@ export default tseslint.config(
         imports: ["**/icons/lucide-icon.js", "**/icons/lucide/**"],
         mayImport: [],
       },
-      renderIcons: {
-        files: ["src/render/icons/**/*.ts"],
-        imports: ["**/render/icons/**"],
-        mayImport: ["icons"],
-      },
       // React views and their never-authorable shared building blocks consume
       // compiled models without owning static serialization.
       ui: {
@@ -112,19 +107,16 @@ export default tseslint.config(
         ],
         mayImport: ["model", "icons"],
       },
-      codeBlock: {
-        files: ["src/render/markdown/code-block/**/*.ts"],
-        imports: ["**/markdown/code-block/**"],
-        mayImport: ["icons", "renderIcons"],
-      },
       components: {
         files: [
+          "src/components/_registration/**/*.ts",
           "src/components/*/definition*.ts",
           "src/components/file-tree/*-definition*.ts",
           "src/components/code-diff/test-fixtures.ts",
           "src/render/markdown/component-pipeline/**/*.ts",
         ],
         imports: [
+          "**/components/_registration/**",
           "**/components/*/definition.js",
           "**/components/file-tree/*-definition.js",
           "**/render/markdown/component-pipeline/**",
@@ -133,27 +125,18 @@ export default tseslint.config(
       },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
-        ignores: [
-          "src/render/markdown/code-block/**/*.ts",
-          "src/render/markdown/component-pipeline/**/*.ts",
-        ],
-        // Direct Markdown-pipeline files only; the nested code-block and
-        // typed-component concerns have their own dependency contracts.
+        ignores: ["src/render/markdown/component-pipeline/**/*.ts"],
+        // Direct Markdown-pipeline files only; the nested typed-component
+        // concern has its own dependency contract.
         imports: ["**/markdown/*.js"],
         // Deliberately not escapeHtml: markdown escapes through
         // rehype-stringify, never by hand.
-        mayImport: ["codeBlock", "components", "model"],
+        mayImport: ["components", "model"],
       },
       shell: {
         files: ["src/render/shell/**/*.ts"],
         imports: ["**/shell/**"],
-        mayImport: [
-          "escapeHtml",
-          "icons",
-          "renderIcons",
-          "codeBlock",
-          "components",
-        ],
+        mayImport: ["escapeHtml", "icons", "components"],
       },
       page: {
         files: ["src/render/page.ts"],
@@ -163,14 +146,14 @@ export default tseslint.config(
       composer: {
         files: ["src/render/*.ts"],
         ignores: ["src/render/page.ts", "src/render/escape-html.ts"],
-        imports: ["**/render-document.js"],
+        imports: ["**/compile-plan-model.js", "**/render-document.js"],
         mayImport: ["markdown", "shell", "page"],
       },
       cli: {
         files: ["src/cli/**/*.ts"],
         imports: ["**/cli/**"],
-        // The composer is the renderer's public entry point; granting only it
-        // is what keeps the CLI out of the renderer's internals.
+        // The composer files are the renderer's public entry points; granting
+        // only them keeps the CLI out of the renderer's internals.
         mayImport: ["composer"],
       },
     };
@@ -178,8 +161,8 @@ export default tseslint.config(
     // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
       ["model", "escapeHtml", "icons"],
-      ["renderIcons", "page", "ui"],
-      ["codeBlock", "components"],
+      ["page", "ui"],
+      ["components"],
       ["markdown", "shell"],
       ["composer"],
       ["cli"],

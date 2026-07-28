@@ -1,18 +1,18 @@
 // Owns the closed authorable-component registry and definition lookups shared
 // by the Markdown validation and delivery phases.
 
-import type { ScopedChildDefinition } from "../../../components/_authoring/contract.js";
-import { BIG_DECISION_COMPONENT_DEFINITION } from "../../../components/big-decision/definition.js";
-import { CALLOUT_COMPONENT_DEFINITION } from "../../../components/callout/definition.js";
-import { CODE_DIFF_COMPONENT_DEFINITION } from "../../../components/code-diff/definition.js";
-import { CODE_SNIPPET_COMPONENT_DEFINITION } from "../../../components/code-snippet/definition.js";
-import { DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION } from "../../../components/database-table-schema/definition.js";
-import { FILE_TREE_DIFF_COMPONENT_DEFINITION } from "../../../components/file-tree/file-tree-diff-definition.js";
-import { FILE_TREE_COMPONENT_DEFINITION } from "../../../components/file-tree/file-tree-definition.js";
-import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "../../../components/graphql-operation/definition.js";
-import { GRPC_METHOD_COMPONENT_DEFINITION } from "../../../components/grpc-method/definition.js";
-import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "../../../components/http-endpoint/definition.js";
-import { SMALL_DECISION_SET_COMPONENT_DEFINITION } from "../../../components/small-decision-set/definition.js";
+import type { ScopedChildDefinition } from "../_authoring/contract.js";
+import { BIG_DECISION_COMPONENT_DEFINITION } from "../big-decision/definition.js";
+import { CALLOUT_COMPONENT_DEFINITION } from "../callout/definition.js";
+import { CODE_DIFF_COMPONENT_DEFINITION } from "../code-diff/definition.js";
+import { CODE_SNIPPET_COMPONENT_DEFINITION } from "../code-snippet/definition.js";
+import { DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION } from "../database-table-schema/definition.js";
+import { FILE_TREE_DIFF_COMPONENT_DEFINITION } from "../file-tree/file-tree-diff-definition.js";
+import { FILE_TREE_COMPONENT_DEFINITION } from "../file-tree/file-tree-definition.js";
+import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "../graphql-operation/definition.js";
+import { GRPC_METHOD_COMPONENT_DEFINITION } from "../grpc-method/definition.js";
+import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "../http-endpoint/definition.js";
+import { SMALL_DECISION_SET_COMPONENT_DEFINITION } from "../small-decision-set/definition.js";
 import type { ComponentDefinition } from "./define-component.js";
 
 export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =

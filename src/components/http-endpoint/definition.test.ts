@@ -9,7 +9,7 @@ import {
 } from "../../render/markdown/compile-markdown.js";
 import type { ScopedChild } from "../_authoring/contract.js";
 import { createDiagnosticCollector } from "../_authoring/diagnostics.js";
-import type { CompiledComponent } from "../../render/markdown/component-pipeline/define-component.js";
+import type { CompiledComponent } from "../_registration/define-component.js";
 import { reactToHast } from "../../render/markdown/component-pipeline/react-hast-adapter.js";
 import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "./definition.js";
 

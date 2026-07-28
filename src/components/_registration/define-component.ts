@@ -7,7 +7,7 @@ import type {
   ComponentCompilerInput,
   ComponentModelCompiler,
   ScopedChildDefinition,
-} from "../../../components/_authoring/contract.js";
+} from "../_authoring/contract.js";
 
 export type CompiledComponent = {
   readonly model: unknown;

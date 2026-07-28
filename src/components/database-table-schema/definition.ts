@@ -3,7 +3,7 @@
 
 import { compileDatabaseTableSchema } from "./compile.js";
 import { DatabaseTableSchema } from "./view.js";
-import { defineComponent } from "../../render/markdown/component-pipeline/define-component.js";
+import { defineComponent } from "../_registration/define-component.js";
 
 /** Declares DatabaseTableSchema's complete component integration contract. */
 export const DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION = defineComponent({

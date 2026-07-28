@@ -13,7 +13,7 @@ import {
   scopedDefinitionFor,
   type ComponentRegistry,
   type ScopedParentDefinition,
-} from "./registry.js";
+} from "../../../components/_registration/registry.js";
 
 const markdownChildren = (
   node: MarkdownRoot | MarkdownNode,

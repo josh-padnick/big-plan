@@ -4,7 +4,7 @@
 import { type ScopedChildDefinition } from "../_authoring/contract.js";
 import { compileBigDecisionComponent } from "./compile.js";
 import { BigDecision } from "./view.js";
-import { defineComponent } from "../../render/markdown/component-pipeline/define-component.js";
+import { defineComponent } from "../_registration/define-component.js";
 
 const bodyPolicy = (
   name: "Criterion" | "Details" | "Option" | "Reversibility" | "Score",

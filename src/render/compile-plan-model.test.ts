@@ -3,11 +3,8 @@
 // component collection, and the same hard-fail behavior as rendering.
 
 import { describe, expect, it } from "vitest";
-import {
-  MarkdownDiagnosticsError,
-  compilePlanModel,
-  renderDocument,
-} from "./render-document.js";
+import { compilePlanModel } from "./compile-plan-model.js";
+import { MarkdownDiagnosticsError, renderDocument } from "./render-document.js";
 
 const PLAN = `# Storage plan
 

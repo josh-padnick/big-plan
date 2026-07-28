@@ -4,7 +4,7 @@
 import { type ScopedChildDefinition } from "../_authoring/contract.js";
 import { compileGrpcMethodComponent } from "./compile.js";
 import { GrpcMethod } from "./view.js";
-import { defineComponent } from "../../render/markdown/component-pipeline/define-component.js";
+import { defineComponent } from "../_registration/define-component.js";
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (
