@@ -27,12 +27,3 @@ A component's attributes are strings or bare booleans, structured data arrives a
 | [SmallDecisionSet](/components/small-decision-set/)       | Collect a plan's small questions as a compact numbered list of briefly explained options.                            |
 
 Scoped child components are valid only in their declared hierarchy: `Annotation` in `CodeDiff` and `CodeSnippet`; `Ddl` in `DatabaseTableSchema`; `Criterion`, `Details`, `Option`, and `Reversibility` directly in `BigDecision`, with `Score` directly in an `Option`; `SmallDecision` directly in `SmallDecisionSet`, with `Option` directly in a `SmallDecision`; `Param`, `Request`, and `Response` in `HttpEndpoint`; `Argument`, `Field`, `Returns`, `Operation`, `Variables`, and `Response` in `GraphqlOperation`; and `Field`, `Error`, `Example`, and `Proto` in `GrpcMethod`.
-
-## Coming next
-
-The library grows one registry capability at a time; each item below is sequenced in the [roadmap](/intro/roadmap/):
-
-- `DatabaseSchema` renders a structured schema card from a fenced YAML child.
-- `Diagram` renders diagram source into inline SVG at build time, keeping documents free of external requests.
-
-The static export is inert. Interactive review aids and transported feedback arrive with the live review application.

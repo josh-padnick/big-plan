@@ -4,13 +4,14 @@
 Big Plan makes reviewing agent plans a first-class experience.
 
 > [!WARNING]
-> **Pre-alpha.** Big Plan is under active development, and its first working release is being built in the open in this repository.
-> The static-subset MDX viewer and its first components work today; the rest of the review experience is still being built.
+> **Pre-alpha.** Big Plan has no compatibility contract until an explicit milestone establishes one.
+> Commands, document formats, and rendered output may change together as the product finds its cleanest model.
 
 Big Plan is built around one question: **what is the best way to review a plan and reach agreement on it, before an agent acts?**
 
 An agent writes its plan as structured MDX, and Big Plan renders it into a rich local review document.
-Today that means section navigation and the typed `BigDecision`, `Callout`, `CodeDiff`, `CodeSnippet`, `DatabaseTableSchema`, `FileTree`, `FileTreeDiff`, `GraphqlOperation`, `GrpcMethod`, `HttpEndpoint`, and `SmallDecisionSet` review components; the planned review experience adds more components, live agent chat, highlight-to-comment threads, versioned change review, and full keyboard control.
+The static authoring contract combines Markdown with validated components for decisions, code, schemas, file trees, and API contracts.
+The [features](docs/src/content/docs/intro/features.md) and [components](docs/src/content/docs/components/index.md) pages describe the capabilities that ship today.
 
 Big Plan focuses exclusively on that upfront moment of agreement - not code review, not project management.
 Everything runs locally, and the MDX file on your disk is the source of truth.

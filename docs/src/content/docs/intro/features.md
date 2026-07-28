@@ -4,7 +4,6 @@ description: Everything the Big Plan viewer ships today, at a glance.
 ---
 
 Everything on this page is shipped and works today.
-For what comes next, see the [roadmap](/intro/roadmap/).
 
 ## Reading experience
 

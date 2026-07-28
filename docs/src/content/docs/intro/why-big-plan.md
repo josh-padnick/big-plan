@@ -45,7 +45,6 @@ Big Plan has none of that; it exists only for the moment of agreement.
 
 **A markdown preview** shows you the text.
 Big Plan is built for review: section navigation, readable code, and typed components.
-Comment threads and live agent chat are planned on the [roadmap](/intro/roadmap/).
 
 For how Big Plan compares to its closest neighbors, Lavish and Agent-Native Plans, see [Big Plan vs. Other](/intro/vs-other/).
 
