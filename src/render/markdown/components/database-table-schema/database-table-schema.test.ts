@@ -4,7 +4,23 @@
 import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
 import { createDiagnosticCollector } from "../../../../model/diagnostics.js";
-import { renderDatabaseTableSchema } from "./database-table-schema.js";
+import { fromHtml } from "hast-util-from-html";
+import { normalizeReparsedProperties } from "../registry.js";
+import { DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION } from "./database-table-schema.js";
+
+// The React port renders a string; reparsing mirrors the registry's own
+// splice so traversal assertions keep exercising the shipped markup.
+const parseRenderedElement = (html: string): Element => {
+  const fragment = fromHtml(html, { fragment: true });
+  normalizeReparsedProperties(fragment.children);
+  const parsed = fragment.children.find(
+    (child): child is Element => child.type === "element",
+  );
+  if (parsed === undefined) {
+    throw new Error("component rendered no element");
+  }
+  return parsed;
+};
 
 const POSITION = {
   start: { line: 3, column: 1, offset: 10 },
@@ -73,13 +89,15 @@ const render = ({
   >[0]["scopedChildren"];
 } = {}) => {
   const diagnostics = createDiagnosticCollector();
-  const element = renderDatabaseTableSchema({
-    attributes,
-    children,
-    scopedChildren,
-    position: POSITION,
-    diagnostics,
-  });
+  const element = parseRenderedElement(
+    DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION.renderStatic({
+      attributes,
+      children,
+      scopedChildren,
+      position: POSITION,
+      diagnostics,
+    }),
+  );
   return { element, diagnostics: diagnostics.diagnostics };
 };
 

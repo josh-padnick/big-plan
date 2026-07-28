@@ -23,8 +23,6 @@ import {
 } from "./components/registry.js";
 import type { CollectedComponentModel } from "./components/registry.js";
 export type { CollectedComponentModel } from "./components/registry.js";
-import type { RendererKind } from "./components/registry.js";
-export type { RendererKind } from "./components/registry.js";
 
 export type Section = {
   readonly id: string;
@@ -181,11 +179,9 @@ const collectElementIds = (
 export const compileMarkdown = ({
   markdown,
   models,
-  renderer,
 }: {
   readonly markdown: string;
   readonly models?: Array<CollectedComponentModel>;
-  readonly renderer?: RendererKind;
 }): CompiledMarkdown => {
   const diagnostics = createDiagnosticCollector();
   const processor = unified()
@@ -209,7 +205,6 @@ export const compileMarkdown = ({
     .use(rehypeRenderComponents, {
       diagnostics,
       ...(models === undefined ? {} : { models }),
-      ...(renderer === undefined ? {} : { renderer }),
     })
     // Detection stays opt-in through the fence language: undeclared and
     // unknown languages remain readable without guessed tokenization.

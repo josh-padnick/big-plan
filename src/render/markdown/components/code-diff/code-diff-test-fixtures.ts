@@ -7,7 +7,9 @@ import type {
   ComponentAttributeValue,
   ScopedChild,
 } from "../../../../model/component-contract.js";
-import { renderCodeDiff } from "./code-diff.js";
+import { fromHtml } from "hast-util-from-html";
+import { CODE_DIFF_COMPONENT_DEFINITION } from "./code-diff.js";
+import { normalizeReparsedProperties } from "../registry.js";
 
 const POSITION = {
   start: { line: 3, column: 1, offset: 10 },
@@ -162,12 +164,22 @@ export const renderCodeDiffFixture = ({
   readonly scopedChildren?: ReadonlyArray<ScopedChild>;
 } = {}) => {
   const diagnostics = createDiagnosticCollector();
-  const element = renderCodeDiff({
+  // The React port renders a string; reparsing mirrors the registry's own
+  // splice so traversal assertions keep exercising the shipped markup.
+  const html = CODE_DIFF_COMPONENT_DEFINITION.renderStatic({
     attributes,
     children,
     scopedChildren,
     position: POSITION,
     diagnostics,
   });
-  return { element, diagnostics: diagnostics.diagnostics };
+  const fragment = fromHtml(html, { fragment: true });
+  normalizeReparsedProperties(fragment.children);
+  const parsed = fragment.children.find(
+    (child): child is Element => child.type === "element",
+  );
+  if (parsed === undefined) {
+    throw new Error("CodeDiff rendered no element");
+  }
+  return { element: parsed, diagnostics: diagnostics.diagnostics };
 };

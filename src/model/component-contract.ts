@@ -127,13 +127,10 @@ export type ComponentStaticRenderer = (
 ) => string;
 
 export type ComponentDefinition = {
-  readonly render: ComponentRenderer;
   // Optional so isolated registries can remain render-only; rendering never
   // requires model exposure.
   readonly compile?: ComponentModelCompiler;
-  // Optional while the vanilla renderer remains the fallback until the React
-  // target becomes the default.
-  readonly renderStatic?: ComponentStaticRenderer;
+  readonly renderStatic: ComponentStaticRenderer;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
 };
 

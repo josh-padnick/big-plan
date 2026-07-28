@@ -5,7 +5,23 @@ import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
 import type { ScopedChild } from "../../../../model/component-contract.js";
 import { createDiagnosticCollector } from "../../../../model/diagnostics.js";
-import { renderCodeSnippet } from "./code-snippet.js";
+import { fromHtml } from "hast-util-from-html";
+import { normalizeReparsedProperties } from "../registry.js";
+import { CODE_SNIPPET_COMPONENT_DEFINITION } from "./code-snippet.js";
+
+// The React port renders a string; reparsing mirrors the registry's own
+// splice so traversal assertions keep exercising the shipped markup.
+const parseRenderedElement = (html: string): Element => {
+  const fragment = fromHtml(html, { fragment: true });
+  normalizeReparsedProperties(fragment.children);
+  const parsed = fragment.children.find(
+    (child): child is Element => child.type === "element",
+  );
+  if (parsed === undefined) {
+    throw new Error("component rendered no element");
+  }
+  return parsed;
+};
 
 const POSITION = {
   start: { line: 3, column: 1, offset: 10 },
@@ -70,13 +86,15 @@ const render = ({
   readonly annotations?: ReadonlyArray<ScopedChild>;
 } = {}) => {
   const diagnostics = createDiagnosticCollector();
-  const element = renderCodeSnippet({
-    attributes,
-    children,
-    scopedChildren: annotations,
-    position: POSITION,
-    diagnostics,
-  });
+  const element = parseRenderedElement(
+    CODE_SNIPPET_COMPONENT_DEFINITION.renderStatic({
+      attributes,
+      children,
+      scopedChildren: annotations,
+      position: POSITION,
+      diagnostics,
+    }),
+  );
   return { element, diagnostics: diagnostics.diagnostics };
 };
 
@@ -297,9 +315,9 @@ describe("renderCodeSnippet annotations", () => {
 
     expect(diagnostics).toEqual([]);
     expect(element.tagName).toBe("figure");
-    expect(rendered).toContain('"data-snippet-line-number":42');
-    expect(rendered).toContain('"data-snippet-line-number":43');
-    expect(rendered).toContain('"data-snippet-line-number":44');
+    expect(rendered).toContain('"data-snippet-line-number":"42"');
+    expect(rendered).toContain('"data-snippet-line-number":"43"');
+    expect(rendered).toContain('"data-snippet-line-number":"44"');
     expect(rendered.match(/data-snippet-annotated/gu)).toHaveLength(2);
     expect(rendered).toContain('"data-snippet-annotated":"start"');
     expect(rendered).toContain('"data-snippet-annotated":"end"');

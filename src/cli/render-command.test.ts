@@ -30,9 +30,7 @@ describe("renderCommand validation", () => {
     await expect(renderCommand([])).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
       message: "Missing input MDX file",
-      suggestions: [
-        "Usage: big-plan render <input.mdx> [output.html] [--renderer vanilla|react]",
-      ],
+      suggestions: ["Usage: big-plan render <input.mdx> [output.html]"],
     });
   });
 
@@ -71,24 +69,6 @@ describe("renderCommand validation", () => {
       code: "VALIDATION_ERROR",
       message: "Output path would overwrite the input MDX file",
     });
-  });
-});
-
-describe("renderCommand renderer flag", () => {
-  it("should reject a --renderer flag with no value instead of treating it as a path", async () => {
-    const inputPath = join(tempDirectory, "plan.mdx");
-    await writeFile(inputPath, "# Plan\n\n## S\n", "utf8");
-    await expect(
-      renderCommand([inputPath, "--renderer"]),
-    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-  });
-
-  it("should reject an unknown renderer value", async () => {
-    const inputPath = join(tempDirectory, "plan.mdx");
-    await writeFile(inputPath, "# Plan\n\n## S\n", "utf8");
-    await expect(
-      renderCommand([inputPath, "--renderer", "handlebars"]),
-    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 });
 
