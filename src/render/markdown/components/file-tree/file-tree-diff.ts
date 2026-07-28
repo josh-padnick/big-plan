@@ -22,6 +22,7 @@ import {
   deriveTreeView,
 } from "../../../../model/derive-tree-view.js";
 import type { TreeEntry } from "../../../../model/parse-tree-text.js";
+import { renderFileTreeDiffStatic } from "../../../../react/file-tree-diff/file-tree-diff.js";
 import {
   renderTreeChangeCounts,
   renderTreeFoldControls,
@@ -443,4 +444,5 @@ export const renderFileTreeDiff: ComponentRenderer = (input) =>
 export const FILE_TREE_DIFF_COMPONENT_DEFINITION = {
   render: renderFileTreeDiff,
   compile: compileFileTreeDiff,
+  renderStatic: (input) => renderFileTreeDiffStatic(compileFileTreeDiff(input)),
 } satisfies ComponentDefinition;

@@ -89,6 +89,36 @@ docs/
 </FileTree>
 `;
 
+const TREE_DIFF_PLAN = `# Plan
+
+## Changes
+
+<FileTreeDiff title="Planned changes">
+
+\`\`\`tree
+src/
+  catalog/
+    refresh-worker.ts [modified] - Move refresh work behind the queue.
+    refresh-queue.ts [added] - Deduplicate refresh jobs by cache key.
+  metrics/ [removed] - The legacy module retires.
+    legacy-counter.ts [removed]
+ops/ -> deploy/ [renamed] - Match the platform team's naming.
+  runbook.md
+README.md [modified]
+\`\`\`
+
+</FileTreeDiff>
+
+<FileTreeDiff hideDiff>
+
+\`\`\`tree
+docs/
+  cli.md [modified]
+\`\`\`
+
+</FileTreeDiff>
+`;
+
 const UNPORTED_PLAN = `# Plan
 
 ## Question
@@ -146,6 +176,20 @@ describe("react renderer parity", () => {
       renderer: "react",
     });
     expect(react.html).toContain("data-file-tree=");
+    expect(react.html).toBe(vanilla.html);
+  });
+
+  it("should render a byte-identical document for titled and untitled FileTreeDiffs", () => {
+    const vanilla = renderDocument({
+      markdown: TREE_DIFF_PLAN,
+      fallbackTitle: "x",
+    });
+    const react = renderDocument({
+      markdown: TREE_DIFF_PLAN,
+      fallbackTitle: "x",
+      renderer: "react",
+    });
+    expect(react.html).toContain("data-file-tree-diff=");
     expect(react.html).toBe(vanilla.html);
   });
 

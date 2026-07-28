@@ -324,6 +324,22 @@ const collectExistingIds = (
   return ids;
 };
 
+// The HTML parser only knows `hidden` as a boolean on HTML elements; on SVG
+// elements it round-trips as the string "", which the serializer would emit
+// as hidden="" where the vanilla renderer emits bare hidden. The two are
+// spec-identical, so normalize to the boolean the vanilla HAST carries.
+const normalizeHiddenAttributes = (nodes: ReadonlyArray<RootContent>): void => {
+  for (const node of nodes) {
+    if (node.type !== "element") {
+      continue;
+    }
+    if (node.properties["hidden"] === "") {
+      node.properties["hidden"] = true;
+    }
+    normalizeHiddenAttributes(node.children);
+  }
+};
+
 // Reports an unknown name, validates attributes, recursively prepares direct
 // scoped children, then dispatches a registered global component.
 const renderFlowElement = ({
@@ -397,6 +413,7 @@ const renderFlowElement = ({
     // Reparsing routes the React output through the same final serializer as
     // everything else, so escaping and formatting can never diverge by path.
     const fragment = fromHtml(rendered, { fragment: true });
+    normalizeHiddenAttributes(fragment.children);
     const first = fragment.children.find(
       (child): child is Element => child.type === "element",
     );
