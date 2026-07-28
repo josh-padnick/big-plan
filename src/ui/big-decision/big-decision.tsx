@@ -362,7 +362,10 @@ const ReversibilitySection = ({
     data-decision-reversibility=""
     data-reversibility-rating={reversibility.rating}
   >
-    <div className="flex items-center gap-1.5">
+    {/* leading-none collapses the summary's inherited line box to the icon
+        and the 1px nudge optically centers it against the uppercase label,
+        whose glyphs ride high in their own line box. */}
+    <div className="flex items-center gap-1.5 [&_summary]:leading-none [&_summary]:-mt-[3px]">
       <SectionLabel label="Reversibility" />
       <InfoDisclosure
         detail={explainerParagraph()}
