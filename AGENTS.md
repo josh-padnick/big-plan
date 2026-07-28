@@ -2,12 +2,14 @@
 
 This is the entry point for agents working in Big Plan.
 
-## What Big Plan is
+## Product
 
 Good AI output depends on a great plan, and Big Plan makes reviewing agent plans a first-class experience.
 It is built around one question: what is the best user experience a human can have when aiming to understand, give feedback on, and ultimately accept an agent plan?
 
 An agent writes the plan, and Big Plan renders it as a human-friendly document designed to make the plan as easy as possible to understand, give feedback on, and accept.
+
+### Where Big Plan fits
 
 A robust AI-assisted delivery workflow has several distinct stages:
 
@@ -26,7 +28,7 @@ Big Plan runs locally, and the plan source on disk is authoritative.
 The product documentation owns current capabilities and usage.
 This guide owns the durable implementation model contributors must preserve.
 
-## Product concepts
+### Concepts
 
 - **Agent plan** is the agent's proposed approach for achieving the user's intent before implementation begins.
 - **Plan source** is the authoritative plan document on disk. The agent edits this source in response to feedback.
