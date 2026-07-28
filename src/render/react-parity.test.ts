@@ -60,6 +60,35 @@ bun run build
 </CodeSnippet>
 `;
 
+const TREE_PLAN = `# Plan
+
+## Layout
+
+<FileTree title="Repository layout">
+
+\`\`\`tree
+src/
+  model/ - The framework-free contract.
+    compile-callout.ts
+  react/
+    callout/
+      callout.tsx
+  empty-dir/
+README.md - The entry point.
+\`\`\`
+
+</FileTree>
+
+<FileTree>
+
+\`\`\`tree
+docs/
+  cli.md
+\`\`\`
+
+</FileTree>
+`;
+
 const UNPORTED_PLAN = `# Plan
 
 ## Question
@@ -103,6 +132,20 @@ describe("react renderer parity", () => {
       renderer: "react",
     });
     expect(react.html).toContain("data-snippet-annotation=");
+    expect(react.html).toBe(vanilla.html);
+  });
+
+  it("should render a byte-identical document for titled and bare FileTrees", () => {
+    const vanilla = renderDocument({
+      markdown: TREE_PLAN,
+      fallbackTitle: "x",
+    });
+    const react = renderDocument({
+      markdown: TREE_PLAN,
+      fallbackTitle: "x",
+      renderer: "react",
+    });
+    expect(react.html).toContain("data-file-tree=");
     expect(react.html).toBe(vanilla.html);
   });
 

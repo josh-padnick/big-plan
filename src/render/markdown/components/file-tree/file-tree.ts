@@ -11,6 +11,7 @@ import {
   compileFileTree,
   type CompiledFileTree,
 } from "../../../../model/compile-file-tree.js";
+import { renderFileTreeStatic } from "../../../../react/file-tree/file-tree.js";
 import {
   renderTreeFoldControls,
   renderTreeHierarchy,
@@ -94,4 +95,5 @@ export const renderFileTree: ComponentRenderer = (input) =>
 export const FILE_TREE_COMPONENT_DEFINITION = {
   render: renderFileTree,
   compile: compileFileTree,
+  renderStatic: (input) => renderFileTreeStatic(compileFileTree(input)),
 } satisfies ComponentDefinition;
