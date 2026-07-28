@@ -26,6 +26,14 @@ afterEach(async () => {
 });
 
 describe("renderCommand validation", () => {
+  it("should reject an option-shaped argument instead of writing to it", async () => {
+    const inputPath = join(tempDirectory, "plan.mdx");
+    await writeFile(inputPath, "# Plan\n\n## S\n", "utf8");
+    await expect(renderCommand([inputPath, "--html"])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+  });
+
   it("should report usage when the input argument is missing", async () => {
     await expect(renderCommand([])).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
