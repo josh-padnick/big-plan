@@ -1,0 +1,12 @@
+// Declares FileTreeDiff's component integration contract; rendering lives in
+// the React component library.
+
+import { compileFileTreeDiff } from "./compile.js";
+import { FileTreeDiff } from "./file-tree-diff-view.js";
+import { defineComponent } from "../../render/markdown/component-pipeline/define-component.js";
+
+/** Declares FileTreeDiff's complete component integration contract. */
+export const FILE_TREE_DIFF_COMPONENT_DEFINITION = defineComponent({
+  compile: compileFileTreeDiff,
+  view: FileTreeDiff,
+});

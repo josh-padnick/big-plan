@@ -1,14 +1,14 @@
 // The renderer's public entry point: composes the shared MDX pipeline into
 // either a validated plan model or a complete HTML review document.
 
-import type { Section } from "./markdown/convert.js";
+import type { Section } from "./markdown/compile-markdown.js";
 import {
   compileMarkdown,
   compileMarkdownModel,
   serializeMarkdown,
-} from "./markdown/convert.js";
-export { MarkdownDiagnosticsError } from "./markdown/convert.js";
-import type { CollectedComponentModel } from "./markdown/convert.js";
+} from "./markdown/compile-markdown.js";
+export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
+import type { CollectedComponentModel } from "./markdown/compile-markdown.js";
 import { renderPage } from "./page.js";
 import { renderShell } from "./shell/shell.js";
 
