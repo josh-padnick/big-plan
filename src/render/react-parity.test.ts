@@ -368,6 +368,43 @@ rpc WatchRefresh(WatchRefreshRequest) returns (stream RefreshEvent);
 <GrpcMethod service="catalog.v1.RefreshService" name="GetRefresh" request="GetRefreshRequest" response="Refresh" kind="unary" deprecated />
 `;
 
+const SMALL_DECISION_PLAN = `# Plan
+
+## Open questions
+
+<SmallDecisionSet title="Open questions">
+
+These stay small; answer in review.
+
+<SmallDecision question="Ship behind a flag?">
+
+Rollout affects the beta cohort only.
+
+<Option title="Yes" recommended>
+
+Safer rollout with an easy kill switch.
+
+</Option>
+
+<Option title="No">
+
+One less flag to clean up later.
+
+</Option>
+
+</SmallDecision>
+
+<SmallDecision question="Keep the legacy export?">
+
+<Option title="Keep it" />
+
+<Option title="Delete it" recommended />
+
+</SmallDecision>
+
+</SmallDecisionSet>
+`;
+
 const UNPORTED_PLAN = `# Plan
 
 ## Question
@@ -509,6 +546,20 @@ describe("react renderer parity", () => {
       renderer: "react",
     });
     expect(react.html).toContain("data-grpc-method=");
+    expect(react.html).toBe(vanilla.html);
+  });
+
+  it("should render a byte-identical document for a SmallDecisionSet with model-carried ids", () => {
+    const vanilla = renderDocument({
+      markdown: SMALL_DECISION_PLAN,
+      fallbackTitle: "x",
+    });
+    const react = renderDocument({
+      markdown: SMALL_DECISION_PLAN,
+      fallbackTitle: "x",
+      renderer: "react",
+    });
+    expect(react.html).toContain("data-small-decision-set=");
     expect(react.html).toBe(vanilla.html);
   });
 

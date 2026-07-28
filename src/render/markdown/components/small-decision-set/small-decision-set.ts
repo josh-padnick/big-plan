@@ -7,6 +7,7 @@ import {
   type ComponentRenderer,
   type ScopedChildDefinition,
 } from "../../../../model/component-contract.js";
+import { renderSmallDecisionSetStatic } from "../../../../react/small-decision-set/small-decision-set.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
 import {
   compileSmallDecisionSetComponent,
@@ -329,5 +330,7 @@ const smallDecisionDefinition = (): ScopedChildDefinition => ({
 export const SMALL_DECISION_SET_COMPONENT_DEFINITION = {
   render: renderSmallDecisionSet,
   compile: compileSmallDecisionSetComponent,
+  renderStatic: (input) =>
+    renderSmallDecisionSetStatic(compileSmallDecisionSetComponent(input)),
   scopedChildren: { SmallDecision: smallDecisionDefinition() },
 } satisfies ComponentDefinition;
