@@ -171,7 +171,7 @@ const ViewToggleGroup = () => (
   </span>
 );
 
-/** Renders the complete CodeDiff caption and progressive controls. */
+/** Renders the CodeDiff caption and controls reserved for the live application. */
 export const CodeDiffHeader = ({
   filePath,
   addedCount,

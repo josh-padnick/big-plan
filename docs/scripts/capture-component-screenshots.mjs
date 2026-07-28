@@ -1,10 +1,9 @@
-// Captures the light and dark component screenshots embedded in the docs
-// component pages. Renders small MDX fixtures with the local CLI, then
-// screenshots the same regions in both color schemes so each light/dark
-// pair shares one crop. Run from docs/ via `bun run screenshots` after
-// building the renderer.
+// Captures the light and dark viewer and component screenshots embedded in
+// the docs. Renders fixtures with the local CLI, then screenshots the same
+// regions in both color schemes so each light/dark pair shares one crop. Run
+// from docs/ via `bun run screenshots` after building the renderer.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +11,11 @@ import { chromium } from "@playwright/test";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OUT_DIR = join(ROOT, "docs", "src", "assets", "components");
+const VIEWER_OUT_DIR = join(ROOT, "docs", "src", "assets");
+const VIEWER_FIXTURE = readFileSync(
+  join(ROOT, "docs", "src", "demo", "example-plan.md"),
+  "utf8",
+);
 const CLI = join(ROOT, "bin", "big-plan.mjs");
 
 const CALLOUTS_FIXTURE = `<Callout type="note" title="Review decision">
@@ -37,23 +41,6 @@ Enable the worker before raising the stale-read window, or reads serve stale dat
 Skipping the backfill drops rows written during the migration window; there is no recovery path.
 
 </Callout>
-`;
-
-const DIFF_FIXTURE = `<CodeDiff file="src/catalog/read-through-cache.ts" showLineNumbers showLineCounts>
-
-\`\`\`diff
-@@ -18,4 +18,7 @@ export const readCatalog = async (key: string) => {
-   const cached = await cache.get(key);
--  if (cached !== null && cached.ageSeconds <= 60) {
-+  if (cached !== null && cached.ageSeconds <= 150) {
-+    if (cached.ageSeconds > 60) {
-+      await refreshQueue.enqueueOnce(key);
-+    }
-     return cached.value;
-   }
-\`\`\`
-
-</CodeDiff>
 `;
 
 const ANNOTATION_FIXTURE = `<CodeDiff file="src/catalog/read-through-cache.ts" showLineNumbers>
@@ -131,38 +118,6 @@ README.md [modified]
 \`\`\`
 
 </FileTreeDiff>
-`;
-
-const TABLE_SCHEMA_FIXTURE = `<DatabaseTableSchema name="catalog.refresh_jobs">
-
-\`\`\`dbml
-id           bigint      [pk, increment]
-cache_key    text        [not null, note: 'The catalog cache key this job refreshes.']
-requested_by bigint      [ref: > catalog.api_instances.id, delete: set null]
-attempts     integer     [not null, default: 0, check: 'attempts <= 5']
-status       text        [not null, default: 'queued', note: 'Allowed: queued | running | done | failed.']
-enqueued_at  timestamptz [not null, default: \`now()\`]
-
-indexes {
-  cache_key [unique, name: 'refresh_jobs_live_key_idx', where: 'status <> \\'done\\'', note: 'Ensures one unfinished job per cache key.']
-  (status, enqueued_at) [name: 'refresh_jobs_scan_idx']
-}
-
-Note: 'One row per queued catalog refresh.'
-\`\`\`
-
-<Ddl title="Row security">
-
-\`\`\`sql
-ALTER TABLE catalog.refresh_jobs ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY refresh_jobs_service_all ON catalog.refresh_jobs
-  FOR ALL TO catalog_service USING (true) WITH CHECK (true);
-\`\`\`
-
-</Ddl>
-
-</DatabaseTableSchema>
 `;
 
 const BIG_DECISION_FIXTURE = `<BigDecision question="Which persistence layer should back review comments?" status="open">
@@ -259,22 +214,20 @@ const capture = async ({
   browser,
   colorScheme,
   html,
-  prepare,
   shoot,
   out,
+  outDir = OUT_DIR,
   width = 760,
+  height = 1600,
 }) => {
   const context = await browser.newContext({
     colorScheme,
-    viewport: { width, height: 1600 },
+    viewport: { width, height },
     deviceScaleFactor: 2,
   });
   const page = await context.newPage();
   await page.goto(`file://${html}`);
-  if (prepare) {
-    await prepare(page);
-  }
-  await shoot(page, join(OUT_DIR, out));
+  await shoot(page, join(outDir, out));
   await context.close();
 };
 
@@ -305,11 +258,6 @@ const shootSnippet = async (page, path) => {
   await page.locator("figure[data-code-snippet]").screenshot({ path });
 };
 
-/** Screenshots the DatabaseTableSchema figure element. */
-const shootTableSchema = async (page, path) => {
-  await page.locator("figure[data-database-table-schema]").screenshot({ path });
-};
-
 /** Screenshots the FileTree figure element. */
 const shootFileTree = async (page, path) => {
   await page.locator("figure[data-file-tree]").screenshot({ path });
@@ -330,19 +278,42 @@ const shootSmallDecisionSet = async (page, path) => {
   await page.locator("figure[data-small-decision-set]").screenshot({ path });
 };
 
-/** Switches the tree to the side-by-side view. */
-const openSideBySide = async (page) => {
-  await page.click('[data-tree-set-view="before-after"]');
-  await page.waitForSelector('[data-tree-content="before-after"]', {
-    state: "visible",
+/** Screenshots a square crop beginning at the review document's article. */
+const shootViewer = async (page, path) => {
+  const article = await page.locator("article").boundingBox();
+  if (article === null) {
+    throw new Error("Rendered viewer has no article.");
+  }
+  await page.screenshot({
+    path,
+    clip: {
+      x: article.x,
+      y: article.y,
+      width: Math.min(article.width, 744),
+      height: 744,
+    },
   });
 };
 
-/** Switches to side-by-side view and opens the actions menu. */
-const openSplitAndMenu = async (page) => {
-  await page.click('[data-diff-set-view="split"]');
-  await page.click("[data-diff-menu-button]");
-  await page.waitForSelector("[data-diff-menu-list]", { state: "visible" });
+/** Screenshots the shell and unified diff at a representative reading point. */
+const shootFullViewer = async (page, path) => {
+  await page.evaluate(() => {
+    document.documentElement.style.scrollBehavior = "auto";
+    const heading = document.querySelector("#code-diff");
+    if (heading === null) {
+      throw new Error("Rendered viewer has no Code diff section.");
+    }
+    heading.scrollIntoView();
+    window.scrollBy({ top: -96 });
+  });
+  await page.waitForFunction(
+    () =>
+      Math.abs(
+        (document.querySelector("#code-diff")?.getBoundingClientRect().top ??
+          0) - 96,
+      ) < 2,
+  );
+  await page.screenshot({ path });
 };
 
 const SHOTS = [
@@ -351,13 +322,6 @@ const SHOTS = [
     mdx: CALLOUTS_FIXTURE,
     base: "callout-types",
     shoot: shootCallouts,
-  },
-  {
-    name: "diff-split",
-    mdx: DIFF_FIXTURE,
-    base: "code-diff-split",
-    shoot: shootFigure,
-    prepare: openSplitAndMenu,
   },
   {
     name: "annotation",
@@ -384,12 +348,6 @@ const SHOTS = [
     shoot: shootSnippet,
   },
   {
-    name: "table-schema",
-    mdx: TABLE_SCHEMA_FIXTURE,
-    base: "database-table-schema",
-    shoot: shootTableSchema,
-  },
-  {
     name: "file-tree",
     mdx: FILE_TREE_FIXTURE,
     base: "file-tree-plain",
@@ -401,19 +359,40 @@ const SHOTS = [
     base: "file-tree-diff-combined",
     shoot: shootFileTreeDiff,
   },
-  {
-    name: "tree-diff-panes",
-    mdx: TREE_DIFF_FIXTURE,
-    base: "file-tree-diff-panes",
-    shoot: shootFileTreeDiff,
-    prepare: openSideBySide,
-    width: 1200,
-  },
 ];
 
 const dir = mkdtempSync(join(tmpdir(), "big-plan-shots-"));
 const browser = await chromium.launch();
 try {
+  const viewerHtml = renderFixture({
+    dir,
+    name: "viewer",
+    mdx: VIEWER_FIXTURE,
+  });
+  for (const colorScheme of ["light", "dark"]) {
+    await capture({
+      browser,
+      colorScheme,
+      html: viewerHtml,
+      shoot: shootViewer,
+      out: `viewer-${colorScheme}.png`,
+      outDir: VIEWER_OUT_DIR,
+      width: 1280,
+      height: 900,
+    });
+    console.log(`captured viewer-${colorScheme}.png`);
+    await capture({
+      browser,
+      colorScheme,
+      html: viewerHtml,
+      shoot: shootFullViewer,
+      out: `viewer-full-${colorScheme}.png`,
+      outDir: VIEWER_OUT_DIR,
+      width: 1280,
+      height: 900,
+    });
+    console.log(`captured viewer-full-${colorScheme}.png`);
+  }
   for (const shot of SHOTS) {
     const html = renderFixture({ dir, name: shot.name, mdx: shot.mdx });
     for (const colorScheme of ["light", "dark"]) {
@@ -421,10 +400,8 @@ try {
         browser,
         colorScheme,
         html,
-        prepare: shot.prepare,
         shoot: shot.shoot,
         out: `${shot.base}-${colorScheme}.png`,
-        width: shot.width,
       });
       console.log(`captured ${shot.base}-${colorScheme}.png`);
     }
