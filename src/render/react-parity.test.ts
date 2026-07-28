@@ -151,6 +151,56 @@ CREATE TABLE billing.subscriptions (id bigint PRIMARY KEY);
 </DatabaseTableSchema>
 `;
 
+const CODE_DIFF_PLAN = `# Plan
+
+## The change
+
+<CodeDiff file="src/cache/read.ts" showLineNumbers showLineCounts>
+
+\`\`\`diff
+diff --git a/src/cache/read.ts b/src/cache/read.ts
+index 23ad911..890ce42 100644
+--- a/src/cache/read.ts
++++ b/src/cache/read.ts
+@@ -18,5 +18,6 @@ export const readCache = async (key: string) => {
+   const cached = await cache.get(key);
+-  if (cached !== null && cached.ageSeconds <= 60) {
++  if (cached !== null && cached.ageSeconds <= 150) {
++    await refreshQueue.enqueueOnce(key);
+     return cached.value;
+   }
+
+@@ -30,3 +32,4 @@ export const readCache = async (key: string) => {
+   const value = await origin.read(key);
++  metrics.increment("cache.miss");
+   return value;
+ };
+\`\`\`
+
+<Annotation lines="19-21" side="new">
+
+The stale window widens while a refresh runs *in the background*.
+
+</Annotation>
+
+<Annotation lines="19" side="old">
+
+The old cutoff moves into the stale-window check.
+
+</Annotation>
+
+</CodeDiff>
+
+<CodeDiff file="config/cache.env">
+
+\`\`\`diff
+-CACHE_TTL=60
++CACHE_TTL=150
+\`\`\`
+
+</CodeDiff>
+`;
+
 const UNPORTED_PLAN = `# Plan
 
 ## Question
@@ -236,6 +286,20 @@ describe("react renderer parity", () => {
       renderer: "react",
     });
     expect(react.html).toContain("data-database-table-schema=");
+    expect(react.html).toBe(vanilla.html);
+  });
+
+  it("should render a byte-identical document for annotated and bare CodeDiffs", () => {
+    const vanilla = renderDocument({
+      markdown: CODE_DIFF_PLAN,
+      fallbackTitle: "x",
+    });
+    const react = renderDocument({
+      markdown: CODE_DIFF_PLAN,
+      fallbackTitle: "x",
+      renderer: "react",
+    });
+    expect(react.html).toContain("data-code-diff=");
     expect(react.html).toBe(vanilla.html);
   });
 

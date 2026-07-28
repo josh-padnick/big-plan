@@ -10,6 +10,7 @@ import {
   compileCodeDiffComponent,
   type CompiledCodeDiff,
 } from "../../../../model/compile-code-diff.js";
+import { renderCodeDiffStatic } from "../../../../react/code-diff/code-diff.js";
 import { renderCodeDiffHeader } from "./code-diff-header.js";
 import { renderCodeDiffViews } from "./code-diff-views.js";
 
@@ -63,6 +64,8 @@ export const renderCodeDiff: ComponentRenderer = (input) =>
 export const CODE_DIFF_COMPONENT_DEFINITION = {
   render: renderCodeDiff,
   compile: compileCodeDiffComponent,
+  renderStatic: (input) =>
+    renderCodeDiffStatic(compileCodeDiffComponent(input)),
   scopedChildren: {
     Annotation: {
       kind: "scoped-child",
