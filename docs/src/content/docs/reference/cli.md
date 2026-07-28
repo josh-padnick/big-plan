@@ -28,10 +28,6 @@ npx big-plan compile <input.mdx> [output.json]
 The CLI resolves the input path against the current working directory.
 It reads the input as UTF-8 text.
 
-`render` accepts an experimental `--renderer` flag (`vanilla`, the default, or `react`) selecting the implementation that renders plan components; both `--renderer react` and `--renderer=react` forms are accepted.
-Every registered component has a React renderer whose output is test-pinned byte-identical to the vanilla renderer, so the flag does not change what a document looks like.
-The registry retains its vanilla fallback until the React renderer becomes the default, although no built-in component currently needs that fallback.
-
 When the output argument is omitted, `render` replaces the input filename extension with `.html` and `compile` replaces it with `.model.json`.
 An input without an extension receives the suffix at the end.
 The default output therefore sits next to the input.

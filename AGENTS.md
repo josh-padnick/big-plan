@@ -16,24 +16,13 @@ Everything runs locally, and the file on disk is the source of truth.
 
 ## Current state
 
-Deliverable 2 is shipped in this repo: MDX plan documents with components, building on the static markdown viewer from deliverable 1.
-`big-plan render <input.mdx> [output.html]` converts a static-subset MDX plan document into a single self-contained themed HTML document with a responsive table of contents built from level-two headings.
-`big-plan compile <input.mdx> [output.json]` emits the validated model consumed by rendering as derived JSON for agents and tools; MDX remains the canonical source.
-Wide screens use a sticky sidebar; narrower screens use a sticky `Sections` disclosure showing the section count.
-Both navigation variants track the current section while the reader scrolls, including short final sections at the bottom of the page, and section links scroll smoothly unless the reader has requested reduced motion.
+Deliverable 2 is shipped in this repo, now rendered end to end by the React component library: MDX plan documents with components, compiled once and delivered as machine JSON or self-contained human HTML.
+`big-plan render <input.mdx> [output.html]` converts a static-subset MDX plan document into a single self-contained themed HTML document, and `big-plan compile <input.mdx> [output.json]` emits the same validated plan model as JSON for agents and tools.
 The static subset rejects imports, exports, expressions, and unsupported attributes with hard-fail diagnostics carrying line and column positions, while the built-in BigDecision, Callout, CodeDiff, CodeSnippet, DatabaseTableSchema, FileTree, FileTreeDiff, GraphqlOperation, GrpcMethod, HttpEndpoint, and SmallDecisionSet components provide validated plan-native presentation.
 GFM tables, task lists, footnotes, and autolinks remain supported, but MDX does not support four-space indented code blocks; plans use fenced code blocks instead.
-Supported declared fenced-code languages receive syntax highlighting, every block code sample gets a copy control, and readers can override the OS light/dark preference with a locally persisted theme control.
-Every viewport has a sticky branding bar whose logo follows that active theme, while embedded light and dark favicons follow the OS preference.
-CodeDiff renders a no-JavaScript unified view with full scoped line annotations, plus progressively enhanced unified/split selection, responsive annotation disclosures, aligned side-localized split annotations, file-path and fence-source copying (LF-normalized with a trailing newline, as MDX parses fences), and full-screen viewing.
-CodeSnippet renders excerpts with optional file identity, file-absolute line numbers, and scoped annotations, plus progressively enhanced file-path and raw-source copying.
-DatabaseTableSchema renders one table's schema from a validated DBML-subset fence: a header band with the schema-qualified name and table note, a dense Column/Type/Constraints/Default/Comment grid keeping every column to one equal-rhythm row whose Constraints cell carries key badges, explicit nullability, foreign keys with uppercase SQL actions, and check expressions, a tinted numbered Indexes band (INDX pills echoed on participating column rows, with predicate-only participation marked WHERE INDX n) leading each entry with its name over a demoted definition, titled Ddl children rendering verbatim engine-specific SQL bands that fold behind DDL-badged tabs when multiple bands exist (with Indexes selected first when present), and progressively enhanced table-name and raw-source copying, INDX references that jump focus to and flash their band entry, a locally persisted column layout combining drag-or-keyboard reordering with a show/hide columns menu, and full-screen viewing.
-BigDecision renders one weighty decision as a standalone criteria matrix - options as columns, authored criteria as rows, terse tone-scored verdicts with hover tooltips (native disclosures without JavaScript) - plus lifecycle status, a rated reversibility section with a built-in explainer, at most one recommendation, per-option and question-level Details drawers, full-screen viewing, reader-set criterion priorities feeding a live leader-highlighted Score row and a collapsible Score section whose live arithmetic breakdown and reset verify the ranking, placeholder lifecycle actions (Submit, Suggest another option, Defer, Re-open) staged for the live layer, and a decided outcome that keeps losing options visible - or, without criteria, a plain selectable option list - while SmallDecisionSet collects a plan's small questions as a compact numbered list whose options pair a title with a short always-visible explanation; in both components the recommended option starts locally selected and the reader can move that selection as a preview of the choice a future live layer will transport.
-HttpEndpoint renders server-expanded API review cards with validated parameters, request examples, and response contracts, then progressively folds multi-section cards behind tabs.
-GraphqlOperation and GrpcMethod extend that review-card grammar to the other protocols: kind-badged operation cards with one-level input and payload field expansions and a grouped executable example whose responses can pair success with a validation error, and streaming-aware RPC cards headed by the authentic proto signature with message-typed field sections, gRPC status codes, grouped examples, and proto source.
-HttpEndpoint marks optional parameters with authored defaults.
-FileTree renders plain hierarchies with foldable directories, while FileTreeDiff renders a no-JavaScript combined change tree with change-count summaries plus a persisted combined/side-by-side selection whose Current and Planned panes stack below the layout breakpoint, a Planned-pane Show diff switch that swaps annotations for the plain final state, and full-screen viewing.
-The output makes no external requests and remains readable with JavaScript disabled; inline scripts progressively enhance the table of contents, theme control, code-copy controls, CodeDiff, CodeSnippet, and DatabaseTableSchema controls, FileTree and FileTreeDiff interactions, BigDecision and SmallDecisionSet option selection, BigDecision's full-screen control, criterion weighting, and lifecycle actions, and HttpEndpoint's tabbed section navigation.
+Supported declared fenced-code languages receive syntax highlighting, and readers' OS light/dark preference styles the document through CSS alone.
+Rendered documents are deliberately inert: they ship no scripts, make no external requests, and remain fully readable everywhere - navigation runs on native anchors, the mobile `Sections` disclosure and every component detail drawer are native `details` elements, wide content scrolls inside its own containers, and controls that would need a script never appear.
+Interactive review aids - theme override, copy controls, diff view switching, tabbed sections, full-screen viewing, option selection, and criterion weighting - belong to the forthcoming live review application, which hydrates the same components.
 
 ## Architecture at a glance
 
@@ -49,7 +38,6 @@ The pipeline is deliberately small: CLI -> renderer -> self-contained HTML or pl
   Element-scoped styles for plain markdown elements live in `src/render/markdown/prose.css`, and the syntax-token palette lives in `src/render/markdown/code-block/syntax-highlighting.css`.
   Authored markup carries Tailwind utility classes where practical; stylesheet rules handle plain markdown elements, highlighter token spans, palette-dependent component variants, and stateful diff layouts.
   `scripts/gen-css.mjs` compiles the entry point (inlining its imports) and embeds the result as a generated TypeScript module, so rendered documents inline the full stylesheet and stay self-contained.
-- Browser-side scripts are authored as real TypeScript in `*.browser.ts` files co-located with the concern they belong to (type-checked against `tsconfig.browser.json`, which adds the DOM lib) and compiled by `scripts/gen-browser-scripts.mjs` into generated modules the shell inlines. Shipped documents never reference external code.
 - Branding assets (the logos and favicons in `assets/`) are embedded by `scripts/gen-assets.mjs` as a generated data-URI module, so the branding bar and favicon ship inside the document like everything else.
 
 Future deliverables build outward from this core with a local server and browser bridge for live agent chat and comments.
@@ -58,11 +46,10 @@ Future deliverables build outward from this core with a local server and browser
 
 - **Runtime target**: Node.js >= 22, ESM only. The published package runs under plain Node so `npx big-plan` works everywhere; Bun is a development-time choice, not a runtime requirement.
 - **Package manager and script runner**: Bun (`bun install`, `bun run <script>`, `bun.lock`).
-- **Language**: TypeScript, strict, compiled with tsc; browser-side scripts type-check against `tsconfig.browser.json` (DOM lib) and are transpiled into generated modules.
+- **Language**: TypeScript, strict, compiled with tsc; UI components are TSX compiled with the automatic JSX runtime.
 - **CLI framework**: `axi-sdk-js` (dispatch, help, structured errors, TOON output).
 - **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-mdx, remark-rehype, rehype-slug, rehype-highlight, rehype-stringify).
-- **React render target (in progress)**: react and react-dom render every registered component to static HTML at render time via `renderToStaticMarkup`; `hast-util-to-jsx-runtime` bridges model-carried HAST prose into React. Nothing React ships in rendered output.
-- **Styling**: Tailwind v4, compiled at build time by `@tailwindcss/cli` into a generated module; no runtime CSS tooling.
+- **React**: react and react-dom render every component to static HTML at build time via `renderToStaticMarkup`; `hast-util-to-jsx-runtime` bridges model-carried HAST prose into React. Nothing React ships in rendered output.
 - **Linting**: ESLint v10 flat config with `typescript-eslint`; conventions and architectural guardrails live in `eslint.config.mjs`.
 - **Tests**: vitest for units (colocated in `src/**`), Playwright (chromium) for browser journeys.
 
