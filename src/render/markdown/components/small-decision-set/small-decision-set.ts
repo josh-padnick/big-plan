@@ -6,7 +6,7 @@ import {
   type ScopedChildDefinition,
 } from "../../../../model/component-contract.js";
 import { compileSmallDecisionSetComponent } from "../../../../model/compile-small-decision-set.js";
-import { renderSmallDecisionSetStatic } from "../../../../react/small-decision-set/small-decision-set.js";
+import { renderSmallDecisionSetStatic } from "../../../../ui/small-decision-set/small-decision-set.js";
 
 const bodyPolicy = (name: "SmallDecision" | "Option") => ({
   prohibited: {

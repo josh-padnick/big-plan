@@ -72,11 +72,12 @@ export default tseslint.config(
         imports: ["**/icons/**"],
         mayImport: [],
       },
-      // The React render target: ports consuming compiled plan models,
-      // SSR-only today. The review app later hydrates these same components.
-      react: {
-        files: ["src/react/**/*.ts", "src/react/**/*.tsx"],
-        imports: ["**/react/**"],
+      // The UI component library: React components consuming compiled plan
+      // models, rendered to static HTML today and hydrated by the future
+      // review app.
+      ui: {
+        files: ["src/ui/**/*.ts", "src/ui/**/*.tsx"],
+        imports: ["**/ui/**"],
         mayImport: ["model", "icons"],
       },
       codeBlock: {
@@ -96,7 +97,7 @@ export default tseslint.config(
         files: ["src/render/markdown/components/**/*.ts"],
         ignores: ["src/render/markdown/components/shared/**/*.ts"],
         imports: ["**/markdown/components/**"],
-        mayImport: ["icons", "componentShared", "model", "react"],
+        mayImport: ["icons", "componentShared", "model", "ui"],
       },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
@@ -139,7 +140,7 @@ export default tseslint.config(
     // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
       ["model", "escapeHtml", "icons"],
-      ["codeBlock", "page", "componentShared", "react"],
+      ["codeBlock", "page", "componentShared", "ui"],
       ["components"],
       ["markdown", "shell"],
       ["composer"],

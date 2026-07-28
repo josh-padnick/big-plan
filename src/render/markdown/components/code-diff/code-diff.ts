@@ -3,7 +3,7 @@
 
 import { type ComponentDefinition } from "../../../../model/component-contract.js";
 import { compileCodeDiffComponent } from "../../../../model/compile-code-diff.js";
-import { renderCodeDiffStatic } from "../../../../react/code-diff/code-diff.js";
+import { renderCodeDiffStatic } from "../../../../ui/code-diff/code-diff.js";
 
 /** Declares CodeDiff's renderer and direct-child Annotation contract. */
 export const CODE_DIFF_COMPONENT_DEFINITION = {

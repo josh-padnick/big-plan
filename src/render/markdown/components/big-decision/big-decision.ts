@@ -6,7 +6,7 @@ import {
   type ScopedChildDefinition,
 } from "../../../../model/component-contract.js";
 import { compileBigDecisionComponent } from "../../../../model/compile-big-decision.js";
-import { renderBigDecisionStatic } from "../../../../react/big-decision/big-decision.js";
+import { renderBigDecisionStatic } from "../../../../ui/big-decision/big-decision.js";
 
 const bodyPolicy = (
   name: "Criterion" | "Details" | "Option" | "Reversibility" | "Score",

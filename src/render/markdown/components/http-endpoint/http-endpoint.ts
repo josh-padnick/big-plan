@@ -6,7 +6,7 @@ import {
   type ScopedChildDefinition,
 } from "../../../../model/component-contract.js";
 import { compileHttpEndpointComponent } from "../../../../model/compile-http-endpoint.js";
-import { renderHttpEndpointStatic } from "../../../../react/http-endpoint/http-endpoint.js";
+import { renderHttpEndpointStatic } from "../../../../ui/http-endpoint/http-endpoint.js";
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (

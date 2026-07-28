@@ -6,7 +6,7 @@ import {
   type ScopedChildDefinition,
 } from "../../../../model/component-contract.js";
 import { compileGraphqlOperationComponent } from "../../../../model/compile-graphql-operation.js";
-import { renderGraphqlOperationStatic } from "../../../../react/graphql-operation/graphql-operation.js";
+import { renderGraphqlOperationStatic } from "../../../../ui/graphql-operation/graphql-operation.js";
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (

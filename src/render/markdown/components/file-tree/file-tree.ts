@@ -3,7 +3,7 @@
 
 import { type ComponentDefinition } from "../../../../model/component-contract.js";
 import { compileFileTree } from "../../../../model/compile-file-tree.js";
-import { renderFileTreeStatic } from "../../../../react/file-tree/file-tree.js";
+import { renderFileTreeStatic } from "../../../../ui/file-tree/file-tree.js";
 
 /** Declares FileTree's complete component integration contract. */
 export const FILE_TREE_COMPONENT_DEFINITION = {

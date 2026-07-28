@@ -3,7 +3,7 @@
 
 import { type ComponentDefinition } from "../../../../model/component-contract.js";
 import { compileCodeSnippetComponent } from "../../../../model/compile-code-snippet.js";
-import { renderCodeSnippetStatic } from "../../../../react/code-snippet/code-snippet.js";
+import { renderCodeSnippetStatic } from "../../../../ui/code-snippet/code-snippet.js";
 
 /** Declares CodeSnippet's renderer and direct-child Annotation contract. */
 export const CODE_SNIPPET_COMPONENT_DEFINITION = {

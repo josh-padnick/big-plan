@@ -3,7 +3,7 @@
 
 import { type ComponentDefinition } from "../../../../model/component-contract.js";
 import { compileDatabaseTableSchema } from "../../../../model/compile-database-table-schema.js";
-import { renderDatabaseTableSchemaStatic } from "../../../../react/database-table-schema/database-table-schema.js";
+import { renderDatabaseTableSchemaStatic } from "../../../../ui/database-table-schema/database-table-schema.js";
 
 /** Declares DatabaseTableSchema's complete component integration contract. */
 export const DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION = {
