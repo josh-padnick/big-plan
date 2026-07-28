@@ -321,6 +321,53 @@ mutation refreshCreate($input: RefreshCreateInput!) {
 <GraphqlOperation kind="query" name="refresh" deprecated deprecationReason="Use refreshJob instead." />
 `;
 
+const GRPC_PLAN = `# Plan
+
+## gRPC
+
+<GrpcMethod service="catalog.v1.RefreshService" name="WatchRefresh" request="WatchRefreshRequest" response="RefreshEvent" kind="serverStreaming">
+
+Streams refresh lifecycle events.
+
+<Field in="request" name="refresh_id" type="string">
+
+The refresh job to watch.
+
+</Field>
+
+<Field in="response" name="status" type="RefreshStatus">
+
+The current lifecycle state.
+
+</Field>
+
+<Error code="NOT_FOUND">
+
+The refresh job does not exist.
+
+</Error>
+
+<Example label="Streaming session">
+
+\`\`\`text
+watch refresh_id=r_1 -> QUEUED -> RUNNING -> DONE
+\`\`\`
+
+</Example>
+
+<Proto>
+
+\`\`\`proto
+rpc WatchRefresh(WatchRefreshRequest) returns (stream RefreshEvent);
+\`\`\`
+
+</Proto>
+
+</GrpcMethod>
+
+<GrpcMethod service="catalog.v1.RefreshService" name="GetRefresh" request="GetRefreshRequest" response="Refresh" kind="unary" deprecated />
+`;
+
 const UNPORTED_PLAN = `# Plan
 
 ## Question
@@ -448,6 +495,20 @@ describe("react renderer parity", () => {
       renderer: "react",
     });
     expect(react.html).toContain("data-graphql-operation=");
+    expect(react.html).toBe(vanilla.html);
+  });
+
+  it("should render a byte-identical document for streaming and compact GrpcMethods", () => {
+    const vanilla = renderDocument({
+      markdown: GRPC_PLAN,
+      fallbackTitle: "x",
+    });
+    const react = renderDocument({
+      markdown: GRPC_PLAN,
+      fallbackTitle: "x",
+      renderer: "react",
+    });
+    expect(react.html).toContain("data-grpc-method=");
     expect(react.html).toBe(vanilla.html);
   });
 
