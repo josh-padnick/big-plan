@@ -11,19 +11,18 @@ Light and dark follow the reader's OS in inert exports.
 
 @import "tailwindcss" source(none);
 @import "./markdown/prose.css";
-@import "./markdown/code-block/syntax-highlighting.css";
-@import "./markdown/components/shared/annotation-card/annotation-card.css";
-@import "./markdown/components/shared/full-screen/full-screen.css";
-@import "./markdown/components/callout/callout.css";
-@import "./markdown/components/code-diff/code-diff.css";
-@import "./markdown/components/code-snippet/code-snippet.css";
-@import "./markdown/components/database-table-schema/database-table-schema.css";
-@import "./markdown/components/big-decision/big-decision.css";
-@import "./markdown/components/file-tree/file-tree.css";
-@import "./markdown/components/small-decision-set/small-decision-set.css";
-@import "./markdown/components/graphql-operation/graphql-operation.css";
-@import "./markdown/components/grpc-method/grpc-method.css";
-@import "./markdown/components/http-endpoint/http-endpoint.css";
+@import "./markdown/syntax-highlighting.css";
+@import "../components/_shared/annotation-card/annotation-card.css";
+@import "../components/callout/styles.css";
+@import "../components/code-diff/styles.css";
+@import "../components/code-snippet/styles.css";
+@import "../components/database-table-schema/styles.css";
+@import "../components/big-decision/styles.css";
+@import "../components/file-tree/styles.css";
+@import "../components/small-decision-set/styles.css";
+@import "../components/graphql-operation/styles.css";
+@import "../components/grpc-method/styles.css";
+@import "../components/http-endpoint/styles.css";
 
 /* Only authored source emits utility candidates; examples and docs do not. */
 @source "../";

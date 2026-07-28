@@ -53,13 +53,31 @@ export default tseslint.config(
     // A layer: where its files live, which import specifiers reach it, and
     // what it MAY import. Everything else known to the model is banned.
     const LAYERS = {
-      // The framework-free plan model: compiled component models, shared
-      // attribute validation, diagnostics, and pure fence parsers. This is
-      // the contract every render target (and the future review app)
-      // consumes; it imports nothing project-local by construction.
+      // Framework-free component compilers, authoring contracts, diagnostics,
+      // and pure parsers stay at the bottom tier even though the file tree
+      // co-locates them with the views and definitions that share their
+      // product concept.
       model: {
-        files: ["src/model/**/*.ts"],
-        imports: ["**/model/**"],
+        files: [
+          "src/components/_authoring/**/*.ts",
+          "src/components/*/compile*.ts",
+          "src/components/code-diff/unified-diff*.ts",
+          "src/components/code-snippet/split-highlighted-lines*.ts",
+          "src/components/database-table-schema/derive-index-participation*.ts",
+          "src/components/database-table-schema/parse-table-schema*.ts",
+          "src/components/file-tree/derive-tree-view*.ts",
+          "src/components/file-tree/parse-tree-text*.ts",
+        ],
+        imports: [
+          "**/components/_authoring/**",
+          "**/components/*/compile.js",
+          "**/components/code-diff/unified-diff.js",
+          "**/components/code-snippet/split-highlighted-lines.js",
+          "**/components/database-table-schema/derive-index-participation.js",
+          "**/components/database-table-schema/parse-table-schema.js",
+          "**/components/file-tree/derive-tree-view.js",
+          "**/components/file-tree/parse-tree-text.js",
+        ],
         mayImport: [],
       },
       escapeHtml: {
@@ -68,54 +86,57 @@ export default tseslint.config(
         mayImport: [],
       },
       icons: {
-        files: ["src/render/icons/**/*.ts"],
-        imports: ["**/icons/**"],
+        files: ["src/icons/**/*.ts"],
+        imports: ["**/icons/lucide-icon.js", "**/icons/lucide/**"],
         mayImport: [],
       },
-      // The UI component library: React components consuming compiled plan
-      // models, rendered to static HTML today and hydrated by the future
-      // review app.
+      // React views and their never-authorable shared building blocks consume
+      // compiled models without owning static serialization.
       ui: {
-        files: ["src/ui/**/*.ts", "src/ui/**/*.tsx"],
-        imports: ["**/ui/**"],
+        files: [
+          "src/components/_shared/**/*.ts",
+          "src/components/_shared/**/*.tsx",
+          "src/components/*/view*.ts",
+          "src/components/*/view*.tsx",
+          "src/components/file-tree/*-view.tsx",
+        ],
+        imports: [
+          "**/components/_shared/**",
+          "**/components/*/view*.js",
+          "**/components/file-tree/*-view.js",
+        ],
         mayImport: ["model", "icons"],
       },
-      codeBlock: {
-        files: ["src/render/markdown/code-block/**/*.ts"],
-        imports: ["**/markdown/code-block/**"],
-        mayImport: ["icons"],
-      },
-      // Never-authorable presentation building blocks the registered
-      // component directories compose; shared/ may reach down into icons but
-      // never sideways into a component directory.
-      componentShared: {
-        files: ["src/render/markdown/components/shared/**/*.ts"],
-        imports: ["**/components/shared/**"],
-        mayImport: ["icons"],
-      },
       components: {
-        files: ["src/render/markdown/components/**/*.ts"],
-        ignores: ["src/render/markdown/components/shared/**/*.ts"],
-        imports: ["**/markdown/components/**"],
-        mayImport: ["icons", "componentShared", "model", "ui"],
+        files: [
+          "src/components/_registration/**/*.ts",
+          "src/components/*/definition*.ts",
+          "src/components/file-tree/*-definition*.ts",
+          "src/components/code-diff/test-fixtures.ts",
+          "src/render/markdown/component-pipeline/**/*.ts",
+        ],
+        imports: [
+          "**/components/_registration/**",
+          "**/components/*/definition.js",
+          "**/components/file-tree/*-definition.js",
+          "**/render/markdown/component-pipeline/**",
+        ],
+        mayImport: ["icons", "model", "ui"],
       },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
-        ignores: [
-          "src/render/markdown/code-block/**/*.ts",
-          "src/render/markdown/components/**/*.ts",
-        ],
-        // Direct Markdown-pipeline files only; the nested code-block and
-        // typed-component concerns have their own dependency contracts.
+        ignores: ["src/render/markdown/component-pipeline/**/*.ts"],
+        // Direct Markdown-pipeline files only; the nested typed-component
+        // concern has its own dependency contract.
         imports: ["**/markdown/*.js"],
         // Deliberately not escapeHtml: markdown escapes through
         // rehype-stringify, never by hand.
-        mayImport: ["codeBlock", "components", "model"],
+        mayImport: ["components", "model"],
       },
       shell: {
         files: ["src/render/shell/**/*.ts"],
         imports: ["**/shell/**"],
-        mayImport: ["escapeHtml", "codeBlock", "components", "componentShared"],
+        mayImport: ["escapeHtml", "icons", "components"],
       },
       page: {
         files: ["src/render/page.ts"],
@@ -125,14 +146,14 @@ export default tseslint.config(
       composer: {
         files: ["src/render/*.ts"],
         ignores: ["src/render/page.ts", "src/render/escape-html.ts"],
-        imports: ["**/render-document.js"],
+        imports: ["**/compile-plan-model.js", "**/render-document.js"],
         mayImport: ["markdown", "shell", "page"],
       },
       cli: {
         files: ["src/cli/**/*.ts"],
         imports: ["**/cli/**"],
-        // The composer is the renderer's public entry point; granting only it
-        // is what keeps the CLI out of the renderer's internals.
+        // The composer files are the renderer's public entry points; granting
+        // only them keeps the CLI out of the renderer's internals.
         mayImport: ["composer"],
       },
     };
@@ -140,7 +161,7 @@ export default tseslint.config(
     // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
       ["model", "escapeHtml", "icons"],
-      ["codeBlock", "page", "componentShared", "ui"],
+      ["page", "ui"],
       ["components"],
       ["markdown", "shell"],
       ["composer"],
@@ -257,9 +278,9 @@ export default tseslint.config(
       .filter((block) => block !== null);
   })(),
   {
-    // Model tests exercise the full authoring pipeline end to end, so they
-    // may reach up into the markdown layer; production model code cannot.
-    files: ["src/model/*.test.ts"],
+    // Co-located component tests may exercise the full authoring pipeline;
+    // production compiler, view, and definition files remain boundary-checked.
+    files: ["src/components/**/*.test.ts"],
     rules: { "no-restricted-imports": "off" },
   },
   {

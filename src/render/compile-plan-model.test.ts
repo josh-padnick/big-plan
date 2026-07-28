@@ -3,11 +3,8 @@
 // component collection, and the same hard-fail behavior as rendering.
 
 import { describe, expect, it } from "vitest";
-import {
-  MarkdownDiagnosticsError,
-  compilePlanModel,
-  renderDocument,
-} from "./render-document.js";
+import { compilePlanModel } from "./compile-plan-model.js";
+import { MarkdownDiagnosticsError, renderDocument } from "./render-document.js";
 
 const PLAN = `# Storage plan
 
@@ -93,6 +90,19 @@ describe("compilePlanModel", () => {
     });
     expect(plan.title).toBe("Untitled plan");
     expect(plan.components).toHaveLength(1);
+  });
+
+  it("should retain authored headings nested inside a component body", () => {
+    const plan = compilePlanModel({
+      markdown:
+        '<Callout type="note">\n\n# Nested title\n\n## Nested section\n\nBody.\n\n</Callout>\n',
+      fallbackTitle: "fallback",
+    });
+
+    expect(plan.title).toBe("Nested title");
+    expect(plan.sections).toEqual([
+      { id: "nested-section", text: "Nested section" },
+    ]);
   });
 
   it("should list a parent before its nested component in document order", () => {
