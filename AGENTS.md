@@ -37,9 +37,8 @@ This guide owns the durable implementation model contributors must preserve.
 ## Technical concepts
 
 - **Static-subset MDX** is the authoring format accepted by Big Plan: Markdown plus registered components, without executable imports, exports, or expressions.
-- **Component model** is the validated, framework-neutral meaning a component compiler derives from authored MDX.
-- **Plan model** is the machine-readable result: document metadata plus component models in source order.
-- **Authorable component** is a registered MDX concept with an authoring contract, a component model, and a human view.
+- **Component** is a built-in MDX element that presents a specific kind of plan information in an opinionated, review-friendly way, such as a decision, code diff, schema, or file tree.
+- **Plan model** is the machine-readable description of a plan: its title and sections plus the validated data for each component in source order.
 - **Review shell** is the reading and navigation surface around rendered plan content.
 - **Page envelope** packages the shell and rendered content as a self-contained HTML document with its head and embedded assets.
 
@@ -54,15 +53,15 @@ Big Plan compiles once and delivers twice:
 MDX plan source
   -> CLI command
   -> static-subset parsing and authoring validation
-  -> component compilation
+  -> registered-component validation and interpretation
      -> model continuation -> plan-model JSON
      -> HTML continuation -> React view -> HAST -> document transforms
         -> review shell -> page envelope -> review document
 ```
 
-Each component compiler returns a framework-neutral model paired with a presentation that consumes it.
-Machine delivery collects those models without top-level presentation.
-Human delivery invokes the paired presentations, crosses one React-to-HAST boundary, applies document-wide transforms, and packages inert HTML.
+Each component validates its authored attributes and content into plain data describing what it should show.
+Machine delivery collects that data in the plan model.
+Human delivery gives the same data to the component's React view, crosses one React-to-HAST boundary, applies document-wide transforms, and packages inert HTML.
 React is a presentation-edge implementation tool; no React runtime or browser script ships in a rendered document.
 
 Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own authorable concept behavior.
@@ -70,24 +69,24 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 
 ## Source ownership and placement
 
-| Owner                    | Responsibility and placement rule                                                                                                                                                                                                         |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/cli/`               | Public command dispatch, safe derived-output workflows, errors, and result serialization. Give each public command a non-underscored folder; keep reusable command mechanics in `_shared/` and business semantics below the CLI.          |
-| `src/components/`        | Authorable plan concepts as vertical slices. Put a new authorable concept in its own folder and follow the infrastructure boundaries in the [components local map](src/components/README.md).                                             |
-| `src/render/`            | Pure document compilation and delivery orchestration. Put cross-document pipeline behavior here and follow the stage boundaries in the [renderer local map](src/render/README.md); keep concept-specific behavior in its component slice. |
-| `src/render/shell/`      | Viewer chrome, reading layout, branding, and responsive navigation. Do not put document packaging here.                                                                                                                                   |
-| `src/render/page.ts`     | Doctype, head, embedded delivery assets, favicons, and the final inert HTML envelope.                                                                                                                                                     |
-| `src/icons/`             | Framework-neutral Lucide icon data. Add one catalog-named file per glyph; adapt it to HAST or React only at the relevant rendering edge.                                                                                                  |
-| `scripts/` and `assets/` | Authored build-time inputs and the generators that embed CSS and branding. Generated modules are derived outputs.                                                                                                                         |
-| `examples/`              | Valid, realistic plan sources shared by authors, tests, and documentation. Add the smallest example that demonstrates an author-facing contract.                                                                                          |
-| `test/`                  | Critical browser journeys over complete rendered documents. Keep pure behavior in colocated unit tests.                                                                                                                                   |
-| `docs/`                  | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. It does not own internal source-placement rules.                                                                           |
+| Owner                    | Responsibility and placement rule                                                                                                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/cli/`               | Public command dispatch, safe derived-output workflows, errors, and result serialization. Give each public command a non-underscored folder; keep reusable command mechanics in `_shared/` and business semantics below the CLI.            |
+| `src/components/`        | Authorable plan concepts as vertical slices. Put a new authorable concept in its own folder and follow the infrastructure boundaries in the [components local map](src/components/README.md).                                               |
+| `src/render/`            | Pure document compilation and delivery orchestration. Put cross-document pipeline behavior here and follow the stage boundaries in the [renderer local map](src/render/README.md); keep component-specific behavior in its component slice. |
+| `src/render/shell/`      | Viewer chrome, reading layout, branding, and responsive navigation. Do not put document packaging here.                                                                                                                                     |
+| `src/render/page.ts`     | Doctype, head, embedded delivery assets, favicons, and the final inert HTML envelope.                                                                                                                                                       |
+| `src/icons/`             | Framework-neutral Lucide icon data. Add one catalog-named file per glyph; adapt it to HAST or React only at the relevant rendering edge.                                                                                                    |
+| `scripts/` and `assets/` | Authored build-time inputs and the generators that embed CSS and branding. Generated modules are derived outputs.                                                                                                                           |
+| `examples/`              | Valid, realistic plan sources shared by authors, tests, and documentation. Add the smallest example that demonstrates an author-facing contract.                                                                                            |
+| `test/`                  | Critical browser journeys over complete rendered documents. Keep pure behavior in colocated unit tests.                                                                                                                                     |
+| `docs/`                  | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. It does not own internal source-placement rules.                                                                             |
 
 Use these placement tests:
 
 - A public CLI action belongs in `src/cli/<command>/`; shared output safety belongs in `src/cli/_shared/`.
 - An authorable MDX concept belongs in `src/components/<concept>/`; a never-authorable visual primitive does not.
-- Document-wide parsing, transformation, or delivery behavior belongs in `src/render/`; concept-specific compilation stays with the concept.
+- Document-wide parsing, transformation, or delivery behavior belongs in `src/render/`; component-specific validation and presentation stay with the component.
 - Reading and navigation chrome belongs in the shell; doctype, head, and embedded packaging belong in the page envelope.
 - A pure rule gets a colocated unit test; only a critical integrated reading journey gets a Playwright spec in `test/`.
 - A public authoring change updates its validated example and the appropriate human or agent-facing product documentation.
