@@ -1,23 +1,22 @@
 ---
 title: How Big Plan works
-description: Why Big Plan treats a plan as a compiled document, and how that design produces model JSON or a self-contained review document.
+description: Why Big Plan treats a plan as a compiled document, and how that design produces machine-readable JSON or a self-contained review document.
 ---
 
 Big Plan's central architectural idea is to treat an authored plan like source code rather than an HTML template.
 Before Big Plan chooses an output format, it **compiles** the plan.
 
 Compilation here does not mean generating machine code.
-It means reading the authored MDX, rejecting syntax or component usage outside Big Plan's static contract, and translating each registered component into validated, framework-neutral data.
-That data is the component's **model**: the meaning of what the author wrote, separated from how a human sees it.
+It means reading the authored MDX, rejecting code or component usage outside Big Plan's plan format, and translating each built-in component into plain validated data.
 
 The compiler is not one class or executable inside Big Plan.
-It is the coordinated translation path made from the MDX parser, authoring validators, and the compiler owned by each registered component.
-A component compiler knows how to turn that component's attributes and children into its model; it does not decide whether the final delivery is JSON or HTML.
+It is the coordinated translation path made from the MDX parser, authoring validators, and the compilation function owned by each built-in component.
+A component's compilation function knows how to turn that component's attributes and children into validated data; it does not decide whether the final delivery is JSON or HTML.
 
-This intermediate model is what makes two outputs possible:
+That shared translation is what keeps two outputs consistent:
 
-- `big-plan compile` collects the document metadata and component models into machine-readable JSON.
-- `big-plan render` presents those same component models inside a human-readable HTML review document.
+- `big-plan compile` collects document metadata and validated component data into machine-readable JSON.
+- `big-plan render` presents that same validated component data inside a human-readable HTML review document.
 
 The commands run independently.
 Running one does not run the other, and `render` never reads JSON produced by `compile`.
@@ -32,11 +31,10 @@ flowchart TB
   C --> E["renderDocument()<br/>compileMarkdown()"]
   D --> F["compileMarkdownTree()<br/>parse, validate, compile components"]
   E --> F
-  F --> G["model output mode<br/>collect component models"]
+  F --> G["machine-readable output mode<br/>collect validated component data"]
   F --> H["HTML output mode<br/>render component presentations"]
-  G --> I["plan.model.json"]
-  H --> J["shell + page envelope"]
-  J --> K["plan.html"]
+  G --> I["machine-readable JSON"]
+  H --> J["self-contained HTML<br/>review document"]
 ```
 
 In the source, `compileMarkdownModel()` and `compileMarkdown()` are thin entry points over `compileMarkdownTree()`.
@@ -45,35 +43,36 @@ It is shared code executed separately by each command, not a cached intermediate
 
 ## Plans are MDX
 
-A plan is an MDX document, but only a deliberately static subset of MDX is accepted: no imports, no exports, no expressions, and no inline JSX.
+A plan is an MDX document made from Markdown and built-in components.
+Imports, exports, expressions, and inline JSX are rejected.
 A plan is prose plus components, nothing else.
 That keeps every plan greppable and diffable, which the review workflow depends on, and it means the renderer never has to run code an agent wrote.
 The full contract lives in [Authoring plans](/for-agents/authoring-plans/).
 
-## Each component compiler supports both output modes
+## Each component supports both output modes
 
 [`BigDecision`](/components/big-decision/), [`Callout`](/components/callout/), [`CodeDiff`](/components/code-diff/), [`CodeSnippet`](/components/code-snippet/), [`DatabaseTableSchema`](/components/database-table-schema/), [`FileTree`](/components/file-tree/), [`FileTreeDiff`](/components/file-tree-diff/), [`GraphqlOperation`](/components/graphql-operation/), [`GrpcMethod`](/components/grpc-method/), [`HttpEndpoint`](/components/http-endpoint/), and [`SmallDecisionSet`](/components/small-decision-set/) come from a closed, built-in registry.
-When `compileMarkdownTree()` reaches a registered component, its definition validates the authored input and returns two things: a framework-neutral model and a React presentation function closed over that model.
+When `compileMarkdownTree()` reaches a registered component, its definition validates the authored input and returns two things: plain validated data and a React presentation function closed over that data.
 The component is compiled once during that command invocation; the selected output mode determines what happens next:
 
-- In **model output mode**, used by `big-plan compile`, Big Plan collects the framework-neutral model in source order and does not invoke the top-level presentation.
+- In **machine-readable output mode**, used by `big-plan compile`, Big Plan collects the validated data in source order and does not invoke the top-level presentation.
 - In **HTML output mode**, used by `big-plan render`, Big Plan invokes the presentation, crosses one React-to-HAST boundary, and replaces the authored component node with plain document HAST.
 
-The two commands therefore agree on component semantics because they call the same component compiler, not because `render` consumes the JSON produced by `compile`.
+The two commands therefore agree on component semantics because they call the same compilation function, not because `render` consumes the JSON produced by `compile`.
 No plan-authored code is evaluated or shipped.
-Ordinary Markdown prose participates only in the human document, while its heading metadata remains available in the machine model.
+Ordinary Markdown prose participates only in the human document, while its heading metadata remains available in the machine-readable JSON.
 
 ```mermaid
 flowchart TB
-  S["plan.mdx source"] --> P["Parse the static MDX subset"]
+  S["plan.mdx source"] --> P["Parse allowed Markdown<br/>and component syntax"]
   P --> V["Validate authoring contract"]
-  V --> C["Component definition returns<br/>{ model, presentation }"]
+  V --> C["Component definition returns<br/>validated data + presentation"]
   C --> Q{"Output mode for this command"}
-  Q -- "model" --> J["Collect document metadata<br/>and component models"]
-  J --> O["Serialize plan.model.json"]
+  Q -- "machine-readable" --> J["Collect document metadata<br/>and validated component data"]
+  J --> O["Serialize JSON"]
   Q -- "HTML" --> R["Invoke presentation<br/>and cross once to HAST"]
   R --> H["Apply document transforms"]
-  H --> T["Add navigation and<br/>the themed review shell"]
+  H --> T["Add navigation and styling"]
   T --> U["Serialize plan.html"]
 ```
 

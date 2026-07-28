@@ -1,10 +1,10 @@
 ---
 title: Authoring plans
-description: The static-subset MDX format Big Plan renders, what it rejects, and how validation errors guide you to a fix.
+description: The MDX plan format Big Plan renders, what it rejects, and how validation errors guide you to a fix.
 ---
 
-Big Plan documents are MDX files, but only a deliberately static subset of MDX is accepted.
-The renderer never evaluates code from a plan: no imports, no exports, no `{}` expressions, and no inline JSX.
+Big Plan documents are MDX files containing Markdown and built-in components.
+The renderer never evaluates code from a plan: imports, exports, `{}` expressions, and inline JSX are rejected.
 A plan is prose plus components, and the file on disk stays the greppable, diffable source of truth.
 
 ## What a plan may contain

@@ -17,7 +17,7 @@ export type RenderedDocument = {
 };
 
 /**
- * Renders static-subset MDX into a complete, self-contained HTML review document.
+ * Renders a validated MDX plan into a complete, self-contained HTML review document.
  * The title is the document's first h1 when present, otherwise the caller's
  * fallback. Pure: no I/O, so callers own where the MDX comes from and where
  * the HTML goes.

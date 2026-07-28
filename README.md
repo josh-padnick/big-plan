@@ -18,7 +18,7 @@ Everything runs locally, and the MDX file on your disk is the source of truth.
 
 ## Usage
 
-Render a static-subset MDX plan document as self-contained themed HTML, or compile its validated plan model as JSON:
+Render an MDX plan document as self-contained themed HTML, or compile its validated contents as machine-readable JSON:
 
 ```sh
 npx big-plan render <file.mdx> [output.html]
@@ -42,7 +42,7 @@ Enable the worker before stale reads.
 
 The full authoring contract lives in the documentation:
 
-- [Authoring plans](docs/src/content/docs/for-agents/authoring-plans.md) - the accepted MDX subset and its hard-fail positional diagnostics.
+- [Authoring plans](docs/src/content/docs/for-agents/authoring-plans.md) - the accepted plan format and its hard-fail positional diagnostics.
 - [Components](docs/src/content/docs/components/index.md) - the complete built-in component reference.
 - [Features](docs/src/content/docs/intro/features.md) - the reader-facing viewer capabilities.
 - [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan render` and `big-plan compile` in detail.

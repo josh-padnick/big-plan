@@ -32,41 +32,39 @@ This guide owns the durable implementation model contributors must preserve.
 
 - **Agent plan** is the agent's proposed approach for achieving the user's intent before implementation begins.
 - **Plan source** is the authoritative plan document on disk. The agent edits this source in response to feedback.
+- **Component** is a built-in, opinionated way to present a specific kind of plan information, such as a decision, code diff, schema, or file tree.
 - **Review document** is Big Plan's human-friendly presentation of the plan source.
 - **Plan review** is the conversation in which the human works to understand the proposed approach, gives feedback, and resolves concerns with the agent.
 - **Plan acceptance** is the human's explicit decision that the intended approach is understood well enough for the agent to begin execution. It is not acceptance of the finished deliverable, which happens later.
 
-## Technical concepts
+## Technical orientation
 
-- **Static-subset MDX** is the authoring format accepted by Big Plan: Markdown plus registered components, without executable imports, exports, or expressions.
-- **Component** is a built-in MDX element that presents a specific kind of plan information in an opinionated, review-friendly way, such as a decision, code diff, schema, or file tree.
-- **Plan model** is the machine-readable description of a plan: its title and sections plus the validated data for each component in source order.
-- **Review shell** is the reading and navigation surface around rendered plan content.
-- **Page envelope** packages the shell and rendered content as a self-contained HTML document with its head and embedded assets.
+Big Plan plans are MDX files that contain Markdown and built-in components.
+Plan-authored code never executes: imports, exports, expressions, and inline JSX are rejected.
 
-Keep these distinctions explicit.
-Authored MDX is not the plan model, serialized model JSON is not the review document, and the shell is not the page envelope.
+Big Plan calls the validation-and-translation step **compilation**.
+Each command compiles the authoritative plan source independently, then produces either machine-readable JSON for agents and tools or a self-contained HTML review document for humans.
 
 ## Architecture at a glance
 
-Big Plan compiles once and delivers twice:
+Big Plan uses one compilation path for two outputs:
 
 ```text
 MDX plan source
   -> CLI command
-  -> static-subset parsing and authoring validation
-  -> registered-component validation and interpretation
-     -> model continuation -> plan-model JSON
-     -> HTML continuation -> React view -> HAST -> document transforms
-        -> review shell -> page envelope -> review document
+  -> parse and validate allowed Markdown and component syntax
+  -> validate and translate built-in components
+     -> machine output -> machine-readable JSON
+     -> human output -> React view -> HAST -> document transforms
+        -> self-contained HTML review document
 ```
 
 Each component validates its authored attributes and content into plain data describing what it should show.
-Machine delivery collects that data in the plan model.
+Machine delivery collects that data as JSON.
 Human delivery gives the same data to the component's React view, crosses one React-to-HAST boundary, applies document-wide transforms, and packages inert HTML.
 React is a presentation-edge implementation tool; no React runtime or browser script ships in a rendered document.
 
-Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own authorable concept behavior.
+Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
 The exact dependency allow-list and completeness guard live in `eslint.config.mjs`.
 
 ## Source ownership and placement
@@ -74,7 +72,7 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 | Owner                    | Responsibility and placement rule                                                                                                                                                                                                           |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/cli/`               | Public command dispatch, safe derived-output workflows, errors, and result serialization. Give each public command a non-underscored folder; keep reusable command mechanics in `_shared/` and business semantics below the CLI.            |
-| `src/components/`        | Authorable plan concepts as vertical slices. Put a new authorable concept in its own folder and follow the infrastructure boundaries in the [components local map](src/components/README.md).                                               |
+| `src/components/`        | Built-in components as vertical slices. Put a new component in its own folder and follow the infrastructure boundaries in the [components local map](src/components/README.md).                                                             |
 | `src/render/`            | Pure document compilation and delivery orchestration. Put cross-document pipeline behavior here and follow the stage boundaries in the [renderer local map](src/render/README.md); keep component-specific behavior in its component slice. |
 | `src/render/shell/`      | Viewer chrome, reading layout, branding, and responsive navigation. Do not put document packaging here.                                                                                                                                     |
 | `src/render/page.ts`     | Doctype, head, embedded delivery assets, favicons, and the final inert HTML envelope.                                                                                                                                                       |
@@ -87,7 +85,7 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 Use these placement tests:
 
 - A public CLI action belongs in `src/cli/<command>/`; shared output safety belongs in `src/cli/_shared/`.
-- An authorable MDX concept belongs in `src/components/<concept>/`; a never-authorable visual primitive does not.
+- A built-in component belongs in `src/components/<component>/`; internal visual support that plan authors cannot use belongs in the appropriate underscore-prefixed support folder.
 - Document-wide parsing, transformation, or delivery behavior belongs in `src/render/`; component-specific validation and presentation stay with the component.
 - Reading and navigation chrome belongs in the shell; doctype, head, and embedded packaging belong in the page envelope.
 - A pure rule gets a colocated unit test; only a critical integrated reading journey gets a Playwright spec in `test/`.
@@ -96,7 +94,7 @@ Use these placement tests:
 ## Pre-release compatibility
 
 Big Plan has no compatibility contract before an explicit milestone establishes one.
-Prefer the cleanest model across the CLI, plan source, plan model, and rendered output instead of preserving an earlier shape through shims, aliases, or migrations.
+Prefer the cleanest model across the CLI, plan source, machine-readable JSON, and rendered output instead of preserving an earlier shape through shims, aliases, or migrations.
 
 When making a breaking change, update every repository call site, test, example, generated artifact, and document in the same change.
 Add compatibility behavior only after an explicit milestone defines the contract that must be preserved.

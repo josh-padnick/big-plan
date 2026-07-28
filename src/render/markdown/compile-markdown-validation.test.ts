@@ -1,4 +1,4 @@
-// Tests static-subset MDX validation, normalized diagnostics, and compatible
+// Tests MDX plan-format validation, normalized diagnostics, and compatible
 // GFM input through the Markdown compiler's public interface.
 
 import { describe, expect, it } from "vitest";
