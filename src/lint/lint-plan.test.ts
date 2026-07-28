@@ -70,6 +70,14 @@ describe("lintPlan markdown-table-format", () => {
     ).toMatchObject([{ ruleId: "markdown-table-format", line: 4 }]);
   });
 
+  it("should report a malformed table whose cells contain inline code", () => {
+    expect(
+      lintPlan({
+        markdown: "| `Name` | Owner |\n| API | Platform |\n",
+      }),
+    ).toMatchObject([{ ruleId: "markdown-table-format", line: 2 }]);
+  });
+
   it.each([
     [
       "a valid GFM table",
@@ -82,6 +90,10 @@ describe("lintPlan markdown-table-format", () => {
       "```md\n| Name | Owner |\n| API | Platform |\n```\n",
     ],
     ["an inline code example", "`| Name | Owner |` and `| API | Platform |`\n"],
+    [
+      "a multiline inline code example",
+      "`Table example:\n| Name | Owner |\n| API | Platform |\n`\n",
+    ],
     [
       "table-like blockquote text",
       "> | Name | Owner |\n> | API | Platform |\n",

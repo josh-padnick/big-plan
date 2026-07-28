@@ -38,7 +38,7 @@ Structural validation is positional and aggregated when possible.
 After MDX parses, Big Plan collects every recoverable problem and fails with the complete list, each entry carrying a `line:column` position:
 
 ```text
-error: Cannot render document with invalid MDX
+error: Cannot validate document with invalid MDX
 help[3]: "3:1 ESM import/export statements are not supported",
          "5:14 Text expressions are not supported",
          "7:1 Unknown component \"Unknwon\""

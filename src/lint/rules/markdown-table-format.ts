@@ -1,19 +1,23 @@
 // Implements the markdown-table-format authoring rule: find strong table
 // intent that GFM left as prose because its delimiter row is invalid.
 
-import type { Paragraph } from "mdast";
-import type { Node, Parent } from "unist";
+import type { InlineCode, Paragraph } from "mdast";
+import type { Node, Parent, Position } from "unist";
 import type { PlanLintFinding, PlanLintRule } from "../types.js";
 
 type TableRow = {
   readonly cells: ReadonlyArray<string>;
   readonly column: number;
+  readonly endColumn: number;
 };
 
 const isParent = (node: Node): node is Parent => "children" in node;
 
 const isParagraph = (node: Node): node is Paragraph =>
   node.type === "paragraph";
+
+const isInlineCode = (node: Node): node is InlineCode =>
+  node.type === "inlineCode";
 
 // Outer pipes make table intent strong enough to lint without treating
 // ordinary prose containing a vertical bar as a malformed table.
@@ -32,6 +36,7 @@ const tableRowOf = (line: string): TableRow | undefined => {
   return {
     cells,
     column: line.indexOf("|") + 1,
+    endColumn: line.lastIndexOf("|") + 1,
   };
 };
 
@@ -48,6 +53,53 @@ const isValidDelimiterRow = ({
 
 const delimiterExample = (columnCount: number): string =>
   `| ${Array.from({ length: columnCount }, () => "---").join(" | ")} |`;
+
+const positionContainsPoint = ({
+  position,
+  line,
+  column,
+}: {
+  readonly position: Position;
+  readonly line: number;
+  readonly column: number;
+}): boolean => {
+  if (line < position.start.line || line > position.end.line) {
+    return false;
+  }
+  if (line === position.start.line && column < position.start.column) {
+    return false;
+  }
+  return line !== position.end.line || column < position.end.column;
+};
+
+const inlineCodeContainsRow = ({
+  node,
+  line,
+  row,
+}: {
+  readonly node: Node;
+  readonly line: number;
+  readonly row: TableRow;
+}): boolean => {
+  if (isInlineCode(node) && node.position !== undefined) {
+    return (
+      positionContainsPoint({
+        position: node.position,
+        line,
+        column: row.column,
+      }) &&
+      positionContainsPoint({
+        position: node.position,
+        line,
+        column: row.endColumn,
+      })
+    );
+  }
+  return (
+    isParent(node) &&
+    node.children.some((child) => inlineCodeContainsRow({ node: child, line, row }))
+  );
+};
 
 // Visits paragraphs only: valid GFM tables and fenced code have distinct node
 // types, so they never reach the table-intent heuristic.
@@ -77,6 +129,16 @@ const checkMarkdownTableFormat = ({
         if (
           header === undefined ||
           following === undefined ||
+          inlineCodeContainsRow({
+            node,
+            line: startLine + index,
+            row: header,
+          }) ||
+          inlineCodeContainsRow({
+            node,
+            line: startLine + index + 1,
+            row: following,
+          }) ||
           isValidDelimiterRow({
             row: following,
             columnCount: header.cells.length,
