@@ -2,8 +2,8 @@
 // around the pure plan-model compiler, supplying only JSON-specific
 // derivation, serialization, and result facts to the shared safe workflow.
 
-import { compilePlanModel } from "../render/render-document.js";
-import { runDerivedOutputCommand } from "./derived-output-command.js";
+import { compilePlanModel } from "../../render/render-document.js";
+import { runDerivedOutputCommand } from "../_shared/derived-output-command.js";
 
 const USAGE = "Usage: big-plan compile <input.mdx> [output.json]";
 

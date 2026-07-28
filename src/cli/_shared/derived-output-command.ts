@@ -4,13 +4,41 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 import { AxiError } from "axi-sdk-js";
-import { MarkdownDiagnosticsError } from "../render/render-document.js";
-import { parsePositionalArguments } from "./command-arguments.js";
-import { createOutputPathGuard } from "./output-path-guard.js";
+import { MarkdownDiagnosticsError } from "../../render/render-document.js";
+import { createGuardedOutputWriter } from "./guarded-output-writer.js";
 
 type DerivationInput = {
   readonly markdown: string;
   readonly fallbackTitle: string;
+};
+
+// Both derived-output commands take one input and at most one output.
+// Option-shaped tokens are rejected because neither command accepts flags.
+const parsePositionalArguments = ({
+  args,
+  usage,
+}: {
+  readonly args: ReadonlyArray<string>;
+  readonly usage: string;
+}): { readonly inputArg?: string; readonly outputArg?: string } => {
+  for (const arg of args) {
+    if (arg.startsWith("-")) {
+      throw new AxiError(`Unknown option "${arg}"`, "VALIDATION_ERROR", [
+        usage,
+      ]);
+    }
+  }
+  if (args.length > 2) {
+    throw new AxiError(
+      `Unexpected extra argument "${args[2] ?? ""}"`,
+      "VALIDATION_ERROR",
+      [usage],
+    );
+  }
+  return {
+    ...(args[0] === undefined ? {} : { inputArg: args[0] }),
+    ...(args[1] === undefined ? {} : { outputArg: args[1] }),
+  };
 };
 
 const defaultOutputPath = ({
@@ -64,7 +92,7 @@ export const runDerivedOutputCommand = async <Derived>({
   const outputPath = resolve(
     outputArg ?? defaultOutputPath({ inputPath, suffix: outputSuffix }),
   );
-  const writeGuardedOutput = createOutputPathGuard({
+  const writeGuardedOutput = createGuardedOutputWriter({
     inputPath,
     outputPath,
     usage,

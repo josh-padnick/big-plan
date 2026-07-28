@@ -1,11 +1,11 @@
 // Wires the big-plan CLI onto runAxiCli(), which owns dispatch, help,
 // structured errors, and output serialization. Command behavior lives in the
-// sibling *-command modules; this file stays thin glue.
+// named command folders; this file stays thin glue.
 
 import { readFile } from "node:fs/promises";
 import { runAxiCli } from "axi-sdk-js";
-import { compileCommand } from "./compile-command.js";
-import { renderCommand } from "./render-command.js";
+import { compileCommand } from "./compile/command.js";
+import { renderCommand } from "./render/command.js";
 
 // The README tagline verbatim, so the CLI and the docs never drift apart.
 const DESCRIPTION =

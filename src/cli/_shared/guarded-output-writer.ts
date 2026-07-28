@@ -1,5 +1,5 @@
-// Owns the shared CLI policy that derived output must never overwrite the
-// authored input, including when two paths alias the same filesystem entry.
+// Owns the shared guarded writer that prevents derived output from ever
+// overwriting the authored input, including through filesystem aliases.
 // The alias check and the write share one file descriptor: the output is
 // opened without truncation, its identity is compared against the input on
 // the open handle, and content is written through that same handle - so no
@@ -11,7 +11,7 @@ import type { FileHandle } from "node:fs/promises";
 import { open, stat } from "node:fs/promises";
 import { AxiError } from "axi-sdk-js";
 
-type OutputPathGuardOptions = {
+type GuardedOutputWriterOptions = {
   readonly inputPath: string;
   readonly outputPath: string;
   readonly usage: string;
@@ -40,7 +40,7 @@ const pathsAlias = async ({
   inputPath,
   outputPath,
 }: Pick<
-  OutputPathGuardOptions,
+  GuardedOutputWriterOptions,
   "inputPath" | "outputPath"
 >): Promise<boolean> => {
   const inputIdentity = await stat(inputPath, { bigint: true });
@@ -61,7 +61,7 @@ const openOutput = async ({
   inputPath,
   outputPath,
   usage,
-}: OutputPathGuardOptions): Promise<FileHandle> => {
+}: GuardedOutputWriterOptions): Promise<FileHandle> => {
   try {
     return await open(outputPath, constants.O_WRONLY | constants.O_CREAT);
   } catch (error: unknown) {
@@ -85,11 +85,11 @@ const openOutput = async ({
 
 // Rejects a lexical collision immediately and returns the writer that
 // callers use in place of a bare writeFile once output content exists.
-export const createOutputPathGuard = ({
+export const createGuardedOutputWriter = ({
   inputPath,
   outputPath,
   usage,
-}: OutputPathGuardOptions): ((content: string) => Promise<void>) => {
+}: GuardedOutputWriterOptions): ((content: string) => Promise<void>) => {
   if (outputPath === inputPath) {
     throw overwriteError(usage);
   }
