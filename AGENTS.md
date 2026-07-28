@@ -4,7 +4,7 @@ This is the entry point for agents working in Big Plan.
 
 ## Product
 
-Good AI output depends on a great plan, and Big Plan makes reviewing agent plans a first-class experience.
+Big Plan makes reviewing agent plans a first-class experience.
 It is built around one question: what is the best user experience a human can have when aiming to understand, give feedback on, and ultimately accept an agent plan?
 
 An agent writes the plan, and Big Plan renders it as a human-friendly document designed to make the plan as easy as possible to understand, give feedback on, and accept.
