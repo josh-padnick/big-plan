@@ -18,13 +18,15 @@ Everything runs locally, and the MDX file on your disk is the source of truth.
 
 ## Usage
 
-Render an MDX plan document as self-contained themed HTML, or compile its validated contents as machine-readable JSON:
+Validate a plan without writing anything, render it as self-contained themed HTML, or compile its validated contents as machine-readable JSON:
 
 ```sh
+npx big-plan validate <file.mdx>
 npx big-plan render <file.mdx> [output.html]
 npx big-plan compile <file.mdx> [output.json]
 ```
 
+Validation exercises structural compilation and human-facing HTML delivery in memory, then applies authoring lint rules.
 Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.model.json`.
 Both sit next to the input, while the MDX file remains the canonical source and JSON is always derived output.
 The rendered HTML embeds all styling and branding assets, ships no scripts, and makes no external requests.
@@ -42,10 +44,10 @@ Enable the worker before stale reads.
 
 The full authoring contract lives in the documentation:
 
-- [Authoring plans](docs/src/content/docs/for-agents/authoring-plans.md) - the accepted plan format and its hard-fail positional diagnostics.
+- [Authoring plans](docs/src/content/docs/for-agents/authoring-plans.md) - the accepted plan format, authoring lint, and hard-fail positional diagnostics.
 - [Components](docs/src/content/docs/components/index.md) - the complete built-in component reference.
 - [Features](docs/src/content/docs/intro/features.md) - the reader-facing viewer capabilities.
-- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan render` and `big-plan compile` in detail.
+- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan validate`, `render`, and `compile` in detail.
 
 To preview components locally, render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`.
 To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.

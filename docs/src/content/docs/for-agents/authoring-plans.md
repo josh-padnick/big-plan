@@ -25,10 +25,17 @@ Component attributes are strings (`title="Rollout"`) or bare shorthand booleans 
 
 Because `<` and `{` begin MDX syntax, write them in code spans or fences when you need them literally in prose.
 
-## Validation is positional and aggregated when possible
+## Validate before rendering
 
-An invalid document never renders partially.
-After MDX parses, the renderer collects every recoverable problem and fails with the complete list, each entry carrying a `line:column` position:
+Use `big-plan validate <input.mdx>` as the correction loop while authoring.
+It reads the plan, exercises the complete in-memory HTML delivery path, builds the machine plan model in the same pass, and runs authoring lint without writing an output file.
+Success reports the resolved title plus section and component counts.
+
+Validation answers whether Big Plan can deliver the plan for a human and whether its authoring lint recognizes likely presentation mistakes.
+It does not replace looking at the rendered document: visual quality, writing clarity, and whether a wide table is pleasant to read still require human review.
+
+Structural validation is positional and aggregated when possible.
+After MDX parses, Big Plan collects every recoverable problem and fails with the complete list, each entry carrying a `line:column` position:
 
 ```text
 error: Cannot render document with invalid MDX
@@ -37,6 +44,24 @@ help[3]: "3:1 ESM import/export statements are not supported",
          "7:1 Unknown component \"Unknwon\""
 ```
 
-Agents authoring plans should treat this as the correction loop: render, read the positions, fix, render again.
-An MDX syntax error can stop parsing before component validation begins, so that render may report only the parse error.
+An MDX syntax error can stop parsing before component validation begins, so validation may report only the parse error.
 A silently degraded document would be worse than a failed one, because the entire product is trust in what the reviewer approves.
+
+## Authoring lint catches likely presentation mistakes
+
+Lint rules are an additional, deliberately stricter layer used by `validate`.
+The first rule, `markdown-table-format`, catches table-shaped outer-pipe rows whose delimiter row is missing or malformed:
+
+```md
+| Change | Effect |
+| Cache responses | Faster reads |
+```
+
+The diagnostic points to the row that should be the delimiter:
+
+```text
+2:1 [markdown-table-format] Table-like block needs a valid delimiter row with 2 columns, for example "| --- | --- |"
+```
+
+The rule ignores valid GFM tables, ordinary prose containing pipes, inline code, fenced code blocks, blockquotes, and isolated table-like rows.
+`render` and `compile` remain permissive for Markdown that the parser treats as prose; use `validate` when you want the extra authoring check.

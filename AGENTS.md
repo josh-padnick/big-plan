@@ -43,11 +43,12 @@ Big Plan plans are MDX files that contain Markdown and built-in components.
 Plan-authored code never executes: imports, exports, expressions, and inline JSX are rejected.
 
 Big Plan calls the validation-and-translation step **compilation**.
-Each command compiles the authoritative plan source independently, then produces either machine-readable JSON for agents and tools or a self-contained HTML review document for humans.
+The output commands compile the authoritative plan source independently, then produce either machine-readable JSON for agents and tools or a self-contained HTML review document for humans.
+The no-write validation command completes human delivery in memory while collecting the machine summary, then applies authoring lint.
 
 ## Architecture at a glance
 
-Big Plan uses one compilation path for two outputs:
+Big Plan uses one compilation path for two outputs, with authoring lint layered onto validation:
 
 ```text
 MDX plan source
@@ -57,11 +58,13 @@ MDX plan source
      -> machine output -> machine-readable JSON
      -> human output -> React view -> HAST -> document transforms
         -> self-contained HTML review document
+  -> validate only -> authoring lint
 ```
 
 Each component validates its authored attributes and content into plain data describing what it should show.
 Machine delivery collects that data as JSON.
 Human delivery gives the same data to the component's React view, crosses one React-to-HAST boundary, applies document-wide transforms, and packages inert HTML.
+Validation completes human delivery while collecting the same component models in one pass, then runs its ordered collection of independent authoring-lint rules.
 React is a presentation-edge implementation tool; no React runtime or browser script ships in a rendered document.
 
 Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
@@ -71,8 +74,9 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 
 | Owner                    | Responsibility and placement rule                                                                                                                                                                                                           |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/cli/`               | Public command dispatch, safe derived-output workflows, errors, and result serialization. Give each public command a non-underscored folder; keep reusable command mechanics in `_shared/` and business semantics below the CLI.            |
+| `src/cli/`               | Public command dispatch, shared input and safe derived-output workflows, errors, and result serialization. Give each public command a non-underscored folder; keep reusable command mechanics in `_shared/` and business semantics below the CLI. |
 | `src/components/`        | Built-in components as vertical slices. Put a new component in its own folder and follow the infrastructure boundaries in the [components local map](src/components/README.md).                                                             |
+| `src/lint/`              | Framework-free, validate-only authoring rules. Keep rules independent and register them in a deterministic order.                                                                                                                            |
 | `src/render/`            | Pure document compilation and delivery orchestration. Put cross-document pipeline behavior here and follow the stage boundaries in the [renderer local map](src/render/README.md); keep component-specific behavior in its component slice. |
 | `src/render/shell/`      | Viewer chrome, reading layout, branding, and responsive navigation. Do not put document packaging here.                                                                                                                                     |
 | `src/render/page.ts`     | Doctype, head, embedded delivery assets, favicons, and the final inert HTML envelope.                                                                                                                                                       |
@@ -84,8 +88,9 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 
 Use these placement tests:
 
-- A public CLI action belongs in `src/cli/<command>/`; shared output safety belongs in `src/cli/_shared/`.
+- A public CLI action belongs in `src/cli/<command>/`; shared input and output safety belongs in `src/cli/_shared/`.
 - A built-in component belongs in `src/components/<component>/`; internal visual support that plan authors cannot use belongs in the appropriate underscore-prefixed support folder.
+- A validate-only authoring-quality check belongs in `src/lint/rules/`; structural acceptance remains in the renderer and component compilers.
 - Document-wide parsing, transformation, or delivery behavior belongs in `src/render/`; component-specific validation and presentation stay with the component.
 - Reading and navigation chrome belongs in the shell; doctype, head, and embedded packaging belong in the page envelope.
 - A pure rule gets a colocated unit test; only a critical integrated reading journey gets a Playwright spec in `test/`.

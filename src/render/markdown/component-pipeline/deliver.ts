@@ -38,6 +38,7 @@ type ComponentDelivery =
   | {
       readonly kind: "html";
       readonly adapt: ReactHastAdapter;
+      readonly collected?: Array<CollectedComponentModel>;
     }
   | {
       readonly kind: "model";
@@ -171,19 +172,19 @@ const renderFlowElement = ({
     diagnostics,
     ids,
   });
+  if (name !== null && delivery.collected !== undefined) {
+    delivery.collected.push({
+      component: name,
+      ...(node.position === undefined
+        ? {}
+        : {
+            line: node.position.start.line,
+            column: node.position.start.column,
+          }),
+      model: compiled.model,
+    });
+  }
   if (delivery.kind === "model") {
-    if (name !== null) {
-      delivery.collected.push({
-        component: name,
-        ...(node.position === undefined
-          ? {}
-          : {
-              line: node.position.start.line,
-              column: node.position.start.column,
-            }),
-        model: compiled.model,
-      });
-    }
     return materializeModel
       ? delivery.adapt(compiled.presentation())
       : undefined;
@@ -324,14 +325,21 @@ export const rehypeRenderComponents =
     diagnostics,
     registry = COMPONENT_REGISTRY,
     models,
+    collectModels,
     adapt = reactToHast,
   }: {
     readonly diagnostics: DiagnosticCollector;
     readonly registry?: ComponentRegistry;
     readonly models?: Array<CollectedComponentModel>;
+    readonly collectModels?: Array<CollectedComponentModel>;
     readonly adapt?: ReactHastAdapter;
   }) =>
   (tree: Root): void => {
+    if (models !== undefined && collectModels !== undefined) {
+      throw new Error(
+        "Component delivery cannot use model-only and HTML model collection together",
+      );
+    }
     const reservedIds = collectExistingIds(tree);
     renderChildren({
       parent: tree,
@@ -341,7 +349,13 @@ export const rehypeRenderComponents =
       materializeModels: false,
       delivery:
         models === undefined
-          ? { kind: "html", adapt }
+          ? {
+              kind: "html",
+              adapt,
+              ...(collectModels === undefined
+                ? {}
+                : { collected: collectModels }),
+            }
           : { kind: "model", collected: models, adapt },
     });
     reportSurvivors({ parent: tree, diagnostics });
