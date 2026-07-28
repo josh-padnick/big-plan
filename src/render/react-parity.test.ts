@@ -1,7 +1,7 @@
 // Pins the React render target's parity contract: a document rendered with
 // renderer "react" is byte-identical to the vanilla output for ported
-// components, and components without a React port fall back to the vanilla
-// renderer unchanged.
+// components. With every component ported, the vanilla-fallback behavior is
+// pinned at the registry level instead.
 
 import { describe, expect, it } from "vitest";
 import { renderDocument } from "./render-document.js";
@@ -405,21 +405,65 @@ One less flag to clean up later.
 </SmallDecisionSet>
 `;
 
-const UNPORTED_PLAN = `# Plan
+const BIG_DECISION_PLAN = `# Plan
 
-## Question
+## Storage
 
-<SmallDecisionSet title="Open questions">
+<BigDecision question="Which store backs review comments?" status="decided">
 
-<SmallDecision question="Ship?">
+Comments need durable identities and ordered replies.
 
-<Option title="Yes" recommended />
+<Details>
 
-<Option title="No" />
+The schema needs only plans, threads, and comments.
 
-</SmallDecision>
+</Details>
 
-</SmallDecisionSet>
+<Criterion title="Setup cost">
+
+What it takes to run locally.
+
+</Criterion>
+
+<Criterion title="Concurrency" />
+
+<Option title="PostgreSQL" recommended chosen summary="The store the team already runs.">
+
+<Score criterion="Setup cost" verdict="Needs a server" tone="bad">
+
+Local dev needs a running daemon.
+
+</Score>
+
+<Score criterion="Concurrency" verdict="Ready" tone="good" />
+
+Migration tooling exists from day one.
+
+</Option>
+
+<Option title="SQLite" summary="One embedded file.">
+
+<Score criterion="Setup cost" verdict="Zero setup" tone="good" />
+
+<Score criterion="Concurrency" verdict="Single writer" tone="mixed" />
+
+</Option>
+
+<Reversibility rating="somewhat-hard">
+
+Swapping engines later is a migration, not a rewrite.
+
+</Reversibility>
+
+</BigDecision>
+
+<BigDecision question="Name the sidecar file?" status="open">
+
+<Option title="review.log" recommended />
+
+<Option title="plan.review" />
+
+</BigDecision>
 `;
 
 describe("react renderer parity", () => {
@@ -563,16 +607,17 @@ describe("react renderer parity", () => {
     expect(react.html).toBe(vanilla.html);
   });
 
-  it("should fall back to the vanilla renderer for components without a React port", () => {
+  it("should render a byte-identical document for matrix and plain-list BigDecisions", () => {
     const vanilla = renderDocument({
-      markdown: UNPORTED_PLAN,
+      markdown: BIG_DECISION_PLAN,
       fallbackTitle: "x",
     });
     const react = renderDocument({
-      markdown: UNPORTED_PLAN,
+      markdown: BIG_DECISION_PLAN,
       fallbackTitle: "x",
       renderer: "react",
     });
+    expect(react.html).toContain("data-big-decision=");
     expect(react.html).toBe(vanilla.html);
   });
 });
