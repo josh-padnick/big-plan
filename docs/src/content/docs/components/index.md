@@ -16,11 +16,11 @@ A component's attributes are strings or bare booleans, structured data arrives a
 | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | [BigDecision](/components/big-decision/)                  | Review one weighty decision as a scored criteria matrix or a substantive option list.                                |
 | [Callout](/components/callout/)                           | Surface a note, tip, warning, or danger so reviewers cannot miss it.                                                 |
-| [CodeDiff](/components/code-diff/)                        | Review one file's unified diff with switchable views, gutters, and line-anchored annotations.                        |
+| [CodeDiff](/components/code-diff/)                        | Review one file's unified diff with gutters and line-anchored annotations.                                           |
 | [CodeSnippet](/components/code-snippet/)                  | Inspect existing code with optional file identity, file-absolute line numbers, and annotations.                      |
 | [DatabaseTableSchema](/components/database-table-schema/) | Review one table's DBML-subset schema and titled verbatim DDL.                                                       |
 | [FileTree](/components/file-tree/)                        | Show a plain file hierarchy with optional per-entry notes.                                                           |
-| [FileTreeDiff](/components/file-tree-diff/)               | Review per-entry change status as a combined tree or before-and-after views.                                         |
+| [FileTreeDiff](/components/file-tree-diff/)               | Review per-entry change status as one combined change tree.                                                          |
 | [GraphqlOperation](/components/graphql-operation/)        | Review one GraphQL query, mutation, or subscription with one-level input and payload shapes and executable examples. |
 | [GrpcMethod](/components/grpc-method/)                    | Review one gRPC method headed by its proto signature, with message fields, status codes, and grouped examples.       |
 | [HttpEndpoint](/components/http-endpoint/)                | Review one HTTP endpoint's contract: parameters, request body, and status-coded responses.                           |
@@ -35,4 +35,4 @@ The library grows one registry capability at a time; each item below is sequence
 - `DatabaseSchema` renders a structured schema card from a fenced YAML child.
 - `Diagram` renders diagram source into inline SVG at build time, keeping documents free of external requests.
 
-Decision controls preview the intended local interaction and label unavailable lifecycle actions as coming soon; transporting or persisting review input waits for the live review server.
+The static export is inert. Interactive review aids and transported feedback arrive with the live review application.

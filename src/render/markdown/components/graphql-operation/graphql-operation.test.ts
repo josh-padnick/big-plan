@@ -5,7 +5,23 @@ import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
 import type { ScopedChild } from "../../../../model/component-contract.js";
 import { createDiagnosticCollector } from "../../../../model/diagnostics.js";
-import { renderGraphqlOperation } from "./graphql-operation.js";
+import { fromHtml } from "hast-util-from-html";
+import { normalizeReparsedProperties } from "../registry.js";
+import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "./graphql-operation.js";
+
+// The static renderer returns a string; reparsing mirrors the registry's own
+// splice so traversal assertions keep exercising the shipped markup.
+const parseRenderedElement = (html: string): Element => {
+  const fragment = fromHtml(html, { fragment: true });
+  normalizeReparsedProperties(fragment.children);
+  const parsed = fragment.children.find(
+    (child): child is Element => child.type === "element",
+  );
+  if (parsed === undefined) {
+    throw new Error("component rendered no element");
+  }
+  return parsed;
+};
 
 const POSITION = {
   start: { line: 3, column: 1, offset: 10 },
@@ -71,13 +87,15 @@ const render = ({
   readonly scopedChildren?: ReadonlyArray<ScopedChild>;
 } = {}) => {
   const diagnostics = createDiagnosticCollector();
-  const element = renderGraphqlOperation({
-    attributes,
-    children,
-    scopedChildren,
-    position: POSITION,
-    diagnostics,
-  });
+  const element = parseRenderedElement(
+    GRAPHQL_OPERATION_COMPONENT_DEFINITION.renderStatic({
+      attributes,
+      children,
+      scopedChildren,
+      position: POSITION,
+      diagnostics,
+    }),
+  );
   return { element, diagnostics: diagnostics.diagnostics };
 };
 

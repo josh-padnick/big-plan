@@ -1,5 +1,5 @@
 // Browser journey for GrpcMethod's streaming-aware signature, palette hooks,
-// grouped field sections, and complete no-JavaScript rendering.
+// grouped field sections, and complete inert rendering.
 
 import { expect, test } from "./fixtures";
 
@@ -45,8 +45,11 @@ test("should review a gRPC method contract", async ({
     );
   });
 
-  await test.step("the proto fence gets the shared copy control", async () => {
-    await expect(method.locator("[data-copy-code]")).toHaveCount(1);
+  await test.step("the proto fence ships without dead controls", async () => {
+    await expect(method.locator("[data-copy-code]")).toHaveCount(0);
+    await expect(method.locator("pre code").first()).toContainText(
+      "rpc WatchComments",
+    );
   });
 
   await test.step("the complete card reads without JavaScript", async () => {

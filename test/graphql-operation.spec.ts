@@ -1,5 +1,5 @@
 // Browser journey for GraphqlOperation's static card anatomy, kind palette,
-// shared code controls, and complete no-JavaScript rendering.
+// code examples, and complete inert rendering.
 
 import { expect, test } from "./fixtures";
 
@@ -36,8 +36,9 @@ test("should review a GraphQL operation contract", async ({
     expect(pillColor).not.toEqual(bodyColor);
   });
 
-  await test.step("operation, variables, and response fences get copy controls", async () => {
-    await expect(operation.locator("[data-copy-code]")).toHaveCount(3);
+  await test.step("code examples ship without dead controls", async () => {
+    await expect(operation.locator("[data-copy-code]")).toHaveCount(0);
+    await expect(operation.locator("pre code")).toHaveCount(3);
   });
 
   await test.step("the complete card reads without JavaScript", async () => {

@@ -3,8 +3,6 @@
 
 import type { Section } from "./markdown/convert.js";
 import { compileMarkdown, serializeMarkdown } from "./markdown/convert.js";
-import type { RendererKind } from "./markdown/convert.js";
-export type { RendererKind } from "./markdown/convert.js";
 export { MarkdownDiagnosticsError } from "./markdown/convert.js";
 import type { CollectedComponentModel } from "./markdown/convert.js";
 import { renderPage } from "./page.js";
@@ -25,16 +23,11 @@ export type RenderedDocument = {
 export const renderDocument = ({
   markdown,
   fallbackTitle,
-  renderer,
 }: {
   readonly markdown: string;
   readonly fallbackTitle: string;
-  readonly renderer?: RendererKind;
 }): RenderedDocument => {
-  const { root, sections, elementIds, title } = compileMarkdown({
-    markdown,
-    ...(renderer === undefined ? {} : { renderer }),
-  });
+  const { root, sections, elementIds, title } = compileMarkdown({ markdown });
   const resolvedTitle = title ?? fallbackTitle;
   const shell = renderShell({
     nav: sections.map((section) => ({ id: section.id, label: section.text })),
@@ -44,7 +37,6 @@ export const renderDocument = ({
   const html = renderPage({
     title: resolvedTitle,
     styles: shell.styles,
-    scripts: shell.scripts,
     bodyClassName: shell.bodyClassName,
     bodyHtml: shell.html,
   });

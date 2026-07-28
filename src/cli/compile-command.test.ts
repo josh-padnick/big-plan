@@ -52,6 +52,22 @@ describe("compileCommand validation", () => {
     });
   });
 
+  it("should reject an option-shaped argument instead of writing to it", async () => {
+    const inputPath = join(tempDirectory, "plan.mdx");
+    await writeFile(inputPath, PLAN, "utf8");
+    await expect(compileCommand([inputPath, "--json"])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+  });
+
+  it("should reject a third positional argument", async () => {
+    const inputPath = join(tempDirectory, "plan.mdx");
+    await writeFile(inputPath, PLAN, "utf8");
+    await expect(
+      compileCommand([inputPath, "out.json", "extra"]),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
   it("should reject an unreadable input path", async () => {
     await expect(
       compileCommand([join(tempDirectory, "missing.mdx")]),

@@ -26,8 +26,8 @@ npx big-plan compile <file.mdx> [output.json]
 
 Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.model.json`.
 Both sit next to the input, while the MDX file remains the canonical source and JSON is always derived output.
-The rendered HTML embeds all styling, behavior, and branding assets, makes no external requests, and stays readable with JavaScript disabled.
-A responsive table of contents built from the document's level-two headings tracks the reader through the page, and the light/dark theme follows the OS preference until the reader chooses one.
+The rendered HTML embeds all styling and branding assets, ships no scripts, and makes no external requests.
+A responsive table of contents links to the document's level-two headings, and the light/dark theme follows the OS preference through CSS alone.
 
 Plans are prose plus validated components, like this callout:
 
@@ -59,7 +59,7 @@ bun run build           # regenerate embedded modules, then compile TypeScript t
 bun run test            # vitest unit tests (regenerates embedded modules first)
 bun run lint            # ESLint checks plus Prettier format verification
 bun run format          # format authored files with Prettier
-bun run gen             # regenerate CSS, browser-script, and branding-asset modules
+bun run gen             # regenerate CSS and branding-asset modules
 bunx playwright test    # browser tests of the rendered viewer (build first)
 node bin/big-plan.mjs render examples/sample.mdx
 ```

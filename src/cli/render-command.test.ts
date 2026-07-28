@@ -26,13 +26,48 @@ afterEach(async () => {
 });
 
 describe("renderCommand validation", () => {
+  it("should reject an option-shaped argument instead of writing to it", async () => {
+    const inputPath = join(tempDirectory, "plan.mdx");
+    await writeFile(inputPath, "# Plan\n\n## S\n", "utf8");
+    await expect(renderCommand([inputPath, "--html"])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+  });
+
   it("should report usage when the input argument is missing", async () => {
     await expect(renderCommand([])).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
       message: "Missing input MDX file",
-      suggestions: [
-        "Usage: big-plan render <input.mdx> [output.html] [--renderer vanilla|react]",
-      ],
+      suggestions: ["Usage: big-plan render <input.mdx> [output.html]"],
+    });
+  });
+
+  it.each(["--renderer", "--renderer=react", "--unknown"])(
+    "should reject the unknown option %s before writing output",
+    async (option) => {
+      const inputPath = join(tempDirectory, "plan.mdx");
+      await writeFile(inputPath, "# Plan\n", "utf8");
+
+      await expect(
+        renderCommand([inputPath, option, "react"]),
+      ).rejects.toMatchObject({
+        code: "VALIDATION_ERROR",
+        message: `Unknown option "${option}"`,
+        suggestions: ["Usage: big-plan render <input.mdx> [output.html]"],
+      });
+    },
+  );
+
+  it("should reject excess positional arguments", async () => {
+    const inputPath = join(tempDirectory, "plan.mdx");
+    await writeFile(inputPath, "# Plan\n", "utf8");
+
+    await expect(
+      renderCommand([inputPath, "plan.html", "extra"]),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: 'Unexpected extra argument "extra"',
+      suggestions: ["Usage: big-plan render <input.mdx> [output.html]"],
     });
   });
 
@@ -71,24 +106,6 @@ describe("renderCommand validation", () => {
       code: "VALIDATION_ERROR",
       message: "Output path would overwrite the input MDX file",
     });
-  });
-});
-
-describe("renderCommand renderer flag", () => {
-  it("should reject a --renderer flag with no value instead of treating it as a path", async () => {
-    const inputPath = join(tempDirectory, "plan.mdx");
-    await writeFile(inputPath, "# Plan\n\n## S\n", "utf8");
-    await expect(
-      renderCommand([inputPath, "--renderer"]),
-    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-  });
-
-  it("should reject an unknown renderer value", async () => {
-    const inputPath = join(tempDirectory, "plan.mdx");
-    await writeFile(inputPath, "# Plan\n\n## S\n", "utf8");
-    await expect(
-      renderCommand([inputPath, "--renderer", "handlebars"]),
-    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 });
 

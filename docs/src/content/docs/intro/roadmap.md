@@ -7,12 +7,12 @@ Big Plan is pre-alpha and is being built in the open, one registry capability at
 
 ## Shipped
 
-- **The static viewer.** `big-plan render` converts a plan into one self-contained themed HTML document: section navigation, syntax highlighting, copy controls, and light/dark themes, readable with JavaScript disabled.
+- **The static viewer.** `big-plan render` converts a plan into one self-contained inert HTML document with section navigation, syntax highlighting, and OS-controlled light/dark themes.
 - **Components.** Plans parse as a static subset of MDX; a closed registry renders components server-side, and invalid documents fail loudly with positional diagnostics that aggregate recoverable problems. [`Callout`](/components/callout/) and [`CodeDiff`](/components/code-diff/) shipped first, including line-anchored `Annotation` notes on diffs.
-- **Code and file-tree review.** [`CodeSnippet`](/components/code-snippet/) inspects annotated excerpts of existing code with file-absolute line numbers, while [`FileTree`](/components/file-tree/) and [`FileTreeDiff`](/components/file-tree-diff/) show plain hierarchies and per-entry change status with combined or side-by-side views.
+- **Code and file-tree review.** [`CodeSnippet`](/components/code-snippet/) inspects annotated excerpts of existing code with file-absolute line numbers, while [`FileTree`](/components/file-tree/) and [`FileTreeDiff`](/components/file-tree-diff/) show plain hierarchies and per-entry change status.
 - **API contract review.** [`HttpEndpoint`](/components/http-endpoint/), [`GraphqlOperation`](/components/graphql-operation/), and [`GrpcMethod`](/components/grpc-method/) render protocol-native contracts with validated fields, examples, and errors.
 - **Table schema review.** [`DatabaseTableSchema`](/components/database-table-schema/) renders one table's validated DBML-subset schema with titled verbatim-DDL bands.
-- **Decision review.** [`BigDecision`](/components/big-decision/) presents a weighty choice as a criteria matrix or substantive option list, while [`SmallDecisionSet`](/components/small-decision-set/) collects compact end-of-plan questions; recommendations start locally selected, and decision priorities can be reweighted in the browser.
+- **Decision review.** [`BigDecision`](/components/big-decision/) presents a weighty choice as a criteria matrix or substantive option list, while [`SmallDecisionSet`](/components/small-decision-set/) collects compact end-of-plan questions and marks recommendations clearly.
 
 ## Planned components
 
@@ -24,7 +24,8 @@ Big Plan is pre-alpha and is being built in the open, one registry capability at
 - A local review server with a live bridge to the authoring agent.
 - Highlight-to-comment threads the agent replies to in place.
 - Versioned change review across plan revisions.
-- Full keyboard control, plus transport-backed review actions and persisted feedback once the live server exists.
+- Hydrated review aids including theme override, copy controls, alternate views, tabs, full-screen viewing, option selection, criterion weighting, and full keyboard control.
+- Transport-backed review actions and persisted feedback once the live server exists.
 
 ## Follow along
 

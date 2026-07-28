@@ -244,7 +244,7 @@ export const compileCodeSnippetComponent = ({
   ) {
     diagnostics.add({
       message:
-        "A bare CodeSnippet duplicates a plain markdown fence, which already provides highlighting and a copy control",
+        "A bare CodeSnippet duplicates a plain markdown fence, which already provides syntax highlighting",
       position,
     });
   }

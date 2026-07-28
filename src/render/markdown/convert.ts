@@ -11,7 +11,6 @@ import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
-import { rehypeDecorateCodeBlocks } from "./code-block/decorate-code-blocks.js";
 import {
   createDiagnosticCollector,
   diagnosticFromParseError,
@@ -23,8 +22,6 @@ import {
 } from "./components/registry.js";
 import type { CollectedComponentModel } from "./components/registry.js";
 export type { CollectedComponentModel } from "./components/registry.js";
-import type { RendererKind } from "./components/registry.js";
-export type { RendererKind } from "./components/registry.js";
 
 export type Section = {
   readonly id: string;
@@ -181,11 +178,9 @@ const collectElementIds = (
 export const compileMarkdown = ({
   markdown,
   models,
-  renderer,
 }: {
   readonly markdown: string;
   readonly models?: Array<CollectedComponentModel>;
-  readonly renderer?: RendererKind;
 }): CompiledMarkdown => {
   const diagnostics = createDiagnosticCollector();
   const processor = unified()
@@ -209,12 +204,10 @@ export const compileMarkdown = ({
     .use(rehypeRenderComponents, {
       diagnostics,
       ...(models === undefined ? {} : { models }),
-      ...(renderer === undefined ? {} : { renderer }),
     })
     // Detection stays opt-in through the fence language: undeclared and
     // unknown languages remain readable without guessed tokenization.
     .use(rehypeHighlight)
-    .use(rehypeDecorateCodeBlocks)
     .use(rehypeWrapTables);
   // Only parsing reflects author mistakes; a transform that throws is a
   // renderer defect and must surface as an internal error, not as a

@@ -53,10 +53,6 @@ export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
 
 export type ComponentRegistry = Readonly<Record<string, ComponentDefinition>>;
 
-// Which implementation renders components; "react" is the in-progress SSR
-// target, while the vanilla fallback remains until the default flips.
-export type RendererKind = "vanilla" | "react";
-
 /** One collected component instance: its name, position, and plan model. */
 export type CollectedComponentModel = {
   readonly component: string;
@@ -331,7 +327,7 @@ const collectExistingIds = (
 // vanilla HAST carries, but serialized differently), and data-* attributes
 // come back as camelCase dataset keys where authored HAST and the transforms
 // that inspect it use the dashed form.
-const normalizeReparsedProperties = (
+export const normalizeReparsedProperties = (
   nodes: ReadonlyArray<RootContent>,
 ): void => {
   for (const node of nodes) {
@@ -361,14 +357,12 @@ const renderFlowElement = ({
   registry,
   ids,
   models,
-  renderer,
 }: {
   readonly node: MdxJsxFlowElement;
   readonly diagnostics: DiagnosticCollector;
   readonly registry: ComponentRegistry;
   readonly ids: ComponentIdAllocator;
   readonly models?: ModelCollector;
-  readonly renderer?: RendererKind;
 }): Element | undefined => {
   const name = node.name;
   const definition = definitionFor({ name, registry });
@@ -386,7 +380,6 @@ const renderFlowElement = ({
     registry,
     ids,
     ...(models === undefined ? {} : { models }),
-    ...(renderer === undefined ? {} : { renderer }),
   });
   if (definition === undefined) {
     return undefined;
@@ -414,32 +407,7 @@ const renderFlowElement = ({
       }),
     });
   }
-  if (renderer === "react" && definition.renderStatic !== undefined) {
-    const rendered = definition.renderStatic({
-      attributes,
-      children: node.children,
-      scopedChildren,
-      position: node.position,
-      diagnostics,
-      ids,
-    });
-    // Reparsing routes the React output through the same final serializer as
-    // everything else, so escaping and formatting can never diverge by path.
-    const fragment = fromHtml(rendered, { fragment: true });
-    normalizeReparsedProperties(fragment.children);
-    const first = fragment.children.find(
-      (child): child is Element => child.type === "element",
-    );
-    if (first !== undefined) {
-      return first;
-    }
-    diagnostics.add({
-      message: `Internal error: React port of "${name ?? "<fragment>"}" produced no element`,
-      position: node.position,
-    });
-    return undefined;
-  }
-  return definition.render({
+  const rendered = definition.renderStatic({
     attributes,
     children: node.children,
     scopedChildren,
@@ -447,6 +415,21 @@ const renderFlowElement = ({
     diagnostics,
     ids,
   });
+  // Reparsing routes the React output through the same final serializer as
+  // everything else, so escaping and formatting can never diverge by path.
+  const fragment = fromHtml(rendered, { fragment: true });
+  normalizeReparsedProperties(fragment.children);
+  const first = fragment.children.find(
+    (child): child is Element => child.type === "element",
+  );
+  if (first !== undefined) {
+    return first;
+  }
+  diagnostics.add({
+    message: `Internal error: static renderer for "${name ?? "<fragment>"}" produced no element`,
+    position: node.position,
+  });
+  return undefined;
 };
 
 /** Rewrites MDX children and returns direct scoped children in authored order. */
@@ -457,7 +440,6 @@ const renderChildren = ({
   registry,
   ids,
   models,
-  renderer,
 }: {
   readonly parent: ParentNode;
   readonly scopedDefinitions?: ScopedParentDefinition["scopedChildren"];
@@ -465,7 +447,6 @@ const renderChildren = ({
   readonly registry: ComponentRegistry;
   readonly ids: ComponentIdAllocator;
   readonly models?: ModelCollector;
-  readonly renderer?: RendererKind;
 }): ReadonlyArray<ScopedChild> => {
   const scopedChildren: Array<ScopedChild> = [];
   let index = 0;
@@ -492,7 +473,6 @@ const renderChildren = ({
         registry,
         ids,
         ...(models === undefined ? {} : { models }),
-        ...(renderer === undefined ? {} : { renderer }),
       });
       scopedChildren.push({
         name: childName,
@@ -513,7 +493,6 @@ const renderChildren = ({
         registry,
         ids,
         ...(models === undefined ? {} : { models }),
-        ...(renderer === undefined ? {} : { renderer }),
       });
     }
     if (child.type === "mdxJsxFlowElement") {
@@ -523,7 +502,6 @@ const renderChildren = ({
         registry,
         ids,
         ...(models === undefined ? {} : { models }),
-        ...(renderer === undefined ? {} : { renderer }),
       });
       parent.children.splice(
         index,
@@ -574,12 +552,10 @@ export const rehypeRenderComponents =
     diagnostics,
     registry = COMPONENT_REGISTRY,
     models,
-    renderer,
   }: {
     readonly diagnostics: DiagnosticCollector;
     readonly registry?: ComponentRegistry;
     readonly models?: Array<CollectedComponentModel>;
-    readonly renderer?: RendererKind;
   }) =>
   (tree: Root): void => {
     const reservedIds = collectExistingIds(tree);
@@ -597,7 +573,6 @@ export const rehypeRenderComponents =
               diagnostics: createDiagnosticCollector(),
             },
           }),
-      ...(renderer === undefined ? {} : { renderer }),
     });
     reportSurvivors({ parent: tree, diagnostics });
   };

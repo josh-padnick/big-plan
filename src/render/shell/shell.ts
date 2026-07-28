@@ -1,8 +1,7 @@
 // Owns the review shell: the reading surface a rendered document lives in -
-// the branding bar, layout grid, theme control, responsive desktop and mobile
-// navigation, code-block and component controls, and content region. It
-// produces body-level markup plus the styles and progressive-enhancement
-// scripts that markup needs, as data;
+// the branding bar, layout grid, responsive desktop and mobile navigation,
+// and content region. It produces body-level markup plus the styles the
+// markup needs, as data;
 // packaging into a complete document is page.ts's job. Authored markup is
 // styled with Tailwind utilities; the compiled stylesheet (including the
 // element-scoped styles from markdown/prose.css) comes from the generated
@@ -11,16 +10,6 @@
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
-import { BIG_DECISION_JS } from "../markdown/components/big-decision/big-decision.generated.js";
-import { CODE_DIFF_JS } from "../markdown/components/code-diff/code-diff.generated.js";
-import { CODE_SNIPPET_JS } from "../markdown/components/code-snippet/code-snippet.generated.js";
-import { DATABASE_TABLE_SCHEMA_JS } from "../markdown/components/database-table-schema/database-table-schema.generated.js";
-import { FILE_TREE_JS } from "../markdown/components/file-tree/file-tree.generated.js";
-import { HTTP_ENDPOINT_JS } from "../markdown/components/http-endpoint/http-endpoint.generated.js";
-import { OPTION_SELECT_JS } from "../markdown/components/shared/option-select/option-select.generated.js";
-import { COPY_CODE_JS } from "../markdown/code-block/copy-code.generated.js";
-import { SCROLL_SPY_JS } from "./scroll-spy.generated.js";
-import { THEME_TOGGLE_JS } from "./theme-toggle.generated.js";
 
 // The shell's own navigation contract: plain text in, so the shell owes
 // nothing to whatever produced the document. Callers map their outline into
@@ -33,7 +22,6 @@ export type NavEntry = {
 export type ShellResult = {
   readonly html: string;
   readonly styles: string;
-  readonly scripts: ReadonlyArray<string>;
   readonly bodyClassName: string;
 };
 
@@ -51,9 +39,6 @@ const TOC_LINK_CLASSES =
   "block border-l-2 border-edge px-3 py-[0.3rem] leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:font-semibold aria-[current=true]:text-accent";
 const MOBILE_TOC_LINK_CLASSES =
   "block border-l-2 border-transparent px-5 py-2.5 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:font-semibold aria-[current=true]:text-accent";
-
-const THEME_TOGGLE_CLASSES =
-  "fixed top-1.5 right-3 z-20 rounded-md border border-edge bg-surface px-3 py-1.5 text-xs font-semibold text-muted shadow-sm hover:text-ink focus:outline-2 focus:outline-offset-2 focus:outline-accent";
 
 // Allocates the shell-owned overview anchor alongside document-owned ids.
 const createOverviewId = (contentIds: ReadonlyArray<string>): string => {
@@ -107,7 +92,7 @@ ${items}
 </nav>`;
 };
 
-// Builds the sticky, progressively enhanced mobile TOC.
+// Builds the sticky mobile TOC as a native disclosure.
 const renderMobileToc = ({
   nav,
   overviewId,
@@ -135,9 +120,8 @@ ${items}
 
 /**
  * Wraps rendered content in the review shell: the layout grid and branding
- * bar, responsive navigation when nav entries exist, theme control, and
- * code-block and component controls. Returns markup plus the styles and
- * progressive-enhancement scripts the caller packages into a page.
+ * bar, responsive navigation when nav entries exist, and content region.
+ * Returns markup plus the styles the caller packages into a page.
  */
 export const renderShell = ({
   nav,
@@ -150,8 +134,7 @@ export const renderShell = ({
 }): ShellResult => {
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
-  const html = `<button class="${THEME_TOGGLE_CLASSES}" type="button" data-theme-toggle aria-label="Toggle color theme">Theme</button>
-<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
+  const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="flex h-full items-center px-5 wide:px-6">
 <a class="rounded-sm focus:outline-2 focus:outline-offset-2 focus:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
@@ -171,30 +154,6 @@ ${contentHtml}
   return {
     html,
     styles: GLOBAL_CSS,
-    scripts: hasToc
-      ? [
-          THEME_TOGGLE_JS,
-          COPY_CODE_JS,
-          CODE_DIFF_JS,
-          CODE_SNIPPET_JS,
-          DATABASE_TABLE_SCHEMA_JS,
-          FILE_TREE_JS,
-          HTTP_ENDPOINT_JS,
-          BIG_DECISION_JS,
-          OPTION_SELECT_JS,
-          SCROLL_SPY_JS,
-        ]
-      : [
-          THEME_TOGGLE_JS,
-          COPY_CODE_JS,
-          CODE_DIFF_JS,
-          CODE_SNIPPET_JS,
-          DATABASE_TABLE_SCHEMA_JS,
-          FILE_TREE_JS,
-          HTTP_ENDPOINT_JS,
-          BIG_DECISION_JS,
-          OPTION_SELECT_JS,
-        ],
     bodyClassName: BODY_CLASSES,
   };
 };

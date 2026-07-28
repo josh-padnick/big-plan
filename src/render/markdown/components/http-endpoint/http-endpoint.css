@@ -43,9 +43,8 @@
 }
 
 @layer components {
-  /* Tabbed navigation: the tab bar replaces the stacked
-     sections' separating borders, so a tabbed card suppresses per-section
-     top borders and marks the active tab with an accent underline. */
+  /* Live-review tabs replace the stacked sections' separating borders and
+     mark the active tab with an accent underline. */
   article [data-http-tabbed] > section {
     border-top: 0;
   }

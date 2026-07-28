@@ -1,10 +1,26 @@
 // Tests Callout schema diagnostics, variant defaults, semantic markup, and
 // preservation of the registry-provided HAST body.
 
-import type { ElementContent } from "hast";
+import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
 import { createDiagnosticCollector } from "../../../../model/diagnostics.js";
+import { fromHtml } from "hast-util-from-html";
+import { normalizeReparsedProperties } from "../registry.js";
 import { CALLOUT_COMPONENT_DEFINITION } from "./callout.js";
+
+// The static renderer returns a string; reparsing mirrors the registry's own
+// splice so traversal assertions keep exercising the shipped markup.
+const parseRenderedElement = (html: string): Element => {
+  const fragment = fromHtml(html, { fragment: true });
+  normalizeReparsedProperties(fragment.children);
+  const parsed = fragment.children.find(
+    (child): child is Element => child.type === "element",
+  );
+  if (parsed === undefined) {
+    throw new Error("component rendered no element");
+  }
+  return parsed;
+};
 
 const POSITION = {
   start: { line: 4, column: 1, offset: 20 },
@@ -19,13 +35,15 @@ const render = ({
   readonly children?: ReadonlyArray<ElementContent>;
 }) => {
   const diagnostics = createDiagnosticCollector();
-  const element = CALLOUT_COMPONENT_DEFINITION.render({
-    attributes,
-    children,
-    scopedChildren: [],
-    position: POSITION,
-    diagnostics,
-  });
+  const element = parseRenderedElement(
+    CALLOUT_COMPONENT_DEFINITION.renderStatic({
+      attributes,
+      children,
+      scopedChildren: [],
+      position: POSITION,
+      diagnostics,
+    }),
+  );
   return { element, diagnostics: diagnostics.diagnostics };
 };
 

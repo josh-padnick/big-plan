@@ -7,6 +7,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 import { AxiError } from "axi-sdk-js";
+import { parsePositionalArguments } from "./command-arguments.js";
 import {
   MarkdownDiagnosticsError,
   compilePlanModel,
@@ -28,13 +29,16 @@ const defaultOutputPath = (inputPath: string): string => {
 export const compileCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
-  const inputArg = args[0];
+  const { inputArg, outputArg } = parsePositionalArguments({
+    args,
+    usage: USAGE,
+  });
   if (inputArg === undefined) {
     throw new AxiError("Missing input MDX file", "VALIDATION_ERROR", [USAGE]);
   }
 
   const inputPath = resolve(inputArg);
-  const outputPath = resolve(args[1] ?? defaultOutputPath(inputPath));
+  const outputPath = resolve(outputArg ?? defaultOutputPath(inputPath));
   const writeGuardedOutput = createOutputPathGuard({
     inputPath,
     outputPath,

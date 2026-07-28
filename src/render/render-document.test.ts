@@ -124,11 +124,9 @@ describe("renderDocument affordances", () => {
     expect(html).not.toContain("@import");
   });
 
-  it("should inline one stylesheet plus the theme, copy, diff, snippet, table-schema, file-tree, http-endpoint, big-decision, option-select, and scroll-spy scripts when rendering", () => {
+  it("should inline one stylesheet and ship no scripts when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
-    expect(html.match(/<script>/g)).toHaveLength(10);
-    expect(html).toContain("data-theme-toggle");
-    expect(html).toContain("data-copy-code");
+    expect(html).not.toContain("<script>");
   });
 
   it("should emit theme-aware favicon links as embedded data URIs when rendering", () => {
@@ -174,7 +172,7 @@ describe("renderDocument shell", () => {
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("</html>");
     expect(html).not.toContain("<nav");
-    expect(html.match(/<script>/g)).toHaveLength(9);
+    expect(html).not.toContain("<script>");
     // The reading column keeps its ~74ch measure even without a sidebar.
     expect(html).toContain("wide:grid-cols-[minmax(0,74ch)]");
   });

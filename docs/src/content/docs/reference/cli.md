@@ -9,7 +9,7 @@ The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors,
 ## Commands
 
 ```text
-big-plan render <input.mdx> [output.html] [--renderer vanilla|react]
+big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
 ```
 
@@ -19,7 +19,7 @@ The output argument is optional for both commands.
 The equivalent package runner forms are:
 
 ```sh
-npx big-plan render <input.mdx> [output.html] [--renderer vanilla|react]
+npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
 ```
 
@@ -27,10 +27,6 @@ npx big-plan compile <input.mdx> [output.json]
 
 The CLI resolves the input path against the current working directory.
 It reads the input as UTF-8 text.
-
-`render` accepts an experimental `--renderer` flag (`vanilla`, the default, or `react`) selecting the implementation that renders plan components; both `--renderer react` and `--renderer=react` forms are accepted.
-Every registered component has a React renderer whose output is test-pinned byte-identical to the vanilla renderer, so the flag does not change what a document looks like.
-The registry retains its vanilla fallback until the React renderer becomes the default, although no built-in component currently needs that fallback.
 
 When the output argument is omitted, `render` replaces the input filename extension with `.html` and `compile` replaces it with `.model.json`.
 An input without an extension receives the suffix at the end.
@@ -79,13 +75,12 @@ After writing the file, each command returns a structured result for `axi-sdk-js
 If the input argument is missing, either command raises a structured `VALIDATION_ERROR` with the message `Missing input MDX file` and its command-specific usage line.
 
 ```text
-Usage: big-plan render <input.mdx> [output.html] [--renderer vanilla|react]
+Usage: big-plan render <input.mdx> [output.html]
 Usage: big-plan compile <input.mdx> [output.json]
 ```
 
-If `--renderer` has no value, `render` raises a structured `VALIDATION_ERROR` with the message `Missing value for --renderer`.
-If its value is not `vanilla` or `react`, `render` instead reports `Unknown renderer "<value>" - expected vanilla or react`.
-Both errors include the `render` usage line, and no output file is written.
+Any dash-prefixed token is rejected as an unknown option, and any third positional argument is rejected as excess.
+Both cases raise a structured `VALIDATION_ERROR`, include the command's usage line, and write no output.
 
 If the input cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
 The read error covers any failure to read the input file.

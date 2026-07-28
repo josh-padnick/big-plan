@@ -118,22 +118,16 @@ export type ComponentModelCompiler = (
   input: Parameters<ComponentRenderer>[0],
 ) => unknown;
 
-/**
- * Renders one component instance to a static HTML string. React ports
- * implement this; the contract stays framework-free by speaking in strings.
- */
+/** Renders one component instance to a static HTML string. */
 export type ComponentStaticRenderer = (
   input: Parameters<ComponentRenderer>[0],
 ) => string;
 
 export type ComponentDefinition = {
-  readonly render: ComponentRenderer;
   // Optional so isolated registries can remain render-only; rendering never
   // requires model exposure.
   readonly compile?: ComponentModelCompiler;
-  // Optional while the vanilla renderer remains the fallback until the React
-  // target becomes the default.
-  readonly renderStatic?: ComponentStaticRenderer;
+  readonly renderStatic: ComponentStaticRenderer;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
 };
 

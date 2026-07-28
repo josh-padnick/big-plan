@@ -15,6 +15,7 @@ import {
 import type {
   ComponentDefinition,
   ComponentRenderer,
+  ComponentStaticRenderer,
 } from "../../../model/component-contract.js";
 import { createDiagnosticCollector } from "../../../model/diagnostics.js";
 import type { ComponentDiagnostic } from "../../../model/diagnostics.js";
@@ -22,7 +23,7 @@ import {
   rehypeRenderComponents,
   remarkValidateComponents,
 } from "./registry.js";
-import type { ComponentRegistry, RendererKind } from "./registry.js";
+import type { ComponentRegistry } from "./registry.js";
 
 const renderNestedFixture: ComponentRenderer = ({ scopedChildren }) => {
   const branch = scopedChildren[0];
@@ -42,8 +43,15 @@ const renderNestedFixture: ComponentRenderer = ({ scopedChildren }) => {
   };
 };
 
+// Serializing the fixture's HAST through the shared serializer keeps these
+// dispatch tests focused on scoping, not markup production.
+const renderNestedFixtureStatic: ComponentStaticRenderer = (input) =>
+  serializeMarkdown({
+    root: { type: "root", children: [renderNestedFixture(input)] },
+  });
+
 const NESTED_COMPONENT_DEFINITION = {
-  render: renderNestedFixture,
+  renderStatic: renderNestedFixtureStatic,
   scopedChildren: {
     Branch: {
       kind: "scoped-child",
@@ -76,11 +84,9 @@ const NESTED_REGISTRY = {
 const compileWithRegistry = ({
   markdown,
   registry,
-  renderer,
 }: {
   readonly markdown: string;
   readonly registry: ComponentRegistry;
-  readonly renderer?: RendererKind;
 }): {
   readonly root: Root;
   readonly diagnostics: ReadonlyArray<ComponentDiagnostic>;
@@ -102,7 +108,6 @@ const compileWithRegistry = ({
     .use(rehypeRenderComponents, {
       diagnostics,
       registry,
-      ...(renderer === undefined ? {} : { renderer }),
     });
   const root: Root = processor.runSync(processor.parse(markdown));
   return { root, diagnostics: diagnostics.diagnostics };
@@ -151,51 +156,19 @@ describe("scoped child dispatch", () => {
     const renderInnerStatic = vi.fn(() => "<span>React inner</span>");
     const renderOuterStatic = vi.fn(() => "<section>React outer</section>");
     const registry = {
-      Inner: {
-        render: renderNestedFixture,
-        renderStatic: renderInnerStatic,
-      },
-      Outer: {
-        render: renderNestedFixture,
-        renderStatic: renderOuterStatic,
-      },
+      Inner: { renderStatic: renderInnerStatic },
+      Outer: { renderStatic: renderOuterStatic },
     } satisfies ComponentRegistry;
 
     const { root, diagnostics } = compileWithRegistry({
       markdown: "<Outer>\n<Inner />\n</Outer>\n",
       registry,
-      renderer: "react",
     });
 
     expect(diagnostics).toEqual([]);
     expect(renderInnerStatic).toHaveBeenCalledOnce();
     expect(renderOuterStatic).toHaveBeenCalledOnce();
     expect(serializeMarkdown({ root })).toBe("<section>React outer</section>");
-  });
-
-  it("should fall back to the vanilla renderer for a definition without a React port", () => {
-    const renderStatic = vi.fn(() => "<span>React</span>");
-    const registry = {
-      Ported: { render: renderNestedFixture, renderStatic },
-      Unported: {
-        render: (): ReturnType<ComponentRenderer> => ({
-          type: "element",
-          tagName: "aside",
-          properties: { "data-vanilla": "" },
-          children: [],
-        }),
-      },
-    } satisfies ComponentRegistry;
-
-    const { root, diagnostics } = compileWithRegistry({
-      markdown: "<Unported />\n",
-      registry,
-      renderer: "react",
-    });
-
-    expect(diagnostics).toEqual([]);
-    expect(renderStatic).not.toHaveBeenCalled();
-    expect(serializeMarkdown({ root })).toBe('<aside data-vanilla=""></aside>');
   });
 
   it("should leave an undeclared name unknown within a nested scope", () => {
