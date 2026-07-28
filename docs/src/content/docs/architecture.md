@@ -13,33 +13,31 @@ The compiler is not one class or executable inside Big Plan.
 It is the coordinated translation path made from the MDX parser, authoring validators, and the compilation function owned by each built-in component.
 A component's compilation function knows how to turn that component's attributes and children into validated data; it does not decide whether the final delivery is JSON or HTML.
 
-That shared translation is what keeps two outputs consistent:
+That shared translation is what keeps validation and both outputs consistent:
 
 - `big-plan compile` collects document metadata and validated component data into machine-readable JSON.
 - `big-plan render` presents that same validated component data inside a human-readable HTML review document.
+- `big-plan validate` completes the HTML path in memory while collecting the machine summary, then applies authoring lint without writing either output.
 
-The commands run independently.
-Running one does not run the other, and `render` never reads JSON produced by `compile`.
+The commands run independently, and no command reads output produced by another.
 They agree because each starts from the authoritative source file and reuses the same parsing, validation, and component-compilation implementation.
 
 ```mermaid
 flowchart TB
   A["plan.mdx<br/>authoritative source"]
-  A --> B["big-plan compile"]
-  A --> C["big-plan render"]
-  B --> D["compilePlanModel()<br/>compileMarkdownModel()"]
-  C --> E["renderDocument()<br/>compileMarkdown()"]
-  D --> F["compileMarkdownTree()<br/>parse, validate, compile components"]
-  E --> F
-  F --> G["machine-readable output mode<br/>collect validated component data"]
-  F --> H["HTML output mode<br/>render component presentations"]
+  A --> F["compileMarkdownTree()<br/>parse, validate, compile components"]
+  F --> Q{"Command continuation"}
+  Q -- "compilePlanModel()<br/>compileMarkdownModel()" --> G["Collect validated component data"]
+  Q -- "renderDocument()<br/>compileMarkdown()" --> H["Render component presentations"]
+  Q -- "validateDocument()<br/>compileMarkdownWithModels()" --> M["Render presentations<br/>and collect component data"]
   G --> I["machine-readable JSON"]
   H --> J["self-contained HTML<br/>review document"]
+  M --> N["authoring lint<br/>no output written"]
 ```
 
-In the source, `compileMarkdownModel()` and `compileMarkdown()` are thin entry points over `compileMarkdownTree()`.
+In the source, `compileMarkdownModel()`, `compileMarkdown()`, and `compileMarkdownWithModels()` are thin entry points over `compileMarkdownTree()`.
 That function coordinates the compilation path described above.
-It is shared code executed separately by each command, not a cached intermediate artifact or a process that emits both files at once.
+It is shared code executed separately by each command, not a cached intermediate artifact or a process that emits output files together.
 
 ## Plans are MDX
 
@@ -56,9 +54,10 @@ When `compileMarkdownTree()` reaches a registered component, its definition vali
 The component is compiled once during that command invocation; the selected output mode determines what happens next:
 
 - In **machine-readable output mode**, used by `big-plan compile`, Big Plan collects the validated data in source order and does not invoke the top-level presentation.
-- In **HTML output mode**, used by `big-plan render`, Big Plan invokes the presentation, crosses one React-to-HAST boundary, and replaces the authored component node with plain document HAST.
+- In **HTML output mode**, used by `big-plan render` and `big-plan validate`, Big Plan invokes the presentation, crosses one React-to-HAST boundary, and replaces the authored component node with plain document HAST.
+  Validation also collects the component data during that delivery, discards the completed document, and runs its separate authoring-lint rules.
 
-The two commands therefore agree on component semantics because they call the same compilation function, not because `render` consumes the JSON produced by `compile`.
+All three commands therefore agree on component semantics because they call the same compilation function, not because one consumes another command's output.
 No plan-authored code is evaluated or shipped.
 Ordinary Markdown prose participates only in the human document, while its heading metadata remains available in the machine-readable JSON.
 
@@ -68,12 +67,14 @@ flowchart TB
   P --> V["Validate authoring contract"]
   V --> C["Component definition returns<br/>validated data + presentation"]
   C --> Q{"Output mode for this command"}
-  Q -- "machine-readable" --> J["Collect document metadata<br/>and validated component data"]
+  Q -- "machine-readable: compile" --> J["Collect document metadata<br/>and validated component data"]
   J --> O["Serialize JSON"]
-  Q -- "HTML" --> R["Invoke presentation<br/>and cross once to HAST"]
-  R --> H["Apply document transforms"]
-  H --> T["Add navigation and styling"]
-  T --> U["Serialize plan.html"]
+  Q -- "HTML: render" --> R["Invoke presentation<br/>and cross once to HAST"]
+  R --> H["Apply document transforms,<br/>add chrome, serialize HTML"]
+  H --> U["Write plan.html"]
+  Q -- "HTML + model collection: validate" --> X["Collect validated data,<br/>invoke presentation, cross to HAST"]
+  X --> Y["Apply document transforms,<br/>add chrome, serialize HTML"]
+  Y --> W["Discard HTML, retain summary,<br/>run authoring lint"]
 ```
 
 An invalid document never renders partially.

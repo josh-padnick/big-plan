@@ -63,5 +63,6 @@ The diagnostic points to the row that should be the delimiter:
 2:1 [markdown-table-format] Table-like block needs a valid delimiter row with 2 columns, for example "| --- | --- |"
 ```
 
-The rule ignores valid GFM tables, ordinary prose containing pipes, inline code, fenced code blocks, blockquotes, and isolated table-like rows.
+The rule ignores valid GFM tables, ordinary prose containing pipes, rows presented wholly as inline-code examples, fenced code blocks, blockquotes, and isolated table-like rows.
+Inline code inside a table cell does not hide an otherwise table-shaped row.
 `render` and `compile` remain permissive for Markdown that the parser treats as prose; use `validate` when you want the extra authoring check.
