@@ -3,7 +3,7 @@ title: CLI reference
 description: Reference the complete Big Plan command surface, defaults, results, and errors.
 ---
 
-Big Plan exposes two commands through the `big-plan` executable: `render` for the human-facing HTML document, and `compile` for the machine-facing plan model.
+Big Plan exposes two commands through the `big-plan` executable: `render` for the human-facing HTML document, and `compile` for machine-readable JSON.
 The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors, and result serialization.
 
 ## Commands
@@ -44,7 +44,8 @@ The reported section count comes from the document's level-two sections.
 
 ## The compiled plan model
 
-`compile` validates the plan exactly as `render` does - every diagnostic hard-fails both commands identically - and writes the validated plan model as pretty-printed JSON:
+The JSON written by `compile` is Big Plan's **compiled plan model**: a structured representation intended for agents and tools.
+`compile` validates the plan exactly as `render` does - every diagnostic hard-fails both commands identically - and writes that representation as pretty-printed JSON:
 
 - `title`: the document title.
 - `sections`: the level-two section outline with ids and text.

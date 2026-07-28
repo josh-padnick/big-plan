@@ -3,7 +3,7 @@ title: Render a plan for human review
 description: Follow the exact operational workflow an agent uses to hand a rendered plan to a person.
 ---
 
-Use this workflow after writing a plan as a static-subset MDX file and before acting on it.
+Use this workflow after writing an MDX plan file containing Markdown and built-in components and before acting on it.
 
 ## Prerequisite
 

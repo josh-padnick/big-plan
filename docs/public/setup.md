@@ -1,7 +1,7 @@
 # Set up Big Plan
 
 You are a coding agent setting up Big Plan for your human.
-Big Plan renders a static-subset MDX plan file into one self-contained HTML document your human reviews, so you reach agreement before you act.
+Big Plan renders an MDX plan file containing Markdown and built-in components into one self-contained HTML document your human reviews, so you reach agreement before you act.
 
 ## 1. Verify the install
 

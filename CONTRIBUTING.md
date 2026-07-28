@@ -9,4 +9,4 @@ The workflow is intentionally light:
 - **Checks.** Run `bun run lint`, `bun run build`, and `bun run test` before opening a pull request; CI enforces the same checks on branches pushed to this repository.
 - **License.** Big Plan is [MIT](LICENSE) licensed; contributions are accepted under the same license.
 
-See [AGENTS.md](AGENTS.md) for architecture, commands, and engineering rules.
+See [AGENTS.md](AGENTS.md) for architecture and engineering rules, and [README.md](README.md) for development commands.

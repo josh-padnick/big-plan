@@ -4,7 +4,6 @@ description: Everything the Big Plan viewer ships today, at a glance.
 ---
 
 Everything on this page is shipped and works today.
-For what comes next, see the [roadmap](/intro/roadmap/).
 
 ## Reading experience
 
@@ -25,7 +24,7 @@ For what comes next, see the [roadmap](/intro/roadmap/).
 
 ## Plan authoring
 
-- A static subset of MDX: standard Markdown and GFM plus a closed component registry, without executable imports, exports, or expressions.
+- An MDX plan format made of standard Markdown, GFM, and built-in components; imports, exports, expressions, and inline JSX are rejected and never executed.
 - Positional diagnostics that aggregate recoverable unsupported syntax, unknown components, invalid attributes, and malformed component content after MDX parses.
 - `BigDecision` components for weighty choices, rendered as scored criteria matrices or substantive option lists with lifecycle state, recommendations, optional reversibility, and outcomes.
 - `Callout` components for notes, tips, warnings, and dangers.

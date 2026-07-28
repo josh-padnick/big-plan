@@ -1,4 +1,4 @@
-// Compiles static-subset MDX into a structured HAST review document plus its title,
+// Validates and compiles an MDX plan into a structured HAST review document plus its title,
 // h2 outline, and element ids, then owns final HTML serialization after
 // transforms finish. The page chrome around that content lives in shell.ts.
 
@@ -195,7 +195,7 @@ const collectElementIds = (
 };
 
 /**
- * Compiles static-subset MDX into a structured review document plus its outline,
+ * Validates and compiles an MDX plan into a structured review document plus its outline,
  * title, and element ids for collision-free shell anchors. The tree stays
  * structured so component and Annotation transforms can run before final
  * serialization.

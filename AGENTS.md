@@ -1,117 +1,173 @@
 # Big Plan agent guide
 
 This is the entry point for agents working in Big Plan.
-Read the product orientation first, then follow the documentation map and linked references for detail.
 
-## What Big Plan is
+## Product
 
-Good AI output depends on a great plan, and Big Plan makes reviewing agent plans a first-class experience.
-Planning is an essential part of effective development with AI, and it deserves a first-class experience.
-Big Plan is built around one question: what is the best way to review a plan and reach agreement on it, before an agent acts?
+Big Plan makes reviewing agent plans a first-class experience.
+It is built around one question: what is the best user experience a human can have when aiming to understand, give feedback on, and ultimately accept an agent plan?
 
-An agent writes its plan as a document on disk, and Big Plan renders it into a rich local review surface.
-The long-term shape includes components for diagrams, schemas, API endpoints and code diffs, a live chat connection to the authoring agent, highlight-to-comment threads, and versioned change review.
-Big Plan focuses exclusively on that upfront moment of agreement - not code review, not project management.
-Everything runs locally, and the file on disk is the source of truth.
+An agent writes the plan, and Big Plan renders it as a human-friendly document designed to make the plan as easy as possible to understand, give feedback on, and accept.
 
-## Current state
+### Where Big Plan fits
 
-Deliverable 2 is shipped in this repo, now rendered end to end by the React component library: MDX plan documents with components, compiled once and delivered as machine JSON or self-contained human HTML.
-`big-plan render <input.mdx> [output.html]` converts a static-subset MDX plan document into a single self-contained themed HTML document, and `big-plan compile <input.mdx> [output.json]` emits the same validated plan model as JSON for agents and tools.
-The static subset rejects imports, exports, expressions, and unsupported attributes with hard-fail diagnostics carrying line and column positions, while the built-in BigDecision, Callout, CodeDiff, CodeSnippet, DatabaseTableSchema, FileTree, FileTreeDiff, GraphqlOperation, GrpcMethod, HttpEndpoint, and SmallDecisionSet components provide validated plan-native presentation.
-GFM tables, task lists, footnotes, and autolinks remain supported, but MDX does not support four-space indented code blocks; plans use fenced code blocks instead.
-Supported declared fenced-code languages receive syntax highlighting, and readers' OS light/dark preference styles the document through CSS alone.
-Rendered documents are deliberately inert: they ship no scripts, make no external requests, and remain fully readable everywhere - navigation runs on native anchors, the mobile `Sections` disclosure and every component detail drawer are native `details` elements, wide content scrolls inside its own containers, and controls that would need a script never appear.
-Interactive review aids - theme override, copy controls, diff view switching, tabbed sections, full-screen viewing, option selection, and criterion weighting - belong to the forthcoming live review application, which hydrates the same components.
+A robust AI-assisted delivery workflow has several distinct stages:
+
+1. **Create a sandbox.** The user gives the agent an isolated workspace where it can make changes without disturbing the main working copy.
+2. **Declare intent.** The user describes the outcome they want and supplies any context or constraints the agent needs.
+3. **Review the plan.** The agent proposes how it will achieve that outcome; the user works to understand the plan, gives feedback, and accepts it before execution begins.
+4. **Execute.** The agent implements the accepted plan inside the sandbox.
+5. **Review the recap.** The user learns what the agent changed, what it verified, and where judgment is still required.
+6. **Validate the deliverable.** The user exercises the delivered result—for example, by taking the UI for a spin—and confirms that the intended business value, user experience, and implementation approach are sound.
+7. **Merge.** Once the result has passed human validation and any required code review, it is ready to integrate.
+
+Big Plan focuses specifically on stage 3: helping a human understand, discuss, and accept the agent's intended approach before work begins.
+It does not own sandboxing, execution, post-execution validation, code review, project management, or merging.
+Big Plan runs locally, and the plan source on disk is authoritative.
+
+The product documentation owns current capabilities and usage.
+This guide owns the durable implementation model contributors must preserve.
+
+### Concepts
+
+- **Agent plan** is the agent's proposed approach for achieving the user's intent before implementation begins.
+- **Plan source** is the authoritative plan document on disk. The agent edits this source in response to feedback.
+- **Component** is a built-in, opinionated way to present a specific kind of plan information, such as a decision, code diff, schema, or file tree.
+- **Review document** is Big Plan's human-friendly presentation of the plan source.
+- **Plan review** is the conversation in which the human works to understand the proposed approach, gives feedback, and resolves concerns with the agent.
+- **Plan acceptance** is the human's explicit decision that the intended approach is understood well enough for the agent to begin execution. It is not acceptance of the finished deliverable, which happens later.
+
+## Technical orientation
+
+Big Plan plans are MDX files that contain Markdown and built-in components.
+Plan-authored code never executes: imports, exports, expressions, and inline JSX are rejected.
+
+Big Plan calls the validation-and-translation step **compilation**.
+Each command compiles the authoritative plan source independently, then produces either machine-readable JSON for agents and tools or a self-contained HTML review document for humans.
 
 ## Architecture at a glance
 
-The pipeline is deliberately small: CLI -> renderer -> self-contained HTML or plan-model JSON.
+Big Plan uses one compilation path for two outputs:
 
-- The CLI (`src/cli/`) is built on `runAxiCli()` from `axi-sdk-js`, which owns dispatch, help, structured errors, and output serialization. Each non-underscored folder is one public command with its colocated tests; `_shared/` owns support that commands reuse but users never invoke directly. `_shared/derived-output-command.ts` owns the safe read, derive, guarded-write, and result sequence, while individual commands supply only output-specific facts.
-- Components (`src/components/`) are organized by the authorable concept: each component folder co-locates its framework-free compiler and model types, registry definition, React view, styles, and tests. `_authoring/` owns the shared framework-free authoring contract, diagnostics, and body mechanics; `_registration/` owns the React-aware definition seam and closed registry; `_shared/` owns never-authorable React building blocks, one folder per shared component. The underscore marks support infrastructure, so every other direct child of `components/` is authorable. Co-location does not weaken dependency direction: `eslint.config.mjs` still keeps compilers framework-free and lets views depend inward on their compiled models.
-- The renderer (`src/render/`) is pure: MDX source plus a fallback title in, complete HTML or a validated plan model out. It uses unified (remark-parse, remark-gfm, remark-mdx, remark-rehype) to compile the static subset into structured HAST, captures authored title/sections after heading slugging, then compiles each registered plan element once. `src/components/_registration/` owns the closed registry, while `src/render/markdown/component-pipeline/` separates pre-HAST authoring validation from post-MDX delivery. Model delivery stops before top-level presentation; HTML delivery crosses the single React-to-HAST adapter before syntax highlighting and table wrapping. Nested presentation is materialized only when a parent model must retain it inside authored HAST. Parsing and component validation collect positional diagnostics and hard-fail before delivery, and rehype-stringify serializes HTML only after transforms finish. The shell uses final rendered ids to allocate a collision-free mobile `Overview` anchor.
-- The review shell (`src/render/shell/`) owns the viewer's look: one reading column, warm paper-like light and dark palettes that follow `prefers-color-scheme`, a sticky branding bar whose logo art follows the active theme, a sticky desktop section sidebar, and a compact sticky mobile `Sections` disclosure. The page envelope (`src/render/page.ts`) separately owns how an inert document is packaged and delivered (doctype, head, inlined styles, and favicon links); future delivery modes swap the envelope while the shell stays the same.
-- Styles are authored with Tailwind v4.
-  `src/render/global.css` is the entry point and owns design tokens, the light and dark palettes, the layout breakpoint, target scroll margins, and page-level rules.
-  Element-scoped styles for plain markdown elements live in `src/render/markdown/prose.css`, and the syntax-token palette lives in `src/render/markdown/syntax-highlighting.css`.
-  Authored markup carries Tailwind utility classes where practical; stylesheet rules handle plain markdown elements, highlighter token spans, palette-dependent component variants, and stateful diff layouts.
-  `scripts/gen-css.mjs` compiles the entry point (inlining its imports) and embeds the result as a generated TypeScript module, so rendered documents inline the full stylesheet and stay self-contained.
-- Branding assets (the logos and favicons in `assets/`) are embedded by `scripts/gen-assets.mjs` as a generated data-URI module, so the branding bar and favicon ship inside the document like everything else.
+```text
+MDX plan source
+  -> CLI command
+  -> parse and validate allowed Markdown and component syntax
+  -> validate and translate built-in components
+     -> machine output -> machine-readable JSON
+     -> human output -> React view -> HAST -> document transforms
+        -> self-contained HTML review document
+```
 
-Future deliverables build outward from this core with a local server and browser bridge for live agent chat and comments.
+Each component validates its authored attributes and content into plain data describing what it should show.
+Machine delivery collects that data as JSON.
+Human delivery gives the same data to the component's React view, crosses one React-to-HAST boundary, applies document-wide transforms, and packages inert HTML.
+React is a presentation-edge implementation tool; no React runtime or browser script ships in a rendered document.
 
-## Tech stack
+Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
+The exact dependency allow-list and completeness guard live in `eslint.config.mjs`.
 
-- **Runtime target**: Node.js >= 22, ESM only. The published package runs under plain Node so `npx big-plan` works everywhere; Bun is a development-time choice, not a runtime requirement.
-- **Package manager and script runner**: Bun (`bun install`, `bun run <script>`, `bun.lock`).
-- **Language**: TypeScript, strict, compiled with tsc; UI components are TSX compiled with the automatic JSX runtime.
-- **CLI framework**: `axi-sdk-js` (dispatch, help, structured errors, TOON output).
-- **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-mdx, remark-rehype, rehype-slug, rehype-highlight, rehype-stringify).
-- **React**: reusable React views live beside their compilers in `src/components/<name>/`; shared React building blocks live one folder each under `src/components/_shared/`. The renderer's one React-to-HAST adapter owns `renderToStaticMarkup` for HTML delivery. Model delivery skips top-level presentation; it materializes only a nested component whose HAST must remain inside a parent model's authored body for JSON compatibility. `hast-util-to-jsx-runtime` bridges model-carried HAST prose into React. Nothing React ships in rendered output.
-- **Linting**: ESLint v10 flat config with `typescript-eslint`; conventions and architectural guardrails live in `eslint.config.mjs`.
-- **Tests**: vitest for units (colocated in `src/**`), Playwright (chromium) for browser journeys.
+## Source ownership and placement
+
+| Owner                    | Responsibility and placement rule                                                                                                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/cli/`               | Public command dispatch, safe derived-output workflows, errors, and result serialization. Give each public command a non-underscored folder; keep reusable command mechanics in `_shared/` and business semantics below the CLI.            |
+| `src/components/`        | Built-in components as vertical slices. Put a new component in its own folder and follow the infrastructure boundaries in the [components local map](src/components/README.md).                                                             |
+| `src/render/`            | Pure document compilation and delivery orchestration. Put cross-document pipeline behavior here and follow the stage boundaries in the [renderer local map](src/render/README.md); keep component-specific behavior in its component slice. |
+| `src/render/shell/`      | Viewer chrome, reading layout, branding, and responsive navigation. Do not put document packaging here.                                                                                                                                     |
+| `src/render/page.ts`     | Doctype, head, embedded delivery assets, favicons, and the final inert HTML envelope.                                                                                                                                                       |
+| `src/icons/`             | Framework-neutral Lucide icon data. Add one catalog-named file per glyph; adapt it to HAST or React only at the relevant rendering edge.                                                                                                    |
+| `scripts/` and `assets/` | Authored build-time inputs and the generators that embed CSS and branding. Generated modules are derived outputs.                                                                                                                           |
+| `examples/`              | Valid, realistic plan sources shared by authors, tests, and documentation. Add the smallest example that demonstrates an author-facing contract.                                                                                            |
+| `test/`                  | Critical browser journeys over complete rendered documents. Keep pure behavior in colocated unit tests.                                                                                                                                     |
+| `docs/`                  | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. It does not own internal source-placement rules.                                                                             |
+
+Use these placement tests:
+
+- A public CLI action belongs in `src/cli/<command>/`; shared output safety belongs in `src/cli/_shared/`.
+- A built-in component belongs in `src/components/<component>/`; internal visual support that plan authors cannot use belongs in the appropriate underscore-prefixed support folder.
+- Document-wide parsing, transformation, or delivery behavior belongs in `src/render/`; component-specific validation and presentation stay with the component.
+- Reading and navigation chrome belongs in the shell; doctype, head, and embedded packaging belong in the page envelope.
+- A pure rule gets a colocated unit test; only a critical integrated reading journey gets a Playwright spec in `test/`.
+- A public authoring change updates its validated example and the appropriate human or agent-facing product documentation.
+
+## Pre-release compatibility
+
+Big Plan has no compatibility contract before an explicit milestone establishes one.
+Prefer the cleanest model across the CLI, plan source, machine-readable JSON, and rendered output instead of preserving an earlier shape through shims, aliases, or migrations.
+
+When making a breaking change, update every repository call site, test, example, generated artifact, and document in the same change.
+Add compatibility behavior only after an explicit milestone defines the contract that must be preserved.
 
 ## Documentation map
 
-Keep `AGENTS.md` as the entry point; `CLAUDE.md` is a harness shim (symlink) back to this guide.
-Satellite docs point back here before giving local guidance.
+Keep `AGENTS.md` as the entry point; `CLAUDE.md` is a harness shim back to this guide.
+Satellite guidance points back here before giving local detail.
 
 ### Where a fact lives
 
 Every guidance fact has exactly one owning layer; everywhere else points to the owner instead of restating it.
 Route by the kind of fact:
 
-- A fact about one file lives in that file's header comment; a fact a check enforces lives in the check and its error message (the architectural layering model, for example, lives in `eslint.config.mjs`).
-- A technology coding standard lives in `fabricahq/app/_rules`; because that repo is private, the [Engineering rules](#engineering-rules) section below carries the working set for this repo.
-- Setup, build, run, and usage procedures live in the root [README.md](./README.md).
-- The contribution workflow (DCO, branches, PR expectations, CI) lives in [CONTRIBUTING.md](./CONTRIBUTING.md).
-- A directory-scoped, multi-file, unenforced boundary lives in that directory's `README.md` local map.
-- Product orientation, architecture, and cross-cutting conventions with no deeper owner live in this guide.
-
-Layers this repo does not need yet (skills, ADRs, long-form reference docs, planning artifacts) are added only when demand appears, following the same one-owner rule.
+- A fact about one file lives in that file's header comment; a fact a check enforces lives in the check and its error message.
+- Current product capabilities and human or agent usage guidance live in `docs/`.
+- Setup, build, run, and shortest-path usage procedures live in the root [README.md](README.md).
+- DCO, branches, pull requests, CI expectations, and other contribution workflow live in [CONTRIBUTING.md](CONTRIBUTING.md).
+- A directory-scoped, multi-file, unenforced placement boundary lives in that directory's `README.md` local map.
+- An architectural decision and its rationale live in an ADR when the decision needs a durable record.
+- A repeatable whole-task workflow becomes a skill only after the workflow has repeated and proven easy to get wrong.
+- Future work, sequencing, and delivery status live in temporary planning artifacts or issue tracking.
+- Product orientation, cross-directory architecture, repository-wide vocabulary, and cross-cutting conventions with no deeper owner live in this guide.
 
 ### README principles
 
-`README.md` files are local maps at decision points, the directory levels where an agent chooses where code belongs; they are never policy.
-A local map is a pointer line (this guide plus the single most useful parent map), an ownership paragraph (what the directory owns, and which owners hold what is not here), and at most a few boundary bullets.
-Hold every sentence to these five principles:
+`README.md` files inside the source tree are local maps at decision points; they are never policy.
+A local map contains a pointer to this guide, an ownership boundary, and only the directory-local decisions needed to place a change.
+Hold every sentence to these principles:
 
-1. **Earn existence.** A README exists only at a decision point.
-   If, after applying the other four principles, nothing remains beyond an ownership statement obvious from the path plus the parent's conventions, delete the whole file.
-   Test: could the parent map's conventions plus `ls` answer every placement question this README answers? Then the file should not exist.
-2. **One fact, deepest owner.** Every fact lives at the deepest layer that owns it, exactly once, per the routing list above.
-   The README keeps only what has no deeper owner: directory-scoped, multi-file, unenforced boundaries.
-   Test: open the file, check, or rule the sentence is about. Is the fact already there (or should it be)? Move it down and delete the README copy.
-3. **Nothing derivable.** Cut any sentence that is an instance of a convention stated by a parent map or `AGENTS.md`, a rephrase of the README's own ownership paragraph, or reconstructible from `ls` and the path.
-   Test: is this sentence true of most sibling directories too? Then it belongs to the parent, not here.
-4. **Point, never restate.** Routing is one sentence naming the owner: a doc, check, rule, or external repo.
-   No summaries of what the owner says, no reading lists another layer already carries, no duplicated command sequences.
-   Test: if the pointed-at owner changed its content tomorrow, would this README need an edit? Then it restated instead of pointed.
-5. **No inventories, no now.** Never list files or subfolders with descriptions, never count things, and never describe current state: no "currently", "temporary", "until X graduates", "the only Y so far".
-   The tree describes itself; state changes without warning.
-   Test: would adding, renaming, or finishing one file make this sentence false? Cut it.
+1. **Earn existence.** Keep a local map only when the parent guidance plus the directory tree cannot answer a real placement question.
+2. **One fact, deepest owner.** Put each fact at the deepest layer that owns it, exactly once.
+3. **Nothing derivable.** Remove statements that merely restate a parent convention, the ownership paragraph, or the visible tree.
+4. **Point, never restate.** Name another owner without summarizing content that could drift.
+5. **No inventories, no current-state narration.** Describe stable boundaries, not the present list or count of files and folders.
 
-Guidance is demand-driven: add a doc, rule, or map entry only when an agent observably failed or had to ask something it should not have needed to, never speculatively.
+Guidance is demand-driven: add a document, rule, or map entry only after an agent observably failed or had to ask something the repository should already answer.
 
 ## Engineering rules
 
-Big Plan follows the technology rules maintained in `fabricahq/app/_rules` (see the TypeScript and Playwright aggregates there).
-That repo is the source of truth, and because it is private, this section carries the working set of conventions for this repo.
+The rules in this guide are authoritative for Big Plan.
+They were adapted from the TypeScript and Playwright guidance in `fabricahq/app/_rules`; that repository is provenance, not a dependency required to contribute here.
 
-Facts a check enforces live in the check: separate type imports, the `any` and non-null-assertion bans, the allow-list architectural layering model (`LAYERS`/`TIERS`), and the Playwright fixtures requirement are all lint-enforced and documented in place in `eslint.config.mjs`.
+Facts enforced mechanically live with their checks.
+`eslint.config.mjs` owns the separate-type-import, `any`, non-null-assertion, architectural-layering, source-completeness, and Playwright-fixture enforcement.
 
-The unenforced conventions to hold by hand:
+Apply these review conventions by judgment:
 
-- Named exports only; type aliases over interfaces; literal unions over enums; no type assertions (`as`).
-- Single-object args for multi-parameter functions; immutable data (`readonly`, `const`).
-- Colocate code and tests by feature; kebab-case file names.
-- Every authored file starts with a file-level comment saying what it owns or why it exists; every non-trivial function gets a concise description above it (trivial one-liners stay uncommented); comments explain why, not what.
-- Icons all come from Lucide and live one file per icon in `src/icons/lucide/`, named by the Lucide catalog name; a component never defines icon path data locally. Framework-neutral icon-node data stays there, while HAST and React adapters remain at their respective rendering edges.
-- Generated files always carry `.generated.` in their name (for example `global.generated.ts`) and are never edited by hand.
-  They are committed so the codebase is scannable without running the generators; after changing a generator or its inputs, run `bun run gen` and commit the regenerated output alongside (CI fails on drift).
-- `global.css` owns design tokens, palettes, and page-level rules only; component-specific styles are colocated with the component and imported from `global.css`; authored markup prefers Tailwind utilities, and stylesheet rules are reserved for variants, state, pseudo-elements, and live-application-created elements.
-- Keep logic in pure modules and unit-test it there; reserve Playwright for critical user journeys.
-- Tests are focused and user-oriented, use "should ... when ..." descriptions, and cover degenerate and boundary cases.
-- Long browser journeys narrate as named `test.step` phases - short present-tense claims such as "the jump lands the heading clear of the sticky bar" - so a test reads top to bottom as a story and a failure names its phase.
-  Setup locators shared across phases are declared once before the first step, and shared assertion plumbing (such as `boxOf`) lives in `test/fixtures.ts` rather than being repeated inline.
+- Use named exports, type aliases rather than interfaces, literal unions rather than enums, and `unknown` rather than `any`; do not use type assertions.
+- Use a single object argument for multi-parameter functions and prefer immutable data (`readonly`, `const`).
+- Colocate code and tests by feature, use kebab-case file names, and keep component-specific behavior inside its component slice.
+- Start every authored source file with a file-level comment saying what it owns or why it exists.
+  Give every non-trivial function a concise description; comments explain why, not what.
+- Use Lucide for icons and keep framework-neutral glyph data in `src/icons/lucide/`; components never define icon paths locally.
+- Author component markup with Tailwind utilities where practical.
+  Reserve stylesheets for variants, state, pseudo-elements, live-application-created elements, and plain generated markup that cannot carry utility classes.
+- Keep logic in pure modules and unit-test it there.
+  Reserve Playwright for critical user journeys.
+- Write focused, user-oriented tests with `should ... when ...` descriptions and coverage of degenerate and boundary cases.
+- Structure long browser journeys as named `test.step` phases so the test reads as a story and a failure names its phase.
+
+## Generated sources
+
+Edit authored inputs, run their generator, and never hand-edit generated output.
+Generated files carry `.generated.` in their name and are committed beside the source change so the repository remains scannable without a build.
+
+- `src/render/global.css` and its imported styles are authored inputs to the generated embedded stylesheet.
+- Logos and favicons under `assets/` are authored inputs to the generated embedded branding module.
+
+The root README owns generation commands; CI detects drift.
+
+## Contribution guardrails
+
+Follow [CONTRIBUTING.md](CONTRIBUTING.md) for the normal branch, commit, pull-request, and verification workflow.
+Before editing, inspect the working tree and preserve changes you did not create.
+Keep each change scoped to its approved purpose, and never repair unrelated work as a side effect.
