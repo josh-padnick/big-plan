@@ -201,6 +201,57 @@ The old cutoff moves into the stale-window check.
 </CodeDiff>
 `;
 
+const HTTP_PLAN = `# Plan
+
+## API
+
+<HttpEndpoint method="POST" path="/v1/plans/{planId}/reviews" summary="Open a review" auth="Bearer token with plans:write scope">
+
+Opens a review thread for one plan revision.
+
+<Param name="planId" in="path" type="string" required>
+
+The plan identifier.
+
+</Param>
+
+<Param name="notify" in="query" type="boolean">
+
+Whether to notify watchers.
+
+</Param>
+
+<Param name="title" in="body" type="string" required>
+
+The review title.
+
+</Param>
+
+<Request contentType="application/json">
+
+\`\`\`json
+{ "title": "Storage decisions" }
+\`\`\`
+
+</Request>
+
+<Response status="201" label="Created">
+
+The review was opened.
+
+</Response>
+
+<Response status="422" label="Validation failed">
+
+The title was empty.
+
+</Response>
+
+</HttpEndpoint>
+
+<HttpEndpoint method="DELETE" path="/v1/reviews/{reviewId}" deprecated summary="Remove a review" />
+`;
+
 const UNPORTED_PLAN = `# Plan
 
 ## Question
@@ -300,6 +351,20 @@ describe("react renderer parity", () => {
       renderer: "react",
     });
     expect(react.html).toContain("data-code-diff=");
+    expect(react.html).toBe(vanilla.html);
+  });
+
+  it("should render a byte-identical document for full and compact HttpEndpoints", () => {
+    const vanilla = renderDocument({
+      markdown: HTTP_PLAN,
+      fallbackTitle: "x",
+    });
+    const react = renderDocument({
+      markdown: HTTP_PLAN,
+      fallbackTitle: "x",
+      renderer: "react",
+    });
+    expect(react.html).toContain("data-http-endpoint=");
     expect(react.html).toBe(vanilla.html);
   });
 

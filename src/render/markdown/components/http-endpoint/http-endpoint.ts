@@ -10,6 +10,7 @@ import {
   type ComponentRenderer,
   type ScopedChildDefinition,
 } from "../../../../model/component-contract.js";
+import { renderHttpEndpointStatic } from "../../../../react/http-endpoint/http-endpoint.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
 import {
   renderCardSection,
@@ -447,6 +448,8 @@ const scopedChild = (
 export const HTTP_ENDPOINT_COMPONENT_DEFINITION = {
   render: renderHttpEndpoint,
   compile: compileHttpEndpointComponent,
+  renderStatic: (input) =>
+    renderHttpEndpointStatic(compileHttpEndpointComponent(input)),
   scopedChildren: {
     Param: scopedChild("Param"),
     Request: scopedChild("Request"),
