@@ -79,7 +79,8 @@ Usage: big-plan render <input.mdx> [output.html]
 Usage: big-plan compile <input.mdx> [output.json]
 ```
 
-Unknown options and excess positional arguments raise a structured `VALIDATION_ERROR`, include the command's usage line, and write no output.
+Any dash-prefixed token is rejected as an unknown option, and any third positional argument is rejected as excess.
+Both cases raise a structured `VALIDATION_ERROR`, include the command's usage line, and write no output.
 
 If the input cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
 The read error covers any failure to read the input file.

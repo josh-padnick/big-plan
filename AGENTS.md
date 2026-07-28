@@ -49,7 +49,7 @@ Future deliverables build outward from this core with a local server and browser
 - **Language**: TypeScript, strict, compiled with tsc; UI components are TSX compiled with the automatic JSX runtime.
 - **CLI framework**: `axi-sdk-js` (dispatch, help, structured errors, TOON output).
 - **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-mdx, remark-rehype, rehype-slug, rehype-highlight, rehype-stringify).
-- **React**: react and react-dom render every component to static HTML at build time via `renderToStaticMarkup`; `hast-util-to-jsx-runtime` bridges model-carried HAST prose into React. Nothing React ships in rendered output.
+- **React**: react and react-dom render every component to static HTML at render time via `renderToStaticMarkup`; `hast-util-to-jsx-runtime` bridges model-carried HAST prose into React. Nothing React ships in rendered output.
 - **Linting**: ESLint v10 flat config with `typescript-eslint`; conventions and architectural guardrails live in `eslint.config.mjs`.
 - **Tests**: vitest for units (colocated in `src/**`), Playwright (chromium) for browser journeys.
 
