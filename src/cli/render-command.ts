@@ -17,8 +17,8 @@ const USAGE =
   "Usage: big-plan render <input.mdx> [output.html] [--renderer vanilla|react]";
 
 // Splits --renderer out of the positional arguments. The flag selects the
-// in-progress React SSR target, which falls back to the vanilla renderer per
-// unported component; parity between the two is test-pinned.
+// in-progress React SSR target; every built-in component has a byte-parity
+// React renderer, while the vanilla fallback remains until the default flips.
 const parseRenderArgs = (
   args: ReadonlyArray<string>,
 ): {

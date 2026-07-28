@@ -19,6 +19,7 @@ import {
   type ComponentRenderer,
   type ScopedChildDefinition,
 } from "../../../../model/component-contract.js";
+import { renderBigDecisionStatic } from "../../../../react/big-decision/big-decision.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
 import {
   renderCardSection,
@@ -833,6 +834,8 @@ const reversibilityDefinition = (): ScopedChildDefinition => ({
 export const BIG_DECISION_COMPONENT_DEFINITION = {
   render: renderBigDecision,
   compile: compileBigDecisionComponent,
+  renderStatic: (input) =>
+    renderBigDecisionStatic(compileBigDecisionComponent(input)),
   scopedChildren: {
     Criterion: criterionDefinition(),
     Details: {

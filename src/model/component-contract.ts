@@ -131,8 +131,8 @@ export type ComponentDefinition = {
   // Optional so isolated registries can remain render-only; rendering never
   // requires model exposure.
   readonly compile?: ComponentModelCompiler;
-  // Optional because React ports land per component; the vanilla renderer
-  // stays the fallback until the default flips.
+  // Optional while the vanilla renderer remains the fallback until the React
+  // target becomes the default.
   readonly renderStatic?: ComponentStaticRenderer;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
 };

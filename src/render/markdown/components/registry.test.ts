@@ -173,6 +173,31 @@ describe("scoped child dispatch", () => {
     expect(serializeMarkdown({ root })).toBe("<section>React outer</section>");
   });
 
+  it("should fall back to the vanilla renderer for a definition without a React port", () => {
+    const renderStatic = vi.fn(() => "<span>React</span>");
+    const registry = {
+      Ported: { render: renderNestedFixture, renderStatic },
+      Unported: {
+        render: (): ReturnType<ComponentRenderer> => ({
+          type: "element",
+          tagName: "aside",
+          properties: { "data-vanilla": "" },
+          children: [],
+        }),
+      },
+    } satisfies ComponentRegistry;
+
+    const { root, diagnostics } = compileWithRegistry({
+      markdown: "<Unported />\n",
+      registry,
+      renderer: "react",
+    });
+
+    expect(diagnostics).toEqual([]);
+    expect(renderStatic).not.toHaveBeenCalled();
+    expect(serializeMarkdown({ root })).toBe('<aside data-vanilla=""></aside>');
+  });
+
   it("should leave an undeclared name unknown within a nested scope", () => {
     const { diagnostics } = compileWithRegistry({
       markdown:

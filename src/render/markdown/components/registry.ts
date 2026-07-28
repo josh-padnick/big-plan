@@ -53,8 +53,8 @@ export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
 
 export type ComponentRegistry = Readonly<Record<string, ComponentDefinition>>;
 
-// Which implementation renders ported components; "react" is the in-progress
-// SSR target and falls back to the vanilla renderer per unported component.
+// Which implementation renders components; "react" is the in-progress SSR
+// target, while the vanilla fallback remains until the default flips.
 export type RendererKind = "vanilla" | "react";
 
 /** One collected component instance: its name, position, and plan model. */

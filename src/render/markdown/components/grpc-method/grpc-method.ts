@@ -8,6 +8,7 @@ import {
   type ComponentRenderer,
   type ScopedChildDefinition,
 } from "../../../../model/component-contract.js";
+import { renderGrpcMethodStatic } from "../../../../react/grpc-method/grpc-method.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
 import {
   renderCardSection,
@@ -361,6 +362,8 @@ const scopedChild = (
 export const GRPC_METHOD_COMPONENT_DEFINITION = {
   render: renderGrpcMethod,
   compile: compileGrpcMethodComponent,
+  renderStatic: (input) =>
+    renderGrpcMethodStatic(compileGrpcMethodComponent(input)),
   scopedChildren: {
     Field: scopedChild("Field"),
     Error: scopedChild("Error"),
