@@ -78,6 +78,35 @@ describe("lintPlan markdown-table-format", () => {
     ).toMatchObject([{ ruleId: "markdown-table-format", line: 2 }]);
   });
 
+  it("should count escaped pipes as cell content in a malformed table", () => {
+    expect(
+      lintPlan({
+        markdown: "| Name \\| Alias | Owner |\n| API \\| v1 | Platform |\n",
+      }),
+    ).toEqual([
+      {
+        ruleId: "markdown-table-format",
+        line: 2,
+        column: 1,
+        message:
+          'Table-like block needs a valid delimiter row with 2 columns, for example "| --- | --- |"',
+      },
+    ]);
+  });
+
+  it("should keep a pipe active after an even run of backslashes", () => {
+    expect(
+      lintPlan({
+        markdown: "| Name \\\\| Alias | Owner |\n| API \\\\| v1 | Platform |\n",
+      }),
+    ).toMatchObject([
+      {
+        message:
+          'Table-like block needs a valid delimiter row with 3 columns, for example "| --- | --- | --- |"',
+      },
+    ]);
+  });
+
   it.each([
     [
       "a valid GFM table",

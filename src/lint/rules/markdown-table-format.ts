@@ -19,6 +19,35 @@ const isParagraph = (node: Node): node is Paragraph =>
 const isInlineCode = (node: Node): node is InlineCode =>
   node.type === "inlineCode";
 
+// Splits only on syntactic separators. An odd run of backslashes escapes the
+// pipe as cell content; an even run leaves the pipe active.
+const splitTableCells = (content: string): ReadonlyArray<string> => {
+  const cells: Array<string> = [];
+  let cellStart = 0;
+
+  for (let index = 0; index < content.length; index += 1) {
+    if (content[index] !== "|") {
+      continue;
+    }
+    let backslashCount = 0;
+    for (
+      let cursor = index - 1;
+      cursor >= 0 && content[cursor] === "\\";
+      cursor -= 1
+    ) {
+      backslashCount += 1;
+    }
+    if (backslashCount % 2 === 1) {
+      continue;
+    }
+    cells.push(content.slice(cellStart, index).trim());
+    cellStart = index + 1;
+  }
+
+  cells.push(content.slice(cellStart).trim());
+  return cells;
+};
+
 // Outer pipes make table intent strong enough to lint without treating
 // ordinary prose containing a vertical bar as a malformed table.
 const tableRowOf = (line: string): TableRow | undefined => {
@@ -26,10 +55,7 @@ const tableRowOf = (line: string): TableRow | undefined => {
   if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) {
     return undefined;
   }
-  const cells = trimmed
-    .slice(1, -1)
-    .split("|")
-    .map((cell) => cell.trim());
+  const cells = splitTableCells(trimmed.slice(1, -1));
   if (cells.length < 2) {
     return undefined;
   }
