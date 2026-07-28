@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import { runAxiCli } from "axi-sdk-js";
 import { compileCommand } from "./compile/command.js";
 import { renderCommand } from "./render/command.js";
+import { validateCommand } from "./validate/command.js";
 
 // The README tagline verbatim, so the CLI and the docs never drift apart.
 const DESCRIPTION =
@@ -20,6 +21,9 @@ Usage:
   big-plan compile <input.mdx> [output.json]  Compile an MDX plan to its
                                              validated plan model as JSON
                                              (defaults to <input>.model.json)
+  big-plan validate <input.mdx>               Check structure, HTML delivery,
+                                             and authoring lint without
+                                             writing an output file
 `;
 
 // Reads this package's own version for --version output, tolerating a missing
@@ -57,6 +61,7 @@ export const main = async (): Promise<void> => {
     commands: {
       render: (args) => renderCommand(args),
       compile: (args) => compileCommand(args),
+      validate: (args) => validateCommand(args),
     },
   });
 };

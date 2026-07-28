@@ -1,9 +1,14 @@
-// The renderer's HTML entry point: composes the shared MDX pipeline into a
-// complete, self-contained review document.
+// The renderer's document entry points: render HTML or exercise HTML and model
+// delivery together for validation.
 
-import type { Section } from "./markdown/compile-markdown.js";
+import {
+  componentsInDocumentOrder,
+  type PlanModel,
+} from "./compile-plan-model.js";
+import type { CompiledMarkdown, Section } from "./markdown/compile-markdown.js";
 import {
   compileMarkdown,
+  compileMarkdownWithModels,
   serializeMarkdown,
 } from "./markdown/compile-markdown.js";
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
@@ -14,6 +19,29 @@ export type RenderedDocument = {
   readonly html: string;
   readonly title: string;
   readonly sections: ReadonlyArray<Section>;
+};
+
+const renderCompiledDocument = ({
+  compiled,
+  fallbackTitle,
+}: {
+  readonly compiled: CompiledMarkdown;
+  readonly fallbackTitle: string;
+}): RenderedDocument => {
+  const { root, sections, elementIds, title } = compiled;
+  const resolvedTitle = title ?? fallbackTitle;
+  const shell = renderShell({
+    nav: sections.map((section) => ({ id: section.id, label: section.text })),
+    contentIds: elementIds,
+    contentHtml: serializeMarkdown({ root }),
+  });
+  const html = renderPage({
+    title: resolvedTitle,
+    styles: shell.styles,
+    bodyClassName: shell.bodyClassName,
+    bodyHtml: shell.html,
+  });
+  return { html, title: resolvedTitle, sections };
 };
 
 /**
@@ -29,18 +57,29 @@ export const renderDocument = ({
   readonly markdown: string;
   readonly fallbackTitle: string;
 }): RenderedDocument => {
-  const { root, sections, elementIds, title } = compileMarkdown({ markdown });
-  const resolvedTitle = title ?? fallbackTitle;
-  const shell = renderShell({
-    nav: sections.map((section) => ({ id: section.id, label: section.text })),
-    contentIds: elementIds,
-    contentHtml: serializeMarkdown({ root }),
+  const compiled = compileMarkdown({ markdown });
+  return renderCompiledDocument({
+    compiled,
+    fallbackTitle,
   });
-  const html = renderPage({
-    title: resolvedTitle,
-    styles: shell.styles,
-    bodyClassName: shell.bodyClassName,
-    bodyHtml: shell.html,
-  });
-  return { html, title: resolvedTitle, sections };
+};
+
+/**
+ * Exercises complete HTML delivery while returning the collected plan-model
+ * summary and discarding the generated document.
+ */
+export const validateDocument = ({
+  markdown,
+  fallbackTitle,
+}: {
+  readonly markdown: string;
+  readonly fallbackTitle: string;
+}): PlanModel => {
+  const compiled = compileMarkdownWithModels({ markdown });
+  const rendered = renderCompiledDocument({ compiled, fallbackTitle });
+  return {
+    title: rendered.title,
+    sections: compiled.sections,
+    components: componentsInDocumentOrder(compiled.components),
+  };
 };

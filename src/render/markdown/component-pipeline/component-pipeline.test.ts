@@ -1,7 +1,7 @@
 // Tests recursive scoped dispatch, direct-parent name boundaries, and scoped
 // Markdown body policies without coupling the capability to a product component.
 
-import type { ElementContent, Root } from "hast";
+import type { Element, ElementContent, Root } from "hast";
 import { createElement } from "react";
 import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
@@ -92,11 +92,13 @@ const compileWithRegistry = ({
   markdown,
   registry,
   models,
+  collectModels,
   adapt,
 }: {
   readonly markdown: string;
   readonly registry: ComponentRegistry;
   readonly models?: Array<CollectedComponentModel>;
+  readonly collectModels?: Array<CollectedComponentModel>;
   readonly adapt?: ReactHastAdapter;
 }): {
   readonly root: Root;
@@ -120,6 +122,7 @@ const compileWithRegistry = ({
       diagnostics,
       registry,
       ...(models === undefined ? {} : { models }),
+      ...(collectModels === undefined ? {} : { collectModels }),
       ...(adapt === undefined ? {} : { adapt }),
     });
   const root: Root = processor.runSync(processor.parse(markdown));
@@ -216,6 +219,41 @@ describe("scoped child dispatch", () => {
       },
     ]);
     expect(serializeMarkdown({ root })).toBe("");
+  });
+
+  it("should collect the model while adapting React for HTML delivery", () => {
+    const compile = vi.fn(() => ({ value: "compiled" }));
+    const View = () => createElement("section", null, "React view");
+    const registry = {
+      Fixture: defineComponent({ compile, view: View }),
+    } satisfies ComponentRegistry;
+    const collectModels: Array<CollectedComponentModel> = [];
+    const adapt = vi.fn((): Element => ({
+      type: "element",
+      tagName: "section",
+      properties: {},
+      children: [{ type: "text", value: "React view" }],
+    }));
+
+    const { root, diagnostics } = compileWithRegistry({
+      markdown: "<Fixture />\n",
+      registry,
+      collectModels,
+      adapt,
+    });
+
+    expect(diagnostics).toEqual([]);
+    expect(compile).toHaveBeenCalledOnce();
+    expect(adapt).toHaveBeenCalledOnce();
+    expect(collectModels).toEqual([
+      {
+        component: "Fixture",
+        line: 1,
+        column: 1,
+        model: { value: "compiled" },
+      },
+    ]);
+    expect(serializeMarkdown({ root })).toBe("<section>React view</section>");
   });
 
   it("should leave an undeclared name unknown within a nested scope", () => {

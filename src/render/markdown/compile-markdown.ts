@@ -39,6 +39,10 @@ export type CompiledMarkdownModel = {
   readonly components: ReadonlyArray<CollectedComponentModel>;
 };
 
+export type CompiledMarkdownWithModels = CompiledMarkdown & {
+  readonly components: ReadonlyArray<CollectedComponentModel>;
+};
+
 /** Carries every positional authoring diagnostic across renderer boundaries. */
 export class MarkdownDiagnosticsError extends Error {
   readonly diagnostics: ReadonlyArray<ComponentDiagnostic>;
@@ -203,9 +207,11 @@ const collectElementIds = (
 const compileMarkdownTree = ({
   markdown,
   models,
+  collectModels,
 }: {
   readonly markdown: string;
   readonly models?: Array<CollectedComponentModel>;
+  readonly collectModels?: Array<CollectedComponentModel>;
 }): CompiledMarkdown => {
   const diagnostics = createDiagnosticCollector();
   const metadata: MarkdownMetadata = { title: undefined, sections: [] };
@@ -231,6 +237,7 @@ const compileMarkdownTree = ({
     .use(rehypeRenderComponents, {
       diagnostics,
       ...(models === undefined ? {} : { models }),
+      ...(collectModels === undefined ? {} : { collectModels }),
     })
     // Detection stays opt-in through the fence language: undeclared and
     // unknown languages remain readable without guessed tokenization.
@@ -281,6 +288,20 @@ export const compileMarkdownModel = ({
     models: components,
   });
   return { sections, title, components };
+};
+
+/** Compiles through HTML delivery while collecting the same component models. */
+export const compileMarkdownWithModels = ({
+  markdown,
+}: {
+  readonly markdown: string;
+}): CompiledMarkdownWithModels => {
+  const components: Array<CollectedComponentModel> = [];
+  const compiled = compileMarkdownTree({
+    markdown,
+    collectModels: components,
+  });
+  return { ...compiled, components };
 };
 
 /** Serializes a compiled review document only after all transforms finish. */

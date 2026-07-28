@@ -28,7 +28,7 @@ export const compilePlanModel = ({
   return {
     title: title ?? fallbackTitle,
     sections,
-    components: sortedBySourcePosition(components),
+    components: componentsInDocumentOrder(components),
   };
 };
 
@@ -36,7 +36,7 @@ export const compilePlanModel = ({
 // rendering before it does), so document order - the compile command's
 // contract - is restored by source position. The stable sort leaves entries
 // without positions in collection order at the end.
-const sortedBySourcePosition = (
+export const componentsInDocumentOrder = (
   components: ReadonlyArray<CollectedComponentModel>,
 ): ReadonlyArray<CollectedComponentModel> =>
   [...components].sort(

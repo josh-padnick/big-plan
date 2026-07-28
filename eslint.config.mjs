@@ -90,6 +90,13 @@ export default tseslint.config(
         imports: ["**/icons/lucide-icon.js", "**/icons/lucide/**"],
         mayImport: [],
       },
+      // Validate-only authoring lint parses source independently and exposes
+      // one framework-free interface over its private rule collection.
+      planLint: {
+        files: ["src/lint/**/*.ts"],
+        imports: ["**/lint/**"],
+        mayImport: [],
+      },
       // React views and their never-authorable shared building blocks consume
       // compiled models without owning static serialization.
       ui: {
@@ -154,13 +161,13 @@ export default tseslint.config(
         imports: ["**/cli/**"],
         // The composer files are the renderer's public entry points; granting
         // only them keeps the CLI out of the renderer's internals.
-        mayImport: ["composer"],
+        mayImport: ["composer", "planLint"],
       },
     };
 
     // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
-      ["model", "escapeHtml", "icons"],
+      ["model", "escapeHtml", "icons", "planLint"],
       ["page", "ui"],
       ["components"],
       ["markdown", "shell"],

@@ -2,7 +2,8 @@
 // self-containment guarantees, and degenerate inputs.
 
 import { describe, expect, it } from "vitest";
-import { renderDocument } from "./render-document.js";
+import { compilePlanModel } from "./compile-plan-model.js";
+import { renderDocument, validateDocument } from "./render-document.js";
 
 const TABLE_SCROLL_CONTAINER = "data-table-scroll-container";
 
@@ -185,5 +186,15 @@ describe("renderDocument shell", () => {
     expect(sections.length).toBe(0);
     expect(html).not.toContain("<nav");
     expect(html).toContain("<h1");
+  });
+});
+
+describe("validateDocument", () => {
+  it("should collect the same model while completing HTML delivery", () => {
+    const markdown =
+      '# Plan\n\n## Scope\n\n<BigDecision question="Q?">\n\n<Callout type="note">\n\nNested context.\n\n</Callout>\n\n<Option title="A" />\n\n<Option title="B" />\n\n</BigDecision>\n';
+    const input = { markdown, fallbackTitle: "Fallback" };
+
+    expect(validateDocument(input)).toEqual(compilePlanModel(input));
   });
 });
