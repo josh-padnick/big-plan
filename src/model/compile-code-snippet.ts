@@ -2,11 +2,12 @@
 // validates attributes and the single fence, highlights it into file-absolute
 // lines, and resolves scoped Annotations against that line range.
 
-import type { Element, ElementContent } from "hast";
+import type { ElementContent } from "hast";
+import { isIgnorableWhitespace, singleAuthoredFence } from "./authored-body.js";
 import {
   validateComponentAttributes,
   type ComponentAttributeSchema,
-  type ComponentRenderer,
+  type ComponentCompilerInput,
   type ScopedChild,
 } from "./component-contract.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
@@ -29,74 +30,11 @@ export type CompiledCodeSnippet = {
   readonly annotations: ReadonlyArray<CompiledCodeSnippetAnnotation>;
 };
 
-type SnippetFence = {
-  readonly source: string;
-  readonly language?: string;
-};
-
 const CODE_SNIPPET_SCHEMA = {
   file: { kind: "string", nonEmpty: true },
   startLine: { kind: "string" },
   showLineNumbers: { kind: "booleanShorthand" },
 } satisfies ComponentAttributeSchema;
-
-const isElement = (node: ElementContent): node is Element =>
-  node.type === "element";
-
-const isWhitespace = (node: ElementContent): boolean =>
-  node.type === "text" && /^\s*$/u.test(node.value);
-
-const languageClasses = (element: Element): ReadonlyArray<string> => {
-  const className = element.properties.className;
-  if (!Array.isArray(className)) {
-    return [];
-  }
-  return className.filter(
-    (value): value is string => typeof value === "string",
-  );
-};
-
-// Enforces the same single-fence HAST shape as CodeDiff while accepting any
-// declared language, or no language at all.
-const snippetFence = ({
-  children,
-}: {
-  readonly children: ReadonlyArray<ElementContent>;
-}): SnippetFence | undefined => {
-  const meaningful = children.filter((child) => !isWhitespace(child));
-  if (meaningful.length !== 1) {
-    return undefined;
-  }
-  const pre = meaningful[0];
-  if (pre === undefined || !isElement(pre) || pre.tagName !== "pre") {
-    return undefined;
-  }
-  if (pre.children.length !== 1) {
-    return undefined;
-  }
-  const code = pre.children[0];
-  if (
-    code === undefined ||
-    !isElement(code) ||
-    code.tagName !== "code" ||
-    code.children.length !== 1
-  ) {
-    return undefined;
-  }
-  const source = code.children[0];
-  if (source === undefined || source.type !== "text") {
-    return undefined;
-  }
-  const languageClass = languageClasses(code).find((name) =>
-    name.startsWith("language-"),
-  );
-  return {
-    source: source.value,
-    ...(languageClass === undefined
-      ? {}
-      : { language: languageClass.slice("language-".length) }),
-  };
-};
 
 const positiveInteger = (value: string | undefined): number | undefined => {
   if (value === undefined || !/^[1-9]\d*$/u.test(value)) {
@@ -141,7 +79,7 @@ const parseAnnotation = ({
       });
     }
   }
-  if (annotation.children.every(isWhitespace)) {
+  if (annotation.children.every(isIgnorableWhitespace)) {
     diagnostics.add({
       message: "Annotation body must not be empty",
       position: annotation.position,
@@ -185,7 +123,7 @@ export const compileCodeSnippetComponent = ({
   scopedChildren,
   position,
   diagnostics,
-}: Parameters<ComponentRenderer>[0]): CompiledCodeSnippet => {
+}: ComponentCompilerInput): CompiledCodeSnippet => {
   const validated = validateComponentAttributes({
     component: "CodeSnippet",
     attributes,
@@ -212,7 +150,7 @@ export const compileCodeSnippetComponent = ({
     });
   }
 
-  const fence = snippetFence({ children });
+  const fence = singleAuthoredFence({ children });
   if (fence === undefined) {
     diagnostics.add({
       message:

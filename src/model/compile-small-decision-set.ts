@@ -2,12 +2,13 @@
 // model while collecting every contract diagnostic at its owning node.
 
 import type { ElementContent } from "hast";
+import { meaningfulChildren } from "./authored-body.js";
 import {
   createComponentIdAllocator,
   validateComponentAttributes,
   type ComponentAttributeSchema,
   type ComponentIdAllocator,
-  type ComponentRenderer,
+  type ComponentCompilerInput,
   type ScopedChild,
 } from "./component-contract.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
@@ -48,13 +49,9 @@ const OPTION_SCHEMA = {
   recommended: { kind: "booleanShorthand" },
 } satisfies ComponentAttributeSchema;
 
-const isWhitespace = (node: ElementContent): boolean =>
-  node.type === "text" && /^\s*$/u.test(node.value);
-
 const contentOf = (
   children: ReadonlyArray<ElementContent>,
-): ReadonlyArray<ElementContent> =>
-  children.filter((node) => !isWhitespace(node));
+): ReadonlyArray<ElementContent> => meaningfulChildren(children);
 
 const compileOption = ({
   child,
@@ -204,7 +201,7 @@ export const compileSmallDecisionSetComponent = ({
   position,
   diagnostics,
   ids = createComponentIdAllocator(),
-}: Parameters<ComponentRenderer>[0]): CompiledSmallDecisionSet => {
+}: ComponentCompilerInput): CompiledSmallDecisionSet => {
   const validated = validateComponentAttributes({
     component: "SmallDecisionSet",
     attributes,

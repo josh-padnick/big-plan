@@ -1,11 +1,12 @@
 // Compiles GrpcMethod's authored attributes and scoped children into a
 // render-ready model while collecting every method-contract diagnostic.
 
-import type { Element, ElementContent } from "hast";
+import type { ElementContent } from "hast";
+import { fenceLanguage, meaningfulChildren } from "./authored-body.js";
 import {
   validateComponentAttributes,
   type ComponentAttributeSchema,
-  type ComponentRenderer,
+  type ComponentCompilerInput,
   type ScopedChild,
 } from "./component-contract.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
@@ -104,34 +105,6 @@ const EXAMPLE_SCHEMA = {
 
 const EMPTY_SCHEMA = {} satisfies ComponentAttributeSchema;
 
-const isElement = (node: ElementContent): node is Element =>
-  node.type === "element";
-
-const isWhitespace = (node: ElementContent): boolean =>
-  node.type === "text" && /^\s*$/u.test(node.value);
-
-// Reads the declared fence language from a pre > code child, if any.
-const fenceLanguage = (node: ElementContent): string | undefined => {
-  if (!isElement(node) || node.tagName !== "pre") {
-    return undefined;
-  }
-  const code = node.children.find(
-    (child) => isElement(child) && child.tagName === "code",
-  );
-  if (code === undefined || !isElement(code)) {
-    return undefined;
-  }
-  const classes = Array.isArray(code.properties["className"])
-    ? code.properties["className"]
-    : [];
-  for (const entry of classes) {
-    if (typeof entry === "string" && entry.startsWith("language-")) {
-      return entry.slice("language-".length);
-    }
-  }
-  return undefined;
-};
-
 const isFieldSide = (value: string): value is GrpcFieldSide =>
   FIELD_SIDES.some((side) => side === value);
 
@@ -155,7 +128,7 @@ const compileField = ({
     side: validated.in ?? "request",
     name: validated.name ?? "",
     ...(validated.type === undefined ? {} : { fieldType: validated.type }),
-    children: child.children.filter((node) => !isWhitespace(node)),
+    children: meaningfulChildren(child.children),
   };
 };
 
@@ -166,7 +139,7 @@ export const compileGrpcMethodComponent = ({
   scopedChildren,
   position,
   diagnostics,
-}: Parameters<ComponentRenderer>[0]): CompiledGrpcMethod => {
+}: ComponentCompilerInput): CompiledGrpcMethod => {
   const validated = validateComponentAttributes({
     component: "GrpcMethod",
     attributes,
@@ -229,7 +202,7 @@ export const compileGrpcMethodComponent = ({
     codes.add(code);
     errors.push({
       code,
-      children: child.children.filter((node) => !isWhitespace(node)),
+      children: meaningfulChildren(child.children),
     });
   }
 
@@ -245,7 +218,7 @@ export const compileGrpcMethodComponent = ({
         diagnostics,
         schema: EXAMPLE_SCHEMA,
       });
-      const exampleBody = child.children.filter((node) => !isWhitespace(node));
+      const exampleBody = meaningfulChildren(child.children);
       const onlyChild = exampleBody[0];
       if (
         exampleBody.length !== 1 ||
@@ -285,7 +258,7 @@ export const compileGrpcMethodComponent = ({
       diagnostics,
       schema: EMPTY_SCHEMA,
     });
-    const protoBody = protoChild.children.filter((node) => !isWhitespace(node));
+    const protoBody = meaningfulChildren(protoChild.children);
     const onlyChild = protoBody[0];
     if (
       protoBody.length !== 1 ||
@@ -308,7 +281,7 @@ export const compileGrpcMethodComponent = ({
     response: validated.response ?? "",
     kind: validated.kind ?? "unary",
     deprecated: validated.deprecated === true,
-    description: children.filter((node) => !isWhitespace(node)),
+    description: meaningfulChildren(children),
     requestFields: fields.filter((field) => field.side === "request"),
     responseFields: fields.filter((field) => field.side === "response"),
     errors,

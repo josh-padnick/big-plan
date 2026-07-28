@@ -5,7 +5,7 @@ import type { ElementContent } from "hast";
 import {
   validateComponentAttributes,
   type ComponentAttributeSchema,
-  type ComponentRenderer,
+  type ComponentCompilerInput,
 } from "./component-contract.js";
 
 export type CalloutType = "note" | "tip" | "warning" | "danger";
@@ -34,7 +34,7 @@ export const compileCalloutComponent = ({
   children,
   position,
   diagnostics,
-}: Parameters<ComponentRenderer>[0]): CompiledCallout => {
+}: ComponentCompilerInput): CompiledCallout => {
   const validated = validateComponentAttributes({
     component: "Callout",
     attributes,

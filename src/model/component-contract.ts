@@ -1,7 +1,7 @@
 // Owns the framework-free authored component contract: compiler inputs,
 // scoped-child policies, id allocation, and attribute validation.
 
-import type { Element, ElementContent, Root } from "hast";
+import type { ElementContent, Root } from "hast";
 import type { DiagnosticCollector } from "./diagnostics.js";
 
 type NodePosition = Root["position"];
@@ -101,11 +101,6 @@ export type ComponentCompilerInput = {
 export type ComponentModelCompiler<Model = unknown> = (
   input: ComponentCompilerInput,
 ) => Model;
-
-// Transitional alias retained for compilers migrated with authored-body.
-export type ComponentRenderer = (
-  input: ComponentCompilerInput,
-) => Element;
 
 export type MarkdownBodyNodeKind =
   | "heading"

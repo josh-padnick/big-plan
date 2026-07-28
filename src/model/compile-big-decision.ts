@@ -2,12 +2,13 @@
 // while collecting every decision-contract diagnostic at its owning node.
 
 import type { ElementContent } from "hast";
+import { meaningfulChildren } from "./authored-body.js";
 import {
   createComponentIdAllocator,
   validateComponentAttributes,
   type ComponentAttributeSchema,
   type ComponentIdAllocator,
-  type ComponentRenderer,
+  type ComponentCompilerInput,
   type ScopedChild,
 } from "./component-contract.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
@@ -111,13 +112,9 @@ const SCORE_SCHEMA = {
   tone: { kind: "enum", values: BIG_DECISION_TONES },
 } satisfies ComponentAttributeSchema;
 
-const isWhitespace = (node: ElementContent): boolean =>
-  node.type === "text" && /^\s*$/u.test(node.value);
-
 const contentOf = (
   children: ReadonlyArray<ElementContent>,
-): ReadonlyArray<ElementContent> =>
-  children.filter((node) => !isWhitespace(node));
+): ReadonlyArray<ElementContent> => meaningfulChildren(children);
 
 const compileCriterion = ({
   child,
@@ -315,7 +312,7 @@ const validateDecisionOptions = ({
   entries,
   diagnostics,
 }: {
-  readonly position: Parameters<ComponentRenderer>[0]["position"];
+  readonly position: ComponentCompilerInput["position"];
   readonly status: BigDecisionStatus;
   readonly entries: ReadonlyArray<{
     readonly child: ScopedChild;
@@ -477,7 +474,7 @@ export const compileBigDecisionComponent = ({
   position,
   diagnostics,
   ids = createComponentIdAllocator(),
-}: Parameters<ComponentRenderer>[0]): CompiledBigDecision => {
+}: ComponentCompilerInput): CompiledBigDecision => {
   const validated = validateComponentAttributes({
     component: "BigDecision",
     attributes,

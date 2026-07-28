@@ -1,11 +1,16 @@
 // Compiles HttpEndpoint's authored attributes and scoped children into a
 // render-ready model while collecting every endpoint-contract diagnostic.
 
-import type { Element, ElementContent } from "hast";
+import type { ElementContent } from "hast";
+import {
+  countAuthoredFences,
+  isAuthoredFence,
+  meaningfulChildren,
+} from "./authored-body.js";
 import {
   validateComponentAttributes,
   type ComponentAttributeSchema,
-  type ComponentRenderer,
+  type ComponentCompilerInput,
   type ScopedChild,
 } from "./component-contract.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
@@ -92,33 +97,8 @@ const RESPONSE_SCHEMA = {
   label: { kind: "string" },
 } satisfies ComponentAttributeSchema;
 
-const isElement = (node: ElementContent): node is Element =>
-  node.type === "element";
-
-const isWhitespace = (node: ElementContent): boolean =>
-  node.type === "text" && /^\s*$/u.test(node.value);
-
-const isFence = (node: ElementContent): boolean =>
-  isElement(node) &&
-  node.tagName === "pre" &&
-  node.children.some((child) => isElement(child) && child.tagName === "code");
-
 const isParamLocation = (value: string): value is HttpParamLocation =>
   PARAM_LOCATIONS.some((location) => location === value);
-
-// Counts fences recursively so response prose cannot hide an extra fenced
-// example inside a quote or list item.
-const countFences = (children: ReadonlyArray<ElementContent>): number => {
-  let count = 0;
-  for (const child of children) {
-    if (isFence(child)) {
-      count += 1;
-    } else if (isElement(child)) {
-      count += countFences(child.children);
-    }
-  }
-  return count;
-};
 
 /** Maps an HTTP status to the palette class used by the renderer. */
 export const httpStatusClass = (status: string): HttpStatusClass => {
@@ -166,7 +146,7 @@ const compileParam = ({
     ...(validated.default === undefined || validated.required === true
       ? {}
       : { defaultValue: validated.default }),
-    children: child.children.filter((node) => !isWhitespace(node)),
+    children: meaningfulChildren(child.children),
   };
 };
 
@@ -185,9 +165,13 @@ const compileRequest = ({
     diagnostics,
     schema: REQUEST_SCHEMA,
   });
-  const children = child.children.filter((node) => !isWhitespace(node));
+  const children = meaningfulChildren(child.children);
   const onlyChild = children[0];
-  if (children.length !== 1 || onlyChild === undefined || !isFence(onlyChild)) {
+  if (
+    children.length !== 1 ||
+    onlyChild === undefined ||
+    !isAuthoredFence(onlyChild)
+  ) {
     diagnostics.add({
       message:
         "Request expects exactly one fenced code block and no other content",
@@ -226,7 +210,7 @@ const compileResponse = ({
       position: child.position,
     });
   }
-  if (countFences(child.children) > 1) {
+  if (countAuthoredFences(child.children) > 1) {
     diagnostics.add({
       message: "Response bodies cannot contain more than one fenced code block",
       position: child.position,
@@ -236,7 +220,7 @@ const compileResponse = ({
     status,
     statusClass: httpStatusClass(status),
     ...(validated.label === undefined ? {} : { label: validated.label }),
-    children: child.children.filter((node) => !isWhitespace(node)),
+    children: meaningfulChildren(child.children),
   };
 };
 
@@ -287,7 +271,7 @@ export const compileHttpEndpointComponent = ({
   scopedChildren,
   position,
   diagnostics,
-}: Parameters<ComponentRenderer>[0]): CompiledHttpEndpoint => {
+}: ComponentCompilerInput): CompiledHttpEndpoint => {
   const validated = validateComponentAttributes({
     component: "HttpEndpoint",
     attributes,
@@ -339,7 +323,7 @@ export const compileHttpEndpointComponent = ({
     ...(validated.summary === undefined ? {} : { summary: validated.summary }),
     ...(validated.auth === undefined ? {} : { auth: validated.auth }),
     deprecated: validated.deprecated === true,
-    description: children.filter((node) => !isWhitespace(node)),
+    description: meaningfulChildren(children),
     params: groupParams({ entries: paramEntries, diagnostics }),
     ...(requests[0] === undefined ? {} : { request: requests[0] }),
     responses: responseEntries.map(({ response }) => response),

@@ -5,12 +5,12 @@
 import {
   validateComponentAttributes,
   type ComponentAttributeSchema,
-  type ComponentRenderer,
+  type ComponentCompilerInput,
 } from "./component-contract.js";
+import { singleAuthoredFence } from "./authored-body.js";
 import { hasTreeChanges } from "./derive-tree-view.js";
 import { parseTreeText } from "./parse-tree-text.js";
 import type { TreeEntry } from "./parse-tree-text.js";
-import { treeSource } from "./tree-source.js";
 
 export type CompiledFileTree = {
   readonly title?: string;
@@ -43,27 +43,24 @@ const compileTree = ({
   children,
   position,
   diagnostics,
-}: Pick<
-  Parameters<ComponentRenderer>[0],
-  "children" | "position" | "diagnostics"
-> & {
+}: Pick<ComponentCompilerInput, "children" | "position" | "diagnostics"> & {
   readonly title: string | undefined;
   readonly component: string;
   readonly mode: "plain" | "diff";
 }): CompiledFileTree & { readonly hasSource: boolean } => {
-  const extracted = treeSource({ children });
-  if (extracted.source === undefined) {
+  const extracted = singleAuthoredFence({ children, language: "tree" });
+  if (extracted === undefined) {
     diagnostics.add({
       message: `${component} expects exactly one fenced code block with language tree and no other content`,
       position,
     });
   }
   const parsed =
-    extracted.source === undefined
+    extracted === undefined
       ? { entries: [], diagnostics: [] }
       : parseTreeText({ source: extracted.source, mode });
   for (const diagnostic of parsed.diagnostics) {
-    const fenceLine = extracted.codePosition?.start.line;
+    const fenceLine = extracted?.codePosition?.start.line;
     diagnostics.add({
       message: `Invalid tree line ${diagnostic.line}: ${diagnostic.message}`,
       position:
@@ -78,13 +75,13 @@ const compileTree = ({
   return {
     ...(title === undefined ? {} : { title }),
     entries: parsed.entries,
-    hasSource: extracted.source !== undefined,
+    hasSource: extracted !== undefined,
   };
 };
 
 /** Compiles one FileTree component into the model consumed by its renderer. */
 export const compileFileTree = (
-  input: Parameters<ComponentRenderer>[0],
+  input: ComponentCompilerInput,
 ): CompiledFileTree => {
   const validated = validateComponentAttributes({
     component: "FileTree",
@@ -107,7 +104,7 @@ export const compileFileTree = (
 
 /** Compiles one FileTreeDiff component, requiring at least one change badge. */
 export const compileFileTreeDiff = (
-  input: Parameters<ComponentRenderer>[0],
+  input: ComponentCompilerInput,
 ): CompiledFileTreeDiff => {
   const validated = validateComponentAttributes({
     component: "FileTreeDiff",

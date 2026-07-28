@@ -1,11 +1,12 @@
 // Compiles GraphqlOperation's authored attributes and scoped children into a
 // render-ready model while collecting every operation-contract diagnostic.
 
-import type { Element, ElementContent } from "hast";
+import type { ElementContent } from "hast";
+import { fenceLanguage, meaningfulChildren } from "./authored-body.js";
 import {
   validateComponentAttributes,
   type ComponentAttributeSchema,
-  type ComponentRenderer,
+  type ComponentCompilerInput,
   type ScopedChild,
 } from "./component-contract.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
@@ -120,39 +121,11 @@ const compileField = ({
     ...(validated.default === undefined
       ? {}
       : { defaultValue: validated.default }),
-    children: child.children.filter((node) => !isWhitespace(node)),
+    children: meaningfulChildren(child.children),
   };
 };
 
 const EMPTY_SCHEMA = {} satisfies ComponentAttributeSchema;
-
-const isElement = (node: ElementContent): node is Element =>
-  node.type === "element";
-
-const isWhitespace = (node: ElementContent): boolean =>
-  node.type === "text" && /^\s*$/u.test(node.value);
-
-// Reads the declared fence language from a pre > code child, if any.
-const fenceLanguage = (node: ElementContent): string | undefined => {
-  if (!isElement(node) || node.tagName !== "pre") {
-    return undefined;
-  }
-  const code = node.children.find(
-    (child) => isElement(child) && child.tagName === "code",
-  );
-  if (code === undefined || !isElement(code)) {
-    return undefined;
-  }
-  const classes = Array.isArray(code.properties["className"])
-    ? code.properties["className"]
-    : [];
-  for (const entry of classes) {
-    if (typeof entry === "string" && entry.startsWith("language-")) {
-      return entry.slice("language-".length);
-    }
-  }
-  return undefined;
-};
 
 // Enforces the shared example-child contract: exactly one fence declaring the
 // expected language and nothing else.
@@ -172,7 +145,7 @@ const compileExampleChild = ({
     diagnostics,
     schema: EMPTY_SCHEMA,
   });
-  const children = child.children.filter((node) => !isWhitespace(node));
+  const children = meaningfulChildren(child.children);
   const onlyChild = children[0];
   if (
     children.length !== 1 ||
@@ -206,7 +179,7 @@ const compileArgument = ({
   return {
     name: validated.name ?? "",
     argumentType: validated.type ?? "",
-    children: child.children.filter((node) => !isWhitespace(node)),
+    children: meaningfulChildren(child.children),
   };
 };
 
@@ -232,7 +205,7 @@ export const compileGraphqlOperationComponent = ({
   scopedChildren,
   position,
   diagnostics,
-}: Parameters<ComponentRenderer>[0]): CompiledGraphqlOperation => {
+}: ComponentCompilerInput): CompiledGraphqlOperation => {
   const validated = validateComponentAttributes({
     component: "GraphqlOperation",
     attributes,
@@ -349,7 +322,7 @@ export const compileGraphqlOperationComponent = ({
         diagnostics,
         schema: RESPONSE_SCHEMA,
       });
-      const children = child.children.filter((node) => !isWhitespace(node));
+      const children = meaningfulChildren(child.children);
       const onlyChild = children[0];
       if (
         children.length !== 1 ||
@@ -387,16 +360,14 @@ export const compileGraphqlOperationComponent = ({
     ...(validated.deprecationReason === undefined
       ? {}
       : { deprecationReason: validated.deprecationReason }),
-    description: children.filter((node) => !isWhitespace(node)),
+    description: meaningfulChildren(children),
     args,
     ...(returnsChild === undefined || returnsValidated === undefined
       ? {}
       : {
           returns: {
             returnType: returnsValidated.type ?? "",
-            children: returnsChild.children.filter(
-              (node) => !isWhitespace(node),
-            ),
+            children: meaningfulChildren(returnsChild.children),
           },
         }),
     inputFields: fields.filter((field) => field.side === "input"),

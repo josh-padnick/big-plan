@@ -2,11 +2,12 @@
 // validates attributes and fences, translates parser diagnostics, and resolves
 // scoped Annotations against parsed diff lines.
 
-import type { Element, ElementContent, Root } from "hast";
+import type { ElementContent, Root } from "hast";
+import { singleAuthoredFence } from "./authored-body.js";
 import {
   validateComponentAttributes,
   type ComponentAttributeSchema,
-  type ComponentRenderer,
+  type ComponentCompilerInput,
   type ScopedChild,
 } from "./component-contract.js";
 import type { DiagnosticCollector } from "./diagnostics.js";
@@ -71,55 +72,6 @@ const EMPTY_DIFF: UnifiedDiff = {
   hasHunkHeaders: false,
 };
 
-const isElement = (node: ElementContent): node is Element =>
-  node.type === "element";
-
-const isWhitespace = (node: ElementContent): boolean =>
-  node.type === "text" && /^\s*$/u.test(node.value);
-
-const languageClasses = (element: Element): ReadonlyArray<string> => {
-  const className = element.properties.className;
-  if (!Array.isArray(className)) {
-    return [];
-  }
-  return className.filter(
-    (value): value is string => typeof value === "string",
-  );
-};
-
-// Enforces the fence shape before syntax highlighting can split its raw text.
-const diffFenceSource = ({
-  children,
-}: {
-  readonly children: ReadonlyArray<ElementContent>;
-}): { readonly source?: string; readonly codePosition?: NodePosition } => {
-  if (children.length !== 1) {
-    return {};
-  }
-  const pre = children[0];
-  if (pre === undefined || !isElement(pre) || pre.tagName !== "pre") {
-    return {};
-  }
-  if (pre.children.length !== 1) {
-    return {};
-  }
-  const code = pre.children[0];
-  if (
-    code === undefined ||
-    !isElement(code) ||
-    code.tagName !== "code" ||
-    !languageClasses(code).includes("language-diff") ||
-    code.children.length !== 1
-  ) {
-    return {};
-  }
-  const text = code.children[0];
-  if (text === undefined || text.type !== "text") {
-    return {};
-  }
-  return { source: text.value, codePosition: code.position };
-};
-
 // Parses the raw diff while translating its local diagnostics back to the
 // authored document coordinates owned by the component.
 const parseCodeDiffSource = ({
@@ -131,9 +83,8 @@ const parseCodeDiffSource = ({
   readonly position: NodePosition;
   readonly diagnostics: DiagnosticCollector;
 }): ParsedCodeDiffSource => {
-  const meaningfulChildren = children.filter((child) => !isWhitespace(child));
-  const extracted = diffFenceSource({ children: meaningfulChildren });
-  if (extracted.source === undefined) {
+  const extracted = singleAuthoredFence({ children, language: "diff" });
+  if (extracted === undefined) {
     diagnostics.add({
       message:
         "CodeDiff expects exactly one fenced code block with language diff and no other content",
@@ -141,14 +92,14 @@ const parseCodeDiffSource = ({
     });
   }
 
-  const source = extracted.source ?? "";
+  const source = extracted?.source ?? "";
   const parsed =
-    extracted.source === undefined
+    extracted === undefined
       ? { diff: EMPTY_DIFF, diagnostics: [] }
       : parseUnifiedDiff({ source });
   for (const diagnostic of parsed.diagnostics) {
-    const fenceLine = extracted.codePosition?.start.line;
-    const fenceColumn = extracted.codePosition?.start.column;
+    const fenceLine = extracted?.codePosition?.start.line;
+    const fenceColumn = extracted?.codePosition?.start.column;
     diagnostics.add({
       message: `Invalid diff line ${diagnostic.line}: ${diagnostic.message}`,
       position:
@@ -164,7 +115,7 @@ const parseCodeDiffSource = ({
   return {
     source,
     diff: parsed.diff,
-    hasSource: extracted.source !== undefined,
+    hasSource: extracted !== undefined,
   };
 };
 
@@ -360,7 +311,7 @@ export const compileCodeDiffComponent = ({
   scopedChildren,
   position,
   diagnostics,
-}: Parameters<ComponentRenderer>[0]): CompiledCodeDiff => {
+}: ComponentCompilerInput): CompiledCodeDiff => {
   const validated = validateComponentAttributes({
     component: "CodeDiff",
     attributes,
