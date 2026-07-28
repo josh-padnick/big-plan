@@ -89,6 +89,68 @@ docs/
 </FileTree>
 `;
 
+const TREE_DIFF_PLAN = `# Plan
+
+## Changes
+
+<FileTreeDiff title="Planned changes">
+
+\`\`\`tree
+src/
+  catalog/
+    refresh-worker.ts [modified] - Move refresh work behind the queue.
+    refresh-queue.ts [added] - Deduplicate refresh jobs by cache key.
+  metrics/ [removed] - The legacy module retires.
+    legacy-counter.ts [removed]
+ops/ -> deploy/ [renamed] - Match the platform team's naming.
+  runbook.md
+README.md [modified]
+\`\`\`
+
+</FileTreeDiff>
+
+<FileTreeDiff hideDiff>
+
+\`\`\`tree
+docs/
+  cli.md [modified]
+\`\`\`
+
+</FileTreeDiff>
+`;
+
+const SCHEMA_PLAN = `# Plan
+
+## Storage
+
+<DatabaseTableSchema name="billing.subscriptions">
+
+\`\`\`dbml
+id           bigint      [pk, increment]
+customer_id  bigint      [not null, ref: > billing.customers.id, delete: cascade, update: restrict]
+seats        integer     [not null, default: 1, check: 'seats > 0', note: 'Licensed seats.']
+canceled_at  timestamptz
+
+indexes {
+  customer_id [name: 'subscriptions_customer_idx', note: 'Backs the dashboard.']
+  customer_id [unique, name: 'subscriptions_live_idx', where: 'canceled_at IS NULL']
+  (customer_id, canceled_at) [name: 'subscriptions_lifecycle_idx']
+}
+
+Note: 'One row per subscription.'
+\`\`\`
+
+<Ddl title="PostgreSQL">
+
+\`\`\`sql
+CREATE TABLE billing.subscriptions (id bigint PRIMARY KEY);
+\`\`\`
+
+</Ddl>
+
+</DatabaseTableSchema>
+`;
+
 const UNPORTED_PLAN = `# Plan
 
 ## Question
@@ -146,6 +208,34 @@ describe("react renderer parity", () => {
       renderer: "react",
     });
     expect(react.html).toContain("data-file-tree=");
+    expect(react.html).toBe(vanilla.html);
+  });
+
+  it("should render a byte-identical document for titled and untitled FileTreeDiffs", () => {
+    const vanilla = renderDocument({
+      markdown: TREE_DIFF_PLAN,
+      fallbackTitle: "x",
+    });
+    const react = renderDocument({
+      markdown: TREE_DIFF_PLAN,
+      fallbackTitle: "x",
+      renderer: "react",
+    });
+    expect(react.html).toContain("data-file-tree-diff=");
+    expect(react.html).toBe(vanilla.html);
+  });
+
+  it("should render a byte-identical document for a DatabaseTableSchema with indexes and DDL", () => {
+    const vanilla = renderDocument({
+      markdown: SCHEMA_PLAN,
+      fallbackTitle: "x",
+    });
+    const react = renderDocument({
+      markdown: SCHEMA_PLAN,
+      fallbackTitle: "x",
+      renderer: "react",
+    });
+    expect(react.html).toContain("data-database-table-schema=");
     expect(react.html).toBe(vanilla.html);
   });
 

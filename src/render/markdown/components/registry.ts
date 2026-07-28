@@ -324,6 +324,35 @@ const collectExistingIds = (
   return ids;
 };
 
+// Restores the property conventions the authored HAST uses after an HTML
+// round trip, so later transforms treat React-rendered fragments exactly
+// like vanilla ones. Two parser artifacts are involved: `hidden` on SVG
+// elements round-trips as the string "" (spec-identical to the boolean the
+// vanilla HAST carries, but serialized differently), and data-* attributes
+// come back as camelCase dataset keys where authored HAST and the transforms
+// that inspect it use the dashed form.
+const normalizeReparsedProperties = (
+  nodes: ReadonlyArray<RootContent>,
+): void => {
+  for (const node of nodes) {
+    if (node.type !== "element") {
+      continue;
+    }
+    if (node.properties["hidden"] === "") {
+      node.properties["hidden"] = true;
+    }
+    const renamed: Element["properties"] = {};
+    for (const key of Object.keys(node.properties)) {
+      const dashed = /^data[A-Z]/.test(key)
+        ? key.replace(/[A-Z]/g, (upper) => `-${upper.toLowerCase()}`)
+        : key;
+      renamed[dashed] = node.properties[key];
+    }
+    node.properties = renamed;
+    normalizeReparsedProperties(node.children);
+  }
+};
+
 // Reports an unknown name, validates attributes, recursively prepares direct
 // scoped children, then dispatches a registered global component.
 const renderFlowElement = ({
@@ -397,6 +426,7 @@ const renderFlowElement = ({
     // Reparsing routes the React output through the same final serializer as
     // everything else, so escaping and formatting can never diverge by path.
     const fragment = fromHtml(rendered, { fragment: true });
+    normalizeReparsedProperties(fragment.children);
     const first = fragment.children.find(
       (child): child is Element => child.type === "element",
     );
