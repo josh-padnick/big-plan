@@ -262,11 +262,6 @@ export default tseslint.config(
     rules: { "no-restricted-imports": "off" },
   },
   {
-    // Browser-side scripts run in the viewer, not Node.
-    files: ["src/**/*.browser.ts"],
-    languageOptions: { globals: globals.browser },
-  },
-  {
     // Node-runtime JavaScript: the bin shim and build-time generators.
     files: ["bin/**/*.mjs", "scripts/**/*.mjs"],
     languageOptions: { globals: globals.node },

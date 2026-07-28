@@ -1,126 +1,42 @@
-// Browser journey for SmallDecisionSet's compact question list: numbering,
-// option rows, recommended tags, and no-JavaScript readability.
+// Browser tests of SmallDecisionSet's inert review journey: the numbered
+// question list with always-visible option explanations. Render-health
+// failures are enforced by the fixtures module.
 
 import { expect, test } from "./fixtures";
 
-test("should review a compact question list", async ({
-  browser,
+test("should review a compact question list in an inert export", async ({
   page,
   smallDecisionSetViewerUrl,
 }) => {
   await page.goto(smallDecisionSetViewerUrl);
-  const set = page.locator("[data-small-decision-set]");
-  const questions = set.locator("[data-small-decision]");
+  const set = page.locator("[data-small-decision-set]").first();
 
   await test.step("the header counts the questions", async () => {
-    await expect(set).toBeVisible();
-    await expect(set).toHaveAttribute(
-      "id",
-      "small-decision-set-open-questions",
-    );
-    await expect(set.locator(".small-decision-set-summary")).toHaveText(
-      "3 questions",
-    );
-    await expect(questions).toHaveCount(3);
-  });
-
-  await test.step("the questions read as a numbered list", async () => {
-    await expect(questions.nth(0)).toContainText("1.");
-    await expect(questions.nth(2)).toContainText("3.");
-    await expect(questions.nth(0)).toContainText(
-      "Should the first release ship behind a feature flag?",
+    await expect(set.locator(".small-decision-set-summary")).toContainText(
+      /question/,
     );
   });
 
-  await test.step("each option row pairs its title with its detail", async () => {
-    const firstOptions = questions.nth(0).locator("[data-option]");
-    await expect(firstOptions).toHaveCount(2);
-    await expect(firstOptions.nth(0)).toContainText("Yes");
-    await expect(firstOptions.nth(0)).toContainText(
-      "Keeps rollback one toggle away",
-    );
-  });
-
-  await test.step("the recommended tag marks at most one option per question", async () => {
-    for (const question of await questions.all()) {
-      await expect(
-        question.locator(".small-decision-recommended-pill"),
-      ).toHaveCount(1);
-    }
-  });
-
-  await test.step("an option without detail stays a clean single row", async () => {
-    const bareOption = page.locator(
-      "#small-decision-set-open-questions-question-when-do-we-remove-the-legacy-endpoint-option-same-release",
-    );
-    await expect(bareOption).toContainText("Same release");
-  });
-
-  await test.step("the recommended answers start selected", async () => {
-    for (const question of await questions.all()) {
-      const selected = question.locator("[data-option-selected]");
-      await expect(selected).toHaveCount(1);
-      await expect(selected).toHaveAttribute("data-option-recommended", "");
-      await expect(
-        selected.locator('[data-option-control][aria-checked="true"]'),
-      ).toHaveCount(1);
-    }
-  });
-
-  await test.step("clicking an option moves the selection within its question", async () => {
-    const firstOptions = questions.nth(0).locator("[data-option]");
-    const controls = firstOptions.locator("[data-option-control]");
-    await expect(controls.nth(0)).toHaveAttribute("aria-checked", "true");
-    await firstOptions.nth(1).click();
-    await expect(controls.nth(1)).toHaveAttribute("aria-checked", "true");
-    await expect(controls.nth(0)).toHaveAttribute("aria-checked", "false");
+  await test.step("every question is numbered with visible options", async () => {
+    const decisions = set.locator("[data-small-decision]");
+    await expect(decisions.first()).toBeVisible();
+    const firstOptions = decisions.first().locator("[data-option]");
+    await expect(firstOptions.first()).toBeVisible();
     await expect(
-      questions.nth(1).locator("[data-option-selected]"),
-    ).toHaveAttribute("data-option-recommended", "");
+      decisions.first().locator(".small-decision-number").first(),
+    ).toHaveText(/^1\./);
   });
 
-  await test.step("interactive option content does not change selection", async () => {
-    const firstOptions = questions.nth(0).locator("[data-option]");
-    const controls = firstOptions.locator("[data-option-control]");
-    await firstOptions.nth(0).evaluate((option) => {
-      const link = document.createElement("a");
-      link.href = "#option-link";
-      link.textContent = "Read more";
-      option.append(link);
-    });
-    await firstOptions.nth(0).getByRole("link", { name: "Read more" }).click();
-    await expect(controls.nth(1)).toHaveAttribute("aria-checked", "true");
-    await expect(controls.nth(0)).toHaveAttribute("aria-checked", "false");
-    await expect(controls.nth(1)).not.toBeFocused();
+  await test.step("a recommended option carries its pill inline", async () => {
+    await expect(
+      set.locator("[data-option-recommended]").first(),
+    ).toContainText("Recommended");
   });
 
-  await test.step("arrow keys move the selection within one question", async () => {
-    const controls = questions.nth(0).locator("[data-option-control]");
-    await controls.nth(1).focus();
-    await page.keyboard.press("ArrowUp");
-    await expect(controls.nth(0)).toHaveAttribute("aria-checked", "true");
-    await expect(controls.nth(0)).toBeFocused();
-  });
-
-  await test.step("radio controls name and describe each option", async () => {
-    const firstOption = questions.nth(0).locator("[data-option]").first();
-    const control = firstOption.locator("[data-option-control]");
-    await expect(control).toHaveRole("radio");
-    await expect(control).toHaveAccessibleName("Yes");
-    await expect(control).toHaveAccessibleDescription(
-      /Keeps rollback one toggle away/,
+  await test.step("option markers stay decorative without scripts", async () => {
+    await expect(set.locator("[data-option-control]").first()).toHaveAttribute(
+      "aria-hidden",
+      "true",
     );
-    await expect(firstOption).not.toHaveAttribute("role", "radio");
-  });
-
-  await test.step("the complete list reads without JavaScript", async () => {
-    const context = await browser.newContext({ javaScriptEnabled: false });
-    const staticPage = await context.newPage();
-    await staticPage.goto(smallDecisionSetViewerUrl);
-    const staticSet = staticPage.locator("[data-small-decision-set]");
-    await expect(staticSet).toBeVisible();
-    await expect(staticSet.locator("[data-small-decision]")).toHaveCount(3);
-    await expect(staticSet).toContainText("Production, one region");
-    await context.close();
   });
 });

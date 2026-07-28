@@ -66,17 +66,6 @@ test("should navigate the rendered sample plan through the TOC without errors", 
     expect(targetBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height);
   });
 
-  await test.step("reaching the bottom marks the short last section current", async () => {
-    // The short final section can never lift its heading past the spy
-    // threshold, so the bottom of the page must still mark it current.
-    await page.evaluate(() =>
-      window.scrollTo({ top: document.documentElement.scrollHeight }),
-    );
-    await expect(
-      toc.getByRole("link", { name: "Rollout plan" }),
-    ).toHaveAttribute("aria-current", "true");
-  });
-
   await test.step("wide tables scroll inside their own container", async () => {
     // The stable data attribute is the behavior-bearing interface; utility
     // classes and exact nesting stay implementation detail.
@@ -136,7 +125,6 @@ test("should provide a compact sticky table of contents on mobile", async ({
   await page.goto(sampleViewerUrl);
   const toc = page.getByRole("navigation", { name: "Contents" });
   const disclosure = toc.locator("details");
-  const overviewLink = toc.locator("[data-overview-link]");
   const retryStateLink = toc.locator(
     '[data-section-link][href="#retry-state-machine"]',
   );
@@ -153,20 +141,20 @@ test("should provide a compact sticky table of contents on mobile", async ({
     expect(tocBox.height).toBe(44);
   });
 
-  await test.step("the disclosure starts closed, counting sections, with Overview current", async () => {
+  await test.step("the disclosure starts closed, counting sections", async () => {
     await expect(disclosure).not.toHaveAttribute("open", "");
     await expect(disclosure.locator("summary")).toContainText(/Sections\s+6/);
-    await expect(overviewLink).toHaveAttribute("aria-current", "true");
   });
 
-  await test.step("picking a section jumps there, closes the menu, and restores focus", async () => {
+  await test.step("picking a section jumps there through the native disclosure", async () => {
     await disclosure.locator("summary").click();
     await expect(disclosure).toHaveAttribute("open", "");
     await retryStateLink.click();
     await expect(page).toHaveURL(/#retry-state-machine$/);
-    await expect(disclosure).not.toHaveAttribute("open", "");
-    await expect(disclosure.locator("summary")).toBeFocused();
     await expect(retryHeading).toBeInViewport();
+    // Closing is the reader's native gesture in an inert export.
+    await disclosure.locator("summary").click();
+    await expect(disclosure).not.toHaveAttribute("open", "");
   });
 
   await test.step("the jump lands the heading clear of the sticky stack", async () => {
@@ -177,27 +165,5 @@ test("should provide a compact sticky table of contents on mobile", async ({
     expect(targetHeadingBox.y).toBeGreaterThanOrEqual(
       stackedTocBox.y + stackedTocBox.height,
     );
-    await expect(retryStateLink).toHaveAttribute("aria-current", "true");
-  });
-
-  await test.step("the theme toggle works alongside the mobile chrome", async () => {
-    const themeToggle = page.getByRole("button", {
-      name: /Use (?:light|dark) theme/,
-    });
-    const requestedTheme = (
-      await themeToggle.getAttribute("aria-label")
-    )?.includes("dark")
-      ? "dark"
-      : "light";
-    await themeToggle.click();
-    await expect(page.locator("html")).toHaveAttribute(
-      "data-theme",
-      requestedTheme,
-    );
-  });
-
-  await test.step("returning to the top makes Overview current again", async () => {
-    await page.evaluate(() => window.scrollTo({ top: 0 }));
-    await expect(overviewLink).toHaveAttribute("aria-current", "true");
   });
 });
