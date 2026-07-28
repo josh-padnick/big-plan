@@ -66,19 +66,9 @@ It performs three checks:
 2. Human-facing HTML delivery completes in memory, including React component presentation, Markdown transforms, shell composition, and serialization.
 3. Every validate-only authoring lint rule passes.
 
-The first lint rule is `markdown-table-format`.
-It reports table-like outer-pipe rows when GFM parsed them as prose because the delimiter row is missing or malformed:
-
-```md
-| Name | Owner |
-| API | Platform |
-```
-
-The diagnostic points to the second row and suggests a valid delimiter with the expected column count.
-Valid GFM tables, ordinary prose containing pipes, inline code, fenced code, and a single table-like row do not trigger the rule.
-
 Lint is intentionally stricter than rendering.
 `render` and `compile` continue to accept legal Markdown that a quality rule flags; `validate` is the authoring gate that combines structural acceptance, renderability, and the registered lint collection.
+See [Authoring plans](/for-agents/authoring-plans/) for the authoring lint rules and their conservative matching boundaries.
 Completing HTML delivery does not replace visual review: browser layout, readability, and whether the page matches author intent still require a human.
 
 ## Successful results

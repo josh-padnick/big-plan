@@ -97,7 +97,9 @@ const inlineCodeContainsRow = ({
   }
   return (
     isParent(node) &&
-    node.children.some((child) => inlineCodeContainsRow({ node: child, line, row }))
+    node.children.some((child) =>
+      inlineCodeContainsRow({ node: child, line, row }),
+    )
   );
 };
 
