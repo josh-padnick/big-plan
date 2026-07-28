@@ -12,6 +12,7 @@ import {
   compileCalloutComponent,
   type CalloutType,
 } from "../../../../model/compile-callout.js";
+import { renderCalloutStatic } from "../../../../react/callout/callout.js";
 import { INFO_ICON } from "../../../icons/lucide/info.js";
 import { LIGHTBULB_ICON } from "../../../icons/lucide/lightbulb.js";
 import { OCTAGON_ALERT_ICON } from "../../../icons/lucide/octagon-alert.js";
@@ -96,4 +97,5 @@ const renderCallout: ComponentRenderer = (input): Element => {
 export const CALLOUT_COMPONENT_DEFINITION = {
   render: renderCallout,
   compile: compileCalloutComponent,
+  renderStatic: (input) => renderCalloutStatic(compileCalloutComponent(input)),
 } satisfies ComponentDefinition;

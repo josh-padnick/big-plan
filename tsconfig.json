@@ -10,6 +10,7 @@
     "noUncheckedIndexedAccess": true,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
+    "jsx": "react-jsx",
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
     "skipLibCheck": true,

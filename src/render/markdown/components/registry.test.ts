@@ -6,7 +6,7 @@ import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   compileMarkdown,
   MarkdownDiagnosticsError,
@@ -22,7 +22,7 @@ import {
   rehypeRenderComponents,
   remarkValidateComponents,
 } from "./registry.js";
-import type { ComponentRegistry } from "./registry.js";
+import type { ComponentRegistry, RendererKind } from "./registry.js";
 
 const renderNestedFixture: ComponentRenderer = ({ scopedChildren }) => {
   const branch = scopedChildren[0];
@@ -76,9 +76,11 @@ const NESTED_REGISTRY = {
 const compileWithRegistry = ({
   markdown,
   registry,
+  renderer,
 }: {
   readonly markdown: string;
   readonly registry: ComponentRegistry;
+  readonly renderer?: RendererKind;
 }): {
   readonly root: Root;
   readonly diagnostics: ReadonlyArray<ComponentDiagnostic>;
@@ -97,7 +99,11 @@ const compileWithRegistry = ({
         "mdxJsxTextElement",
       ],
     })
-    .use(rehypeRenderComponents, { diagnostics, registry });
+    .use(rehypeRenderComponents, {
+      diagnostics,
+      registry,
+      ...(renderer === undefined ? {} : { renderer }),
+    });
   const root: Root = processor.runSync(processor.parse(markdown));
   return { root, diagnostics: diagnostics.diagnostics };
 };
@@ -139,6 +145,32 @@ describe("scoped child dispatch", () => {
     expect(serializeMarkdown({ root })).toBe(
       '<section data-branch-id="decision" data-leaf-label="keep"><p>Leaf with <strong>formatting</strong>.</p></section>',
     );
+  });
+
+  it("should dispatch nested ported components through React", () => {
+    const renderInnerStatic = vi.fn(() => "<span>React inner</span>");
+    const renderOuterStatic = vi.fn(() => "<section>React outer</section>");
+    const registry = {
+      Inner: {
+        render: renderNestedFixture,
+        renderStatic: renderInnerStatic,
+      },
+      Outer: {
+        render: renderNestedFixture,
+        renderStatic: renderOuterStatic,
+      },
+    } satisfies ComponentRegistry;
+
+    const { root, diagnostics } = compileWithRegistry({
+      markdown: "<Outer>\n<Inner />\n</Outer>\n",
+      registry,
+      renderer: "react",
+    });
+
+    expect(diagnostics).toEqual([]);
+    expect(renderInnerStatic).toHaveBeenCalledOnce();
+    expect(renderOuterStatic).toHaveBeenCalledOnce();
+    expect(serializeMarkdown({ root })).toBe("<section>React outer</section>");
   });
 
   it("should leave an undeclared name unknown within a nested scope", () => {

@@ -72,6 +72,13 @@ export default tseslint.config(
         imports: ["**/icons/**"],
         mayImport: [],
       },
+      // The React render target: ports consuming compiled plan models,
+      // SSR-only today. The review app later hydrates these same components.
+      react: {
+        files: ["src/react/**/*.ts", "src/react/**/*.tsx"],
+        imports: ["**/react/**"],
+        mayImport: ["model", "icons"],
+      },
       codeBlock: {
         files: ["src/render/markdown/code-block/**/*.ts"],
         imports: ["**/markdown/code-block/**"],
@@ -89,7 +96,7 @@ export default tseslint.config(
         files: ["src/render/markdown/components/**/*.ts"],
         ignores: ["src/render/markdown/components/shared/**/*.ts"],
         imports: ["**/markdown/components/**"],
-        mayImport: ["icons", "componentShared", "model"],
+        mayImport: ["icons", "componentShared", "model", "react"],
       },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
@@ -132,7 +139,7 @@ export default tseslint.config(
     // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
       ["model", "escapeHtml", "icons"],
-      ["codeBlock", "page", "componentShared"],
+      ["codeBlock", "page", "componentShared", "react"],
       ["components"],
       ["markdown", "shell"],
       ["composer"],
