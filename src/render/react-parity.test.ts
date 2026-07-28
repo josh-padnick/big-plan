@@ -252,6 +252,75 @@ The title was empty.
 <HttpEndpoint method="DELETE" path="/v1/reviews/{reviewId}" deprecated summary="Remove a review" />
 `;
 
+const GRAPHQL_PLAN = `# Plan
+
+## GraphQL
+
+<GraphqlOperation kind="mutation" name="refreshCreate" access="Requires catalog:write">
+
+Queues a refresh through the GraphQL bridge.
+
+<Argument name="input" type="RefreshCreateInput!">
+
+The cache keys to refresh.
+
+</Argument>
+
+<Field in="input" name="cacheKeys" type="[String!]!">
+
+The cache entries to refresh.
+
+</Field>
+
+<Field in="input" name="force" type="Boolean" default="false">
+
+Refreshes keys even when fresh.
+
+</Field>
+
+<Returns type="RefreshCreatePayload">
+
+The queued refresh plus a userErrors list.
+
+</Returns>
+
+<Field in="payload" name="refresh" type="Refresh">
+
+The queued refresh job.
+
+</Field>
+
+<Operation>
+
+\`\`\`graphql
+mutation refreshCreate($input: RefreshCreateInput!) {
+  refreshCreate(input: $input) { refresh { id } }
+}
+\`\`\`
+
+</Operation>
+
+<Variables>
+
+\`\`\`json
+{ "input": { "cacheKeys": ["a"] } }
+\`\`\`
+
+</Variables>
+
+<Response label="Success">
+
+\`\`\`json
+{ "data": { "refreshCreate": { "refresh": { "id": "r_1" } } } }
+\`\`\`
+
+</Response>
+
+</GraphqlOperation>
+
+<GraphqlOperation kind="query" name="refresh" deprecated deprecationReason="Use refreshJob instead." />
+`;
+
 const UNPORTED_PLAN = `# Plan
 
 ## Question
@@ -365,6 +434,20 @@ describe("react renderer parity", () => {
       renderer: "react",
     });
     expect(react.html).toContain("data-http-endpoint=");
+    expect(react.html).toBe(vanilla.html);
+  });
+
+  it("should render a byte-identical document for full and compact GraphqlOperations", () => {
+    const vanilla = renderDocument({
+      markdown: GRAPHQL_PLAN,
+      fallbackTitle: "x",
+    });
+    const react = renderDocument({
+      markdown: GRAPHQL_PLAN,
+      fallbackTitle: "x",
+      renderer: "react",
+    });
+    expect(react.html).toContain("data-graphql-operation=");
     expect(react.html).toBe(vanilla.html);
   });
 

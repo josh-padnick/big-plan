@@ -9,6 +9,7 @@ import {
   type ComponentRenderer,
   type ScopedChildDefinition,
 } from "../../../../model/component-contract.js";
+import { renderGraphqlOperationStatic } from "../../../../react/graphql-operation/graphql-operation.js";
 import { renderBadgePill } from "../shared/badge-pill/badge-pill.js";
 import {
   renderCardSection,
@@ -375,6 +376,8 @@ const scopedChild = (
 export const GRAPHQL_OPERATION_COMPONENT_DEFINITION = {
   render: renderGraphqlOperation,
   compile: compileGraphqlOperationComponent,
+  renderStatic: (input) =>
+    renderGraphqlOperationStatic(compileGraphqlOperationComponent(input)),
   scopedChildren: {
     Argument: scopedChild("Argument"),
     Field: scopedChild("Field"),
