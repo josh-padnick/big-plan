@@ -1,7 +1,6 @@
 # Big Plan agent guide
 
 This is the entry point for agents working in Big Plan.
-Read the product orientation and architecture first, then follow the documentation map and the nearest local map for the task.
 
 ## What Big Plan is
 
