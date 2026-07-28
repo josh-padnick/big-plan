@@ -8,8 +8,20 @@ Good AI output depends on a great plan, and Big Plan makes reviewing agent plans
 It is built around one question: what is the best user experience a human can have when aiming to understand, give feedback on, and ultimately accept an agent plan?
 
 An agent writes the plan, and Big Plan renders it as a human-friendly document designed to make the plan as easy as possible to understand, give feedback on, and accept.
-Big Plan focuses on that upfront moment of agreement, not code review or project management.
-Everything runs locally, and the plan source on disk is authoritative.
+
+A robust AI-assisted delivery workflow has several distinct stages:
+
+1. **Create a sandbox.** The user gives the agent an isolated workspace where it can make changes without disturbing the main working copy.
+2. **Declare intent.** The user describes the outcome they want and supplies any context or constraints the agent needs.
+3. **Review the plan.** The agent proposes how it will achieve that outcome; the user works to understand the plan, gives feedback, and accepts it before execution begins.
+4. **Execute.** The agent implements the accepted plan inside the sandbox.
+5. **Review the recap.** The user learns what the agent changed, what it verified, and where judgment is still required.
+6. **Validate the deliverable.** The user exercises the delivered result—for example, by taking the UI for a spin—and confirms that the intended business value, user experience, and implementation approach are sound.
+7. **Merge.** Once the result has passed human validation and any required code review, it is ready to integrate.
+
+Big Plan focuses specifically on stage 3: helping a human understand, discuss, and accept the agent's intended approach before work begins.
+It does not own sandboxing, execution, post-execution validation, code review, project management, or merging.
+Big Plan runs locally, and the plan source on disk is authoritative.
 
 The product documentation owns current capabilities and usage.
 This guide owns the durable implementation model contributors must preserve.
