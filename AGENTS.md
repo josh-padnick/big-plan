@@ -44,11 +44,12 @@ Plan-authored code never executes: imports, exports, expressions, and inline JSX
 
 Big Plan calls the validation-and-translation step **compilation**.
 The output commands compile the authoritative plan source independently, then produce either machine-readable JSON for agents and tools or a self-contained HTML review document for humans.
-The no-write validation command completes human delivery in memory while collecting the machine summary, then applies authoring lint.
+The no-write validation command renders the plan in memory while collecting the machine-readable summary, then applies linting rules to the authored plan.
 
 ## Architecture at a glance
 
-Big Plan uses one compilation path for two outputs, with authoring lint layered onto validation:
+Big Plan uses one compilation path to produce either machine-readable JSON or a human-readable review document.
+The validate command checks that the review document can be rendered, then applies linting rules to the authored plan:
 
 ```text
 MDX plan source
@@ -58,13 +59,14 @@ MDX plan source
      -> machine output -> machine-readable JSON
      -> human output -> React view -> HAST -> document transforms
         -> self-contained HTML review document
-  -> validate only -> authoring lint
+  -> validate only -> linting rules
 ```
 
 Each component validates its authored attributes and content into plain data describing what it should show.
 Machine delivery collects that data as JSON.
 Human delivery gives the same data to the component's React view, crosses one React-to-HAST boundary, applies document-wide transforms, and packages inert HTML.
-Validation completes human delivery while collecting the same component models in one pass, then runs its ordered collection of independent authoring-lint rules.
+Validation renders the plan in memory while collecting the same component models in one pass.
+It discards the generated HTML, then applies its registered linting rules to the authored plan.
 React is a presentation-edge implementation tool; no React runtime or browser script ships in a rendered document.
 
 Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
@@ -76,7 +78,7 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/cli/`               | Public command dispatch, shared input and safe derived-output workflows, errors, and result serialization. Give each public command a non-underscored folder; keep reusable command mechanics in `_shared/` and business semantics below the CLI. |
 | `src/components/`        | Built-in components as vertical slices. Put a new component in its own folder and follow the infrastructure boundaries in the [components local map](src/components/README.md).                                                                   |
-| `src/lint/`              | Framework-free, validate-only authoring rules. Keep rules independent and register them in a deterministic order.                                                                                                                                 |
+| `src/lint/`              | Framework-free, validate-only linting rules for statically analyzable aspects of an authored plan. Keep rules independent and register them in a deterministic order.                                                                             |
 | `src/render/`            | Pure document compilation and delivery orchestration. Put cross-document pipeline behavior here and follow the stage boundaries in the [renderer local map](src/render/README.md); keep component-specific behavior in its component slice.       |
 | `src/render/shell/`      | Viewer chrome, reading layout, branding, and responsive navigation. Do not put document packaging here.                                                                                                                                           |
 | `src/render/page.ts`     | Doctype, head, embedded delivery assets, favicons, and the final inert HTML envelope.                                                                                                                                                             |

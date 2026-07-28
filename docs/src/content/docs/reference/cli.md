@@ -57,19 +57,19 @@ The JSON written by `compile` is Big Plan's **compiled plan model**: a structure
 Prose fields inside models (context paragraphs, option bodies) are HAST subtrees: plain JSON objects describing the markdown content.
 Generated element ids inside models match the ids in the rendered HTML, so a tool can link a model entry to its rendered element.
 
-## Validation and authoring lint
+## Validation and linting
 
 `validate` reads and checks the plan without choosing an output path, creating a directory, or writing a file.
 It performs three checks:
 
 1. The shared static-subset MDX and component compiler accepts the authored structure.
-2. Human-facing HTML delivery completes in memory, including React component presentation, Markdown transforms, shell composition, and serialization.
-3. Every validate-only authoring lint rule passes.
+2. Big Plan renders the complete HTML document in memory, including React component presentation, Markdown transforms, shell composition, and serialization.
+3. The authored plan passes every registered linting rule.
 
 Lint is intentionally stricter than rendering.
 `render` and `compile` continue to accept legal Markdown that a quality rule flags; `validate` is the authoring gate that combines structural acceptance, renderability, and the registered lint collection.
-See [Authoring plans](/for-agents/authoring-plans/) for the authoring lint rules and their conservative matching boundaries.
-Completing HTML delivery does not replace visual review: browser layout, readability, and whether the page matches author intent still require a human.
+See [Authoring plans](/for-agents/authoring-plans/) for the linting rules and their conservative matching boundaries.
+Rendering the document in memory does not replace visual review: browser layout, readability, and whether the page matches author intent still require a human.
 
 ## Successful results
 

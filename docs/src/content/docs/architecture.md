@@ -17,7 +17,7 @@ That shared translation is what keeps validation and both outputs consistent:
 
 - `big-plan compile` collects document metadata and validated component data into machine-readable JSON.
 - `big-plan render` presents that same validated component data inside a human-readable HTML review document.
-- `big-plan validate` completes the HTML path in memory while collecting the machine summary, then applies authoring lint without writing either output.
+- `big-plan validate` renders the plan in memory while collecting the machine-readable summary, then applies linting rules to the authored plan without writing either output.
 
 The commands run independently, and no command reads output produced by another.
 They agree because each starts from the authoritative source file and reuses the same parsing, validation, and component-compilation implementation.
@@ -32,7 +32,7 @@ flowchart TB
   Q -- "validateDocument()<br/>compileMarkdownWithModels()" --> M["Render presentations<br/>and collect component data"]
   G --> I["machine-readable JSON"]
   H --> J["self-contained HTML<br/>review document"]
-  M --> N["authoring lint<br/>no output written"]
+  M --> N["Apply linting rules<br/>no output written"]
 ```
 
 In the source, `compileMarkdownModel()`, `compileMarkdown()`, and `compileMarkdownWithModels()` are thin entry points over `compileMarkdownTree()`.
@@ -55,7 +55,7 @@ The component is compiled once during that command invocation; the selected outp
 
 - In **machine-readable output mode**, used by `big-plan compile`, Big Plan collects the validated data in source order and does not invoke the top-level presentation.
 - In **HTML output mode**, used by `big-plan render` and `big-plan validate`, Big Plan invokes the presentation, crosses one React-to-HAST boundary, and replaces the authored component node with plain document HAST.
-  Validation also collects the component data during that delivery, discards the completed document, and runs its separate authoring-lint rules.
+  Validation also collects the component data while rendering, discards the generated document, and applies its registered linting rules to the authored plan.
 
 All three commands therefore agree on component semantics because they call the same compilation function, not because one consumes another command's output.
 No plan-authored code is evaluated or shipped.
@@ -74,7 +74,7 @@ flowchart TB
   H --> U["Write plan.html"]
   Q -- "HTML + model collection: validate" --> X["Collect validated data,<br/>invoke presentation, cross to HAST"]
   X --> Y["Apply document transforms,<br/>add chrome, serialize HTML"]
-  Y --> W["Discard HTML, retain summary,<br/>run authoring lint"]
+  Y --> W["Discard HTML, retain summary,<br/>apply linting rules"]
 ```
 
 An invalid document never renders partially.
