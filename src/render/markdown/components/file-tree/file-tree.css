@@ -44,19 +44,6 @@
   article .file-tree-diff-button[hidden] {
     display: none;
   }
-  /* Inside the shared full-screen dialog the tree owns the scroll surface;
-     the header stays pinned while the active content region scrolls. */
-  article .component-dialog > [data-file-tree-diff] {
-    display: flex;
-    min-height: 0;
-    flex: 1;
-    flex-direction: column;
-  }
-  article .component-dialog > [data-file-tree-diff] > [data-tree-content] {
-    min-height: 0;
-    flex: 1;
-    overflow-y: auto;
-  }
   article [data-tree-content="before-after"] {
     display: none;
   }

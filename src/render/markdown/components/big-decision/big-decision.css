@@ -1,12 +1,5 @@
-/* BigDecision full-screen layout, status, outcome, option-state, matrix,
-   verdict-tone, and info disclosure variants, colocated with the component. */
-
-article .component-dialog > [data-big-decision] {
-  min-height: 0;
-  flex: 1;
-  margin-bottom: 0;
-  overflow-y: auto;
-}
+/* BigDecision status, outcome, option-state, matrix, verdict-tone, and info
+   disclosure variants, colocated with the component. */
 
 @layer components {
   article .big-decision-status-open {
