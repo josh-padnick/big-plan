@@ -1,7 +1,7 @@
-// Implements `big-plan render <input.mdx> [output.html]`: the I/O boundary
-// around the pure renderer, owning argument validation, file reads/writes,
-// and the structured result runAxiCli() prints. Content decisions, including
-// the document title, belong to the renderer.
+// Implements `big-plan render <input.mdx> [output.html] [--renderer
+// vanilla|react]`: the I/O boundary around the pure renderer, owning argument
+// validation, file reads/writes, and the structured result runAxiCli() prints.
+// Content decisions, including the document title, belong to the renderer.
 
 import { mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";

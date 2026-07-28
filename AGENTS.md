@@ -61,7 +61,7 @@ Future deliverables build outward from this core with a local server and browser
 - **Language**: TypeScript, strict, compiled with tsc; browser-side scripts type-check against `tsconfig.browser.json` (DOM lib) and are transpiled into generated modules.
 - **CLI framework**: `axi-sdk-js` (dispatch, help, structured errors, TOON output).
 - **Markdown pipeline**: unified (remark-parse, remark-gfm, remark-mdx, remark-rehype, rehype-slug, rehype-highlight, rehype-stringify).
-- **React render target (in progress)**: react and react-dom render ported components to static HTML at build time via `renderToStaticMarkup`; `hast-util-to-jsx-runtime` bridges model-carried HAST prose into React. Nothing React ships in rendered output.
+- **React render target (in progress)**: react and react-dom render ported components to static HTML at render time via `renderToStaticMarkup`; `hast-util-to-jsx-runtime` bridges model-carried HAST prose into React. Nothing React ships in rendered output.
 - **Styling**: Tailwind v4, compiled at build time by `@tailwindcss/cli` into a generated module; no runtime CSS tooling.
 - **Linting**: ESLint v10 flat config with `typescript-eslint`; conventions and architectural guardrails live in `eslint.config.mjs`.
 - **Tests**: vitest for units (colocated in `src/**`), Playwright (chromium) for browser journeys.
