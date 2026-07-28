@@ -26,14 +26,22 @@ Big Plan runs locally, and the plan source on disk is authoritative.
 The product documentation owns current capabilities and usage.
 This guide owns the durable implementation model contributors must preserve.
 
-## Core concepts
+## Product concepts
 
-- **Plan source** is the static-subset MDX file an agent authors. It is the source of truth.
-- **Plan model** is the framework-neutral machine result: document metadata plus compiled component models in source order.
-- **Authorable component** is a registered MDX concept with an authoring contract, a compiled model, and a human view.
-- **Review document** is the self-contained human-readable HTML derived from the plan source.
+- **Agent plan** is the agent's proposed approach for achieving the user's intent before implementation begins.
+- **Plan source** is the authoritative plan document on disk. The agent edits this source in response to feedback.
+- **Review document** is Big Plan's human-friendly presentation of the plan source.
+- **Plan review** is the conversation in which the human works to understand the proposed approach, gives feedback, and resolves concerns with the agent.
+- **Plan acceptance** is the human's explicit decision that the intended approach is understood well enough for the agent to begin execution. It is not acceptance of the finished deliverable, which happens later.
+
+## Technical concepts
+
+- **Static-subset MDX** is the authoring format accepted by Big Plan: Markdown plus registered components, without executable imports, exports, or expressions.
+- **Component model** is the validated, framework-neutral meaning a component compiler derives from authored MDX.
+- **Plan model** is the machine-readable result: document metadata plus component models in source order.
+- **Authorable component** is a registered MDX concept with an authoring contract, a component model, and a human view.
 - **Review shell** is the reading and navigation surface around rendered plan content.
-- **Page envelope** packages that surface as a self-contained HTML document with its head and embedded assets.
+- **Page envelope** packages the shell and rendered content as a self-contained HTML document with its head and embedded assets.
 
 Keep these distinctions explicit.
 Authored MDX is not the plan model, serialized model JSON is not the review document, and the shell is not the page envelope.
