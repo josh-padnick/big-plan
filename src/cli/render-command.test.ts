@@ -66,7 +66,7 @@ describe("renderCommand validation", () => {
       renderCommand([inputPath, "plan.html", "extra"]),
     ).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
-      message: "Too many arguments",
+      message: 'Unexpected extra argument "extra"',
       suggestions: ["Usage: big-plan render <input.mdx> [output.html]"],
     });
   });

@@ -15,21 +15,6 @@ import { createOutputPathGuard } from "./output-path-guard.js";
 
 const USAGE = "Usage: big-plan render <input.mdx> [output.html]";
 
-// Validates the command's option-free, two-position argument contract.
-const validateArgs = (args: ReadonlyArray<string>): void => {
-  const unknownOption = args.find((arg) => arg.startsWith("-") && arg !== "-");
-  if (unknownOption !== undefined) {
-    throw new AxiError(
-      `Unknown option "${unknownOption}"`,
-      "VALIDATION_ERROR",
-      [USAGE],
-    );
-  }
-  if (args.length > 2) {
-    throw new AxiError("Too many arguments", "VALIDATION_ERROR", [USAGE]);
-  }
-};
-
 // Defaults the output to sit next to the input: <input>.html.
 const defaultOutputPath = (inputPath: string): string => {
   const extension = extname(inputPath);
@@ -43,7 +28,6 @@ const defaultOutputPath = (inputPath: string): string => {
 export const renderCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
-  validateArgs(args);
   const { inputArg, outputArg } = parsePositionalArguments({
     args,
     usage: USAGE,
