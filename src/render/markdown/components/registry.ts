@@ -2,12 +2,10 @@
 // centralized form validation, scoped child collection, depth-first global
 // dispatch, and removal of every MDX node.
 
-import { fromHtml } from "hast-util-from-html";
 import type { Element, Root, RootContent } from "hast";
 import type { Nodes as MarkdownNode, Root as MarkdownRoot } from "mdast";
 import type {
   ComponentAttributeValue,
-  ComponentDefinition,
   MarkdownBodyNodeKind,
   MarkdownBodyPolicy,
   ScopedChild,
@@ -17,6 +15,7 @@ import {
   createComponentIdAllocator,
   type ComponentIdAllocator,
 } from "../../../model/component-contract.js";
+import type { ComponentDefinition } from "./define-component.js";
 import { BIG_DECISION_COMPONENT_DEFINITION } from "./big-decision/big-decision.js";
 import { CALLOUT_COMPONENT_DEFINITION } from "./callout/callout.js";
 import { CODE_DIFF_COMPONENT_DEFINITION } from "./code-diff/code-diff.js";
@@ -28,8 +27,9 @@ import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "./graphql-operation/grap
 import { GRPC_METHOD_COMPONENT_DEFINITION } from "./grpc-method/grpc-method.js";
 import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "./http-endpoint/http-endpoint.js";
 import { SMALL_DECISION_SET_COMPONENT_DEFINITION } from "./small-decision-set/small-decision-set.js";
-import { createDiagnosticCollector } from "../../../model/diagnostics.js";
 import type { DiagnosticCollector } from "../../../model/diagnostics.js";
+import { reactToHast } from "./react-hast-adapter.js";
+import type { ReactHastAdapter } from "./react-hast-adapter.js";
 
 type MdxJsxFlowElement = Extract<
   RootContent,
@@ -61,15 +61,16 @@ export type CollectedComponentModel = {
   readonly model: unknown;
 };
 
-// The collector compiles with its own allocator (same reservations, same
-// call order, therefore identical ids) and a discarded diagnostics
-// collector, because the render path has already reported every authoring
-// error once.
-type ModelCollector = {
-  readonly collected: Array<CollectedComponentModel>;
-  readonly ids: ComponentIdAllocator;
-  readonly diagnostics: DiagnosticCollector;
-};
+type ComponentDelivery =
+  | {
+      readonly kind: "html";
+      readonly adapt: ReactHastAdapter;
+    }
+  | {
+      readonly kind: "model";
+      readonly collected: Array<CollectedComponentModel>;
+      readonly adapt: ReactHastAdapter;
+    };
 
 export const REGISTERED_COMPONENT_NAMES: ReadonlySet<string> = new Set(
   Object.keys(COMPONENT_REGISTRY),
@@ -320,49 +321,22 @@ const collectExistingIds = (
   return ids;
 };
 
-// Restores the property conventions the authored HAST uses after an HTML
-// round trip, so later transforms treat React-rendered fragments exactly
-// like vanilla ones. Two parser artifacts are involved: `hidden` on SVG
-// elements round-trips as the string "" (spec-identical to the boolean the
-// vanilla HAST carries, but serialized differently), and data-* attributes
-// come back as camelCase dataset keys where authored HAST and the transforms
-// that inspect it use the dashed form.
-export const normalizeReparsedProperties = (
-  nodes: ReadonlyArray<RootContent>,
-): void => {
-  for (const node of nodes) {
-    if (node.type !== "element") {
-      continue;
-    }
-    if (node.properties["hidden"] === "") {
-      node.properties["hidden"] = true;
-    }
-    const renamed: Element["properties"] = {};
-    for (const key of Object.keys(node.properties)) {
-      const dashed = /^data[A-Z]/.test(key)
-        ? key.replace(/[A-Z]/g, (upper) => `-${upper.toLowerCase()}`)
-        : key;
-      renamed[dashed] = node.properties[key];
-    }
-    node.properties = renamed;
-    normalizeReparsedProperties(node.children);
-  }
-};
-
 // Reports an unknown name, validates attributes, recursively prepares direct
-// scoped children, then dispatches a registered global component.
+// scoped children, compiles once, then chooses model or HTML delivery.
 const renderFlowElement = ({
   node,
   diagnostics,
   registry,
   ids,
-  models,
+  delivery,
+  materializeModel,
 }: {
   readonly node: MdxJsxFlowElement;
   readonly diagnostics: DiagnosticCollector;
   readonly registry: ComponentRegistry;
   readonly ids: ComponentIdAllocator;
-  readonly models?: ModelCollector;
+  readonly delivery: ComponentDelivery;
+  readonly materializeModel: boolean;
 }): Element | undefined => {
   const name = node.name;
   const definition = definitionFor({ name, registry });
@@ -379,35 +353,16 @@ const renderFlowElement = ({
     diagnostics,
     registry,
     ids,
-    ...(models === undefined ? {} : { models }),
+    delivery,
+    // A model carrying authored HAST must retain a nested component's
+    // presentation inside its parent body. Top-level model entries stop
+    // before adaptation.
+    materializeModels: delivery.kind === "model",
   });
   if (definition === undefined) {
     return undefined;
   }
-  if (
-    models !== undefined &&
-    definition.compile !== undefined &&
-    name !== null
-  ) {
-    models.collected.push({
-      component: name,
-      ...(node.position === undefined
-        ? {}
-        : {
-            line: node.position.start.line,
-            column: node.position.start.column,
-          }),
-      model: definition.compile({
-        attributes,
-        children: node.children,
-        scopedChildren,
-        position: node.position,
-        diagnostics: models.diagnostics,
-        ids: models.ids,
-      }),
-    });
-  }
-  const rendered = definition.renderStatic({
+  const compiled = definition.compile({
     attributes,
     children: node.children,
     scopedChildren,
@@ -415,15 +370,26 @@ const renderFlowElement = ({
     diagnostics,
     ids,
   });
-  // Reparsing routes the React output through the same final serializer as
-  // everything else, so escaping and formatting can never diverge by path.
-  const fragment = fromHtml(rendered, { fragment: true });
-  normalizeReparsedProperties(fragment.children);
-  const first = fragment.children.find(
-    (child): child is Element => child.type === "element",
-  );
-  if (first !== undefined) {
-    return first;
+  if (delivery.kind === "model") {
+    if (name !== null) {
+      delivery.collected.push({
+        component: name,
+        ...(node.position === undefined
+          ? {}
+          : {
+              line: node.position.start.line,
+              column: node.position.start.column,
+            }),
+        model: compiled.model,
+      });
+    }
+    return materializeModel
+      ? delivery.adapt(compiled.presentation())
+      : undefined;
+  }
+  const rendered = delivery.adapt(compiled.presentation());
+  if (rendered !== undefined) {
+    return rendered;
   }
   diagnostics.add({
     message: `Internal error: static renderer for "${name ?? "<fragment>"}" produced no element`,
@@ -439,14 +405,16 @@ const renderChildren = ({
   diagnostics,
   registry,
   ids,
-  models,
+  delivery,
+  materializeModels,
 }: {
   readonly parent: ParentNode;
   readonly scopedDefinitions?: ScopedParentDefinition["scopedChildren"];
   readonly diagnostics: DiagnosticCollector;
   readonly registry: ComponentRegistry;
   readonly ids: ComponentIdAllocator;
-  readonly models?: ModelCollector;
+  readonly delivery: ComponentDelivery;
+  readonly materializeModels: boolean;
 }): ReadonlyArray<ScopedChild> => {
   const scopedChildren: Array<ScopedChild> = [];
   let index = 0;
@@ -472,7 +440,8 @@ const renderChildren = ({
         diagnostics,
         registry,
         ids,
-        ...(models === undefined ? {} : { models }),
+        delivery,
+        materializeModels,
       });
       scopedChildren.push({
         name: childName,
@@ -492,7 +461,8 @@ const renderChildren = ({
         diagnostics,
         registry,
         ids,
-        ...(models === undefined ? {} : { models }),
+        delivery,
+        materializeModels,
       });
     }
     if (child.type === "mdxJsxFlowElement") {
@@ -501,7 +471,8 @@ const renderChildren = ({
         diagnostics,
         registry,
         ids,
-        ...(models === undefined ? {} : { models }),
+        delivery,
+        materializeModel: materializeModels,
       });
       parent.children.splice(
         index,
@@ -552,10 +523,12 @@ export const rehypeRenderComponents =
     diagnostics,
     registry = COMPONENT_REGISTRY,
     models,
+    adapt = reactToHast,
   }: {
     readonly diagnostics: DiagnosticCollector;
     readonly registry?: ComponentRegistry;
     readonly models?: Array<CollectedComponentModel>;
+    readonly adapt?: ReactHastAdapter;
   }) =>
   (tree: Root): void => {
     const reservedIds = collectExistingIds(tree);
@@ -564,15 +537,11 @@ export const rehypeRenderComponents =
       diagnostics,
       registry,
       ids: createComponentIdAllocator({ reservedIds }),
-      ...(models === undefined
-        ? {}
-        : {
-            models: {
-              collected: models,
-              ids: createComponentIdAllocator({ reservedIds }),
-              diagnostics: createDiagnosticCollector(),
-            },
-          }),
+      materializeModels: false,
+      delivery:
+        models === undefined
+          ? { kind: "html", adapt }
+          : { kind: "model", collected: models, adapt },
     });
     reportSurvivors({ parent: tree, diagnostics });
   };

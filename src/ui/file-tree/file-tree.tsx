@@ -1,14 +1,13 @@
 // Renders FileTree's outer figure, optional title header, and semantic
 // hierarchy through the shared tree component.
 
-import { renderToStaticMarkup } from "react-dom/server";
 import type { CompiledFileTree } from "../../model/compile-file-tree.js";
 import {
   TreeFoldControls,
   TreeHierarchy,
 } from "../shared/tree-hierarchy/tree-hierarchy.js";
 
-const FileTreeView = ({ model }: { readonly model: CompiledFileTree }) => (
+export const FileTree = ({ model }: { readonly model: CompiledFileTree }) => (
   <figure
     className="file-tree mb-5 min-w-0 overflow-hidden rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]"
     data-file-tree=""
@@ -31,7 +30,3 @@ const FileTreeView = ({ model }: { readonly model: CompiledFileTree }) => (
     </div>
   </figure>
 );
-
-/** Renders one compiled FileTree to static HTML. */
-export const renderFileTreeStatic = (model: CompiledFileTree): string =>
-  renderToStaticMarkup(<FileTreeView model={model} />);

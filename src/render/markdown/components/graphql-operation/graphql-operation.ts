@@ -1,12 +1,10 @@
 // Declares GraphqlOperation's component integration contract and its scoped
 // child grammar; rendering lives in the React component library.
 
-import {
-  type ComponentDefinition,
-  type ScopedChildDefinition,
-} from "../../../../model/component-contract.js";
+import { type ScopedChildDefinition } from "../../../../model/component-contract.js";
 import { compileGraphqlOperationComponent } from "../../../../model/compile-graphql-operation.js";
-import { renderGraphqlOperationStatic } from "../../../../ui/graphql-operation/graphql-operation.js";
+import { GraphqlOperation } from "../../../../ui/graphql-operation/graphql-operation.js";
+import { defineComponent } from "../define-component.js";
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (
@@ -25,10 +23,9 @@ const scopedChild = (
 });
 
 /** Declares GraphqlOperation's renderer and direct-child contract blocks. */
-export const GRAPHQL_OPERATION_COMPONENT_DEFINITION = {
+export const GRAPHQL_OPERATION_COMPONENT_DEFINITION = defineComponent({
   compile: compileGraphqlOperationComponent,
-  renderStatic: (input) =>
-    renderGraphqlOperationStatic(compileGraphqlOperationComponent(input)),
+  view: GraphqlOperation,
   scopedChildren: {
     Argument: scopedChild("Argument"),
     Field: scopedChild("Field"),
@@ -37,4 +34,4 @@ export const GRAPHQL_OPERATION_COMPONENT_DEFINITION = {
     Variables: scopedChild("Variables"),
     Response: scopedChild("Response"),
   },
-} satisfies ComponentDefinition;
+});

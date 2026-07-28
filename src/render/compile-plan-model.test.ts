@@ -95,6 +95,19 @@ describe("compilePlanModel", () => {
     expect(plan.components).toHaveLength(1);
   });
 
+  it("should retain authored headings nested inside a component body", () => {
+    const plan = compilePlanModel({
+      markdown:
+        '<Callout type="note">\n\n# Nested title\n\n## Nested section\n\nBody.\n\n</Callout>\n',
+      fallbackTitle: "fallback",
+    });
+
+    expect(plan.title).toBe("Nested title");
+    expect(plan.sections).toEqual([
+      { id: "nested-section", text: "Nested section" },
+    ]);
+  });
+
   it("should list a parent before its nested component in document order", () => {
     const plan = compilePlanModel({
       markdown:

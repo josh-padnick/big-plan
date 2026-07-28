@@ -1,5 +1,5 @@
-// Owns the authored component contract shared by feature renderers and the
-// registry: renderer inputs, scoped-child policies, and attribute validation.
+// Owns the framework-free authored component contract: compiler inputs,
+// scoped-child policies, id allocation, and attribute validation.
 
 import type { Element, ElementContent, Root } from "hast";
 import type { DiagnosticCollector } from "./diagnostics.js";
@@ -88,14 +88,24 @@ export const createComponentIdAllocator = ({
   };
 };
 
-export type ComponentRenderer = (input: {
+export type ComponentCompilerInput = {
   readonly attributes: Readonly<Record<string, ComponentAttributeValue>>;
   readonly children: ReadonlyArray<ElementContent>;
   readonly scopedChildren: ReadonlyArray<ScopedChild>;
   readonly position: NodePosition;
   readonly diagnostics: DiagnosticCollector;
   readonly ids?: ComponentIdAllocator;
-}) => Element;
+};
+
+/** Compiles one authored component into a framework-free plan model. */
+export type ComponentModelCompiler<Model = unknown> = (
+  input: ComponentCompilerInput,
+) => Model;
+
+// Transitional alias retained for compilers migrated with authored-body.
+export type ComponentRenderer = (
+  input: ComponentCompilerInput,
+) => Element;
 
 export type MarkdownBodyNodeKind =
   | "heading"
@@ -110,24 +120,6 @@ export type MarkdownBodyPolicy = {
 export type ScopedChildDefinition = {
   readonly kind: "scoped-child";
   readonly markdownBody?: MarkdownBodyPolicy;
-  readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
-};
-
-/** Compiles one authored component into its plan model without rendering. */
-export type ComponentModelCompiler = (
-  input: Parameters<ComponentRenderer>[0],
-) => unknown;
-
-/** Renders one component instance to a static HTML string. */
-export type ComponentStaticRenderer = (
-  input: Parameters<ComponentRenderer>[0],
-) => string;
-
-export type ComponentDefinition = {
-  // Optional so isolated registries can remain render-only; rendering never
-  // requires model exposure.
-  readonly compile?: ComponentModelCompiler;
-  readonly renderStatic: ComponentStaticRenderer;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
 };
 

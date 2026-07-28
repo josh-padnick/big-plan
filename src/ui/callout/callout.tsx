@@ -1,6 +1,5 @@
 // Renders a compiled Callout as a semantic, type-tinted panel.
 
-import { renderToStaticMarkup } from "react-dom/server";
 import type {
   CalloutType,
   CompiledCallout,
@@ -25,7 +24,7 @@ const CALLOUT_CONFIGS = {
   danger: { defaultTitle: "Danger", icon: OCTAGON_ALERT_ICON },
 } satisfies Readonly<Record<CalloutType, CalloutConfig>>;
 
-const CalloutView = ({ model }: { readonly model: CompiledCallout }) => {
+export const Callout = ({ model }: { readonly model: CompiledCallout }) => {
   const config = CALLOUT_CONFIGS[model.type];
   return (
     // Border colors come from the stylesheet's [data-callout] rules; a
@@ -46,7 +45,3 @@ const CalloutView = ({ model }: { readonly model: CompiledCallout }) => {
     </aside>
   );
 };
-
-/** Renders one compiled Callout to static HTML. */
-export const renderCalloutStatic = (model: CompiledCallout): string =>
-  renderToStaticMarkup(<CalloutView model={model} />);

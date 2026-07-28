@@ -1,12 +1,10 @@
 // Declares BigDecision's component integration contract and its recursively
 // scoped authoring grammar; rendering lives in the React component library.
 
-import {
-  type ComponentDefinition,
-  type ScopedChildDefinition,
-} from "../../../../model/component-contract.js";
+import { type ScopedChildDefinition } from "../../../../model/component-contract.js";
 import { compileBigDecisionComponent } from "../../../../model/compile-big-decision.js";
-import { renderBigDecisionStatic } from "../../../../ui/big-decision/big-decision.js";
+import { BigDecision } from "../../../../ui/big-decision/big-decision.js";
+import { defineComponent } from "../define-component.js";
 
 const bodyPolicy = (
   name: "Criterion" | "Details" | "Option" | "Reversibility" | "Score",
@@ -41,10 +39,9 @@ const reversibilityDefinition = (): ScopedChildDefinition => ({
 });
 
 /** Declares BigDecision's renderer and recursively scoped authoring grammar. */
-export const BIG_DECISION_COMPONENT_DEFINITION = {
+export const BIG_DECISION_COMPONENT_DEFINITION = defineComponent({
   compile: compileBigDecisionComponent,
-  renderStatic: (input) =>
-    renderBigDecisionStatic(compileBigDecisionComponent(input)),
+  view: BigDecision,
   scopedChildren: {
     Criterion: criterionDefinition(),
     Details: {
@@ -54,4 +51,4 @@ export const BIG_DECISION_COMPONENT_DEFINITION = {
     Option: optionDefinition(),
     Reversibility: reversibilityDefinition(),
   },
-} satisfies ComponentDefinition;
+});

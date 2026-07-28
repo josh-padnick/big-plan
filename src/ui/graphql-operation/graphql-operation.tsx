@@ -1,7 +1,6 @@
 // Renders an always-expanded GraphqlOperation review card with arguments,
 // return fields, and grouped executable examples.
 
-import { renderToStaticMarkup } from "react-dom/server";
 import type {
   CompiledGraphqlArgument,
   CompiledGraphqlExample,
@@ -89,7 +88,7 @@ const FieldExpansion = ({
 
 // Builds the complete card while omitting every empty optional region; a
 // header-only operation is a legitimate compact way to enumerate a schema.
-const GraphqlOperationView = ({
+export const GraphqlOperation = ({
   model,
 }: {
   readonly model: CompiledGraphqlOperation;
@@ -233,8 +232,3 @@ const ExampleSection = ({
     ))}
   </CardSection>
 );
-
-/** Renders one compiled GraphqlOperation to static HTML. */
-export const renderGraphqlOperationStatic = (
-  model: CompiledGraphqlOperation,
-): string => renderToStaticMarkup(<GraphqlOperationView model={model} />);

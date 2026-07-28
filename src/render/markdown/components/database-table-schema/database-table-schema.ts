@@ -1,15 +1,14 @@
 // Declares DatabaseTableSchema's component integration contract and its
 // scoped Ddl policy; rendering lives in the React component library.
 
-import { type ComponentDefinition } from "../../../../model/component-contract.js";
 import { compileDatabaseTableSchema } from "../../../../model/compile-database-table-schema.js";
-import { renderDatabaseTableSchemaStatic } from "../../../../ui/database-table-schema/database-table-schema.js";
+import { DatabaseTableSchema } from "../../../../ui/database-table-schema/database-table-schema.js";
+import { defineComponent } from "../define-component.js";
 
 /** Declares DatabaseTableSchema's complete component integration contract. */
-export const DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION = {
+export const DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION = defineComponent({
   compile: compileDatabaseTableSchema,
-  renderStatic: (input) =>
-    renderDatabaseTableSchemaStatic(compileDatabaseTableSchema(input)),
+  view: DatabaseTableSchema,
   scopedChildren: {
     Ddl: {
       kind: "scoped-child",
@@ -23,4 +22,4 @@ export const DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION = {
       },
     },
   },
-} satisfies ComponentDefinition;
+});

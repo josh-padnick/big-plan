@@ -1,7 +1,8 @@
 // Tests recursive scoped dispatch, direct-parent name boundaries, and scoped
 // Markdown body policies without coupling the capability to a product component.
 
-import type { Root } from "hast";
+import type { ElementContent, Root } from "hast";
+import { createElement } from "react";
 import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
@@ -12,46 +13,53 @@ import {
   MarkdownDiagnosticsError,
   serializeMarkdown,
 } from "../convert.js";
-import type {
-  ComponentDefinition,
-  ComponentRenderer,
-  ComponentStaticRenderer,
-} from "../../../model/component-contract.js";
+import type { ComponentCompilerInput } from "../../../model/component-contract.js";
 import { createDiagnosticCollector } from "../../../model/diagnostics.js";
 import type { ComponentDiagnostic } from "../../../model/diagnostics.js";
+import { hastContentToReact } from "../../../ui/hast-content.js";
+import { defineComponent } from "./define-component.js";
 import {
   rehypeRenderComponents,
   remarkValidateComponents,
 } from "./registry.js";
-import type { ComponentRegistry } from "./registry.js";
+import type { CollectedComponentModel, ComponentRegistry } from "./registry.js";
+import type { ReactHastAdapter } from "./react-hast-adapter.js";
 
-const renderNestedFixture: ComponentRenderer = ({ scopedChildren }) => {
+type NestedFixtureModel = {
+  readonly branchId: string | boolean | undefined;
+  readonly leafLabel: string | boolean | undefined;
+  readonly children: ReadonlyArray<ElementContent>;
+};
+
+const compileNestedFixture = ({
+  scopedChildren,
+}: ComponentCompilerInput): NestedFixtureModel => {
   const branch = scopedChildren[0];
   const leaf = branch?.scopedChildren?.[0];
   return {
-    type: "element",
-    tagName: "section",
-    properties: {
-      ...(branch?.attributes["id"] === undefined
-        ? {}
-        : { "data-branch-id": branch.attributes["id"] }),
-      ...(leaf?.attributes["label"] === undefined
-        ? {}
-        : { "data-leaf-label": leaf.attributes["label"] }),
-    },
-    children: leaf === undefined ? [] : [...leaf.children],
+    branchId: branch?.attributes["id"],
+    leafLabel: leaf?.attributes["label"],
+    children: leaf?.children ?? [],
   };
 };
 
-// Serializing the fixture's HAST through the shared serializer keeps these
-// dispatch tests focused on scoping, not markup production.
-const renderNestedFixtureStatic: ComponentStaticRenderer = (input) =>
-  serializeMarkdown({
-    root: { type: "root", children: [renderNestedFixture(input)] },
-  });
+const NestedFixture = ({ model }: { readonly model: NestedFixtureModel }) =>
+  createElement(
+    "section",
+    {
+      ...(model.branchId === undefined
+        ? {}
+        : { "data-branch-id": model.branchId }),
+      ...(model.leafLabel === undefined
+        ? {}
+        : { "data-leaf-label": model.leafLabel }),
+    },
+    hastContentToReact(model.children),
+  );
 
-const NESTED_COMPONENT_DEFINITION = {
-  renderStatic: renderNestedFixtureStatic,
+const NESTED_COMPONENT_DEFINITION = defineComponent({
+  compile: compileNestedFixture,
+  view: NestedFixture,
   scopedChildren: {
     Branch: {
       kind: "scoped-child",
@@ -73,7 +81,7 @@ const NESTED_COMPONENT_DEFINITION = {
       },
     },
   },
-} satisfies ComponentDefinition;
+});
 
 const NESTED_REGISTRY = {
   NestedFixture: NESTED_COMPONENT_DEFINITION,
@@ -84,9 +92,13 @@ const NESTED_REGISTRY = {
 const compileWithRegistry = ({
   markdown,
   registry,
+  models,
+  adapt,
 }: {
   readonly markdown: string;
   readonly registry: ComponentRegistry;
+  readonly models?: Array<CollectedComponentModel>;
+  readonly adapt?: ReactHastAdapter;
 }): {
   readonly root: Root;
   readonly diagnostics: ReadonlyArray<ComponentDiagnostic>;
@@ -108,6 +120,8 @@ const compileWithRegistry = ({
     .use(rehypeRenderComponents, {
       diagnostics,
       registry,
+      ...(models === undefined ? {} : { models }),
+      ...(adapt === undefined ? {} : { adapt }),
     });
   const root: Root = processor.runSync(processor.parse(markdown));
   return { root, diagnostics: diagnostics.diagnostics };
@@ -153,11 +167,13 @@ describe("scoped child dispatch", () => {
   });
 
   it("should dispatch nested ported components through React", () => {
-    const renderInnerStatic = vi.fn(() => "<span>React inner</span>");
-    const renderOuterStatic = vi.fn(() => "<section>React outer</section>");
+    const compileInner = vi.fn(() => undefined);
+    const compileOuter = vi.fn(() => undefined);
+    const Inner = () => createElement("span", null, "React inner");
+    const Outer = () => createElement("section", null, "React outer");
     const registry = {
-      Inner: { renderStatic: renderInnerStatic },
-      Outer: { renderStatic: renderOuterStatic },
+      Inner: defineComponent({ compile: compileInner, view: Inner }),
+      Outer: defineComponent({ compile: compileOuter, view: Outer }),
     } satisfies ComponentRegistry;
 
     const { root, diagnostics } = compileWithRegistry({
@@ -166,9 +182,41 @@ describe("scoped child dispatch", () => {
     });
 
     expect(diagnostics).toEqual([]);
-    expect(renderInnerStatic).toHaveBeenCalledOnce();
-    expect(renderOuterStatic).toHaveBeenCalledOnce();
+    expect(compileInner).toHaveBeenCalledOnce();
+    expect(compileOuter).toHaveBeenCalledOnce();
     expect(serializeMarkdown({ root })).toBe("<section>React outer</section>");
+  });
+
+  it("should compile once without adapting React for model delivery", () => {
+    const compile = vi.fn(() => ({ value: "compiled" }));
+    const View = () => createElement("section", null, "React view");
+    const registry = {
+      Fixture: defineComponent({ compile, view: View }),
+    } satisfies ComponentRegistry;
+    const models: Array<CollectedComponentModel> = [];
+    const adapt = vi.fn(() => {
+      throw new Error("model delivery crossed the React adapter");
+    });
+
+    const { root, diagnostics } = compileWithRegistry({
+      markdown: "<Fixture />\n",
+      registry,
+      models,
+      adapt,
+    });
+
+    expect(diagnostics).toEqual([]);
+    expect(compile).toHaveBeenCalledOnce();
+    expect(adapt).not.toHaveBeenCalled();
+    expect(models).toEqual([
+      {
+        component: "Fixture",
+        line: 1,
+        column: 1,
+        model: { value: "compiled" },
+      },
+    ]);
+    expect(serializeMarkdown({ root })).toBe("");
   });
 
   it("should leave an undeclared name unknown within a nested scope", () => {

@@ -2,7 +2,6 @@
 // location-grouped parameters, request examples, and status-coded responses.
 
 import type { ReactNode } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import type {
   CompiledHttpEndpoint,
   CompiledHttpParam,
@@ -198,7 +197,7 @@ const ResponseEntry = ({
 
 // Builds the complete card while omitting every empty optional region, making
 // a header-only endpoint a deliberate and useful compact rendering.
-const HttpEndpointView = ({
+export const HttpEndpoint = ({
   model,
 }: {
   readonly model: CompiledHttpEndpoint;
@@ -271,7 +270,3 @@ const HttpEndpointView = ({
     )}
   </figure>
 );
-
-/** Renders one compiled HttpEndpoint to static HTML. */
-export const renderHttpEndpointStatic = (model: CompiledHttpEndpoint): string =>
-  renderToStaticMarkup(<HttpEndpointView model={model} />);

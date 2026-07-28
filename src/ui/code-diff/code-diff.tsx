@@ -1,12 +1,11 @@
 // Renders a compiled CodeDiff as a static figure with both review views and
 // the hidden source consumed by the live review application.
 
-import { renderToStaticMarkup } from "react-dom/server";
 import type { CompiledCodeDiff } from "../../model/compile-code-diff.js";
 import { CodeDiffHeader } from "./code-diff-header.js";
 import { CodeDiffViews } from "./code-diff-views.js";
 
-const CodeDiffView = ({ model }: { readonly model: CompiledCodeDiff }) => (
+export const CodeDiff = ({ model }: { readonly model: CompiledCodeDiff }) => (
   <figure
     className="code-diff mb-5 min-w-0 rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]"
     data-code-diff=""
@@ -28,7 +27,3 @@ const CodeDiffView = ({ model }: { readonly model: CompiledCodeDiff }) => (
     <textarea hidden readOnly data-diff-source="" defaultValue={model.source} />
   </figure>
 );
-
-/** Renders one compiled CodeDiff to static HTML. */
-export const renderCodeDiffStatic = (model: CompiledCodeDiff): string =>
-  renderToStaticMarkup(<CodeDiffView model={model} />);

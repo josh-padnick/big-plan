@@ -1,7 +1,6 @@
 // Renders DatabaseTableSchema's outer figure, columns grid, labeled sections,
 // and hidden source consumed by the live review application.
 
-import { renderToStaticMarkup } from "react-dom/server";
 import type { CompiledDatabaseTableSchema } from "../../model/compile-database-table-schema.js";
 import { TableSchemaHeader } from "./database-table-schema-header.js";
 import {
@@ -9,7 +8,7 @@ import {
   TableSchemaSections,
 } from "./database-table-schema-views.js";
 
-const TableSchemaView = ({
+export const DatabaseTableSchema = ({
   model,
 }: {
   readonly model: CompiledDatabaseTableSchema;
@@ -41,8 +40,3 @@ const TableSchemaView = ({
     />
   </figure>
 );
-
-/** Renders one compiled DatabaseTableSchema to static HTML. */
-export const renderDatabaseTableSchemaStatic = (
-  model: CompiledDatabaseTableSchema,
-): string => renderToStaticMarkup(<TableSchemaView model={model} />);

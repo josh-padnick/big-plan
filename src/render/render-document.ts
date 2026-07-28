@@ -2,7 +2,11 @@
 // either a validated plan model or a complete HTML review document.
 
 import type { Section } from "./markdown/convert.js";
-import { compileMarkdown, serializeMarkdown } from "./markdown/convert.js";
+import {
+  compileMarkdown,
+  compileMarkdownModel,
+  serializeMarkdown,
+} from "./markdown/convert.js";
 export { MarkdownDiagnosticsError } from "./markdown/convert.js";
 import type { CollectedComponentModel } from "./markdown/convert.js";
 import { renderPage } from "./page.js";
@@ -62,8 +66,7 @@ export const compilePlanModel = ({
   readonly markdown: string;
   readonly fallbackTitle: string;
 }): PlanModel => {
-  const components: Array<CollectedComponentModel> = [];
-  const { sections, title } = compileMarkdown({ markdown, models: components });
+  const { sections, title, components } = compileMarkdownModel({ markdown });
   return {
     title: title ?? fallbackTitle,
     sections,

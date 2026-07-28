@@ -2,11 +2,17 @@
 // titles, the Lucide data hook, and prose body conversion.
 
 import { describe, expect, it } from "vitest";
-import { renderCalloutStatic } from "./callout.js";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import type { CompiledCallout } from "../../model/compile-callout.js";
+import { Callout } from "./callout.js";
 
-describe("renderCalloutStatic", () => {
+const renderCallout = (model: CompiledCallout): string =>
+  renderToStaticMarkup(createElement(Callout, { model }));
+
+describe("Callout", () => {
   it("should render the panel with the default title when none is authored", () => {
-    const html = renderCalloutStatic({
+    const html = renderCallout({
       type: "warning",
       body: [
         {
@@ -24,7 +30,7 @@ describe("renderCalloutStatic", () => {
   });
 
   it("should prefer the authored title when one is given", () => {
-    const html = renderCalloutStatic({
+    const html = renderCallout({
       type: "tip",
       title: "Try it",
       body: [],

@@ -1,7 +1,6 @@
 // Renders FileTreeDiff's combined change tree plus the derived before/after
 // hierarchy panes reserved for the live review application.
 
-import { renderToStaticMarkup } from "react-dom/server";
 import type { CompiledFileTreeDiff } from "../../model/compile-file-tree.js";
 import {
   countTreeChanges,
@@ -277,7 +276,7 @@ const BeforeAfterView = ({
   </div>
 );
 
-const FileTreeDiffView = ({
+export const FileTreeDiff = ({
   model,
 }: {
   readonly model: CompiledFileTreeDiff;
@@ -293,7 +292,3 @@ const FileTreeDiffView = ({
     <BeforeAfterView entries={model.entries} showDiff={!model.hideDiff} />
   </figure>
 );
-
-/** Renders one compiled FileTreeDiff to static HTML. */
-export const renderFileTreeDiffStatic = (model: CompiledFileTreeDiff): string =>
-  renderToStaticMarkup(<FileTreeDiffView model={model} />);

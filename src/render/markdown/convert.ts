@@ -35,6 +35,12 @@ export type CompiledMarkdown = {
   readonly title: string | undefined;
 };
 
+export type CompiledMarkdownModel = {
+  readonly sections: ReadonlyArray<Section>;
+  readonly title: string | undefined;
+  readonly components: ReadonlyArray<CollectedComponentModel>;
+};
+
 /** Carries every positional authoring diagnostic across renderer boundaries. */
 export class MarkdownDiagnosticsError extends Error {
   readonly diagnostics: ReadonlyArray<ComponentDiagnostic>;
@@ -52,12 +58,19 @@ const FOOTNOTE_LABEL_ID = "footnote-label";
 
 // Flattens a heading to plain text so TOC entries keep their visible words
 // but drop inline markup such as code spans or emphasis.
-const textOf = (node: Element): string => {
+type MdxJsxFlowElement = Extract<
+  RootContent,
+  { readonly type: "mdxJsxFlowElement" }
+>;
+
+type StructuredParent = Root | Element | MdxJsxFlowElement;
+
+const textOf = (node: StructuredParent): string => {
   let text = "";
   for (const child of node.children) {
     if (child.type === "text") {
       text += child.value;
-    } else if (child.type === "element") {
+    } else if (child.type === "element" || child.type === "mdxJsxFlowElement") {
       text += textOf(child);
     }
   }
@@ -114,17 +127,16 @@ const rehypeWrapTables = () => (tree: Root) => {
 // Finds the document title: the text of the first h1 in the rendered tree.
 // Walking the parsed tree (rather than regexing the source) means a "# line"
 // inside a fenced code block can never masquerade as the title.
-const findTitle = (node: Root | Element): string | undefined => {
+const findTitle = (node: StructuredParent): string | undefined => {
   for (const child of node.children) {
-    if (!isElement(child)) {
-      continue;
-    }
-    if (child.tagName === "h1") {
+    if (child.type === "element" && child.tagName === "h1") {
       return textOf(child);
     }
-    const nested = findTitle(child);
-    if (nested !== undefined) {
-      return nested;
+    if (child.type === "element" || child.type === "mdxJsxFlowElement") {
+      const nested = findTitle(child);
+      if (nested !== undefined) {
+        return nested;
+      }
     }
   }
   return undefined;
@@ -133,24 +145,39 @@ const findTitle = (node: Root | Element): string | undefined => {
 // Gathers every slugged h2 in document order, at any nesting depth, so
 // sections inside containers such as blockquotes still reach the TOC.
 const collectSections = (
-  node: Root | Element,
+  node: StructuredParent,
   sections: Array<Section>,
 ): void => {
   for (const child of node.children) {
-    if (!isElement(child)) {
-      continue;
+    if (child.type === "element") {
+      const id = child.properties.id;
+      if (
+        child.tagName === "h2" &&
+        typeof id === "string" &&
+        id !== FOOTNOTE_LABEL_ID
+      ) {
+        sections.push({ id, text: textOf(child) });
+      }
     }
-    const id = child.properties.id;
-    if (
-      child.tagName === "h2" &&
-      typeof id === "string" &&
-      id !== FOOTNOTE_LABEL_ID
-    ) {
-      sections.push({ id, text: textOf(child) });
+    if (child.type === "element" || child.type === "mdxJsxFlowElement") {
+      collectSections(child, sections);
     }
-    collectSections(child, sections);
   }
 };
+
+type MarkdownMetadata = {
+  title: string | undefined;
+  readonly sections: Array<Section>;
+};
+
+// Captures authored headings after slugging but before model delivery removes
+// component bodies or HTML delivery replaces them with React-produced HAST.
+const rehypeCollectMetadata =
+  ({ metadata }: { readonly metadata: MarkdownMetadata }) =>
+  (tree: Root): void => {
+    metadata.title = findTitle(tree);
+    collectSections(tree, metadata.sections);
+  };
 
 // Gathers ids from rendered elements for page-shell namespace allocation.
 const collectElementIds = (
@@ -175,7 +202,7 @@ const collectElementIds = (
  * structured so component and Annotation transforms can run before final
  * serialization.
  */
-export const compileMarkdown = ({
+const compileMarkdownTree = ({
   markdown,
   models,
 }: {
@@ -183,6 +210,7 @@ export const compileMarkdown = ({
   readonly models?: Array<CollectedComponentModel>;
 }): CompiledMarkdown => {
   const diagnostics = createDiagnosticCollector();
+  const metadata: MarkdownMetadata = { title: undefined, sections: [] };
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -201,6 +229,7 @@ export const compileMarkdown = ({
       ],
     })
     .use(rehypeSlug)
+    .use(rehypeCollectMetadata, { metadata })
     .use(rehypeRenderComponents, {
       diagnostics,
       ...(models === undefined ? {} : { models }),
@@ -224,12 +253,36 @@ export const compileMarkdown = ({
     throw new MarkdownDiagnosticsError(diagnostics.diagnostics);
   }
 
-  const sections: Array<Section> = [];
-  collectSections(tree, sections);
   const elementIds: Array<string> = [];
   collectElementIds(tree, elementIds);
 
-  return { root: tree, sections, elementIds, title: findTitle(tree) };
+  return {
+    root: tree,
+    sections: metadata.sections,
+    elementIds,
+    title: metadata.title,
+  };
+};
+
+/** Compiles Markdown through the HTML continuation. */
+export const compileMarkdown = ({
+  markdown,
+}: {
+  readonly markdown: string;
+}): CompiledMarkdown => compileMarkdownTree({ markdown });
+
+/** Compiles Markdown through the model continuation without top-level HTML. */
+export const compileMarkdownModel = ({
+  markdown,
+}: {
+  readonly markdown: string;
+}): CompiledMarkdownModel => {
+  const components: Array<CollectedComponentModel> = [];
+  const { sections, title } = compileMarkdownTree({
+    markdown,
+    models: components,
+  });
+  return { sections, title, components };
 };
 
 /** Serializes a compiled review document only after all transforms finish. */

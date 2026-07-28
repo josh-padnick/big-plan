@@ -7,9 +7,8 @@ import type {
   ComponentAttributeValue,
   ScopedChild,
 } from "../../../../model/component-contract.js";
-import { fromHtml } from "hast-util-from-html";
 import { CODE_DIFF_COMPONENT_DEFINITION } from "./code-diff.js";
-import { normalizeReparsedProperties } from "../registry.js";
+import { reactToHast } from "../react-hast-adapter.js";
 
 const POSITION = {
   start: { line: 3, column: 1, offset: 10 },
@@ -164,20 +163,14 @@ export const renderCodeDiffFixture = ({
   readonly scopedChildren?: ReadonlyArray<ScopedChild>;
 } = {}) => {
   const diagnostics = createDiagnosticCollector();
-  // The static renderer returns a string; reparsing mirrors the registry's own
-  // splice so traversal assertions keep exercising the shipped markup.
-  const html = CODE_DIFF_COMPONENT_DEFINITION.renderStatic({
+  const compiled = CODE_DIFF_COMPONENT_DEFINITION.compile({
     attributes,
     children,
     scopedChildren,
     position: POSITION,
     diagnostics,
   });
-  const fragment = fromHtml(html, { fragment: true });
-  normalizeReparsedProperties(fragment.children);
-  const parsed = fragment.children.find(
-    (child): child is Element => child.type === "element",
-  );
+  const parsed = reactToHast(compiled.presentation());
   if (parsed === undefined) {
     throw new Error("CodeDiff rendered no element");
   }

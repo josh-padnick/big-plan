@@ -1,7 +1,6 @@
 // Renders CodeSnippet's file identity, numbered highlighted rows, anchored
 // annotation cards, and hidden live-review source and controls.
 
-import { renderToStaticMarkup } from "react-dom/server";
 import type {
   CompiledCodeSnippet,
   CompiledCodeSnippetAnnotation,
@@ -182,7 +181,7 @@ const SnippetRows = ({
   );
 };
 
-const CodeSnippetView = ({
+export const CodeSnippet = ({
   model,
 }: {
   readonly model: CompiledCodeSnippet;
@@ -214,7 +213,3 @@ const CodeSnippetView = ({
     />
   </figure>
 );
-
-/** Renders one compiled CodeSnippet to static HTML. */
-export const renderCodeSnippetStatic = (model: CompiledCodeSnippet): string =>
-  renderToStaticMarkup(<CodeSnippetView model={model} />);

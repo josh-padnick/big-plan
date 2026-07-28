@@ -2,7 +2,6 @@
 // signature, message-typed fields, status codes, examples, and proto source.
 
 import type { ElementContent } from "hast";
-import { renderToStaticMarkup } from "react-dom/server";
 import type {
   CompiledGrpcError,
   CompiledGrpcField,
@@ -141,7 +140,11 @@ const ProtoSection = ({
 
 // Builds the complete card while omitting every empty optional region; a
 // header-only method is a legitimate compact way to enumerate a service.
-const GrpcMethodView = ({ model }: { readonly model: CompiledGrpcMethod }) => (
+export const GrpcMethod = ({
+  model,
+}: {
+  readonly model: CompiledGrpcMethod;
+}) => (
   <figure
     className="grpc-method mb-5 min-w-0 overflow-hidden rounded-md border border-edge"
     data-grpc-method=""
@@ -213,7 +216,3 @@ const GrpcMethodView = ({ model }: { readonly model: CompiledGrpcMethod }) => (
     {model.proto === undefined ? null : <ProtoSection proto={model.proto} />}
   </figure>
 );
-
-/** Renders one compiled GrpcMethod to static HTML. */
-export const renderGrpcMethodStatic = (model: CompiledGrpcMethod): string =>
-  renderToStaticMarkup(<GrpcMethodView model={model} />);

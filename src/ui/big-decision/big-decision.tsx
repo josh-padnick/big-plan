@@ -4,7 +4,6 @@
 
 import type { ElementContent } from "hast";
 import type { ReactNode } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import type {
   BigDecisionReversibilityRating,
   BigDecisionStatus,
@@ -407,7 +406,7 @@ const DetailsDrawer = ({
   </div>
 );
 
-const BigDecisionView = ({
+export const BigDecision = ({
   model,
 }: {
   readonly model: CompiledBigDecision;
@@ -452,7 +451,3 @@ const BigDecisionView = ({
     )}
   </figure>
 );
-
-/** Renders one compiled BigDecision to static HTML. */
-export const renderBigDecisionStatic = (model: CompiledBigDecision): string =>
-  renderToStaticMarkup(<BigDecisionView model={model} />);

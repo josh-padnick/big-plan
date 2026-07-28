@@ -1,15 +1,14 @@
 // Declares CodeDiff's component integration contract and its scoped
 // Annotation policy; rendering lives in the React component library.
 
-import { type ComponentDefinition } from "../../../../model/component-contract.js";
 import { compileCodeDiffComponent } from "../../../../model/compile-code-diff.js";
-import { renderCodeDiffStatic } from "../../../../ui/code-diff/code-diff.js";
+import { CodeDiff } from "../../../../ui/code-diff/code-diff.js";
+import { defineComponent } from "../define-component.js";
 
 /** Declares CodeDiff's renderer and direct-child Annotation contract. */
-export const CODE_DIFF_COMPONENT_DEFINITION = {
+export const CODE_DIFF_COMPONENT_DEFINITION = defineComponent({
   compile: compileCodeDiffComponent,
-  renderStatic: (input) =>
-    renderCodeDiffStatic(compileCodeDiffComponent(input)),
+  view: CodeDiff,
   scopedChildren: {
     Annotation: {
       kind: "scoped-child",
@@ -26,4 +25,4 @@ export const CODE_DIFF_COMPONENT_DEFINITION = {
       },
     },
   },
-} satisfies ComponentDefinition;
+});

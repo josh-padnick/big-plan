@@ -1,12 +1,10 @@
 // Declares GrpcMethod's component integration contract and its scoped child
 // grammar; rendering lives in the React component library.
 
-import {
-  type ComponentDefinition,
-  type ScopedChildDefinition,
-} from "../../../../model/component-contract.js";
+import { type ScopedChildDefinition } from "../../../../model/component-contract.js";
 import { compileGrpcMethodComponent } from "../../../../model/compile-grpc-method.js";
-import { renderGrpcMethodStatic } from "../../../../ui/grpc-method/grpc-method.js";
+import { GrpcMethod } from "../../../../ui/grpc-method/grpc-method.js";
+import { defineComponent } from "../define-component.js";
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (
@@ -24,14 +22,13 @@ const scopedChild = (
 });
 
 /** Declares GrpcMethod's renderer and direct-child contract blocks. */
-export const GRPC_METHOD_COMPONENT_DEFINITION = {
+export const GRPC_METHOD_COMPONENT_DEFINITION = defineComponent({
   compile: compileGrpcMethodComponent,
-  renderStatic: (input) =>
-    renderGrpcMethodStatic(compileGrpcMethodComponent(input)),
+  view: GrpcMethod,
   scopedChildren: {
     Field: scopedChild("Field"),
     Error: scopedChild("Error"),
     Example: scopedChild("Example"),
     Proto: scopedChild("Proto"),
   },
-} satisfies ComponentDefinition;
+});

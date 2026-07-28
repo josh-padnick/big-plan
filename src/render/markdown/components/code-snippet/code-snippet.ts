@@ -1,15 +1,14 @@
 // Declares CodeSnippet's component integration contract and its scoped
 // Annotation policy; rendering lives in the React component library.
 
-import { type ComponentDefinition } from "../../../../model/component-contract.js";
 import { compileCodeSnippetComponent } from "../../../../model/compile-code-snippet.js";
-import { renderCodeSnippetStatic } from "../../../../ui/code-snippet/code-snippet.js";
+import { CodeSnippet } from "../../../../ui/code-snippet/code-snippet.js";
+import { defineComponent } from "../define-component.js";
 
 /** Declares CodeSnippet's renderer and direct-child Annotation contract. */
-export const CODE_SNIPPET_COMPONENT_DEFINITION = {
+export const CODE_SNIPPET_COMPONENT_DEFINITION = defineComponent({
   compile: compileCodeSnippetComponent,
-  renderStatic: (input) =>
-    renderCodeSnippetStatic(compileCodeSnippetComponent(input)),
+  view: CodeSnippet,
   scopedChildren: {
     Annotation: {
       kind: "scoped-child",
@@ -26,4 +25,4 @@ export const CODE_SNIPPET_COMPONENT_DEFINITION = {
       },
     },
   },
-} satisfies ComponentDefinition;
+});

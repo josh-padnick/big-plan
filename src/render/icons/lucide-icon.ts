@@ -6,9 +6,8 @@
 // Importing Lucide's root catalog for two icons also imposes a large install
 // and startup cost, so callers keep the small official icon-node assets local
 // and use this adapter to serialize them into the self-contained HTML. A future
-// Vite-powered server UI can use Lucide's framework package directly; the
-// static render path should retain this lightweight HAST boundary (or consume
-// equivalent generated icon data) while it still promises one offline file.
+// React views also consume the same local icon-node data directly, while this
+// HAST adapter remains for non-React renderer features.
 
 import type { Element } from "hast";
 

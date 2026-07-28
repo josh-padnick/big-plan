@@ -1,12 +1,10 @@
 // Declares SmallDecisionSet's scoped question grammar; rendering lives in
 // the React component library.
 
-import {
-  type ComponentDefinition,
-  type ScopedChildDefinition,
-} from "../../../../model/component-contract.js";
+import { type ScopedChildDefinition } from "../../../../model/component-contract.js";
 import { compileSmallDecisionSetComponent } from "../../../../model/compile-small-decision-set.js";
-import { renderSmallDecisionSetStatic } from "../../../../ui/small-decision-set/small-decision-set.js";
+import { SmallDecisionSet } from "../../../../ui/small-decision-set/small-decision-set.js";
+import { defineComponent } from "../define-component.js";
 
 const bodyPolicy = (name: "SmallDecision" | "Option") => ({
   prohibited: {
@@ -29,9 +27,8 @@ const smallDecisionDefinition = (): ScopedChildDefinition => ({
 });
 
 /** Declares SmallDecisionSet's renderer and scoped authoring grammar. */
-export const SMALL_DECISION_SET_COMPONENT_DEFINITION = {
+export const SMALL_DECISION_SET_COMPONENT_DEFINITION = defineComponent({
   compile: compileSmallDecisionSetComponent,
-  renderStatic: (input) =>
-    renderSmallDecisionSetStatic(compileSmallDecisionSetComponent(input)),
+  view: SmallDecisionSet,
   scopedChildren: { SmallDecision: smallDecisionDefinition() },
-} satisfies ComponentDefinition;
+});

@@ -2,7 +2,6 @@
 // with decorative option markers awaiting the live review application.
 // Every id comes from the compiled model for stable anchors and hydration.
 
-import { renderToStaticMarkup } from "react-dom/server";
 import type {
   CompiledSmallDecision,
   CompiledSmallDecisionOption,
@@ -97,7 +96,7 @@ const DecisionBlock = ({
   </li>
 );
 
-const SmallDecisionSetView = ({
+export const SmallDecisionSet = ({
   model,
 }: {
   readonly model: CompiledSmallDecisionSet;
@@ -129,8 +128,3 @@ const SmallDecisionSetView = ({
     </ol>
   </figure>
 );
-
-/** Renders one compiled SmallDecisionSet to static HTML. */
-export const renderSmallDecisionSetStatic = (
-  model: CompiledSmallDecisionSet,
-): string => renderToStaticMarkup(<SmallDecisionSetView model={model} />);
