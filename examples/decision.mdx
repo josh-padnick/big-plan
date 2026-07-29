@@ -1,0 +1,39 @@
+# Skill Distribution Decision Plan
+
+The skill's delivery channel gets decided with the `Decision` component, read option by option.
+
+<Decision question="How does the skill reach the end user's agent?" status="open">
+
+The authored skill file in the repository is canonical either way; this decision is only about the delivery channel.
+
+<Option title="Embedded in the CLI, printed by a new command" recommended summary="A skill command prints the file verbatim; the agent redirects it into place.">
+
+<Consideration title="Version fidelity" verdict="Exact" tone="good">
+
+The skill is compiled into the package, so its text can never disagree with the installed CLI.
+
+</Consideration>
+
+<Consideration title="Single source of truth" verdict="One file" tone="good" />
+
+<Consideration title="Works offline" verdict="Yes" tone="good" />
+
+Re-running the command after an upgrade refreshes the installed skill.
+
+</Option>
+
+<Option title="Docs-site download" summary="Setup tells the agent to fetch the skill from the docs site.">
+
+<Consideration title="Version fidelity" verdict="Drifts" tone="bad">
+
+The site always serves the latest text, which can disagree with an older installed CLI.
+
+</Consideration>
+
+<Consideration title="Single source of truth" verdict="One file" tone="good" />
+
+<Consideration title="Works offline" verdict="No" tone="bad" />
+
+</Option>
+
+</Decision>

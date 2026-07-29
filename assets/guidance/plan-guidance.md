@@ -46,14 +46,14 @@ Place it near the end, after the reader understands the approach, and make every
 Big Plan ships components that present specific kinds of information better than paragraphs can:
 
 - `QuickSummary` for the key points a reviewer reads first.
-- `BigDecision` for a weighty tradeoff with options and a recommendation; `SmallDecisionSet` for quick calls.
+- `Decision` for a tradeoff read option by option; `ComplexDecision` for a full criteria matrix; `SimpleDecisionSet` for quick calls.
 - `CodeDiff` and `CodeSnippet` for concrete code the reviewer should see.
 - `FileTree` and `FileTreeDiff` for layout and placement changes.
 - `DatabaseTableSchema`, `HttpEndpoint`, `GraphqlOperation`, and `GrpcMethod` for structured contracts.
 - `Callout` to make one decision, warning, or note impossible to miss.
 
 A decision buried in prose is a decision the reviewer cannot easily accept or reject.
-Before using a component, run `big-plan guidance <Component>` (for example `big-plan guidance BigDecision`) for how to use it well.
+Before using a component, run `big-plan guidance <Component>` (for example `big-plan guidance ComplexDecision`) for how to use it well.
 
 ## 7. Validate, render, and reread
 
