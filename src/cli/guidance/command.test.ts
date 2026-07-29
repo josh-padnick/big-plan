@@ -42,11 +42,35 @@ describe("guidanceCommand", () => {
     expect(await readdir(stateDirectory)).toHaveLength(1);
   });
 
-  it("should reject any argument", async () => {
-    await expect(guidanceCommand(["plan.mdx"])).rejects.toMatchObject({
+  it("should reject a second argument", async () => {
+    await expect(
+      guidanceCommand(["QuickSummary", "extra"]),
+    ).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
-      message: 'Unexpected extra argument "plan.mdx"',
-      suggestions: ["Usage: big-plan guidance"],
+      message: 'Unexpected extra argument "extra"',
+      suggestions: ["Usage: big-plan guidance [component]"],
+    });
+  });
+
+  it("should print one component's usage guidance without touching the gate", async () => {
+    const output = await guidanceCommand(["QuickSummary"]);
+
+    expect(output).toContain("# Using QuickSummary well");
+    // Component guidance is reference material; only the full principles run
+    // records an acknowledgment.
+    await expect(validateCommand(["plan.mdx"])).rejects.toMatchObject({
+      code: "GUIDANCE_REQUIRED",
+    });
+  });
+
+  it("should list the known components when the component is unknown", async () => {
+    await expect(guidanceCommand(["Unknown"])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: 'Unknown component "Unknown"',
+      suggestions: [
+        expect.stringContaining("QuickSummary"),
+        "Usage: big-plan guidance [component]",
+      ],
     });
   });
 

@@ -16,9 +16,10 @@ const DESCRIPTION =
 const TOP_LEVEL_HELP = `big-plan - ${DESCRIPTION}
 
 Usage:
-  big-plan guidance                           Read the plan-writing guidance
-                                             and starting template; required
-                                             before validate and render
+  big-plan guidance [component]               Read the plan-writing guidance
+                                             (required before validate and
+                                             render), or one component's
+                                             usage guidance
   big-plan render <input.mdx> [output.html]   Render an MDX plan to a
                                              single self-contained HTML file
                                              (defaults to <input>.html)

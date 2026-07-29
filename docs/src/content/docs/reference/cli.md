@@ -9,13 +9,13 @@ The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors,
 ## Commands
 
 ```text
-big-plan guidance
+big-plan guidance [component]
 big-plan validate <input.mdx>
 big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
 ```
 
-`guidance` accepts no arguments.
+`guidance` optionally takes one component name.
 For the other commands `<input.mdx>` is required.
 `validate` accepts no output argument.
 The output argument is optional for `render` and `compile`.
@@ -34,6 +34,9 @@ npx big-plan compile <input.mdx> [output.json]
 `guidance` prints the authoring principles for writing a plan a human loves to review.
 It deliberately prescribes principles rather than a template, so each plan keeps the structure its content needs.
 Running it also records a guidance acknowledgment for the current working directory.
+
+With a component name, `big-plan guidance <Component>` prints that component's judgment-level usage guidance instead: when to reach for it and what belongs in it.
+The component form records no acknowledgment, and an unknown name fails with the list of components that have guidance.
 
 `validate` and `render` require a current acknowledgment and fail with a structured `GUIDANCE_REQUIRED` error until `guidance` has been run.
 An acknowledgment is current when it was recorded for the same working directory within the last 24 hours against the guidance content the installed CLI ships.

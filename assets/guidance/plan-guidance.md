@@ -16,9 +16,9 @@ Never use a concept the reader has not met yet; a coined phrase like a hyphen-ch
 
 ## 2. Open with a quick summary
 
-Make the first section "Quick summary": the plan's key points, stated as concisely as possible.
+Put a `QuickSummary` component directly after the lede, before any section: the plan's key points, stated as concisely as possible.
 A reader who stops after it should know what will change, how it will work, the decisions you need from them, and the biggest risk.
-Short bullets beat paragraphs here.
+It enforces its own shape - one bullet list, at most 5 bullets, at most 600 characters - and `big-plan guidance QuickSummary` explains how to use it well.
 Everything after the quick summary is elaboration; nothing essential may appear for the first time in a later section.
 
 ## 3. Choose the structure this plan needs
@@ -45,6 +45,7 @@ Place it near the end, after the reader understands the approach, and make every
 
 Big Plan ships components that present specific kinds of information better than paragraphs can:
 
+- `QuickSummary` for the key points a reviewer reads first.
 - `BigDecision` for a weighty tradeoff with options and a recommendation; `SmallDecisionSet` for quick calls.
 - `CodeDiff` and `CodeSnippet` for concrete code the reviewer should see.
 - `FileTree` and `FileTreeDiff` for layout and placement changes.
@@ -52,6 +53,7 @@ Big Plan ships components that present specific kinds of information better than
 - `Callout` to make one decision, warning, or note impossible to miss.
 
 A decision buried in prose is a decision the reviewer cannot easily accept or reject.
+Before using a component, run `big-plan guidance <Component>` (for example `big-plan guidance BigDecision`) for how to use it well.
 
 ## 7. Validate, render, and reread
 
