@@ -33,7 +33,7 @@ test("should navigate the rendered sample plan through the TOC without errors", 
   });
 
   await test.step("the TOC lists every h2 section in document order", async () => {
-    await expect(toc.getByRole("link")).toHaveText([
+    await expect(toc.locator("ol").getByRole("link")).toHaveText([
       "Background",
       "Goals and non-goals",
       "Retry state machine",
@@ -165,5 +165,36 @@ test("should provide a compact sticky table of contents on mobile", async ({
     expect(targetHeadingBox.y).toBeGreaterThanOrEqual(
       stackedTocBox.y + stackedTocBox.height,
     );
+  });
+});
+
+test("should highlight the section being read and return to the top through Contents", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.goto(sampleViewerUrl);
+  const toc = page.getByRole("navigation", { name: "Contents" });
+  const rolloutLink = toc.getByRole("link", { name: "Rollout plan" });
+
+  await test.step("no section is highlighted at the very top", async () => {
+    await expect(toc.locator('[aria-current="true"]')).toHaveCount(0);
+  });
+
+  await test.step("jumping to a section highlights its TOC entry", async () => {
+    await rolloutLink.click();
+    await expect(rolloutLink).toHaveAttribute("aria-current", "true");
+    await expect(toc.locator('[aria-current="true"]')).toHaveCount(1);
+  });
+
+  await test.step("Contents returns to the top and clears the highlight", async () => {
+    await toc.getByRole("link", { name: "Contents" }).click();
+    await expect(page).toHaveURL(/#top$/);
+    await expect(
+      page.getByRole("heading", {
+        level: 1,
+        name: "Payments Retry Architecture Plan",
+      }),
+    ).toBeInViewport();
+    await expect(toc.locator('[aria-current="true"]')).toHaveCount(0);
   });
 });

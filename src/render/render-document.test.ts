@@ -122,9 +122,13 @@ describe("renderDocument affordances", () => {
     expect(html).not.toContain("@import");
   });
 
-  it("should inline one stylesheet and ship no scripts when rendering", () => {
+  it("should inline one stylesheet and only the scroll-spy script when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
-    expect(html).not.toContain("<script>");
+    // The shell's scroll-spy is the single script; plan content can never
+    // contribute another, and nothing external is referenced.
+    expect(html.match(/<script>/g)).toHaveLength(1);
+    expect(html).toContain("data-section-link");
+    expect(html).not.toContain('src="http');
   });
 
   it("should emit theme-aware favicon links as embedded data URIs when rendering", () => {

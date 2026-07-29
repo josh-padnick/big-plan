@@ -32,8 +32,8 @@ Validation checks that the plan can be compiled and rendered, then applies linti
 Rendering applies the same linting rules, so a plan that fails lint never reaches a reviewer.
 Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.model.json`.
 Both sit next to the input, while the MDX file remains the canonical source and JSON is always derived output.
-The rendered HTML embeds all styling and branding assets, ships no scripts, and makes no external requests.
-A responsive table of contents links to the document's level-two headings, and the light/dark theme follows the OS preference through CSS alone.
+The rendered HTML embeds all styling and branding assets, makes no external requests, and never executes plan-authored code; the only script is the shell's small embedded scroll-spy.
+A responsive table of contents links to the document's level-two headings and highlights the section being read, and the light/dark theme follows the OS preference through CSS alone.
 
 Plans are prose plus validated components, like this callout:
 

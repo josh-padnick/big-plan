@@ -68,7 +68,8 @@ Machine delivery collects that data as JSON.
 Human delivery gives the same data to the component's React view, crosses one React-to-HAST boundary, applies document-wide transforms, and packages inert HTML.
 Validation renders the plan in memory while collecting the same component models in one pass.
 It discards the generated HTML, then applies its registered linting rules to the authored plan.
-React is a presentation-edge implementation tool; no React runtime or browser script ships in a rendered document.
+React is a presentation-edge implementation tool; no React runtime ships in a rendered document, and the only browser script is the shell's small self-contained navigation scroll-spy.
+Plan content never contributes executable code, and a document stays fully readable with scripts disabled.
 
 Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
 The exact dependency allow-list and completeness guard live in `eslint.config.mjs`.

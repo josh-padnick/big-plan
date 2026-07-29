@@ -35,10 +35,55 @@ const LAYOUT_CLASSES =
 const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,74ch)]`;
 const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,74ch)]`;
 
+// Active links change color and border only, never weight, so highlighting
+// can never re-wrap a label.
 const TOC_LINK_CLASSES =
-  "block border-l-2 border-edge px-3 py-[0.3rem] leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:font-semibold aria-[current=true]:text-accent";
+  "block border-l-2 border-edge px-3 py-[0.3rem] leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
 const MOBILE_TOC_LINK_CLASSES =
-  "block border-l-2 border-transparent px-5 py-2.5 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:font-semibold aria-[current=true]:text-accent";
+  "block border-l-2 border-transparent px-5 py-2.5 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
+
+// The one script a rendered document ships: a dependency-free scroll-spy that
+// marks the section being read with aria-current on its TOC links. Plan
+// content never contributes script; documents stay readable with JS disabled.
+const SCROLL_SPY_SCRIPT = `<script>
+(() => {
+  const links = Array.from(document.querySelectorAll("[data-section-link]"));
+  const targets = new Map();
+  for (const link of links) {
+    const id = decodeURIComponent((link.getAttribute("href") || "").slice(1));
+    const heading = document.getElementById(id);
+    if (heading === null) continue;
+    targets.set(heading, (targets.get(heading) || []).concat(link));
+  }
+  const headings = Array.from(targets.keys());
+  if (headings.length === 0) return;
+  const apply = () => {
+    const readingLine = window.innerHeight * 0.25;
+    let current = null;
+    for (const heading of headings) {
+      if (heading.getBoundingClientRect().top <= readingLine) current = heading;
+    }
+    for (const [heading, sectionLinks] of targets) {
+      for (const link of sectionLinks) {
+        if (heading === current) link.setAttribute("aria-current", "true");
+        else link.removeAttribute("aria-current");
+      }
+    }
+  };
+  let scheduled = false;
+  const schedule = () => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      apply();
+    });
+  };
+  addEventListener("scroll", schedule, { passive: true });
+  addEventListener("resize", schedule, { passive: true });
+  apply();
+})();
+</script>`;
 
 // Allocates the shell-owned overview anchor alongside document-owned ids.
 const createOverviewId = (contentIds: ReadonlyArray<string>): string => {
@@ -68,11 +113,18 @@ const renderTocItems = ({
     )
     .join("\n");
 
-// Builds the desktop sidebar navigation.
-const renderDesktopToc = (nav: ReadonlyArray<NavEntry>): string => {
+// Builds the desktop sidebar navigation; its "Contents" label doubles as the
+// way back to the very top of the document.
+const renderDesktopToc = ({
+  nav,
+  overviewId,
+}: {
+  readonly nav: ReadonlyArray<NavEntry>;
+  readonly overviewId: string;
+}): string => {
   const items = renderTocItems({ nav, linkClasses: TOC_LINK_CLASSES });
   return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[5.75rem] wide:block wide:self-start" aria-label="Contents">
-<p class="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-muted">Contents</p>
+<p class="mb-3 text-xs font-semibold uppercase tracking-[0.08em]"><a class="rounded-sm text-muted hover:text-ink focus:outline-2 focus:outline-offset-2 focus:outline-accent" href="#${encodeURIComponent(overviewId)}">Contents</a></p>
 <ol>
 ${items}
 </ol>
@@ -131,13 +183,14 @@ export const renderShell = ({
 </header>
 ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}">
-${hasToc ? renderDesktopToc(nav) : ""}
+${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
 <main class="min-w-0" id="${overviewId}">
 <article>
 ${contentHtml}
 </article>
 </main>
-</div>`;
+</div>
+${hasToc ? SCROLL_SPY_SCRIPT : ""}`;
   return {
     html,
     styles: GLOBAL_CSS,
