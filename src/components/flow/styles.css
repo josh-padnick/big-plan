@@ -1,0 +1,91 @@
+/*
+Flow diagram drawing: card tones, badge tints, and the connector geometry -
+lines, arrowheads, and the one-to-many fork - that utility classes cannot
+express because they live in pseudo-elements and data-attribute variants.
+Color reinforces the semantic tones; borders carry the same distinction so
+color never carries meaning alone.
+*/
+
+@layer components {
+  .flow-node {
+    background: var(--surface-c);
+    border-color: var(--edge-c);
+  }
+  .flow-node[data-flow-tone="source"] {
+    background: color-mix(in srgb, var(--accent-c) 10%, transparent);
+    border-color: color-mix(in srgb, var(--accent-c) 38%, var(--edge-c));
+  }
+  .flow-node[data-flow-tone="destination"] {
+    background: color-mix(in srgb, var(--callout-note-c) 10%, transparent);
+    border-color: color-mix(in srgb, var(--callout-note-c) 35%, var(--edge-c));
+  }
+
+  /* Inside the graphic, monospace marks an identifier, not a code sample;
+     the prose code chrome would read as a snippet. */
+  .flow-node code,
+  [data-flow-footer] code {
+    background: none;
+    border: none;
+    padding: 0;
+  }
+
+  .flow-badge[data-flow-badge-tone="neutral"] {
+    background: color-mix(in srgb, var(--ink-c) 7%, transparent);
+    color: var(--muted-c);
+  }
+  .flow-badge[data-flow-badge-tone="warning"] {
+    background: color-mix(in srgb, var(--callout-warning-c) 14%, transparent);
+    color: var(--callout-warning-c);
+  }
+
+  /* A straight connector is the line itself; its arrowhead touches the card
+     it points at. */
+  .flow-link,
+  .flow-fork-stub {
+    height: 1.5px;
+    background: var(--muted-c);
+  }
+  .flow-link::after {
+    content: "";
+    position: absolute;
+    right: -1px;
+    top: -3.25px;
+    border: 4px solid transparent;
+    border-left: 6px solid var(--muted-c);
+  }
+
+  /* The fork: the stub leaves the source at the stack's center and meets a
+     vertical rail; every branch runs from the rail to its own card with its
+     own arrowhead, so one-to-many is drawn as one-to-many. */
+  .flow-fork-branch::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    right: 0;
+    top: calc(50% - 0.75px);
+    height: 1.5px;
+    background: var(--muted-c);
+  }
+  .flow-fork-branch::after {
+    content: "";
+    position: absolute;
+    right: -1px;
+    top: calc(50% - 4px);
+    border: 4px solid transparent;
+    border-left: 6px solid var(--muted-c);
+  }
+  .flow-fork-rail {
+    position: absolute;
+    left: calc(50% - 0.75px);
+    width: 1.5px;
+    top: 0;
+    bottom: 0;
+    background: var(--muted-c);
+  }
+  [data-flow-branch="first"] .flow-fork-rail {
+    top: 50%;
+  }
+  [data-flow-branch="last"] .flow-fork-rail {
+    bottom: 50%;
+  }
+}
