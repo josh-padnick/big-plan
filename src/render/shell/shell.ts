@@ -43,11 +43,15 @@ const MOBILE_TOC_LINK_CLASSES =
   "block border-l-2 border-transparent px-5 py-2.5 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
 
 // The one script a rendered document ships: a dependency-free scroll-spy that
-// marks the section being read with aria-current on its TOC links. Plan
-// content never contributes script; documents stay readable with JS disabled.
+// marks the section being read with aria-current on its TOC links, falling
+// back to the overview links above the first section. Plan content never
+// contributes script; documents stay readable with JS disabled.
 const SCROLL_SPY_SCRIPT = `<script>
 (() => {
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
+  const overviewLinks = Array.from(
+    document.querySelectorAll("[data-overview-link]"),
+  );
   const targets = new Map();
   for (const link of links) {
     const id = decodeURIComponent((link.getAttribute("href") || "").slice(1));
@@ -68,6 +72,10 @@ const SCROLL_SPY_SCRIPT = `<script>
         if (heading === current) link.setAttribute("aria-current", "true");
         else link.removeAttribute("aria-current");
       }
+    }
+    for (const link of overviewLinks) {
+      if (current === null) link.setAttribute("aria-current", "true");
+      else link.removeAttribute("aria-current");
     }
   };
   let scheduled = false;
@@ -124,7 +132,7 @@ const renderDesktopToc = ({
 }): string => {
   const items = renderTocItems({ nav, linkClasses: TOC_LINK_CLASSES });
   return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[5.75rem] wide:block wide:self-start" aria-label="Contents">
-<p class="mb-3 text-xs font-semibold uppercase tracking-[0.08em]"><a class="rounded-sm text-muted hover:text-ink focus:outline-2 focus:outline-offset-2 focus:outline-accent" href="#${encodeURIComponent(overviewId)}">Contents</a></p>
+<p class="mb-3 text-xs font-semibold uppercase tracking-[0.08em]"><a class="rounded-sm text-muted hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a></p>
 <ol>
 ${items}
 </ol>
@@ -175,7 +183,7 @@ export const renderShell = ({
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="flex h-full items-center px-5 wide:px-6">
-<a class="rounded-sm focus:outline-2 focus:outline-offset-2 focus:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
+<a class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>

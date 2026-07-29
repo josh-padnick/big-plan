@@ -174,20 +174,23 @@ test("should highlight the section being read and return to the top through Cont
 }) => {
   await page.goto(sampleViewerUrl);
   const toc = page.getByRole("navigation", { name: "Contents" });
+  const contentsLink = toc.getByRole("link", { name: "Contents" });
   const rolloutLink = toc.getByRole("link", { name: "Rollout plan" });
 
-  await test.step("no section is highlighted at the very top", async () => {
-    await expect(toc.locator('[aria-current="true"]')).toHaveCount(0);
+  await test.step("Contents itself is current at the very top", async () => {
+    await expect(contentsLink).toHaveAttribute("aria-current", "true");
+    await expect(toc.locator('ol [aria-current="true"]')).toHaveCount(0);
   });
 
-  await test.step("jumping to a section highlights its TOC entry", async () => {
+  await test.step("jumping to a section moves the highlight to its TOC entry", async () => {
     await rolloutLink.click();
     await expect(rolloutLink).toHaveAttribute("aria-current", "true");
-    await expect(toc.locator('[aria-current="true"]')).toHaveCount(1);
+    await expect(contentsLink).not.toHaveAttribute("aria-current", "true");
+    await expect(toc.locator('ol [aria-current="true"]')).toHaveCount(1);
   });
 
-  await test.step("Contents returns to the top and clears the highlight", async () => {
-    await toc.getByRole("link", { name: "Contents" }).click();
+  await test.step("Contents returns to the top and takes the highlight back", async () => {
+    await contentsLink.click();
     await expect(page).toHaveURL(/#top$/);
     await expect(
       page.getByRole("heading", {
@@ -195,6 +198,7 @@ test("should highlight the section being read and return to the top through Cont
         name: "Payments Retry Architecture Plan",
       }),
     ).toBeInViewport();
-    await expect(toc.locator('[aria-current="true"]')).toHaveCount(0);
+    await expect(contentsLink).toHaveAttribute("aria-current", "true");
+    await expect(toc.locator('ol [aria-current="true"]')).toHaveCount(0);
   });
 });
