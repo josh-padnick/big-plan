@@ -1,6 +1,6 @@
 # Edge Cache Revalidation Plan
 
-This plan moves catalog-page cache revalidation out of request handlers and into a small background queue.
+Catalog-page cache revalidation moves out of request handlers and into a small background queue.
 Today an expired entry makes the first reader wait for an origin fetch, so traffic spikes amplify latency precisely when the cache should protect the service.
 The proposed stale-while-revalidate path keeps reads fast, bounds origin concurrency, and preserves the current cache key contract.
 

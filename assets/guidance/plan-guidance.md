@@ -6,10 +6,11 @@ Every principle below serves that reading order.
 
 ## 1. Name the outcome, then state the thesis
 
-The title names what will exist after execution, not the document.
-Write "Add an official, installable skill to Big Plan", never "Skill implementation plan" or "Plan for shipping the skill".
-Follow the title immediately with a lede: one or two sentences stating the thesis of the plan itself.
-The lede answers "what are you proposing and why does it matter", not "what this document contains".
+The title names what will exist after execution, in a punchy noun phrase of at most eight words.
+Write "Ship the official Big Plan skill", never "Skill implementation plan" or a title so long it reads as a sentence.
+Follow the title immediately with a lede: exactly one concise sentence that describes the plan, reading as the document's subtitle.
+State the thesis declaratively.
+Never open the lede with "I propose", "This plan", or any other words about the document or its author; describe the delivered future, not the act of proposing it.
 
 ## 2. Orient before you specify
 

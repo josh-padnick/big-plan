@@ -38,7 +38,7 @@ const checkPlanLede = ({
       line: second.position.start.line,
       column: second.position.start.column,
       message:
-        "Open with a lede: one or two sentences after the title stating the plan's thesis, before the first section heading",
+        "Open with a lede: one concise sentence after the title stating the plan's thesis, before the first section heading",
     },
   ];
 };

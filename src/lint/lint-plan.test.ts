@@ -142,7 +142,7 @@ describe("lintPlan plan-lede", () => {
         line: 3,
         column: 1,
         message:
-          "Open with a lede: one or two sentences after the title stating the plan's thesis, before the first section heading",
+          "Open with a lede: one concise sentence after the title stating the plan's thesis, before the first section heading",
       },
     ]);
   });
@@ -162,6 +162,83 @@ describe("lintPlan plan-lede", () => {
     ],
     ["a document without a level-one title", "## Status quo\n\nToday.\n"],
     ["a title with no sections at all", "# Ship the skill\n"],
+  ])("should not report %s", (_label, markdown) => {
+    expect(lintPlan({ markdown })).toEqual([]);
+  });
+});
+
+describe("lintPlan title-length", () => {
+  it("should report a title longer than eight words", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# Ship the official Big Plan skill users install into their agents\n\nLede.\n",
+      }),
+    ).toEqual([
+      {
+        ruleId: "title-length",
+        line: 1,
+        column: 1,
+        message:
+          "Keep the title a punchy noun phrase of at most 8 words and 60 characters naming the outcome",
+      },
+    ]);
+  });
+
+  it("should report a title longer than sixty characters", () => {
+    expect(
+      lintPlan({
+        markdown: `# Institutionalize cross-organizational containerization\n\nLede.\n`,
+      }),
+    ).toEqual([]);
+    expect(
+      lintPlan({
+        markdown: `# Institutionalize cross-organizational containerization computations\n\nLede.\n`,
+      }),
+    ).toMatchObject([{ ruleId: "title-length", line: 1 }]);
+  });
+
+  it.each([
+    ["an eight-word title", "# Add an official installable skill to Big Plan\n\nLede.\n"],
+    ["a title with inline code", "# Ship the `big-plan skill` command\n\nLede.\n"],
+    ["a document without a leading title", "Prose first.\n\n# A very long title that would otherwise be flagged here\n"],
+  ])("should not report %s", (_label, markdown) => {
+    expect(lintPlan({ markdown })).toEqual([]);
+  });
+});
+
+describe("lintPlan lede-style", () => {
+  it.each([
+    ["I propose one version-controlled skill file."],
+    ["This plan adds per-key rate limiting."],
+    ["this document exercises every major shape."],
+    ["We will move retries into a queue."],
+  ])("should report a lede opening with %j", (lede) => {
+    expect(lintPlan({ markdown: `# Title\n\n${lede}\n` })).toEqual([
+      {
+        ruleId: "lede-style",
+        line: 3,
+        column: 1,
+        message:
+          'Write the lede as a declarative subtitle describing the delivered outcome, not an opener like "I propose" or "This plan"',
+      },
+    ]);
+  });
+
+  it.each([
+    [
+      "a declarative lede",
+      "# Title\n\nA durable retry pipeline replaces inline retries.\n",
+    ],
+    [
+      "a lede mentioning the phrase later in the sentence",
+      "# Title\n\nEverything this plan touches stays local.\n",
+    ],
+    [
+      "a component directly after the title",
+      '# Title\n\n<Callout type="note">\n\nI propose nothing here.\n\n</Callout>\n',
+    ],
+    ["a document without a leading title", "This plan is referenced in prose.\n"],
   ])("should not report %s", (_label, markdown) => {
     expect(lintPlan({ markdown })).toEqual([]);
   });

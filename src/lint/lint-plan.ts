@@ -5,16 +5,20 @@ import remarkGfm from "remark-gfm";
 import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
+import { ledeStyleRule } from "./rules/lede-style.js";
 import { markdownTableFormatRule } from "./rules/markdown-table-format.js";
 import { planLedeRule } from "./rules/plan-lede.js";
 import { sectionVocabularyRule } from "./rules/section-vocabulary.js";
+import { titleLengthRule } from "./rules/title-length.js";
 import type { PlanLintDiagnostic, PlanLintRule } from "./types.js";
 
 export type { PlanLintDiagnostic } from "./types.js";
 
 const RULES: ReadonlyArray<PlanLintRule> = [
   markdownTableFormatRule,
+  titleLengthRule,
   planLedeRule,
+  ledeStyleRule,
   sectionVocabularyRule,
 ];
 

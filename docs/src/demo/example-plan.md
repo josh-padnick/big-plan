@@ -1,13 +1,12 @@
-# Implementation plan: Rate limiting for the public API
+# Rate limiting for the public API
 
-Prepared by your coding agent.
-Review this plan and agree on it before any code changes begin.
+Per-key rate limiting with a fixed monthly quota and a burst allowance, enforced at the gateway.
 
 ## Summary
 
 Our public API has no rate limiting.
 One misbehaving client can degrade the service for everyone, and we have no way to offer usage tiers.
-This plan adds per-key rate limiting with a fixed monthly quota and a burst allowance, enforced at the gateway.
+Per-key limits at the gateway, with a fixed monthly quota and a burst allowance, close both gaps.
 
 ## Current state
 

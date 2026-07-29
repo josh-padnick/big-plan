@@ -73,7 +73,7 @@ describe("renderCommand", () => {
       code: "VALIDATION_ERROR",
       message: "Plan failed authoring lint",
       suggestions: [
-        "3:1 [plan-lede] Open with a lede: one or two sentences after the title stating the plan's thesis, before the first section heading",
+        "3:1 [plan-lede] Open with a lede: one concise sentence after the title stating the plan's thesis, before the first section heading",
       ],
     });
     expect(await readdir(tempDirectory)).toEqual(entriesBefore);

@@ -58,8 +58,14 @@ A silently degraded document would be worse than a failed one, because the entir
 Lint rules are an additional, deliberately stricter layer applied by `validate` and `render`.
 They can check any statically analyzable aspect of an authored plan.
 
+`title-length` keeps a plan's leading level-one title a punchy noun phrase: at most eight words and sixty characters.
+A document that does not open with a level-one title is left alone.
+
 `plan-lede` requires a plan that opens with a level-one title to state its thesis in prose before the first section heading, so the reader is oriented before structure begins.
 Any flow content after the title satisfies it; a title followed directly by another heading is the finding.
+
+`lede-style` requires that lede to read as a declarative subtitle describing the delivered outcome.
+A lede opening with a self-referential phrase such as "I propose", "We will", "This plan", or "This document" is flagged; prose mentioning those phrases later in a sentence is not.
 
 `section-vocabulary` keeps section names in Big Plan's opinionated review vocabulary.
 A heading reading exactly "Desired outcome", "Desired outcomes", or "Definition of done" is flagged with the preferred heading "Acceptance criteria".
