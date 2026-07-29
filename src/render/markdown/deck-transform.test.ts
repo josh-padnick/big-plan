@@ -97,6 +97,87 @@ describe("deck slide frames", () => {
   });
 });
 
+describe("deck Glance completion", () => {
+  const GLANCE_FIXTURE = `# Deck plan
+
+The lede.
+
+<Glance>
+<Item section="Status quo" gist="Today's state" />
+<Item section="Success looks like" gist="The outcome" />
+<Item section="The design" gist="The mechanism" />
+</Glance>
+
+<Part title="Context" />
+
+## Status quo
+
+Today's state.
+
+## Success looks like
+
+The outcome.
+
+<Part title="The proposal" />
+
+## The design
+
+The mechanism.
+`;
+
+  it("should link every row to its section in document order", () => {
+    const { html } = compile(GLANCE_FIXTURE);
+    expect(html).toMatch(/<a data-glance-row[^>]*href="#status-quo"/);
+    expect(html).toMatch(/<a data-glance-row[^>]*href="#success-looks-like"/);
+    expect(html).toMatch(/<a data-glance-row[^>]*href="#the-design"/);
+  });
+
+  it("should fill every row's slide number", () => {
+    const { html } = compile(GLANCE_FIXTURE);
+    expect(html).toMatch(/<span data-glance-num[^>]*>1\.1<\/span>/);
+    expect(html).toMatch(/<span data-glance-num[^>]*>1\.2<\/span>/);
+    expect(html).toMatch(/<span data-glance-num[^>]*>2\.1<\/span>/);
+  });
+
+  it("should insert one group header before each part's first row", () => {
+    const { html } = compile(GLANCE_FIXTURE);
+    expect(html.match(/data-glance-group/g)).toHaveLength(2);
+    expect(html).toMatch(/<p data-glance-group[^>]*>\[1\] Context<\/p>/);
+    expect(html).toMatch(/<p data-glance-group[^>]*>\[2\] The proposal<\/p>/);
+    const header = html.indexOf("[1] Context");
+    const firstRow = html.indexOf('href="#status-quo"');
+    expect(header).toBeGreaterThan(-1);
+    expect(header).toBeLessThan(firstRow);
+  });
+
+  it("should use plain sequential numbers when the plan has no parts", () => {
+    const { html } = compile(
+      '# P\n\nLede.\n\n<Glance>\n<Item section="One" gist="A" />\n<Item section="Two" gist="B" />\n</Glance>\n\n## One\n\nA.\n\n## Two\n\nB.\n',
+    );
+    expect(html).toMatch(/<span data-glance-num[^>]*>1<\/span>/);
+    expect(html).toMatch(/<span data-glance-num[^>]*>2<\/span>/);
+    expect(html).not.toContain("data-glance-group");
+  });
+
+  it("should keep the Glance outside any slide frame", () => {
+    const { html } = compile(
+      '## Before\n\nA.\n\n<Glance>\n<Item section="Before" gist="A" />\n</Glance>\n',
+    );
+    const glance = html.indexOf("data-glance");
+    const slideEnd = html.indexOf("</section>");
+    expect(slideEnd).toBeGreaterThan(-1);
+    expect(slideEnd).toBeLessThan(glance);
+  });
+
+  it("should keep placeholders on rows beyond the document's sections", () => {
+    const { html } = compile(
+      '# P\n\nLede.\n\n<Glance>\n<Item section="One" gist="A" />\n<Item section="Ghost" gist="B" />\n</Glance>\n\n## One\n\nA.\n',
+    );
+    expect(html).toMatch(/<a data-glance-row[^>]*href="#one"/);
+    expect(html).toMatch(/<a data-glance-row[^>]*href="#"/);
+  });
+});
+
 describe("deck section metadata", () => {
   it("should attach each section's part in document order when acts exist", () => {
     const { sections } = compile(DECK_FIXTURE);

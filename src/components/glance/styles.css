@@ -1,0 +1,13 @@
+/* Glance row hover: a subtle ink wash with the title turning accent. The
+   ink-mix adapts across light and dark themes and deliberately never shares
+   a fill with the surface-colored Part band - surface means structure, the
+   tint means interactive. */
+
+@layer components {
+  article .glance-row:hover {
+    background: color-mix(in srgb, var(--ink-c) 4%, transparent);
+  }
+  article .glance-row:hover .glance-name {
+    color: var(--accent-c);
+  }
+}

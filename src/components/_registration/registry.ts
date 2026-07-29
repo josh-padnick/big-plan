@@ -10,6 +10,7 @@ import { DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION } from "../database-table-sc
 import { DECISION_COMPONENT_DEFINITION } from "../decision/definition.js";
 import { FILE_TREE_DIFF_COMPONENT_DEFINITION } from "../file-tree/file-tree-diff-definition.js";
 import { FILE_TREE_COMPONENT_DEFINITION } from "../file-tree/file-tree-definition.js";
+import { GLANCE_COMPONENT_DEFINITION } from "../glance/definition.js";
 import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "../graphql-operation/definition.js";
 import { GRPC_METHOD_COMPONENT_DEFINITION } from "../grpc-method/definition.js";
 import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "../http-endpoint/definition.js";
@@ -28,6 +29,7 @@ export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
     Decision: DECISION_COMPONENT_DEFINITION,
     FileTree: FILE_TREE_COMPONENT_DEFINITION,
     FileTreeDiff: FILE_TREE_DIFF_COMPONENT_DEFINITION,
+    Glance: GLANCE_COMPONENT_DEFINITION,
     GraphqlOperation: GRAPHQL_OPERATION_COMPONENT_DEFINITION,
     GrpcMethod: GRPC_METHOD_COMPONENT_DEFINITION,
     HttpEndpoint: HTTP_ENDPOINT_COMPONENT_DEFINITION,

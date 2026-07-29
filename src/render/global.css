@@ -22,6 +22,7 @@ Light and dark follow the reader's OS in inert exports.
 @import "../components/decision/styles.css";
 @import "../components/quick-summary/styles.css";
 @import "../components/file-tree/styles.css";
+@import "../components/glance/styles.css";
 @import "../components/simple-decision-set/styles.css";
 @import "../components/graphql-operation/styles.css";
 @import "../components/grpc-method/styles.css";

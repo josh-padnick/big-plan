@@ -1,7 +1,9 @@
 // Applies the deck reading paradigm to a compiled review document: numbers
-// Part dividers in document order and wraps each top-level h2 section in a
-// slide frame with a numbered kicker. It runs after component delivery, so
-// the markers it consumes are the data attributes the Part view emits.
+// Part dividers in document order, wraps each top-level h2 section in a
+// slide frame with a numbered kicker, and completes the Glance overview with
+// section links, slide numbers, and part group headers. It runs after
+// component delivery, so the markers it consumes are the data attributes the
+// Part and Glance views emit.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 
@@ -59,6 +61,17 @@ const KICKER_CLASSES = [
   "font-semibold",
   "uppercase",
   "tracking-[0.14em]",
+  "text-accent",
+] as const;
+
+const GLANCE_GROUP_CLASSES = [
+  "glance-group",
+  "mt-2.5",
+  "mb-0.5",
+  "text-xs",
+  "font-semibold",
+  "uppercase",
+  "tracking-[0.1em]",
   "text-accent",
 ] as const;
 
@@ -202,11 +215,93 @@ const wrapSlides = (
   return sections;
 };
 
+const findGlance = (node: Root | Element): Element | undefined => {
+  for (const child of node.children) {
+    if (!isElement(child)) {
+      continue;
+    }
+    if (child.properties["data-glance"] !== undefined) {
+      return child;
+    }
+    const nested = findGlance(child);
+    if (nested !== undefined) {
+      return nested;
+    }
+  }
+  return undefined;
+};
+
+const fillGlanceNumber = (row: Element, label: string): void => {
+  for (const child of row.children) {
+    if (isElement(child) && child.properties["data-glance-num"] !== undefined) {
+      child.children = [{ type: "text", value: label }];
+      return;
+    }
+  }
+};
+
+// Completes the Glance the view rendered as placeholders: each row links to
+// its slide's section and shows its slide number, and a part group header
+// precedes the first row of every part. Rows map to slides by document
+// order; the glance-matches-sections lint rule owns reporting mismatches, so
+// a row without a slide keeps its placeholder instead of failing delivery.
+const completeGlance = (
+  tree: Root,
+  sections: ReadonlyArray<SlideSection>,
+): void => {
+  const glance = findGlance(tree);
+  if (glance === undefined) {
+    return;
+  }
+  const rewritten: Array<ElementContent> = [];
+  let rowIndex = 0;
+  let headedPart: number | undefined;
+  for (const child of glance.children) {
+    if (
+      !isElement(child) ||
+      child.properties["data-glance-row"] === undefined
+    ) {
+      rewritten.push(child);
+      continue;
+    }
+    const section = sections[rowIndex];
+    rowIndex += 1;
+    if (section === undefined) {
+      rewritten.push(child);
+      continue;
+    }
+    if (section.part !== undefined && section.part.number !== headedPart) {
+      headedPart = section.part.number;
+      rewritten.push({
+        type: "element",
+        tagName: "p",
+        properties: {
+          "data-glance-group": "",
+          className: [...GLANCE_GROUP_CLASSES],
+        },
+        children: [
+          {
+            type: "text",
+            value: `[${section.part.number}] ${section.part.title}`,
+          },
+        ],
+      });
+    }
+    if (section.id !== undefined) {
+      child.properties.href = `#${section.id}`;
+    }
+    fillGlanceNumber(child, section.label);
+    rewritten.push(child);
+  }
+  glance.children = rewritten;
+};
+
 /** Creates the rehype transform that applies the deck reading paradigm. */
 export const rehypeDeckTransform =
   ({ partIds }: { readonly partIds?: Array<string> } = {}) =>
   (tree: Root) => {
     const parts = new Map<Element, NumberedPart>();
     numberParts({ node: tree, assigned: parts, partIds });
-    wrapSlides(tree, parts);
+    const sections = wrapSlides(tree, parts);
+    completeGlance(tree, sections);
   };
