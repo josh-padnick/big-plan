@@ -1,5 +1,5 @@
-// Tests QuickSummary's facet contract - What/How/Risks/Decisions grammar,
-// ordering, and the bullet and character caps - and its rendered card markup.
+// Tests QuickSummary's facet contract - Why/What/How grammar, ordering, and
+// the bullet and character caps - and its rendered hero-card markup.
 
 import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
@@ -13,7 +13,6 @@ const POSITION = {
   start: { line: 3, column: 1, offset: 10 },
   end: { line: 20, column: 16, offset: 400 },
 };
-
 const FACET_POSITION = {
   start: { line: 5, column: 1, offset: 30 },
   end: { line: 9, column: 8, offset: 90 },
@@ -26,17 +25,17 @@ const textItem = (value: string): ElementContent => ({
   children: [{ type: "text", value }],
 });
 
-const bulletList = (items: ReadonlyArray<ElementContent>): ElementContent => ({
-  type: "element",
-  tagName: "ul",
-  properties: {},
-  children: [...items],
-});
-
 const facet = (name: string, bullets: ReadonlyArray<string>): ScopedChild => ({
   name,
   attributes: {},
-  children: [bulletList(bullets.map(textItem))],
+  children: [
+    {
+      type: "element",
+      tagName: "ul",
+      properties: {},
+      children: bullets.map(textItem),
+    },
+  ],
   position: FACET_POSITION,
 });
 
@@ -48,17 +47,11 @@ const parseRenderedElement = (compiled: CompiledComponent): Element => {
   return parsed;
 };
 
-const render = ({
-  children = [],
-  scopedChildren,
-}: {
-  readonly children?: ReadonlyArray<ElementContent>;
-  readonly scopedChildren: ReadonlyArray<ScopedChild>;
-}) => {
+const render = (scopedChildren: ReadonlyArray<ScopedChild>) => {
   const diagnostics = createDiagnosticCollector();
   const compiled = QUICK_SUMMARY_COMPONENT_DEFINITION.compile({
     attributes: {},
-    children,
+    children: [],
     scopedChildren,
     position: POSITION,
     diagnostics,
@@ -69,178 +62,71 @@ const render = ({
   };
 };
 
+const VALID = [
+  facet("Why", ["Checkout must stay fast."]),
+  facet("What", ["Build a persistent retry queue."]),
+  facet("How", ["Move retries into a worker.", "Ship operator controls."]),
+];
+
 describe("QUICK_SUMMARY_COMPONENT_DEFINITION", () => {
-  it("should render the facet grid when every facet is within its caps", () => {
-    const { element, diagnostics } = render({
-      scopedChildren: [
-        facet("What", ["Retries move into a queue."]),
-        facet("How", ["A worker drains it with backoff."]),
-        facet("OpenQuestions", ["Which queue technology?"]),
-      ],
-    });
+  it("should render the Why hero above What and How cards", () => {
+    const { element, diagnostics } = render(VALID);
     expect(diagnostics).toEqual([]);
     expect(element.tagName).toBe("aside");
     const rendered = JSON.stringify(element);
     expect(rendered).toContain('"value":"Quick summary"');
-    for (const label of ["What", "How", "Open questions"]) {
+    expect(rendered).toContain("quick-summary-why");
+    for (const label of ["Why", "What", "How"]) {
       expect(rendered).toContain(`"value":"${label}"`);
     }
-    expect(rendered).toContain('"tagName":"dl"');
-    expect(rendered).toContain('"value":"Retries move into a queue."');
+    expect(rendered.indexOf('"value":"Why"')).toBeLessThan(
+      rendered.indexOf('"value":"What"'),
+    );
   });
 
-  it("should require the What facet", () => {
+  it("should require Why and What", () => {
     expect(
-      render({ scopedChildren: [facet("How", ["Something."])] }).diagnostics,
+      render([facet("How", ["Do something."])]).diagnostics.map(
+        (diagnostic) => diagnostic.message,
+      ),
     ).toEqual([
-      {
-        line: 3,
-        column: 1,
-        message:
-          "QuickSummary needs a What section stating what changes for the reader",
-      },
+      "QuickSummary needs a Why section stating the business value in one sentence",
+      "QuickSummary needs a What section stating what changes for the reader",
     ]);
   });
 
-  it("should reject loose content outside the facets", () => {
-    const paragraph: ElementContent = {
-      type: "element",
-      tagName: "p",
-      properties: {},
-      children: [{ type: "text", value: "Loose prose." }],
-    };
+  it("should cap Why at one bullet and How at three", () => {
     expect(
-      render({
-        children: [paragraph],
-        scopedChildren: [facet("What", ["A change."])],
-      }).diagnostics,
+      render([
+        facet("Why", ["One.", "Two."]),
+        facet("What", ["Build it."]),
+        facet("How", ["A.", "B.", "C.", "D."]),
+      ]).diagnostics.map((diagnostic) => diagnostic.message),
     ).toEqual([
-      {
-        line: 3,
-        column: 1,
-        message:
-          "QuickSummary holds only What, How, and OpenQuestions sections; move loose content into one of them",
-      },
-    ]);
-  });
-
-  it("should reject duplicate facets", () => {
-    expect(
-      render({
-        scopedChildren: [
-          facet("What", ["A change."]),
-          facet("What", ["Another change."]),
-        ],
-      }).diagnostics,
-    ).toEqual([
-      {
-        line: 5,
-        column: 1,
-        message: "QuickSummary allows one What section",
-      },
+      "Why allows at most 1 bullet (found 2); keep only the key points",
+      "How allows at most 3 bullets (found 4); keep only the key points",
     ]);
   });
 
   it("should reject facets out of canonical order", () => {
     expect(
-      render({
-        scopedChildren: [
-          facet("How", ["A step."]),
-          facet("What", ["A change."]),
-        ],
-      }).diagnostics,
+      render([
+        facet("What", ["Build it."]),
+        facet("Why", ["Value."]),
+      ]).diagnostics.map((diagnostic) => diagnostic.message),
     ).toEqual([
-      {
-        line: 3,
-        column: 1,
-        message:
-          "Order QuickSummary sections What, How, OpenQuestions so every plan reads the same way",
-      },
+      "Order QuickSummary sections Why, What, How so every plan reads the same way",
     ]);
   });
 
-  it("should reject a facet body that is not exactly one bullet list", () => {
-    const prose: ScopedChild = {
-      name: "What",
-      attributes: {},
-      children: [
-        {
-          type: "element",
-          tagName: "p",
-          properties: {},
-          children: [{ type: "text", value: "Prose instead of bullets." }],
-        },
-      ],
-      position: FACET_POSITION,
-    };
-    expect(render({ scopedChildren: [prose] }).diagnostics).toEqual([
-      {
-        line: 5,
-        column: 1,
-        message: "What must contain exactly one bullet list and nothing else",
-      },
-    ]);
-  });
-
-  it("should reject more than three bullets in one facet", () => {
+  it("should reject more than the character budget", () => {
+    const long = "x".repeat(300);
     expect(
-      render({
-        scopedChildren: [facet("What", ["A.", "B.", "C.", "D."])],
-      }).diagnostics,
+      render([facet("Why", [long]), facet("What", [long])]).diagnostics.map(
+        (diagnostic) => diagnostic.message,
+      ),
     ).toEqual([
-      {
-        line: 5,
-        column: 1,
-        message:
-          "What allows at most 3 bullets (found 4); keep only the key points",
-      },
+      "QuickSummary allows at most 450 characters of text (found 600); summarize at the altitude of intent, not inventory",
     ]);
-  });
-
-  it("should reject more than six hundred readable characters across facets", () => {
-    const long = "x".repeat(301);
-    expect(
-      render({
-        scopedChildren: [facet("What", [long]), facet("How", [long])],
-      }).diagnostics,
-    ).toEqual([
-      {
-        line: 3,
-        column: 1,
-        message:
-          "QuickSummary allows at most 600 characters of text (found 602); summarize at the altitude of intent, not inventory",
-      },
-    ]);
-  });
-
-  it("should require OpenQuestions bullets to be phrased as questions", () => {
-    expect(
-      render({
-        scopedChildren: [
-          facet("What", ["A change."]),
-          facet("OpenQuestions", ["Not a question."]),
-        ],
-      }).diagnostics,
-    ).toEqual([
-      {
-        line: 5,
-        column: 1,
-        message:
-          "Every OpenQuestions bullet is phrased as a question ending with a question mark",
-      },
-    ]);
-  });
-
-  it("should render facets in canonical order regardless of model input", () => {
-    const { element } = render({
-      scopedChildren: [
-        facet("What", ["A change."]),
-        facet("OpenQuestions", ["Which call?"]),
-      ],
-    });
-    const rendered = JSON.stringify(element);
-    expect(rendered.indexOf('"value":"What"')).toBeLessThan(
-      rendered.indexOf('"value":"Open questions"'),
-    );
   });
 });

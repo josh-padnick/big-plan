@@ -46,6 +46,7 @@ is styled by its owning module, not here.
   article h1:has(+ p) {
     border-bottom: none;
     padding-bottom: 0;
+    margin-bottom: 0.3rem;
   }
   article h1 + p {
     font-size: 1.25rem;

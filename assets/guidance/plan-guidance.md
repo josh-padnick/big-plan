@@ -8,16 +8,17 @@ Get to the point, and stay there.
 
 The title names what will exist after execution, in a punchy noun phrase of at most eight words.
 Write "Ship the official Big Plan skill", never "Skill implementation plan" or a title so long it reads as a sentence.
-Follow the title immediately with a lede: exactly one concise sentence that describes the plan, reading as the document's subtitle.
+Follow the title immediately with a lede: exactly one concise sentence, reading as the document's subtitle.
+Prefer an imperative mission statement: "Create a version-controlled skill file and make it easily installable."
 Big Plan renders that first paragraph as the subtitle, so keep it as short as it can be while still carrying the thesis.
-State the thesis declaratively, in plain language.
-Never open the lede with "I propose", "This plan", or any other words about the document or its author; describe the delivered future, not the act of proposing it.
+Use plain language.
+Never open the lede with "I propose", "This plan", or any other words about the document or its author; state the mission, not the act of proposing it.
 Never use a concept the reader has not met yet; a coined phrase like a hyphen-chained workflow name belongs after the section that introduces it, if anywhere.
 
 ## 2. Open with a quick summary
 
 Put a `QuickSummary` component directly after the lede, before any section: the plan's key points, stated as concisely as possible.
-Its `What`, `How`, and `OpenQuestions` sections tell a stopping reader what will change, how it will work, and what they must answer, with risks folded into the questions that resolve them.
+Its `Why`, `What`, and `How` sections tell a stopping reader the business value, the change, and the actions you will take.
 It enforces its own shape - short bullet lists within hard caps - and `big-plan guidance QuickSummary` explains how to use it well.
 Everything after the quick summary is elaboration; nothing essential may appear for the first time in a later section.
 

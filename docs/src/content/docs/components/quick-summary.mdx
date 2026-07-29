@@ -18,38 +18,38 @@ If a point only matters to readers of one section, it belongs in that section.
 
 ## Authoring
 
-The body holds `What`, `How`, and `OpenQuestions` facet sections, each carrying one short bullet list; the card renders them as a labeled grid:
+The body holds `Why`, `What`, and `How` facet sections; the card renders Why as an accent hero band above What and How cards:
 
 ```mdx
 <QuickSummary>
 
+<Why>
+
+- For checkout to stay fast, failed captures must retry without blocking requests.
+
+</Why>
+
 <What>
 
-- Failed captures move from inline API-server retries into a persistent queue with explicit state.
+- Build a persistent retry queue with explicit state and an audit trail.
 
 </What>
 
 <How>
 
-- A worker drains the queue with bounded, jittered backoff.
+- Move capture retries out of the API server and into a queue worker.
+- Ship operator controls to pause, force, and cancel retries.
 
 </How>
-
-<OpenQuestions>
-
-- Which queue technology keeps capture and schedule updates transactional, closing the double-charge risk?
-
-</OpenQuestions>
 
 </QuickSummary>
 ```
 
 ## The contract
 
-- `What` is required; `How` and `OpenQuestions` are optional, each at most once, in that order.
-- Every `OpenQuestions` bullet is phrased as a question ending with a question mark.
-- Each facet's body is exactly one bullet list of at most 3 bullets; prose, headings, and other components are rejected.
-- At most 600 characters of readable text across all facets, counted after collapsing whitespace and including inline code and emphasis.
+- `Why` and `What` are required; `How` is optional; each at most once, in that order.
+- Each facet's body is exactly one bullet list: one bullet for `Why` and `What`, at most 3 for `How`; prose, headings, and other components are rejected.
+- At most 450 characters of readable text across all facets, counted after collapsing whitespace and including inline code and emphasis.
 - At most one `QuickSummary` per document, enforced by the `single-quick-summary` linting rule.
 - No attributes on the component or its facets.
 

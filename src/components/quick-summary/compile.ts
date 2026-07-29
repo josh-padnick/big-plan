@@ -11,12 +11,14 @@ import {
 } from "../_authoring/contract.js";
 import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
 
-export const QUICK_SUMMARY_FACETS = ["What", "How", "OpenQuestions"] as const;
+export const QUICK_SUMMARY_FACETS = ["Why", "What", "How"] as const;
 
 export type QuickSummaryFacetName = (typeof QUICK_SUMMARY_FACETS)[number];
 
-export const QUICK_SUMMARY_MAXIMUM_BULLETS_PER_FACET = 3;
-export const QUICK_SUMMARY_MAXIMUM_CHARACTERS = 600;
+export const QUICK_SUMMARY_FACET_BULLET_CAPS: Readonly<
+  Record<QuickSummaryFacetName, number>
+> = { Why: 1, What: 1, How: 3 };
+export const QUICK_SUMMARY_MAXIMUM_CHARACTERS = 450;
 
 export type CompiledQuickSummaryFacet = {
   readonly name: QuickSummaryFacetName;
@@ -85,19 +87,11 @@ const compileFacet = ({
       position: child.position,
     });
   }
-  if (items.length > QUICK_SUMMARY_MAXIMUM_BULLETS_PER_FACET) {
+  const cap =
+    QUICK_SUMMARY_FACET_BULLET_CAPS[child.name as QuickSummaryFacetName] ?? 1;
+  if (items.length > cap) {
     diagnostics.add({
-      message: `${child.name} allows at most ${QUICK_SUMMARY_MAXIMUM_BULLETS_PER_FACET} bullets (found ${items.length}); keep only the key points`,
-      position: child.position,
-    });
-  }
-  if (
-    child.name === "OpenQuestions" &&
-    items.some((item) => !collectText(item.children).trim().endsWith("?"))
-  ) {
-    diagnostics.add({
-      message:
-        "Every OpenQuestions bullet is phrased as a question ending with a question mark",
+      message: `${child.name} allows at most ${cap} bullet${cap === 1 ? "" : "s"} (found ${items.length}); keep only the key points`,
       position: child.position,
     });
   }
@@ -122,7 +116,7 @@ export const compileQuickSummaryComponent = ({
   if (meaningfulChildren(children).length > 0) {
     diagnostics.add({
       message:
-        "QuickSummary holds only What, How, and OpenQuestions sections; move loose content into one of them",
+        "QuickSummary holds only Why, What, and How sections; move loose content into one of them",
       position,
     });
   }
@@ -135,6 +129,13 @@ export const compileQuickSummaryComponent = ({
       });
     }
     seen.add(child.name);
+  }
+  if (!seen.has("Why")) {
+    diagnostics.add({
+      message:
+        "QuickSummary needs a Why section stating the business value in one sentence",
+      position,
+    });
   }
   if (!seen.has("What")) {
     diagnostics.add({
@@ -155,7 +156,7 @@ export const compileQuickSummaryComponent = ({
   if (!inCanonicalOrder) {
     diagnostics.add({
       message:
-        "Order QuickSummary sections What, How, OpenQuestions so every plan reads the same way",
+        "Order QuickSummary sections Why, What, How so every plan reads the same way",
       position,
     });
   }
