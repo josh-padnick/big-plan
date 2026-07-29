@@ -1,6 +1,6 @@
 // Exercises the guidance command and its acknowledgment gate: guidance output,
-// per-directory unlocking of validate and render, expiry, and the requirement
-// that the shipped template itself passes validation.
+// per-directory unlocking of validate and render, expiry, and the degraded
+// warning path when no state directory accepts writes.
 
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { validateCommand } from "../validate/command.js";
 import { guidanceCommand } from "./command.js";
-import { GUIDANCE_VERSION, TEMPLATE_MDX } from "./content.generated.js";
+import { GUIDANCE_VERSION } from "./content.generated.js";
 
 let tempDirectory = "";
 let stateDirectory = "";
@@ -34,12 +34,11 @@ const overwriteMarker = async (content: string): Promise<void> => {
 };
 
 describe("guidanceCommand", () => {
-  it("should print the principles and the template and record the acknowledgment", async () => {
+  it("should print the principles and record the acknowledgment", async () => {
     const output = await guidanceCommand([]);
 
     expect(output).toContain("# How to write a plan a human loves to review");
-    expect(output).toContain("## Start from this template");
-    expect(output).toContain("## Acceptance criteria");
+    expect(output).toContain("quick summary");
     expect(await readdir(stateDirectory)).toHaveLength(1);
   });
 
@@ -119,16 +118,6 @@ describe("guidanceCommand", () => {
           "Guidance acknowledgment could not be verified",
         ),
       ]),
-    });
-  });
-
-  it("should ship a template that passes validation and authoring lint", async () => {
-    await guidanceCommand([]);
-    const templatePath = join(tempDirectory, "template.mdx");
-    await writeFile(templatePath, TEMPLATE_MDX, "utf8");
-
-    await expect(validateCommand([templatePath])).resolves.toMatchObject({
-      validated: templatePath,
     });
   });
 });

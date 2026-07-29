@@ -3,7 +3,7 @@ title: CLI reference
 description: Reference the complete Big Plan command surface, defaults, results, and errors.
 ---
 
-Big Plan exposes four commands through the `big-plan` executable: `guidance` for the plan-writing principles and template, `validate` for a no-write authoring check, `render` for the human-facing HTML document, and `compile` for the machine-facing plan model.
+Big Plan exposes four commands through the `big-plan` executable: `guidance` for the plan-writing principles, `validate` for a no-write authoring check, `render` for the human-facing HTML document, and `compile` for the machine-facing plan model.
 The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors, and result serialization.
 
 ## Commands
@@ -31,7 +31,8 @@ npx big-plan compile <input.mdx> [output.json]
 
 ## Guidance and the acknowledgment gate
 
-`guidance` prints the authoring principles for writing a plan a human loves to review, followed by a starting template in a fenced `mdx` block.
+`guidance` prints the authoring principles for writing a plan a human loves to review.
+It deliberately prescribes principles rather than a template, so each plan keeps the structure its content needs.
 Running it also records a guidance acknowledgment for the current working directory.
 
 `validate` and `render` require a current acknowledgment and fail with a structured `GUIDANCE_REQUIRED` error until `guidance` has been run.

@@ -27,7 +27,7 @@ npx big-plan render <file.mdx> [output.html]
 npx big-plan compile <file.mdx> [output.json]
 ```
 
-`guidance` prints the principles and starting template for writing a plan a human loves to review; reading it recently is required before `validate` and `render` will run.
+`guidance` prints the principles for writing a plan a human loves to review; reading it recently is required before `validate` and `render` will run.
 Validation checks that the plan can be compiled and rendered, then applies linting rules to the authored plan without writing an output file.
 Rendering applies the same linting rules, so a plan that fails lint never reaches a reviewer.
 Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.model.json`.

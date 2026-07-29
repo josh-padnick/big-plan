@@ -1,43 +1,38 @@
 # How to write a plan a human loves to review
 
 You are writing for one reader: a human deciding whether to let you build.
-They read top to bottom, orienting first and verifying second.
-Every principle below serves that reading order.
+They read top to bottom, orienting first and verifying second, and every sentence costs them time.
+Get to the point, and stay there.
 
 ## 1. Name the outcome, then state the thesis
 
 The title names what will exist after execution, in a punchy noun phrase of at most eight words.
 Write "Ship the official Big Plan skill", never "Skill implementation plan" or a title so long it reads as a sentence.
 Follow the title immediately with a lede: exactly one concise sentence that describes the plan, reading as the document's subtitle.
-Big Plan renders that first paragraph as the subtitle, so keep it as short as it can be while still carrying the thesis; move every qualifier and supporting detail into the sections below.
+Big Plan renders that first paragraph as the subtitle, so keep it as short as it can be while still carrying the thesis.
 State the thesis declaratively.
 Never open the lede with "I propose", "This plan", or any other words about the document or its author; describe the delivered future, not the act of proposing it.
 
-## 2. Orient before you specify
+## 2. Open with a quick summary
 
-Order sections so each one answers the question a reviewer has at that moment:
+Make the first section "Quick summary": the plan's key points, stated as concisely as possible.
+A reader who stops after it should know what will change, how it will work, the decisions you need from them, and the biggest risk.
+Short bullets beat paragraphs here.
+Everything after the quick summary is elaboration; nothing essential may appear for the first time in a later section.
 
-1. What is true today, and why is it not enough? (status quo)
-2. What will the delivered result be like? (recommendation)
-3. How will it work in detail? (design)
-4. What exactly will you do, in what order? (implementation phases)
-5. How will we both know it is done? (acceptance criteria)
-6. What could go wrong, and what are you deliberately not doing? (risks, scope)
+## 3. Choose the structure this plan needs
 
-Low-level detail placed before orientation forces the reader to hold facts they cannot yet evaluate.
-If a section would make the reader ask "why am I reading this now?", it is in the wrong place.
+There is no canonical section list; use the sections this plan needs, and only those.
+Order them by the reader's questions: what is true today, what the delivered result will be like, how it works in detail, and how you will both know it is done.
+Keep orientation ahead of detail; if a section would make the reader ask "why am I reading this now?", it is in the wrong place.
+Fold "why X rather than Y" justifications into the surrounding story or a decision component, never into free-floating essay sections.
+Present delivery logistics, such as PR sequencing, as supporting decisions rather than headlines.
 
-## 3. Open with the status quo
+## 4. Be terse
 
-Start the body with the current state: what exists, what hurts, and why change is warranted now.
-Justifications such as "why X rather than Y" belong here or inside a decision component.
-Never give a justification its own free-floating essay section later in the document.
-
-## 4. Make the recommendation the vision
-
-The recommendation section paints the big picture of how the delivered result will work end to end.
-Delivery logistics, such as whether the work ships as a separate PR, belong inside the recommendation as supporting decisions, never as its headline.
-A reader finishing this section should be able to describe the future state in their own words.
+Write as tersely as the content allows.
+Prefer one precise sentence over three cautious ones, and cut anything that restates another section, narrates your process, or exists to look thorough.
+Keep paragraphs short; a reviewer should never lose the argument inside a wall of text.
 
 ## 5. Say "Acceptance criteria"
 
@@ -57,13 +52,7 @@ Big Plan ships components that present specific kinds of information better than
 
 A decision buried in prose is a decision the reviewer cannot easily accept or reject.
 
-## 7. Earn every section
-
-Cut sections that restate other sections, narrate the writing process, or exist to look thorough.
-Prefer one precise sentence over three cautious ones.
-Keep paragraphs short; a reviewer should never lose the argument inside a wall of text.
-
-## 8. Validate, render, and reread
+## 7. Validate, render, and reread
 
 Run `big-plan validate <plan.mdx>` and fix every diagnostic until it passes.
 Lint catches what is statically analyzable; it cannot judge writing.

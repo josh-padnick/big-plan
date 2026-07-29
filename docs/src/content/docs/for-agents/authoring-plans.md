@@ -10,7 +10,7 @@ A plan is prose plus components, and the file on disk stays the greppable, diffa
 ## Read the guidance first
 
 Run `big-plan guidance` before writing a plan.
-It prints the principles for writing a plan a human loves to review, plus a starting template that already satisfies the linting rules below.
+It prints the principles for writing a plan a human loves to review, including the quick-summary opening and the terseness the reviewer expects.
 Reading it recently is required: `validate` and `render` fail with `GUIDANCE_REQUIRED` until guidance has been run from the same working directory within 24 hours.
 
 ## What a plan may contain

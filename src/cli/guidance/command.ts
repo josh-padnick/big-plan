@@ -1,10 +1,10 @@
-// Implements `big-plan guidance`: prints the plan-writing principles and the
-// starting template, and records the acknowledgment that unlocks validate and
-// render for the current directory.
+// Implements `big-plan guidance`: prints the plan-writing principles and
+// records the acknowledgment that unlocks validate and render for the
+// current directory.
 
 import { AxiError } from "axi-sdk-js";
 import { recordGuidanceAcknowledgment } from "./acknowledgment.js";
-import { GUIDANCE_MARKDOWN, TEMPLATE_MDX } from "./content.generated.js";
+import { GUIDANCE_MARKDOWN } from "./content.generated.js";
 
 const USAGE = "Usage: big-plan guidance";
 
@@ -23,18 +23,5 @@ export const guidanceCommand = async (
   const acknowledgmentNote = persisted
     ? "Guidance acknowledged for this directory: `big-plan validate` and `big-plan render` are unlocked for 24 hours."
     : "No writable state directory exists here, so this acknowledgment could not be saved; validate and render will warn instead of locking. Set BIG_PLAN_STATE_DIR to a writable directory to restore the gate.";
-  return [
-    GUIDANCE_MARKDOWN.trimEnd(),
-    "",
-    "## Start from this template",
-    "",
-    "Copy this skeleton and replace every placeholder; delete sections that genuinely do not apply.",
-    "",
-    "```mdx",
-    TEMPLATE_MDX.trimEnd(),
-    "```",
-    "",
-    acknowledgmentNote,
-    "",
-  ].join("\n");
+  return [GUIDANCE_MARKDOWN.trimEnd(), "", acknowledgmentNote, ""].join("\n");
 };

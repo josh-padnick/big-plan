@@ -17,7 +17,7 @@ If the global install is unavailable, use `npx big-plan` in place of `big-plan` 
 
 Before implementing any non-trivial task:
 
-1. Run `big-plan guidance` and follow its principles and template.
+1. Run `big-plan guidance` and follow its principles.
    Validate and render stay locked until you have read it.
 2. Write your implementation plan to an MDX file, for example `plan.mdx`.
 3. Run `big-plan validate plan.mdx` and fix every diagnostic until it passes.
