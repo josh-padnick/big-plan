@@ -22,7 +22,15 @@ Its `Why`, `What`, and `How` sections tell a stopping reader the business value,
 It enforces its own shape - short bullet lists within hard caps - and `big-plan guidance QuickSummary` explains how to use it well.
 Everything after the quick summary is elaboration; nothing essential may appear for the first time in a later section.
 
-## 3. Choose the structure this plan needs
+## 3. Place every statement at a deliberate abstraction level
+
+A plan spans one abstraction chain, from product goal down to mechanism; climb it by asking "why does this matter?" and descend by asking "how?".
+Each part of the plan owns a rung: the title and lede state the mission, `Why` the product goal, `What` the capability, `How` the actions, sections the design and mechanisms, and acceptance criteria the verification.
+Place each fact on its rung on purpose: a sentence naming files, commands, or flags is mechanism-level and belongs in a design section, never in the lede or summary.
+A principle is not a how: "keep the skill version-locked" states a virtue; "embed the skill text in the CLI" states an action.
+The frame most worth the reviewer's attention is usually in the middle of the chain - a lifecycle, ownership, or policy question - not the loftiest goal and not the lowest mechanism.
+
+## 4. Choose the structure this plan needs
 
 There is no canonical section list; use the sections this plan needs, and only those.
 Order them by the reader's questions: what is true today, what the delivered result will be like, how it works in detail, and how you will both know it is done.
@@ -30,19 +38,19 @@ Keep orientation ahead of detail; if a section would make the reader ask "why am
 Fold "why X rather than Y" justifications into the surrounding story or a decision component, never into free-floating essay sections.
 Present delivery logistics, such as PR sequencing, as supporting decisions rather than headlines.
 
-## 4. Be terse
+## 5. Be terse
 
 Write as tersely as the content allows.
 Prefer one precise sentence over three cautious ones, and cut anything that restates another section, narrates your process, or exists to look thorough.
 Keep paragraphs short; a reviewer should never lose the argument inside a wall of text.
 
-## 5. Say "Acceptance criteria"
+## 6. Say "Acceptance criteria"
 
 Name the verification contract "Acceptance criteria".
 Avoid vaguer labels such as "Desired outcome" or "Definition of done".
 Place it near the end, after the reader understands the approach, and make every criterion independently checkable.
 
-## 6. Use components where they beat prose
+## 7. Use components where they beat prose
 
 Big Plan ships components that present specific kinds of information better than paragraphs can:
 
@@ -56,7 +64,7 @@ Big Plan ships components that present specific kinds of information better than
 A decision buried in prose is a decision the reviewer cannot easily accept or reject.
 Before using a component, run `big-plan guidance <Component>` (for example `big-plan guidance ComplexDecision`) for how to use it well.
 
-## 7. Validate, render, and reread
+## 8. Validate, render, and reread
 
 Run `big-plan validate <plan.mdx>` and fix every diagnostic until it passes.
 Lint catches what is statically analyzable; it cannot judge writing.
