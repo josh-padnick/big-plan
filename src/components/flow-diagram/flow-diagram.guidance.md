@@ -1,4 +1,4 @@
-# Using Flow well
+# Using FlowDiagram well
 
 A staged diagram for genuinely relational content - flows, dependencies, fan-outs - never for a list of claims.
 
@@ -9,4 +9,4 @@ A staged diagram for genuinely relational content - flows, dependencies, fan-out
 - Use `code` only for technical identifiers - commands, paths, branches, PR numbers; explanatory prose stays in the body line.
 - Include identity and status when known ("PR #33", "Open") so the diagram is actionable.
 - Tone marks the roles: `source` for this plan's artifact, `neutral` for machinery, `destination` for where the result lands.
-- A conditional workflow gets an explicit footer paragraph inside the Flow, never a fused subtitle like "branches from or lands after".
+- A conditional workflow gets an explicit footer paragraph inside the FlowDiagram, never a fused subtitle like "branches from or lands after".

@@ -1,4 +1,4 @@
-// Renders a compiled Flow as a staged diagram: small-caps stage headers over
+// Renders a compiled FlowDiagram as a staged diagram: small-caps stage headers over
 // content-sized, tone-tinted cards, joined by verb-labeled connectors whose
 // arrowheads point subject-to-object, with an explicit branching fork when
 // one node feeds several. Placement is inline grid coordinates because
@@ -7,14 +7,14 @@
 
 import type { CSSProperties } from "react";
 import type {
-  CompiledFlow,
-  CompiledFlowEdge,
-  CompiledFlowNode,
+  CompiledFlowDiagram,
+  CompiledFlowDiagramEdge,
+  CompiledFlowDiagramNode,
 } from "./compile.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 
 const BADGE_CLASSES =
-  "flow-badge ml-[0.4rem] inline-block rounded-full px-2 py-[0.05rem] align-[1px] text-[0.6875rem] font-semibold";
+  "flow-diagram-badge ml-[0.4rem] inline-block rounded-full px-2 py-[0.05rem] align-[1px] text-[0.6875rem] font-semibold";
 
 const LABEL_CLASSES = "block text-sm font-semibold text-ink";
 
@@ -32,22 +32,22 @@ const Node = ({
   style,
   spaced,
 }: {
-  readonly node: CompiledFlowNode;
+  readonly node: CompiledFlowDiagramNode;
   readonly style: CSSProperties;
   readonly spaced: boolean;
 }) => (
   <div
-    data-flow-node
-    data-flow-tone={node.tone}
-    className={`flow-node rounded-lg border px-[0.85rem] py-2 leading-normal${spaced ? " my-[0.275rem]" : ""}`}
+    data-flow-diagram-node
+    data-flow-diagram-tone={node.tone}
+    className={`flow-diagram-node rounded-lg border px-[0.85rem] py-2 leading-normal${spaced ? " my-[0.275rem]" : ""}`}
     style={style}
   >
     <strong className={LABEL_CLASSES}>
       {node.label}
       {node.badge === undefined ? null : (
         <span
-          data-flow-badge
-          data-flow-badge-tone={node.badgeTone}
+          data-flow-diagram-badge
+          data-flow-diagram-badge-tone={node.badgeTone}
           className={BADGE_CLASSES}
         >
           {node.badge}
@@ -55,7 +55,7 @@ const Node = ({
       )}
     </strong>
     {node.code === undefined ? null : (
-      <code className="flow-node-code block font-mono text-xs text-muted">
+      <code className="flow-diagram-node-code block font-mono text-xs text-muted">
         {node.code}
       </code>
     )}
@@ -73,10 +73,14 @@ const Link = ({
   edge,
   style,
 }: {
-  readonly edge: CompiledFlowEdge;
+  readonly edge: CompiledFlowDiagramEdge;
   readonly style: CSSProperties;
 }) => (
-  <div data-flow-link className="flow-link relative self-center" style={style}>
+  <div
+    data-flow-diagram-link
+    className="flow-diagram-link relative self-center"
+    style={style}
+  >
     {edge.label === undefined ? null : (
       <span className={EDGE_LABEL_CLASSES}>{edge.label}</span>
     )}
@@ -92,7 +96,11 @@ const branchPosition = ({
 }): "first" | "middle" | "last" =>
   index === 0 ? "first" : index === count - 1 ? "last" : "middle";
 
-export const Flow = ({ model }: { readonly model: CompiledFlow }) => {
+export const FlowDiagram = ({
+  model,
+}: {
+  readonly model: CompiledFlowDiagram;
+}) => {
   const laneCount = Math.max(
     1,
     ...model.stages.map((stage) => stage.nodes.length),
@@ -111,7 +119,7 @@ export const Flow = ({ model }: { readonly model: CompiledFlow }) => {
   const edgeInto = (nodeId: string) =>
     model.edges.find((edge) => edge.to === nodeId);
   return (
-    <div data-flow className="flow mb-5 overflow-x-auto">
+    <div data-flow-diagram className="flow-diagram mb-5 overflow-x-auto">
       <div
         className="grid w-max max-w-none items-center"
         style={{ gridTemplateColumns: columns }}
@@ -119,7 +127,7 @@ export const Flow = ({ model }: { readonly model: CompiledFlow }) => {
         {model.stages.map((stage, stageIndex) => (
           <p
             key={`stage-${stageIndex}`}
-            data-flow-stage
+            data-flow-diagram-stage
             className="m-0 mb-2 self-end text-[0.6875rem] font-semibold tracking-[0.09em] uppercase text-muted"
             style={{ gridColumn: cardColumn(stageIndex), gridRow: "1" }}
           >
@@ -174,8 +182,8 @@ export const Flow = ({ model }: { readonly model: CompiledFlow }) => {
           return [
             <div
               key={`stub-${stageIndex}`}
-              data-flow-fork-stub
-              className="flow-fork-stub w-1/2 justify-self-start self-center"
+              data-flow-diagram-fork-stub
+              className="flow-diagram-fork-stub w-1/2 justify-self-start self-center"
               style={{
                 gridColumn: connectorColumn,
                 gridRow: `2 / span ${laneCount}`,
@@ -186,17 +194,17 @@ export const Flow = ({ model }: { readonly model: CompiledFlow }) => {
               return (
                 <div
                   key={`branch-${node.id}`}
-                  data-flow-branch={branchPosition({
+                  data-flow-diagram-branch={branchPosition({
                     index: nodeIndex,
                     count: next.nodes.length,
                   })}
-                  className="flow-fork-branch relative self-stretch"
+                  className="flow-diagram-fork-branch relative self-stretch"
                   style={{
                     gridColumn: connectorColumn,
                     gridRow: `${nodeIndex + 2}`,
                   }}
                 >
-                  <span className="flow-fork-rail" aria-hidden />
+                  <span className="flow-diagram-fork-rail" aria-hidden />
                   {label === undefined ? null : (
                     // The branch's own segment runs from the rail to the
                     // card, so its verb floats over that right half.
@@ -212,7 +220,7 @@ export const Flow = ({ model }: { readonly model: CompiledFlow }) => {
       </div>
       {model.footer === undefined ? null : (
         <p
-          data-flow-footer
+          data-flow-diagram-footer
           className="mt-[0.9rem] mb-0 text-center text-[0.8125rem] text-muted"
         >
           {hastContentToReact(model.footer)}

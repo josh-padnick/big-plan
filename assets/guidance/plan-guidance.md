@@ -65,7 +65,7 @@ Big Plan ships components that present specific kinds of information better than
 - `Glance` for the plan in one look: one linked row per section, directly after the quick summary.
 - `Part` to divide the slides into numbered acts.
 - `Decision` for a tradeoff read option by option; `ComplexDecision` for a full criteria matrix; `SimpleDecisionSet` for quick calls.
-- `Flow` for genuinely relational content - a flow, dependency, or fan-out - drawn as staged cards with directed connectors.
+- `FlowDiagram` for genuinely relational content - a flow, dependency, or fan-out - drawn as staged cards with directed connectors.
 - `CodeDiff` and `CodeSnippet` for concrete code the reviewer should see.
 - `FileTree` and `FileTreeDiff` for layout and placement changes.
 - `DatabaseTableSchema`, `HttpEndpoint`, `GraphqlOperation`, and `GrpcMethod` for structured contracts.

@@ -1,4 +1,4 @@
-// Compiles Flow's authored form into its plan model: staged columns of
+// Compiles FlowDiagram's authored form into its plan model: staged columns of
 // content-sized nodes joined by verb-labeled, directed edges, with an
 // optional footer line. Validation owns the v1 layout contract - single-node
 // stages flowing left to right into an optional fan-out in the last stage -
@@ -14,50 +14,50 @@ import {
 } from "../_authoring/contract.js";
 import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
 
-export type FlowTone = "source" | "neutral" | "destination";
+export type FlowDiagramTone = "source" | "neutral" | "destination";
 
-const FLOW_TONES: ReadonlyArray<FlowTone> = [
+const FLOW_DIAGRAM_TONES: ReadonlyArray<FlowDiagramTone> = [
   "source",
   "neutral",
   "destination",
 ];
 
-export type FlowBadgeTone = "neutral" | "warning";
+export type FlowDiagramBadgeTone = "neutral" | "warning";
 
-const BADGE_TONES: ReadonlyArray<FlowBadgeTone> = ["neutral", "warning"];
+const BADGE_TONES: ReadonlyArray<FlowDiagramBadgeTone> = ["neutral", "warning"];
 
-export type CompiledFlowNode = {
+export type CompiledFlowDiagramNode = {
   readonly id: string;
   readonly label: string;
-  readonly tone: FlowTone;
+  readonly tone: FlowDiagramTone;
   // A technical identifier line (a path, command, or PR number) rendered in
   // monospace under the label; explanatory prose belongs in the body.
   readonly code?: string;
   // A short state or status pill beside the label, such as "Open - must
   // merge first"; state never fuses into the label itself.
   readonly badge?: string;
-  readonly badgeTone: FlowBadgeTone;
+  readonly badgeTone: FlowDiagramBadgeTone;
   // The relationship explained at the point of connection: the inline
   // content of the node's one authored paragraph.
   readonly body: ReadonlyArray<ElementContent>;
 };
 
-export type CompiledFlowStage = {
+export type CompiledFlowDiagramStage = {
   readonly title: string;
-  readonly nodes: ReadonlyArray<CompiledFlowNode>;
+  readonly nodes: ReadonlyArray<CompiledFlowDiagramNode>;
 };
 
-export type CompiledFlowEdge = {
+export type CompiledFlowDiagramEdge = {
   readonly from: string;
   readonly to: string;
   readonly label?: string;
 };
 
-export type CompiledFlow = {
-  readonly stages: ReadonlyArray<CompiledFlowStage>;
-  readonly edges: ReadonlyArray<CompiledFlowEdge>;
+export type CompiledFlowDiagram = {
+  readonly stages: ReadonlyArray<CompiledFlowDiagramStage>;
+  readonly edges: ReadonlyArray<CompiledFlowDiagramEdge>;
   // Inline content of the optional footer paragraph authored directly in the
-  // Flow body: the takeaway or the conditional the diagram cannot draw.
+  // FlowDiagram body: the takeaway or the conditional the diagram cannot draw.
   readonly footer?: ReadonlyArray<ElementContent>;
 };
 
@@ -71,7 +71,7 @@ const NODE_SCHEMA = {
   code: { kind: "string" },
   badge: { kind: "string" },
   badgeTone: { kind: "enum", values: BADGE_TONES },
-  tone: { kind: "enum", values: FLOW_TONES },
+  tone: { kind: "enum", values: FLOW_DIAGRAM_TONES },
 } satisfies ComponentAttributeSchema;
 
 const EDGE_SCHEMA = {
@@ -121,7 +121,7 @@ const compileNode = ({
 }: {
   readonly child: ScopedChild;
   readonly diagnostics: DiagnosticCollector;
-}): CompiledFlowNode | undefined => {
+}): CompiledFlowDiagramNode | undefined => {
   const validated = validateComponentAttributes({
     component: "Node",
     attributes: child.attributes,
@@ -162,7 +162,7 @@ const compileStage = ({
 }: {
   readonly child: ScopedChild;
   readonly diagnostics: DiagnosticCollector;
-}): CompiledFlowStage => {
+}): CompiledFlowDiagramStage => {
   const validated = validateComponentAttributes({
     component: "Stage",
     attributes: child.attributes,
@@ -200,7 +200,7 @@ const compileEdge = ({
 }: {
   readonly child: ScopedChild;
   readonly diagnostics: DiagnosticCollector;
-}): CompiledFlowEdge | undefined => {
+}): CompiledFlowDiagramEdge | undefined => {
   const validated = validateComponentAttributes({
     component: "Edge",
     attributes: child.attributes,
@@ -226,7 +226,7 @@ const compileEdge = ({
 };
 
 // Enforces the v1 layout contract on the whole diagram, so every accepted
-// Flow can be drawn exactly: earlier stages hold one node each, only the
+// FlowDiagram can be drawn exactly: earlier stages hold one node each, only the
 // last stage may fan out, and its fan-in covers each node exactly once.
 const validateShape = ({
   stages,
@@ -235,8 +235,8 @@ const validateShape = ({
   position,
   diagnostics,
 }: {
-  readonly stages: ReadonlyArray<CompiledFlowStage>;
-  readonly edges: ReadonlyArray<CompiledFlowEdge>;
+  readonly stages: ReadonlyArray<CompiledFlowDiagramStage>;
+  readonly edges: ReadonlyArray<CompiledFlowDiagramEdge>;
   readonly edgeChildren: ReadonlyArray<ScopedChild>;
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
@@ -312,16 +312,16 @@ const validateShape = ({
   });
 };
 
-/** Compiles one Flow component into the model consumed by rendering. */
-export const compileFlowComponent = ({
+/** Compiles one FlowDiagram component into the model consumed by rendering. */
+export const compileFlowDiagramComponent = ({
   attributes,
   children,
   scopedChildren,
   position,
   diagnostics,
-}: ComponentCompilerInput): CompiledFlow => {
+}: ComponentCompilerInput): CompiledFlowDiagram => {
   validateComponentAttributes({
-    component: "Flow",
+    component: "FlowDiagram",
     attributes,
     position,
     diagnostics,
@@ -333,7 +333,7 @@ export const compileFlowComponent = ({
   const edgeChildren = scopedChildren.filter((child) => child.name === "Edge");
   if (stageChildren.length < 2) {
     diagnostics.add({
-      message: "Flow needs at least two Stage columns to relate",
+      message: "FlowDiagram needs at least two Stage columns to relate",
       position,
     });
   }
@@ -349,7 +349,7 @@ export const compileFlowComponent = ({
   }
   const footer = singleParagraphContent({
     children,
-    owner: "The Flow footer",
+    owner: "The FlowDiagram footer",
     position,
     diagnostics,
   });

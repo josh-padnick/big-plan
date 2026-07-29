@@ -1,21 +1,21 @@
 ---
-title: Flow
+title: FlowDiagram
 description: A staged diagram of tinted node cards joined by verb-labeled, directed connectors, with an explicit fork when one node feeds several.
 ---
 
-`Flow` diagrams genuinely relational content - flows, dependencies, fan-outs - as staged columns read left to right.
+`FlowDiagram` diagrams genuinely relational content - flows, dependencies, fan-outs - as staged columns read left to right.
 Small-caps stage headers name what each column holds, content-sized cards carry a bold label with an optional monospace identifier, status badge, and one-line body, and every connector touches its cards with an arrowhead pointing subject-to-object of its verb.
 When one node feeds several, the diagram draws an explicit branching fork rather than a lone arrow beside a stack.
 
 ## When to use it
 
-Reach for `Flow` when the point is a relationship: how an artifact travels, what depends on what, where one source fans out.
+Reach for `FlowDiagram` when the point is a relationship: how an artifact travels, what depends on what, where one source fans out.
 A list of parallel claims is bullets, not a diagram.
 
 ## Authoring
 
 ```mdx
-<Flow>
+<FlowDiagram>
 
 <Stage title="Source of truth">
 <Node id="authored" label="Author once" code="assets/skill/SKILL.md" tone="source" />
@@ -35,7 +35,7 @@ The site republishes the same file
 
 One authored file - no content drift.
 
-</Flow>
+</FlowDiagram>
 ```
 
 ## The contract
@@ -45,7 +45,7 @@ One authored file - no content drift.
 - A `Node` body is at most one short paragraph: the relationship explained at the point of connection.
 - Every `Edge` needs `from` and `to` naming node ids in adjacent stages, read left to right; `label` carries the verb.
 - Only the last stage may hold more than one node, and every node after the first stage takes exactly one incoming edge, so the diagram always draws as columns with one connector or one fork between them.
-- Loose content inside `Flow` is at most one paragraph: the footer line rendered inside the graphic.
+- Loose content inside `FlowDiagram` is at most one paragraph: the footer line rendered inside the graphic.
 
 Each violation fails `validate` and `render` with a positional diagnostic.
-Run `big-plan guidance Flow` for judgment-level usage guidance.
+Run `big-plan guidance FlowDiagram` for judgment-level usage guidance.

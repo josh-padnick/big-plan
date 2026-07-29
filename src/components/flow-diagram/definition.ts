@@ -1,9 +1,9 @@
-// Declares Flow's component integration contract and its Stage, Node, and
+// Declares FlowDiagram's component integration contract and its Stage, Node, and
 // Edge child grammar; rendering lives in the React component library.
 
 import type { ScopedChildDefinition } from "../_authoring/contract.js";
-import { compileFlowComponent } from "./compile.js";
-import { Flow } from "./view.js";
+import { compileFlowDiagramComponent } from "./compile.js";
+import { FlowDiagram } from "./view.js";
 import { defineComponent } from "../_registration/define-component.js";
 
 // A node body is the one-line relationship explanation; anything with
@@ -55,9 +55,9 @@ const edge: ScopedChildDefinition = {
   },
 };
 
-/** Declares Flow's renderer and Stage, Node, and Edge child contract blocks. */
-export const FLOW_COMPONENT_DEFINITION = defineComponent({
-  compile: compileFlowComponent,
-  view: Flow,
+/** Declares FlowDiagram's renderer and Stage, Node, and Edge child contract blocks. */
+export const FLOW_DIAGRAM_COMPONENT_DEFINITION = defineComponent({
+  compile: compileFlowDiagramComponent,
+  view: FlowDiagram,
   scopedChildren: { Stage: stage, Edge: edge },
 });

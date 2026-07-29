@@ -1,4 +1,4 @@
-// Tests Flow's staged-diagram contract: the v1 shape validation - single-node
+// Tests FlowDiagram's staged-diagram contract: the v1 shape validation - single-node
 // stages flowing left to right into an optional last-stage fan-out - plus the
 // card, connector, fork, badge, and footer markup the view places on the
 // grid.
@@ -9,7 +9,7 @@ import type { ScopedChild } from "../_authoring/contract.js";
 import { createDiagnosticCollector } from "../_authoring/diagnostics.js";
 import type { CompiledComponent } from "../_registration/define-component.js";
 import { reactToHast } from "../../render/markdown/component-pipeline/react-hast-adapter.js";
-import { FLOW_COMPONENT_DEFINITION } from "./definition.js";
+import { FLOW_DIAGRAM_COMPONENT_DEFINITION } from "./definition.js";
 
 const parseRenderedElement = (compiled: CompiledComponent): Element => {
   const parsed = reactToHast(compiled.presentation());
@@ -75,7 +75,7 @@ const render = ({
 }) => {
   const diagnostics = createDiagnosticCollector();
   const element = parseRenderedElement(
-    FLOW_COMPONENT_DEFINITION.compile({
+    FLOW_DIAGRAM_COMPONENT_DEFINITION.compile({
       attributes: {},
       children,
       scopedChildren,
@@ -128,8 +128,8 @@ const pipelineChildren = (): ReadonlyArray<ScopedChild> => [
   edge({ from: "gen", to: "setup" }),
 ];
 
-describe("FLOW_COMPONENT_DEFINITION", () => {
-  it("should report a Flow with fewer than two stages", () => {
+describe("FLOW_DIAGRAM_COMPONENT_DEFINITION", () => {
+  it("should report a FlowDiagram with fewer than two stages", () => {
     const { diagnostics } = render({
       scopedChildren: [stage("Only", [node({ id: "a", label: "A" })])],
     });
@@ -137,7 +137,7 @@ describe("FLOW_COMPONENT_DEFINITION", () => {
       {
         line: 3,
         column: 1,
-        message: "Flow needs at least two Stage columns to relate",
+        message: "FlowDiagram needs at least two Stage columns to relate",
       },
     ]);
   });
@@ -274,7 +274,7 @@ describe("FLOW_COMPONENT_DEFINITION", () => {
     });
   });
 
-  it("should reject loose Flow content that is not a footer paragraph", () => {
+  it("should reject loose FlowDiagram content that is not a footer paragraph", () => {
     const { diagnostics } = render({
       scopedChildren: dependencyChildren(),
       children: [
@@ -289,7 +289,7 @@ describe("FLOW_COMPONENT_DEFINITION", () => {
     expect(diagnostics).toContainEqual({
       line: 3,
       column: 1,
-      message: "The Flow footer is one short paragraph",
+      message: "The FlowDiagram footer is one short paragraph",
     });
   });
 
@@ -299,18 +299,18 @@ describe("FLOW_COMPONENT_DEFINITION", () => {
       children: [paragraph("Until #33 merges, branch the skill PR from it.")],
     });
     expect(diagnostics).toEqual([]);
-    expect(element.properties["data-flow"]).toBe("true");
+    expect(element.properties["data-flow-diagram"]).toBe("true");
     const rendered = JSON.stringify(element);
-    expect(rendered).toContain('"data-flow-tone":"source"');
-    expect(rendered).toContain('"data-flow-badge-tone":"neutral"');
+    expect(rendered).toContain('"data-flow-diagram-tone":"source"');
+    expect(rendered).toContain('"data-flow-diagram-badge-tone":"neutral"');
     expect(rendered).toContain('"value":"unblocks"');
     expect(rendered).toContain('"value":"Adds the guidance command"');
-    expect(rendered).toContain('"data-flow-footer":"true"');
+    expect(rendered).toContain('"data-flow-diagram-footer":"true"');
     expect(rendered).toContain(
       '"value":"Until #33 merges, branch the skill PR from it."',
     );
-    expect(rendered).toContain('"data-flow-link":"true"');
-    expect(rendered).not.toContain("data-flow-branch");
+    expect(rendered).toContain('"data-flow-diagram-link":"true"');
+    expect(rendered).not.toContain("data-flow-diagram-branch");
   });
 
   it("should render the pipeline fan-out as a fork touching every card", () => {
@@ -321,10 +321,10 @@ describe("FLOW_COMPONENT_DEFINITION", () => {
     const rendered = JSON.stringify(element);
     expect(rendered).toContain('"value":"Source of truth"');
     expect(rendered).toContain('"value":"assets/skill/SKILL.md"');
-    expect(rendered).toContain('"data-flow-fork-stub":"true"');
-    expect(rendered).toContain('"data-flow-branch":"first"');
-    expect(rendered).toContain('"data-flow-branch":"middle"');
-    expect(rendered).toContain('"data-flow-branch":"last"');
+    expect(rendered).toContain('"data-flow-diagram-fork-stub":"true"');
+    expect(rendered).toContain('"data-flow-diagram-branch":"first"');
+    expect(rendered).toContain('"data-flow-diagram-branch":"middle"');
+    expect(rendered).toContain('"data-flow-diagram-branch":"last"');
     // The single-node stages span every lane; the fan-out cards take one
     // lane each so the branches meet their centers.
     expect(rendered).toContain("grid-row:2 / span 3");

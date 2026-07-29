@@ -1,6 +1,6 @@
 // Browser tests of the deck reading journey: Part divider bands, grouped TOC
 // navigation to a part anchor, Glance rows linking to their slides,
-// sub-slide frames with kicker headings, context-builder lines, and the Flow
+// sub-slide frames with kicker headings, context-builder lines, and the FlowDiagram
 // diagram's staged fork. Render-health failures are enforced by the fixtures
 // module.
 
@@ -63,35 +63,37 @@ test("should read the deck plan through parts, glance, and sub-slides", async ({
   });
 });
 
-test("should draw the Flow pipeline as staged cards with an explicit fork", async ({
+test("should draw the FlowDiagram pipeline as staged cards with an explicit fork", async ({
   page,
-  flowViewerUrl,
+  flowDiagramViewerUrl,
 }) => {
-  await page.goto(flowViewerUrl);
-  const flow = page.locator("[data-flow]").first();
+  await page.goto(flowDiagramViewerUrl);
+  const flow = page.locator("[data-flow-diagram]").first();
 
   await test.step("stage headers and toned cards render in columns", async () => {
-    await expect(flow.locator("[data-flow-stage]")).toHaveText([
+    await expect(flow.locator("[data-flow-diagram-stage]")).toHaveText([
       "Source of truth",
       "Generate",
       "Available through",
     ]);
     await expect(
-      flow.locator('[data-flow-node][data-flow-tone="source"]'),
+      flow.locator('[data-flow-diagram-node][data-flow-diagram-tone="source"]'),
     ).toHaveCount(1);
     await expect(
-      flow.locator('[data-flow-node][data-flow-tone="destination"]'),
+      flow.locator(
+        '[data-flow-diagram-node][data-flow-diagram-tone="destination"]',
+      ),
     ).toHaveCount(3);
   });
 
   await test.step("the fan-out draws one branch per destination card", async () => {
-    await expect(flow.locator("[data-flow-fork-stub]")).toHaveCount(1);
-    await expect(flow.locator("[data-flow-branch]")).toHaveCount(3);
+    await expect(flow.locator("[data-flow-diagram-fork-stub]")).toHaveCount(1);
+    await expect(flow.locator("[data-flow-diagram-branch]")).toHaveCount(3);
     // Each branch's row centers on its card, so the branch and card boxes
     // overlap vertically and the connector touches the card.
-    const branch = flow.locator('[data-flow-branch="first"]');
+    const branch = flow.locator('[data-flow-diagram-branch="first"]');
     const card = flow
-      .locator('[data-flow-node][data-flow-tone="destination"]')
+      .locator('[data-flow-diagram-node][data-flow-diagram-tone="destination"]')
       .first();
     const branchBox = await boxOf(branch);
     const cardBox = await boxOf(card);
@@ -105,7 +107,7 @@ test("should draw the Flow pipeline as staged cards with an explicit fork", asyn
 
   await test.step("the verb label and footer line render inside the graphic", async () => {
     await expect(flow).toContainText("feeds");
-    await expect(flow.locator("[data-flow-footer]")).toContainText(
+    await expect(flow.locator("[data-flow-diagram-footer]")).toContainText(
       "One authored file",
     );
   });

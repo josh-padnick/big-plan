@@ -44,7 +44,7 @@ type WorkerFixtures = {
   readonly apiEndpointsViewerUrl: string;
   readonly complexDecisionViewerUrl: string;
   readonly deckViewerUrl: string;
-  readonly flowViewerUrl: string;
+  readonly flowDiagramViewerUrl: string;
   readonly nestedDecisionViewerUrl: string;
   readonly simpleDecisionSetViewerUrl: string;
   readonly sampleViewerUrl: string;
@@ -210,12 +210,12 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     },
     { scope: "worker" },
   ],
-  flowViewerUrl: [
+  flowDiagramViewerUrl: [
     async ({}, use) => {
-      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-flow-"));
-      const outputPath = join(outputDir, "flow.html");
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-flow-diagram-"));
+      const outputPath = join(outputDir, "flow-diagram.html");
       await renderThroughCli({
-        inputPath: join(repoRoot, "examples", "flow.mdx"),
+        inputPath: join(repoRoot, "examples", "flow-diagram.mdx"),
         outputPath,
         outputDir,
       });
