@@ -67,6 +67,9 @@ Any flow content after the title satisfies it; a title followed directly by anot
 `lede-style` requires that lede to read as a declarative subtitle describing the delivered outcome.
 A lede opening with a self-referential phrase such as "I propose", "We will", "This plan", or "This document" is flagged; prose mentioning those phrases later in a sentence is not.
 
+`lede-length` keeps the lede a subtitle rather than an opening body paragraph: at most thirty words, counted across plain text, inline code, and emphasis.
+Big Plan renders the paragraph directly under the title as the document's subtitle, so supporting detail belongs in a following paragraph or section.
+
 `section-vocabulary` keeps section names in Big Plan's opinionated review vocabulary.
 A heading reading exactly "Desired outcome", "Desired outcomes", or "Definition of done" is flagged with the preferred heading "Acceptance criteria".
 Prose mentioning those phrases, and headings that merely contain them, are never flagged.

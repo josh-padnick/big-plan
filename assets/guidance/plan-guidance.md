@@ -9,6 +9,7 @@ Every principle below serves that reading order.
 The title names what will exist after execution, in a punchy noun phrase of at most eight words.
 Write "Ship the official Big Plan skill", never "Skill implementation plan" or a title so long it reads as a sentence.
 Follow the title immediately with a lede: exactly one concise sentence that describes the plan, reading as the document's subtitle.
+Big Plan renders that first paragraph as the subtitle, so keep it as short as it can be while still carrying the thesis; move every qualifier and supporting detail into the sections below.
 State the thesis declaratively.
 Never open the lede with "I propose", "This plan", or any other words about the document or its author; describe the delivered future, not the act of proposing it.
 

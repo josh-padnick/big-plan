@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
+import { ledeLengthRule } from "./rules/lede-length.js";
 import { ledeStyleRule } from "./rules/lede-style.js";
 import { markdownTableFormatRule } from "./rules/markdown-table-format.js";
 import { planLedeRule } from "./rules/plan-lede.js";
@@ -19,6 +20,7 @@ const RULES: ReadonlyArray<PlanLintRule> = [
   titleLengthRule,
   planLedeRule,
   ledeStyleRule,
+  ledeLengthRule,
   sectionVocabularyRule,
 ];
 
