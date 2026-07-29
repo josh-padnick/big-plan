@@ -17,17 +17,36 @@ the transform.
   article .plan-slide > :last-child {
     margin-bottom: 0;
   }
+
+  /* The parent header block of a section split into sub-slides: kicker and
+     h2 stand as one unit above the numbered frames, with any intro prose
+     spaced below the heading. */
+  article .plan-subpart > h2 {
+    margin: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+    font-size: 1.6rem;
+  }
+  article .plan-subpart > h2 ~ * {
+    margin-top: 0.8rem;
+    margin-bottom: 0;
+  }
 }
 
-/* A slide's h2 sits below the kicker and the frame's top padding, so its
-   jump offset budgets for the frame above it as well as the sticky chrome.
-   Unlayered on purpose: the page-level :target rule is unlayered and would
-   otherwise always win. */
-article .plan-slide > h2 {
+/* A slide's h2 sits below the kicker and the frame's top padding, and a
+   sub-slide's kicker heading sits below the frame's top padding, so their
+   jump offsets budget for the frame above them as well as the sticky
+   chrome. Unlayered on purpose: the page-level :target rule is unlayered
+   and would otherwise always win. */
+article .plan-slide > h2,
+article .plan-subpart > h2,
+article .plan-slide > h3[data-slide-kicker] {
   scroll-margin-top: 8rem;
 }
 @media (width < 56rem) {
-  article .plan-slide > h2 {
+  article .plan-slide > h2,
+  article .plan-subpart > h2,
+  article .plan-slide > h3[data-slide-kicker] {
     scroll-margin-top: 10.75rem;
   }
 }

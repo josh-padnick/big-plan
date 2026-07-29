@@ -1,9 +1,11 @@
 // Applies the deck reading paradigm to a compiled review document: numbers
 // Part dividers in document order, wraps each top-level h2 section in a
-// slide frame with a numbered kicker, and completes the Glance overview with
-// section links, slide numbers, and part group headers. It runs after
-// component delivery, so the markers it consumes are the data attributes the
-// Part and Glance views emit.
+// slide frame with a numbered kicker (splitting a section with h3 headings
+// into a parent header block over numbered sub-slides), restyles a slide's
+// leading emphasized paragraph into its context-builder line, and completes
+// the Glance overview with section links, slide numbers, and part group
+// headers. It runs after component delivery, so the markers it consumes are
+// the data attributes the Part and Glance views emit.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 
@@ -62,6 +64,24 @@ const KICKER_CLASSES = [
   "uppercase",
   "tracking-[0.14em]",
   "text-accent",
+] as const;
+
+// The parent header block a sectioned-into-sub-slides section keeps: its
+// kicker and h2 stand above the numbered sub-slide frames.
+const SUBPART_CLASSES = ["plan-subpart", "mt-12", "mb-4"] as const;
+
+// A sub-slide's kicker is its heading: the h3 keeps its anchor and outline
+// role while rendering as the numbered small-caps line.
+const SUBSLIDE_KICKER_CLASSES = ["mt-0", ...KICKER_CLASSES] as const;
+
+// The context builder: one muted line telling the reader what they are
+// looking at, restyled from the slide's leading emphasized paragraph.
+const CONTEXT_CLASSES = [
+  "plan-slide-context",
+  "-mt-[0.2rem]",
+  "mb-[0.9rem]",
+  "text-[0.9375rem]",
+  "text-muted",
 ] as const;
 
 const GLANCE_GROUP_CLASSES = [
@@ -128,6 +148,113 @@ type SlideSection = {
   readonly id: string | undefined;
   readonly label: string;
   readonly part: NumberedPart | undefined;
+};
+
+// Restyles a slide's leading emphasized paragraph into the context builder:
+// the muted line under the kicker (or heading) that tells the reader what
+// they are looking at. The emphasis marks intent, so it unwraps; the line is
+// muted, not italic.
+const applyContextBuilder = (body: ReadonlyArray<ElementContent>): void => {
+  const first = body.find(
+    (node) => node.type !== "text" || node.value.trim() !== "",
+  );
+  if (first === undefined || !isElement(first) || first.tagName !== "p") {
+    return;
+  }
+  const meaningful = first.children.filter(
+    (node) => node.type !== "text" || node.value.trim() !== "",
+  );
+  const [only] = meaningful;
+  if (
+    meaningful.length !== 1 ||
+    only === undefined ||
+    !isElement(only) ||
+    only.tagName !== "em"
+  ) {
+    return;
+  }
+  first.children = only.children;
+  first.properties["data-slide-context"] = "";
+  first.properties.className = [...CONTEXT_CLASSES];
+};
+
+// Splits a section body that contains h3 headings into the parent header
+// block plus one numbered sub-slide frame per h3 run, so a long section
+// reads as its own small deck. The h3 becomes the sub-slide's kicker,
+// keeping its anchor and outline role.
+const buildSubSlides = ({
+  heading,
+  body,
+  label,
+  kicker,
+}: {
+  readonly heading: Element;
+  readonly body: ReadonlyArray<ElementContent>;
+  readonly label: string;
+  readonly kicker: Element;
+}): ReadonlyArray<ElementContent> => {
+  const firstH3 = body.findIndex(
+    (node) => isElement(node) && node.tagName === "h3",
+  );
+  const parent: Element = {
+    type: "element",
+    tagName: "div",
+    properties: {
+      "data-subpart": "",
+      className: [...SUBPART_CLASSES],
+    },
+    children: [kicker, heading, ...body.slice(0, firstH3)],
+  };
+  const result: Array<ElementContent> = [parent];
+  let index = firstH3;
+  let subIndex = 0;
+  while (index < body.length) {
+    const h3 = body[index];
+    if (h3 === undefined || !isElement(h3) || h3.tagName !== "h3") {
+      index += 1;
+      continue;
+    }
+    const run: Array<ElementContent> = [];
+    let end = index + 1;
+    while (end < body.length) {
+      const sibling = body[end];
+      if (
+        sibling === undefined ||
+        (isElement(sibling) && sibling.tagName === "h3")
+      ) {
+        break;
+      }
+      run.push(sibling);
+      end += 1;
+    }
+    subIndex += 1;
+    const subLabel = `${label}.${subIndex}`;
+    const subKicker: Element = {
+      type: "element",
+      tagName: "h3",
+      properties: {
+        ...(typeof h3.properties.id === "string"
+          ? { id: h3.properties.id }
+          : {}),
+        "data-slide-kicker": "",
+        className: [...SUBSLIDE_KICKER_CLASSES],
+      },
+      children: [{ type: "text", value: `${subLabel} / ${textOf(h3)}` }],
+    };
+    applyContextBuilder(run);
+    result.push({
+      type: "element",
+      tagName: "section",
+      properties: {
+        "data-slide": "",
+        "data-subslide": "",
+        className: [...SLIDE_CLASSES],
+      },
+      children: [subKicker, ...run],
+    });
+    index = end;
+  }
+  return result;
 };
 
 // Wraps each top-level h2 plus its following siblings - up to the next h2,
@@ -199,6 +326,23 @@ const wrapSlides = (
       label,
       part: currentPart,
     });
+    const sectionBody = body.slice(1);
+    const hasSubSlides = sectionBody.some(
+      (node) => isElement(node) && node.tagName === "h3",
+    );
+    if (hasSubSlides) {
+      rewritten.push(
+        ...buildSubSlides({
+          heading: child,
+          body: sectionBody,
+          label,
+          kicker,
+        }),
+      );
+      index = end;
+      continue;
+    }
+    applyContextBuilder(sectionBody);
     const slide: Element = {
       type: "element",
       tagName: "section",

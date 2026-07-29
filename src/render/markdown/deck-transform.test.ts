@@ -1,6 +1,7 @@
 // Tests the deck transform through full compilation: slide frames around h2
-// sections, numbered kickers, Part divider numbering and anchors, and the
-// part grouping carried on section metadata.
+// sections, numbered kickers, sub-slide frames around h3 runs, context
+// builders from leading emphasized paragraphs, Part divider numbering and
+// anchors, and the part grouping carried on section metadata.
 
 import { describe, expect, it } from "vitest";
 import { compileMarkdown, serializeMarkdown } from "./compile-markdown.js";
@@ -94,6 +95,98 @@ describe("deck slide frames", () => {
   it("should leave a document without h2 sections unwrapped", () => {
     const { html } = compile("# Only a title\n\nProse.\n");
     expect(html).not.toContain("data-slide");
+  });
+});
+
+describe("deck sub-slides", () => {
+  const SUBSLIDE_FIXTURE = `# Deck plan
+
+The lede.
+
+<Part title="The proposal" />
+
+## Warm-up
+
+Simple.
+
+## Implementation
+
+An intro line.
+
+### Pipeline
+
+How it travels.
+
+### Planned changes
+
+What lands where.
+`;
+
+  it("should render the section header as a parent block above sub-slide frames", () => {
+    const { html } = compile(SUBSLIDE_FIXTURE);
+    expect(html).toMatch(
+      /<div data-subpart[^>]*><p data-slide-kicker[^>]*>1\.2 \/ Implementation<\/p><h2 id="implementation">Implementation<\/h2>\n<p>An intro line\.<\/p>\n<\/div>/,
+    );
+  });
+
+  it("should frame each h3 run as its own numbered sub-slide", () => {
+    const { html } = compile(SUBSLIDE_FIXTURE);
+    expect(html.match(/data-subslide/g)).toHaveLength(2);
+    expect(html).toMatch(
+      /<section data-slide[^>]* data-subslide[^>]*><h3 id="pipeline" data-slide-kicker[^>]*>1\.2\.1 \/ Pipeline<\/h3>\n<p>How it travels\.<\/p>\n<\/section>/,
+    );
+    expect(html).toContain(">1.2.2 / Planned changes</h3>");
+  });
+
+  it("should keep a section without h3 headings a single slide frame", () => {
+    const { html } = compile(SUBSLIDE_FIXTURE);
+    expect(html).toMatch(
+      /<section data-slide[^>]*><p data-slide-kicker[^>]*>1\.1 \/ Warm-up<\/p>/,
+    );
+  });
+
+  it("should keep the section's Glance link and metadata on the h2", () => {
+    const { sections } = compile(SUBSLIDE_FIXTURE);
+    expect(sections.map((section) => section.id)).toEqual([
+      "warm-up",
+      "implementation",
+    ]);
+  });
+});
+
+describe("deck context builders", () => {
+  it("should restyle a slide's leading emphasized paragraph as the context line", () => {
+    const { html } = compile(
+      "## One\n\n*What you are looking at.*\n\nBody prose.\n",
+    );
+    expect(html).toMatch(
+      /<p data-slide-context[^>]*>What you are looking at\.<\/p>/,
+    );
+    expect(html).not.toMatch(/<p data-slide-context[^>]*><em>/);
+  });
+
+  it("should restyle a sub-slide's leading emphasized paragraph under its kicker", () => {
+    const { html } = compile(
+      "## One\n\n### Two\n\n*The sub-slide's context.*\n\nBody.\n",
+    );
+    expect(html).toMatch(
+      /<h3 id="two" data-slide-kicker[^>]*>1\.1 \/ Two<\/h3>\n<p data-slide-context[^>]*>The sub-slide's context\.<\/p>/,
+    );
+  });
+
+  it("should leave an ordinary leading paragraph alone", () => {
+    const { html } = compile("## One\n\nPlain prose first.\n");
+    expect(html).not.toContain("data-slide-context");
+  });
+
+  it("should leave a partially emphasized leading paragraph alone", () => {
+    const { html } = compile("## One\n\n*Half* emphasized.\n");
+    expect(html).not.toContain("data-slide-context");
+  });
+
+  it("should leave a later emphasized paragraph alone", () => {
+    const { html } = compile("## One\n\nPlain first.\n\n*Emphasis later.*\n");
+    expect(html).not.toContain("data-slide-context");
   });
 });
 

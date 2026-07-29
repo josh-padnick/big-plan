@@ -50,13 +50,27 @@ A durable retry queue replaces inline payment-capture retries, demonstrated here
 
 ## The retry queue
 
-- A queue worker owns retries end to end, with explicit state per attempt.
-- Backoff is bounded, so a stuck capture never retries forever.
+A queue worker owns retries end to end.
+
+### The worker
+
+*What the queue worker does on every attempt.*
+
+- Claims due schedules with explicit state per attempt.
+- Applies bounded backoff, so a stuck capture never retries forever.
+
+### The audit trail
+
+*Where every attempt becomes visible to operators.*
+
 - Every state change lands in the audit trail as it happens.
+- Operators pause, force, or cancel from the same view.
 
 <Part title="Shipping & your review" />
 
 ## Sequencing
+
+*We need to agree on the landing order before the schema ships.*
 
 - Land the schema migration first, behind no user-facing change.
 - Ship the queue worker second, shadowing inline retries.

@@ -31,6 +31,12 @@ Component attributes are strings (`title="Rollout"`) or bare shorthand booleans 
 
 Because `<` and `{` begin MDX syntax, write them in code spans or fences when you need them literally in prose.
 
+## How structure renders as a deck
+
+The rendered document reads as a deck: every h2 section becomes a slide frame headed by a numbered kicker, and `Part` markers group the slides into numbered acts that also group the table of contents and the `Glance` overview.
+A section containing h3 headings renders as a parent header block over numbered sub-slides, one per h3 run, with the h3 itself becoming the sub-slide's kicker.
+A slide or sub-slide whose first paragraph is entirely emphasized (`*like this*`) renders that paragraph as the context builder: one muted line under the kicker telling the reader what they are looking at.
+
 ## Validate before rendering
 
 Use `big-plan validate <input.mdx>` as the correction loop while authoring.
