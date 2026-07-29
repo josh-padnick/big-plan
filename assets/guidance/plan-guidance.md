@@ -34,10 +34,13 @@ The frame most worth the reviewer's attention is usually in the middle of the ch
 
 A rendered plan reads as a deck: every section is one slide carrying one thought, stated mostly in bullets, at roughly one screen of content.
 If a section needs a second screen, it holds a second thought; split it.
+When one section genuinely owns several thoughts - an implementation with its pipeline and its change list - split it into h3 sub-slides instead: each h3 run renders as its own numbered frame under the section's header.
 Group the slides with `Part` markers into about three acts - Context, The proposal, and Shipping & your review - adapting the names when this plan demands it.
 Part 1 canonically holds "Status quo" and then "Success looks like": what is true today, and the outcome-level success a sponsor would repeat.
 "Success looks like" states outcomes, not verification; the checkable contract stays in "Acceptance criteria" near the end.
 Put a `Glance` directly after the `QuickSummary`: one row per section, so the reviewer sees the whole argument before reading any of it.
+Open a dense slide with a context builder: one fully emphasized paragraph (`*like this*`) that renders as a muted line telling the reader what they are looking at.
+When the slide carries a reader action - a decision, a question, something to verify - the context builder declares the action ("We need to decide where the skill ships."), not a description of the slide; purely orienting slides may stay descriptive.
 Within an act, order slides by the reader's questions, keep orientation ahead of detail, and cut any slide that would make the reader ask "why am I reading this now?".
 Fold "why X rather than Y" justifications into the surrounding story or a decision component, never into free-floating essay sections.
 Present delivery logistics, such as PR sequencing, as supporting decisions rather than headlines.
@@ -62,6 +65,7 @@ Big Plan ships components that present specific kinds of information better than
 - `Glance` for the plan in one look: one linked row per section, directly after the quick summary.
 - `Part` to divide the slides into numbered acts.
 - `Decision` for a tradeoff read option by option; `ComplexDecision` for a full criteria matrix; `SimpleDecisionSet` for quick calls.
+- `Flow` for genuinely relational content - a flow, dependency, or fan-out - drawn as staged cards with directed connectors.
 - `CodeDiff` and `CodeSnippet` for concrete code the reviewer should see.
 - `FileTree` and `FileTreeDiff` for layout and placement changes.
 - `DatabaseTableSchema`, `HttpEndpoint`, `GraphqlOperation`, and `GrpcMethod` for structured contracts.

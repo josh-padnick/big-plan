@@ -43,6 +43,8 @@ type WorkerFixtures = {
   readonly componentsViewerUrl: string;
   readonly apiEndpointsViewerUrl: string;
   readonly complexDecisionViewerUrl: string;
+  readonly deckViewerUrl: string;
+  readonly flowViewerUrl: string;
   readonly nestedDecisionViewerUrl: string;
   readonly simpleDecisionSetViewerUrl: string;
   readonly sampleViewerUrl: string;
@@ -184,6 +186,36 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const outputPath = join(outputDir, "complex-decision.html");
       await renderThroughCli({
         inputPath: join(repoRoot, "examples", "complex-decision.mdx"),
+        outputPath,
+        outputDir,
+      });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  // The deck example carries Parts, a Glance, sub-slides, and context
+  // builders, so the deck journey reads the paradigm end to end.
+  deckViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-deck-"));
+      const outputPath = join(outputDir, "deck.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "deck.mdx"),
+        outputPath,
+        outputDir,
+      });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  flowViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-flow-"));
+      const outputPath = join(outputDir, "flow.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "flow.mdx"),
         outputPath,
         outputDir,
       });
