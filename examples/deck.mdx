@@ -1,0 +1,68 @@
+# Ship the payments retry queue
+
+A durable retry queue replaces inline payment-capture retries, demonstrated here as a deck of `Part` acts with a `Glance` overview.
+
+<QuickSummary>
+
+<Why>
+
+- For checkout to stay fast and reliable, failed captures must retry without blocking requests or losing state on deploys.
+
+</Why>
+
+<What>
+
+- Build a persistent retry queue with explicit state and an operator-visible audit trail.
+
+</What>
+
+<How>
+
+- Move capture retries out of the API server and into a queue worker.
+- Record every attempt in the audit trail.
+
+</How>
+
+</QuickSummary>
+
+<Glance>
+<Item section="Status quo" gist="Inline retries couple checkout latency to processor health" />
+<Item section="Success looks like" gist="A restart never loses a scheduled retry" />
+<Item section="The retry queue" gist="A queue worker with explicit state and bounded backoff" />
+<Item section="Sequencing" gist="Schema first, worker second, operator controls last" />
+<Item section="Acceptance criteria" gist="The checkable contract for done" />
+</Glance>
+
+<Part title="Context" />
+
+## Status quo
+
+- Inline retries couple checkout latency to processor health.
+- Retry state lives in process memory, so every deploy loses it.
+- Operators cannot see, pause, or force a retry.
+
+## Success looks like
+
+- A failed capture is retried on schedule even across API-server restarts.
+- Operators watch every attempt in one audit trail.
+
+<Part title="The proposal" />
+
+## The retry queue
+
+- A queue worker owns retries end to end, with explicit state per attempt.
+- Backoff is bounded, so a stuck capture never retries forever.
+- Every state change lands in the audit trail as it happens.
+
+<Part title="Shipping & your review" />
+
+## Sequencing
+
+- Land the schema migration first, behind no user-facing change.
+- Ship the queue worker second, shadowing inline retries.
+- Cut over and add operator controls last.
+
+## Acceptance criteria
+
+- A failed capture is retried on schedule after an API-server restart.
+- Operators can pause, force, and cancel retries per merchant.

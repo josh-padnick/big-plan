@@ -30,11 +30,15 @@ Place each fact on its rung on purpose: a sentence naming files, commands, or fl
 A principle is not a how: "keep the skill version-locked" states a virtue; "embed the skill text in the CLI" states an action.
 The frame most worth the reviewer's attention is usually in the middle of the chain - a lifecycle, ownership, or policy question - not the loftiest goal and not the lowest mechanism.
 
-## 4. Choose the structure this plan needs
+## 4. Structure the plan as a deck of slides
 
-There is no canonical section list; use the sections this plan needs, and only those.
-Order them by the reader's questions: what is true today, what the delivered result will be like, how it works in detail, and how you will both know it is done.
-Keep orientation ahead of detail; if a section would make the reader ask "why am I reading this now?", it is in the wrong place.
+A rendered plan reads as a deck: every section is one slide carrying one thought, stated mostly in bullets, at roughly one screen of content.
+If a section needs a second screen, it holds a second thought; split it.
+Group the slides with `Part` markers into about three acts - Context, The proposal, and Shipping & your review - adapting the names when this plan demands it.
+Part 1 canonically holds "Status quo" and then "Success looks like": what is true today, and the outcome-level success a sponsor would repeat.
+"Success looks like" states outcomes, not verification; the checkable contract stays in "Acceptance criteria" near the end.
+Put a `Glance` directly after the `QuickSummary`: one row per section, so the reviewer sees the whole argument before reading any of it.
+Within an act, order slides by the reader's questions, keep orientation ahead of detail, and cut any slide that would make the reader ask "why am I reading this now?".
 Fold "why X rather than Y" justifications into the surrounding story or a decision component, never into free-floating essay sections.
 Present delivery logistics, such as PR sequencing, as supporting decisions rather than headlines.
 
@@ -55,6 +59,8 @@ Place it near the end, after the reader understands the approach, and make every
 Big Plan ships components that present specific kinds of information better than paragraphs can:
 
 - `QuickSummary` for the key points a reviewer reads first.
+- `Glance` for the plan in one look: one linked row per section, directly after the quick summary.
+- `Part` to divide the slides into numbered acts.
 - `Decision` for a tradeoff read option by option; `ComplexDecision` for a full criteria matrix; `SimpleDecisionSet` for quick calls.
 - `CodeDiff` and `CodeSnippet` for concrete code the reviewer should see.
 - `FileTree` and `FileTreeDiff` for layout and placement changes.
