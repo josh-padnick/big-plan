@@ -3,28 +3,44 @@ title: CLI reference
 description: Reference the complete Big Plan command surface, defaults, results, and errors.
 ---
 
-Big Plan exposes three commands through the `big-plan` executable: `validate` for a no-write authoring check, `render` for the human-facing HTML document, and `compile` for the machine-facing plan model.
+Big Plan exposes four commands through the `big-plan` executable: `guidance` for the plan-writing principles and template, `validate` for a no-write authoring check, `render` for the human-facing HTML document, and `compile` for the machine-facing plan model.
 The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors, and result serialization.
 
 ## Commands
 
 ```text
+big-plan guidance
 big-plan validate <input.mdx>
 big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
 ```
 
-`<input.mdx>` is required.
+`guidance` accepts no arguments.
+For the other commands `<input.mdx>` is required.
 `validate` accepts no output argument.
 The output argument is optional for `render` and `compile`.
 
 The equivalent package runner forms are:
 
 ```sh
+npx big-plan guidance
 npx big-plan validate <input.mdx>
 npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
 ```
+
+## Guidance and the acknowledgment gate
+
+`guidance` prints the authoring principles for writing a plan a human loves to review, followed by a starting template in a fenced `mdx` block.
+Running it also records a guidance acknowledgment for the current working directory.
+
+`validate` and `render` require a current acknowledgment and fail with a structured `GUIDANCE_REQUIRED` error until `guidance` has been run.
+An acknowledgment is current when it was recorded for the same working directory within the last 24 hours against the guidance content the installed CLI ships.
+Updating Big Plan to a release with changed guidance therefore re-locks both commands until `guidance` is read again.
+`compile` is not gated, so machine tooling can compile a plan model without the authoring workflow.
+
+Acknowledgment state lives outside the project in the user's home directory under `.big-plan/`.
+Set the `BIG_PLAN_STATE_DIR` environment variable to relocate it, which test suites and sandboxed environments use to keep state isolated.
 
 ## Input and output paths
 
@@ -66,8 +82,8 @@ It performs three checks:
 2. Big Plan renders the complete HTML document in memory, including React component presentation, Markdown transforms, shell composition, and serialization.
 3. The authored plan passes every registered linting rule.
 
-Lint is intentionally stricter than rendering.
-`render` and `compile` continue to accept legal Markdown that a quality rule flags; `validate` is the authoring gate that combines structural acceptance, renderability, and the registered lint collection.
+Lint is intentionally stricter than structural compilation.
+`render` applies the same linting rules after derivation and before writing, so a plan that fails lint never becomes a review document; `compile` continues to accept legal Markdown that a quality rule flags.
 See [Authoring plans](/for-agents/authoring-plans/) for the linting rules and their conservative matching boundaries.
 Rendering the document in memory does not replace visual review: browser layout, readability, and whether the page matches author intent still require a human.
 
@@ -93,8 +109,11 @@ On success, each command returns a structured result for `axi-sdk-js` to seriali
 - `validated`: the absolute input path.
 - `title`: the document title.
 - `sections` and `components`: the validated counts.
+- `help`: a reminder that lint checks only what is statically analyzable, so the rendered document still needs rereading against the `guidance` principles.
 
-It writes no output and needs no `help` entry on success.
+It writes no output.
+
+`guidance` returns the guidance Markdown itself rather than a structured result.
 
 ## Errors
 
@@ -119,14 +138,17 @@ The input file is left unchanged.
 If parsing or component validation fails, the command raises a structured `VALIDATION_ERROR` with `Cannot validate document with invalid MDX`, `Cannot render document with invalid MDX`, or `Cannot compile document with invalid MDX`, according to the command.
 Its help entries contain every collected authoring diagnostic as `line:column message`, and no output file is written.
 
-If authoring lint fails, `validate` raises `VALIDATION_ERROR` with `Plan failed authoring lint`.
+If authoring lint fails, `validate` and `render` raise `VALIDATION_ERROR` with `Plan failed authoring lint`.
 Each help entry is `line:column [rule-id] message`.
+`render` runs lint before writing, so a lint failure leaves no output file.
+
+If guidance has not been acknowledged for the working directory, `validate` and `render` raise a structured `GUIDANCE_REQUIRED` error whose help entries name the `big-plan guidance` command and the acknowledgment window.
 
 `axi-sdk-js` maps `VALIDATION_ERROR` to exit status `2`.
 Successful validation exits `0`; operational or internal failures use `1`.
 
 ## Top-level help and version
 
-The CLI configures top-level help that lists all three commands and the derived-output defaults.
+The CLI configures top-level help that lists all four commands and the derived-output defaults.
 It also reads the package version for version output.
 If that version cannot be read from the package metadata, version reporting is left unconfigured instead of crashing the CLI.

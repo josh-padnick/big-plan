@@ -7,6 +7,12 @@ Big Plan documents are MDX files containing Markdown and built-in components.
 The renderer never evaluates code from a plan: imports, exports, `{}` expressions, and inline JSX are rejected.
 A plan is prose plus components, and the file on disk stays the greppable, diffable source of truth.
 
+## Read the guidance first
+
+Run `big-plan guidance` before writing a plan.
+It prints the principles for writing a plan a human loves to review, plus a starting template that already satisfies the linting rules below.
+Reading it recently is required: `validate` and `render` fail with `GUIDANCE_REQUIRED` until guidance has been run from the same working directory within 24 hours.
+
 ## What a plan may contain
 
 Standard Markdown plus GFM tables, task lists, footnotes, and literal autolinks all work.
@@ -29,7 +35,7 @@ Because `<` and `{` begin MDX syntax, write them in code spans or fences when yo
 
 Use `big-plan validate <input.mdx>` as the correction loop while authoring.
 It reads the plan, renders the complete HTML document in memory, builds the machine plan model in the same pass, and applies linting rules to the authored plan without writing an output file.
-Success reports the resolved title plus section and component counts.
+Success reports the resolved title plus section and component counts, and reminds you to reread the rendered document against the guidance principles before presenting it.
 
 Validation answers whether Big Plan can render the plan and whether the plan passes every statically analyzable rule in the lint collection.
 It does not replace looking at the rendered document: visual quality, writing clarity, and whether a wide table is pleasant to read still require human review.
@@ -49,9 +55,17 @@ A silently degraded document would be worse than a failed one, because the entir
 
 ## Linting rules catch statically analyzable problems
 
-Lint rules are an additional, deliberately stricter layer used by `validate`.
+Lint rules are an additional, deliberately stricter layer applied by `validate` and `render`.
 They can check any statically analyzable aspect of an authored plan.
-The first rule, `markdown-table-format`, catches table-shaped outer-pipe rows whose delimiter row is missing or malformed:
+
+`plan-lede` requires a plan that opens with a level-one title to state its thesis in prose before the first section heading, so the reader is oriented before structure begins.
+Any flow content after the title satisfies it; a title followed directly by another heading is the finding.
+
+`section-vocabulary` keeps section names in Big Plan's opinionated review vocabulary.
+A heading reading exactly "Desired outcome", "Desired outcomes", or "Definition of done" is flagged with the preferred heading "Acceptance criteria".
+Prose mentioning those phrases, and headings that merely contain them, are never flagged.
+
+`markdown-table-format` catches table-shaped outer-pipe rows whose delimiter row is missing or malformed:
 
 ```md
 | Change | Effect |
@@ -66,4 +80,4 @@ The diagnostic points to the row that should be the delimiter:
 
 The rule ignores valid GFM tables, ordinary prose containing pipes, rows presented wholly as inline-code examples, fenced code blocks, blockquotes, and isolated table-like rows.
 Inline code inside a table cell does not hide an otherwise table-shaped row.
-`render` and `compile` remain permissive for Markdown that the parser treats as prose; use `validate` when you want the extra authoring check.
+`render` enforces the same rules before writing, so a plan that fails lint never reaches a reviewer; only `compile` remains permissive for Markdown that the parser treats as prose.
