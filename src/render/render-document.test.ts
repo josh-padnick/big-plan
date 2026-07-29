@@ -88,10 +88,7 @@ describe("renderDocument affordances", () => {
 
   it("should render a TOC nav linking to each h2 when the document has sections", () => {
     expect(html).toContain('aria-label="Contents"');
-    // Labels render word by word so each word carries its bold-width ghost.
-    expect(html).toMatch(
-      /<a[^>]* href="#first-section">(?:<span class="toc-word" data-word="First">First<\/span>) (?:<span class="toc-word" data-word="section">section<\/span>)<\/a>/,
-    );
+    expect(html).toMatch(/<a[^>]* href="#first-section">First section<\/a>/);
   });
 
   it("should render the mobile section disclosure", () => {

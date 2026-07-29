@@ -167,24 +167,6 @@ Light and dark follow the reader's OS in inert exports.
   --breakpoint-wide: 56rem;
 }
 
-/* Each TOC label word reserves its semibold width through a hidden bold
-   ghost, so the active section's bolding can never change where a label
-   wraps. */
-nav[aria-label="Contents"] .toc-word {
-  display: inline-block;
-  /* Top-align the word boxes: the block ghost would otherwise move each
-     span's baseline and inflate the line boxes. */
-  vertical-align: top;
-}
-nav[aria-label="Contents"] .toc-word::after {
-  content: attr(data-word);
-  display: block;
-  height: 0;
-  overflow: hidden;
-  visibility: hidden;
-  font-weight: 600;
-}
-
 /* Section navigation glides instead of jumping; readers who ask the OS for
    reduced motion keep instant jumps. */
 @media (prefers-reduced-motion: no-preference) {

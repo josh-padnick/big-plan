@@ -52,19 +52,6 @@ const createOverviewId = (contentIds: ReadonlyArray<string>): string => {
   return candidate;
 };
 
-// Sizes every label word at its semibold width via a hidden ::after ghost
-// (see the .toc-word rules), so the active section's bolding can never move
-// a label's line breaks; pseudo-element text stays out of copies and the
-// accessibility tree.
-const bufferedTocLabel = (label: string): string =>
-  label
-    .split(" ")
-    .map(
-      (word) =>
-        `<span class="toc-word" data-word="${escapeHtml(word)}">${escapeHtml(word)}</span>`,
-    )
-    .join(" ");
-
 // Builds links shared by both TOCs; ids are URI-encoded because slugs may
 // contain characters that are not literal-safe inside href values.
 const renderTocItems = ({
@@ -77,7 +64,7 @@ const renderTocItems = ({
   nav
     .map(
       (entry) =>
-        `<li><a class="${linkClasses}" data-section-link href="#${encodeURIComponent(entry.id)}">${bufferedTocLabel(entry.label)}</a></li>`,
+        `<li><a class="${linkClasses}" data-section-link href="#${encodeURIComponent(entry.id)}">${escapeHtml(entry.label)}</a></li>`,
     )
     .join("\n");
 
