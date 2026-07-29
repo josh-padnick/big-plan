@@ -17,7 +17,7 @@ Reading it recently is required: `validate` and `render` fail with `GUIDANCE_REQ
 
 Standard Markdown plus GFM tables, task lists, footnotes, and literal autolinks all work.
 Fenced code blocks with a supported declared language receive syntax highlighting; unknown and undeclared languages stay plain.
-Components are flow-level JSX elements from the built-in [component registry](/components/): `BigDecision`, `Callout`, `CodeDiff`, `CodeSnippet`, `DatabaseTableSchema`, `FileTree`, `FileTreeDiff`, `GraphqlOperation`, `GrpcMethod`, `HttpEndpoint`, and `SmallDecisionSet`, plus scoped child components such as `Annotation`, `Option`, and `Score` that are valid only in the hierarchy declared by their parent.
+Components are flow-level JSX elements from the built-in [component registry](/components/): `BigDecision`, `Callout`, `CodeDiff`, `CodeSnippet`, `DatabaseTableSchema`, `FileTree`, `FileTreeDiff`, `GraphqlOperation`, `GrpcMethod`, `HttpEndpoint`, `QuickSummary`, and `SmallDecisionSet`, plus scoped child components such as `Annotation`, `Option`, and `Score` that are valid only in the hierarchy declared by their parent.
 Component attributes are strings (`title="Rollout"`) or bare shorthand booleans (`showLineNumbers`) where a component's schema allows them.
 
 ## What a plan may not contain
@@ -73,6 +73,8 @@ Big Plan renders the paragraph directly under the title as the document's subtit
 `section-vocabulary` keeps section names in Big Plan's opinionated review vocabulary.
 A heading reading exactly "Desired outcome", "Desired outcomes", or "Definition of done" is flagged with the preferred heading "Acceptance criteria".
 Prose mentioning those phrases, and headings that merely contain them, are never flagged.
+
+`single-quick-summary` allows at most one `QuickSummary` per plan, so the reviewer always has exactly one place to start.
 
 `markdown-table-format` catches table-shaped outer-pipe rows whose delimiter row is missing or malformed:
 

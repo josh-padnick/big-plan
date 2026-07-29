@@ -199,9 +199,18 @@ describe("lintPlan title-length", () => {
   });
 
   it.each([
-    ["an eight-word title", "# Add an official installable skill to Big Plan\n\nLede.\n"],
-    ["a title with inline code", "# Ship the `big-plan skill` command\n\nLede.\n"],
-    ["a document without a leading title", "Prose first.\n\n# A very long title that would otherwise be flagged here\n"],
+    [
+      "an eight-word title",
+      "# Add an official installable skill to Big Plan\n\nLede.\n",
+    ],
+    [
+      "a title with inline code",
+      "# Ship the `big-plan skill` command\n\nLede.\n",
+    ],
+    [
+      "a document without a leading title",
+      "Prose first.\n\n# A very long title that would otherwise be flagged here\n",
+    ],
   ])("should not report %s", (_label, markdown) => {
     expect(lintPlan({ markdown })).toEqual([]);
   });
@@ -238,7 +247,10 @@ describe("lintPlan lede-style", () => {
       "a component directly after the title",
       '# Title\n\n<Callout type="note">\n\nI propose nothing here.\n\n</Callout>\n',
     ],
-    ["a document without a leading title", "This plan is referenced in prose.\n"],
+    [
+      "a document without a leading title",
+      "This plan is referenced in prose.\n",
+    ],
   ])("should not report %s", (_label, markdown) => {
     expect(lintPlan({ markdown })).toEqual([]);
   });
@@ -280,6 +292,34 @@ describe("lintPlan lede-length", () => {
     ],
   ])("should not report %s", (_label, markdown) => {
     expect(lintPlan({ markdown })).toEqual([]);
+  });
+});
+
+describe("lintPlan single-quick-summary", () => {
+  it("should report each QuickSummary after the first", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n<QuickSummary>\n\n- A.\n\n</QuickSummary>\n\n## S\n\n<QuickSummary>\n\n- B.\n\n</QuickSummary>\n",
+      }),
+    ).toEqual([
+      {
+        ruleId: "single-quick-summary",
+        line: 13,
+        column: 1,
+        message:
+          "Only one QuickSummary is allowed; merge the key points into the first one",
+      },
+    ]);
+  });
+
+  it("should not report a single QuickSummary", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n<QuickSummary>\n\n- A.\n\n</QuickSummary>\n\n## S\n\nBody.\n",
+      }),
+    ).toEqual([]);
   });
 });
 

@@ -24,6 +24,7 @@ A component's attributes are strings or bare booleans, structured data arrives a
 | [GraphqlOperation](/components/graphql-operation/)        | Review one GraphQL query, mutation, or subscription with one-level input and payload shapes and executable examples. |
 | [GrpcMethod](/components/grpc-method/)                    | Review one gRPC method headed by its proto signature, with message fields, status codes, and grouped examples.       |
 | [HttpEndpoint](/components/http-endpoint/)                | Review one HTTP endpoint's contract: parameters, request body, and status-coded responses.                           |
+| [QuickSummary](/components/quick-summary/)                | Open the plan with its few key points as a standout card, capped at five bullets and six hundred characters.         |
 | [SmallDecisionSet](/components/small-decision-set/)       | Collect a plan's small questions as a compact numbered list of briefly explained options.                            |
 
 Scoped child components are valid only in their declared hierarchy: `Annotation` in `CodeDiff` and `CodeSnippet`; `Ddl` in `DatabaseTableSchema`; `Criterion`, `Details`, `Option`, and `Reversibility` directly in `BigDecision`, with `Score` directly in an `Option`; `SmallDecision` directly in `SmallDecisionSet`, with `Option` directly in a `SmallDecision`; `Param`, `Request`, and `Response` in `HttpEndpoint`; `Argument`, `Field`, `Returns`, `Operation`, `Variables`, and `Response` in `GraphqlOperation`; and `Field`, `Error`, `Example`, and `Proto` in `GrpcMethod`.

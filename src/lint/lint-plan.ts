@@ -10,6 +10,7 @@ import { ledeStyleRule } from "./rules/lede-style.js";
 import { markdownTableFormatRule } from "./rules/markdown-table-format.js";
 import { planLedeRule } from "./rules/plan-lede.js";
 import { sectionVocabularyRule } from "./rules/section-vocabulary.js";
+import { singleQuickSummaryRule } from "./rules/single-quick-summary.js";
 import { titleLengthRule } from "./rules/title-length.js";
 import type { PlanLintDiagnostic, PlanLintRule } from "./types.js";
 
@@ -22,6 +23,7 @@ const RULES: ReadonlyArray<PlanLintRule> = [
   ledeStyleRule,
   ledeLengthRule,
   sectionVocabularyRule,
+  singleQuickSummaryRule,
 ];
 
 /** Runs every authoring lint rule in stable registry order. */

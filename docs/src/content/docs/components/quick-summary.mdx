@@ -1,0 +1,43 @@
+---
+title: QuickSummary
+description: A standout card of the plan's key points, capped at five bullets and six hundred characters so it stays a summary.
+---
+
+`QuickSummary` opens a plan with the few points a reviewer must know, rendered as a labeled card that stands apart from body prose.
+Its caps are the point: a summary that cannot grow cannot become an aggregation of the whole plan.
+
+## When to use it
+
+Place one `QuickSummary` directly after the plan's lede, before any section.
+A reader who stops after it should know what will change, how it will work, which decisions the plan needs from them, and the biggest risk.
+
+### When not to use it
+
+Do not use it anywhere but the top of the document, and never as a section recap.
+If a point only matters to readers of one section, it belongs in that section.
+
+## Authoring
+
+The body must be exactly one bullet list and nothing else:
+
+```mdx
+<QuickSummary>
+
+- Failed captures move from inline API-server retries into a persistent queue with explicit state.
+- Backoff is bounded and jittered, and every attempt lands in an operator-visible audit trail.
+- You decide two things: the queue technology and whether rollout starts with a shadow mode.
+- Biggest risk: double charges if capture and schedule updates are not transactional.
+
+</QuickSummary>
+```
+
+## The contract
+
+- The body is exactly one bullet list; prose, headings, and other components are rejected.
+- At most 5 bullets.
+- At most 600 characters of readable text across all bullets, counted after collapsing whitespace and including inline code and emphasis.
+- At most one `QuickSummary` per document, enforced by the `single-quick-summary` linting rule.
+- No attributes.
+
+Each violation fails `validate` and `render` with a positional diagnostic.
+Run `big-plan guidance QuickSummary` for judgment-level usage guidance.

@@ -22,9 +22,7 @@ const isInlineCode = (node: Node): node is InlineCode =>
 // code-styled word still counts toward the budget.
 const headingText = (heading: Heading): string =>
   heading.children
-    .map((child) =>
-      isText(child) || isInlineCode(child) ? child.value : "",
-    )
+    .map((child) => (isText(child) || isInlineCode(child) ? child.value : ""))
     .join("")
     .trim();
 
