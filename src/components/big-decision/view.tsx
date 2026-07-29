@@ -64,9 +64,9 @@ const StatusPill = ({ status }: { readonly status: BigDecisionStatus }) => (
   />
 );
 
-// A native inline disclosure behind the info glyph: opening it expands the
-// owning cell in place, which survives the matrix's scroll container where a
-// floating popover would clip.
+// A native inline disclosure behind the info glyph. Without scripts it
+// expands the owning cell in place; the shell's viewer script floats it as a
+// hover popover positioned to stay inside the viewport.
 const InfoDisclosure = ({
   detail,
   icon = INFO_ICON,
@@ -75,12 +75,15 @@ const InfoDisclosure = ({
   readonly icon?: LucideIcon;
 }) =>
   detail.length === 0 ? null : (
-    <details className="big-decision-info">
+    <details className="big-decision-info" data-info-popover>
       <summary className="inline-flex cursor-pointer align-middle text-muted [&>svg]:size-3.5">
         {lucideIconToReact({ icon, hidden: false })}
         <span className="sr-only">{"More detail"}</span>
       </summary>
-      <div className="big-decision-info-body max-w-60 text-xs font-normal text-muted [&>:last-child]:mb-0">
+      <div
+        className="big-decision-info-body max-w-60 text-xs font-normal text-muted [&>:last-child]:mb-0"
+        data-info-popover-body
+      >
         {hastContentToReact(detail)}
       </div>
     </details>
@@ -251,9 +254,15 @@ const CriterionHeader = ({
     {criterion.detail.length === 0 ? (
       criterion.title
     ) : (
-      <details className="big-decision-info big-decision-criterion-help">
+      <details
+        className="big-decision-info big-decision-criterion-help"
+        data-info-popover
+      >
         <summary className="cursor-help">{criterion.title}</summary>
-        <div className="big-decision-info-body max-w-60 text-xs font-normal text-muted [&>:last-child]:mb-0">
+        <div
+          className="big-decision-info-body max-w-60 text-xs font-normal text-muted [&>:last-child]:mb-0"
+          data-info-popover-body
+        >
           {hastContentToReact(criterion.detail)}
         </div>
       </details>

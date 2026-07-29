@@ -34,11 +34,15 @@ test("should review a standalone decision matrix in an inert export", async ({
     ).toBeVisible();
   });
 
-  await test.step("verdict detail opens through the native disclosure", async () => {
+  await test.step("verdict detail floats as a hover popover", async () => {
     const info = matrix.locator("details.big-decision-info").first();
-    await info.locator("summary").click();
+    await info.locator("summary").hover();
     await expect(info).toHaveAttribute("open", "");
-    await expect(info.locator(".big-decision-info-body")).toBeVisible();
+    const body = info.locator(".big-decision-info-body");
+    await expect(body).toBeVisible();
+    await expect(body).toBeInViewport();
+    await page.mouse.move(0, 0);
+    await expect(info).not.toHaveAttribute("open", "");
   });
 
   await test.step("the reversibility section states its rating", async () => {

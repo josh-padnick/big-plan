@@ -42,11 +42,13 @@ const TOC_LINK_CLASSES =
 const MOBILE_TOC_LINK_CLASSES =
   "block border-l-2 border-transparent px-5 py-2.5 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
 
-// The one script a rendered document ships: a dependency-free scroll-spy that
-// marks the section being read with aria-current on its TOC links, falling
-// back to the overview links above the first section. Plan content never
-// contributes script; documents stay readable with JS disabled.
-const SCROLL_SPY_SCRIPT = `<script>
+// The one script a rendered document ships, carrying the viewer enhancements:
+// a scroll-spy that marks the section being read with aria-current on its TOC
+// links (falling back to the overview links above the first section), and
+// hover popovers that float [data-info-popover] disclosures beside their
+// triggers, positioned to stay inside the viewport. Plan content never
+// contributes script, and every affordance keeps a no-JS fallback.
+const VIEWER_SCRIPT = `<script>
 (() => {
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
   const overviewLinks = Array.from(
@@ -90,6 +92,70 @@ const SCROLL_SPY_SCRIPT = `<script>
   addEventListener("scroll", schedule, { passive: true });
   addEventListener("resize", schedule, { passive: true });
   apply();
+})();
+(() => {
+  const infos = document.querySelectorAll("details[data-info-popover]");
+  for (const info of infos) {
+    const summary = info.querySelector("summary");
+    const body = info.querySelector("[data-info-popover-body]");
+    if (summary === null || body === null) continue;
+    info.setAttribute("data-info-popover-floating", "");
+    const open = () => {
+      info.open = true;
+      const anchor = summary.getBoundingClientRect();
+      body.style.left = "0px";
+      body.style.top = "0px";
+      const size = body.getBoundingClientRect();
+      const left = Math.max(
+        8,
+        Math.min(
+          anchor.left + anchor.width / 2 - size.width / 2,
+          innerWidth - size.width - 8,
+        ),
+      );
+      const below = anchor.bottom + 6;
+      const top =
+        below + size.height > innerHeight - 8
+          ? Math.max(8, anchor.top - size.height - 6)
+          : below;
+      body.style.left = left + "px";
+      body.style.top = top + "px";
+    };
+    const close = () => {
+      info.open = false;
+    };
+    info.addEventListener("pointerenter", (event) => {
+      if (event.pointerType !== "touch") open();
+    });
+    info.addEventListener("pointerleave", () => {
+      if (!info.matches(":focus-within")) close();
+    });
+    summary.addEventListener("focus", () => {
+      if (summary.matches(":focus-visible")) open();
+    });
+    info.addEventListener("focusout", (event) => {
+      if (
+        !(event.relatedTarget instanceof Node) ||
+        !info.contains(event.relatedTarget)
+      )
+        close();
+    });
+    summary.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (info.open) close();
+      else open();
+    });
+    summary.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") close();
+    });
+    document.addEventListener(
+      "scroll",
+      () => {
+        if (info.open) open();
+      },
+      { capture: true, passive: true },
+    );
+  }
 })();
 </script>`;
 
@@ -180,6 +246,8 @@ export const renderShell = ({
   readonly contentHtml: string;
 }): ShellResult => {
   const hasToc = nav.length > 0;
+  // The viewer script ships only when an affordance in this document uses it.
+  const needsViewerScript = hasToc || contentHtml.includes("data-info-popover");
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="flex h-full items-center px-5 wide:px-6">
@@ -198,7 +266,7 @@ ${contentHtml}
 </article>
 </main>
 </div>
-${hasToc ? SCROLL_SPY_SCRIPT : ""}`;
+${needsViewerScript ? VIEWER_SCRIPT : ""}`;
   return {
     html,
     styles: GLOBAL_CSS,
