@@ -1,4 +1,4 @@
-// Tests Glance schema diagnostics, the Item child contract, and the overview
+// Tests TableOfContents schema diagnostics, the Entry child contract, and the overview
 // markup whose links, numbers, and group headers the deck transform
 // completes.
 
@@ -8,7 +8,7 @@ import type { ScopedChild } from "../_authoring/contract.js";
 import { createDiagnosticCollector } from "../_authoring/diagnostics.js";
 import type { CompiledComponent } from "../_registration/define-component.js";
 import { reactToHast } from "../../render/markdown/component-pipeline/react-hast-adapter.js";
-import { GLANCE_COMPONENT_DEFINITION } from "./definition.js";
+import { TABLE_OF_CONTENTS_COMPONENT_DEFINITION } from "./definition.js";
 
 const parseRenderedElement = (compiled: CompiledComponent): Element => {
   const parsed = reactToHast(compiled.presentation());
@@ -28,11 +28,11 @@ const ITEM_POSITION = {
   end: { line: 6, column: 50, offset: 89 },
 };
 
-const item = (
+const entry = (
   attributes: Readonly<Record<string, string | boolean>>,
   children: ReadonlyArray<ElementContent> = [],
 ): ScopedChild => ({
-  name: "Item",
+  name: "Entry",
   attributes,
   children,
   position: ITEM_POSITION,
@@ -47,7 +47,7 @@ const render = ({
 }) => {
   const diagnostics = createDiagnosticCollector();
   const element = parseRenderedElement(
-    GLANCE_COMPONENT_DEFINITION.compile({
+    TABLE_OF_CONTENTS_COMPONENT_DEFINITION.compile({
       attributes: {},
       children,
       scopedChildren,
@@ -58,13 +58,14 @@ const render = ({
   return { element, diagnostics: diagnostics.diagnostics };
 };
 
-describe("GLANCE_COMPONENT_DEFINITION", () => {
-  it("should report an empty Glance when no Item exists", () => {
+describe("TABLE_OF_CONTENTS_COMPONENT_DEFINITION", () => {
+  it("should report an empty TableOfContents when no Entry exists", () => {
     expect(render({}).diagnostics).toEqual([
       {
         line: 5,
         column: 1,
-        message: "Glance needs at least one Item naming a section and its gist",
+        message:
+          "TableOfContents needs at least one Entry naming a section and its gist",
       },
     ]);
   });
@@ -79,7 +80,7 @@ describe("GLANCE_COMPONENT_DEFINITION", () => {
       },
     ];
     const { diagnostics } = render({
-      scopedChildren: [item({ section: "Status quo", gist: "Today" })],
+      scopedChildren: [entry({ section: "Status quo", gist: "Today" })],
       children,
     });
     expect(diagnostics).toEqual([
@@ -87,14 +88,14 @@ describe("GLANCE_COMPONENT_DEFINITION", () => {
         line: 5,
         column: 1,
         message:
-          "Glance holds only Item entries; move loose content into the plan body",
+          "TableOfContents holds only Entry rows; move loose content into the plan body",
       },
     ]);
   });
 
-  it("should report missing Item attributes at the item's position", () => {
+  it("should report missing Entry attributes at the entry's position", () => {
     const { diagnostics } = render({
-      scopedChildren: [item({ section: "Status quo" })],
+      scopedChildren: [entry({ section: "Status quo" })],
     });
     expect(diagnostics).toEqual([
       {
@@ -105,9 +106,9 @@ describe("GLANCE_COMPONENT_DEFINITION", () => {
     ]);
   });
 
-  it("should report empty Item attributes at the item's position", () => {
+  it("should report empty Entry attributes at the entry's position", () => {
     const { diagnostics } = render({
-      scopedChildren: [item({ section: " ", gist: "Today" })],
+      scopedChildren: [entry({ section: " ", gist: "Today" })],
     });
     expect(diagnostics).toEqual([
       {
@@ -118,10 +119,10 @@ describe("GLANCE_COMPONENT_DEFINITION", () => {
     ]);
   });
 
-  it("should reject Item body content when an item is not self-closing", () => {
+  it("should reject Entry body content when an entry is not self-closing", () => {
     const { diagnostics } = render({
       scopedChildren: [
-        item({ section: "Status quo", gist: "Today" }, [
+        entry({ section: "Status quo", gist: "Today" }, [
           {
             type: "element",
             tagName: "p",
@@ -136,7 +137,7 @@ describe("GLANCE_COMPONENT_DEFINITION", () => {
         line: 6,
         column: 1,
         message:
-          'Item is self-closing; write <Item section="..." gist="..." /> with no body content',
+          'Entry is self-closing; write <Entry section="..." gist="..." /> with no body content',
       },
     ]);
   });
@@ -146,7 +147,7 @@ describe("GLANCE_COMPONENT_DEFINITION", () => {
   it("should carry row-hover title accent as a utility", () => {
     const rendered = JSON.stringify(
       render({
-        scopedChildren: [item({ section: "Status quo", gist: "A gist" })],
+        scopedChildren: [entry({ section: "Status quo", gist: "A gist" })],
       }).element,
     );
 
@@ -156,13 +157,13 @@ describe("GLANCE_COMPONENT_DEFINITION", () => {
   it("should render placeholder rows the deck transform completes", () => {
     const { element, diagnostics } = render({
       scopedChildren: [
-        item({ section: "Status quo", gist: "Docs promise a skill" }),
-        item({ section: "The design", gist: "Embed it in the CLI" }),
+        entry({ section: "Status quo", gist: "Docs promise a skill" }),
+        entry({ section: "The design", gist: "Embed it in the CLI" }),
       ],
     });
     expect(diagnostics).toEqual([]);
     expect(element.tagName).toBe("nav");
-    expect(element.properties["data-glance"]).toBe("true");
+    expect(element.properties["data-table-of-contents"]).toBe("true");
     expect(element.properties.ariaLabel).toBe("The plan in one look");
     const rendered = JSON.stringify(element);
     expect(rendered).toContain('"value":"The plan in one look"');
@@ -171,7 +172,7 @@ describe("GLANCE_COMPONENT_DEFINITION", () => {
     const rows = element.children.filter(
       (child) =>
         child.type === "element" &&
-        child.properties["data-glance-row"] !== undefined,
+        child.properties["data-table-of-contents-row"] !== undefined,
     );
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({

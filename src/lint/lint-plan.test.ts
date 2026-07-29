@@ -361,80 +361,85 @@ describe("lintPlan section-vocabulary", () => {
   });
 });
 
-describe("lintPlan glance-matches-sections", () => {
-  const plan = (glance: string): string =>
-    `# T\n\nLede.\n\n${glance}\n## Status quo\n\nA.\n\n## The design\n\nB.\n`;
+describe("lintPlan table-of-contents-matches-sections", () => {
+  const plan = (overview: string): string =>
+    `# T\n\nLede.\n\n${overview}\n## Status quo\n\nA.\n\n## The design\n\nB.\n`;
 
-  it("should accept a Glance whose items repeat every section title in order", () => {
+  it("should accept a TableOfContents whose entries repeat every section title in order", () => {
     expect(
       lintPlan({
         markdown: plan(
-          '<Glance>\n<Item section="Status quo" gist="Today" />\n<Item section="The design" gist="Tomorrow" />\n</Glance>\n',
+          '<TableOfContents>\n<Entry section="Status quo" gist="Today" />\n<Entry section="The design" gist="Tomorrow" />\n</TableOfContents>\n',
         ),
       }),
     ).toEqual([]);
   });
 
-  it("should report a mismatched item at the Glance's position", () => {
+  it("should report a mismatched entry at the TableOfContents's position", () => {
     expect(
       lintPlan({
         markdown: plan(
-          '<Glance>\n<Item section="Status quo" gist="Today" />\n<Item section="Design" gist="Tomorrow" />\n</Glance>\n',
+          '<TableOfContents>\n<Entry section="Status quo" gist="Today" />\n<Entry section="Design" gist="Tomorrow" />\n</TableOfContents>\n',
         ),
       }),
     ).toEqual([
       {
-        ruleId: "glance-matches-sections",
+        ruleId: "table-of-contents-matches-sections",
         line: 5,
         column: 1,
         message:
-          'Glance item 2 says "Design" but section 2 is titled "The design"; list every section title exactly, in document order',
+          'TableOfContents entry 2 says "Design" but section 2 is titled "The design"; list every section title exactly, in document order',
       },
     ]);
   });
 
-  it("should report items in the wrong order as pairwise mismatches", () => {
+  it("should report entries in the wrong order as pairwise mismatches", () => {
     const findings = lintPlan({
       markdown: plan(
-        '<Glance>\n<Item section="The design" gist="Tomorrow" />\n<Item section="Status quo" gist="Today" />\n</Glance>\n',
+        '<TableOfContents>\n<Entry section="The design" gist="Tomorrow" />\n<Entry section="Status quo" gist="Today" />\n</TableOfContents>\n',
       ),
     });
     expect(findings).toHaveLength(2);
-    expect(findings[0]?.message).toContain('Glance item 1 says "The design"');
-    expect(findings[1]?.message).toContain('Glance item 2 says "Status quo"');
+    expect(findings[0]?.message).toContain(
+      'TableOfContents entry 1 says "The design"',
+    );
+    expect(findings[1]?.message).toContain(
+      'TableOfContents entry 2 says "Status quo"',
+    );
   });
 
-  it("should report a missing item for an uncovered section", () => {
+  it("should report a missing entry for an uncovered section", () => {
     expect(
       lintPlan({
         markdown: plan(
-          '<Glance>\n<Item section="Status quo" gist="Today" />\n</Glance>\n',
+          '<TableOfContents>\n<Entry section="Status quo" gist="Today" />\n</TableOfContents>\n',
         ),
       }),
     ).toEqual([
       {
-        ruleId: "glance-matches-sections",
+        ruleId: "table-of-contents-matches-sections",
         line: 5,
         column: 1,
-        message: 'Glance is missing an item for section 2 ("The design")',
+        message:
+          'TableOfContents is missing an entry for section 2 ("The design")',
       },
     ]);
   });
 
-  it("should report an extra item beyond the document's sections", () => {
+  it("should report an extra entry beyond the document's sections", () => {
     expect(
       lintPlan({
         markdown: plan(
-          '<Glance>\n<Item section="Status quo" gist="Today" />\n<Item section="The design" gist="Tomorrow" />\n<Item section="Rollout" gist="Later" />\n</Glance>\n',
+          '<TableOfContents>\n<Entry section="Status quo" gist="Today" />\n<Entry section="The design" gist="Tomorrow" />\n<Entry section="Rollout" gist="Later" />\n</TableOfContents>\n',
         ),
       }),
     ).toEqual([
       {
-        ruleId: "glance-matches-sections",
+        ruleId: "table-of-contents-matches-sections",
         line: 5,
         column: 1,
         message:
-          'Glance item 3 ("Rollout") has no matching section; a Glance lists exactly the document\'s sections',
+          'TableOfContents entry 3 ("Rollout") has no matching section; a TableOfContents lists exactly the document\'s sections',
       },
     ]);
   });
@@ -443,12 +448,12 @@ describe("lintPlan glance-matches-sections", () => {
     expect(
       lintPlan({
         markdown:
-          '# T\n\nLede.\n\n<Glance>\n<Item section="The skill command" gist="Prints it" />\n</Glance>\n## The `skill` command\n\nA.\n',
+          '# T\n\nLede.\n\n<TableOfContents>\n<Entry section="The skill command" gist="Prints it" />\n</TableOfContents>\n## The `skill` command\n\nA.\n',
       }),
     ).toEqual([]);
   });
 
-  it("should report nothing when the plan has no Glance", () => {
+  it("should report nothing when the plan has no TableOfContents", () => {
     expect(
       lintPlan({ markdown: "# T\n\nLede.\n\n## Status quo\n\nA.\n" }),
     ).toEqual([]);

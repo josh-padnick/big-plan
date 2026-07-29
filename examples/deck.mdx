@@ -1,6 +1,6 @@
 # Ship the payments retry queue
 
-A durable retry queue replaces inline payment-capture retries, demonstrated here as a deck of `Part` acts with a `Glance` overview.
+A durable retry queue replaces inline payment-capture retries, demonstrated here as a deck of `Part` acts with a `TableOfContents` overview.
 
 <QuickSummary>
 
@@ -25,13 +25,13 @@ A durable retry queue replaces inline payment-capture retries, demonstrated here
 
 </QuickSummary>
 
-<Glance>
-<Item section="Status quo" gist="Inline retries couple checkout latency to processor health" />
-<Item section="Success looks like" gist="A restart never loses a scheduled retry" />
-<Item section="The retry queue" gist="A queue worker with explicit state and bounded backoff" />
-<Item section="Sequencing" gist="Schema first, worker second, operator controls last" />
-<Item section="Acceptance criteria" gist="The checkable contract for done" />
-</Glance>
+<TableOfContents>
+<Entry section="Status quo" gist="Inline retries couple checkout latency to processor health" />
+<Entry section="Success looks like" gist="A restart never loses a scheduled retry" />
+<Entry section="The retry queue" gist="A queue worker with explicit state and bounded backoff" />
+<Entry section="Sequencing" gist="Schema first, worker second, operator controls last" />
+<Entry section="Acceptance criteria" gist="The checkable contract for done" />
+</TableOfContents>
 
 <Part title="Context" />
 

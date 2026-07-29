@@ -1,5 +1,5 @@
-// Implements the glance-matches-sections authoring rule: when a plan carries
-// a Glance, its Item section attributes must repeat the document's h2
+// Implements the table-of-contents-matches-sections authoring rule: when a plan carries
+// a TableOfContents, its Entry section attributes must repeat the document's h2
 // section titles exactly, in order, one to one, so the overview can never
 // drift from the sections it promises.
 
@@ -58,29 +58,32 @@ const headingText = (node: Node): string => {
   return node.children.map(headingText).join("");
 };
 
-type GlanceNode = {
-  readonly items: ReadonlyArray<string>;
+type TableOfContentsNode = {
+  readonly entries: ReadonlyArray<string>;
   readonly line: number;
   readonly column: number;
 };
 
-const checkGlanceMatchesSections = ({
+const checkTableOfContentsMatchesSections = ({
   tree,
 }: {
   readonly markdown: string;
   readonly tree: Node;
 }): ReadonlyArray<PlanLintFinding> => {
-  const glances: Array<GlanceNode> = [];
+  const overviews: Array<TableOfContentsNode> = [];
   const sectionTitles: Array<string> = [];
 
   const visit = (node: Node): void => {
     if (isHeading(node) && node.depth === 2) {
       sectionTitles.push(headingText(node).trim());
     }
-    if (isNamedFlowElement(node, "Glance") && node.position !== undefined) {
-      glances.push({
-        items: node.children
-          .filter((child) => isNamedFlowElement(child, "Item"))
+    if (
+      isNamedFlowElement(node, "TableOfContents") &&
+      node.position !== undefined
+    ) {
+      overviews.push({
+        entries: node.children
+          .filter((child) => isNamedFlowElement(child, "Entry"))
           .map((child) => stringAttribute({ node: child, name: "section" }))
           .filter((section): section is string => section !== undefined),
         line: node.position.start.line,
@@ -97,28 +100,28 @@ const checkGlanceMatchesSections = ({
   visit(tree);
 
   const findings: Array<PlanLintFinding> = [];
-  for (const glance of glances) {
-    const count = Math.max(glance.items.length, sectionTitles.length);
+  for (const overview of overviews) {
+    const count = Math.max(overview.entries.length, sectionTitles.length);
     for (let index = 0; index < count; index += 1) {
-      const item = glance.items[index];
+      const entry = overview.entries[index];
       const section = sectionTitles[index];
-      if (item !== undefined && section !== undefined && item !== section) {
+      if (entry !== undefined && section !== undefined && entry !== section) {
         findings.push({
-          line: glance.line,
-          column: glance.column,
-          message: `Glance item ${index + 1} says "${item}" but section ${index + 1} is titled "${section}"; list every section title exactly, in document order`,
+          line: overview.line,
+          column: overview.column,
+          message: `TableOfContents entry ${index + 1} says "${entry}" but section ${index + 1} is titled "${section}"; list every section title exactly, in document order`,
         });
-      } else if (item !== undefined && section === undefined) {
+      } else if (entry !== undefined && section === undefined) {
         findings.push({
-          line: glance.line,
-          column: glance.column,
-          message: `Glance item ${index + 1} ("${item}") has no matching section; a Glance lists exactly the document's sections`,
+          line: overview.line,
+          column: overview.column,
+          message: `TableOfContents entry ${index + 1} ("${entry}") has no matching section; a TableOfContents lists exactly the document's sections`,
         });
-      } else if (item === undefined && section !== undefined) {
+      } else if (entry === undefined && section !== undefined) {
         findings.push({
-          line: glance.line,
-          column: glance.column,
-          message: `Glance is missing an item for section ${index + 1} ("${section}")`,
+          line: overview.line,
+          column: overview.column,
+          message: `TableOfContents is missing an entry for section ${index + 1} ("${section}")`,
         });
       }
     }
@@ -126,7 +129,7 @@ const checkGlanceMatchesSections = ({
   return findings;
 };
 
-export const glanceMatchesSectionsRule: PlanLintRule = {
-  id: "glance-matches-sections",
-  check: checkGlanceMatchesSections,
+export const tableOfContentsMatchesSectionsRule: PlanLintRule = {
+  id: "table-of-contents-matches-sections",
+  check: checkTableOfContentsMatchesSections,
 };

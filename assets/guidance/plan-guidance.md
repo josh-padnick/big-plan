@@ -38,7 +38,7 @@ When one section genuinely owns several thoughts - an implementation with its pi
 Group the slides with `Part` markers into about three acts - Context, The proposal, and Shipping & your review - adapting the names when this plan demands it.
 Part 1 canonically holds "Status quo" and then "Success looks like": what is true today, and the outcome-level success a sponsor would repeat.
 "Success looks like" states outcomes, not verification; the checkable contract stays in "Acceptance criteria" near the end.
-Put a `Glance` directly after the `QuickSummary`: one row per section, so the reviewer sees the whole argument before reading any of it.
+Put a `TableOfContents` directly after the `QuickSummary`: one row per section, so the reviewer sees the whole argument before reading any of it.
 Open a dense slide with a context builder: one fully emphasized paragraph (`*like this*`) that renders as a muted line telling the reader what they are looking at.
 When the slide carries a reader action - a decision, a question, something to verify - the context builder declares the action ("We need to decide where the skill ships."), not a description of the slide; purely orienting slides may stay descriptive.
 Within an act, order slides by the reader's questions, keep orientation ahead of detail, and cut any slide that would make the reader ask "why am I reading this now?".
@@ -62,7 +62,7 @@ Place it near the end, after the reader understands the approach, and make every
 Big Plan ships components that present specific kinds of information better than paragraphs can:
 
 - `QuickSummary` for the key points a reviewer reads first.
-- `Glance` for the plan in one look: one linked row per section, directly after the quick summary.
+- `TableOfContents` for the plan in one look: one linked row per section, directly after the quick summary.
 - `Part` to divide the slides into numbered acts.
 - `Decision` for a tradeoff read option by option; `ComplexDecision` for a full criteria matrix; `SimpleDecisionSet` for quick calls.
 - `FlowDiagram` for genuinely relational content - a flow, dependency, or fan-out - drawn as staged cards with directed connectors.

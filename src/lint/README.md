@@ -42,19 +42,19 @@ diagnostic formatting in
 
 ## Directory responsibilities
 
-| File or folder                     | Responsibility                                                                                                  |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `lint-plan.ts`                     | Public deep-module interface. It parses the source once, runs the ordered rule registry, and attaches rule IDs. |
-| `types.ts`                         | Private rule and finding contracts plus the public diagnostic shape.                                            |
-| `rules/`                           | One focused module per authoring rule.                                                                          |
-| `rules/glance-matches-sections.ts` | Requires a Glance's Item section names to repeat the document's h2 titles exactly, in order, one to one.        |
-| `rules/markdown-table-format.ts`   | Detects strong Markdown-table intent when a missing or malformed delimiter made GFM parse the rows as prose.    |
-| `rules/plan-lede.ts`               | Requires orientation prose between a plan's level-one title and its first section heading.                      |
-| `rules/lede-length.ts`             | Keeps the lede within the word budget of a subtitle rather than an opening body paragraph.                      |
-| `rules/lede-style.ts`              | Requires that lede to open declaratively rather than with a self-referential phrase like "This plan".           |
-| `rules/section-vocabulary.ts`      | Keeps whole-heading section names in Big Plan's opinionated review vocabulary.                                  |
-| `rules/title-length.ts`            | Keeps the leading level-one title a punchy noun phrase within word and character budgets.                       |
-| `lint-plan.test.ts`                | Exercises the public interface, source positions, diagnostic order, and conservative near misses.               |
+| File or folder                                | Responsibility                                                                                                     |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `lint-plan.ts`                                | Public deep-module interface. It parses the source once, runs the ordered rule registry, and attaches rule IDs.    |
+| `types.ts`                                    | Private rule and finding contracts plus the public diagnostic shape.                                               |
+| `rules/`                                      | One focused module per authoring rule.                                                                             |
+| `rules/table-of-contents-matches-sections.ts` | Requires a TableOfContents's Entry section names to repeat the document's h2 titles exactly, in order, one to one. |
+| `rules/markdown-table-format.ts`              | Detects strong Markdown-table intent when a missing or malformed delimiter made GFM parse the rows as prose.       |
+| `rules/plan-lede.ts`                          | Requires orientation prose between a plan's level-one title and its first section heading.                         |
+| `rules/lede-length.ts`                        | Keeps the lede within the word budget of a subtitle rather than an opening body paragraph.                         |
+| `rules/lede-style.ts`                         | Requires that lede to open declaratively rather than with a self-referential phrase like "This plan".              |
+| `rules/section-vocabulary.ts`                 | Keeps whole-heading section names in Big Plan's opinionated review vocabulary.                                     |
+| `rules/title-length.ts`                       | Keeps the leading level-one title a punchy noun phrase within word and character budgets.                          |
+| `lint-plan.test.ts`                           | Exercises the public interface, source positions, diagnostic order, and conservative near misses.                  |
 
 `src/lint` is an independent bottom-tier layer in `eslint.config.mjs`.
 It must stay framework-free and may not import the renderer, components, or

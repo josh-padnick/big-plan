@@ -3,9 +3,9 @@
 // slide frame with a numbered kicker (splitting a section with h3 headings
 // into a parent header block over numbered sub-slides), restyles a slide's
 // leading emphasized paragraph into its context-builder line, and completes
-// the Glance overview with section links, slide numbers, and part group
+// the TableOfContents overview with section links, slide numbers, and part group
 // headers. It runs after component delivery, so the markers it consumes are
-// the data attributes the Part and Glance views emit.
+// the data attributes the Part and TableOfContents views emit.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 
@@ -84,8 +84,8 @@ const CONTEXT_CLASSES = [
   "text-muted",
 ] as const;
 
-const GLANCE_GROUP_CLASSES = [
-  "glance-group",
+const TOC_GROUP_CLASSES = [
+  "table-of-contents-group",
   "mt-2.5",
   "mb-0.5",
   "text-xs",
@@ -258,9 +258,9 @@ const buildSubSlides = ({
 };
 
 // Wraps each top-level h2 plus its following siblings - up to the next h2,
-// Part divider, Glance, or footnotes appendix - in a slide frame headed by a
+// Part divider, TableOfContents, or footnotes appendix - in a slide frame headed by a
 // numbered kicker. Returns the slide sections in document order so the
-// Glance completion can link to them.
+// TableOfContents completion can link to them.
 const wrapSlides = (
   tree: Root,
   parts: Map<Element, NumberedPart>,
@@ -297,7 +297,7 @@ const wrapSlides = (
         !isSlideContent(sibling) ||
         (isElement(sibling) && sibling.tagName === "h2") ||
         (isElement(sibling) && parts.has(sibling)) ||
-        hasProperty(sibling, "data-glance") ||
+        hasProperty(sibling, "data-table-of-contents") ||
         isFootnotesSection(sibling)
       ) {
         break;
@@ -359,15 +359,15 @@ const wrapSlides = (
   return sections;
 };
 
-const findGlance = (node: Root | Element): Element | undefined => {
+const findTableOfContents = (node: Root | Element): Element | undefined => {
   for (const child of node.children) {
     if (!isElement(child)) {
       continue;
     }
-    if (child.properties["data-glance"] !== undefined) {
+    if (child.properties["data-table-of-contents"] !== undefined) {
       return child;
     }
-    const nested = findGlance(child);
+    const nested = findTableOfContents(child);
     if (nested !== undefined) {
       return nested;
     }
@@ -375,35 +375,38 @@ const findGlance = (node: Root | Element): Element | undefined => {
   return undefined;
 };
 
-const fillGlanceNumber = (row: Element, label: string): void => {
+const fillTableOfContentsNumber = (row: Element, label: string): void => {
   for (const child of row.children) {
-    if (isElement(child) && child.properties["data-glance-num"] !== undefined) {
+    if (
+      isElement(child) &&
+      child.properties["data-table-of-contents-num"] !== undefined
+    ) {
       child.children = [{ type: "text", value: label }];
       return;
     }
   }
 };
 
-// Completes the Glance the view rendered as placeholders: each row links to
+// Completes the TableOfContents the view rendered as placeholders: each row links to
 // its slide's section and shows its slide number, and a part group header
 // precedes the first row of every part. Rows map to slides by document
-// order; the glance-matches-sections lint rule owns reporting mismatches, so
+// order; the table-of-contents-matches-sections lint rule owns reporting mismatches, so
 // a row without a slide keeps its placeholder instead of failing delivery.
-const completeGlance = (
+const completeTableOfContents = (
   tree: Root,
   sections: ReadonlyArray<SlideSection>,
 ): void => {
-  const glance = findGlance(tree);
-  if (glance === undefined) {
+  const overview = findTableOfContents(tree);
+  if (overview === undefined) {
     return;
   }
   const rewritten: Array<ElementContent> = [];
   let rowIndex = 0;
   let headedPart: number | undefined;
-  for (const child of glance.children) {
+  for (const child of overview.children) {
     if (
       !isElement(child) ||
-      child.properties["data-glance-row"] === undefined
+      child.properties["data-table-of-contents-row"] === undefined
     ) {
       rewritten.push(child);
       continue;
@@ -420,8 +423,8 @@ const completeGlance = (
         type: "element",
         tagName: "p",
         properties: {
-          "data-glance-group": "",
-          className: [...GLANCE_GROUP_CLASSES],
+          "data-table-of-contents-group": "",
+          className: [...TOC_GROUP_CLASSES],
         },
         children: [
           {
@@ -434,10 +437,10 @@ const completeGlance = (
     if (section.id !== undefined) {
       child.properties.href = `#${section.id}`;
     }
-    fillGlanceNumber(child, section.label);
+    fillTableOfContentsNumber(child, section.label);
     rewritten.push(child);
   }
-  glance.children = rewritten;
+  overview.children = rewritten;
 };
 
 /** Creates the rehype transform that applies the deck reading paradigm. */
@@ -447,5 +450,5 @@ export const rehypeDeckTransform =
     const parts = new Map<Element, NumberedPart>();
     numberParts({ node: tree, assigned: parts, partIds });
     const sections = wrapSlides(tree, parts);
-    completeGlance(tree, sections);
+    completeTableOfContents(tree, sections);
   };

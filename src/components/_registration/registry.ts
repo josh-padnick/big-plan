@@ -11,13 +11,13 @@ import { DECISION_COMPONENT_DEFINITION } from "../decision/definition.js";
 import { FILE_TREE_DIFF_COMPONENT_DEFINITION } from "../file-tree/file-tree-diff-definition.js";
 import { FILE_TREE_COMPONENT_DEFINITION } from "../file-tree/file-tree-definition.js";
 import { FLOW_DIAGRAM_COMPONENT_DEFINITION } from "../flow-diagram/definition.js";
-import { GLANCE_COMPONENT_DEFINITION } from "../glance/definition.js";
 import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "../graphql-operation/definition.js";
 import { GRPC_METHOD_COMPONENT_DEFINITION } from "../grpc-method/definition.js";
 import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "../http-endpoint/definition.js";
 import { PART_COMPONENT_DEFINITION } from "../part/definition.js";
 import { QUICK_SUMMARY_COMPONENT_DEFINITION } from "../quick-summary/definition.js";
 import { SIMPLE_DECISION_SET_COMPONENT_DEFINITION } from "../simple-decision-set/definition.js";
+import { TABLE_OF_CONTENTS_COMPONENT_DEFINITION } from "../table-of-contents/definition.js";
 import type { ComponentDefinition } from "./define-component.js";
 
 export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
@@ -31,13 +31,13 @@ export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
     FileTree: FILE_TREE_COMPONENT_DEFINITION,
     FileTreeDiff: FILE_TREE_DIFF_COMPONENT_DEFINITION,
     FlowDiagram: FLOW_DIAGRAM_COMPONENT_DEFINITION,
-    Glance: GLANCE_COMPONENT_DEFINITION,
     GraphqlOperation: GRAPHQL_OPERATION_COMPONENT_DEFINITION,
     GrpcMethod: GRPC_METHOD_COMPONENT_DEFINITION,
     HttpEndpoint: HTTP_ENDPOINT_COMPONENT_DEFINITION,
     Part: PART_COMPONENT_DEFINITION,
     QuickSummary: QUICK_SUMMARY_COMPONENT_DEFINITION,
     SimpleDecisionSet: SIMPLE_DECISION_SET_COMPONENT_DEFINITION,
+    TableOfContents: TABLE_OF_CONTENTS_COMPONENT_DEFINITION,
   };
 
 export type ComponentRegistry = Readonly<Record<string, ComponentDefinition>>;

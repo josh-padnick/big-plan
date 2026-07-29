@@ -1,12 +1,12 @@
 // Browser tests of the deck reading journey: Part divider bands, grouped TOC
-// navigation to a part anchor, Glance rows linking to their slides,
+// navigation to a part anchor, TableOfContents rows linking to their slides,
 // sub-slide frames with kicker headings, context-builder lines, and the FlowDiagram
 // diagram's staged fork. Render-health failures are enforced by the fixtures
 // module.
 
 import { boxOf, expect, test } from "./fixtures";
 
-test("should read the deck plan through parts, glance, and sub-slides", async ({
+test("should read the deck plan through parts, the overview, and sub-slides", async ({
   page,
   deckViewerUrl,
 }) => {
@@ -32,12 +32,12 @@ test("should read the deck plan through parts, glance, and sub-slides", async ({
     await expect(page.locator("#part-the-proposal")).toBeInViewport();
   });
 
-  await test.step("a Glance row jumps to its numbered slide", async () => {
+  await test.step("a TableOfContents row jumps to its numbered slide", async () => {
     await page.goto(deckViewerUrl);
-    const row = page.locator("[data-glance-row]", {
+    const row = page.locator("[data-table-of-contents-row]", {
       hasText: "Status quo",
     });
-    await expect(row.locator("[data-glance-num]")).toHaveText("1.1");
+    await expect(row.locator("[data-table-of-contents-num]")).toHaveText("1.1");
     await row.click();
     await expect(page).toHaveURL(/#status-quo$/);
     const heading = page.getByRole("heading", { level: 2, name: "Status quo" });

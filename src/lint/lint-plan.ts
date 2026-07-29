@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
-import { glanceMatchesSectionsRule } from "./rules/glance-matches-sections.js";
+import { tableOfContentsMatchesSectionsRule } from "./rules/table-of-contents-matches-sections.js";
 import { ledeLengthRule } from "./rules/lede-length.js";
 import { ledeStyleRule } from "./rules/lede-style.js";
 import { markdownTableFormatRule } from "./rules/markdown-table-format.js";
@@ -25,7 +25,7 @@ const RULES: ReadonlyArray<PlanLintRule> = [
   ledeLengthRule,
   sectionVocabularyRule,
   singleQuickSummaryRule,
-  glanceMatchesSectionsRule,
+  tableOfContentsMatchesSectionsRule,
 ];
 
 /** Runs every authoring lint rule in stable registry order. */

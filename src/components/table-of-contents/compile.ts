@@ -1,5 +1,5 @@
-// Compiles Glance's authored form into its plan model: one overview entry
-// per Item, each naming a section and its one-line gist. Section links,
+// Compiles TableOfContents's authored form into its plan model: one overview entry
+// per Entry, each naming a section and its one-line gist. Section links,
 // slide numbers, and part group headers are document-order knowledge the
 // renderer's deck transform completes.
 
@@ -12,40 +12,40 @@ import {
 } from "../_authoring/contract.js";
 import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
 
-export type CompiledGlanceItem = {
+export type CompiledTableOfContentsEntry = {
   readonly section: string;
   readonly gist: string;
 };
 
-export type CompiledGlance = {
-  readonly items: ReadonlyArray<CompiledGlanceItem>;
+export type CompiledTableOfContents = {
+  readonly entries: ReadonlyArray<CompiledTableOfContentsEntry>;
 };
 
-const ITEM_SCHEMA = {
+const ENTRY_SCHEMA = {
   section: { kind: "string", required: true, nonEmpty: true },
   gist: { kind: "string", required: true, nonEmpty: true },
 } satisfies ComponentAttributeSchema;
 
-// Validates one Item into an overview entry; every violation reports at the
-// item's own position.
-const compileItem = ({
+// Validates one Entry into an overview entry; every violation reports at the
+// entry's own position.
+const compileEntry = ({
   child,
   diagnostics,
 }: {
   readonly child: ScopedChild;
   readonly diagnostics: DiagnosticCollector;
-}): CompiledGlanceItem | undefined => {
+}): CompiledTableOfContentsEntry | undefined => {
   const validated = validateComponentAttributes({
-    component: "Item",
+    component: "Entry",
     attributes: child.attributes,
     position: child.position,
     diagnostics,
-    schema: ITEM_SCHEMA,
+    schema: ENTRY_SCHEMA,
   });
   if (meaningfulChildren(child.children).length > 0) {
     diagnostics.add({
       message:
-        'Item is self-closing; write <Item section="..." gist="..." /> with no body content',
+        'Entry is self-closing; write <Entry section="..." gist="..." /> with no body content',
       position: child.position,
     });
   }
@@ -55,16 +55,16 @@ const compileItem = ({
   return { section: validated.section, gist: validated.gist };
 };
 
-/** Compiles one Glance component into the model consumed by rendering. */
-export const compileGlanceComponent = ({
+/** Compiles one TableOfContents component into the model consumed by rendering. */
+export const compileTableOfContentsComponent = ({
   attributes,
   children,
   scopedChildren,
   position,
   diagnostics,
-}: ComponentCompilerInput): CompiledGlance => {
+}: ComponentCompilerInput): CompiledTableOfContents => {
   validateComponentAttributes({
-    component: "Glance",
+    component: "TableOfContents",
     attributes,
     position,
     diagnostics,
@@ -73,20 +73,21 @@ export const compileGlanceComponent = ({
   if (meaningfulChildren(children).length > 0) {
     diagnostics.add({
       message:
-        "Glance holds only Item entries; move loose content into the plan body",
+        "TableOfContents holds only Entry rows; move loose content into the plan body",
       position,
     });
   }
   if (scopedChildren.length === 0) {
     diagnostics.add({
-      message: "Glance needs at least one Item naming a section and its gist",
+      message:
+        "TableOfContents needs at least one Entry naming a section and its gist",
       position,
     });
   }
   return {
-    items: scopedChildren.flatMap((child) => {
-      const item = compileItem({ child, diagnostics });
-      return item === undefined ? [] : [item];
+    entries: scopedChildren.flatMap((child) => {
+      const entry = compileEntry({ child, diagnostics });
+      return entry === undefined ? [] : [entry];
     }),
   };
 };

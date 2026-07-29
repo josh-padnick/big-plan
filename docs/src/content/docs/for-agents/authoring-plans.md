@@ -17,7 +17,7 @@ Reading it recently is required: `validate` and `render` fail with `GUIDANCE_REQ
 
 Standard Markdown plus GFM tables, task lists, footnotes, and literal autolinks all work.
 Fenced code blocks with a supported declared language receive syntax highlighting; unknown and undeclared languages stay plain.
-Components are flow-level JSX elements from the built-in [component registry](/components/): `ComplexDecision`, `Callout`, `CodeDiff`, `CodeSnippet`, `DatabaseTableSchema`, `Decision`, `FileTree`, `FileTreeDiff`, `FlowDiagram`, `Glance`, `GraphqlOperation`, `GrpcMethod`, `HttpEndpoint`, `Part`, `QuickSummary`, and `SimpleDecisionSet`, plus scoped child components such as `Annotation`, `Item`, `Option`, and `Score` that are valid only in the hierarchy declared by their parent.
+Components are flow-level JSX elements from the built-in [component registry](/components/): `ComplexDecision`, `Callout`, `CodeDiff`, `CodeSnippet`, `DatabaseTableSchema`, `Decision`, `FileTree`, `FileTreeDiff`, `FlowDiagram`, `GraphqlOperation`, `GrpcMethod`, `HttpEndpoint`, `Part`, `QuickSummary`, `SimpleDecisionSet`, and `TableOfContents`, plus scoped child components such as `Annotation`, `Entry`, `Option`, and `Score` that are valid only in the hierarchy declared by their parent.
 Component attributes are strings (`title="Rollout"`) or bare shorthand booleans (`showLineNumbers`) where a component's schema allows them.
 
 ## What a plan may not contain
@@ -33,7 +33,7 @@ Because `<` and `{` begin MDX syntax, write them in code spans or fences when yo
 
 ## How structure renders as a deck
 
-The rendered document reads as a deck: every h2 section becomes a slide frame headed by a numbered kicker, and `Part` markers group the slides into numbered acts that also group the table of contents and the `Glance` overview.
+The rendered document reads as a deck: every h2 section becomes a slide frame headed by a numbered kicker, and `Part` markers group the slides into numbered acts that also group the sidebar navigation and the in-document `TableOfContents` overview.
 A section containing h3 headings renders as a parent header block over numbered sub-slides, one per h3 run, with the h3 itself becoming the sub-slide's kicker.
 A slide or sub-slide whose first paragraph is entirely emphasized (`*like this*`) renders that paragraph as the context builder: one muted line under the kicker telling the reader what they are looking at.
 
@@ -82,8 +82,8 @@ Prose mentioning those phrases, and headings that merely contain them, are never
 
 `single-quick-summary` allows at most one `QuickSummary` per plan, so the reviewer always has exactly one place to start.
 
-`glance-matches-sections` requires a `Glance`'s Item section names to repeat the document's h2 titles exactly, in order, one to one.
-Every mismatch - a wrong name, a missing section, or an extra item - is reported at the Glance's position, so the overview can never drift from the plan it summarizes.
+`table-of-contents-matches-sections` requires a `TableOfContents`'s Entry section names to repeat the document's h2 titles exactly, in order, one to one.
+Every mismatch - a wrong name, a missing section, or an extra entry - is reported at the TableOfContents's position, so the overview can never drift from the plan it summarizes.
 
 `markdown-table-format` catches table-shaped outer-pipe rows whose delimiter row is missing or malformed:
 

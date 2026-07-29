@@ -194,7 +194,7 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     },
     { scope: "worker" },
   ],
-  // The deck example carries Parts, a Glance, sub-slides, and context
+  // The deck example carries Parts, a TableOfContents, sub-slides, and context
   // builders, so the deck journey reads the paradigm end to end.
   deckViewerUrl: [
     async ({}, use) => {
