@@ -21,11 +21,9 @@ const Consideration = ({
 }: {
   readonly consideration: CompiledDecisionConsideration;
 }) => (
-  <li className="m-0">
-    <span className="font-medium text-ink">{consideration.title}:</span>{" "}
-    <span
-      className={`decision-verdict ${TONE_CLASSES[consideration.tone]} font-medium`}
-    >
+  <li className="m-0 leading-relaxed">
+    <span className="font-semibold text-ink">{consideration.title}:</span>{" "}
+    <span className={`decision-verdict ${TONE_CLASSES[consideration.tone]}`}>
       {consideration.verdict}.
     </span>
     {consideration.detail.length === 0 ? null : (
@@ -45,10 +43,10 @@ const OptionCard = ({
   <section
     data-decision-option
     {...(option.recommended ? { "data-option-recommended": "" } : {})}
-    className="decision-option mb-3 rounded-md border border-edge px-4 py-3 last:mb-0"
+    className="decision-option mb-4 rounded-lg border border-edge px-5 py-4 last:mb-0"
   >
-    <header className="mb-1.5 flex flex-wrap items-baseline gap-x-2">
-      <h4 className="m-0 text-base font-semibold">{option.title}</h4>
+    <header className="mb-1 flex flex-wrap items-center gap-x-3">
+      <h4 className="m-0 text-lg font-semibold">{option.title}</h4>
       {option.recommended ? (
         <span className="decision-recommended-pill rounded-full px-2 py-0.5 text-xs font-semibold">
           Recommended
@@ -56,15 +54,15 @@ const OptionCard = ({
       ) : null}
     </header>
     {option.summary === undefined ? null : (
-      <p className="mb-1.5 text-sm text-muted">{option.summary}</p>
+      <p className="mb-0 text-muted">{option.summary}</p>
     )}
-    <ul className="m-0 list-none space-y-1 p-0 text-sm">
+    <ul className="mt-3 mb-0 list-none space-y-2 border-t border-edge p-0 pt-3 text-[0.9375rem]">
       {option.considerations.map((consideration, index) => (
         <Consideration key={index} consideration={consideration} />
       ))}
     </ul>
     {option.detail.length === 0 ? null : (
-      <div className="mt-2 text-sm text-muted [&>:last-child]:mb-0">
+      <div className="mt-3 text-[0.9375rem] text-muted [&>:last-child]:mb-0">
         {hastContentToReact(option.detail)}
       </div>
     )}
@@ -85,9 +83,9 @@ export const Decision = ({ model }: { readonly model: CompiledDecision }) => (
         {model.status}
       </span>
     </header>
-    <h3 className="mt-0 mb-2 text-lg font-semibold">{model.question}</h3>
+    <h3 className="mt-0 mb-2 text-2xl font-bold">{model.question}</h3>
     {model.context.length === 0 ? null : (
-      <div className="mb-3 text-sm text-muted [&>:last-child]:mb-0">
+      <div className="mb-4 text-muted [&>:last-child]:mb-0">
         {hastContentToReact(model.context)}
       </div>
     )}

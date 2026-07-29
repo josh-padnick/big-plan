@@ -11,12 +11,7 @@ import {
 } from "../_authoring/contract.js";
 import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
 
-export const QUICK_SUMMARY_FACETS = [
-  "What",
-  "How",
-  "Risks",
-  "Decisions",
-] as const;
+export const QUICK_SUMMARY_FACETS = ["What", "How", "OpenQuestions"] as const;
 
 export type QuickSummaryFacetName = (typeof QUICK_SUMMARY_FACETS)[number];
 
@@ -96,6 +91,16 @@ const compileFacet = ({
       position: child.position,
     });
   }
+  if (
+    child.name === "OpenQuestions" &&
+    items.some((item) => !collectText(item.children).trim().endsWith("?"))
+  ) {
+    diagnostics.add({
+      message:
+        "Every OpenQuestions bullet is phrased as a question ending with a question mark",
+      position: child.position,
+    });
+  }
   return items.map((item) => item.children);
 };
 
@@ -117,7 +122,7 @@ export const compileQuickSummaryComponent = ({
   if (meaningfulChildren(children).length > 0) {
     diagnostics.add({
       message:
-        "QuickSummary holds only What, How, Risks, and Decisions sections; move loose content into one of them",
+        "QuickSummary holds only What, How, and OpenQuestions sections; move loose content into one of them",
       position,
     });
   }
@@ -150,7 +155,7 @@ export const compileQuickSummaryComponent = ({
   if (!inCanonicalOrder) {
     diagnostics.add({
       message:
-        "Order QuickSummary sections What, How, Risks, Decisions so every plan reads the same way",
+        "Order QuickSummary sections What, How, OpenQuestions so every plan reads the same way",
       position,
     });
   }

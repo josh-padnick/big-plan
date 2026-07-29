@@ -18,7 +18,7 @@ If a point only matters to readers of one section, it belongs in that section.
 
 ## Authoring
 
-The body holds `What`, `How`, `Risks`, and `Decisions` facet sections, each carrying one short bullet list; the card renders them as a labeled grid:
+The body holds `What`, `How`, and `OpenQuestions` facet sections, each carrying one short bullet list; the card renders them as a labeled grid:
 
 ```mdx
 <QuickSummary>
@@ -35,24 +35,19 @@ The body holds `What`, `How`, `Risks`, and `Decisions` facet sections, each carr
 
 </How>
 
-<Risks>
+<OpenQuestions>
 
-- Double charges if capture and schedule updates are not transactional.
+- Which queue technology keeps capture and schedule updates transactional, closing the double-charge risk?
 
-</Risks>
-
-<Decisions>
-
-- The queue technology, and whether rollout starts with a shadow mode.
-
-</Decisions>
+</OpenQuestions>
 
 </QuickSummary>
 ```
 
 ## The contract
 
-- `What` is required; `How`, `Risks`, and `Decisions` are optional, each at most once, in that order.
+- `What` is required; `How` and `OpenQuestions` are optional, each at most once, in that order.
+- Every `OpenQuestions` bullet is phrased as a question ending with a question mark.
 - Each facet's body is exactly one bullet list of at most 3 bullets; prose, headings, and other components are rejected.
 - At most 600 characters of readable text across all facets, counted after collapsing whitespace and including inline code and emphasis.
 - At most one `QuickSummary` per document, enforced by the `single-quick-summary` linting rule.

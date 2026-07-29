@@ -17,7 +17,7 @@ Never use a concept the reader has not met yet; a coined phrase like a hyphen-ch
 ## 2. Open with a quick summary
 
 Put a `QuickSummary` component directly after the lede, before any section: the plan's key points, stated as concisely as possible.
-Its `What`, `How`, `Risks`, and `Decisions` sections tell a stopping reader what will change, how it will work, what could go wrong, and what you need decided.
+Its `What`, `How`, and `OpenQuestions` sections tell a stopping reader what will change, how it will work, and what they must answer, with risks folded into the questions that resolve them.
 It enforces its own shape - short bullet lists within hard caps - and `big-plan guidance QuickSummary` explains how to use it well.
 Everything after the quick summary is elaboration; nothing essential may appear for the first time in a later section.
 

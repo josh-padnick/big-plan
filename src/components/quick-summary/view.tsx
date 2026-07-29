@@ -1,10 +1,15 @@
 // Renders a compiled QuickSummary as the standout key-points card a reviewer
-// reads first: a label column of facets beside their few short bullets, so
-// the card scans as a grid rather than a wall of bullets.
+// reads first: each facet is its own bounded box with an accent label inside,
+// under a sentence-case title that outranks the facet labels.
 
-import { Fragment } from "react";
-import type { CompiledQuickSummary } from "./compile.js";
+import type { CompiledQuickSummary, QuickSummaryFacetName } from "./compile.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
+
+const FACET_LABELS: Readonly<Record<QuickSummaryFacetName, string>> = {
+  What: "What",
+  How: "How",
+  OpenQuestions: "Open questions",
+};
 
 export const QuickSummary = ({
   model,
@@ -15,14 +20,17 @@ export const QuickSummary = ({
     data-quick-summary
     className="mb-8 rounded-lg border border-edge bg-surface px-5 py-4"
   >
-    <p className="mb-3 text-xs font-semibold tracking-[0.08em] uppercase text-accent">
+    <p className="mb-3 text-[1.0625rem] font-semibold text-ink">
       Quick summary
     </p>
-    <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2.5">
+    <dl className="m-0 space-y-3">
       {model.facets.map((facet) => (
-        <Fragment key={facet.name}>
-          <dt className="pt-px text-xs font-semibold tracking-[0.08em] uppercase text-muted">
-            {facet.name}
+        <div
+          key={facet.name}
+          className="rounded-lg border border-edge bg-paper px-4 pt-2.5 pb-3"
+        >
+          <dt className="mb-1.5 text-xs font-semibold tracking-[0.08em] uppercase text-accent">
+            {FACET_LABELS[facet.name]}
           </dt>
           <dd className="m-0">
             <ul className="m-0 list-disc space-y-1 pl-4">
@@ -33,7 +41,7 @@ export const QuickSummary = ({
               ))}
             </ul>
           </dd>
-        </Fragment>
+        </div>
       ))}
     </dl>
   </aside>

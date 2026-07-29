@@ -75,15 +75,14 @@ describe("QUICK_SUMMARY_COMPONENT_DEFINITION", () => {
       scopedChildren: [
         facet("What", ["Retries move into a queue."]),
         facet("How", ["A worker drains it with backoff."]),
-        facet("Risks", ["Double charges without transactions."]),
-        facet("Decisions", ["Queue technology."]),
+        facet("OpenQuestions", ["Which queue technology?"]),
       ],
     });
     expect(diagnostics).toEqual([]);
     expect(element.tagName).toBe("aside");
     const rendered = JSON.stringify(element);
     expect(rendered).toContain('"value":"Quick summary"');
-    for (const label of ["What", "How", "Risks", "Decisions"]) {
+    for (const label of ["What", "How", "Open questions"]) {
       expect(rendered).toContain(`"value":"${label}"`);
     }
     expect(rendered).toContain('"tagName":"dl"');
@@ -120,7 +119,7 @@ describe("QUICK_SUMMARY_COMPONENT_DEFINITION", () => {
         line: 3,
         column: 1,
         message:
-          "QuickSummary holds only What, How, Risks, and Decisions sections; move loose content into one of them",
+          "QuickSummary holds only What, How, and OpenQuestions sections; move loose content into one of them",
       },
     ]);
   });
@@ -146,7 +145,7 @@ describe("QUICK_SUMMARY_COMPONENT_DEFINITION", () => {
     expect(
       render({
         scopedChildren: [
-          facet("Risks", ["A risk."]),
+          facet("How", ["A step."]),
           facet("What", ["A change."]),
         ],
       }).diagnostics,
@@ -155,7 +154,7 @@ describe("QUICK_SUMMARY_COMPONENT_DEFINITION", () => {
         line: 3,
         column: 1,
         message:
-          "Order QuickSummary sections What, How, Risks, Decisions so every plan reads the same way",
+          "Order QuickSummary sections What, How, OpenQuestions so every plan reads the same way",
       },
     ]);
   });
@@ -202,7 +201,7 @@ describe("QUICK_SUMMARY_COMPONENT_DEFINITION", () => {
     const long = "x".repeat(301);
     expect(
       render({
-        scopedChildren: [facet("What", [long]), facet("Risks", [long])],
+        scopedChildren: [facet("What", [long]), facet("How", [long])],
       }).diagnostics,
     ).toEqual([
       {
@@ -214,16 +213,34 @@ describe("QUICK_SUMMARY_COMPONENT_DEFINITION", () => {
     ]);
   });
 
+  it("should require OpenQuestions bullets to be phrased as questions", () => {
+    expect(
+      render({
+        scopedChildren: [
+          facet("What", ["A change."]),
+          facet("OpenQuestions", ["Not a question."]),
+        ],
+      }).diagnostics,
+    ).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message:
+          "Every OpenQuestions bullet is phrased as a question ending with a question mark",
+      },
+    ]);
+  });
+
   it("should render facets in canonical order regardless of model input", () => {
     const { element } = render({
       scopedChildren: [
         facet("What", ["A change."]),
-        facet("Decisions", ["A call."]),
+        facet("OpenQuestions", ["Which call?"]),
       ],
     });
     const rendered = JSON.stringify(element);
     expect(rendered.indexOf('"value":"What"')).toBeLessThan(
-      rendered.indexOf('"value":"Decisions"'),
+      rendered.indexOf('"value":"Open questions"'),
     );
   });
 });

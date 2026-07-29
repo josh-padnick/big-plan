@@ -17,17 +17,12 @@ A persistent retry queue replaces inline payment-capture retries, summarized her
 
 </How>
 
-<Risks>
+<OpenQuestions>
 
-- Double charges if capture and schedule updates are not transactional.
+- Which queue technology keeps capture and schedule updates transactional, closing the double-charge risk?
+- Does rollout start with a shadow mode?
 
-</Risks>
-
-<Decisions>
-
-- The queue technology, and whether rollout starts with a shadow mode.
-
-</Decisions>
+</OpenQuestions>
 
 </QuickSummary>
 
