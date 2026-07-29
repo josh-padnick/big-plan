@@ -20,6 +20,12 @@ describe("renderCodeDiff output", () => {
     expect(JSON.stringify(element)).not.toContain("code-diff-stats");
   });
 
+  // A components-layer hover rule loses to the row's own bg-transparent
+  // utility, so the menu row's highlight has to be a utility too.
+  it("should carry menu-row hover feedback as a utility", () => {
+    expect(JSON.stringify(render().element)).toContain("hover:bg-edge");
+  });
+
   it("should render the header stats when showLineCounts is set", () => {
     const { element, diagnostics } = render({
       attributes: { file: "src/retry.ts", showLineCounts: true },

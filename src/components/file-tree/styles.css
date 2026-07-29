@@ -135,7 +135,4 @@
   article .file-tree-note-hint > summary::-webkit-details-marker {
     display: none;
   }
-  article .file-tree-note-hint[open] > summary {
-    color: var(--color-ink);
-  }
 }

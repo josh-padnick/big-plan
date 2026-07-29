@@ -152,6 +152,17 @@ describe("ComplexDecision rendering", () => {
     expect(html).not.toContain("<details");
   });
 
+  // The summary's own text-muted utility beats a components-layer rule, so the
+  // open accent rides a group variant. Criterion help stays out of the group
+  // deliberately: its title keeps the surrounding row color when it opens.
+  it("should accent an open info disclosure without recoloring criterion help", () => {
+    const html = render(OPEN_DECISION);
+
+    expect(html).toContain("group-open:text-accent");
+    expect(html).toContain("complex-decision-criterion-help");
+    expect(html).not.toContain("complex-decision-criterion-help group");
+  });
+
   it("should render the recommended pill exactly once per decision", () => {
     const html = render(OPEN_DECISION);
     const pillCount =

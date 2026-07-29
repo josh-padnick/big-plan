@@ -173,6 +173,9 @@ describe("renderFileTreeDiff", () => {
     expect(serialized).toContain('"data-info-popover-body":"true"');
     expect(serialized).toContain('"value":"Entry point."');
     expect(serialized).not.toContain('"title":');
+    // The open glyph darkens through a group variant; a stylesheet rule would
+    // lose to the summary's own text-muted utility.
+    expect(serialized).toContain("group-open:text-ink");
   });
 
   it("should keep the before pane unmarked and every marker on the after pane", () => {

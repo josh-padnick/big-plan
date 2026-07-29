@@ -212,8 +212,8 @@ const NoteElement = ({
   // glyph and out of this row's horizontal scroll container, and without
   // scripts the same disclosure still opens the note in place.
   return (
-    <details className="file-tree-note-hint" data-info-popover>
-      <summary className="inline-flex cursor-help text-muted hover:text-ink [&>svg]:size-3.5 [&>svg]:shrink-0">
+    <details className="file-tree-note-hint group" data-info-popover>
+      <summary className="inline-flex cursor-help text-muted group-open:text-ink hover:text-ink [&>svg]:size-3.5 [&>svg]:shrink-0">
         {lucideIconToReact({ icon: MESSAGE_SQUARE_ICON, hidden: false })}
         <span className="sr-only">{"Note"}</span>
       </summary>

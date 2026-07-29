@@ -133,9 +133,6 @@
   article .complex-decision-info > summary::-webkit-details-marker {
     display: none;
   }
-  article .complex-decision-info[open] > summary {
-    color: var(--color-accent);
-  }
   article .complex-decision-info > .complex-decision-info-body {
     margin-top: 0.375rem;
   }
@@ -147,9 +144,6 @@
       transparent
     );
     text-underline-offset: 3px;
-  }
-  article .complex-decision-criterion-help[open] > summary {
-    color: inherit;
   }
   /* The reversibility section has the full column, so its explainer is not
      bound to the matrix cells' narrow measure. */

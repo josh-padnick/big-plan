@@ -141,6 +141,18 @@ describe("GLANCE_COMPONENT_DEFINITION", () => {
     ]);
   });
 
+  // The row's own text-ink utility beats a components-layer rule, so the title
+  // accent has to arrive as a group variant or the hover goes unnoticed.
+  it("should carry row-hover title accent as a utility", () => {
+    const rendered = JSON.stringify(
+      render({
+        scopedChildren: [item({ section: "Status quo", gist: "A gist" })],
+      }).element,
+    );
+
+    expect(rendered).toContain("group-hover:text-accent");
+  });
+
   it("should render placeholder rows the deck transform completes", () => {
     const { element, diagnostics } = render({
       scopedChildren: [

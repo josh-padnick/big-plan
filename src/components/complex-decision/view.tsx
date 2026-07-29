@@ -78,8 +78,10 @@ const InfoDisclosure = ({
   readonly icon?: LucideIcon;
 }) =>
   detail.length === 0 ? null : (
-    <details className="complex-decision-info" data-info-popover>
-      <summary className="inline-flex cursor-pointer align-middle text-muted [&>svg]:size-3.5">
+    // The open trigger turns accent through a group variant: a stylesheet rule
+    // on the summary would lose to its own text-muted utility.
+    <details className="complex-decision-info group" data-info-popover>
+      <summary className="inline-flex cursor-pointer align-middle text-muted group-open:text-accent [&>svg]:size-3.5">
         {lucideIconToReact({ icon, hidden: false })}
         <span className="sr-only">{"More detail"}</span>
       </summary>

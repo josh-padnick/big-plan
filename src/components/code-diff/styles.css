@@ -26,9 +26,6 @@
   article .code-diff-menu-list[hidden] {
     display: none;
   }
-  article .code-diff-menu-item:hover {
-    background: var(--color-edge);
-  }
   article .code-diff-toggle-group[hidden] {
     display: none;
   }
