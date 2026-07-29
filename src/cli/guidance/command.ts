@@ -19,7 +19,10 @@ export const guidanceCommand = async (
       [USAGE],
     );
   }
-  await recordGuidanceAcknowledgment();
+  const { persisted } = await recordGuidanceAcknowledgment();
+  const acknowledgmentNote = persisted
+    ? "Guidance acknowledged for this directory: `big-plan validate` and `big-plan render` are unlocked for 24 hours."
+    : "No writable state directory exists here, so this acknowledgment could not be saved; validate and render will warn instead of locking. Set BIG_PLAN_STATE_DIR to a writable directory to restore the gate.";
   return [
     GUIDANCE_MARKDOWN.trimEnd(),
     "",
@@ -31,7 +34,7 @@ export const guidanceCommand = async (
     TEMPLATE_MDX.trimEnd(),
     "```",
     "",
-    "Guidance acknowledged for this directory: `big-plan validate` and `big-plan render` are unlocked for 24 hours.",
+    acknowledgmentNote,
     "",
   ].join("\n");
 };

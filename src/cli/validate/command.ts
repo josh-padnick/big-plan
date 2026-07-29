@@ -15,7 +15,7 @@ const USAGE = "Usage: big-plan validate <input.mdx>";
 export const validateCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
-  await requireGuidanceAcknowledgment();
+  const { warnings } = await requireGuidanceAcknowledgment();
   const { inputPath } = parseInputCommandArguments({
     args,
     usage: USAGE,
@@ -34,6 +34,7 @@ export const validateCommand = async (
     sections: derived.sections.length,
     components: derived.components.length,
     help: [
+      ...warnings,
       "Lint checks only what is statically analyzable; render the plan and reread the document exactly as your human will",
       "Judge it against the principles from `big-plan guidance` before presenting it",
     ],

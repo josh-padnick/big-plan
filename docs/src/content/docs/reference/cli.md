@@ -39,8 +39,11 @@ An acknowledgment is current when it was recorded for the same working directory
 Updating Big Plan to a release with changed guidance therefore re-locks both commands until `guidance` is read again.
 `compile` is not gated, so machine tooling can compile a plan model without the authoring workflow.
 
-Acknowledgment state lives outside the project in the user's home directory under `.big-plan/`.
-Set the `BIG_PLAN_STATE_DIR` environment variable to relocate it, which test suites and sandboxed environments use to keep state isolated.
+Acknowledgment state lives outside the project: in `.big-plan/` under the user's home directory, falling back to a `big-plan/` directory under the system temporary directory when the home directory rejects writes, as workspace-scoped sandboxes commonly do.
+Setting the `BIG_PLAN_STATE_DIR` environment variable pins state to exactly one directory, which test suites and sandboxed environments use to keep state isolated.
+
+When no state location accepts writes at all, the gate degrades instead of blocking: `guidance` still prints the full guidance and notes that the acknowledgment could not be saved, and `validate` and `render` proceed while their results carry a warning that the acknowledgment could not be verified.
+Filesystem restrictions therefore never lock an agent out of the plan workflow.
 
 ## Input and output paths
 

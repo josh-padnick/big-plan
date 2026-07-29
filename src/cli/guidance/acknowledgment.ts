@@ -1,10 +1,12 @@
 // Owns the guidance acknowledgment gate: running `big-plan guidance` records
 // that the current guidance version was read for a working directory, and
 // validate and render refuse to run for that directory until it has been.
+// Environments with no writable state location degrade to a warning, so a
+// sandboxed agent is reminded rather than locked out.
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import { GUIDANCE_VERSION } from "./content.generated.js";
@@ -13,19 +15,25 @@ import { GUIDANCE_VERSION } from "./content.generated.js";
 // within a working day should not be interrupted.
 const ACKNOWLEDGMENT_TTL_MS = 24 * 60 * 60 * 1000;
 
-// BIG_PLAN_STATE_DIR exists for tests and sandboxed environments that need
-// acknowledgment state isolated from the user's home directory.
-const stateDirectory = (): string =>
-  process.env["BIG_PLAN_STATE_DIR"] ?? join(homedir(), ".big-plan");
+// BIG_PLAN_STATE_DIR pins state to one directory for tests and sandboxed
+// environments. Without it, the home directory is preferred and the system
+// temporary directory is the fallback for sandboxes that block home writes.
+const candidateStateDirectories = (): ReadonlyArray<string> => {
+  const override = process.env["BIG_PLAN_STATE_DIR"];
+  if (override !== undefined) {
+    return [override];
+  }
+  return [join(homedir(), ".big-plan"), join(tmpdir(), "big-plan")];
+};
 
 // One marker file per working directory, so acknowledging guidance in one
 // project never unlocks another.
-const markerPath = (): string => {
+const markerName = (): string => {
   const key = createHash("sha256")
     .update(process.cwd())
     .digest("hex")
     .slice(0, 16);
-  return join(stateDirectory(), `guidance-${key}.json`);
+  return `guidance-${key}.json`;
 };
 
 type AcknowledgmentMarker = {
@@ -55,32 +63,83 @@ const parseMarker = (raw: string): AcknowledgmentMarker | undefined => {
   return undefined;
 };
 
-/** Records that the current guidance version was read for this directory. */
-export const recordGuidanceAcknowledgment = async (): Promise<void> => {
+const isMarkerCurrent = (marker: AcknowledgmentMarker | undefined): boolean =>
+  marker !== undefined &&
+  marker.version === GUIDANCE_VERSION &&
+  Date.now() - marker.acknowledgedAtMs < ACKNOWLEDGMENT_TTL_MS;
+
+const readCurrentMarker = async (): Promise<boolean> => {
+  for (const directory of candidateStateDirectories()) {
+    try {
+      const raw = await readFile(join(directory, markerName()), "utf8");
+      if (isMarkerCurrent(parseMarker(raw))) {
+        return true;
+      }
+    } catch {
+      // Missing or unreadable in this location; try the next candidate.
+    }
+  }
+  return false;
+};
+
+// Confirms a candidate directory accepts writes without leaving a fake
+// acknowledgment behind.
+const isAnyStateDirectoryWritable = async (): Promise<boolean> => {
+  for (const directory of candidateStateDirectories()) {
+    const probePath = join(directory, `.probe-${process.pid}`);
+    try {
+      await mkdir(directory, { recursive: true });
+      await writeFile(probePath, "", "utf8");
+      await rm(probePath, { force: true });
+      return true;
+    } catch {
+      // This location rejects writes; try the next candidate.
+    }
+  }
+  return false;
+};
+
+/**
+ * Records that the current guidance version was read for this directory.
+ * Reports whether any state location accepted the marker, so the caller can
+ * tell the reader when persistence was impossible.
+ */
+export const recordGuidanceAcknowledgment = async (): Promise<{
+  readonly persisted: boolean;
+}> => {
   const marker: AcknowledgmentMarker = {
     version: GUIDANCE_VERSION,
     acknowledgedAtMs: Date.now(),
   };
-  await mkdir(stateDirectory(), { recursive: true });
-  await writeFile(markerPath(), JSON.stringify(marker), "utf8");
+  for (const directory of candidateStateDirectories()) {
+    try {
+      await mkdir(directory, { recursive: true });
+      await writeFile(
+        join(directory, markerName()),
+        JSON.stringify(marker),
+        "utf8",
+      );
+      return { persisted: true };
+    } catch {
+      // This location rejects writes; try the next candidate.
+    }
+  }
+  return { persisted: false };
 };
 
 /**
- * Fails with a structured error unless the current guidance version was
- * acknowledged for this directory within the acknowledgment window.
+ * Enforces the guidance gate. A current acknowledgment passes silently; a
+ * missing one fails with a structured error while any state location is
+ * writable, and degrades to returned warnings when none is, so filesystem
+ * restrictions never block the plan workflow outright.
  */
-export const requireGuidanceAcknowledgment = async (): Promise<void> => {
-  let marker: AcknowledgmentMarker | undefined;
-  try {
-    marker = parseMarker(await readFile(markerPath(), "utf8"));
-  } catch {
-    marker = undefined;
+export const requireGuidanceAcknowledgment = async (): Promise<{
+  readonly warnings: ReadonlyArray<string>;
+}> => {
+  if (await readCurrentMarker()) {
+    return { warnings: [] };
   }
-  const isCurrent =
-    marker !== undefined &&
-    marker.version === GUIDANCE_VERSION &&
-    Date.now() - marker.acknowledgedAtMs < ACKNOWLEDGMENT_TTL_MS;
-  if (!isCurrent) {
+  if (await isAnyStateDirectoryWritable()) {
     throw new AxiError(
       "Read the plan-writing guidance before working on a plan",
       "GUIDANCE_REQUIRED",
@@ -90,4 +149,10 @@ export const requireGuidanceAcknowledgment = async (): Promise<void> => {
       ],
     );
   }
+  return {
+    warnings: [
+      "Guidance acknowledgment could not be verified: no writable state directory exists in this environment",
+      "Run `big-plan guidance` and follow its principles, or set BIG_PLAN_STATE_DIR to a writable directory to restore the acknowledgment gate",
+    ],
+  };
 };

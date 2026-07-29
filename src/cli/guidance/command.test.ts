@@ -100,6 +100,28 @@ describe("guidanceCommand", () => {
     });
   });
 
+  it("should warn instead of locking when no state directory is writable", async () => {
+    const blockerPath = join(tempDirectory, "blocker");
+    await writeFile(blockerPath, "", "utf8");
+    // A directory path nested under a plain file can never be created, so
+    // every state write fails and the gate degrades to a warning.
+    process.env["BIG_PLAN_STATE_DIR"] = join(blockerPath, "state");
+    const inputPath = join(tempDirectory, "plan.mdx");
+    await writeFile(inputPath, "# Plan\n\nLede.\n\n## Scope\n\nOne.\n", "utf8");
+
+    const output = await guidanceCommand([]);
+    expect(output).toContain("could not be saved");
+
+    await expect(validateCommand([inputPath])).resolves.toMatchObject({
+      title: "Plan",
+      help: expect.arrayContaining([
+        expect.stringContaining(
+          "Guidance acknowledgment could not be verified",
+        ),
+      ]),
+    });
+  });
+
   it("should ship a template that passes validation and authoring lint", async () => {
     await guidanceCommand([]);
     const templatePath = join(tempDirectory, "template.mdx");

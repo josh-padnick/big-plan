@@ -13,7 +13,7 @@ const USAGE = "Usage: big-plan render <input.mdx> [output.html]";
 export const renderCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
-  await requireGuidanceAcknowledgment();
+  const { warnings } = await requireGuidanceAcknowledgment();
   return runDerivedOutputCommand({
     args,
     usage: USAGE,
@@ -28,7 +28,10 @@ export const renderCommand = async (
       rendered: outputPath,
       title: derived.title,
       sections: derived.sections.length,
-      help: [`Open ${outputPath} in your browser to review the document`],
+      help: [
+        ...warnings,
+        `Open ${outputPath} in your browser to review the document`,
+      ],
     }),
   });
 };
