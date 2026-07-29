@@ -18,26 +18,45 @@ If a point only matters to readers of one section, it belongs in that section.
 
 ## Authoring
 
-The body must be exactly one bullet list and nothing else:
+The body holds `What`, `How`, `Risks`, and `Decisions` facet sections, each carrying one short bullet list; the card renders them as a labeled grid:
 
 ```mdx
 <QuickSummary>
 
+<What>
+
 - Failed captures move from inline API-server retries into a persistent queue with explicit state.
-- Backoff is bounded and jittered, and every attempt lands in an operator-visible audit trail.
-- You decide two things: the queue technology and whether rollout starts with a shadow mode.
-- Biggest risk: double charges if capture and schedule updates are not transactional.
+
+</What>
+
+<How>
+
+- A worker drains the queue with bounded, jittered backoff.
+
+</How>
+
+<Risks>
+
+- Double charges if capture and schedule updates are not transactional.
+
+</Risks>
+
+<Decisions>
+
+- The queue technology, and whether rollout starts with a shadow mode.
+
+</Decisions>
 
 </QuickSummary>
 ```
 
 ## The contract
 
-- The body is exactly one bullet list; prose, headings, and other components are rejected.
-- At most 5 bullets.
-- At most 600 characters of readable text across all bullets, counted after collapsing whitespace and including inline code and emphasis.
+- `What` is required; `How`, `Risks`, and `Decisions` are optional, each at most once, in that order.
+- Each facet's body is exactly one bullet list of at most 3 bullets; prose, headings, and other components are rejected.
+- At most 600 characters of readable text across all facets, counted after collapsing whitespace and including inline code and emphasis.
 - At most one `QuickSummary` per document, enforced by the `single-quick-summary` linting rule.
-- No attributes.
+- No attributes on the component or its facets.
 
 Each violation fails `validate` and `render` with a positional diagnostic.
 Run `big-plan guidance QuickSummary` for judgment-level usage guidance.

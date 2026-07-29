@@ -4,10 +4,30 @@ A persistent retry queue replaces inline payment-capture retries, summarized her
 
 <QuickSummary>
 
+<What>
+
 - Failed captures move from inline API-server retries into a persistent queue with explicit state.
-- Backoff is bounded and jittered, and every attempt lands in an operator-visible audit trail.
-- You decide two things: the queue technology and whether rollout starts with a shadow mode.
-- Biggest risk: double charges if capture and schedule updates are not transactional.
+
+</What>
+
+<How>
+
+- A worker drains the queue with bounded, jittered backoff.
+- Every attempt lands in an operator-visible audit trail.
+
+</How>
+
+<Risks>
+
+- Double charges if capture and schedule updates are not transactional.
+
+</Risks>
+
+<Decisions>
+
+- The queue technology, and whether rollout starts with a shadow mode.
+
+</Decisions>
 
 </QuickSummary>
 

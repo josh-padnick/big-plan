@@ -17,8 +17,8 @@ Never use a concept the reader has not met yet; a coined phrase like a hyphen-ch
 ## 2. Open with a quick summary
 
 Put a `QuickSummary` component directly after the lede, before any section: the plan's key points, stated as concisely as possible.
-A reader who stops after it should know what will change, how it will work, the decisions you need from them, and the biggest risk.
-It enforces its own shape - one bullet list, at most 5 bullets, at most 600 characters - and `big-plan guidance QuickSummary` explains how to use it well.
+Its `What`, `How`, `Risks`, and `Decisions` sections tell a stopping reader what will change, how it will work, what could go wrong, and what you need decided.
+It enforces its own shape - short bullet lists within hard caps - and `big-plan guidance QuickSummary` explains how to use it well.
 Everything after the quick summary is elaboration; nothing essential may appear for the first time in a later section.
 
 ## 3. Choose the structure this plan needs

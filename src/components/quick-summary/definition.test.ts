@@ -1,16 +1,22 @@
-// Tests QuickSummary's structural contract - one bullet list, the item and
-// character caps - and its rendered card markup.
+// Tests QuickSummary's facet contract - What/How/Risks/Decisions grammar,
+// ordering, and the bullet and character caps - and its rendered card markup.
 
 import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
 import { createDiagnosticCollector } from "../_authoring/diagnostics.js";
+import type { ScopedChild } from "../_authoring/contract.js";
 import type { CompiledComponent } from "../_registration/define-component.js";
 import { reactToHast } from "../../render/markdown/component-pipeline/react-hast-adapter.js";
 import { QUICK_SUMMARY_COMPONENT_DEFINITION } from "./definition.js";
 
 const POSITION = {
   start: { line: 3, column: 1, offset: 10 },
-  end: { line: 9, column: 16, offset: 200 },
+  end: { line: 20, column: 16, offset: 400 },
+};
+
+const FACET_POSITION = {
+  start: { line: 5, column: 1, offset: 30 },
+  end: { line: 9, column: 8, offset: 90 },
 };
 
 const textItem = (value: string): ElementContent => ({
@@ -27,6 +33,13 @@ const bulletList = (items: ReadonlyArray<ElementContent>): ElementContent => ({
   children: [...items],
 });
 
+const facet = (name: string, bullets: ReadonlyArray<string>): ScopedChild => ({
+  name,
+  attributes: {},
+  children: [bulletList(bullets.map(textItem))],
+  position: FACET_POSITION,
+});
+
 const parseRenderedElement = (compiled: CompiledComponent): Element => {
   const parsed = reactToHast(compiled.presentation());
   if (parsed === undefined) {
@@ -35,12 +48,18 @@ const parseRenderedElement = (compiled: CompiledComponent): Element => {
   return parsed;
 };
 
-const render = (children: ReadonlyArray<ElementContent>) => {
+const render = ({
+  children = [],
+  scopedChildren,
+}: {
+  readonly children?: ReadonlyArray<ElementContent>;
+  readonly scopedChildren: ReadonlyArray<ScopedChild>;
+}) => {
   const diagnostics = createDiagnosticCollector();
   const compiled = QUICK_SUMMARY_COMPONENT_DEFINITION.compile({
     attributes: {},
     children,
-    scopedChildren: [],
+    scopedChildren,
     position: POSITION,
     diagnostics,
   });
@@ -51,62 +70,141 @@ const render = (children: ReadonlyArray<ElementContent>) => {
 };
 
 describe("QUICK_SUMMARY_COMPONENT_DEFINITION", () => {
-  it("should render the labeled card when the summary is within its caps", () => {
-    const { element, diagnostics } = render([
-      bulletList([textItem("One change."), textItem("One risk.")]),
-    ]);
+  it("should render the facet grid when every facet is within its caps", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: [
+        facet("What", ["Retries move into a queue."]),
+        facet("How", ["A worker drains it with backoff."]),
+        facet("Risks", ["Double charges without transactions."]),
+        facet("Decisions", ["Queue technology."]),
+      ],
+    });
     expect(diagnostics).toEqual([]);
     expect(element.tagName).toBe("aside");
     const rendered = JSON.stringify(element);
     expect(rendered).toContain('"value":"Quick summary"');
-    expect(rendered).toContain('"value":"One change."');
-    expect(rendered).toContain('"value":"One risk."');
+    for (const label of ["What", "How", "Risks", "Decisions"]) {
+      expect(rendered).toContain(`"value":"${label}"`);
+    }
+    expect(rendered).toContain('"tagName":"dl"');
+    expect(rendered).toContain('"value":"Retries move into a queue."');
   });
 
-  it("should reject a body that is not exactly one bullet list", () => {
+  it("should require the What facet", () => {
+    expect(
+      render({ scopedChildren: [facet("How", ["Something."])] }).diagnostics,
+    ).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message:
+          "QuickSummary needs a What section stating what changes for the reader",
+      },
+    ]);
+  });
+
+  it("should reject loose content outside the facets", () => {
     const paragraph: ElementContent = {
       type: "element",
       tagName: "p",
       properties: {},
-      children: [{ type: "text", value: "Prose instead of bullets." }],
+      children: [{ type: "text", value: "Loose prose." }],
     };
-    expect(render([paragraph]).diagnostics).toEqual([
-      {
-        line: 3,
-        column: 1,
-        message:
-          "QuickSummary must contain exactly one bullet list and nothing else",
-      },
-    ]);
     expect(
-      render([bulletList([textItem("A.")]), paragraph]).diagnostics,
-    ).toHaveLength(1);
-  });
-
-  it("should reject an empty list", () => {
-    expect(render([bulletList([])]).diagnostics).toEqual([
-      { line: 3, column: 1, message: "QuickSummary needs at least one bullet" },
-    ]);
-  });
-
-  it("should reject more than five bullets", () => {
-    const items = Array.from({ length: 6 }, (_, i) => textItem(`Point ${i}.`));
-    expect(render([bulletList(items)]).diagnostics).toEqual([
+      render({
+        children: [paragraph],
+        scopedChildren: [facet("What", ["A change."])],
+      }).diagnostics,
+    ).toEqual([
       {
         line: 3,
         column: 1,
         message:
-          "QuickSummary allows at most 5 bullets (found 6); keep only the key points",
+          "QuickSummary holds only What, How, Risks, and Decisions sections; move loose content into one of them",
       },
     ]);
   });
 
-  it("should reject more than six hundred readable characters", () => {
-    const long = "x".repeat(301);
-    const { diagnostics } = render([
-      bulletList([textItem(long), textItem(long)]),
+  it("should reject duplicate facets", () => {
+    expect(
+      render({
+        scopedChildren: [
+          facet("What", ["A change."]),
+          facet("What", ["Another change."]),
+        ],
+      }).diagnostics,
+    ).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message: "QuickSummary allows one What section",
+      },
     ]);
-    expect(diagnostics).toEqual([
+  });
+
+  it("should reject facets out of canonical order", () => {
+    expect(
+      render({
+        scopedChildren: [
+          facet("Risks", ["A risk."]),
+          facet("What", ["A change."]),
+        ],
+      }).diagnostics,
+    ).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message:
+          "Order QuickSummary sections What, How, Risks, Decisions so every plan reads the same way",
+      },
+    ]);
+  });
+
+  it("should reject a facet body that is not exactly one bullet list", () => {
+    const prose: ScopedChild = {
+      name: "What",
+      attributes: {},
+      children: [
+        {
+          type: "element",
+          tagName: "p",
+          properties: {},
+          children: [{ type: "text", value: "Prose instead of bullets." }],
+        },
+      ],
+      position: FACET_POSITION,
+    };
+    expect(render({ scopedChildren: [prose] }).diagnostics).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message: "What must contain exactly one bullet list and nothing else",
+      },
+    ]);
+  });
+
+  it("should reject more than three bullets in one facet", () => {
+    expect(
+      render({
+        scopedChildren: [facet("What", ["A.", "B.", "C.", "D."])],
+      }).diagnostics,
+    ).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message:
+          "What allows at most 3 bullets (found 4); keep only the key points",
+      },
+    ]);
+  });
+
+  it("should reject more than six hundred readable characters across facets", () => {
+    const long = "x".repeat(301);
+    expect(
+      render({
+        scopedChildren: [facet("What", [long]), facet("Risks", [long])],
+      }).diagnostics,
+    ).toEqual([
       {
         line: 3,
         column: 1,
@@ -116,33 +214,16 @@ describe("QUICK_SUMMARY_COMPONENT_DEFINITION", () => {
     ]);
   });
 
-  it("should count characters inside inline markup and collapse whitespace", () => {
-    const styledItem: ElementContent = {
-      type: "element",
-      tagName: "li",
-      properties: {},
-      children: [
-        { type: "text", value: "Uses  " },
-        {
-          type: "element",
-          tagName: "code",
-          properties: {},
-          children: [{ type: "text", value: "big-plan validate" }],
-        },
+  it("should render facets in canonical order regardless of model input", () => {
+    const { element } = render({
+      scopedChildren: [
+        facet("What", ["A change."]),
+        facet("Decisions", ["A call."]),
       ],
-    };
-    const filler = "y".repeat(579);
-    const { diagnostics } = render([
-      bulletList([styledItem, textItem(filler)]),
-    ]);
-    // "Uses big-plan validate" is 22 readable characters after collapsing.
-    expect(diagnostics).toEqual([
-      {
-        line: 3,
-        column: 1,
-        message:
-          "QuickSummary allows at most 600 characters of text (found 601); summarize at the altitude of intent, not inventory",
-      },
-    ]);
+    });
+    const rendered = JSON.stringify(element);
+    expect(rendered.indexOf('"value":"What"')).toBeLessThan(
+      rendered.indexOf('"value":"Decisions"'),
+    );
   });
 });
