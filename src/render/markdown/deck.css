@@ -6,16 +6,8 @@ the transform.
 */
 
 @layer components {
-  /* The slide under the pointer takes a subtle ink wash so the reader can
-     track their position. Ink-mixed, so the tint adapts to light and dark
-     themes, and slightly lighter than the Glance rows' wash because a slide
-     is a reading surface, not a control. */
-  article .plan-slide {
-    transition: background-color 0.25s ease;
-  }
-  article .plan-slide:hover {
-    background: color-mix(in srgb, var(--ink-c) 3.5%, transparent);
-  }
+  /* A slide frame is a calm reading surface: no hover or scroll wash, ever.
+     The reader tracks position through the kickers and the TOC scroll-spy. */
   article .plan-slide > h2 {
     margin: 0 0 1rem;
     border-bottom: none;
