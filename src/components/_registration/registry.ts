@@ -13,6 +13,7 @@ import { FILE_TREE_COMPONENT_DEFINITION } from "../file-tree/file-tree-definitio
 import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "../graphql-operation/definition.js";
 import { GRPC_METHOD_COMPONENT_DEFINITION } from "../grpc-method/definition.js";
 import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "../http-endpoint/definition.js";
+import { PART_COMPONENT_DEFINITION } from "../part/definition.js";
 import { QUICK_SUMMARY_COMPONENT_DEFINITION } from "../quick-summary/definition.js";
 import { SIMPLE_DECISION_SET_COMPONENT_DEFINITION } from "../simple-decision-set/definition.js";
 import type { ComponentDefinition } from "./define-component.js";
@@ -30,6 +31,7 @@ export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
     GraphqlOperation: GRAPHQL_OPERATION_COMPONENT_DEFINITION,
     GrpcMethod: GRPC_METHOD_COMPONENT_DEFINITION,
     HttpEndpoint: HTTP_ENDPOINT_COMPONENT_DEFINITION,
+    Part: PART_COMPONENT_DEFINITION,
     QuickSummary: QUICK_SUMMARY_COMPONENT_DEFINITION,
     SimpleDecisionSet: SIMPLE_DECISION_SET_COMPONENT_DEFINITION,
   };

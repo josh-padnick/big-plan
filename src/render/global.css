@@ -11,6 +11,7 @@ Light and dark follow the reader's OS in inert exports.
 
 @import "tailwindcss" source(none);
 @import "./markdown/prose.css";
+@import "./markdown/deck.css";
 @import "./markdown/syntax-highlighting.css";
 @import "../components/_shared/annotation-card/annotation-card.css";
 @import "../components/callout/styles.css";

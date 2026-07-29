@@ -153,6 +153,62 @@ describe("renderDocument affordances", () => {
   });
 });
 
+describe("renderDocument grouped navigation", () => {
+  const PARTED_FIXTURE = `# Deck plan
+
+The lede.
+
+<Part title="Context" />
+
+## Status quo
+
+Today.
+
+<Part title="The proposal" />
+
+## The design
+
+Tomorrow.
+`;
+
+  it("should render linked part headers above their grouped section links", () => {
+    const { html } = renderDocument({
+      markdown: PARTED_FIXTURE,
+      fallbackTitle: "Deck",
+    });
+    expect(html).toMatch(
+      /<a[^>]* data-toc-part href="#part-context">\[1\] Context<\/a>/,
+    );
+    expect(html).toMatch(
+      /<a[^>]* data-toc-part href="#part-the-proposal">\[2\] The proposal<\/a>/,
+    );
+    // Both TOCs group: desktop sidebar plus the mobile disclosure.
+    expect(html.match(/data-toc-part/g)).toHaveLength(4);
+    const header = html.indexOf('href="#part-context"');
+    const section = html.indexOf('data-section-link href="#status-quo"');
+    expect(header).toBeGreaterThan(-1);
+    expect(header).toBeLessThan(section);
+  });
+
+  it("should keep part headers out of the scroll-spy contract", () => {
+    const { html } = renderDocument({
+      markdown: PARTED_FIXTURE,
+      fallbackTitle: "Deck",
+    });
+    expect(html).not.toMatch(/data-section-link[^>]*href="#part-/);
+    expect(html).toMatch(/data-section-link href="#status-quo"/);
+    expect(html).toMatch(/data-section-link href="#the-design"/);
+  });
+
+  it("should render a plain ungrouped TOC when the plan has no parts", () => {
+    const { html } = renderDocument({
+      markdown: "# Plan\n\nLede.\n\n## Only section\n\nBody.\n",
+      fallbackTitle: "Plan",
+    });
+    expect(html).not.toContain("data-toc-part");
+  });
+});
+
 describe("renderDocument shell", () => {
   it("should escape the title when it contains HTML special characters", () => {
     const { html } = renderDocument({
