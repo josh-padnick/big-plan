@@ -5,6 +5,7 @@
 import { readFile } from "node:fs/promises";
 import { runAxiCli } from "axi-sdk-js";
 import { compileCommand } from "./compile/command.js";
+import { guidanceCommand } from "./guidance/command.js";
 import { renderCommand } from "./render/command.js";
 import { validateCommand } from "./validate/command.js";
 
@@ -15,6 +16,9 @@ const DESCRIPTION =
 const TOP_LEVEL_HELP = `big-plan - ${DESCRIPTION}
 
 Usage:
+  big-plan guidance                           Read the plan-writing guidance
+                                             and starting template; required
+                                             before validate and render
   big-plan render <input.mdx> [output.html]   Render an MDX plan to a
                                              single self-contained HTML file
                                              (defaults to <input>.html)
@@ -56,9 +60,10 @@ export const main = async (): Promise<void> => {
     topLevelHelp: TOP_LEVEL_HELP,
     home: () => ({
       "big-plan": DESCRIPTION,
-      next_step: "big-plan render <file.mdx>",
+      next_step: "big-plan guidance",
     }),
     commands: {
+      guidance: (args) => guidanceCommand(args),
       render: (args) => renderCommand(args),
       compile: (args) => compileCommand(args),
       validate: (args) => validateCommand(args),

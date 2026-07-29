@@ -15,6 +15,28 @@ import { expect, test as base } from "@playwright/test";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+const binPath = join(repoRoot, "bin", "big-plan.mjs");
+
+// Fixtures follow the same workflow a user runs: guidance first, then render.
+// The acknowledgment state lives inside the fixture's temporary directory so
+// workers never read or write the developer's real acknowledgment state.
+const renderThroughCli = async ({
+  inputPath,
+  outputPath,
+  outputDir,
+}: {
+  readonly inputPath: string;
+  readonly outputPath: string;
+  readonly outputDir: string;
+}): Promise<void> => {
+  const env = { ...process.env, BIG_PLAN_STATE_DIR: join(outputDir, "state") };
+  await execFileAsync(process.execPath, [binPath, "guidance"], { env });
+  await execFileAsync(
+    process.execPath,
+    [binPath, "render", inputPath, outputPath],
+    { env },
+  );
+};
 
 type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
@@ -92,12 +114,7 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const inputPath = join(outputDir, "annotation-code.mdx");
       const outputPath = join(outputDir, "annotation-code.html");
       await writeFile(inputPath, ANNOTATION_CODE_MDX, "utf8");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        inputPath,
-        outputPath,
-      ]);
+      await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
@@ -109,12 +126,11 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     async ({}, use) => {
       const outputDir = await mkdtemp(join(tmpdir(), "big-plan-components-"));
       const outputPath = join(outputDir, "components.html");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        join(repoRoot, "examples", "mdx-components.mdx"),
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "mdx-components.mdx"),
         outputPath,
-      ]);
+        outputDir,
+      });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
@@ -126,12 +142,11 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         join(tmpdir(), "big-plan-api-endpoints-"),
       );
       const outputPath = join(outputDir, "api-endpoints.html");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        join(repoRoot, "examples", "api-endpoints.mdx"),
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "api-endpoints.mdx"),
         outputPath,
-      ]);
+        outputDir,
+      });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
@@ -155,12 +170,7 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         `${source}\n## Table Schema Panel 1\n\n## Table Schema Panel 2 Tab\n`,
         "utf8",
       );
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        inputPath,
-        outputPath,
-      ]);
+      await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
@@ -170,12 +180,11 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     async ({}, use) => {
       const outputDir = await mkdtemp(join(tmpdir(), "big-plan-big-decision-"));
       const outputPath = join(outputDir, "big-decision.html");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        join(repoRoot, "examples", "big-decision.mdx"),
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "big-decision.mdx"),
         outputPath,
-      ]);
+        outputDir,
+      });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
@@ -189,12 +198,7 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const inputPath = join(outputDir, "nested-decision.mdx");
       const outputPath = join(outputDir, "nested-decision.html");
       await writeFile(inputPath, NESTED_DECISION_MDX, "utf8");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        inputPath,
-        outputPath,
-      ]);
+      await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
@@ -206,12 +210,11 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         join(tmpdir(), "big-plan-small-decision-set-"),
       );
       const outputPath = join(outputDir, "small-decision-set.html");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        join(repoRoot, "examples", "small-decision-set.mdx"),
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "small-decision-set.mdx"),
         outputPath,
-      ]);
+        outputDir,
+      });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
@@ -223,12 +226,11 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     async ({}, use) => {
       const outputDir = await mkdtemp(join(tmpdir(), "big-plan-viewer-"));
       const outputPath = join(outputDir, "sample.html");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        join(repoRoot, "examples", "sample.mdx"),
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "sample.mdx"),
         outputPath,
-      ]);
+        outputDir,
+      });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },

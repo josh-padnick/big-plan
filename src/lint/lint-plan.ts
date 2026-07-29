@@ -6,11 +6,17 @@ import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { markdownTableFormatRule } from "./rules/markdown-table-format.js";
+import { planLedeRule } from "./rules/plan-lede.js";
+import { sectionVocabularyRule } from "./rules/section-vocabulary.js";
 import type { PlanLintDiagnostic, PlanLintRule } from "./types.js";
 
 export type { PlanLintDiagnostic } from "./types.js";
 
-const RULES: ReadonlyArray<PlanLintRule> = [markdownTableFormatRule];
+const RULES: ReadonlyArray<PlanLintRule> = [
+  markdownTableFormatRule,
+  planLedeRule,
+  sectionVocabularyRule,
+];
 
 /** Runs every authoring lint rule in stable registry order. */
 export const lintPlan = ({

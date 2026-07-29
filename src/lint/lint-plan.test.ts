@@ -1,4 +1,4 @@
-// Exercises the authoring lint interface through its first table-format rule,
+// Exercises the authoring lint interface through its registered rules,
 // including intended findings, source positions, and conservative near misses.
 
 import { describe, expect, it } from "vitest";
@@ -9,12 +9,12 @@ describe("lintPlan markdown-table-format", () => {
     expect(
       lintPlan({
         markdown:
-          "# Plan\n\n## Ownership\n\n| Name | Owner |\n| API | Platform |\n",
+          "# Plan\n\nA lede.\n\n## Ownership\n\n| Name | Owner |\n| API | Platform |\n",
       }),
     ).toEqual([
       {
         ruleId: "markdown-table-format",
-        line: 6,
+        line: 8,
         column: 1,
         message:
           'Table-like block needs a valid delimiter row with 2 columns, for example "| --- | --- |"',
@@ -126,6 +126,79 @@ describe("lintPlan markdown-table-format", () => {
     [
       "table-like blockquote text",
       "> | Name | Owner |\n> | API | Platform |\n",
+    ],
+  ])("should not report %s", (_label, markdown) => {
+    expect(lintPlan({ markdown })).toEqual([]);
+  });
+});
+
+describe("lintPlan plan-lede", () => {
+  it("should report the first section heading when the title has no lede", () => {
+    expect(
+      lintPlan({ markdown: "# Ship the skill\n\n## Status quo\n\nToday.\n" }),
+    ).toEqual([
+      {
+        ruleId: "plan-lede",
+        line: 3,
+        column: 1,
+        message:
+          "Open with a lede: one or two sentences after the title stating the plan's thesis, before the first section heading",
+      },
+    ]);
+  });
+
+  it.each([
+    [
+      "a title followed by a lede paragraph",
+      "# Ship the skill\n\nOne sentence of thesis.\n\n## Status quo\n\nToday.\n",
+    ],
+    [
+      "a title followed by a component",
+      '# Ship the skill\n\n<Callout type="note">\n\nContext.\n\n</Callout>\n\n## Status quo\n\nToday.\n',
+    ],
+    [
+      "a title followed by a blockquote",
+      "# Ship the skill\n\n> Review goal.\n\n## Status quo\n\nToday.\n",
+    ],
+    ["a document without a level-one title", "## Status quo\n\nToday.\n"],
+    ["a title with no sections at all", "# Ship the skill\n"],
+  ])("should not report %s", (_label, markdown) => {
+    expect(lintPlan({ markdown })).toEqual([]);
+  });
+});
+
+describe("lintPlan section-vocabulary", () => {
+  it.each([
+    ["## Desired outcome\n", 1],
+    ["# T\n\nLede.\n\n### Desired Outcomes\n", 5],
+    ["# T\n\nLede.\n\n## Definition of done\n", 5],
+  ])(
+    "should prefer Acceptance criteria over the heading in %j",
+    (markdown, line) => {
+      expect(lintPlan({ markdown })).toEqual([
+        {
+          ruleId: "section-vocabulary",
+          line,
+          column: 1,
+          message:
+            'Name this section "Acceptance criteria"; it is Big Plan\'s vocabulary for the contract this heading introduces',
+        },
+      ]);
+    },
+  );
+
+  it.each([
+    [
+      "the preferred heading itself",
+      "# T\n\nLede.\n\n## Acceptance criteria\n",
+    ],
+    [
+      "a heading that merely contains a discouraged phrase",
+      "# T\n\nLede.\n\n## Desired outcome of phase one\n",
+    ],
+    [
+      "prose mentioning a discouraged phrase",
+      "# T\n\nThe desired outcome appears in prose.\n",
     ],
   ])("should not report %s", (_label, markdown) => {
     expect(lintPlan({ markdown })).toEqual([]);
