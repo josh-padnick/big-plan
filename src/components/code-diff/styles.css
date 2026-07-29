@@ -32,18 +32,8 @@
   article .code-diff-toggle-group[hidden] {
     display: none;
   }
-  article .code-diff-toggle-group .code-diff-button {
-    border-radius: 0;
-  }
-  article .code-diff-toggle-group [aria-pressed="true"] {
-    background: var(--color-edge);
-    color: var(--color-ink);
-  }
   article .code-diff-button[hidden] {
     display: none;
-  }
-  article .code-diff-button:hover {
-    background: var(--color-edge);
   }
   article .code-diff-button svg[hidden] {
     display: none;

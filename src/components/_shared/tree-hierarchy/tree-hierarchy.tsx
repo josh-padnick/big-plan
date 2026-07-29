@@ -145,9 +145,9 @@ const FoldButton = ({
 }) => (
   <button
     type="button"
-    className={`file-tree-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 p-0 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5 ${FOLD_TONE_CLASSES[tone]}`}
+    className={`file-tree-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 p-0 transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5 ${FOLD_TONE_CLASSES[tone]}`}
     aria-label={label}
-    title={label}
+    data-tooltip={label}
     hidden
     data-tree-fold={action}
     data-size="xs"
@@ -207,18 +207,23 @@ const NoteElement = ({
       </span>
     );
   }
-  // The title attribute gives inert exports a native hint; the live review
-  // application can upgrade it. The visually hidden text keeps the note in
-  // the accessibility tree and in copied selections.
+  // A note is prose, so it gets the shell's hover popover rather than the
+  // header controls' one-line hint: the viewer script floats it beside the
+  // glyph and out of this row's horizontal scroll container, and without
+  // scripts the same disclosure still opens the note in place.
   return (
-    <button
-      type="button"
-      className="file-tree-note-hint inline-flex cursor-help border-0 bg-transparent p-0 text-muted hover:text-ink [&>svg]:size-3.5 [&>svg]:shrink-0"
-      title={entry.note}
-    >
-      {lucideIconToReact({ icon: MESSAGE_SQUARE_ICON, hidden: false })}
-      <span className="sr-only">{entry.note}</span>
-    </button>
+    <details className="file-tree-note-hint" data-info-popover>
+      <summary className="inline-flex cursor-help text-muted hover:text-ink [&>svg]:size-3.5 [&>svg]:shrink-0">
+        {lucideIconToReact({ icon: MESSAGE_SQUARE_ICON, hidden: false })}
+        <span className="sr-only">{"Note"}</span>
+      </summary>
+      <div
+        className="file-tree-note-body font-sans text-xs whitespace-normal text-muted"
+        data-info-popover-body
+      >
+        {entry.note}
+      </div>
+    </details>
   );
 };
 

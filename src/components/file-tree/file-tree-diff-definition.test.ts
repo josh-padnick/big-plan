@@ -138,6 +138,43 @@ describe("renderFileTreeDiff", () => {
     expect(JSON.stringify(element)).toContain('"data-state":"unchecked"');
   });
 
+  it("should label header controls with a fast hint instead of a native title", () => {
+    const serialized = JSON.stringify(render().element);
+
+    expect(serialized).toContain('"data-tooltip":"Collapse all folders"');
+    expect(serialized).toContain('"data-tooltip":"View file tree full screen"');
+    expect(serialized).toContain('"data-tooltip":"Side-by-side view"');
+    expect(serialized).not.toContain('"title":');
+  });
+
+  // These states have to ride on utilities. Expressed as stylesheet rules in
+  // the components layer they lose to the buttons' resting background utility,
+  // which is how both silently stopped rendering.
+  it("should carry header-control hover and pressed backgrounds as utilities", () => {
+    const controls = JSON.stringify(render().element);
+
+    expect(controls).toContain("hover:bg-edge");
+    expect(controls).toContain("aria-pressed:bg-edge");
+    // Segmented rounding stands in for the overflow clipping that used to cut
+    // these controls' hover hints off.
+    expect(controls).toContain("first:rounded-l-[0.3125rem]");
+  });
+
+  it("should open an entry note as a hover popover rather than a native title", () => {
+    const serialized = JSON.stringify(
+      render({
+        children: [
+          fence({ source: "src/\n  added.ts [added] - Entry point.\n" }),
+        ],
+      }).element,
+    );
+
+    expect(serialized).toContain('"data-info-popover":"true"');
+    expect(serialized).toContain('"data-info-popover-body":"true"');
+    expect(serialized).toContain('"value":"Entry point."');
+    expect(serialized).not.toContain('"title":');
+  });
+
   it("should keep the before pane unmarked and every marker on the after pane", () => {
     const states = contentView({
       element: render().element,

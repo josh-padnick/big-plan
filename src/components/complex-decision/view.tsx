@@ -45,9 +45,9 @@ const TONE_ICONS = {
 const ExpandButton = () => (
   <button
     type="button"
-    className="complex-decision-expand inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
+    className="complex-decision-expand inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
     aria-label="View decision full screen"
-    title="View decision full screen"
+    data-tooltip="View decision full screen"
     hidden
     data-decision-expand=""
   >

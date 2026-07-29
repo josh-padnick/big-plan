@@ -39,11 +39,11 @@ const ActionsMenu = ({ filePath }: { readonly filePath?: string }) => (
   <span className="code-snippet-menu relative inline-flex" data-snippet-menu="">
     <button
       type="button"
-      className="code-snippet-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
+      className="code-snippet-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
       aria-label="More actions"
       aria-haspopup="menu"
       aria-expanded="false"
-      title="More actions"
+      data-tooltip="More actions"
       hidden
       data-snippet-menu-button=""
       data-size="xs"

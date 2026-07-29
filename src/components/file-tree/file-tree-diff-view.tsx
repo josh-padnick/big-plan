@@ -16,9 +16,17 @@ import {
   treeChangeCountsToReact,
 } from "../_shared/tree-hierarchy/tree-hierarchy.js";
 
-// Shared by the view toggles and the full-screen control.
-const BUTTON_CLASSES =
-  "file-tree-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+// Shared by the view toggles and the full-screen control. Hover and pressed
+// colors are utilities rather than stylesheet rules because a components-layer
+// rule loses to the resting bg-surface utility, which left these controls with
+// no background feedback at all.
+const BUTTON_BASE_CLASSES =
+  "file-tree-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-surface p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+const BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} rounded-md`;
+// Segmented buttons sit flush and round only where they meet the group's
+// outer corners, so the group needs no overflow clipping and the buttons'
+// hover hints stay visible. The end radius is the group's less its border.
+const TOGGLE_BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} first:rounded-l-[0.3125rem] last:rounded-r-[0.3125rem] aria-pressed:bg-edge aria-pressed:text-ink`;
 // Shared by the combined view and both state-pane bodies.
 const BODY_CLASSES = "file-tree-body overflow-x-auto px-3 py-2.5";
 
@@ -35,10 +43,10 @@ const ViewToggleButton = ({
 }) => (
   <button
     type="button"
-    className={BUTTON_CLASSES}
+    className={TOGGLE_BUTTON_CLASSES}
     aria-label={label}
     aria-pressed={pressed ? "true" : "false"}
-    title={label}
+    data-tooltip={label}
     data-tree-set-view={view}
     data-size="xs"
     data-slot="button"
@@ -50,7 +58,7 @@ const ViewToggleButton = ({
 
 const ViewToggleGroup = () => (
   <span
-    className="file-tree-diff-toggle-group inline-flex shrink-0 overflow-hidden rounded-[0.375rem] border border-edge"
+    className="file-tree-diff-toggle-group inline-flex shrink-0 rounded-[0.375rem] border border-edge"
     role="group"
     aria-label="File tree diff view"
     hidden
@@ -78,7 +86,7 @@ const ExpandButton = () => (
     type="button"
     className={BUTTON_CLASSES}
     aria-label="View file tree full screen"
-    title="View file tree full screen"
+    data-tooltip="View file tree full screen"
     hidden
     data-tree-expand=""
     data-size="xs"

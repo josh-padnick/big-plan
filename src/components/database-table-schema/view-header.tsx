@@ -15,9 +15,11 @@ import { CopyFeedback } from "../_shared/copy-feedback/copy-feedback.js";
 
 // A transparent resting state keeps the overflow control quieter than the
 // schema it acts on; hover and focus still reveal the full affordance.
-// Shared by the columns, actions, and full-screen controls.
+// Shared by the columns, actions, and full-screen controls. The hover
+// background is a utility rather than a stylesheet rule because a
+// components-layer rule loses to the resting bg-transparent utility.
 const BUTTON_CLASSES =
-  "table-schema-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+  "table-schema-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 // Shared by the actions and columns menus.
 const MENU_LIST_CLASSES =
   "table-schema-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge p-1";
@@ -82,7 +84,7 @@ const ActionsMenu = () => (
       aria-label="More actions"
       aria-haspopup="menu"
       aria-expanded="false"
-      title="More actions"
+      data-tooltip="More actions"
       hidden
       data-schema-menu-button=""
       data-size="xs"
@@ -126,7 +128,7 @@ const ColumnsMenu = () => (
       aria-label="Choose columns"
       aria-haspopup="menu"
       aria-expanded="false"
-      title="Choose columns"
+      data-tooltip="Choose columns"
       hidden
       data-schema-columns-button=""
       data-size="xs"
@@ -180,7 +182,7 @@ const ExpandButton = () => (
     type="button"
     className={BUTTON_CLASSES}
     aria-label="View table schema full screen"
-    title="View table schema full screen"
+    data-tooltip="View table schema full screen"
     hidden
     data-schema-expand=""
     data-size="xs"

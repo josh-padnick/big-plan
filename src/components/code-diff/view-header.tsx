@@ -12,9 +12,17 @@ import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { FileIdentity } from "../_shared/file-identity/file-identity.js";
 
 // Shared by the view toggles, the actions button, and the full-screen
-// control.
-const BUTTON_CLASSES =
-  "code-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+// control. Hover and pressed colors are utilities rather than stylesheet
+// rules because a components-layer rule loses to the resting bg-surface
+// utility, which left these controls with no background feedback at all.
+const BUTTON_BASE_CLASSES =
+  "code-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-surface p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+// The actions button and the full-screen control stand on their own.
+const BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} rounded-md`;
+// Segmented buttons sit flush and round only where they meet the group's
+// outer corners, so the group needs no overflow clipping and the buttons'
+// hover hints stay visible. The end radius is the group's less its border.
+const TOGGLE_BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} first:rounded-l-[0.3125rem] last:rounded-r-[0.3125rem] aria-pressed:bg-edge aria-pressed:text-ink`;
 const MENU_ITEM_CLASSES =
   "code-diff-menu-item flex w-full cursor-pointer items-center gap-[0.45rem] whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-[0.3rem] text-left text-xs text-ink [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted";
 
@@ -79,7 +87,7 @@ const ActionsMenu = () => (
       aria-label="More actions"
       aria-haspopup="menu"
       aria-expanded="false"
-      title="More actions"
+      data-tooltip="More actions"
       hidden
       data-diff-menu-button=""
       data-size="xs"
@@ -116,10 +124,10 @@ const ViewToggleButton = ({
 }) => (
   <button
     type="button"
-    className={BUTTON_CLASSES}
+    className={TOGGLE_BUTTON_CLASSES}
     aria-label={label}
     aria-pressed={pressed ? "true" : "false"}
-    title={label}
+    data-tooltip={label}
     data-diff-set-view={view}
     data-size="xs"
     data-slot="button"
@@ -136,7 +144,7 @@ const ExpandControlButton = () => (
     type="button"
     className={BUTTON_CLASSES}
     aria-label="View diff full screen"
-    title="View diff full screen"
+    data-tooltip="View diff full screen"
     hidden
     data-diff-expand=""
     data-size="xs"
@@ -150,7 +158,7 @@ const ExpandControlButton = () => (
 
 const ViewToggleGroup = () => (
   <span
-    className="code-diff-toggle-group inline-flex overflow-hidden rounded-[0.375rem] border border-edge"
+    className="code-diff-toggle-group inline-flex rounded-[0.375rem] border border-edge"
     role="group"
     aria-label="Diff view"
     hidden
