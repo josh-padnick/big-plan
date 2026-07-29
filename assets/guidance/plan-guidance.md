@@ -10,8 +10,9 @@ The title names what will exist after execution, in a punchy noun phrase of at m
 Write "Ship the official Big Plan skill", never "Skill implementation plan" or a title so long it reads as a sentence.
 Follow the title immediately with a lede: exactly one concise sentence that describes the plan, reading as the document's subtitle.
 Big Plan renders that first paragraph as the subtitle, so keep it as short as it can be while still carrying the thesis.
-State the thesis declaratively.
+State the thesis declaratively, in plain language.
 Never open the lede with "I propose", "This plan", or any other words about the document or its author; describe the delivered future, not the act of proposing it.
+Never use a concept the reader has not met yet; a coined phrase like a hyphen-chained workflow name belongs after the section that introduces it, if anywhere.
 
 ## 2. Open with a quick summary
 
