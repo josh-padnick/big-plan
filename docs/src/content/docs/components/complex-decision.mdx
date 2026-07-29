@@ -1,14 +1,14 @@
 ---
-title: BigDecision
+title: ComplexDecision
 description: A standalone component that reviews one weighty decision as a criteria matrix or substantive option list, with lifecycle status, a recommendation, optional reversibility, and a recorded outcome.
 ---
 
 import ThemeImage from "../../../components/ThemeImage.astro";
-import bigDecisionLight from "../../../assets/components/big-decision-light.png";
-import bigDecisionDark from "../../../assets/components/big-decision-dark.png";
+import bigDecisionLight from "../../../assets/components/complex-decision-light.png";
+import bigDecisionDark from "../../../assets/components/complex-decision-dark.png";
 
-`BigDecision` presents one consequential choice as a comparison a reviewer can actually check: a criteria matrix when the options share comparable dimensions, or a substantive option list when prose rationale carries the argument.
-Place it in the plan section where the decision belongs; the smaller end-of-plan questions belong in [SmallDecisionSet](/components/small-decision-set/) instead.
+`ComplexDecision` presents one consequential choice as a comparison a reviewer can actually check: a criteria matrix when the options share comparable dimensions, or a substantive option list when prose rationale carries the argument.
+Place it in the plan section where the decision belongs; the smaller end-of-plan questions belong in [SimpleDecisionSet](/components/simple-decision-set/) instead.
 Open decisions mark the author's recommendation, while decided decisions preserve the chosen outcome and every alternative.
 A decision can rate its reversibility on a fixed scale with a built-in explainer, and wide matrices scroll inside their card without widening the page.
 
@@ -22,7 +22,7 @@ A decision can rate its reversibility on a fixed scale with a built-in explainer
 
 ## When to use it
 
-Use `BigDecision` when a choice carries real tradeoffs a reviewer must weigh before implementation.
+Use `ComplexDecision` when a choice carries real tradeoffs a reviewer must weigh before implementation.
 Phrase the decision as a question, then name the criteria it actually turns on - the forces from the context paragraph - explain each one in its body, and score every option against every criterion.
 Keep verdicts terse: a verdict word plus a short qualifier, with longer reasoning behind the cell's info tooltip.
 Drop a criterion whose verdicts match across every option; a row that discriminates nothing is noise.
@@ -31,17 +31,17 @@ When the decision lands, mark the chosen option and keep the losing options visi
 
 ### Matrix or plain options?
 
-`BigDecision` renders two shapes, chosen by whether the decision declares criteria:
+`ComplexDecision` renders two shapes, chosen by whether the decision declares criteria:
 
 - **Declare criteria and score them** when the options compete on shared, comparable dimensions - architecture and technology choices usually do. The matrix makes the comparison checkable.
 - **Omit criteria for a plain option list** when the choice is qualitative or the options do not share dimensions - naming, tone, or direction calls where prose rationale carries the argument. The options render as substantive cards with summaries and detail drawers.
-- If the choice is quick enough that a sentence per option settles it, it belongs in a [SmallDecisionSet](/components/small-decision-set/) instead.
+- If the choice is quick enough that a sentence per option settles it, it belongs in a [SimpleDecisionSet](/components/simple-decision-set/) instead.
 
 Forcing a matrix onto options with no shared criteria produces rows that discriminate nothing; forcing prose onto a real tradeoff hides the comparison. Pick the shape that matches the decision.
 
 ### When not to use it
 
-- Small end-of-plan questions with short answers - use [SmallDecisionSet](/components/small-decision-set/)
+- Small end-of-plan questions with short answers - use [SimpleDecisionSet](/components/simple-decision-set/)
 - Implementation steps with no competing choice - use prose or a task list
 - A decision needing sign-off from a named approver - agreement flows arrive with the live review layer
 
@@ -54,7 +54,7 @@ Forcing a matrix onto options with no shared criteria produces rows that discrim
 ## Usage
 
 ````mdx
-<BigDecision question="Which persistence layer should back review comments?" status="open">
+<ComplexDecision question="Which persistence layer should back review comments?" status="open">
 
 Comments need durable identities and ordered replies without blocking a later multi-reviewer workflow.
 
@@ -92,12 +92,12 @@ The repository layer isolates SQL, so swapping engines later costs a data migrat
 
 </Reversibility>
 
-</BigDecision>
+</ComplexDecision>
 ````
 
 ## Authoring
 
-### BigDecision
+### ComplexDecision
 
 | Attribute       | Type                              | Required | Behavior                                                            |
 | --------------- | --------------------------------- | -------- | ------------------------------------------------------------------- |
@@ -159,7 +159,7 @@ At most one `Reversibility` element rates what changing course later would cost;
 
 Markdown in the body is the decision-specific rationale shown under the rating.
 
-`Criterion`, `Details`, `Option`, and `Reversibility` must be direct `BigDecision` children, and `Score` must be a direct `Option` child.
+`Criterion`, `Details`, `Option`, and `Reversibility` must be direct `ComplexDecision` children, and `Score` must be a direct `Option` child.
 Their markdown bodies accept prose, lists, inline formatting, and plain fenced code, but reject headings, footnotes, and typed components with positional diagnostics.
 
 ## Lifecycle

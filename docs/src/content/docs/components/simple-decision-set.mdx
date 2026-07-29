@@ -1,15 +1,15 @@
 ---
-title: SmallDecisionSet
+title: SimpleDecisionSet
 description: A compact component that collects a plan's small questions, each with two or more briefly explained options and at most one recommendation.
 ---
 
 import ThemeImage from "../../../components/ThemeImage.astro";
-import smallDecisionSetLight from "../../../assets/components/small-decision-set-light.png";
-import smallDecisionSetDark from "../../../assets/components/small-decision-set-dark.png";
+import smallDecisionSetLight from "../../../assets/components/simple-decision-set-light.png";
+import smallDecisionSetDark from "../../../assets/components/simple-decision-set-dark.png";
 
-`SmallDecisionSet` collects the small questions a plan poses to its reviewer - typically at the end - as one compact numbered list.
+`SimpleDecisionSet` collects the small questions a plan poses to its reviewer - typically at the end - as one compact numbered list.
 Each question offers two or more options, and each option pairs its title with a short explanation, enough to answer quickly without a tradeoff card.
-A choice weighty enough to need a structured tradeoff comparison belongs in a standalone [BigDecision](/components/big-decision/) instead.
+A choice weighty enough to need a structured tradeoff comparison belongs in a standalone [ComplexDecision](/components/complex-decision/) instead.
 The recommended answer carries a clear inline badge; selecting and recording answers arrives with the live review layer.
 
 ## How it looks
@@ -22,12 +22,12 @@ The recommended answer carries a clear inline badge; selecting and recording ans
 
 ## When to use it
 
-Use `SmallDecisionSet` for the quick calls that remain after the plan's substance is settled: rollout toggles, naming, sequencing, defaults.
+Use `SimpleDecisionSet` for the quick calls that remain after the plan's substance is settled: rollout toggles, naming, sequencing, defaults.
 Phrase every question as a question, keep option explanations to a sentence or two, and mark the recommended answer so an agreeing reviewer can confirm at a glance.
 
 ### When not to use it
 
-- A decision with real tradeoffs to weigh - use [BigDecision](/components/big-decision/)
+- A decision with real tradeoffs to weigh - use [ComplexDecision](/components/complex-decision/)
 - A single yes/no confirmation the surrounding prose can carry
 - Questions with no concrete options yet - leave them as prose until the options exist
 
@@ -40,11 +40,11 @@ Phrase every question as a question, keep option explanations to a sentence or t
 ## Usage
 
 ````mdx
-<SmallDecisionSet title="Open questions">
+<SimpleDecisionSet title="Open questions">
 
 Answer these before implementation starts.
 
-<SmallDecision question="Should the first release ship behind a feature flag?">
+<SimpleDecision question="Should the first release ship behind a feature flag?">
 
 The rollout risk is concentrated in the first week.
 
@@ -60,21 +60,21 @@ Avoids the flag-cleanup follow-up task.
 
 </Option>
 
-</SmallDecision>
+</SimpleDecision>
 
-</SmallDecisionSet>
+</SimpleDecisionSet>
 ````
 
 ## Authoring
 
-### SmallDecisionSet
+### SimpleDecisionSet
 
 An optional `title` labels the list, and the header always counts the questions.
-Introductory markdown before the first `SmallDecision` explains what the list covers.
+Introductory markdown before the first `SimpleDecision` explains what the list covers.
 
-### SmallDecision
+### SimpleDecision
 
-Nest one or more `SmallDecision` elements directly inside the set.
+Nest one or more `SimpleDecision` elements directly inside the set.
 
 | Attribute  | Type               | Required | Behavior                                    |
 | ---------- | ------------------ | -------- | ------------------------------------------- |
@@ -92,5 +92,5 @@ Each question needs at least two options.
 
 Markdown in the option body is the short always-visible explanation; an option may omit it when the title alone is enough.
 
-`SmallDecision` must be a direct `SmallDecisionSet` child, and `Option` must be a direct `SmallDecision` child.
+`SimpleDecision` must be a direct `SimpleDecisionSet` child, and `Option` must be a direct `SimpleDecision` child.
 Their markdown bodies accept prose, lists, inline formatting, and plain fenced code, but reject headings, footnotes, and typed components with positional diagnostics.

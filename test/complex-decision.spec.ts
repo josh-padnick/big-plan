@@ -1,4 +1,4 @@
-// Browser tests of BigDecision's inert review journey: the criteria matrix,
+// Browser tests of ComplexDecision's inert review journey: the criteria matrix,
 // native disclosures, and the reversibility section, with every
 // script-dependent control absent or hidden. Render-health failures are
 // enforced by the fixtures module.
@@ -7,11 +7,11 @@ import { expect, test } from "./fixtures";
 
 test("should review a standalone decision matrix in an inert export", async ({
   page,
-  bigDecisionViewerUrl,
+  complexDecisionViewerUrl,
 }) => {
-  await page.goto(bigDecisionViewerUrl);
-  const decision = page.locator("[data-big-decision]").first();
-  const matrix = decision.locator("table.big-decision-matrix");
+  await page.goto(complexDecisionViewerUrl);
+  const decision = page.locator("[data-complex-decision]").first();
+  const matrix = decision.locator("table.complex-decision-matrix");
 
   await test.step("the question heads the card", async () => {
     await expect(decision.locator("[data-decision-question]")).toBeVisible();
@@ -21,7 +21,7 @@ test("should review a standalone decision matrix in an inert export", async ({
     await expect(matrix).toBeVisible();
     await expect(matrix.locator("thead [data-option]").first()).toBeVisible();
     await expect(
-      matrix.locator("tbody th.big-decision-criterion").first(),
+      matrix.locator("tbody th.complex-decision-criterion").first(),
     ).toBeVisible();
   });
 
@@ -35,10 +35,10 @@ test("should review a standalone decision matrix in an inert export", async ({
   });
 
   await test.step("verdict detail floats as a hover popover", async () => {
-    const info = matrix.locator("details.big-decision-info").first();
+    const info = matrix.locator("details.complex-decision-info").first();
     await info.locator("summary").hover();
     await expect(info).toHaveAttribute("open", "");
-    const body = info.locator(".big-decision-info-body");
+    const body = info.locator(".complex-decision-info-body");
     await expect(body).toBeVisible();
     await expect(body).toBeInViewport();
     await page.mouse.move(0, 0);

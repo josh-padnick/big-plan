@@ -42,9 +42,9 @@ type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
   readonly componentsViewerUrl: string;
   readonly apiEndpointsViewerUrl: string;
-  readonly bigDecisionViewerUrl: string;
+  readonly complexDecisionViewerUrl: string;
   readonly nestedDecisionViewerUrl: string;
-  readonly smallDecisionSetViewerUrl: string;
+  readonly simpleDecisionSetViewerUrl: string;
   readonly sampleViewerUrl: string;
   readonly tableSchemaViewerUrl: string;
 };
@@ -74,11 +74,11 @@ retry();
 
 const NESTED_DECISION_MDX = `# Nested decisions
 
-<BigDecision question="Which outer option should win?" status="open">
+<ComplexDecision question="Which outer option should win?" status="open">
 
 The outer context introduces a complete decision.
 
-<BigDecision question="Which inner option should win?" status="open">
+<ComplexDecision question="Which inner option should win?" status="open">
 
 <Criterion title="Inner criterion" />
 
@@ -90,7 +90,7 @@ The outer context introduces a complete decision.
 <Score criterion="Inner criterion" verdict="Weak" tone="bad" />
 </Option>
 
-</BigDecision>
+</ComplexDecision>
 
 <Criterion title="Outer criterion" />
 
@@ -102,7 +102,7 @@ The outer context introduces a complete decision.
 <Score criterion="Outer criterion" verdict="Weak" tone="bad" />
 </Option>
 
-</BigDecision>
+</ComplexDecision>
 `;
 
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
@@ -176,12 +176,14 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     },
     { scope: "worker" },
   ],
-  bigDecisionViewerUrl: [
+  complexDecisionViewerUrl: [
     async ({}, use) => {
-      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-big-decision-"));
-      const outputPath = join(outputDir, "big-decision.html");
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-complex-decision-"),
+      );
+      const outputPath = join(outputDir, "complex-decision.html");
       await renderThroughCli({
-        inputPath: join(repoRoot, "examples", "big-decision.mdx"),
+        inputPath: join(repoRoot, "examples", "complex-decision.mdx"),
         outputPath,
         outputDir,
       });
@@ -204,14 +206,14 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     },
     { scope: "worker" },
   ],
-  smallDecisionSetViewerUrl: [
+  simpleDecisionSetViewerUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(
-        join(tmpdir(), "big-plan-small-decision-set-"),
+        join(tmpdir(), "big-plan-simple-decision-set-"),
       );
-      const outputPath = join(outputDir, "small-decision-set.html");
+      const outputPath = join(outputDir, "simple-decision-set.html");
       await renderThroughCli({
-        inputPath: join(repoRoot, "examples", "small-decision-set.mdx"),
+        inputPath: join(repoRoot, "examples", "simple-decision-set.mdx"),
         outputPath,
         outputDir,
       });

@@ -21,17 +21,17 @@ const PLAN = `# Rollout plan
 
 ## Question
 
-<SmallDecisionSet title="Open questions">
+<SimpleDecisionSet title="Open questions">
 
-<SmallDecision question="Ship behind a flag?">
+<SimpleDecision question="Ship behind a flag?">
 
 <Option title="Yes" recommended />
 
 <Option title="No" />
 
-</SmallDecision>
+</SimpleDecision>
 
-</SmallDecisionSet>
+</SimpleDecisionSet>
 `;
 
 describe("compileCommand", () => {
@@ -39,7 +39,7 @@ describe("compileCommand", () => {
     const inputPath = join(tempDirectory, "invalid.mdx");
     await writeFile(
       inputPath,
-      '<BigDecision question="Q?">\n\n</BigDecision>\n',
+      '<ComplexDecision question="Q?">\n\n</ComplexDecision>\n',
       "utf8",
     );
 
@@ -73,7 +73,7 @@ describe("compileCommand", () => {
       title: "Rollout plan",
       components: [
         {
-          component: "SmallDecisionSet",
+          component: "SimpleDecisionSet",
           model: {
             title: "Open questions",
             decisions: [
