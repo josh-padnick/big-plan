@@ -73,17 +73,24 @@ they stay locked to the card instead of floating in the gutter.
   }
 
   /*
-     Part band height is the same expanded/collapsed: always center the
-     chevron on the pill. Collapsed chips (slide + sub-slide) also center.
+     Center only Part pills and collapsed sub-slide / simple-slide chips.
+     Slide-groups (2.1 User journeys) keep pre-012265c flex-start + fixed
+     0.65rem toggle inset so expand/collapse icon feel is unchanged.
   */
   article .plan-part-group > .plan-collapse-row,
-  article [data-collapsible][data-collapsed] > .plan-collapse-row {
+  article
+    [data-collapsible="subslide"][data-collapsed]
+    > .plan-collapse-row,
+  article
+    [data-collapsible="slide"][data-collapsed]:not(.plan-slide-group)
+    > .plan-collapse-row {
     align-items: center;
   }
 
   /*
-     Expanded framed slides keep a fixed top inset near the kicker. Part and
-     collapsed rows zero margin so flex centering owns vertical placement.
+     Toggle insets: simple expanded slides near kicker; slide-groups always
+     0.65rem (expanded and collapsed); part/sub-chip/simple-collapsed use 0
+     so flex center owns the midline.
   */
   article .plan-collapse-toggle {
     flex: 0 0 1.35rem;
@@ -91,12 +98,16 @@ they stay locked to the card instead of floating in the gutter.
     height: 1.35rem;
     margin-top: 1.15rem;
   }
-  article .plan-slide-group:not([data-collapsed]) > .plan-collapse-row > .plan-collapse-toggle {
+  article .plan-slide-group > .plan-collapse-row > .plan-collapse-toggle {
     margin-top: 0.65rem;
   }
   article .plan-part-group > .plan-collapse-row > .plan-collapse-toggle,
   article
-    [data-collapsible][data-collapsed]
+    [data-collapsible="subslide"][data-collapsed]
+    > .plan-collapse-row
+    > .plan-collapse-toggle,
+  article
+    [data-collapsible="slide"][data-collapsed]:not(.plan-slide-group)
     > .plan-collapse-row
     > .plan-collapse-toggle {
     margin-top: 0;
