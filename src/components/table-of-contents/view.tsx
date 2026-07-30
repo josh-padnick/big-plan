@@ -39,9 +39,11 @@ export const TableOfContents = ({
       aria-label="The plan in one look"
       className="table-of-contents mb-10"
     >
-      <p className="mb-2 text-[1.0625rem] font-semibold text-ink">
+      {/* Semantic h2 for chrome only: nested inside the overview nav so it
+          is not a deck slide, and sized to match slide-title h2 scale. */}
+      <h2 className="table-of-contents-title mb-3 border-0 p-0 text-[1.6rem] leading-tight font-semibold text-ink">
         The plan in one look
-      </p>
+      </h2>
       {model.entries.map((entry, index) => {
         const section = outline.sections[index];
         const group =
