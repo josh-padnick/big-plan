@@ -1,4 +1,5 @@
-// Owns the guidance acknowledgment gate: running `big-plan guidance` records
+// Owns the guidance gate shared by three commands: running `big-plan
+// guidance` records
 // that the current guidance version was read for a working directory, and
 // validate and render refuse to run for that directory until it has been.
 // Environments with no writable state location degrade to a warning, so a
@@ -9,7 +10,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { AxiError } from "axi-sdk-js";
-import { GUIDANCE_VERSION } from "./content.generated.js";
+import { GUIDANCE_VERSION } from "../guidance/content.generated.js";
 
 // A fresh session the next day should reread the guidance; iteration loops
 // within a working day should not be interrupted.

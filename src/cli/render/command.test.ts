@@ -6,7 +6,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { recordGuidanceAcknowledgment } from "../guidance/acknowledgment.js";
+import { recordGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
 import { renderCommand } from "./command.js";
 
 let tempDirectory = "";
@@ -73,7 +73,7 @@ describe("renderCommand", () => {
       code: "VALIDATION_ERROR",
       message: "Plan failed authoring lint",
       suggestions: [
-        "3:1 [plan-lede] Open with a lede: one concise sentence after the title stating the plan's thesis, before the first section heading",
+        "3:1 [lede-presence] Open with a lede: one concise sentence after the title stating the plan's thesis, before the first section heading",
       ],
     });
     expect(await readdir(tempDirectory)).toEqual(entriesBefore);

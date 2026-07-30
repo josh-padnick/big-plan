@@ -3,7 +3,7 @@
 // for the current directory), or one component's usage guidance on demand.
 
 import { AxiError } from "axi-sdk-js";
-import { recordGuidanceAcknowledgment } from "./acknowledgment.js";
+import { recordGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
 import { COMPONENT_GUIDANCE, GUIDANCE_MARKDOWN } from "./content.generated.js";
 
 const USAGE = "Usage: big-plan guidance [component]";

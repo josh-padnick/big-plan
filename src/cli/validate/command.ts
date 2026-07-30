@@ -7,7 +7,7 @@ import {
   deriveInputFile,
   parseInputCommandArguments,
 } from "../_shared/input-command.js";
-import { requireGuidanceAcknowledgment } from "../guidance/acknowledgment.js";
+import { requireGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
 
 const USAGE = "Usage: big-plan validate <input.mdx>";
 

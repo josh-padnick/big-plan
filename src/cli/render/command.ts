@@ -5,7 +5,7 @@
 import { renderDocument } from "../../render/render-document.js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { runDerivedOutputCommand } from "../_shared/derived-output-command.js";
-import { requireGuidanceAcknowledgment } from "../guidance/acknowledgment.js";
+import { requireGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
 
 const USAGE = "Usage: big-plan render <input.mdx> [output.html]";
 

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { compileCommand } from "../compile/command.js";
-import { recordGuidanceAcknowledgment } from "../guidance/acknowledgment.js";
+import { recordGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
 import { renderCommand } from "../render/command.js";
 import { validateCommand } from "./command.js";
 
