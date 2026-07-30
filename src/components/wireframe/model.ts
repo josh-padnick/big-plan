@@ -43,6 +43,14 @@ export const WIREFRAME_EMPHASES: ReadonlyArray<WireframeEmphasis> = [
   "destructive",
 ];
 
+export type WireframeMediaShape = "square" | "wide" | "tall";
+
+export const WIREFRAME_MEDIA_SHAPES: ReadonlyArray<WireframeMediaShape> = [
+  "square",
+  "wide",
+  "tall",
+];
+
 export type WireframeTextRole = "body" | "helper" | "muted";
 
 export const WIREFRAME_TEXT_ROLES: ReadonlyArray<WireframeTextRole> = [
@@ -144,6 +152,74 @@ export type WireframeNode =
       // resolved against the wireframe's own screens before rendering, so a
       // rendered document can never offer a dead action.
       readonly navigateTo?: string;
+    }
+  | {
+      readonly element: "AppShell";
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
+      readonly element: "Sidebar";
+      readonly brand?: string;
+      readonly mode?: string;
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
+      readonly element: "AppContent";
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
+      readonly element: "TopBar";
+      readonly title?: string;
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
+      readonly element: "PageHeader";
+      readonly title: string;
+      readonly description?: string;
+      readonly badge?: string;
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
+      readonly element: "Nav";
+      readonly label?: string;
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
+      readonly element: "NavItem";
+      readonly label: string;
+      readonly active: boolean;
+      readonly navigateTo?: string;
+    }
+  | {
+      readonly element: "Metric";
+      readonly label: string;
+      readonly value: string;
+      readonly note?: string;
+    }
+  | {
+      readonly element: "Progress";
+      readonly label?: string;
+      // Percent complete. A wireframe draws the bar and always writes the
+      // number beside it, so the state survives without the drawing.
+      readonly value: number;
+      readonly detail?: string;
+    }
+  | { readonly element: "Badge"; readonly label: string }
+  | { readonly element: "Divider"; readonly label?: string }
+  | {
+      readonly element: "ImagePlaceholder";
+      readonly label: string;
+      readonly shape: WireframeMediaShape;
+    }
+  | {
+      readonly element: "List";
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
+      readonly element: "ListItem";
+      readonly label: string;
+      readonly meta?: string;
+      readonly value?: string;
     };
 
 export type WireframeElementName = WireframeNode["element"];

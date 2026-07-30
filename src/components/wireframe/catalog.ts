@@ -16,6 +16,7 @@ import {
   WIREFRAME_EMPHASES,
   WIREFRAME_HEADING_LEVELS,
   WIREFRAME_JUSTIFICATIONS,
+  WIREFRAME_MEDIA_SHAPES,
   WIREFRAME_SPACES,
   WIREFRAME_TEXT_ROLES,
   type WireframeElementName,
@@ -47,6 +48,12 @@ export type WireframeElementDefinition = {
   // Whether the element holds other wireframe elements. A leaf reports any
   // nested element rather than silently dropping it.
   readonly acceptsChildren: boolean;
+  // The names this element holds, when it holds only some of them. Omitted
+  // means any element that may stand inside a screen.
+  readonly allowedChildren?: ReadonlyArray<string>;
+  // The elements this one belongs to, when it belongs to only some of them.
+  // A row of navigation items means nothing outside its navigation.
+  readonly allowedParents?: ReadonlyArray<string>;
   // One line an agent can act on, and one authored line proving the shape.
   readonly summary: string;
   readonly example: string;
@@ -83,6 +90,64 @@ const BUTTON_SCHEMA = {
   label: { kind: "string", required: true, nonEmpty: true },
   emphasis: { kind: "enum", values: WIREFRAME_EMPHASES },
   navigateTo: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const EMPTY_SCHEMA = {} satisfies ComponentAttributeSchema;
+
+const SIDEBAR_SCHEMA = {
+  brand: { kind: "string", nonEmpty: true },
+  mode: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const TOP_BAR_SCHEMA = {
+  title: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const PAGE_HEADER_SCHEMA = {
+  title: { kind: "string", required: true, nonEmpty: true },
+  description: { kind: "string", nonEmpty: true },
+  badge: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const NAV_SCHEMA = {
+  label: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const NAV_ITEM_SCHEMA = {
+  label: { kind: "string", required: true, nonEmpty: true },
+  active: { kind: "booleanShorthand" },
+  navigateTo: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const METRIC_SCHEMA = {
+  label: { kind: "string", required: true, nonEmpty: true },
+  value: { kind: "string", required: true, nonEmpty: true },
+  note: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const PROGRESS_SCHEMA = {
+  label: { kind: "string", nonEmpty: true },
+  value: { kind: "number", min: 0, max: 100, required: true },
+  detail: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const BADGE_SCHEMA = {
+  label: { kind: "string", required: true, nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const DIVIDER_SCHEMA = {
+  label: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const IMAGE_PLACEHOLDER_SCHEMA = {
+  label: { kind: "string", required: true, nonEmpty: true },
+  shape: { kind: "enum", values: WIREFRAME_MEDIA_SHAPES },
+} satisfies ComponentAttributeSchema;
+
+const LIST_ITEM_SCHEMA = {
+  label: { kind: "string", required: true, nonEmpty: true },
+  meta: { kind: "string", nonEmpty: true },
+  value: { kind: "string", nonEmpty: true },
 } satisfies ComponentAttributeSchema;
 
 // Keyed exhaustively by the node union, so adding a node variant without
@@ -216,6 +281,294 @@ const CATALOG = {
         ...(validated.navigateTo === undefined
           ? {}
           : { navigateTo: validated.navigateTo }),
+      };
+    },
+  },
+  AppShell: {
+    category: "layout",
+    acceptsChildren: true,
+    allowedChildren: ["Sidebar", "TopBar", "AppContent"],
+    summary:
+      "The product frame: a sidebar, an optional top bar, and the content region.",
+    example:
+      "<AppShell><Sidebar>...</Sidebar><AppContent>...</AppContent></AppShell>",
+    compile: ({ attributes, children, position, diagnostics }) => {
+      validateComponentAttributes({
+        component: "AppShell",
+        attributes,
+        position,
+        diagnostics,
+        schema: EMPTY_SCHEMA,
+      });
+      return { element: "AppShell", children };
+    },
+  },
+  Sidebar: {
+    category: "layout",
+    acceptsChildren: true,
+    allowedParents: ["AppShell"],
+    summary: "The app shell's identity and navigation column.",
+    example: '<Sidebar brand="Eddy\'s Wallet" mode="Child mode">...</Sidebar>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Sidebar",
+        attributes,
+        position,
+        diagnostics,
+        schema: SIDEBAR_SCHEMA,
+      });
+      return {
+        element: "Sidebar",
+        ...(validated.brand === undefined ? {} : { brand: validated.brand }),
+        ...(validated.mode === undefined ? {} : { mode: validated.mode }),
+        children,
+      };
+    },
+  },
+  AppContent: {
+    category: "layout",
+    acceptsChildren: true,
+    allowedParents: ["AppShell"],
+    summary: "The app shell's main region, where the screen's work happens.",
+    example: "<AppContent>...</AppContent>",
+    compile: ({ attributes, children, position, diagnostics }) => {
+      validateComponentAttributes({
+        component: "AppContent",
+        attributes,
+        position,
+        diagnostics,
+        schema: EMPTY_SCHEMA,
+      });
+      return { element: "AppContent", children };
+    },
+  },
+  TopBar: {
+    category: "layout",
+    acceptsChildren: true,
+    allowedParents: ["AppShell"],
+    summary: "A strip across the top of the shell for the title and actions.",
+    example: '<TopBar title="Dashboard">...</TopBar>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "TopBar",
+        attributes,
+        position,
+        diagnostics,
+        schema: TOP_BAR_SCHEMA,
+      });
+      return {
+        element: "TopBar",
+        ...(validated.title === undefined ? {} : { title: validated.title }),
+        children,
+      };
+    },
+  },
+  PageHeader: {
+    category: "surface",
+    acceptsChildren: true,
+    summary:
+      "What this page is, said once at the top, with its actions beside it.",
+    example: '<PageHeader title="Hi, Eddy!" badge="Read only">...</PageHeader>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "PageHeader",
+        attributes,
+        position,
+        diagnostics,
+        schema: PAGE_HEADER_SCHEMA,
+      });
+      return {
+        element: "PageHeader",
+        title: validated.title ?? "",
+        ...(validated.description === undefined
+          ? {}
+          : { description: validated.description }),
+        ...(validated.badge === undefined ? {} : { badge: validated.badge }),
+        children,
+      };
+    },
+  },
+  Nav: {
+    category: "layout",
+    acceptsChildren: true,
+    allowedChildren: ["NavItem"],
+    summary: "A list of destinations, usually down the sidebar.",
+    example: '<Nav label="Main"><NavItem label="Wallet" active /></Nav>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Nav",
+        attributes,
+        position,
+        diagnostics,
+        schema: NAV_SCHEMA,
+      });
+      return {
+        element: "Nav",
+        ...(validated.label === undefined ? {} : { label: validated.label }),
+        children,
+      };
+    },
+  },
+  NavItem: {
+    category: "content",
+    acceptsChildren: false,
+    allowedParents: ["Nav"],
+    summary:
+      "One destination. Mark the current one active; give it navigateTo to make it walk.",
+    example: '<NavItem label="Activity" navigateTo="activity" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "NavItem",
+        attributes,
+        position,
+        diagnostics,
+        schema: NAV_ITEM_SCHEMA,
+      });
+      return {
+        element: "NavItem",
+        label: validated.label ?? "",
+        active: validated.active === true,
+        ...(validated.navigateTo === undefined
+          ? {}
+          : { navigateTo: validated.navigateTo }),
+      };
+    },
+  },
+  Metric: {
+    category: "content",
+    acceptsChildren: false,
+    summary: "One number the screen exists to show, with its label.",
+    example: '<Metric label="Your balance" value="$42.50" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Metric",
+        attributes,
+        position,
+        diagnostics,
+        schema: METRIC_SCHEMA,
+      });
+      return {
+        element: "Metric",
+        label: validated.label ?? "",
+        value: validated.value ?? "",
+        ...(validated.note === undefined ? {} : { note: validated.note }),
+      };
+    },
+  },
+  Progress: {
+    category: "content",
+    acceptsChildren: false,
+    summary: "How far along something is, from 0 to 100.",
+    example:
+      '<Progress label="Headphones goal" value="61" detail="$42.50 of $70" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Progress",
+        attributes,
+        position,
+        diagnostics,
+        schema: PROGRESS_SCHEMA,
+      });
+      return {
+        element: "Progress",
+        ...(validated.label === undefined ? {} : { label: validated.label }),
+        value: validated.value ?? 0,
+        ...(validated.detail === undefined ? {} : { detail: validated.detail }),
+      };
+    },
+  },
+  Badge: {
+    category: "content",
+    acceptsChildren: false,
+    summary: "A short status beside the thing it describes.",
+    example: '<Badge label="Pending" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Badge",
+        attributes,
+        position,
+        diagnostics,
+        schema: BADGE_SCHEMA,
+      });
+      return { element: "Badge", label: validated.label ?? "" };
+    },
+  },
+  Divider: {
+    category: "content",
+    acceptsChildren: false,
+    summary: "A rule between two parts of a screen, optionally labeled.",
+    example: '<Divider label="Earlier" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Divider",
+        attributes,
+        position,
+        diagnostics,
+        schema: DIVIDER_SCHEMA,
+      });
+      return {
+        element: "Divider",
+        ...(validated.label === undefined ? {} : { label: validated.label }),
+      };
+    },
+  },
+  ImagePlaceholder: {
+    category: "content",
+    acceptsChildren: false,
+    summary: "A crossed box standing in for media, named by what it will show.",
+    example: '<ImagePlaceholder label="Goal photo" shape="wide" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "ImagePlaceholder",
+        attributes,
+        position,
+        diagnostics,
+        schema: IMAGE_PLACEHOLDER_SCHEMA,
+      });
+      return {
+        element: "ImagePlaceholder",
+        label: validated.label ?? "",
+        shape: validated.shape ?? "wide",
+      };
+    },
+  },
+  List: {
+    category: "surface",
+    acceptsChildren: true,
+    allowedChildren: ["ListItem"],
+    summary: "Repeated rows of the same kind of thing.",
+    example: '<List><ListItem label="Book fair" value="-$8.50" /></List>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      validateComponentAttributes({
+        component: "List",
+        attributes,
+        position,
+        diagnostics,
+        schema: EMPTY_SCHEMA,
+      });
+      return { element: "List", children };
+    },
+  },
+  ListItem: {
+    category: "content",
+    acceptsChildren: false,
+    allowedParents: ["List"],
+    summary: "One row: what it is, when it happened, and what it was worth.",
+    example:
+      '<ListItem label="Weekly allowance" meta="Today" value="+$5.00" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "ListItem",
+        attributes,
+        position,
+        diagnostics,
+        schema: LIST_ITEM_SCHEMA,
+      });
+      return {
+        element: "ListItem",
+        label: validated.label ?? "",
+        ...(validated.meta === undefined ? {} : { meta: validated.meta }),
+        ...(validated.value === undefined ? {} : { value: validated.value }),
       };
     },
   },
