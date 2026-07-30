@@ -2,7 +2,8 @@
 Deck styles for markdown-generated markup the slide transform wraps: the h2
 inside a slide frame cannot carry utility classes, so its in-slide identity
 lives here. The slide frame and kicker themselves carry utilities assigned by
-the transform.
+the transform. Collapse controls sit outside the frame on a shared hover host
+so the reading column is never indented when expanded.
 */
 
 @layer components {
@@ -30,6 +31,140 @@ the transform.
   article .plan-subpart > h2 ~ * {
     margin-top: 0.8rem;
     margin-bottom: 0;
+  }
+  article .plan-slide-group > [data-collapse-body] > :first-child {
+    margin-top: 0.8rem;
+  }
+
+  /*
+     Shared hover host: left padding is the outside-toggle gutter; equal
+     negative margin keeps the frame aligned with the pre-collapse column.
+     flow-root keeps part/subpart top margins inside the host so absolute
+     toggle tops can top-align to that chrome instead of floating oddly.
+  */
+  article .plan-collapse-host {
+    display: flow-root;
+    position: relative;
+    padding-left: 1.75rem;
+    margin-left: -1.75rem;
+  }
+
+  /*
+     Toggle is always top-aligned to the first header chrome of its host,
+     never vertically centered against the full block height.
+  */
+  article .plan-collapse-host > .plan-collapse-toggle {
+    top: 1.25rem; /* matches .plan-slide py-5 top padding */
+  }
+  article .plan-slide-group > .plan-collapse-toggle {
+    top: 3rem; /* matches .plan-subpart mt-12 when expanded */
+  }
+  article .plan-part-group > .plan-collapse-toggle {
+    /* Top of the part band title row (band mt + its own top padding). */
+    top: calc(3.8rem + 0.55rem);
+  }
+
+  /*
+     Mid-tone affordance: always faintly visible so the column is scannable,
+     stronger on host hover/focus without becoming a stark spike.
+  */
+  article .plan-collapse-toggle {
+    color: color-mix(in oklab, var(--muted-c) 68%, transparent);
+    opacity: 0.4;
+    pointer-events: auto;
+    transition:
+      opacity 0.12s ease,
+      color 0.12s ease;
+  }
+  article .plan-collapse-host:hover > .plan-collapse-toggle,
+  article .plan-collapse-host:focus-within > .plan-collapse-toggle,
+  article .plan-collapse-host[data-collapse-hover] > .plan-collapse-toggle {
+    opacity: 0.72;
+    color: color-mix(in oklab, var(--muted-c) 82%, transparent);
+  }
+  article .plan-collapse-toggle:hover,
+  article .plan-collapse-toggle:focus-visible {
+    opacity: 0.88;
+    color: var(--muted-c);
+  }
+
+  /* Quiet chevron - mid size between first stark and last soft pass. */
+  article .plan-collapse-toggle::before {
+    content: "";
+    display: block;
+    width: 0.32rem;
+    height: 0.32rem;
+    border-right: 1.35px solid currentColor;
+    border-bottom: 1.35px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform 0.15s ease;
+    margin-top: -0.12rem;
+  }
+  article .plan-collapse-toggle[aria-expanded="false"]::before {
+    transform: rotate(-45deg);
+    margin-top: 0;
+  }
+
+  /* Collapsed: hide bodies. */
+  article [data-collapsible][data-collapsed] > [data-collapse-body] {
+    display: none;
+  }
+  article
+    [data-collapsible][data-collapsed]
+    > .plan-slide
+    > :not([data-slide-kicker]):not(h2):not(h3[data-slide-kicker]) {
+    display: none;
+  }
+
+  /*
+     Uniform collapsed header chrome for every slide-like unit - both framed
+     slides and borderless subpart groups - so a stack of collapsed sections
+     forms one consistent column (no mixed box / no-box headers).
+  */
+  article [data-collapsible][data-collapsed] > .plan-slide,
+  article [data-collapsible][data-collapsed] > .plan-subpart {
+    margin-top: 0;
+    margin-bottom: 0.65rem;
+    border: 1px solid var(--edge-c);
+    border-radius: 0.75rem;
+    background: transparent;
+    padding: 0.85rem 1.25rem;
+  }
+  article [data-collapsible][data-collapsed] > .plan-slide > h2,
+  article [data-collapsible][data-collapsed] > .plan-subpart > h2 {
+    margin: 0;
+  }
+  article
+    [data-collapsible][data-collapsed]
+    > .plan-slide
+    > h3[data-slide-kicker] {
+    margin: 0;
+  }
+  article
+    [data-collapsible][data-collapsed]
+    > .plan-slide
+    > [data-slide-kicker]:not(h3),
+  article
+    [data-collapsible][data-collapsed]
+    > .plan-subpart
+    > [data-slide-kicker] {
+    margin: 0 0 0.35rem;
+  }
+  article
+    [data-collapsible][data-collapsed]
+    > .plan-slide
+    > [data-slide-kicker]:not(h3):last-child {
+    margin-bottom: 0;
+  }
+
+  /* Collapsed slide-group: subpart no longer needs its expanded top spacing. */
+  article .plan-slide-group[data-collapsed] > .plan-collapse-toggle {
+    top: 0.85rem;
+  }
+
+  /* Collapsed part: keep the act band; tighten trailing gap under it. */
+  article [data-collapsible="part"][data-collapsed] > [data-part] {
+    margin-bottom: 0.65rem;
   }
 }
 

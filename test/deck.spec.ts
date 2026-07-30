@@ -63,6 +63,98 @@ test("should read the deck plan through parts, the overview, and sub-slides", as
   });
 });
 
+test("should collapse and expand deck parts, slides, and sub-slides", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.goto(deckViewerUrl);
+  const toc = page.getByRole("navigation", { name: "Contents" });
+
+  await test.step("blocks start open so body content is visible", async () => {
+    const statusHost = page.locator(
+      '[data-collapsible="slide"][data-collapse-id="status-quo"]',
+    );
+    await expect(statusHost).not.toHaveAttribute("data-collapsed", "");
+    await expect(statusHost.getByText("Inline retries")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 2, name: "Status quo" }),
+    ).toBeVisible();
+  });
+
+  await test.step("collapsing a slide hides its body but keeps the title", async () => {
+    const statusHost = page.locator(
+      '[data-collapsible="slide"][data-collapse-id="status-quo"]',
+    );
+    const toggle = statusHost.locator(":scope > [data-collapse-toggle]");
+    await statusHost.hover();
+    await toggle.click();
+    await expect(statusHost).toHaveAttribute("data-collapsed", "");
+    await expect(statusHost.getByText("Inline retries")).toBeHidden();
+    await expect(
+      page.getByRole("heading", { level: 2, name: "Status quo" }),
+    ).toBeVisible();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  await test.step("hover host keeps the toggle while moving onto it", async () => {
+    const successHost = page.locator(
+      '[data-collapsible="slide"][data-collapse-id="success-looks-like"]',
+    );
+    const toggle = successHost.locator(":scope > [data-collapse-toggle]");
+    await successHost.locator(".plan-slide").hover();
+    await expect(toggle).toBeVisible();
+    await toggle.hover();
+    await expect(toggle).toBeVisible();
+  });
+
+  await test.step("collapsing a sub-slide hides only that frame's body", async () => {
+    const worker = page.locator(
+      '[data-collapsible="subslide"][data-collapse-id="the-worker"]',
+    );
+    await worker.hover();
+    await worker.locator(":scope > [data-collapse-toggle]").click();
+    await expect(worker).toHaveAttribute("data-collapsed", "");
+    await expect(worker.getByText("Claims due schedules")).toBeHidden();
+    await expect(
+      page.locator(
+        '[data-collapsible="subslide"][data-collapse-id="the-audit-trail"]',
+      ),
+    ).toContainText("Every state change");
+  });
+
+  await test.step("collapsing a part tucks away every slide in the act", async () => {
+    const proposal = page.locator(
+      '[data-collapsible="part"][data-collapse-id="part-the-proposal"]',
+    );
+    await proposal.hover();
+    await proposal.locator(":scope > [data-collapse-toggle]").click();
+    await expect(proposal).toHaveAttribute("data-collapsed", "");
+    await expect(
+      proposal.locator(":scope > [data-collapse-body]"),
+    ).toBeHidden();
+    await expect(page.locator("#part-the-proposal")).toBeVisible();
+  });
+
+  await test.step("a TOC jump expands collapsed ancestors and lands on the target", async () => {
+    await toc.getByRole("link", { name: "The retry queue" }).click();
+    await expect(page).toHaveURL(/#the-retry-queue$/);
+    const proposal = page.locator(
+      '[data-collapsible="part"][data-collapse-id="part-the-proposal"]',
+    );
+    await expect(proposal).not.toHaveAttribute("data-collapsed", "");
+    const heading = page.getByRole("heading", {
+      level: 2,
+      name: "The retry queue",
+    });
+    await expect(heading).toBeInViewport();
+    await expect(
+      page.locator(
+        '[data-collapsible="slide"][data-collapse-id="the-retry-queue"]',
+      ),
+    ).toBeVisible();
+  });
+});
+
 test("should draw the FlowDiagram pipeline as staged cards with an explicit fork", async ({
   page,
   flowDiagramViewerUrl,

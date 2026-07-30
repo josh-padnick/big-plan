@@ -7,6 +7,8 @@
 // outline-aware components, and computes the document outline - parts and
 // sections numbered in document order - that those components' views consume
 // once the placeholders are presented. It knows no component's markup.
+// Collapse toggles sit outside frames; expanded markup matches the pre-
+// collapse deck so the reading column is never indented by chrome.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 import type {
@@ -44,12 +46,19 @@ const textOf = (node: Element): string => {
 };
 
 // The GFM footnotes block is an appendix, not an authored section, so it
-// never joins the last slide.
+// never joins the last slide or a Part collapse group.
 const isFootnotesSection = (node: RootContent): boolean =>
   isElement(node) &&
   node.tagName === "section" &&
   Array.isArray(node.properties.className) &&
   node.properties.className.includes("footnotes");
+
+// Document-level outline placeholders that are not Parts (for example the
+// TableOfContents) must stay outside Part collapse bodies.
+const isNonPartOutlinePlaceholder = (node: RootContent): boolean =>
+  isElement(node) &&
+  node.properties[OUTLINE_PLACEHOLDER_ATTRIBUTE] !== undefined &&
+  node.properties[OUTLINE_PART_TITLE_ATTRIBUTE] === undefined;
 
 // Tailwind utilities remain private styling implementation; the data
 // attributes are the stable behavior-bearing interfaces used by tests.
@@ -91,6 +100,43 @@ const CONTEXT_CLASSES = [
   "mb-[0.9rem]",
   "text-[0.9375rem]",
   "text-muted",
+] as const;
+
+// One continuous hover host wraps both the outside toggle and the frame so
+// moving the pointer onto the control never leaves the host hit area.
+// Padding/margin for the left gutter live in deck.css (not Tailwind here) so
+// the reading column stays aligned with pre-collapse layout.
+const COLLAPSE_HOST_CLASSES = ["plan-collapse-host", "relative"] as const;
+
+// Toggle classes stay minimal; positioning and hover reveal live in deck.css.
+// Top offsets are owned by deck.css per host kind so every control is
+// top-aligned to its header chrome (slide, subpart, or part band).
+const TOGGLE_CLASSES = [
+  "plan-collapse-toggle",
+  "absolute",
+  "left-0",
+  "z-10",
+  "inline-flex",
+  "size-5",
+  "cursor-pointer",
+  "items-center",
+  "justify-center",
+  "rounded-md",
+  "border-0",
+  "bg-transparent",
+  "p-0",
+  "focus-visible:outline-2",
+  "focus-visible:outline-offset-2",
+  "focus-visible:outline-accent",
+] as const;
+
+const PART_GROUP_CLASSES = [
+  "plan-part-group",
+  ...COLLAPSE_HOST_CLASSES,
+] as const;
+const SLIDE_GROUP_CLASSES = [
+  "plan-slide-group",
+  ...COLLAPSE_HOST_CLASSES,
 ] as const;
 
 /** The outline holder the transform fills in document order. */
@@ -154,10 +200,59 @@ const applyContextBuilder = (body: ReadonlyArray<ElementContent>): void => {
   first.properties.className = [...CONTEXT_CLASSES];
 };
 
-// Splits a section body that contains h3 headings into the parent header
-// block plus one numbered sub-slide frame per h3 run, so a long section
-// reads as its own small deck. The h3 becomes the sub-slide's kicker,
-// keeping its anchor and outline role.
+// Builds the inert collapse control; the viewer script wires behavior and
+// keeps content fully readable when scripts are disabled.
+const createCollapseToggle = (): Element => ({
+  type: "element",
+  tagName: "button",
+  properties: {
+    type: "button",
+    "data-collapse-toggle": "",
+    "aria-expanded": "true",
+    "aria-label": "Collapse",
+    className: [...TOGGLE_CLASSES],
+  },
+  children: [],
+});
+
+const createCollapseBody = (
+  children: ReadonlyArray<ElementContent>,
+): Element => ({
+  type: "element",
+  tagName: "div",
+  properties: {
+    "data-collapse-body": "",
+  },
+  children: [...children],
+});
+
+// Host owns data-collapsible so :hover covers both the outside toggle and the
+// frame; the frame itself keeps pre-collapse markup and classes.
+const createCollapseHost = ({
+  kind,
+  collapseId,
+  className,
+  content,
+}: {
+  readonly kind: "slide" | "subslide" | "part";
+  readonly collapseId: string;
+  readonly className: ReadonlyArray<string>;
+  readonly content: ReadonlyArray<ElementContent>;
+}): Element => ({
+  type: "element",
+  tagName: "div",
+  properties: {
+    "data-collapsible": kind,
+    "data-collapse-id": collapseId,
+    className: [...className],
+  },
+  children: [createCollapseToggle(), ...content],
+});
+
+// Splits a section body that contains h3 headings into one collapsible slide
+// group: the parent header stays visible when collapsed, and each h3 run is
+// its own nested collapsible sub-slide. Expanded layout keeps the original
+// subpart + sub-slide structure without a flex title row.
 const buildSubSlides = ({
   heading,
   body,
@@ -168,10 +263,13 @@ const buildSubSlides = ({
   readonly body: ReadonlyArray<ElementContent>;
   readonly label: string;
   readonly kicker: Element;
-}): ReadonlyArray<ElementContent> => {
+}): Element => {
   const firstH3 = body.findIndex(
     (node) => isElement(node) && node.tagName === "h3",
   );
+  const intro = body.slice(0, firstH3);
+  const collapseId =
+    typeof heading.properties.id === "string" ? heading.properties.id : label;
   const parent: Element = {
     type: "element",
     tagName: "div",
@@ -179,9 +277,9 @@ const buildSubSlides = ({
       "data-subpart": "",
       className: [...SUBPART_CLASSES],
     },
-    children: [kicker, heading, ...body.slice(0, firstH3)],
+    children: [kicker, heading],
   };
-  const result: Array<ElementContent> = [parent];
+  const groupBody: Array<ElementContent> = [...intro];
   let index = firstH3;
   let subIndex = 0;
   while (index < body.length) {
@@ -205,6 +303,8 @@ const buildSubSlides = ({
     }
     subIndex += 1;
     const subLabel = `${label}.${subIndex}`;
+    const subId =
+      typeof h3.properties.id === "string" ? h3.properties.id : subLabel;
     const subKicker: Element = {
       type: "element",
       tagName: "h3",
@@ -218,7 +318,7 @@ const buildSubSlides = ({
       children: [{ type: "text", value: `${subLabel} / ${textOf(h3)}` }],
     };
     applyContextBuilder(run);
-    result.push({
+    const frame: Element = {
       type: "element",
       tagName: "section",
       properties: {
@@ -227,16 +327,30 @@ const buildSubSlides = ({
         className: [...SLIDE_CLASSES],
       },
       children: [subKicker, ...run],
-    });
+    };
+    groupBody.push(
+      createCollapseHost({
+        kind: "subslide",
+        collapseId: subId,
+        className: COLLAPSE_HOST_CLASSES,
+        content: [frame],
+      }),
+    );
     index = end;
   }
-  return result;
+  return createCollapseHost({
+    kind: "slide",
+    collapseId,
+    className: SLIDE_GROUP_CLASSES,
+    content: [parent, createCollapseBody(groupBody)],
+  });
 };
 
 // Wraps each top-level h2 plus its following siblings - up to the next h2,
 // outline placeholder (a Part divider or overview), or footnotes appendix -
-// in a slide frame headed by a numbered kicker. Returns the slide sections
-// in document order so the outline can carry them.
+// in a collapsible slide frame headed by a numbered kicker. Groups each Part
+// divider with the slides that follow it so an act can collapse as a unit.
+// Returns the slide sections in document order so the outline can carry them.
 const wrapSlides = (
   tree: Root,
   parts: Map<Element, DocumentOutlinePart>,
@@ -245,6 +359,37 @@ const wrapSlides = (
   const rewritten: Array<RootContent> = [];
   let currentPart: DocumentOutlinePart | undefined;
   let indexInPart = 0;
+  let openPartGroup: Element | undefined;
+  let openPartBody: Array<ElementContent> = [];
+
+  const flushPartGroup = (): void => {
+    if (openPartGroup === undefined) {
+      return;
+    }
+    // Host children are [toggle, part band, ...]; keep that order and append
+    // the collapsible body after the part band.
+    const existing = openPartGroup.children;
+    openPartGroup.children = [...existing, createCollapseBody(openPartBody)];
+    rewritten.push(openPartGroup);
+    openPartGroup = undefined;
+    openPartBody = [];
+  };
+
+  const pushNode = (node: RootContent | ElementContent): void => {
+    if (openPartGroup !== undefined) {
+      openPartBody.push(node as ElementContent);
+      return;
+    }
+    rewritten.push(node as RootContent);
+  };
+
+  // Global document boundaries leave the open act so collapsing a Part never
+  // hides footnotes or overview placeholders that belong to the whole plan.
+  const pushDocumentBoundary = (node: RootContent): void => {
+    flushPartGroup();
+    rewritten.push(node);
+  };
+
   let index = 0;
   while (index < tree.children.length) {
     const child = tree.children[index];
@@ -252,15 +397,33 @@ const wrapSlides = (
       index += 1;
       continue;
     }
+    if (isFootnotesSection(child) || isNonPartOutlinePlaceholder(child)) {
+      pushDocumentBoundary(child);
+      index += 1;
+      continue;
+    }
     if (isElement(child) && parts.has(child)) {
+      flushPartGroup();
       currentPart = parts.get(child);
       indexInPart = 0;
-      rewritten.push(child);
+      const partId =
+        typeof child.properties.id === "string"
+          ? child.properties.id
+          : `part-${currentPart?.number ?? indexInPart + 1}`;
+      // Toggle first, then the Part placeholder: outline completion replaces
+      // the placeholder in place while the host owns the continuous hover area.
+      openPartGroup = createCollapseHost({
+        kind: "part",
+        collapseId: partId,
+        className: PART_GROUP_CLASSES,
+        content: [child],
+      });
+      openPartBody = [];
       index += 1;
       continue;
     }
     if (!isElement(child) || child.tagName !== "h2") {
-      rewritten.push(child);
+      pushNode(child);
       index += 1;
       continue;
     }
@@ -307,8 +470,8 @@ const wrapSlides = (
       (node) => isElement(node) && node.tagName === "h3",
     );
     if (hasSubSlides) {
-      rewritten.push(
-        ...buildSubSlides({
+      pushNode(
+        buildSubSlides({
           heading: child,
           body: sectionBody,
           label,
@@ -319,18 +482,28 @@ const wrapSlides = (
       continue;
     }
     applyContextBuilder(sectionBody);
-    const slide: Element = {
+    const collapseId = typeof id === "string" ? id : label;
+    // Frame markup matches pre-collapse slides; the host holds the toggle.
+    const frame: Element = {
       type: "element",
       tagName: "section",
       properties: {
         "data-slide": "",
         className: [...SLIDE_CLASSES],
       },
-      children: [kicker, ...body],
+      children: [kicker, child, ...sectionBody],
     };
-    rewritten.push(slide);
+    pushNode(
+      createCollapseHost({
+        kind: "slide",
+        collapseId,
+        className: COLLAPSE_HOST_CLASSES,
+        content: [frame],
+      }),
+    );
     index = end;
   }
+  flushPartGroup();
   tree.children = rewritten;
   return sections;
 };
