@@ -217,6 +217,13 @@ export type WireframeNode =
       readonly children: ReadonlyArray<WireframeNode>;
     }
   | {
+      // Phone tab strip across the bottom of a screen. Desktop shells use
+      // Sidebar instead; putting a bottom bar on desktop reads as mobile UI
+      // drawn on a wide artboard.
+      readonly element: "BottomBar";
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
       readonly element: "PageHeader";
       readonly title: string;
       readonly description?: string;
