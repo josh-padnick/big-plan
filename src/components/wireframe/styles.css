@@ -349,7 +349,9 @@ marks and a plan diff never jitters.
     flex: 1;
     grid-template-columns: minmax(7rem, 10.5rem) 1fr;
     gap: 0.875rem;
-    align-items: start;
+    /* The nav runs the full height of the app, the way a desktop product's
+       does, rather than stopping where its own links end. */
+    align-items: stretch;
   }
   @container (width < 26rem) {
     .wireframe-app-shell {
