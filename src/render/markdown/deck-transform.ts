@@ -109,14 +109,15 @@ const CONTEXT_CLASSES = [
 const COLLAPSE_HOST_CLASSES = ["plan-collapse-host", "relative"] as const;
 
 // Toggle classes stay minimal; positioning and hover reveal live in deck.css.
+// Top offsets are owned by deck.css per host kind so every control is
+// top-aligned to its header chrome (slide, subpart, or part band).
 const TOGGLE_CLASSES = [
   "plan-collapse-toggle",
   "absolute",
-  "top-[1.15rem]",
   "left-0",
   "z-10",
   "inline-flex",
-  "size-6",
+  "size-5",
   "cursor-pointer",
   "items-center",
   "justify-center",
@@ -124,9 +125,6 @@ const TOGGLE_CLASSES = [
   "border-0",
   "bg-transparent",
   "p-0",
-  "text-muted",
-  "hover:bg-surface",
-  "hover:text-ink",
   "focus-visible:outline-2",
   "focus-visible:outline-offset-2",
   "focus-visible:outline-accent",

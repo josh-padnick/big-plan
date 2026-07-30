@@ -39,51 +39,72 @@ so the reading column is never indented when expanded.
   /*
      Shared hover host: left padding is the outside-toggle gutter; equal
      negative margin keeps the frame aligned with the pre-collapse column.
-     The gutter is part of the host hit box, so moving onto the toggle never
-     clears :hover.
+     flow-root keeps part/subpart top margins inside the host so absolute
+     toggle tops can top-align to that chrome instead of floating oddly.
   */
   article .plan-collapse-host {
+    display: flow-root;
+    position: relative;
     padding-left: 1.75rem;
     margin-left: -1.75rem;
   }
 
-  /* Outside toggle: subtle until the whole host is hovered or focused. */
+  /*
+     Toggle is always top-aligned to the first header chrome of its host,
+     never vertically centered against the full block height.
+  */
+  article .plan-collapse-host > .plan-collapse-toggle {
+    top: 1.25rem; /* matches .plan-slide py-5 top padding */
+  }
+  article .plan-slide-group > .plan-collapse-toggle {
+    top: 3rem; /* matches .plan-subpart mt-12 */
+  }
+  article .plan-part-group > .plan-collapse-toggle {
+    /* Top of the part band title row (band mt + its own top padding). */
+    top: calc(3.8rem + 0.55rem);
+  }
+
+  /* Soft, easy-to-miss control; only slightly stronger when actively hovered. */
   article .plan-collapse-toggle {
+    color: color-mix(in oklab, var(--muted-c) 42%, transparent);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.12s ease;
+    transition:
+      opacity 0.12s ease,
+      color 0.12s ease;
   }
   article .plan-collapse-host:hover > .plan-collapse-toggle,
   article .plan-collapse-host:focus-within > .plan-collapse-toggle,
-  article .plan-collapse-host[data-collapse-hover] > .plan-collapse-toggle,
-  article .plan-collapse-toggle:focus-visible {
-    opacity: 1;
+  article .plan-collapse-host[data-collapse-hover] > .plan-collapse-toggle {
+    opacity: 0.62;
     pointer-events: auto;
+    color: color-mix(in oklab, var(--muted-c) 58%, transparent);
+  }
+  article .plan-collapse-toggle:hover,
+  article .plan-collapse-toggle:focus-visible {
+    opacity: 0.78;
+    pointer-events: auto;
+    color: color-mix(in oklab, var(--muted-c) 72%, transparent);
   }
 
-  /* CSS chevron points down when expanded, right when collapsed. */
+  /* Light chevron - smaller and thinner so it stays quiet. */
   article .plan-collapse-toggle::before {
     content: "";
     display: block;
-    width: 0.35rem;
-    height: 0.35rem;
-    border-right: 1.5px solid currentColor;
-    border-bottom: 1.5px solid currentColor;
+    width: 0.28rem;
+    height: 0.28rem;
+    border-right: 1.15px solid currentColor;
+    border-bottom: 1.15px solid currentColor;
     transform: rotate(45deg);
     transition: transform 0.15s ease;
-    margin-top: -0.15rem;
+    margin-top: -0.12rem;
   }
   article .plan-collapse-toggle[aria-expanded="false"]::before {
     transform: rotate(-45deg);
     margin-top: 0;
   }
 
-  /* Part bands use a lower toggle so it sits beside the act title row. */
-  article .plan-part-group > .plan-collapse-toggle {
-    top: calc(3.8rem + 0.55rem);
-  }
-
-  /* Collapsed bodies leave headers (kicker/title/part band) visible. */
+  /* Collapsed: hide bodies; keep header chrome geometry matching expanded. */
   article [data-collapsible][data-collapsed] > [data-collapse-body] {
     display: none;
   }
@@ -92,6 +113,40 @@ so the reading column is never indented when expanded.
     > .plan-slide
     > :not([data-slide-kicker]):not(h2):not(h3[data-slide-kicker]) {
     display: none;
+  }
+
+  /*
+     When a slide frame is collapsed to kicker+title only, drop the empty
+     body stack (extra bottom padding and title bottom margin) so the border
+     hugs the same header geometry as when expanded - no tall empty card.
+  */
+  article [data-collapsible][data-collapsed] > .plan-slide {
+    padding-bottom: 1.25rem;
+  }
+  article [data-collapsible][data-collapsed] > .plan-slide > h2 {
+    margin-bottom: 0;
+  }
+  article
+    [data-collapsible][data-collapsed]
+    > .plan-slide
+    > h3[data-slide-kicker] {
+    margin-bottom: 0;
+  }
+  article
+    [data-collapsible][data-collapsed]
+    > .plan-slide
+    > [data-slide-kicker]:not(h3) {
+    margin-bottom: 0.45rem;
+  }
+  article
+    [data-collapsible][data-collapsed]
+    > .plan-slide
+    > [data-slide-kicker]:not(h3):last-child {
+    margin-bottom: 0;
+  }
+  /* Collapsed part: keep the band itself; tighten trailing gap under it. */
+  article [data-collapsible="part"][data-collapsed] > [data-part] {
+    margin-bottom: 0.65rem;
   }
 }
 
