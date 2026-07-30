@@ -37,6 +37,15 @@ This guide owns the durable implementation model contributors must preserve.
 - **Plan review** is the conversation in which the human works to understand the proposed approach, gives feedback, and resolves concerns with the agent.
 - **Plan acceptance** is the human's explicit decision that the intended approach is understood well enough for the agent to begin execution. It is not acceptance of the finished deliverable, which happens later.
 
+### Plan-quality standards
+
+Big Plan aims for plans that meet two standards:
+
+1. **Pleasant to read** - the review experience should feel pleasant; reading the plan should not feel like a chore.
+2. **Understandable** - the plan should be as easy as possible for a human to understand.
+
+Use these standards when judging plan quality, product improvements, and the [gold-standard plan-quality testing](#gold-standard-plan-quality-testing) workflow.
+
 ## Technical orientation
 
 Big Plan plans are MDX files that contain Markdown and built-in components.
@@ -172,13 +181,14 @@ This section owns the durable procedure for improving Big Plan's plan quality as
 It is not unit testing, Playwright journey testing, or ordinary contribution verification.
 Those remain under [Engineering rules](#engineering-rules), `test/`, and [CONTRIBUTING.md](CONTRIBUTING.md).
 Current product capabilities and authoring guidance remain in `docs/`; point there rather than restating them.
+The evaluation bar for plan quality is the two [plan-quality standards](#plan-quality-standards): pleasant to read, and understandable.
 
 ### What "good" means
 
 The gold standard for working on Big Plan quality is:
 
-1. A **context-free agent** (no prior conversation about the desired plan shape, and no private captain preferences beyond what Big Plan itself teaches) uses Big Plan to produce a plan.
-2. A human evaluates whether that plan, produced **solely via the tool**, meets expectations.
+1. A **context-free agent** (no prior conversation about the desired plan shape, and no private author or project preferences beyond what Big Plan itself teaches) uses Big Plan to produce a plan.
+2. A human evaluates whether that plan, produced **solely via the tool**, meets Big Plan's plan-quality standards: pleasant to read, and understandable.
 3. Feedback from that evaluation is used to improve Big Plan itself, not only to patch one plan for one task.
 
 Re-running full context-free generation after every small product improvement is intentionally expensive.
@@ -192,19 +202,19 @@ Use this loop to design the quality bar for a chosen scenario without paying for
 1. Start from Big Plan **status quo** (current main, or the current published behavior you intend to improve).
 2. Have a **context-free agent** generate an initial plan for the chosen scenario using Big Plan only.
    Do not seed that agent with the desired plan shape, private acceptance criteria, or prior refinement conversation.
-3. Work with a normal (context-rich) agent to improve that plan until it reflects the desired quality bar.
+3. Work with a normal (context-rich) agent to improve that plan until it reflects the plan-quality standards for the scenario.
    Edits may include the plan source (MDX) and, when useful for speed, direct edits to the rendered HTML review document.
    Example of a speed edit only: renumber acceptance criteria as AC1, AC2, and so on in the review document while shaping the bar.
    That numbering example is illustrative of a presentation standard you might want later; it is not a claim that the product already enforces it.
-4. Stop when the plan is a **reference-quality artifact** for the scenario: it encodes the acceptance criteria and presentation standards you want Big Plan to produce next time without hand-editing.
+4. Stop when the plan is a **reference-quality artifact** for the scenario: it encodes the acceptance criteria and presentation standards you want Big Plan to produce next time without hand-editing, and it is both pleasant to read and understandable.
 
 Part A evaluates and designs the target.
 It does **not** prove that Big Plan, unaided, will produce that quality on a fresh run.
 
-### Captain gate from Part A to Part B
+### Backport handoff from Part A to Part B
 
-Treat captain language such as "this looks good, let's backport" as the handoff from Part A into Part B.
-Until that gate (or an equivalent explicit decision to improve the product), keep changes in the plan refinement loop rather than treating hand-edits as product proof.
+Treat contributor language such as "this looks good, let's backport" as the handoff from Part A into Part B: the refined plan is good enough, so durable improvements should move into the product and be re-verified.
+Until that handoff (or an equivalent explicit decision by the author or contributor to improve the product), keep changes in the plan refinement loop rather than treating hand-edits as product proof.
 
 ### Part B - Backport into Big Plan, then re-verify (expensive proof)
 
@@ -213,7 +223,7 @@ Use this loop to make durable product improvements and prove them with a clean g
 1. Backport every durable improvement from the refined reference plan into the **Big Plan product** wherever that behavior is owned.
    Owners may include authoring guidance, lint rules, components, examples, install or setup docs, agent-facing prompts, and related surfaces under the [documentation map](#documentation-map) and [source ownership](#source-ownership-and-placement).
 2. Run **context-free plan generation again** with the updated tool: a clean agent, the same scenario intent, and no carrying over of the hand-refined plan text.
-3. Compare the newly generated plan against the refined reference and the latest acceptance criteria for the scenario.
+3. Compare the newly generated plan against the refined reference and the plan-quality standards (pleasant to read, and understandable), using the latest acceptance criteria for the scenario.
 4. If the new plan still falls short, either refine the reference further (return to Part A as needed) or continue product changes.
    Do not treat hand-edits alone as proof the tool improved.
 
