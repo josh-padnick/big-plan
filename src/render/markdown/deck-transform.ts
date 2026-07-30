@@ -91,8 +91,29 @@ const KICKER_CLASSES = [
 const SUBPART_CLASSES = ["plan-subpart", "mb-4"] as const;
 
 // A sub-slide's kicker is its heading: the h3 keeps its anchor and outline
-// role while rendering as the numbered small-caps line.
-const SUBSLIDE_KICKER_CLASSES = ["mt-0", ...KICKER_CLASSES] as const;
+// role while rendering as the numbered small-caps line. No bottom margin -
+// header chrome metrics stay fixed across expand/collapse.
+const SUBSLIDE_KICKER_CLASSES = [
+  "mt-0",
+  "mb-0",
+  "text-[0.6875rem]",
+  "font-semibold",
+  "uppercase",
+  "tracking-[0.14em]",
+  "text-accent",
+] as const;
+
+// Compact always-on frame for sub-slide headers (kicker only); body lives in
+// data-collapse-body so expand/collapse never restyles this chrome.
+const SUBSLIDE_FRAME_CLASSES = [
+  "plan-slide",
+  "plan-subslide-frame",
+  "rounded-xl",
+  "border",
+  "border-edge",
+  "px-4",
+  "py-3",
+] as const;
 
 // The context builder: one muted line telling the reader what they are
 // looking at, restyled from the slide's leading emphasized paragraph.
@@ -331,15 +352,17 @@ const buildSubSlides = ({
       children: [{ type: "text", value: `${subLabel} / ${textOf(h3)}` }],
     };
     applyContextBuilder(run);
+    // Header is kicker-only; body is a child collapse region so the frame's
+    // padding/border never change when expanding or collapsing.
     const frame: Element = {
       type: "element",
       tagName: "section",
       properties: {
         "data-slide": "",
         "data-subslide": "",
-        className: [...SLIDE_CLASSES],
+        className: [...SUBSLIDE_FRAME_CLASSES],
       },
-      children: [subKicker, ...run],
+      children: [subKicker, createCollapseBody(run)],
     };
     groupBody.push(
       createCollapseHost({
@@ -498,7 +521,8 @@ const wrapSlides = (
     }
     applyContextBuilder(sectionBody);
     const collapseId = typeof id === "string" ? id : label;
-    // Frame markup matches pre-collapse slides; the host holds the toggle.
+    // Kicker + h2 stay in the frame; section body is a collapse region so
+    // expand/collapse only toggles visibility below the header chrome.
     const frame: Element = {
       type: "element",
       tagName: "section",
@@ -506,7 +530,7 @@ const wrapSlides = (
         "data-slide": "",
         className: [...SLIDE_CLASSES],
       },
-      children: [kicker, child, ...sectionBody],
+      children: [kicker, child, createCollapseBody(sectionBody)],
     };
     pushNode(
       createCollapseHost({

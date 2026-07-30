@@ -41,9 +41,9 @@ describe("deck slide frames", () => {
     expect(html.match(/<section data-slide/g)).toHaveLength(2);
     expect(html).toContain('data-collapsible="slide" data-collapse-id="one"');
     expect(html).toContain("plan-collapse-host");
-    // Host row owns the toggle; the frame keeps pre-collapse direct children.
+    // Host row owns the toggle; body lives in data-collapse-body under the frame.
     expect(html).toMatch(
-      /data-collapse-row[^>]*>.*data-collapse-toggle[^>]*>.*<section data-slide[^>]*><p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one">One<\/h2>\n<p>Alpha\.<\/p>/s,
+      /data-collapse-row[^>]*>.*data-collapse-toggle[^>]*>.*<section data-slide[^>]*><p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one">One<\/h2><div data-collapse-body[^>]*>\n?<p>Alpha\.<\/p>/s,
     );
     expect(html).not.toContain("data-collapse-chrome");
   });
@@ -159,7 +159,7 @@ What lands where.
       'data-collapsible="subslide" data-collapse-id="pipeline"',
     );
     expect(html).toMatch(
-      /<h3 id="pipeline" data-slide-kicker[^>]*>1\.2\.1 \/ Pipeline<\/h3>\n<p>How it travels\.<\/p>/,
+      /<h3 id="pipeline" data-slide-kicker[^>]*>1\.2\.1 \/ Pipeline<\/h3><div data-collapse-body[^>]*>\n?<p>How it travels\.<\/p>/,
     );
     expect(html).toContain(">1.2.2 / Planned changes</h3>");
   });
@@ -197,7 +197,7 @@ describe("deck context builders", () => {
       "## One\n\n### Two\n\n*The sub-slide's context.*\n\nBody.\n",
     );
     expect(html).toMatch(
-      /<h3 id="two" data-slide-kicker[^>]*>1\.1 \/ Two<\/h3>\n<p data-slide-context[^>]*>The sub-slide's context\.<\/p>/,
+      /<h3 id="two" data-slide-kicker[^>]*>1\.1 \/ Two<\/h3><div data-collapse-body[^>]*>\n?<p data-slide-context[^>]*>The sub-slide's context\.<\/p>/,
     );
   });
 

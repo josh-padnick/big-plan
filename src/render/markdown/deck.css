@@ -1,9 +1,8 @@
 /*
 Deck styles for markdown-generated markup the slide transform wraps: the h2
 inside a slide frame cannot carry utility classes, so its in-slide identity
-lives here. The slide frame and kicker themselves carry utilities assigned by
-the transform. Collapse controls sit in a flex row with the header chrome so
-they stay locked to the card instead of floating in the gutter.
+lives here. Collapse chrome is geometry-stable: expand/collapse only toggles
+body visibility - never header margins, padding, border, or toggle insets.
 */
 
 @layer components {
@@ -20,8 +19,7 @@ they stay locked to the card instead of floating in the gutter.
   }
 
   /* The parent header block of a section split into sub-slides: kicker and
-     h2 stand as one unit above the numbered frames, with any intro prose
-     spaced below the heading. */
+     h2 stand as one unit above the numbered frames. */
   article .plan-subpart > h2 {
     margin: 0;
     border-bottom: none;
@@ -32,35 +30,40 @@ they stay locked to the card instead of floating in the gutter.
     margin-top: 0.8rem;
     margin-bottom: 0;
   }
-  article .plan-slide-group > [data-collapse-body] > :first-child {
-    margin-top: 0.8rem;
-  }
 
-  /* Spacing that used to live on chrome (mt-12 / part mt) sits on the row so
-     the toggle and header move together. Slide-group lead-in is expanded-only
-     so collapsed chips under a Part share one uniform inter-item gap. */
-  article .plan-slide-group:not([data-collapsed]) > .plan-collapse-row {
-    margin-top: 3rem;
-  }
+  /*
+     Geometry-stable host spacing (identical expanded and collapsed).
+     Peer slides under a Part share one host margin - no expand-only lead-in.
+  */
   article .plan-part-group > .plan-collapse-row {
     margin-top: 3.8rem;
-    /* Spacing after the band lives on the row so flex center uses the pill
-       height only - not a trailing margin that pulls the midline down. */
     margin-bottom: 1.3rem;
+  }
+  article [data-collapse-body] > [data-collapsible="slide"] {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+  }
+  /* Expanded reading air for slide-groups: on the body only (hidden when
+     collapsed), never on the header row. */
+  article .plan-slide-group > [data-collapse-body] {
+    margin-top: 0.75rem;
   }
 
   /*
-     Host + row: toggle and header share one flex line so the chevron stays
-     glued to the chrome. Negative margin pulls the row into the left gutter
-     without indenting the reading column.
+     Sub-slide hierarchy: always indented under the parent slide so collapsed
+     x.y.z chips do not read as peer slides (2.2). Same both states.
   */
+  article [data-collapsible="subslide"] {
+    margin-left: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+
   article .plan-collapse-host {
     min-width: 0;
   }
   article .plan-collapse-row {
     display: flex;
-    /* Default: top of tall expanded slides. Parts and collapsed chips override
-       to center so the chevron shares the header/chip midline. */
+    /* flex-start keeps the toggle top fixed when only body height changes. */
     align-items: flex-start;
     gap: 0.25rem;
     margin-left: -1.65rem;
@@ -71,65 +74,36 @@ they stay locked to the card instead of floating in the gutter.
     flex: 1 1 auto;
     min-width: 0;
   }
-
-  /*
-     Center only Part pills and collapsed sub-slide / simple-slide chips.
-     Slide-groups (2.1 User journeys) keep pre-012265c flex-start + fixed
-     0.65rem toggle inset so expand/collapse icon feel is unchanged.
-  */
-  article .plan-part-group > .plan-collapse-row,
-  article
-    [data-collapsible="subslide"][data-collapsed]
-    > .plan-collapse-row,
-  article
-    [data-collapsible="slide"][data-collapsed]:not(.plan-slide-group)
-    > .plan-collapse-row {
+  /* Part band height is constant both states - center the chevron on the pill. */
+  article .plan-part-group > .plan-collapse-row {
     align-items: center;
   }
 
   /*
-     Toggle insets: simple expanded slides near kicker; slide-groups always
-     0.65rem (expanded and collapsed); part/sub-chip/simple-collapsed use 0
-     so flex center owns the midline.
+     Toggle insets are CONSTANT per host kind (no expanded/collapsed swaps).
+     flex-start + fixed margin-top => top delta 0 when body shows/hides.
   */
   article .plan-collapse-toggle {
     flex: 0 0 1.35rem;
     width: 1.35rem;
     height: 1.35rem;
     margin-top: 1.15rem;
-  }
-  article .plan-slide-group > .plan-collapse-row > .plan-collapse-toggle {
-    margin-top: 0.65rem;
-  }
-  article .plan-part-group > .plan-collapse-row > .plan-collapse-toggle,
-  article
-    [data-collapsible="subslide"][data-collapsed]
-    > .plan-collapse-row
-    > .plan-collapse-toggle,
-  article
-    [data-collapsible="slide"][data-collapsed]:not(.plan-slide-group)
-    > .plan-collapse-row
-    > .plan-collapse-toggle {
-    margin-top: 0;
-  }
-  article
-    [data-collapsible="subslide"]:not([data-collapsed])
-    > .plan-collapse-row
-    > .plan-collapse-toggle {
-    margin-top: 1.15rem;
-  }
-
-  /*
-     Mid-tone affordance: always faintly visible so the column is scannable,
-     stronger on host hover/focus without becoming a stark spike.
-  */
-  article .plan-collapse-toggle {
     color: color-mix(in oklab, var(--muted-c) 68%, transparent);
     opacity: 0.4;
     pointer-events: auto;
     transition:
       opacity 0.12s ease,
       color 0.12s ease;
+  }
+  article .plan-slide-group > .plan-collapse-row > .plan-collapse-toggle {
+    margin-top: 0.15rem;
+  }
+  article .plan-part-group > .plan-collapse-row > .plan-collapse-toggle {
+    margin-top: 0;
+  }
+  article [data-collapsible="subslide"] > .plan-collapse-row > .plan-collapse-toggle {
+    /* Align with comfortable py-3 sub-slide header pad (~0.75rem). */
+    margin-top: 0.75rem;
   }
   article .plan-collapse-host:hover > .plan-collapse-row > .plan-collapse-toggle,
   article
@@ -149,7 +123,7 @@ they stay locked to the card instead of floating in the gutter.
     color: var(--muted-c);
   }
 
-  /* Quiet chevron; no margin shift between expanded/collapsed - only rotate. */
+  /* Quiet chevron - transform only. */
   article .plan-collapse-toggle::before {
     content: "";
     display: block;
@@ -165,138 +139,27 @@ they stay locked to the card instead of floating in the gutter.
     transform: rotate(-45deg);
   }
 
-  /* Collapsed: hide bodies. */
-  article [data-collapsible][data-collapsed] > [data-collapse-body] {
-    display: none;
+  /* Sub-slide frame: comfortable pad always; kicker + body stack in-flow. */
+  article .plan-subslide-frame > [data-slide-kicker] {
+    margin: 0;
   }
-  article
-    [data-collapsible][data-collapsed]
-    .plan-slide
-    > :not([data-slide-kicker]):not(h2):not(h3[data-slide-kicker]) {
+  article .plan-subslide-frame > [data-collapse-body] {
+    margin-top: 0.75rem;
+  }
+
+  /* Only body visibility changes - never header chrome. */
+  article [data-collapsible][data-collapsed] > [data-collapse-body],
+  article [data-collapsible][data-collapsed] [data-collapse-body] {
     display: none;
   }
 }
 
-/*
-   Collapsed chrome is unlayered on purpose so slide utilities (py-5, mb-6)
-   cannot produce uneven heights between simple slides and slide-groups.
-*/
-
-article [data-collapsible][data-collapsed] > [data-collapse-body] {
+/* Unlayered: body hide must win over utilities; scroll margins for anchors. */
+article [data-collapsible][data-collapsed] > [data-collapse-body],
+article [data-collapsible][data-collapsed] [data-collapse-body] {
   display: none;
 }
 
-/*
-   Slide-level collapsed headers: one shared formula for .plan-slide and
-   .plan-subpart. Keep title/kicker metrics equal to expanded headers
-   (1.6rem h2, kicker rhythm) so expand/collapse does not reflow the frame;
-   only the body disappears. Shared padding/border makes every chip under a
-   Part the same height.
-*/
-article
-  [data-collapsible="slide"][data-collapsed]
-  > .plan-collapse-row
-  > .plan-slide,
-article
-  [data-collapsible="slide"][data-collapsed]
-  > .plan-collapse-row
-  > .plan-subpart {
-  box-sizing: border-box;
-  /* Gap after chips is on the row, not the flex item, so center uses chip box. */
-  margin: 0;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.65rem;
-  background: transparent;
-  /* Identical padding for every collapsed slide-level unit. */
-  padding: 0.65rem 1.15rem;
-}
-
-/*
-   Uniform collapsed list under a Part: every slide-level row (simple or
-   group) uses the same top/bottom gap - no leftover 3rem group lead-in.
-*/
-article [data-collapsible="slide"][data-collapsed] > .plan-collapse-row {
-  margin-top: 0;
-  margin-bottom: 0.45rem;
-}
-
-article
-  [data-collapsible="slide"][data-collapsed]
-  > .plan-collapse-row
-  [data-slide-kicker]:not(h3) {
-  margin: 0 0 0.3rem;
-  line-height: 1.2;
-}
-
-article [data-collapsible="slide"][data-collapsed] > .plan-collapse-row h2 {
-  margin: 0;
-  border: 0;
-  padding: 0;
-  font-size: 1.6rem;
-  font-weight: 600;
-  line-height: 1.25;
-}
-
-/*
-   Sub-slide chips: one tight row. Expanded keeps top-aligned toggle (margin);
-   collapsed zeros that margin and uses equal pad so chevron + kicker text
-   share one midline (measure mid-Y of button vs h3, not a tall empty box).
-*/
-article [data-collapsible="subslide"][data-collapsed] > .plan-collapse-row {
-  align-items: center;
-  margin-bottom: 0.28rem;
-}
-article
-  [data-collapsible="subslide"][data-collapsed]
-  > .plan-collapse-row
-  > .plan-collapse-toggle {
-  margin-top: 0;
-  /* Match single-line kicker height so flex center equals text center. */
-  height: 1.15rem;
-  flex-basis: 1.15rem;
-  width: 1.15rem;
-}
-article
-  [data-collapsible="subslide"][data-collapsed]
-  > .plan-collapse-row
-  > .plan-slide {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  margin: 0;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.4rem;
-  background: transparent;
-  /* Symmetric pad around the kicker line only - override expanded py-5. */
-  padding: 0.4rem 0.75rem;
-  min-height: 0;
-  line-height: 1;
-}
-
-article
-  [data-collapsible="subslide"][data-collapsed]
-  > .plan-collapse-row
-  > .plan-slide
-  > h3[data-slide-kicker] {
-  margin: 0;
-  padding: 0;
-  line-height: 1.2;
-  font-size: 0.6875rem;
-  /* Kill kicker utility mb that top-biases the label inside the chip. */
-  margin-bottom: 0;
-  margin-top: 0;
-}
-
-/* Part band: keep surface chrome; tighten only the trailing gap. */
-article [data-collapsible="part"][data-collapsed] > .plan-collapse-row [data-part] {
-  margin-bottom: 0.5rem;
-}
-
-/* A slide's h2 sits below the kicker and the frame's top padding, and a
-   sub-slide's kicker heading sits below the frame's top padding, so their
-   jump offsets budget for the frame above them as well as the sticky
-   chrome. Unlayered on purpose: the page-level :target rule is unlayered
-   and would otherwise always win. */
 article .plan-slide > h2,
 article .plan-subpart > h2,
 article .plan-slide > h3[data-slide-kicker] {
