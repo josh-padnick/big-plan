@@ -7,6 +7,7 @@ A hand-drawn sketch of a product screen, drawn from a fixed vocabulary so a revi
 - Every screen needs `id` and `name`. Add a second `Screen` and a `Button` with `navigateTo` to turn a sketch into a walkable prototype, and keep prototypes short: two or three screens along one path.
 - All copy is written as attributes: `<Text text="..." />`, `<Metric label="..." value="..." />`, `<Button label="..." />`. A wireframe holds no prose, and the explanation belongs in the paragraphs around it.
 - Pick the `viewport` the design is really for. The artboard reflows to the reader's width instead of shrinking the text, so the preset sets the shape rather than the final size.
+- Say what kind of product this is with `chrome`. A web product uses `chrome="browser"` and a `url`, which tells a reviewer the route before they read a label; a phone screen uses `chrome="phone"`. An unframed screen floats on the page and reads as a tablet app whatever is inside it, so frame every screen of a real product and keep the frame the same across the prototype.
 
 The vocabulary, by what it is for:
 
@@ -20,7 +21,13 @@ The vocabulary, by what it is for:
 
 ```mdx
 <Wireframe id="eddys-wallet" title="Eddy's wallet" initialScreen="home">
-  <Screen id="home" name="Child wallet home" viewport="tablet-landscape">
+  <Screen
+    id="home"
+    name="Child wallet home"
+    viewport="tablet-landscape"
+    chrome="browser"
+    url="app.example.dev/wallet"
+  >
     <AppShell>
       <Sidebar brand="Eddy's Wallet" mode="Child mode">
         <Nav label="Main">

@@ -80,6 +80,21 @@ export const WIREFRAME_DIRECTIONS: ReadonlyArray<WireframeDirection> = [
   "down",
 ];
 
+/**
+ * The frame drawn around a screen.
+ *
+ * A wireframe of a web product that floats on the page reads as a tablet app
+ * no matter what is inside it. The frame is what tells a reviewer which kind
+ * of product they are looking at, before they read a single label.
+ */
+export type WireframeChrome = "none" | "browser" | "phone";
+
+export const WIREFRAME_CHROMES: ReadonlyArray<WireframeChrome> = [
+  "none",
+  "browser",
+  "phone",
+];
+
 export type WireframeTextRole = "body" | "helper" | "muted";
 
 export const WIREFRAME_TEXT_ROLES: ReadonlyArray<WireframeTextRole> = [
@@ -307,6 +322,10 @@ export type WireframeScreen = {
   readonly id: string;
   readonly name: string;
   readonly viewport: WireframeViewport;
+  readonly chrome: WireframeChrome;
+  // The address shown in the browser frame. It says which route of the
+  // product this screen is, which a reviewer otherwise has to infer.
+  readonly url?: string;
   readonly children: ReadonlyArray<WireframeNode>;
 };
 

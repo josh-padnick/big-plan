@@ -6,16 +6,20 @@ A builder for declarative agent workflows, sketched end to end with `Wireframe` 
 
 A workflow is a graph: nodes are agent steps, edges carry control and data, and a gate stops the run until a human approves.
 
-The prototype below walks eleven screens along the path an author actually takes - find the workflow, open the canvas, configure a step, watch a run, and fix it.
+The prototype below walks the path an author actually takes - find the workflow, open the canvas, configure a step, watch a run, and fix it.
+
+It is a desktop web product: a durable left nav, a wide content column, and the browser's own address bar showing which route each screen is. One screen at the end is deliberately mobile, because a failed run is the thing people open on a phone.
 
 Click through it. Every arrow in the sketch is a screen you can reach.
 
 <Wireframe
   id="workflow-builder"
-  title="Workflow builder, eleven screens"
+  title="Workflow builder, ten desktop screens and one mobile"
   initialScreen="home"
 >
-  <Screen id="home" name="Home" viewport="desktop">
+  <Screen id="home" name="Home" viewport="desktop"
+    chrome="browser"
+    url="app.fabrica.dev/acme-robotics">
     <AppShell>
       <Sidebar brand="Fabrica" mode="Acme Robotics">
         <Nav label="Main">
@@ -73,7 +77,9 @@ Click through it. Every arrow in the sketch is a screen you can reach.
     </AppShell>
   </Screen>
 
-  <Screen id="library" name="Workflow library" viewport="desktop">
+  <Screen id="library" name="Workflow library" viewport="desktop"
+    chrome="browser"
+    url="app.fabrica.dev/acme-robotics/workflows">
     <AppShell>
       <Sidebar brand="Fabrica" mode="Acme Robotics">
         <Nav label="Main">
@@ -129,7 +135,9 @@ Click through it. Every arrow in the sketch is a screen you can reach.
     </AppShell>
   </Screen>
 
-  <Screen id="canvas" name="Canvas builder" viewport="desktop">
+  <Screen id="canvas" name="Canvas builder" viewport="desktop"
+    chrome="browser"
+    url="app.fabrica.dev/acme-robotics/workflows/nightly-digest/edit">
     <AppShell>
       <Sidebar brand="Nightly digest" mode="Draft · v7">
         <Nav label="Step palette">
@@ -187,7 +195,9 @@ Click through it. Every arrow in the sketch is a screen you can reach.
     </AppShell>
   </Screen>
 
-  <Screen id="step-config" name="Step configuration" viewport="desktop">
+  <Screen id="step-config" name="Step configuration" viewport="desktop"
+    chrome="browser"
+    url="app.fabrica.dev/acme-robotics/workflows/nightly-digest/steps/2">
     <AppShell>
       <Sidebar brand="Nightly digest" mode="Draft · v7">
         <Nav label="Steps">
@@ -252,7 +262,9 @@ Click through it. Every arrow in the sketch is a screen you can reach.
     </AppShell>
   </Screen>
 
-  <Screen id="runs" name="Run history" viewport="desktop">
+  <Screen id="runs" name="Run history" viewport="desktop"
+    chrome="browser"
+    url="app.fabrica.dev/acme-robotics/runs">
     <AppShell>
       <Sidebar brand="Fabrica" mode="Acme Robotics">
         <Nav label="Main">
@@ -307,7 +319,9 @@ Click through it. Every arrow in the sketch is a screen you can reach.
     </AppShell>
   </Screen>
 
-  <Screen id="run-detail" name="Run detail" viewport="desktop">
+  <Screen id="run-detail" name="Run detail" viewport="desktop"
+    chrome="browser"
+    url="app.fabrica.dev/acme-robotics/runs/1042">
     <AppShell>
       <Sidebar brand="Fabrica" mode="Acme Robotics">
         <Nav label="Main">
@@ -365,7 +379,9 @@ Click through it. Every arrow in the sketch is a screen you can reach.
     </AppShell>
   </Screen>
 
-  <Screen id="create-basics" name="Create workflow" viewport="desktop">
+  <Screen id="create-basics" name="Create workflow" viewport="desktop"
+    chrome="browser"
+    url="app.fabrica.dev/acme-robotics/workflows/new">
     <AppShell>
       <Sidebar brand="Fabrica" mode="Acme Robotics">
         <Nav label="Main">
@@ -408,7 +424,9 @@ Click through it. Every arrow in the sketch is a screen you can reach.
     </AppShell>
   </Screen>
 
-  <Screen id="create-trigger" name="Create workflow, trigger" viewport="desktop">
+  <Screen id="create-trigger" name="Create workflow, trigger" viewport="desktop"
+    chrome="browser"
+    url="app.fabrica.dev/acme-robotics/workflows/new/trigger">
     <AppShell>
       <Sidebar brand="Fabrica" mode="Acme Robotics">
         <Nav label="Main">
@@ -455,7 +473,9 @@ Click through it. Every arrow in the sketch is a screen you can reach.
     </AppShell>
   </Screen>
 
-  <Screen id="settings" name="Settings" viewport="desktop">
+  <Screen id="settings" name="Settings" viewport="desktop"
+    chrome="browser"
+    url="app.fabrica.dev/acme-robotics/settings">
     <AppShell>
       <Sidebar brand="Fabrica" mode="Acme Robotics">
         <Nav label="Main">
@@ -501,7 +521,9 @@ Click through it. Every arrow in the sketch is a screen you can reach.
     </AppShell>
   </Screen>
 
-  <Screen id="empty" name="Empty library" viewport="desktop">
+  <Screen id="empty" name="Empty library" viewport="desktop"
+    chrome="browser"
+    url="app.fabrica.dev/nova-labs/workflows">
     <AppShell>
       <Sidebar brand="Fabrica" mode="Nova Labs">
         <Nav label="Main">
@@ -536,7 +558,12 @@ Click through it. Every arrow in the sketch is a screen you can reach.
     </AppShell>
   </Screen>
 
-  <Screen id="error" name="Run failed, phone" viewport="mobile-portrait">
+  <Screen
+    id="error"
+    name="Mobile only: run failed"
+    viewport="mobile-portrait"
+    chrome="phone"
+  >
     <TopBar title="Run #1040" />
     <Stack gap="md">
       <Panel eyebrow="Release notes" title="Run failed">
