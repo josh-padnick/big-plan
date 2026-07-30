@@ -18,11 +18,53 @@ export const VIEWER_SCRIPT = `<script>
     targets.set(heading, (targets.get(heading) || []).concat(link));
   }
   const headings = Array.from(targets.keys());
-  if (headings.length === 0) return;
+  if (headings.length === 0) {
+    window.__bigPlanRefreshScrollSpy = () => {};
+    return;
+  }
+  const isReadableHeading = (heading) => {
+    if (!(heading instanceof Element)) return false;
+    if (typeof heading.checkVisibility === "function") {
+      try {
+        if (
+          !heading.checkVisibility({
+            checkOpacity: false,
+            checkVisibilityCSS: true,
+          })
+        )
+          return false;
+      } catch (_) {}
+    }
+    const rect = heading.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return false;
+    let node = heading;
+    while (node instanceof Element) {
+      if (node.hasAttribute("data-collapsed")) {
+        const body = node.querySelector(":scope > [data-collapse-body]");
+        if (body !== null && body.contains(heading)) return false;
+        if (
+          node.matches("section[data-slide]") &&
+          !heading.matches(
+            "[data-slide-kicker], h2, h3[data-slide-kicker]",
+          ) &&
+          node.contains(heading) &&
+          heading !== node
+        ) {
+          const directChrome =
+            heading.matches("h2, h3[data-slide-kicker], [data-slide-kicker]") &&
+            heading.parentElement === node;
+          if (!directChrome) return false;
+        }
+      }
+      node = node.parentElement;
+    }
+    return true;
+  };
   const apply = () => {
     const readingLine = window.innerHeight * 0.25;
     let current = null;
     for (const heading of headings) {
+      if (!isReadableHeading(heading)) continue;
       if (heading.getBoundingClientRect().top <= readingLine) current = heading;
     }
     for (const [heading, sectionLinks] of targets) {
@@ -36,6 +78,7 @@ export const VIEWER_SCRIPT = `<script>
       else link.removeAttribute("aria-current");
     }
   };
+  window.__bigPlanRefreshScrollSpy = apply;
   let scheduled = false;
   const schedule = () => {
     if (scheduled) return;
@@ -121,14 +164,8 @@ export const VIEWER_SCRIPT = `<script>
     document.title ||
     location.pathname;
   const storageKey = (id) => "big-plan:collapse:" + docKey + ":" + id;
-  const toggleFor = (block) => {
-    const chrome = block.querySelector(
-      ":scope > [data-collapse-chrome], :scope > [data-part]",
-    );
-    return chrome
-      ? chrome.querySelector("[data-collapse-toggle]")
-      : block.querySelector(":scope > [data-collapse-toggle]");
-  };
+  const toggleFor = (block) =>
+    block.querySelector(":scope > [data-collapse-toggle]");
   const setCollapsed = (block, collapsed) => {
     if (collapsed) block.setAttribute("data-collapsed", "");
     else block.removeAttribute("data-collapsed");
@@ -142,10 +179,14 @@ export const VIEWER_SCRIPT = `<script>
       );
     }
     const id = block.getAttribute("data-collapse-id");
-    if (id === null || id === "") return;
-    try {
-      localStorage.setItem(storageKey(id), collapsed ? "1" : "0");
-    } catch (_) {}
+    if (id !== null && id !== "") {
+      try {
+        localStorage.setItem(storageKey(id), collapsed ? "1" : "0");
+      } catch (_) {}
+    }
+    if (typeof window.__bigPlanRefreshScrollSpy === "function") {
+      window.__bigPlanRefreshScrollSpy();
+    }
   };
   for (const block of blocks) {
     const id = block.getAttribute("data-collapse-id");

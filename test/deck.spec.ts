@@ -75,7 +75,7 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
       '[data-collapsible="slide"][data-collapse-id="status-quo"]',
     );
     await expect(statusSlide).not.toHaveAttribute("data-collapsed", "");
-    await expect(statusSlide.locator("[data-collapse-body]")).toBeVisible();
+    await expect(statusSlide.getByText("Inline retries")).toBeVisible();
     await expect(
       page.getByRole("heading", { level: 2, name: "Status quo" }),
     ).toBeVisible();
@@ -85,10 +85,11 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     const statusSlide = page.locator(
       '[data-collapsible="slide"][data-collapse-id="status-quo"]',
     );
-    const toggle = statusSlide.locator("[data-collapse-toggle]");
-    await toggle.click();
+    const toggle = statusSlide.locator(":scope > [data-collapse-toggle]");
+    await statusSlide.hover();
+    await toggle.click({ force: true });
     await expect(statusSlide).toHaveAttribute("data-collapsed", "");
-    await expect(statusSlide.locator("[data-collapse-body]")).toBeHidden();
+    await expect(statusSlide.getByText("Inline retries")).toBeHidden();
     await expect(
       page.getByRole("heading", { level: 2, name: "Status quo" }),
     ).toBeVisible();
@@ -99,23 +100,27 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     const worker = page.locator(
       '[data-collapsible="subslide"][data-collapse-id="the-worker"]',
     );
-    await worker.locator("[data-collapse-toggle]").click();
+    await worker.hover();
+    await worker.locator(":scope > [data-collapse-toggle]").click({ force: true });
     await expect(worker).toHaveAttribute("data-collapsed", "");
-    await expect(worker.locator("[data-collapse-body]")).toBeHidden();
+    await expect(
+      worker.getByText("Claims due schedules"),
+    ).toBeHidden();
     await expect(
       page.locator(
-        '[data-collapsible="subslide"][data-collapse-id="the-audit-trail"] [data-collapse-body]',
+        '[data-collapsible="subslide"][data-collapse-id="the-audit-trail"]',
       ),
-    ).toBeVisible();
+    ).toContainText("Every state change");
   });
 
   await test.step("collapsing a part tucks away every slide in the act", async () => {
     const proposal = page.locator(
       '[data-collapsible="part"][data-collapse-id="part-the-proposal"]',
     );
+    await proposal.hover();
     await proposal
-      .locator(":scope > [data-part] [data-collapse-toggle]")
-      .click();
+      .locator(":scope > [data-collapse-toggle]")
+      .click({ force: true });
     await expect(proposal).toHaveAttribute("data-collapsed", "");
     await expect(
       proposal.locator(":scope > [data-collapse-body]"),
@@ -137,7 +142,7 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     await expect(heading).toBeInViewport();
     await expect(
       page.locator(
-        '[data-collapsible="slide"][data-collapse-id="the-retry-queue"] > [data-collapse-body]',
+        '[data-collapsible="slide"][data-collapse-id="the-retry-queue"]',
       ),
     ).toBeVisible();
   });

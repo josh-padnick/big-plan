@@ -41,9 +41,11 @@ describe("deck slide frames", () => {
     expect(html.match(/<section data-slide/g)).toHaveLength(2);
     expect(html).toContain('data-collapsible="slide" data-collapse-id="one"');
     expect(html).toMatch(
-      /data-collapse-chrome[^>]*>.*data-collapse-toggle[^>]*>.*<p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one">One<\/h2>/s,
+      /data-collapse-toggle[^>]*>.*<p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one">One<\/h2>\n<p>Alpha\.<\/p>/s,
     );
-    expect(html).toMatch(/data-collapse-body[^>]*>\n?<p>Alpha\.<\/p>/);
+    // Expanded structure keeps kicker and title as direct slide children so
+    // the reading column is not indented by collapse chrome.
+    expect(html).not.toContain("data-collapse-chrome");
   });
 
   it("should give sections plain sequential kickers when no Part exists", () => {
@@ -145,11 +147,9 @@ What lands where.
       /data-collapsible="slide" data-collapse-id="implementation"/,
     );
     expect(html).toMatch(
-      /data-subpart[^>]*>.*data-slide-kicker[^>]*>1\.2 \/ Implementation<\/p><h2 id="implementation">Implementation<\/h2>/s,
+      /data-subpart[^>]*><p data-slide-kicker[^>]*>1\.2 \/ Implementation<\/p><h2 id="implementation">Implementation<\/h2>/,
     );
-    expect(html).toMatch(
-      /data-collapse-body[^>]*>\n?<p>An intro line\.<\/p>/,
-    );
+    expect(html).toMatch(/data-collapse-body[^>]*>\n?<p>An intro line\.<\/p>/);
   });
 
   it("should frame each h3 run as its own numbered sub-slide", () => {
@@ -159,9 +159,8 @@ What lands where.
       'data-collapsible="subslide" data-collapse-id="pipeline"',
     );
     expect(html).toMatch(
-      /<h3 id="pipeline" data-slide-kicker[^>]*>1\.2\.1 \/ Pipeline<\/h3>/,
+      /<h3 id="pipeline" data-slide-kicker[^>]*>1\.2\.1 \/ Pipeline<\/h3>\n<p>How it travels\.<\/p>/,
     );
-    expect(html).toMatch(/data-collapse-body[^>]*>\n?<p>How it travels\.<\/p>/);
     expect(html).toContain(">1.2.2 / Planned changes</h3>");
   });
 
@@ -198,11 +197,25 @@ describe("deck context builders", () => {
       "## One\n\n### Two\n\n*The sub-slide's context.*\n\nBody.\n",
     );
     expect(html).toMatch(
-      /<h3 id="two" data-slide-kicker[^>]*>1\.1 \/ Two<\/h3>/,
+      /<h3 id="two" data-slide-kicker[^>]*>1\.1 \/ Two<\/h3>\n<p data-slide-context[^>]*>The sub-slide's context\.<\/p>/,
     );
-    expect(html).toMatch(
-      /data-collapse-body[^>]*>\n?<p data-slide-context[^>]*>The sub-slide's context\.<\/p>/,
+  });
+
+  it("should keep footnotes outside a Part collapse body", () => {
+    const { html } = compile(
+      '<Part title="Context" />\n\n## One\n\ntext[^1]\n\n[^1]: the note\n',
     );
+    const partBody = html.indexOf('data-collapsible="part"');
+    const footnotes = html.indexOf('class="footnotes"');
+    const partBodyClose = html.lastIndexOf("</div>");
+    expect(partBody).toBeGreaterThan(-1);
+    expect(footnotes).toBeGreaterThan(partBody);
+    // Footnotes follow the closed part group rather than sitting inside it.
+    expect(html.indexOf('class="footnotes"')).toBeGreaterThan(
+      html.indexOf("data-collapse-body"),
+    );
+    expect(html.slice(0, footnotes)).toContain("</div>");
+    expect(partBodyClose).toBeGreaterThan(-1);
   });
 
   it("should leave an ordinary leading paragraph alone", () => {

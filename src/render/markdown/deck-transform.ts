@@ -7,8 +7,8 @@
 // outline-aware components, and computes the document outline - parts and
 // sections numbered in document order - that those components' views consume
 // once the placeholders are presented. It knows no component's markup.
-// Collapse chrome (toggle + header) and body wrappers let the viewer script
-// tuck away parts, slides, and sub-slides without removing content from HTML.
+// Collapse toggles sit outside frames; expanded markup matches the pre-
+// collapse deck so the reading column is never indented by chrome.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 import type {
@@ -46,12 +46,19 @@ const textOf = (node: Element): string => {
 };
 
 // The GFM footnotes block is an appendix, not an authored section, so it
-// never joins the last slide.
+// never joins the last slide or a Part collapse group.
 const isFootnotesSection = (node: RootContent): boolean =>
   isElement(node) &&
   node.tagName === "section" &&
   Array.isArray(node.properties.className) &&
   node.properties.className.includes("footnotes");
+
+// Document-level outline placeholders that are not Parts (for example the
+// TableOfContents) must stay outside Part collapse bodies.
+const isNonPartOutlinePlaceholder = (node: RootContent): boolean =>
+  isElement(node) &&
+  node.properties[OUTLINE_PLACEHOLDER_ATTRIBUTE] !== undefined &&
+  node.properties[OUTLINE_PART_TITLE_ATTRIBUTE] === undefined;
 
 // Tailwind utilities remain private styling implementation; the data
 // attributes are the stable behavior-bearing interfaces used by tests.
@@ -83,12 +90,7 @@ const SUBPART_CLASSES = ["plan-subpart", "mt-12", "mb-4"] as const;
 
 // A sub-slide's kicker is its heading: the h3 keeps its anchor and outline
 // role while rendering as the numbered small-caps line.
-const SUBSLIDE_KICKER_CLASSES = [
-  "mt-0",
-  "min-w-0",
-  "flex-1",
-  ...KICKER_CLASSES,
-] as const;
+const SUBSLIDE_KICKER_CLASSES = ["mt-0", ...KICKER_CLASSES] as const;
 
 // The context builder: one muted line telling the reader what they are
 // looking at, restyled from the slide's leading emphasized paragraph.
@@ -100,14 +102,19 @@ const CONTEXT_CLASSES = [
   "text-muted",
 ] as const;
 
-// Collapse chrome sits beside the kicker or part band; the button itself is
-// styled in deck.css so a CSS chevron can rotate with aria-expanded.
+// Collapse hosts are relative so the toggle can sit just outside the frame
+// without participating in the reading-column flex flow.
+const COLLAPSIBLE_HOST_CLASSES = ["plan-collapsible", "relative"] as const;
+
+// Toggle classes stay minimal; positioning and hover reveal live in deck.css.
 const TOGGLE_CLASSES = [
   "plan-collapse-toggle",
-  "mt-0.5",
+  "absolute",
+  "top-[1.15rem]",
+  "right-full",
+  "mr-1.5",
   "inline-flex",
   "size-6",
-  "shrink-0",
   "cursor-pointer",
   "items-center",
   "justify-center",
@@ -123,14 +130,8 @@ const TOGGLE_CLASSES = [
   "focus-visible:outline-accent",
 ] as const;
 
-const CHROME_CLASSES = [
-  "plan-collapse-chrome",
-  "flex",
-  "items-start",
-  "gap-2",
-] as const;
-
-const CHROME_HEADING_CLASSES = ["min-w-0", "flex-1"] as const;
+const PART_GROUP_CLASSES = ["plan-part-group", "relative"] as const;
+const SLIDE_GROUP_CLASSES = ["plan-slide-group", "relative"] as const;
 
 /** The outline holder the transform fills in document order. */
 export type MutableDocumentOutline = {
@@ -208,30 +209,6 @@ const createCollapseToggle = (): Element => ({
   children: [],
 });
 
-// Groups the toggle with the visible header so a collapsed block still shows
-// its kicker and title while the body is tucked away.
-const createCollapseChrome = (
-  headingChildren: ReadonlyArray<ElementContent>,
-): Element => ({
-  type: "element",
-  tagName: "div",
-  properties: {
-    "data-collapse-chrome": "",
-    className: [...CHROME_CLASSES],
-  },
-  children: [
-    createCollapseToggle(),
-    {
-      type: "element",
-      tagName: "div",
-      properties: {
-        className: [...CHROME_HEADING_CLASSES],
-      },
-      children: [...headingChildren],
-    },
-  ],
-});
-
 const createCollapseBody = (
   children: ReadonlyArray<ElementContent>,
 ): Element => ({
@@ -245,7 +222,8 @@ const createCollapseBody = (
 
 // Splits a section body that contains h3 headings into one collapsible slide
 // group: the parent header stays visible when collapsed, and each h3 run is
-// its own nested collapsible sub-slide.
+// its own nested collapsible sub-slide. Expanded layout keeps the original
+// subpart + sub-slide structure without a flex title row.
 const buildSubSlides = ({
   heading,
   body,
@@ -263,25 +241,14 @@ const buildSubSlides = ({
   const intro = body.slice(0, firstH3);
   const collapseId =
     typeof heading.properties.id === "string" ? heading.properties.id : label;
-  const chrome: Element = {
+  const parent: Element = {
     type: "element",
     tagName: "div",
     properties: {
       "data-subpart": "",
-      "data-collapse-chrome": "",
-      className: [...SUBPART_CLASSES, ...CHROME_CLASSES],
+      className: [...SUBPART_CLASSES],
     },
-    children: [
-      createCollapseToggle(),
-      {
-        type: "element",
-        tagName: "div",
-        properties: {
-          className: [...CHROME_HEADING_CLASSES],
-        },
-        children: [kicker, heading],
-      },
-    ],
+    children: [kicker, heading],
   };
   const groupBody: Array<ElementContent> = [...intro];
   let index = firstH3;
@@ -330,20 +297,9 @@ const buildSubSlides = ({
         "data-subslide": "",
         "data-collapsible": "subslide",
         "data-collapse-id": subId,
-        className: [...SLIDE_CLASSES],
+        className: [...SLIDE_CLASSES, ...COLLAPSIBLE_HOST_CLASSES],
       },
-      children: [
-        {
-          type: "element",
-          tagName: "div",
-          properties: {
-            "data-collapse-chrome": "",
-            className: [...CHROME_CLASSES],
-          },
-          children: [createCollapseToggle(), subKicker],
-        },
-        createCollapseBody(run),
-      ],
+      children: [createCollapseToggle(), subKicker, ...run],
     });
     index = end;
   }
@@ -353,9 +309,9 @@ const buildSubSlides = ({
     properties: {
       "data-collapsible": "slide",
       "data-collapse-id": collapseId,
-      className: ["plan-slide-group"],
+      className: [...SLIDE_GROUP_CLASSES],
     },
-    children: [chrome, createCollapseBody(groupBody)],
+    children: [createCollapseToggle(), parent, createCollapseBody(groupBody)],
   };
 };
 
@@ -379,13 +335,20 @@ const wrapSlides = (
     if (openPartGroup === undefined) {
       return;
     }
-    const [partChrome] = openPartGroup.children;
-    if (partChrome === undefined) {
+    const partChrome = openPartGroup.children[0];
+    const toggle = openPartGroup.children[1];
+    if (partChrome === undefined || toggle === undefined) {
       openPartGroup = undefined;
       openPartBody = [];
       return;
     }
-    openPartGroup.children = [partChrome, createCollapseBody(openPartBody)];
+    // Children order: part band, outside toggle, collapse body. The toggle is
+    // absolutely positioned, so document order does not change reading flow.
+    openPartGroup.children = [
+      partChrome,
+      toggle,
+      createCollapseBody(openPartBody),
+    ];
     rewritten.push(openPartGroup);
     openPartGroup = undefined;
     openPartBody = [];
@@ -399,10 +362,22 @@ const wrapSlides = (
     rewritten.push(node as RootContent);
   };
 
+  // Global document boundaries leave the open act so collapsing a Part never
+  // hides footnotes or overview placeholders that belong to the whole plan.
+  const pushDocumentBoundary = (node: RootContent): void => {
+    flushPartGroup();
+    rewritten.push(node);
+  };
+
   let index = 0;
   while (index < tree.children.length) {
     const child = tree.children[index];
     if (child === undefined) {
+      index += 1;
+      continue;
+    }
+    if (isFootnotesSection(child) || isNonPartOutlinePlaceholder(child)) {
+      pushDocumentBoundary(child);
       index += 1;
       continue;
     }
@@ -420,9 +395,11 @@ const wrapSlides = (
         properties: {
           "data-collapsible": "part",
           "data-collapse-id": partId,
-          className: ["plan-part-group"],
+          className: [...PART_GROUP_CLASSES],
         },
-        children: [child],
+        // Placeholder first so outline completion replaces it in place; the
+        // deck-owned toggle is a sibling so Part stays free of viewer chrome.
+        children: [child, createCollapseToggle()],
       };
       openPartBody = [];
       index += 1;
@@ -489,6 +466,7 @@ const wrapSlides = (
     }
     applyContextBuilder(sectionBody);
     const collapseId = typeof id === "string" ? id : label;
+    // Expanded children match the pre-collapse slide: toggle is out-of-flow.
     const slide: Element = {
       type: "element",
       tagName: "section",
@@ -496,12 +474,9 @@ const wrapSlides = (
         "data-slide": "",
         "data-collapsible": "slide",
         "data-collapse-id": collapseId,
-        className: [...SLIDE_CLASSES],
+        className: [...SLIDE_CLASSES, ...COLLAPSIBLE_HOST_CLASSES],
       },
-      children: [
-        createCollapseChrome([kicker, child]),
-        createCollapseBody(sectionBody),
-      ],
+      children: [createCollapseToggle(), kicker, child, ...sectionBody],
     };
     pushNode(slide);
     index = end;
