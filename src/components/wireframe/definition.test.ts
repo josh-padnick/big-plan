@@ -586,6 +586,196 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain("app.example.dev/workflows");
   });
 
+  it("should compile a flush desktop shell beside tablet and phone form factors", () => {
+    const { compiled, diagnostics } = compile({
+      attributes: { id: "form-factors", initialScreen: "desk-home" },
+      scopedChildren: [
+        screen({
+          id: "desk-home",
+          name: "Desktop inbox",
+          attributes: {
+            viewport: "desktop",
+            chrome: "browser",
+            url: "app.harbor.team/inbox",
+          },
+          children: [
+            element({
+              name: "AppShell",
+              children: [
+                element({
+                  name: "Sidebar",
+                  attributes: { brand: "Harbor" },
+                  children: [
+                    element({
+                      name: "Nav",
+                      children: [
+                        element({
+                          name: "NavItem",
+                          attributes: { label: "Inbox", active: true },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                element({
+                  name: "AppContent",
+                  children: [
+                    element({
+                      name: "PageHeader",
+                      attributes: { title: "Inbox" },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+        screen({
+          id: "tablet-home",
+          name: "Tablet inbox",
+          attributes: {
+            viewport: "tablet-landscape",
+            chrome: "browser",
+            url: "app.harbor.team/inbox",
+          },
+          children: [
+            element({
+              name: "AppShell",
+              children: [
+                element({
+                  name: "Sidebar",
+                  attributes: { brand: "Harbor" },
+                  children: [
+                    element({
+                      name: "Nav",
+                      children: [
+                        element({
+                          name: "NavItem",
+                          attributes: { label: "Inbox", active: true },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                element({
+                  name: "AppContent",
+                  children: [
+                    element({
+                      name: "PageHeader",
+                      attributes: { title: "Inbox" },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+        screen({
+          id: "phone-home",
+          name: "Phone inbox",
+          attributes: {
+            viewport: "mobile-portrait",
+            chrome: "phone",
+          },
+          children: [
+            element({
+              name: "TopBar",
+              attributes: { title: "Harbor" },
+            }),
+            element({
+              name: "Panel",
+              attributes: { title: "Open" },
+              children: [
+                element({
+                  name: "List",
+                  children: [
+                    element({
+                      name: "ListItem",
+                      attributes: { label: "Billing refund", value: "2h" },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+            element({
+              name: "BottomBar",
+              children: [
+                element({
+                  name: "Button",
+                  attributes: { label: "Inbox", emphasis: "primary" },
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Settings", navigateTo: "desk-home" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(compiled.model).toMatchObject({
+      screens: [
+        {
+          id: "desk-home",
+          viewport: "desktop",
+          chrome: "browser",
+          url: "app.harbor.team/inbox",
+        },
+        {
+          id: "tablet-home",
+          viewport: "tablet-landscape",
+          chrome: "browser",
+        },
+        {
+          id: "phone-home",
+          viewport: "mobile-portrait",
+          chrome: "phone",
+        },
+      ],
+    });
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-wireframe-viewport":"desktop"');
+    expect(rendered).toContain('"data-wireframe-viewport":"tablet-landscape"');
+    expect(rendered).toContain('"data-wireframe-viewport":"mobile-portrait"');
+    expect(rendered).toContain('"data-wireframe-chrome":"browser"');
+    expect(rendered).toContain('"data-wireframe-chrome":"phone"');
+    expect(rendered).toContain("wireframe-app-shell");
+    expect(rendered).toContain("wireframe-sidebar");
+    expect(rendered).toContain("wireframe-bottom-bar");
+    expect(rendered).toContain("Primary destinations");
+  });
+
+  it("should draw a phone bottom bar as a navigation strip", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          attributes: { viewport: "mobile-portrait", chrome: "phone" },
+          children: [
+            element({
+              name: "BottomBar",
+              children: [
+                element({
+                  name: "Button",
+                  attributes: { label: "Home", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(compiled.model.screens[0]?.children[0]).toMatchObject({
+      element: "BottomBar",
+    });
+    const rendered = html(render(compiled));
+    expect(rendered).toContain("wireframe-bottom-bar");
+    expect(rendered).toContain("Home");
+  });
+
   it("should report an address on a screen that has no address bar to draw it in", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [
