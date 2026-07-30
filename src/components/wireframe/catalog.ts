@@ -16,8 +16,11 @@ import {
   WIREFRAME_EMPHASES,
   WIREFRAME_HEADING_LEVELS,
   WIREFRAME_JUSTIFICATIONS,
+  WIREFRAME_DIRECTIONS,
+  WIREFRAME_FIELD_KINDS,
   WIREFRAME_MEDIA_SHAPES,
   WIREFRAME_SPACES,
+  WIREFRAME_STEP_STATES,
   WIREFRAME_TEXT_ROLES,
   type WireframeElementName,
   type WireframeNode,
@@ -148,6 +151,52 @@ const LIST_ITEM_SCHEMA = {
   label: { kind: "string", required: true, nonEmpty: true },
   meta: { kind: "string", nonEmpty: true },
   value: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+// A labelled control. The label is required on every one of them: a wireframe
+// that draws an unlabelled box has not decided what the field is for, and the
+// rendered control would reach a screen reader as nothing at all.
+const TEXT_FIELD_SCHEMA = {
+  label: { kind: "string", required: true, nonEmpty: true },
+  kind: { kind: "enum", values: WIREFRAME_FIELD_KINDS },
+  placeholder: { kind: "string", nonEmpty: true },
+  value: { kind: "string", nonEmpty: true },
+  hint: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const TEXT_AREA_SCHEMA = {
+  label: { kind: "string", required: true, nonEmpty: true },
+  placeholder: { kind: "string", nonEmpty: true },
+  value: { kind: "string", nonEmpty: true },
+  hint: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const SELECT_SCHEMA = {
+  label: { kind: "string", required: true, nonEmpty: true },
+  value: { kind: "string", required: true, nonEmpty: true },
+  hint: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const CHECKBOX_SCHEMA = {
+  label: { kind: "string", required: true, nonEmpty: true },
+  checked: { kind: "booleanShorthand" },
+  hint: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const SWITCH_SCHEMA = {
+  label: { kind: "string", required: true, nonEmpty: true },
+  on: { kind: "booleanShorthand" },
+  hint: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+const STEP_SCHEMA = {
+  label: { kind: "string", required: true, nonEmpty: true },
+  state: { kind: "enum", values: WIREFRAME_STEP_STATES },
+} satisfies ComponentAttributeSchema;
+
+const CONNECTOR_SCHEMA = {
+  direction: { kind: "enum", values: WIREFRAME_DIRECTIONS },
+  label: { kind: "string", nonEmpty: true },
 } satisfies ComponentAttributeSchema;
 
 // Keyed exhaustively by the node union, so adding a node variant without
@@ -345,8 +394,10 @@ const CATALOG = {
   TopBar: {
     category: "layout",
     acceptsChildren: true,
-    allowedParents: ["AppShell"],
-    summary: "A strip across the top of the shell for the title and actions.",
+    // A phone screen has a top bar without having a shell around it.
+    allowedParents: ["AppShell", "Screen"],
+    summary:
+      "A strip across the top of a shell or a screen for the title and actions.",
     example: '<TopBar title="Dashboard">...</TopBar>',
     compile: ({ attributes, children, position, diagnostics }) => {
       const validated = validateComponentAttributes({
@@ -569,6 +620,177 @@ const CATALOG = {
         label: validated.label ?? "",
         ...(validated.meta === undefined ? {} : { meta: validated.meta }),
         ...(validated.value === undefined ? {} : { value: validated.value }),
+      };
+    },
+  },
+  TextField: {
+    category: "content",
+    acceptsChildren: false,
+    summary: "A single-line input, drawn as the real control with its label.",
+    example: '<TextField label="Workflow name" placeholder="Nightly digest" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "TextField",
+        attributes,
+        position,
+        diagnostics,
+        schema: TEXT_FIELD_SCHEMA,
+      });
+      return {
+        element: "TextField",
+        label: validated.label ?? "",
+        kind: validated.kind ?? "text",
+        ...(validated.placeholder === undefined
+          ? {}
+          : { placeholder: validated.placeholder }),
+        ...(validated.value === undefined ? {} : { value: validated.value }),
+        ...(validated.hint === undefined ? {} : { hint: validated.hint }),
+      };
+    },
+  },
+  TextArea: {
+    category: "content",
+    acceptsChildren: false,
+    summary: "A multi-line input for prose the user will write.",
+    example: '<TextArea label="Prompt" placeholder="Summarize the run..." />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "TextArea",
+        attributes,
+        position,
+        diagnostics,
+        schema: TEXT_AREA_SCHEMA,
+      });
+      return {
+        element: "TextArea",
+        label: validated.label ?? "",
+        ...(validated.placeholder === undefined
+          ? {}
+          : { placeholder: validated.placeholder }),
+        ...(validated.value === undefined ? {} : { value: validated.value }),
+        ...(validated.hint === undefined ? {} : { hint: validated.hint }),
+      };
+    },
+  },
+  Select: {
+    category: "content",
+    acceptsChildren: false,
+    summary: "A choice, showing the option currently selected.",
+    example: '<Select label="Run as" value="Service account" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Select",
+        attributes,
+        position,
+        diagnostics,
+        schema: SELECT_SCHEMA,
+      });
+      return {
+        element: "Select",
+        label: validated.label ?? "",
+        value: validated.value ?? "",
+        ...(validated.hint === undefined ? {} : { hint: validated.hint }),
+      };
+    },
+  },
+  Checkbox: {
+    category: "content",
+    acceptsChildren: false,
+    summary: "One boolean the user ticks.",
+    example: '<Checkbox label="Retry failed steps" checked />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Checkbox",
+        attributes,
+        position,
+        diagnostics,
+        schema: CHECKBOX_SCHEMA,
+      });
+      return {
+        element: "Checkbox",
+        label: validated.label ?? "",
+        checked: validated.checked === true,
+        ...(validated.hint === undefined ? {} : { hint: validated.hint }),
+      };
+    },
+  },
+  Switch: {
+    category: "content",
+    acceptsChildren: false,
+    summary: "A setting that takes effect as soon as it is flipped.",
+    example: '<Switch label="Pause this workflow" on />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Switch",
+        attributes,
+        position,
+        diagnostics,
+        schema: SWITCH_SCHEMA,
+      });
+      return {
+        element: "Switch",
+        label: validated.label ?? "",
+        on: validated.on === true,
+        ...(validated.hint === undefined ? {} : { hint: validated.hint }),
+      };
+    },
+  },
+  Stepper: {
+    category: "layout",
+    acceptsChildren: true,
+    allowedChildren: ["Step"],
+    summary: "Where the user is in a multi-step flow.",
+    example: '<Stepper><Step label="Basics" state="done" /></Stepper>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      validateComponentAttributes({
+        component: "Stepper",
+        attributes,
+        position,
+        diagnostics,
+        schema: EMPTY_SCHEMA,
+      });
+      return { element: "Stepper", children };
+    },
+  },
+  Step: {
+    category: "content",
+    acceptsChildren: false,
+    allowedParents: ["Stepper"],
+    summary: "One step: done behind them, current, or still ahead.",
+    example: '<Step label="Trigger" state="current" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Step",
+        attributes,
+        position,
+        diagnostics,
+        schema: STEP_SCHEMA,
+      });
+      return {
+        element: "Step",
+        label: validated.label ?? "",
+        state: validated.state ?? "todo",
+      };
+    },
+  },
+  Connector: {
+    category: "content",
+    acceptsChildren: false,
+    summary:
+      "The arrow between two steps of a flow, optionally labeled with the condition.",
+    example: '<Connector direction="right" label="on success" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Connector",
+        attributes,
+        position,
+        diagnostics,
+        schema: CONNECTOR_SCHEMA,
+      });
+      return {
+        element: "Connector",
+        direction: validated.direction ?? "right",
+        ...(validated.label === undefined ? {} : { label: validated.label }),
       };
     },
   },

@@ -51,6 +51,35 @@ export const WIREFRAME_MEDIA_SHAPES: ReadonlyArray<WireframeMediaShape> = [
   "tall",
 ];
 
+// The native input types a wireframe may draw. Each renders as the real
+// control, so a reviewer meets the same affordance the product will have.
+export type WireframeFieldKind =
+  "text" | "search" | "email" | "password" | "number" | "date";
+
+export const WIREFRAME_FIELD_KINDS: ReadonlyArray<WireframeFieldKind> = [
+  "text",
+  "search",
+  "email",
+  "password",
+  "number",
+  "date",
+];
+
+export type WireframeStepState = "done" | "current" | "todo";
+
+export const WIREFRAME_STEP_STATES: ReadonlyArray<WireframeStepState> = [
+  "done",
+  "current",
+  "todo",
+];
+
+export type WireframeDirection = "right" | "down";
+
+export const WIREFRAME_DIRECTIONS: ReadonlyArray<WireframeDirection> = [
+  "right",
+  "down",
+];
+
 export type WireframeTextRole = "body" | "helper" | "muted";
 
 export const WIREFRAME_TEXT_ROLES: ReadonlyArray<WireframeTextRole> = [
@@ -220,6 +249,55 @@ export type WireframeNode =
       readonly label: string;
       readonly meta?: string;
       readonly value?: string;
+    }
+  | {
+      readonly element: "TextField";
+      readonly label: string;
+      readonly kind: WireframeFieldKind;
+      readonly placeholder?: string;
+      readonly value?: string;
+      readonly hint?: string;
+    }
+  | {
+      readonly element: "TextArea";
+      readonly label: string;
+      readonly placeholder?: string;
+      readonly value?: string;
+      readonly hint?: string;
+    }
+  | {
+      readonly element: "Select";
+      readonly label: string;
+      // What the control currently reads as. A wireframe shows the chosen
+      // option, not the whole menu.
+      readonly value: string;
+      readonly hint?: string;
+    }
+  | {
+      readonly element: "Checkbox";
+      readonly label: string;
+      readonly checked: boolean;
+      readonly hint?: string;
+    }
+  | {
+      readonly element: "Switch";
+      readonly label: string;
+      readonly on: boolean;
+      readonly hint?: string;
+    }
+  | {
+      readonly element: "Stepper";
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
+      readonly element: "Step";
+      readonly label: string;
+      readonly state: WireframeStepState;
+    }
+  | {
+      readonly element: "Connector";
+      readonly direction: WireframeDirection;
+      readonly label?: string;
     };
 
 export type WireframeElementName = WireframeNode["element"];
