@@ -13,6 +13,7 @@ import {
 import { meaningfulChildren } from "../_authoring/authored-body.js";
 import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
 import { wireframeElementFor } from "./catalog.js";
+import type { WireframeElementDefinition } from "./catalog.js";
 import {
   WIREFRAME_VIEWPORTS,
   type CompiledWireframe,
@@ -59,13 +60,60 @@ const rejectProse = ({
   });
 };
 
+// A list read as prose: "Sidebar, TopBar, or AppContent".
+const nameList = (names: ReadonlyArray<string>): string =>
+  names.length < 2
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+
+// Reports an element standing somewhere it cannot mean anything: a NavItem
+// outside its Nav, or a Panel dropped between an app shell's own regions.
+const rejectMisplacement = ({
+  child,
+  definition,
+  parent,
+  diagnostics,
+}: {
+  readonly child: ScopedChild;
+  readonly definition: WireframeElementDefinition;
+  readonly parent: {
+    readonly name: string;
+    readonly allowed?: ReadonlyArray<string>;
+  };
+  readonly diagnostics: DiagnosticCollector;
+}): boolean => {
+  if (parent.allowed !== undefined && !parent.allowed.includes(child.name)) {
+    diagnostics.add({
+      message: `${parent.name} holds only ${nameList(parent.allowed)}; ${child.name} belongs inside one of those`,
+      position: child.position,
+    });
+    return true;
+  }
+  if (
+    definition.allowedParents !== undefined &&
+    !definition.allowedParents.includes(parent.name)
+  ) {
+    diagnostics.add({
+      message: `${child.name} belongs inside ${nameList(definition.allowedParents)}, not ${parent.name}`,
+      position: child.position,
+    });
+    return true;
+  }
+  return false;
+};
+
 /** Compiles the elements inside one container in authored order. */
 const compileNodes = ({
   children,
+  parent,
   diagnostics,
   references,
 }: {
   readonly children: ReadonlyArray<ScopedChild>;
+  readonly parent: {
+    readonly name: string;
+    readonly allowed?: ReadonlyArray<string>;
+  };
   readonly diagnostics: DiagnosticCollector;
   readonly references: Array<ScreenReference>;
 }): ReadonlyArray<WireframeNode> =>
@@ -86,6 +134,9 @@ const compileNodes = ({
       });
       return [];
     }
+    if (rejectMisplacement({ child, definition, parent, diagnostics })) {
+      return [];
+    }
     rejectProse({ child, diagnostics });
     const nested = child.scopedChildren ?? [];
     if (!definition.acceptsChildren && nested.length > 0) {
@@ -97,12 +148,25 @@ const compileNodes = ({
     const node = definition.compile({
       attributes: child.attributes,
       children: definition.acceptsChildren
-        ? compileNodes({ children: nested, diagnostics, references })
+        ? compileNodes({
+            children: nested,
+            parent: {
+              name: child.name,
+              ...(definition.allowedChildren === undefined
+                ? {}
+                : { allowed: definition.allowedChildren }),
+            },
+            diagnostics,
+            references,
+          })
         : [],
       position: child.position,
       diagnostics,
     });
-    if (node.element === "Button" && node.navigateTo !== undefined) {
+    if (
+      (node.element === "Button" || node.element === "NavItem") &&
+      node.navigateTo !== undefined
+    ) {
       references.push({ to: node.navigateTo, position: child.position });
     }
     return [node];
@@ -128,6 +192,7 @@ const compileScreen = ({
   rejectProse({ child, diagnostics });
   const children = compileNodes({
     children: child.scopedChildren ?? [],
+    parent: { name: SCREEN_ELEMENT },
     diagnostics,
     references,
   });

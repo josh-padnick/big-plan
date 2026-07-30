@@ -113,6 +113,149 @@ const WireframeElement = ({
           {node.label}
         </button>
       );
+    case "AppShell":
+      return (
+        <div className="wireframe-app-shell">
+          <WireframeElements nodes={node.children} />
+        </div>
+      );
+    case "Sidebar":
+      return (
+        <div className="wireframe-sidebar flex flex-col gap-3">
+          {node.brand === undefined ? null : (
+            <p className="wireframe-brand">{node.brand}</p>
+          )}
+          {node.mode === undefined ? null : (
+            <p className="wireframe-eyebrow">{node.mode}</p>
+          )}
+          <WireframeElements nodes={node.children} />
+        </div>
+      );
+    case "AppContent":
+      return (
+        <div className="wireframe-app-content flex flex-col gap-4">
+          <WireframeElements nodes={node.children} />
+        </div>
+      );
+    case "TopBar":
+      return (
+        <div className="wireframe-top-bar flex flex-wrap items-center gap-3">
+          {node.title === undefined ? null : (
+            <p className="wireframe-brand">{node.title}</p>
+          )}
+          <WireframeElements nodes={node.children} />
+        </div>
+      );
+    case "PageHeader":
+      return (
+        <header className="wireframe-page-header flex flex-wrap items-center gap-3">
+          <div className="wireframe-page-header-text flex flex-col gap-1">
+            <h3 className="wireframe-heading">{node.title}</h3>
+            {node.description === undefined ? null : (
+              <p className="wireframe-text" data-wireframe-role="helper">
+                {node.description}
+              </p>
+            )}
+          </div>
+          {node.badge === undefined ? null : (
+            <span className="wireframe-badge">{node.badge}</span>
+          )}
+          <div className="wireframe-page-header-actions flex flex-wrap gap-2">
+            <WireframeElements nodes={node.children} />
+          </div>
+        </header>
+      );
+    case "Nav":
+      return (
+        <nav
+          className="wireframe-nav flex flex-col gap-1"
+          {...(node.label === undefined ? {} : { "aria-label": node.label })}
+        >
+          <WireframeElements nodes={node.children} />
+        </nav>
+      );
+    case "NavItem":
+      return (
+        <button
+          type="button"
+          className="wireframe-nav-item"
+          {...(node.active ? { "aria-current": "page" } : {})}
+          {...(node.navigateTo === undefined
+            ? {}
+            : { "data-wireframe-navigate": node.navigateTo })}
+        >
+          {node.label}
+        </button>
+      );
+    case "Metric":
+      return (
+        <div className="wireframe-metric flex flex-col">
+          <span className="wireframe-metric-label">{node.label}</span>
+          <span className="wireframe-metric-value">{node.value}</span>
+          {node.note === undefined ? null : (
+            <span className="wireframe-metric-note">{node.note}</span>
+          )}
+        </div>
+      );
+    case "Progress":
+      // The bar is decoration; the percentage beside it is the state, so a
+      // reader without the drawing still knows how far along this is.
+      return (
+        <div className="wireframe-progress flex flex-col gap-1">
+          <div className="wireframe-progress-line flex justify-between gap-2">
+            <span>{node.label ?? "Progress"}</span>
+            <span className="wireframe-progress-value">{node.value}%</span>
+          </div>
+          <div className="wireframe-progress-track" aria-hidden="true">
+            <div
+              className="wireframe-progress-fill"
+              data-wireframe-progress={String(Math.round(node.value / 5) * 5)}
+            />
+          </div>
+          {node.detail === undefined ? null : (
+            <span className="wireframe-metric-note">{node.detail}</span>
+          )}
+        </div>
+      );
+    case "Badge":
+      return <span className="wireframe-badge">{node.label}</span>;
+    case "Divider":
+      return node.label === undefined ? (
+        <hr className="wireframe-divider" />
+      ) : (
+        <div className="wireframe-divider-labeled flex items-center gap-2">
+          <hr className="wireframe-divider grow" />
+          <span className="wireframe-eyebrow">{node.label}</span>
+          <hr className="wireframe-divider grow" />
+        </div>
+      );
+    case "ImagePlaceholder":
+      return (
+        <div
+          className="wireframe-image flex items-center justify-center"
+          data-wireframe-shape={node.shape}
+        >
+          <span className="wireframe-image-label">{node.label}</span>
+        </div>
+      );
+    case "List":
+      return (
+        <ul className="wireframe-list flex flex-col">
+          <WireframeElements nodes={node.children} />
+        </ul>
+      );
+    case "ListItem":
+      return (
+        <li className="wireframe-list-item flex flex-wrap items-baseline gap-2">
+          <span className="wireframe-list-label grow">{node.label}</span>
+          {node.meta === undefined ? null : (
+            <span className="wireframe-list-meta">{node.meta}</span>
+          )}
+          {node.value === undefined ? null : (
+            <span className="wireframe-list-value">{node.value}</span>
+          )}
+        </li>
+      );
   }
 };
 

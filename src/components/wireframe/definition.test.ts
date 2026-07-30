@@ -327,6 +327,106 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     ]);
   });
 
+  it("should report an element dropped between the app shell's own regions", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "AppShell",
+              children: [element({ name: "Panel" })],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message:
+          "AppShell holds only Sidebar, TopBar or AppContent; Panel belongs inside one of those",
+      },
+    ]);
+  });
+
+  it("should report a navigation item written outside its navigation", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Panel",
+              children: [
+                element({ name: "NavItem", attributes: { label: "Wallet" } }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message: "NavItem belongs inside Nav, not Panel",
+      },
+    ]);
+  });
+
+  it("should resolve a navigation item's screen the same way a button's is resolved", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Nav",
+              children: [
+                element({
+                  name: "NavItem",
+                  attributes: { label: "Settings", navigateTo: "settings" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message:
+          'navigateTo "settings" names no screen in this wireframe; available screens: home',
+      },
+    ]);
+  });
+
+  it("should draw progress in fixed steps and always write the number beside it", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Progress",
+              attributes: { label: "Goal", value: "61" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-wireframe-progress":"60"');
+    expect(rendered).toContain("61");
+    // No authored value ever reaches a style attribute.
+    expect(rendered).not.toContain('"style"');
+  });
+
   it("should mark only the initial screen current so an inert document shows every screen", () => {
     const { compiled } = compile({ scopedChildren: [HOME, LESSON] });
     const rendered = html(render(compiled));

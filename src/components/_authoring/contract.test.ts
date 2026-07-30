@@ -40,6 +40,46 @@ describe("validateComponentAttributes", () => {
     ]);
   });
 
+  it("should read a bounded number written as an attribute string", () => {
+    const { values, messages } = validate(
+      { value: { kind: "number", min: 0, max: 100 } },
+      { value: "61" },
+    );
+    expect(messages).toEqual([]);
+    expect(values["value"]).toBe(61);
+  });
+
+  it("should report a number outside its declared range rather than clamping it", () => {
+    const { values, messages } = validate(
+      { value: { kind: "number", min: 0, max: 100 } },
+      { value: "140" },
+    );
+    expect(messages).toEqual([
+      'Attribute "value" must be a number between 0 and 100',
+    ]);
+    expect(values["value"]).toBeUndefined();
+  });
+
+  it("should report a fractional value when the number must be whole", () => {
+    const { messages } = validate(
+      { step: { kind: "number", min: 1, max: 9, integer: true } },
+      { step: "2.5" },
+    );
+    expect(messages).toEqual([
+      'Attribute "step" must be a whole number between 1 and 9',
+    ]);
+  });
+
+  it("should report a missing required number with its expected range", () => {
+    const { messages } = validate(
+      { value: { kind: "number", min: 0, max: 100, required: true } },
+      {},
+    );
+    expect(messages).toEqual([
+      'Missing required attribute "value"; expected a number between 0 and 100',
+    ]);
+  });
+
   it("should report an invalid enum value and return undefined for it", () => {
     const { values, messages } = validate(
       { tone: { kind: "enum", values: ["calm", "loud"], required: true } },
