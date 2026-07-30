@@ -15,6 +15,7 @@ big-plan skill [write <path>]
 big-plan validate <input.mdx>
 big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
+big-plan update [--check]
 ```
 
 `guidance` optionally takes one component name.
@@ -22,6 +23,7 @@ big-plan compile <input.mdx> [output.json]
 For the plan-file commands `<input.mdx>` is required.
 `validate` accepts no output argument.
 The output argument is optional for `render` and `compile`.
+`update` is the optional `axi-sdk-js` built-in rather than a Big Plan product command.
 
 The equivalent package runner forms are:
 
@@ -32,6 +34,7 @@ npx big-plan skill write <path/to/SKILL.md>
 npx big-plan validate <input.mdx>
 npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
+npx big-plan update --check
 ```
 
 ## Guidance and the acknowledgment gate
@@ -48,6 +51,12 @@ An acknowledgment is current when it was recorded for the same working directory
 Updating Big Plan to a release with changed guidance therefore re-locks both commands until `guidance` is read again.
 `compile` and `skill` are not gated, so machine tooling and skill install can run without the authoring workflow.
 
+Acknowledgment state lives outside the project: in `.big-plan/` under the user's home directory, falling back to a `big-plan/` directory under the system temporary directory when the home directory rejects writes, as workspace-scoped sandboxes commonly do.
+Setting the `BIG_PLAN_STATE_DIR` environment variable pins state to exactly one directory, which test suites and sandboxed environments use to keep state isolated.
+
+When no state location accepts writes at all, the gate degrades instead of blocking: `guidance` still prints the full guidance and notes that the acknowledgment could not be saved, and `validate` and `render` proceed while their results carry a warning that the acknowledgment could not be verified.
+Filesystem restrictions therefore never lock an agent out of the plan workflow.
+
 ## Skill shell
 
 `skill` prints the thin agent skill document embedded in the package (authored at `assets/skill/SKILL.md` and generated into the CLI).
@@ -63,11 +72,11 @@ After a package upgrade, new guidance is available immediately via `big-plan gui
 Re-run `skill write` only when the thin shell itself changed.
 Prefer `npx big-plan@latest` for always-current one-off runs; see [Use the skill](/for-agents/use-the-skill/) for the full update-propagation story.
 
-Acknowledgment state lives outside the project: in `.big-plan/` under the user's home directory, falling back to a `big-plan/` directory under the system temporary directory when the home directory rejects writes, as workspace-scoped sandboxes commonly do.
-Setting the `BIG_PLAN_STATE_DIR` environment variable pins state to exactly one directory, which test suites and sandboxed environments use to keep state isolated.
+## Optional global update
 
-When no state location accepts writes at all, the gate degrades instead of blocking: `guidance` still prints the full guidance and notes that the acknowledgment could not be saved, and `validate` and `render` proceed while their results carry a warning that the acknowledgment could not be verified.
-Filesystem restrictions therefore never lock an agent out of the plan workflow.
+`big-plan update --check` reports the installed and latest published versions without installing anything.
+Running `big-plan update` without `--check` is opt-in mutation: for a recognized global npm or pnpm install, the built-in updater runs the matching global package-manager upgrade.
+Use it only when a global upgrade is wanted; prefer `npx big-plan@latest` for always-current one-off runs.
 
 ## Input and output paths
 
@@ -149,7 +158,7 @@ It writes no output.
 
 ## Errors
 
-If the input argument is missing, any command raises a structured `VALIDATION_ERROR` with the message `Missing input MDX file` and its command-specific usage line.
+If the input argument is missing, any plan-file command raises a structured `VALIDATION_ERROR` with the message `Missing input MDX file` and its command-specific usage line.
 
 ```text
 Usage: big-plan validate <input.mdx>
@@ -157,7 +166,7 @@ Usage: big-plan render <input.mdx> [output.html]
 Usage: big-plan compile <input.mdx> [output.json]
 ```
 
-Any dash-prefixed token is rejected as an unknown option.
+The three plan-file commands and `skill` reject any dash-prefixed command argument as an unknown option.
 `validate` rejects a second positional argument; `render` and `compile` reject a third.
 Both cases raise a structured `VALIDATION_ERROR`, include the command's usage line, and write no output.
 
@@ -181,6 +190,6 @@ Successful validation exits `0`; operational or internal failures use `1`.
 
 ## Top-level help and version
 
-The CLI configures top-level help that lists the product commands and the derived-output defaults.
+The CLI configures top-level help that lists the product commands and the derived-output defaults; `axi-sdk-js` appends the built-in update commands.
 It also reads the package version for version output.
 If that version cannot be read from the package metadata, version reporting is left unconfigured instead of crashing the CLI.

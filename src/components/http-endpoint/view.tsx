@@ -39,7 +39,7 @@ const pathChildren = (path: string): ReadonlyArray<ReactNode> =>
     );
 
 // Renders one parameter as a definition pair so its identity and prose remain
-// semantically connected even in the script-free document. The location badge
+// semantically connected even when scripts are unavailable. The location badge
 // is gone: each parameter now lives under an explicit location section, so a
 // per-row badge would restate the section label.
 const ParamEntry = ({ param }: { readonly param: CompiledHttpParam }) => (

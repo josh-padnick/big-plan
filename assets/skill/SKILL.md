@@ -92,7 +92,7 @@ Relative paths alone are not enough when the human's working directory may diffe
 | This thin skill shell (workflow framing only)                | Upgrade the package, then re-run `big-plan skill write <path>` if a copy was installed |
 
 Prefer `npx big-plan@latest ...` for always-current one-off runs.
-The CLI may also expose a built-in `update` command for global installs; use it only when the human wants a global upgrade.
+The CLI also exposes a built-in `update` command for global installs; use it only when the human wants a global upgrade.
 Never overwrite installed skill files unless the human (or an explicit `skill write`) requested it.
 
 ## Failure modes
