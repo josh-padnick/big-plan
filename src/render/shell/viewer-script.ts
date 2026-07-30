@@ -1,8 +1,9 @@
 // The one script a rendered document ships, carrying the viewer enhancements:
 // a scroll-spy that marks the section being read with aria-current on its TOC
-// links (falling back to the overview links above the first section), and
-// hover popovers that float [data-info-popover] disclosures beside their
-// triggers, positioned to stay inside the viewport. Plan content never
+// links (falling back to the overview links above the first section), hover
+// popovers that float [data-info-popover] disclosures beside their triggers,
+// positioned to stay inside the viewport, and wireframe screen navigation
+// driven entirely by data attributes the renderer emitted. Plan content never
 // contributes script, and every affordance keeps a no-JS fallback.
 export const VIEWER_SCRIPT = `<script>
 (() => {
@@ -111,6 +112,41 @@ export const VIEWER_SCRIPT = `<script>
       },
       { capture: true, passive: true },
     );
+  }
+})();
+(() => {
+  for (const root of document.querySelectorAll("[data-wireframe]")) {
+    const screens = Array.from(
+      root.querySelectorAll("[data-wireframe-screen]"),
+    );
+    if (screens.length === 0) continue;
+    // Marking the root interactive is what narrows the drawing to one screen.
+    // An inert document keeps every screen on the page, so the storyboard
+    // stays readable without this script.
+    root.setAttribute("data-wireframe-interactive", "");
+    const show = (id) => {
+      for (const screen of screens) {
+        screen.toggleAttribute(
+          "data-wireframe-current",
+          screen.getAttribute("data-wireframe-screen") === id,
+        );
+      }
+      for (const tab of root.querySelectorAll("[data-wireframe-switch]")) {
+        if (tab.getAttribute("data-wireframe-navigate") === id)
+          tab.setAttribute("aria-current", "true");
+        else tab.removeAttribute("aria-current");
+      }
+    };
+    root.addEventListener("click", (event) => {
+      const trigger =
+        event.target instanceof Element
+          ? event.target.closest("[data-wireframe-navigate]")
+          : null;
+      if (trigger === null || !root.contains(trigger)) return;
+      const id = trigger.getAttribute("data-wireframe-navigate");
+      if (screens.some((s) => s.getAttribute("data-wireframe-screen") === id))
+        show(id);
+    });
   }
 })();
 </script>`;
