@@ -39,9 +39,11 @@ describe("deck slide frames", () => {
   it("should wrap each h2 section in a slide frame when the document has sections", () => {
     const { html } = compile("## One\n\nAlpha.\n\n## Two\n\nBeta.\n");
     expect(html.match(/<section data-slide/g)).toHaveLength(2);
+    expect(html).toContain('data-collapsible="slide" data-collapse-id="one"');
     expect(html).toMatch(
-      /<section data-slide[^>]*><p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one">One<\/h2>\n<p>Alpha\.<\/p>\n<\/section>/,
+      /data-collapse-chrome[^>]*>.*data-collapse-toggle[^>]*>.*<p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one">One<\/h2>/s,
     );
+    expect(html).toMatch(/data-collapse-body[^>]*>\n?<p>Alpha\.<\/p>/);
   });
 
   it("should give sections plain sequential kickers when no Part exists", () => {
@@ -69,6 +71,18 @@ describe("deck slide frames", () => {
     expect(partIds).toEqual(["part-context", "part-the-proposal"]);
     expect(html).toContain('id="part-context"');
     expect(html).toContain('id="part-the-proposal"');
+  });
+
+  it("should wrap each Part and its following slides in a collapsible group", () => {
+    const { html } = compile(DECK_FIXTURE);
+    expect(html).toMatch(
+      /data-collapsible="part" data-collapse-id="part-context"/,
+    );
+    expect(html).toMatch(
+      /data-collapsible="part" data-collapse-id="part-the-proposal"/,
+    );
+    expect(html).not.toContain("data-collapsed");
+    expect(html).toContain('data-collapse-toggle');
   });
 
   it("should keep the lede and title outside any slide frame", () => {
@@ -128,24 +142,35 @@ What lands where.
   it("should render the section header as a parent block above sub-slide frames", () => {
     const { html } = compile(SUBSLIDE_FIXTURE);
     expect(html).toMatch(
-      /<div data-subpart[^>]*><p data-slide-kicker[^>]*>1\.2 \/ Implementation<\/p><h2 id="implementation">Implementation<\/h2>\n<p>An intro line\.<\/p>\n<\/div>/,
+      /data-collapsible="slide" data-collapse-id="implementation"/,
+    );
+    expect(html).toMatch(
+      /data-subpart[^>]*>.*data-slide-kicker[^>]*>1\.2 \/ Implementation<\/p><h2 id="implementation">Implementation<\/h2>/s,
+    );
+    expect(html).toMatch(
+      /data-collapse-body[^>]*>\n?<p>An intro line\.<\/p>/,
     );
   });
 
   it("should frame each h3 run as its own numbered sub-slide", () => {
     const { html } = compile(SUBSLIDE_FIXTURE);
     expect(html.match(/data-subslide/g)).toHaveLength(2);
-    expect(html).toMatch(
-      /<section data-slide[^>]* data-subslide[^>]*><h3 id="pipeline" data-slide-kicker[^>]*>1\.2\.1 \/ Pipeline<\/h3>\n<p>How it travels\.<\/p>\n<\/section>/,
+    expect(html).toContain(
+      'data-collapsible="subslide" data-collapse-id="pipeline"',
     );
+    expect(html).toMatch(
+      /<h3 id="pipeline" data-slide-kicker[^>]*>1\.2\.1 \/ Pipeline<\/h3>/,
+    );
+    expect(html).toMatch(/data-collapse-body[^>]*>\n?<p>How it travels\.<\/p>/);
     expect(html).toContain(">1.2.2 / Planned changes</h3>");
   });
 
   it("should keep a section without h3 headings a single slide frame", () => {
     const { html } = compile(SUBSLIDE_FIXTURE);
-    expect(html).toMatch(
-      /<section data-slide[^>]*><p data-slide-kicker[^>]*>1\.1 \/ Warm-up<\/p>/,
+    expect(html).toContain(
+      'data-collapsible="slide" data-collapse-id="warm-up"',
     );
+    expect(html).toContain(">1.1 / Warm-up</p>");
   });
 
   it("should keep the section's TableOfContents link and metadata on the h2", () => {
@@ -173,7 +198,10 @@ describe("deck context builders", () => {
       "## One\n\n### Two\n\n*The sub-slide's context.*\n\nBody.\n",
     );
     expect(html).toMatch(
-      /<h3 id="two" data-slide-kicker[^>]*>1\.1 \/ Two<\/h3>\n<p data-slide-context[^>]*>The sub-slide's context\.<\/p>/,
+      /<h3 id="two" data-slide-kicker[^>]*>1\.1 \/ Two<\/h3>/,
+    );
+    expect(html).toMatch(
+      /data-collapse-body[^>]*>\n?<p data-slide-context[^>]*>The sub-slide's context\.<\/p>/,
     );
   });
 

@@ -2,34 +2,63 @@
 Deck styles for markdown-generated markup the slide transform wraps: the h2
 inside a slide frame cannot carry utility classes, so its in-slide identity
 lives here. The slide frame and kicker themselves carry utilities assigned by
-the transform.
+the transform. Collapse controls and collapsed body hiding are also here so
+the reading chrome stays local to the deck.
 */
 
 @layer components {
   /* A slide frame is a calm reading surface: no hover or scroll wash, ever.
      The reader tracks position through the kickers and the TOC scroll-spy. */
-  article .plan-slide > h2 {
+  article .plan-slide [data-collapse-chrome] h2 {
     margin: 0 0 1rem;
     border-bottom: none;
     padding-bottom: 0;
     font-size: 1.6rem;
   }
-  article .plan-slide > :last-child {
+  article .plan-slide > [data-collapse-body] > :last-child {
     margin-bottom: 0;
   }
 
   /* The parent header block of a section split into sub-slides: kicker and
      h2 stand as one unit above the numbered frames, with any intro prose
-     spaced below the heading. */
-  article .plan-subpart > h2 {
+     spaced below the heading when the group is open. */
+  article .plan-subpart h2 {
     margin: 0;
     border-bottom: none;
     padding-bottom: 0;
     font-size: 1.6rem;
   }
-  article .plan-subpart > h2 ~ * {
+  article .plan-slide-group > [data-collapse-body] > :first-child {
     margin-top: 0.8rem;
-    margin-bottom: 0;
+  }
+
+  /* Collapse toggle: CSS chevron points down when expanded, right when
+     collapsed. Default is open; only the viewer script sets aria-expanded. */
+  article .plan-collapse-toggle::before {
+    content: "";
+    display: block;
+    width: 0.35rem;
+    height: 0.35rem;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform 0.15s ease;
+    margin-top: -0.15rem;
+  }
+  article .plan-collapse-toggle[aria-expanded="false"]::before {
+    transform: rotate(-45deg);
+    margin-top: 0;
+  }
+
+  /* Collapsed body stays in the DOM for no-JS readability and TOC targets
+     under expanded ancestors; only the body wrapper is hidden. */
+  article [data-collapsible][data-collapsed] > [data-collapse-body] {
+    display: none;
+  }
+
+  /* Part bands that own a toggle keep the control aligned with the tag. */
+  article [data-part] .plan-collapse-toggle {
+    margin-top: 0.35rem;
   }
 }
 
@@ -38,15 +67,15 @@ the transform.
    jump offsets budget for the frame above them as well as the sticky
    chrome. Unlayered on purpose: the page-level :target rule is unlayered
    and would otherwise always win. */
-article .plan-slide > h2,
-article .plan-subpart > h2,
-article .plan-slide > h3[data-slide-kicker] {
+article .plan-slide [data-collapse-chrome] h2,
+article .plan-subpart h2,
+article .plan-slide h3[data-slide-kicker] {
   scroll-margin-top: 8rem;
 }
 @media (width < 56rem) {
-  article .plan-slide > h2,
-  article .plan-subpart > h2,
-  article .plan-slide > h3[data-slide-kicker] {
+  article .plan-slide [data-collapse-chrome] h2,
+  article .plan-subpart h2,
+  article .plan-slide h3[data-slide-kicker] {
     scroll-margin-top: 10.75rem;
   }
 }

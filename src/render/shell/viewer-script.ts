@@ -1,9 +1,9 @@
 // The one script a rendered document ships, carrying the viewer enhancements:
 // a scroll-spy that marks the section being read with aria-current on its TOC
-// links (falling back to the overview links above the first section), and
-// hover popovers that float [data-info-popover] disclosures beside their
-// triggers, positioned to stay inside the viewport. Plan content never
-// contributes script, and every affordance keeps a no-JS fallback.
+// links (falling back to the overview links above the first section), hover
+// popovers that float [data-info-popover] disclosures beside their triggers,
+// and collapse toggles for deck parts, slides, and sub-slides. Plan content
+// never contributes script, and every affordance keeps a no-JS fallback.
 export const VIEWER_SCRIPT = `<script>
 (() => {
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
@@ -112,5 +112,87 @@ export const VIEWER_SCRIPT = `<script>
       { capture: true, passive: true },
     );
   }
+})();
+(() => {
+  const blocks = Array.from(document.querySelectorAll("[data-collapsible]"));
+  if (blocks.length === 0) return;
+  const docKey =
+    document.documentElement.getAttribute("data-plan-id") ||
+    document.title ||
+    location.pathname;
+  const storageKey = (id) => "big-plan:collapse:" + docKey + ":" + id;
+  const toggleFor = (block) => {
+    const chrome = block.querySelector(
+      ":scope > [data-collapse-chrome], :scope > [data-part]",
+    );
+    return chrome
+      ? chrome.querySelector("[data-collapse-toggle]")
+      : block.querySelector(":scope > [data-collapse-toggle]");
+  };
+  const setCollapsed = (block, collapsed) => {
+    if (collapsed) block.setAttribute("data-collapsed", "");
+    else block.removeAttribute("data-collapsed");
+    const button = toggleFor(block);
+    if (button !== null) {
+      button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      const kind = block.getAttribute("data-collapsible") || "section";
+      button.setAttribute(
+        "aria-label",
+        collapsed ? "Expand " + kind : "Collapse " + kind,
+      );
+    }
+    const id = block.getAttribute("data-collapse-id");
+    if (id === null || id === "") return;
+    try {
+      localStorage.setItem(storageKey(id), collapsed ? "1" : "0");
+    } catch (_) {}
+  };
+  for (const block of blocks) {
+    const id = block.getAttribute("data-collapse-id");
+    if (id !== null && id !== "") {
+      try {
+        if (localStorage.getItem(storageKey(id)) === "1") {
+          setCollapsed(block, true);
+        }
+      } catch (_) {}
+    }
+    const button = toggleFor(block);
+    if (button === null) continue;
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      setCollapsed(block, !block.hasAttribute("data-collapsed"));
+    });
+  }
+  const expandAncestors = (target) => {
+    let node = target;
+    while (node instanceof Element) {
+      if (
+        node.hasAttribute("data-collapsible") &&
+        node.hasAttribute("data-collapsed")
+      ) {
+        setCollapsed(node, false);
+      }
+      node = node.parentElement;
+    }
+  };
+  const expandHash = (hash) => {
+    if (!hash || hash === "#") return;
+    const id = decodeURIComponent(hash.slice(1));
+    if (id === "") return;
+    const target = document.getElementById(id);
+    if (target === null) return;
+    expandAncestors(target);
+  };
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest('a[href^="#"]');
+    if (link === null) return;
+    const href = link.getAttribute("href");
+    if (href === null) return;
+    expandHash(href);
+  });
+  expandHash(location.hash);
+  addEventListener("hashchange", () => {
+    expandHash(location.hash);
+  });
 })();
 </script>`;

@@ -7,6 +7,8 @@
 // outline-aware components, and computes the document outline - parts and
 // sections numbered in document order - that those components' views consume
 // once the placeholders are presented. It knows no component's markup.
+// Collapse chrome (toggle + header) and body wrappers let the viewer script
+// tuck away parts, slides, and sub-slides without removing content from HTML.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 import type {
@@ -81,7 +83,12 @@ const SUBPART_CLASSES = ["plan-subpart", "mt-12", "mb-4"] as const;
 
 // A sub-slide's kicker is its heading: the h3 keeps its anchor and outline
 // role while rendering as the numbered small-caps line.
-const SUBSLIDE_KICKER_CLASSES = ["mt-0", ...KICKER_CLASSES] as const;
+const SUBSLIDE_KICKER_CLASSES = [
+  "mt-0",
+  "min-w-0",
+  "flex-1",
+  ...KICKER_CLASSES,
+] as const;
 
 // The context builder: one muted line telling the reader what they are
 // looking at, restyled from the slide's leading emphasized paragraph.
@@ -92,6 +99,38 @@ const CONTEXT_CLASSES = [
   "text-[0.9375rem]",
   "text-muted",
 ] as const;
+
+// Collapse chrome sits beside the kicker or part band; the button itself is
+// styled in deck.css so a CSS chevron can rotate with aria-expanded.
+const TOGGLE_CLASSES = [
+  "plan-collapse-toggle",
+  "mt-0.5",
+  "inline-flex",
+  "size-6",
+  "shrink-0",
+  "cursor-pointer",
+  "items-center",
+  "justify-center",
+  "rounded-md",
+  "border-0",
+  "bg-transparent",
+  "p-0",
+  "text-muted",
+  "hover:bg-surface",
+  "hover:text-ink",
+  "focus-visible:outline-2",
+  "focus-visible:outline-offset-2",
+  "focus-visible:outline-accent",
+] as const;
+
+const CHROME_CLASSES = [
+  "plan-collapse-chrome",
+  "flex",
+  "items-start",
+  "gap-2",
+] as const;
+
+const CHROME_HEADING_CLASSES = ["min-w-0", "flex-1"] as const;
 
 /** The outline holder the transform fills in document order. */
 export type MutableDocumentOutline = {
@@ -154,10 +193,59 @@ const applyContextBuilder = (body: ReadonlyArray<ElementContent>): void => {
   first.properties.className = [...CONTEXT_CLASSES];
 };
 
-// Splits a section body that contains h3 headings into the parent header
-// block plus one numbered sub-slide frame per h3 run, so a long section
-// reads as its own small deck. The h3 becomes the sub-slide's kicker,
-// keeping its anchor and outline role.
+// Builds the inert collapse control; the viewer script wires behavior and
+// keeps content fully readable when scripts are disabled.
+const createCollapseToggle = (): Element => ({
+  type: "element",
+  tagName: "button",
+  properties: {
+    type: "button",
+    "data-collapse-toggle": "",
+    "aria-expanded": "true",
+    "aria-label": "Collapse",
+    className: [...TOGGLE_CLASSES],
+  },
+  children: [],
+});
+
+// Groups the toggle with the visible header so a collapsed block still shows
+// its kicker and title while the body is tucked away.
+const createCollapseChrome = (
+  headingChildren: ReadonlyArray<ElementContent>,
+): Element => ({
+  type: "element",
+  tagName: "div",
+  properties: {
+    "data-collapse-chrome": "",
+    className: [...CHROME_CLASSES],
+  },
+  children: [
+    createCollapseToggle(),
+    {
+      type: "element",
+      tagName: "div",
+      properties: {
+        className: [...CHROME_HEADING_CLASSES],
+      },
+      children: [...headingChildren],
+    },
+  ],
+});
+
+const createCollapseBody = (
+  children: ReadonlyArray<ElementContent>,
+): Element => ({
+  type: "element",
+  tagName: "div",
+  properties: {
+    "data-collapse-body": "",
+  },
+  children: [...children],
+});
+
+// Splits a section body that contains h3 headings into one collapsible slide
+// group: the parent header stays visible when collapsed, and each h3 run is
+// its own nested collapsible sub-slide.
 const buildSubSlides = ({
   heading,
   body,
@@ -168,20 +256,34 @@ const buildSubSlides = ({
   readonly body: ReadonlyArray<ElementContent>;
   readonly label: string;
   readonly kicker: Element;
-}): ReadonlyArray<ElementContent> => {
+}): Element => {
   const firstH3 = body.findIndex(
     (node) => isElement(node) && node.tagName === "h3",
   );
-  const parent: Element = {
+  const intro = body.slice(0, firstH3);
+  const collapseId =
+    typeof heading.properties.id === "string" ? heading.properties.id : label;
+  const chrome: Element = {
     type: "element",
     tagName: "div",
     properties: {
       "data-subpart": "",
-      className: [...SUBPART_CLASSES],
+      "data-collapse-chrome": "",
+      className: [...SUBPART_CLASSES, ...CHROME_CLASSES],
     },
-    children: [kicker, heading, ...body.slice(0, firstH3)],
+    children: [
+      createCollapseToggle(),
+      {
+        type: "element",
+        tagName: "div",
+        properties: {
+          className: [...CHROME_HEADING_CLASSES],
+        },
+        children: [kicker, heading],
+      },
+    ],
   };
-  const result: Array<ElementContent> = [parent];
+  const groupBody: Array<ElementContent> = [...intro];
   let index = firstH3;
   let subIndex = 0;
   while (index < body.length) {
@@ -205,6 +307,8 @@ const buildSubSlides = ({
     }
     subIndex += 1;
     const subLabel = `${label}.${subIndex}`;
+    const subId =
+      typeof h3.properties.id === "string" ? h3.properties.id : subLabel;
     const subKicker: Element = {
       type: "element",
       tagName: "h3",
@@ -218,25 +322,48 @@ const buildSubSlides = ({
       children: [{ type: "text", value: `${subLabel} / ${textOf(h3)}` }],
     };
     applyContextBuilder(run);
-    result.push({
+    groupBody.push({
       type: "element",
       tagName: "section",
       properties: {
         "data-slide": "",
         "data-subslide": "",
+        "data-collapsible": "subslide",
+        "data-collapse-id": subId,
         className: [...SLIDE_CLASSES],
       },
-      children: [subKicker, ...run],
+      children: [
+        {
+          type: "element",
+          tagName: "div",
+          properties: {
+            "data-collapse-chrome": "",
+            className: [...CHROME_CLASSES],
+          },
+          children: [createCollapseToggle(), subKicker],
+        },
+        createCollapseBody(run),
+      ],
     });
     index = end;
   }
-  return result;
+  return {
+    type: "element",
+    tagName: "div",
+    properties: {
+      "data-collapsible": "slide",
+      "data-collapse-id": collapseId,
+      className: ["plan-slide-group"],
+    },
+    children: [chrome, createCollapseBody(groupBody)],
+  };
 };
 
 // Wraps each top-level h2 plus its following siblings - up to the next h2,
 // outline placeholder (a Part divider or overview), or footnotes appendix -
-// in a slide frame headed by a numbered kicker. Returns the slide sections
-// in document order so the outline can carry them.
+// in a collapsible slide frame headed by a numbered kicker. Groups each Part
+// divider with the slides that follow it so an act can collapse as a unit.
+// Returns the slide sections in document order so the outline can carry them.
 const wrapSlides = (
   tree: Root,
   parts: Map<Element, DocumentOutlinePart>,
@@ -245,6 +372,33 @@ const wrapSlides = (
   const rewritten: Array<RootContent> = [];
   let currentPart: DocumentOutlinePart | undefined;
   let indexInPart = 0;
+  let openPartGroup: Element | undefined;
+  let openPartBody: Array<ElementContent> = [];
+
+  const flushPartGroup = (): void => {
+    if (openPartGroup === undefined) {
+      return;
+    }
+    const [partChrome] = openPartGroup.children;
+    if (partChrome === undefined) {
+      openPartGroup = undefined;
+      openPartBody = [];
+      return;
+    }
+    openPartGroup.children = [partChrome, createCollapseBody(openPartBody)];
+    rewritten.push(openPartGroup);
+    openPartGroup = undefined;
+    openPartBody = [];
+  };
+
+  const pushNode = (node: RootContent | ElementContent): void => {
+    if (openPartGroup !== undefined) {
+      openPartBody.push(node as ElementContent);
+      return;
+    }
+    rewritten.push(node as RootContent);
+  };
+
   let index = 0;
   while (index < tree.children.length) {
     const child = tree.children[index];
@@ -253,14 +407,29 @@ const wrapSlides = (
       continue;
     }
     if (isElement(child) && parts.has(child)) {
+      flushPartGroup();
       currentPart = parts.get(child);
       indexInPart = 0;
-      rewritten.push(child);
+      const partId =
+        typeof child.properties.id === "string"
+          ? child.properties.id
+          : `part-${currentPart?.number ?? indexInPart + 1}`;
+      openPartGroup = {
+        type: "element",
+        tagName: "div",
+        properties: {
+          "data-collapsible": "part",
+          "data-collapse-id": partId,
+          className: ["plan-part-group"],
+        },
+        children: [child],
+      };
+      openPartBody = [];
       index += 1;
       continue;
     }
     if (!isElement(child) || child.tagName !== "h2") {
-      rewritten.push(child);
+      pushNode(child);
       index += 1;
       continue;
     }
@@ -307,8 +476,8 @@ const wrapSlides = (
       (node) => isElement(node) && node.tagName === "h3",
     );
     if (hasSubSlides) {
-      rewritten.push(
-        ...buildSubSlides({
+      pushNode(
+        buildSubSlides({
           heading: child,
           body: sectionBody,
           label,
@@ -319,18 +488,25 @@ const wrapSlides = (
       continue;
     }
     applyContextBuilder(sectionBody);
+    const collapseId = typeof id === "string" ? id : label;
     const slide: Element = {
       type: "element",
       tagName: "section",
       properties: {
         "data-slide": "",
+        "data-collapsible": "slide",
+        "data-collapse-id": collapseId,
         className: [...SLIDE_CLASSES],
       },
-      children: [kicker, ...body],
+      children: [
+        createCollapseChrome([kicker, child]),
+        createCollapseBody(sectionBody),
+      ],
     };
-    rewritten.push(slide);
+    pushNode(slide);
     index = end;
   }
+  flushPartGroup();
   tree.children = rewritten;
   return sections;
 };
