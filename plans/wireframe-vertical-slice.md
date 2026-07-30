@@ -146,8 +146,12 @@ Big Plan's reading column is `74ch`, about 740px.
 A `tablet-landscape` app shell inside it has roughly 490px left for content after the sidebar, so a three-region dashboard reflows to two.
 The reflow is correct responsive behavior and it still reads well, but it is not the layout the author drew.
 
+Measured on the showcase: the drawing gets about **420px** of content width after the sidebar, which is why a three-region dashboard lands as two-plus-one and the canvas is drawn two nodes to a row.
+The screens still read, and the reflow is what a real product does at that width, but it is not the layout the author drew.
+
 The alternative is a full-bleed artboard: a wireframe escapes the column and uses the window's width.
-That is a shell change, not a component change, and Big Plan has no full-bleed mechanism today.
+That is a shell change rather than a component one, and it cannot be faked from inside the component: the reading column is not centered in the viewport (a 15rem contents column sits to its left), so any `50%`-based escape centers on the wrong axis and overflows the page.
+Big Plan has no full-bleed mechanism today, and adding one is a shell decision.
 
 ### The hand: settled, with two follow-on choices
 
@@ -161,5 +165,7 @@ Two consequences are worth a look rather than a decision:
 
 ### Breadth: how much more catalog before this ships?
 
-Form controls (`TextField`, `Select`, `Checkbox`, `Switch`) and data (`Table`, `Timeline`) are the two obvious next sets.
-`Table` needs an authoring shape the current attribute model cannot express - most likely a fenced body, the way `FileTree` already reads a plain-text body - so it is the one that carries design risk.
+Form controls shipped: `TextField`, `TextArea`, `Select`, `Checkbox`, and `Switch`, plus `Stepper`/`Step` for a create flow and `Connector` for a canvas arrow.
+The eleven-screen workflow-builder showcase in `examples/workflow-engine-builder.mdx` exercises the whole vocabulary and is what the width question below is measured against.
+
+`Table` and `Timeline` are what remain, and `Table` is the one carrying design risk: it needs an authoring shape the attribute model cannot express, most likely a fenced body the way `FileTree` already reads a plain-text body.
