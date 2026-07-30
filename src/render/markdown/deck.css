@@ -57,18 +57,21 @@ so the reading column is never indented when expanded.
     top: 1.25rem; /* matches .plan-slide py-5 top padding */
   }
   article .plan-slide-group > .plan-collapse-toggle {
-    top: 3rem; /* matches .plan-subpart mt-12 */
+    top: 3rem; /* matches .plan-subpart mt-12 when expanded */
   }
   article .plan-part-group > .plan-collapse-toggle {
     /* Top of the part band title row (band mt + its own top padding). */
     top: calc(3.8rem + 0.55rem);
   }
 
-  /* Soft, easy-to-miss control; only slightly stronger when actively hovered. */
+  /*
+     Mid-tone affordance: always faintly visible so the column is scannable,
+     stronger on host hover/focus without becoming a stark spike.
+  */
   article .plan-collapse-toggle {
-    color: color-mix(in oklab, var(--muted-c) 42%, transparent);
-    opacity: 0;
-    pointer-events: none;
+    color: color-mix(in oklab, var(--muted-c) 68%, transparent);
+    opacity: 0.4;
+    pointer-events: auto;
     transition:
       opacity 0.12s ease,
       color 0.12s ease;
@@ -76,25 +79,23 @@ so the reading column is never indented when expanded.
   article .plan-collapse-host:hover > .plan-collapse-toggle,
   article .plan-collapse-host:focus-within > .plan-collapse-toggle,
   article .plan-collapse-host[data-collapse-hover] > .plan-collapse-toggle {
-    opacity: 0.62;
-    pointer-events: auto;
-    color: color-mix(in oklab, var(--muted-c) 58%, transparent);
+    opacity: 0.72;
+    color: color-mix(in oklab, var(--muted-c) 82%, transparent);
   }
   article .plan-collapse-toggle:hover,
   article .plan-collapse-toggle:focus-visible {
-    opacity: 0.78;
-    pointer-events: auto;
-    color: color-mix(in oklab, var(--muted-c) 72%, transparent);
+    opacity: 0.88;
+    color: var(--muted-c);
   }
 
-  /* Light chevron - smaller and thinner so it stays quiet. */
+  /* Quiet chevron - mid size between first stark and last soft pass. */
   article .plan-collapse-toggle::before {
     content: "";
     display: block;
-    width: 0.28rem;
-    height: 0.28rem;
-    border-right: 1.15px solid currentColor;
-    border-bottom: 1.15px solid currentColor;
+    width: 0.32rem;
+    height: 0.32rem;
+    border-right: 1.35px solid currentColor;
+    border-bottom: 1.35px solid currentColor;
     transform: rotate(45deg);
     transition: transform 0.15s ease;
     margin-top: -0.12rem;
@@ -104,7 +105,7 @@ so the reading column is never indented when expanded.
     margin-top: 0;
   }
 
-  /* Collapsed: hide bodies; keep header chrome geometry matching expanded. */
+  /* Collapsed: hide bodies. */
   article [data-collapsible][data-collapsed] > [data-collapse-body] {
     display: none;
   }
@@ -116,27 +117,38 @@ so the reading column is never indented when expanded.
   }
 
   /*
-     When a slide frame is collapsed to kicker+title only, drop the empty
-     body stack (extra bottom padding and title bottom margin) so the border
-     hugs the same header geometry as when expanded - no tall empty card.
+     Uniform collapsed header chrome for every slide-like unit - both framed
+     slides and borderless subpart groups - so a stack of collapsed sections
+     forms one consistent column (no mixed box / no-box headers).
   */
-  article [data-collapsible][data-collapsed] > .plan-slide {
-    padding-bottom: 1.25rem;
+  article [data-collapsible][data-collapsed] > .plan-slide,
+  article [data-collapsible][data-collapsed] > .plan-subpart {
+    margin-top: 0;
+    margin-bottom: 0.65rem;
+    border: 1px solid var(--edge-c);
+    border-radius: 0.75rem;
+    background: transparent;
+    padding: 0.85rem 1.25rem;
   }
-  article [data-collapsible][data-collapsed] > .plan-slide > h2 {
-    margin-bottom: 0;
+  article [data-collapsible][data-collapsed] > .plan-slide > h2,
+  article [data-collapsible][data-collapsed] > .plan-subpart > h2 {
+    margin: 0;
   }
   article
     [data-collapsible][data-collapsed]
     > .plan-slide
     > h3[data-slide-kicker] {
-    margin-bottom: 0;
+    margin: 0;
   }
   article
     [data-collapsible][data-collapsed]
     > .plan-slide
-    > [data-slide-kicker]:not(h3) {
-    margin-bottom: 0.45rem;
+    > [data-slide-kicker]:not(h3),
+  article
+    [data-collapsible][data-collapsed]
+    > .plan-subpart
+    > [data-slide-kicker] {
+    margin: 0 0 0.35rem;
   }
   article
     [data-collapsible][data-collapsed]
@@ -144,7 +156,13 @@ so the reading column is never indented when expanded.
     > [data-slide-kicker]:not(h3):last-child {
     margin-bottom: 0;
   }
-  /* Collapsed part: keep the band itself; tighten trailing gap under it. */
+
+  /* Collapsed slide-group: subpart no longer needs its expanded top spacing. */
+  article .plan-slide-group[data-collapsed] > .plan-collapse-toggle {
+    top: 0.85rem;
+  }
+
+  /* Collapsed part: keep the act band; tighten trailing gap under it. */
   article [data-collapsible="part"][data-collapsed] > [data-part] {
     margin-bottom: 0.65rem;
   }
