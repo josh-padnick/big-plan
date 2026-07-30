@@ -22,9 +22,10 @@
     "node": ">=22"
   },
   "scripts": {
-    "gen": "bun run gen:css && bun run gen:assets && bun run gen:guidance",
+    "gen": "bun run gen:fonts && bun run gen:css && bun run gen:assets && bun run gen:guidance",
     "gen:assets": "node scripts/gen-assets.mjs",
     "gen:css": "node scripts/gen-css.mjs",
+    "gen:fonts": "node scripts/gen-fonts.mjs",
     "gen:guidance": "node scripts/gen-guidance.mjs",
     "build": "bun run gen && tsc",
     "test": "bun run gen && vitest run",

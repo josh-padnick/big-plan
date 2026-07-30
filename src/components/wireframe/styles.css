@@ -10,15 +10,19 @@ marks and a plan diff never jitters.
 */
 
 @layer components {
-  /* One wobbly rounded rectangle, drawn twice, reads as a pen stroke. The
-     radii are deliberately lopsided; every element reuses them so the whole
-     drawing looks like one hand. */
+  /* One rounded rectangle, drawn twice, reads as a pen stroke.
+
+     The radii are unequal corner to corner so no edge is machine-true, but
+     only slightly: a box that visibly leans stops reading as a rectangle
+     somebody drew and starts reading as a mistake, and it pulls attention
+     away from the design it is meant to show. Every element reuses the same
+     two sets so the whole drawing looks like one hand. */
   .wireframe {
     --wf-stroke: color-mix(in srgb, var(--color-ink) 55%, transparent);
     --wf-stroke-soft: color-mix(in srgb, var(--color-ink) 22%, transparent);
     --wf-fill: color-mix(in srgb, var(--color-ink) 6%, transparent);
-    --wf-sketch: 255px 15px 225px 15px / 15px 225px 15px 255px;
-    --wf-sketch-alt: 225px 15px 255px 15px / 15px 255px 15px 225px;
+    --wf-sketch: 9px 4px 11px 5px / 5px 11px 4px 9px;
+    --wf-sketch-alt: 11px 5px 9px 4px / 4px 9px 5px 11px;
     margin: 1.75rem 0;
   }
 
@@ -33,10 +37,10 @@ marks and a plan diff never jitters.
     line-height: 1.3;
   }
   .wireframe h3 {
-    font-size: 1.125rem;
+    font-size: 1.3125rem;
   }
   .wireframe h4 {
-    font-size: 1rem;
+    font-size: 1.0625rem;
   }
   .wireframe h5 {
     font-size: 0.9375rem;
@@ -127,6 +131,16 @@ marks and a plan diff never jitters.
      as room the design has left over. */
   .wireframe-artboard {
     display: flex;
+    /* Letterforms carry the sketch; the strokes only frame it. The font stops
+       at the artboard's edge: the caption, the screen switcher, and the
+       viewport note are Big Plan speaking about the drawing, not part of it.
+
+       The bundled face has one weight, and a browser's synthetic bold
+       thickens its strokes until they stop looking hand-drawn - worst
+       exactly where the type is largest. Emphasis therefore comes from size,
+       case, and ink, and never from a weight the hand does not have. */
+    font-family: "Patrick Hand", var(--font-sans);
+    font-synthesis-weight: none;
     /* The drawing responds to the artboard, not to the browser window, so a
        narrow review column collapses a shell exactly like a narrow device. */
     container-type: inline-size;
@@ -190,7 +204,7 @@ marks and a plan diff never jitters.
   .wireframe-panel::after {
     content: "";
     position: absolute;
-    inset: 3px -3px -3px 3px;
+    inset: 2px -2px -2px 2px;
     border: 1px solid var(--wf-stroke-soft);
     border-radius: var(--wf-sketch-alt);
     pointer-events: none;
@@ -294,8 +308,7 @@ marks and a plan diff never jitters.
     border-radius: var(--wf-sketch);
   }
   .wireframe-brand {
-    font-weight: 700;
-    letter-spacing: -0.01em;
+    font-size: 1.0625rem;
   }
 
   .wireframe-page-header {
@@ -340,10 +353,8 @@ marks and a plan diff never jitters.
     color: var(--color-muted);
   }
   .wireframe-metric-value {
-    font-size: 1.75rem;
-    font-weight: 700;
+    font-size: 2rem;
     line-height: 1.15;
-    letter-spacing: -0.02em;
   }
   .wireframe-metric-note {
     font-size: 0.8125rem;

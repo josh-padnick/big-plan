@@ -120,6 +120,15 @@ describe("renderDocument affordances", () => {
     }
     expect(html).not.toMatch(/<script\s+[^>]*src=/);
     expect(html).not.toContain("@import");
+    // The embedded stylesheet fetches too: a bundled typeface reaches the
+    // reader through a data URI in @font-face, never through a URL.
+    const styleValues = [...html.matchAll(/url\(([^)]*)\)/g)].map(
+      (match) => match[1],
+    );
+    expect(styleValues.length).toBeGreaterThan(0);
+    for (const value of styleValues) {
+      expect(value).toMatch(/^data:/);
+    }
   });
 
   it("should inline one stylesheet and only the scroll-spy script when rendering", () => {
