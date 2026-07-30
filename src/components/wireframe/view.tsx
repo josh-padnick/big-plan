@@ -401,12 +401,25 @@ const Screen = ({
           {preset.label} - {preset.width}x{preset.height}
         </span>
       </div>
-      <div
-        className="wireframe-artboard"
-        data-wireframe-viewport={screen.viewport}
-      >
-        <div className="wireframe-canvas flex flex-col gap-4">
-          <WireframeElements nodes={screen.children} />
+      <div className="wireframe-frame" data-wireframe-chrome={screen.chrome}>
+        {screen.chrome === "browser" ? (
+          <div className="wireframe-browser-bar">
+            <span className="wireframe-browser-dots" aria-hidden="true" />
+            <span className="wireframe-browser-address">
+              {screen.url ?? " "}
+            </span>
+          </div>
+        ) : null}
+        {screen.chrome === "phone" ? (
+          <span className="wireframe-phone-notch" aria-hidden="true" />
+        ) : null}
+        <div
+          className="wireframe-artboard"
+          data-wireframe-viewport={screen.viewport}
+        >
+          <div className="wireframe-canvas flex flex-col gap-4">
+            <WireframeElements nodes={screen.children} />
+          </div>
         </div>
       </div>
     </section>

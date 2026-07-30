@@ -129,6 +129,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
           id: "home",
           name: "Wallet home",
           viewport: "desktop",
+          chrome: "none",
           children: [
             {
               element: "Panel",
@@ -149,6 +150,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
           id: "lesson",
           name: "Loan lesson",
           viewport: "desktop",
+          chrome: "none",
           children: [{ element: "Text", text: "Lesson 3 of 6", role: "body" }],
         },
       ],
@@ -563,6 +565,54 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"data-wireframe-direction":"down"');
     expect(rendered).toContain("on success");
     expect(rendered).toContain('"ariaHidden":"true"');
+  });
+
+  it("should frame a web screen as a browser window showing its route", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          attributes: { chrome: "browser", url: "app.example.dev/workflows" },
+          children: [element({ name: "Text", attributes: { text: "Hi" } })],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(compiled.model).toMatchObject({
+      screens: [{ chrome: "browser", url: "app.example.dev/workflows" }],
+    });
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-wireframe-chrome":"browser"');
+    expect(rendered).toContain("app.example.dev/workflows");
+  });
+
+  it("should report an address on a screen that has no address bar to draw it in", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          attributes: { url: "app.example.dev/workflows" },
+          children: [element({ name: "Text", attributes: { text: "Hi" } })],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message:
+          'Attribute "url" needs chrome="browser"; only a browser frame has an address bar',
+      },
+    ]);
+    // The address is dropped rather than drawn somewhere it does not belong.
+    expect(compiled.model).toMatchObject({ screens: [{ chrome: "none" }] });
+    expect(html(render(compiled))).not.toContain("app.example.dev");
+  });
+
+  it("should leave a screen unframed unless the author asks for a frame", () => {
+    const { compiled } = compile({ scopedChildren: [HOME] });
+    expect(compiled.model).toMatchObject({ screens: [{ chrome: "none" }] });
+    expect(html(render(compiled))).toContain('"data-wireframe-chrome":"none"');
   });
 
   it("should mark only the initial screen current so an inert document shows every screen", () => {

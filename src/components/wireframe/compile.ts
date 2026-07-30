@@ -15,6 +15,7 @@ import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
 import { wireframeElementFor } from "./catalog.js";
 import type { WireframeElementDefinition } from "./catalog.js";
 import {
+  WIREFRAME_CHROMES,
   WIREFRAME_VIEWPORTS,
   type CompiledWireframe,
   type WireframeNode,
@@ -33,6 +34,8 @@ const SCREEN_SCHEMA = {
   id: { kind: "string", required: true, nonEmpty: true },
   name: { kind: "string", required: true, nonEmpty: true },
   viewport: { kind: "enum", values: WIREFRAME_VIEWPORTS },
+  chrome: { kind: "enum", values: WIREFRAME_CHROMES },
+  url: { kind: "string", nonEmpty: true },
 } satisfies ComponentAttributeSchema;
 
 // One authored navigateTo, kept with its source position so a broken target
@@ -190,6 +193,15 @@ const compileScreen = ({
     schema: SCREEN_SCHEMA,
   });
   rejectProse({ child, diagnostics });
+  // An address only means something inside a browser frame; anywhere else it
+  // would be drawn nowhere and quietly lost.
+  if (validated.url !== undefined && validated.chrome !== "browser") {
+    diagnostics.add({
+      message:
+        'Attribute "url" needs chrome="browser"; only a browser frame has an address bar',
+      position: child.position,
+    });
+  }
   const children = compileNodes({
     children: child.scopedChildren ?? [],
     parent: { name: SCREEN_ELEMENT },
@@ -209,6 +221,10 @@ const compileScreen = ({
     id: validated.id,
     name: validated.name,
     viewport: validated.viewport ?? "desktop",
+    chrome: validated.chrome ?? "none",
+    ...(validated.url === undefined || validated.chrome !== "browser"
+      ? {}
+      : { url: validated.url }),
     children,
   };
 };
