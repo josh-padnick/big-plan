@@ -41,9 +41,9 @@ describe("deck slide frames", () => {
     expect(html.match(/<section data-slide/g)).toHaveLength(2);
     expect(html).toContain('data-collapsible="slide" data-collapse-id="one"');
     expect(html).toContain("plan-collapse-host");
-    // Host owns the toggle; the frame keeps pre-collapse direct children.
+    // Host row owns the toggle; the frame keeps pre-collapse direct children.
     expect(html).toMatch(
-      /data-collapse-toggle[^>]*>.*<section data-slide[^>]*><p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one">One<\/h2>\n<p>Alpha\.<\/p>/s,
+      /data-collapse-row[^>]*>.*data-collapse-toggle[^>]*>.*<section data-slide[^>]*><p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one">One<\/h2>\n<p>Alpha\.<\/p>/s,
     );
     expect(html).not.toContain("data-collapse-chrome");
   });

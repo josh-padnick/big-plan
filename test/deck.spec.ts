@@ -85,7 +85,9 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     const statusHost = page.locator(
       '[data-collapsible="slide"][data-collapse-id="status-quo"]',
     );
-    const toggle = statusHost.locator(":scope > [data-collapse-toggle]");
+    const toggle = statusHost.locator(
+      ":scope > [data-collapse-row] > [data-collapse-toggle]",
+    );
     await statusHost.hover();
     await toggle.click();
     await expect(statusHost).toHaveAttribute("data-collapsed", "");
@@ -100,7 +102,9 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     const successHost = page.locator(
       '[data-collapsible="slide"][data-collapse-id="success-looks-like"]',
     );
-    const toggle = successHost.locator(":scope > [data-collapse-toggle]");
+    const toggle = successHost.locator(
+      ":scope > [data-collapse-row] > [data-collapse-toggle]",
+    );
     await successHost.locator(".plan-slide").hover();
     await expect(toggle).toBeVisible();
     await toggle.hover();
@@ -112,7 +116,9 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
       '[data-collapsible="subslide"][data-collapse-id="the-worker"]',
     );
     await worker.hover();
-    await worker.locator(":scope > [data-collapse-toggle]").click();
+    await worker
+      .locator(":scope > [data-collapse-row] > [data-collapse-toggle]")
+      .click();
     await expect(worker).toHaveAttribute("data-collapsed", "");
     await expect(worker.getByText("Claims due schedules")).toBeHidden();
     await expect(
@@ -127,7 +133,9 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
       '[data-collapsible="part"][data-collapse-id="part-the-proposal"]',
     );
     await proposal.hover();
-    await proposal.locator(":scope > [data-collapse-toggle]").click();
+    await proposal
+      .locator(":scope > [data-collapse-row] > [data-collapse-toggle]")
+      .click();
     await expect(proposal).toHaveAttribute("data-collapsed", "");
     await expect(
       proposal.locator(":scope > [data-collapse-body]"),

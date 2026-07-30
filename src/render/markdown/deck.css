@@ -2,8 +2,8 @@
 Deck styles for markdown-generated markup the slide transform wraps: the h2
 inside a slide frame cannot carry utility classes, so its in-slide identity
 lives here. The slide frame and kicker themselves carry utilities assigned by
-the transform. Collapse controls sit outside the frame on a shared hover host
-so the reading column is never indented when expanded.
+the transform. Collapse controls sit in a flex row with the header chrome so
+they stay locked to the card instead of floating in the gutter.
 */
 
 @layer components {
@@ -36,32 +36,69 @@ so the reading column is never indented when expanded.
     margin-top: 0.8rem;
   }
 
-  /*
-     Shared hover host: left padding is the outside-toggle gutter; equal
-     negative margin keeps the frame aligned with the pre-collapse column.
-     flow-root keeps part/subpart top margins inside the host so absolute
-     toggle tops can top-align to that chrome instead of floating oddly.
-  */
-  article .plan-collapse-host {
-    display: flow-root;
-    position: relative;
-    padding-left: 1.75rem;
-    margin-left: -1.75rem;
+  /* Spacing that used to live on chrome (mt-12 / part mt) sits on the row so
+     the toggle and header move together - never a floating gutter orphan. */
+  article .plan-slide-group:not([data-collapsed]) > .plan-collapse-row {
+    margin-top: 3rem;
+  }
+  article .plan-part-group > .plan-collapse-row {
+    margin-top: 3.8rem;
   }
 
   /*
-     Toggle is always top-aligned to the first header chrome of its host,
-     never vertically centered against the full block height.
+     Host + row: toggle and header share one flex line so the chevron stays
+     glued to the chrome. Negative margin pulls the row into the left gutter
+     without indenting the reading column.
   */
-  article .plan-collapse-host > .plan-collapse-toggle {
-    top: 1.25rem; /* matches .plan-slide py-5 top padding */
+  article .plan-collapse-host {
+    min-width: 0;
   }
-  article .plan-slide-group > .plan-collapse-toggle {
-    top: 3rem; /* matches .plan-subpart mt-12 when expanded */
+  article .plan-collapse-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.2rem;
+    margin-left: -1.65rem;
+    width: calc(100% + 1.65rem);
   }
-  article .plan-part-group > .plan-collapse-toggle {
-    /* Top of the part band title row (band mt + its own top padding). */
-    top: calc(3.8rem + 0.55rem);
+  article .plan-collapse-row > :not([data-collapse-toggle]) {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /*
+     Toggle sits in the gutter column, top-aligned to the header with a small
+     inset so it reads with the kicker line (not flush, not mid-card).
+  */
+  article .plan-collapse-toggle {
+    flex: 0 0 1.35rem;
+    width: 1.35rem;
+    height: 1.35rem;
+    margin-top: 1.15rem; /* expanded slide py-5 + kicker start */
+  }
+  article .plan-slide-group > .plan-collapse-row > .plan-collapse-toggle {
+    margin-top: 0.15rem; /* subpart has no card padding when expanded */
+  }
+  article .plan-part-group > .plan-collapse-row > .plan-collapse-toggle {
+    margin-top: 0.5rem; /* slightly into the part band padding */
+  }
+  /* Collapsed chips are shorter: tuck the chevron near the top of the box. */
+  article
+    [data-collapsible][data-collapsed]
+    > .plan-collapse-row
+    > .plan-collapse-toggle {
+    margin-top: 0.38rem;
+  }
+  article
+    [data-collapsible="subslide"][data-collapsed]
+    > .plan-collapse-row
+    > .plan-collapse-toggle {
+    margin-top: 0.3rem;
+  }
+  article
+    .plan-part-group[data-collapsed]
+    > .plan-collapse-row
+    > .plan-collapse-toggle {
+    margin-top: 0.45rem;
   }
 
   /*
@@ -76,9 +113,15 @@ so the reading column is never indented when expanded.
       opacity 0.12s ease,
       color 0.12s ease;
   }
-  article .plan-collapse-host:hover > .plan-collapse-toggle,
-  article .plan-collapse-host:focus-within > .plan-collapse-toggle,
-  article .plan-collapse-host[data-collapse-hover] > .plan-collapse-toggle {
+  article .plan-collapse-host:hover > .plan-collapse-row > .plan-collapse-toggle,
+  article
+    .plan-collapse-host:focus-within
+    > .plan-collapse-row
+    > .plan-collapse-toggle,
+  article
+    .plan-collapse-host[data-collapse-hover]
+    > .plan-collapse-row
+    > .plan-collapse-toggle {
     opacity: 0.72;
     color: color-mix(in oklab, var(--muted-c) 82%, transparent);
   }
@@ -88,7 +131,7 @@ so the reading column is never indented when expanded.
     color: var(--muted-c);
   }
 
-  /* Quiet chevron - mid size between first stark and last soft pass. */
+  /* Quiet chevron. */
   article .plan-collapse-toggle::before {
     content: "";
     display: block;
@@ -111,60 +154,61 @@ so the reading column is never indented when expanded.
   }
   article
     [data-collapsible][data-collapsed]
-    > .plan-slide
+    .plan-slide
     > :not([data-slide-kicker]):not(h2):not(h3[data-slide-kicker]) {
     display: none;
   }
 
   /*
-     Uniform collapsed header chrome for every slide-like unit - both framed
-     slides and borderless subpart groups - so a stack of collapsed sections
-     forms one consistent column (no mixed box / no-box headers).
+     Uniform, tight collapsed header chips for every slide-like unit so a
+     stack of collapsed sections forms one consistent column.
   */
-  article [data-collapsible][data-collapsed] > .plan-slide,
-  article [data-collapsible][data-collapsed] > .plan-subpart {
+  article [data-collapsible][data-collapsed] .plan-slide,
+  article [data-collapsible][data-collapsed] .plan-subpart {
     margin-top: 0;
-    margin-bottom: 0.65rem;
+    margin-bottom: 0.4rem;
     border: 1px solid var(--edge-c);
-    border-radius: 0.75rem;
+    border-radius: 0.55rem;
     background: transparent;
-    padding: 0.85rem 1.25rem;
+    padding: 0.4rem 0.9rem;
   }
-  article [data-collapsible][data-collapsed] > .plan-slide > h2,
-  article [data-collapsible][data-collapsed] > .plan-subpart > h2 {
+  /* Sub-slide chips are single-line kickers - keep them especially short. */
+  article [data-collapsible="subslide"][data-collapsed] .plan-slide {
+    padding: 0.32rem 0.85rem;
+    margin-bottom: 0.35rem;
+  }
+  article [data-collapsible][data-collapsed] .plan-slide > h2,
+  article [data-collapsible][data-collapsed] .plan-subpart > h2 {
     margin: 0;
+    font-size: 1.35rem;
+    line-height: 1.25;
   }
   article
     [data-collapsible][data-collapsed]
-    > .plan-slide
+    .plan-slide
     > h3[data-slide-kicker] {
     margin: 0;
   }
   article
     [data-collapsible][data-collapsed]
-    > .plan-slide
+    .plan-slide
     > [data-slide-kicker]:not(h3),
   article
     [data-collapsible][data-collapsed]
-    > .plan-subpart
+    .plan-subpart
     > [data-slide-kicker] {
-    margin: 0 0 0.35rem;
+    margin: 0 0 0.15rem;
   }
   article
     [data-collapsible][data-collapsed]
-    > .plan-slide
+    .plan-slide
     > [data-slide-kicker]:not(h3):last-child {
     margin-bottom: 0;
   }
 
-  /* Collapsed slide-group: subpart no longer needs its expanded top spacing. */
-  article .plan-slide-group[data-collapsed] > .plan-collapse-toggle {
-    top: 0.85rem;
-  }
-
   /* Collapsed part: keep the act band; tighten trailing gap under it. */
-  article [data-collapsible="part"][data-collapsed] > [data-part] {
-    margin-bottom: 0.65rem;
+  article [data-collapsible="part"][data-collapsed] [data-part] {
+    margin-bottom: 0.5rem;
   }
 }
 

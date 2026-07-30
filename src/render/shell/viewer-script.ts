@@ -165,7 +165,9 @@ export const VIEWER_SCRIPT = `<script>
     location.pathname;
   const storageKey = (id) => "big-plan:collapse:" + docKey + ":" + id;
   const toggleFor = (block) =>
-    block.querySelector(":scope > [data-collapse-toggle]");
+    block.querySelector(
+      ":scope > [data-collapse-row] > [data-collapse-toggle], :scope > [data-collapse-toggle]",
+    );
   const setCollapsed = (block, collapsed) => {
     if (collapsed) block.setAttribute("data-collapsed", "");
     else block.removeAttribute("data-collapsed");

@@ -85,8 +85,10 @@ const KICKER_CLASSES = [
 ] as const;
 
 // The parent header block a sectioned-into-sub-slides section keeps: its
-// kicker and h2 stand above the numbered sub-slide frames.
-const SUBPART_CLASSES = ["plan-subpart", "mt-12", "mb-4"] as const;
+// kicker and h2 stand above the numbered sub-slide frames. Top spacing is
+// owned by the collapse host CSS so collapsed headers do not keep a dead
+// margin that leaves the toggle floating above the chrome.
+const SUBPART_CLASSES = ["plan-subpart", "mb-4"] as const;
 
 // A sub-slide's kicker is its heading: the h3 keeps its anchor and outline
 // role while rendering as the numbered small-caps line.
@@ -102,22 +104,18 @@ const CONTEXT_CLASSES = [
   "text-muted",
 ] as const;
 
-// One continuous hover host wraps both the outside toggle and the frame so
-// moving the pointer onto the control never leaves the host hit area.
-// Padding/margin for the left gutter live in deck.css (not Tailwind here) so
-// the reading column stays aligned with pre-collapse layout.
-const COLLAPSE_HOST_CLASSES = ["plan-collapse-host", "relative"] as const;
+// One continuous hover host wraps toggle + frame. The toggle sits in a flex
+// row with the header chrome so it never absolutely floats above a margin.
+// Gutter alignment lives in deck.css.
+const COLLAPSE_HOST_CLASSES = ["plan-collapse-host"] as const;
 
-// Toggle classes stay minimal; positioning and hover reveal live in deck.css.
-// Top offsets are owned by deck.css per host kind so every control is
-// top-aligned to its header chrome (slide, subpart, or part band).
+// Toggle classes stay minimal; vertical align to the header is flex-based in
+// deck.css (not absolute top offsets that drift when margins change).
 const TOGGLE_CLASSES = [
   "plan-collapse-toggle",
-  "absolute",
-  "left-0",
-  "z-10",
   "inline-flex",
   "size-5",
+  "shrink-0",
   "cursor-pointer",
   "items-center",
   "justify-center",
@@ -129,6 +127,8 @@ const TOGGLE_CLASSES = [
   "focus-visible:outline-offset-2",
   "focus-visible:outline-accent",
 ] as const;
+
+const COLLAPSE_ROW_CLASSES = ["plan-collapse-row"] as const;
 
 const PART_GROUP_CLASSES = [
   "plan-part-group",
@@ -226,18 +226,20 @@ const createCollapseBody = (
   children: [...children],
 });
 
-// Host owns data-collapsible so :hover covers both the outside toggle and the
-// frame; the frame itself keeps pre-collapse markup and classes.
+// Header row locks the toggle to the first chrome box (slide / subpart /
+// part band). Optional body siblings (part slides, sub-slides) follow.
 const createCollapseHost = ({
   kind,
   collapseId,
   className,
-  content,
+  header,
+  body,
 }: {
   readonly kind: "slide" | "subslide" | "part";
   readonly collapseId: string;
   readonly className: ReadonlyArray<string>;
-  readonly content: ReadonlyArray<ElementContent>;
+  readonly header: ElementContent;
+  readonly body?: ElementContent;
 }): Element => ({
   type: "element",
   tagName: "div",
@@ -246,7 +248,18 @@ const createCollapseHost = ({
     "data-collapse-id": collapseId,
     className: [...className],
   },
-  children: [createCollapseToggle(), ...content],
+  children: [
+    {
+      type: "element",
+      tagName: "div",
+      properties: {
+        "data-collapse-row": "",
+        className: [...COLLAPSE_ROW_CLASSES],
+      },
+      children: [createCollapseToggle(), header],
+    },
+    ...(body === undefined ? [] : [body]),
+  ],
 });
 
 // Splits a section body that contains h3 headings into one collapsible slide
@@ -333,7 +346,7 @@ const buildSubSlides = ({
         kind: "subslide",
         collapseId: subId,
         className: COLLAPSE_HOST_CLASSES,
-        content: [frame],
+        header: frame,
       }),
     );
     index = end;
@@ -342,7 +355,8 @@ const buildSubSlides = ({
     kind: "slide",
     collapseId,
     className: SLIDE_GROUP_CLASSES,
-    content: [parent, createCollapseBody(groupBody)],
+    header: parent,
+    body: createCollapseBody(groupBody),
   });
 };
 
@@ -366,10 +380,11 @@ const wrapSlides = (
     if (openPartGroup === undefined) {
       return;
     }
-    // Host children are [toggle, part band, ...]; keep that order and append
-    // the collapsible body after the part band.
-    const existing = openPartGroup.children;
-    openPartGroup.children = [...existing, createCollapseBody(openPartBody)];
+    // Host is [header-row, ...]; append the act body after the part band row.
+    openPartGroup.children = [
+      ...openPartGroup.children,
+      createCollapseBody(openPartBody),
+    ];
     rewritten.push(openPartGroup);
     openPartGroup = undefined;
     openPartBody = [];
@@ -410,13 +425,13 @@ const wrapSlides = (
         typeof child.properties.id === "string"
           ? child.properties.id
           : `part-${currentPart?.number ?? indexInPart + 1}`;
-      // Toggle first, then the Part placeholder: outline completion replaces
-      // the placeholder in place while the host owns the continuous hover area.
+      // Part placeholder is the header chrome; outline completion replaces it
+      // in place. Body slides are appended on flush.
       openPartGroup = createCollapseHost({
         kind: "part",
         collapseId: partId,
         className: PART_GROUP_CLASSES,
-        content: [child],
+        header: child,
       });
       openPartBody = [];
       index += 1;
@@ -498,7 +513,7 @@ const wrapSlides = (
         kind: "slide",
         collapseId,
         className: COLLAPSE_HOST_CLASSES,
-        content: [frame],
+        header: frame,
       }),
     );
     index = end;
