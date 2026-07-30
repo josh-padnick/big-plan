@@ -32,7 +32,7 @@ Folders beginning with `_` are internal support code.
 Plan authors cannot use their names as MDX components.
 
 - Use `_authoring/` for parsing, validation, diagnostics, or authored-body behavior that genuinely belongs to multiple component compilers and does not depend on React.
-- Use `_model/` for framework-free model types and pure derivations, such as the document outline, that genuinely belong to multiple component slices.
+- Use `_model/` for framework-free model types, grammars, and pure derivations, such as the document outline or the tree-text grammar, that genuinely belong to multiple component slices.
 - Use `_registration/` for the registry that maps allowed MDX names to component definitions and for the small adapter that pairs compilation with a React view.
 - Use `_shared/` for reusable visual building blocks, such as an internal badge or annotation card, that authors must never write directly in a plan.
 
@@ -44,7 +44,7 @@ Keep it with the component that owns it until another real consumer demonstrates
 - Can a plan author write this concept in MDX? Give it a component folder.
 - Is it component-specific parsing, rendering, styling, or testing? Keep it in that component folder.
 - Is it non-React authoring behavior used by multiple components? Put it in `_authoring/`.
-- Is it a framework-free model type or pure derivation shared by multiple slices? Put it in `_model/`.
+- Is it a framework-free model type, grammar, or pure derivation shared by multiple slices? Put it in `_model/`.
 - Does it connect component definitions to the closed registry? Put it in `_registration/`.
 - Is it reusable React UI that is never valid MDX? Put it in `_shared/`.
 - Does it operate on the document as a whole? Put it in `src/render/`.

@@ -2,8 +2,11 @@
 // hierarchy panes reserved for the live review application.
 
 import type { CompiledFileTreeDiff } from "./compile.js";
-import { countTreeChanges, deriveTreeView } from "./derive-tree-view.js";
-import type { TreeEntry } from "./parse-tree-text.js";
+import {
+  countTreeChanges,
+  deriveTreeView,
+} from "../_model/tree-text/derive-tree-view.js";
+import type { TreeEntry } from "../_model/tree-text/parse-tree-text.js";
 import { COLUMNS_2_ICON } from "../../icons/lucide/columns-2.js";
 import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";

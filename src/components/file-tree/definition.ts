@@ -2,7 +2,7 @@
 // React component library.
 
 import { compileFileTree } from "./compile.js";
-import { FileTree } from "./file-tree-view.js";
+import { FileTree } from "./view.js";
 import { defineComponent } from "../_registration/define-component.js";
 
 /** Declares FileTree's complete component integration contract. */

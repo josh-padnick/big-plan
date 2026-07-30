@@ -1,0 +1,94 @@
+/* Tree-hierarchy row, connector, icon, folding, summary, and status
+   variants, colocated with the shared component that emits this markup for
+   FileTree and every FileTreeDiff view. */
+
+@layer components {
+  article .file-tree-item[data-tree-collapsed] > .file-tree-children {
+    display: none;
+  }
+  /* The chevron points down while a directory is expanded and right while
+     collapsed, matching the familiar tree affordance. */
+  article .file-tree-toggle svg {
+    transform: rotate(90deg);
+  }
+  article
+    .file-tree-item[data-tree-collapsed]
+    > .file-tree-row
+    .file-tree-toggle
+    svg {
+    transform: none;
+  }
+  /* Folded-away changes surface as a compact count so a reader knows
+     whether a collapsed directory is worth expanding. */
+  article .file-tree-dir-summary {
+    display: none;
+  }
+  article
+    .file-tree-item[data-tree-collapsed]
+    > .file-tree-row
+    .file-tree-dir-summary {
+    display: inline-flex;
+  }
+  article .file-tree-sum-added {
+    color: var(--diff-add-c);
+  }
+  article .file-tree-sum-modified {
+    color: var(--callout-warning-c);
+  }
+  article .file-tree-sum-removed {
+    color: var(--diff-remove-c);
+  }
+  article .file-tree-sum-renamed {
+    color: var(--callout-note-c);
+  }
+  article .file-tree-row > svg {
+    color: var(--color-muted);
+  }
+  /* Guides sit well behind the content: indentation already carries the
+     structure, so the lines only whisper it. */
+  article .file-tree-children {
+    border-left-color: color-mix(in srgb, var(--color-edge) 50%, transparent);
+  }
+  article .file-tree-children > .file-tree-item > .file-tree-row::before {
+    position: absolute;
+    top: 50%;
+    left: -1.05rem;
+    width: 0.75rem;
+    border-top: 1px solid color-mix(in srgb, var(--color-edge) 50%, transparent);
+    content: "";
+  }
+  /* Git-status-style change tinting shared by the file name and its
+     spelled-out status at the row edge; deletions also strike the name. */
+  article [data-tree-badge="added"] > svg,
+  article [data-tree-badge="added"] > .file-tree-name,
+  article [data-tree-badge="added"] > .file-tree-label {
+    color: var(--diff-add-c);
+  }
+  article [data-tree-badge="removed"] > svg,
+  article [data-tree-badge="removed"] > .file-tree-name,
+  article [data-tree-badge="removed"] > .file-tree-label {
+    color: var(--diff-remove-c);
+  }
+  article [data-tree-badge="removed"] > .file-tree-name {
+    text-decoration: line-through;
+  }
+  article [data-tree-badge="modified"] > svg,
+  article [data-tree-badge="modified"] > .file-tree-name,
+  article [data-tree-badge="modified"] > .file-tree-label {
+    color: var(--callout-warning-c);
+  }
+  article [data-tree-badge="renamed"] > svg,
+  article [data-tree-badge="renamed"] > .file-tree-name,
+  article [data-tree-badge="renamed"] > .file-tree-label {
+    color: var(--callout-note-c);
+  }
+  /* The glyph is the whole affordance, so the native disclosure triangle goes
+     away and the row keeps its tight rhythm; the shell's viewer script floats
+     the note beside the glyph. */
+  article .file-tree-note-hint > summary {
+    list-style: none;
+  }
+  article .file-tree-note-hint > summary::-webkit-details-marker {
+    display: none;
+  }
+}

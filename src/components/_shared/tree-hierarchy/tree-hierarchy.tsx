@@ -2,9 +2,12 @@
 // FileTreeDiff view, parameterized by displayed names and change markers.
 
 import type { ReactNode } from "react";
-import { countTreeChanges } from "../../file-tree/derive-tree-view.js";
-import type { TreeChangeCounts } from "../../file-tree/derive-tree-view.js";
-import type { TreeBadge, TreeEntry } from "../../file-tree/parse-tree-text.js";
+import { countTreeChanges } from "../../_model/tree-text/derive-tree-view.js";
+import type { TreeChangeCounts } from "../../_model/tree-text/derive-tree-view.js";
+import type {
+  TreeBadge,
+  TreeEntry,
+} from "../../_model/tree-text/parse-tree-text.js";
 import { CHEVRON_RIGHT_ICON } from "../../../icons/lucide/chevron-right.js";
 import { COPY_MINUS_ICON } from "../../../icons/lucide/copy-minus.js";
 import { COPY_PLUS_ICON } from "../../../icons/lucide/copy-plus.js";

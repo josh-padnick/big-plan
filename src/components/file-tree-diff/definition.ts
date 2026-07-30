@@ -2,7 +2,7 @@
 // the React component library.
 
 import { compileFileTreeDiff } from "./compile.js";
-import { FileTreeDiff } from "./file-tree-diff-view.js";
+import { FileTreeDiff } from "./view.js";
 import { defineComponent } from "../_registration/define-component.js";
 
 /** Declares FileTreeDiff's complete component integration contract. */

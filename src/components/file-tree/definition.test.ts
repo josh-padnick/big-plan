@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { createDiagnosticCollector } from "../_authoring/diagnostics.js";
 import type { CompiledComponent } from "../_registration/define-component.js";
 import { reactToHast } from "../../render/markdown/component-pipeline/react-hast-adapter.js";
-import { FILE_TREE_COMPONENT_DEFINITION } from "./file-tree-definition.js";
+import { FILE_TREE_COMPONENT_DEFINITION } from "./definition.js";
 
 const parseRenderedElement = (compiled: CompiledComponent): Element => {
   const parsed = reactToHast(compiled.presentation());
