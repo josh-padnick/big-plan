@@ -60,6 +60,7 @@ export default tseslint.config(
       model: {
         files: [
           "src/components/_authoring/**/*.ts",
+          "src/components/_model/**/*.ts",
           "src/components/*/compile*.ts",
           "src/components/code-diff/unified-diff*.ts",
           "src/components/code-snippet/split-highlighted-lines*.ts",
@@ -70,6 +71,7 @@ export default tseslint.config(
         ],
         imports: [
           "**/components/_authoring/**",
+          "**/components/_model/**",
           "**/components/*/compile.js",
           "**/components/code-diff/unified-diff.js",
           "**/components/code-snippet/split-highlighted-lines.js",

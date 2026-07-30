@@ -18,6 +18,8 @@ import {
   type ComponentRegistry,
   type ScopedParentDefinition,
 } from "../../../components/_registration/registry.js";
+import { createOutlinePlaceholder } from "./outline-placeholder.js";
+import type { DeferredOutlinePresentations } from "./outline-placeholder.js";
 import { reactToHast } from "./react-hast-adapter.js";
 import type { ReactHastAdapter } from "./react-hast-adapter.js";
 
@@ -39,6 +41,7 @@ type ComponentDelivery =
       readonly kind: "html";
       readonly adapt: ReactHastAdapter;
       readonly collected?: Array<CollectedComponentModel>;
+      readonly deferOutline?: DeferredOutlinePresentations;
     }
   | {
       readonly kind: "model";
@@ -189,6 +192,15 @@ const renderFlowElement = ({
       ? delivery.adapt(compiled.presentation())
       : undefined;
   }
+  // An outline-aware component defers its presentation behind a placeholder
+  // until the deck transform has computed the document outline.
+  if (compiled.outline !== undefined && delivery.deferOutline !== undefined) {
+    delivery.deferOutline.push(compiled.outline.present);
+    return createOutlinePlaceholder({
+      index: delivery.deferOutline.length - 1,
+      marker: compiled.outline.marker,
+    });
+  }
   const rendered = delivery.adapt(compiled.presentation());
   if (rendered !== undefined) {
     return rendered;
@@ -326,12 +338,14 @@ export const rehypeRenderComponents =
     registry = COMPONENT_REGISTRY,
     models,
     collectModels,
+    deferOutline,
     adapt = reactToHast,
   }: {
     readonly diagnostics: DiagnosticCollector;
     readonly registry?: ComponentRegistry;
     readonly models?: Array<CollectedComponentModel>;
     readonly collectModels?: Array<CollectedComponentModel>;
+    readonly deferOutline?: DeferredOutlinePresentations;
     readonly adapt?: ReactHastAdapter;
   }) =>
   (tree: Root): void => {
@@ -355,6 +369,7 @@ export const rehypeRenderComponents =
               ...(collectModels === undefined
                 ? {}
                 : { collected: collectModels }),
+              ...(deferOutline === undefined ? {} : { deferOutline }),
             }
           : { kind: "model", collected: models, adapt },
     });

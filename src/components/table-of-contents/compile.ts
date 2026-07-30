@@ -1,7 +1,7 @@
 // Compiles TableOfContents's authored form into its plan model: one overview entry
 // per Entry, each naming a section and its one-line gist. Section links,
 // slide numbers, and part group headers are document-order knowledge the
-// renderer's deck transform completes.
+// view reads from the document outline the renderer computes.
 
 import { meaningfulChildren } from "../_authoring/authored-body.js";
 import {

@@ -18,7 +18,10 @@ import type { ComponentDiagnostic } from "../../components/_authoring/diagnostic
 import { rehypeRenderComponents } from "./component-pipeline/deliver.js";
 import type { CollectedComponentModel } from "./component-pipeline/deliver.js";
 export type { CollectedComponentModel } from "./component-pipeline/deliver.js";
+import { completeOutlinePlaceholders } from "./component-pipeline/outline-placeholder.js";
+import type { DeferredOutlinePresentations } from "./component-pipeline/outline-placeholder.js";
 import { rehypeDeckTransform } from "./deck-transform.js";
+import type { MutableDocumentOutline } from "./deck-transform.js";
 import { remarkValidateComponents } from "./component-pipeline/validate-authoring.js";
 
 export type SectionPart = {
@@ -263,7 +266,11 @@ const compileMarkdownTree = ({
 }): CompiledMarkdown => {
   const diagnostics = createDiagnosticCollector();
   const metadata: MarkdownMetadata = { title: undefined, sections: [] };
-  const partIds: Array<string> = [];
+  // Outline-aware components defer their presentation behind placeholders;
+  // the deck transform fills the outline, and the completion pass then
+  // presents every placeholder against it.
+  const deferredOutline: DeferredOutlinePresentations = [];
+  const outline: MutableDocumentOutline = { parts: [], sections: [] };
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -287,12 +294,21 @@ const compileMarkdownTree = ({
       diagnostics,
       ...(models === undefined ? {} : { models }),
       ...(collectModels === undefined ? {} : { collectModels }),
+      deferOutline: deferredOutline,
     })
     // Detection stays opt-in through the fence language: undeclared and
     // unknown languages remain readable without guessed tokenization.
     .use(rehypeHighlight)
     .use(rehypeWrapTables)
-    .use(rehypeDeckTransform, { partIds });
+    .use(rehypeDeckTransform, { outline })
+    .use(() => (tree: Root) => {
+      completeOutlinePlaceholders({
+        tree,
+        presentations: deferredOutline,
+        outline,
+        diagnostics,
+      });
+    });
   // Only parsing reflects author mistakes; a transform that throws is a
   // renderer defect and must surface as an internal error, not as a
   // diagnostic blaming the document.
@@ -316,7 +332,7 @@ const compileMarkdownTree = ({
     sections: metadata.sections,
     elementIds,
     title: metadata.title,
-    partIds,
+    partIds: outline.parts.map((part) => part.id ?? ""),
   };
 };
 

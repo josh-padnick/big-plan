@@ -1,5 +1,5 @@
 // Tests Part schema diagnostics, the self-closing body contract, anchor
-// allocation, and the divider markup the deck transform completes.
+// allocation, and the divider markup rendered without a completed outline.
 
 import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
@@ -109,7 +109,7 @@ describe("PART_COMPONENT_DEFINITION", () => {
     expect(element.properties.id).toBe("part-context-2");
   });
 
-  it("should leave the number slot empty for the deck transform to fill", () => {
+  it("should leave the part tag empty without a completed outline", () => {
     const { element } = render({ attributes: { title: "Context" } });
     const numberSlot = element.children.find(
       (child) =>

@@ -1,6 +1,5 @@
-// Tests TableOfContents schema diagnostics, the Entry child contract, and the overview
-// markup whose links, numbers, and group headers the deck transform
-// completes.
+// Tests TableOfContents schema diagnostics, the Entry child contract, and
+// the placeholder overview markup rendered without a completed outline.
 
 import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
@@ -154,7 +153,7 @@ describe("TABLE_OF_CONTENTS_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain("group-hover:text-accent");
   });
 
-  it("should render placeholder rows the deck transform completes", () => {
+  it("should render placeholder rows without a completed outline", () => {
     const { element, diagnostics } = render({
       scopedChildren: [
         entry({ section: "Status quo", gist: "Docs promise a skill" }),

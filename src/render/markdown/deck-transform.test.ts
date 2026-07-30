@@ -1,7 +1,9 @@
-// Tests the deck transform through full compilation: slide frames around h2
+// Tests the deck paradigm through full compilation: slide frames around h2
 // sections, numbered kickers, sub-slide frames around h3 runs, context
-// builders from leading emphasized paragraphs, Part divider numbering and
-// anchors, and the part grouping carried on section metadata.
+// builders from leading emphasized paragraphs, and the document outline the
+// transform computes for the outline-aware Part and TableOfContents views -
+// divider numbering and anchors, completed overview rows, and the part
+// grouping carried on section metadata.
 
 import { describe, expect, it } from "vitest";
 import { compileMarkdown } from "./compile-markdown.js";

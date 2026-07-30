@@ -1,13 +1,22 @@
-// Applies the deck reading paradigm to a compiled review document: numbers
-// Part dividers in document order, wraps each top-level h2 section in a
-// slide frame with a numbered kicker (splitting a section with h3 headings
-// into a parent header block over numbered sub-slides), restyles a slide's
-// leading emphasized paragraph into its context-builder line, and completes
-// the TableOfContents overview with section links, slide numbers, and part group
-// headers. It runs after component delivery, so the markers it consumes are
-// the data attributes the Part and TableOfContents views emit.
+// Applies the deck reading paradigm to a compiled review document: wraps
+// each top-level h2 section in a slide frame with a numbered kicker
+// (splitting a section with h3 headings into a parent header block over
+// numbered sub-slides) and restyles a slide's leading emphasized paragraph
+// into its context-builder line. It runs after component delivery, reading
+// the attribute-marked outline placeholders that delivery leaves for
+// outline-aware components, and computes the document outline - parts and
+// sections numbered in document order - that those components' views consume
+// once the placeholders are presented. It knows no component's markup.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
+import type {
+  DocumentOutlinePart,
+  DocumentOutlineSection,
+} from "../../components/_model/document-outline/document-outline.js";
+import {
+  OUTLINE_PART_TITLE_ATTRIBUTE,
+  OUTLINE_PLACEHOLDER_ATTRIBUTE,
+} from "./component-pipeline/outline-placeholder.js";
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
   node.type === "element";
@@ -84,70 +93,37 @@ const CONTEXT_CLASSES = [
   "text-muted",
 ] as const;
 
-const TOC_GROUP_CLASSES = [
-  "table-of-contents-group",
-  "mt-2.5",
-  "mb-0.5",
-  "text-xs",
-  "font-semibold",
-  "uppercase",
-  "tracking-[0.1em]",
-  "text-accent",
-] as const;
-
-type NumberedPart = {
-  readonly number: number;
-  readonly title: string;
+/** The outline holder the transform fills in document order. */
+export type MutableDocumentOutline = {
+  readonly parts: Array<DocumentOutlinePart>;
+  readonly sections: Array<DocumentOutlineSection>;
 };
 
-// Numbers every Part divider in document order, filling the view's empty
-// [data-part-number] slot, recording the divider anchors for navigation, and
-// mapping each divider so the top-level slide walk can group sections under
-// it.
-const numberParts = ({
+// Numbers every part placeholder in document order, reading the act title
+// and anchor the placeholder attributes carry, and mapping each placeholder
+// element so the top-level slide walk can group sections under it.
+const collectParts = ({
   node,
   assigned,
-  partIds,
 }: {
   readonly node: Root | Element;
-  readonly assigned: Map<Element, NumberedPart>;
-  readonly partIds?: Array<string>;
+  readonly assigned: Map<Element, DocumentOutlinePart>;
 }): void => {
   for (const child of node.children) {
     if (!isElement(child)) {
       continue;
     }
-    if (child.properties["data-part"] !== undefined) {
-      const title = child.properties["data-part-title"];
-      const part: NumberedPart = {
+    if (child.properties[OUTLINE_PART_TITLE_ATTRIBUTE] !== undefined) {
+      const title = child.properties[OUTLINE_PART_TITLE_ATTRIBUTE];
+      const id = child.properties.id;
+      assigned.set(child, {
         number: assigned.size + 1,
         title: typeof title === "string" ? title : "",
-      };
-      assigned.set(child, part);
-      fillPartNumber(child, part.number);
-      const id = child.properties.id;
-      partIds?.push(typeof id === "string" ? id : "");
+        ...(typeof id === "string" ? { id } : {}),
+      });
     }
-    numberParts({ node: child, assigned, partIds });
+    collectParts({ node: child, assigned });
   }
-};
-
-const fillPartNumber = (divider: Element, number: number): void => {
-  for (const child of divider.children) {
-    if (
-      isElement(child) &&
-      child.properties["data-part-number"] !== undefined
-    ) {
-      child.children = [{ type: "text", value: `Part ${number}` }];
-      return;
-    }
-  }
-};
-
-type SlideSection = {
-  readonly id: string | undefined;
-  readonly label: string;
-  readonly part: NumberedPart | undefined;
 };
 
 // Restyles a slide's leading emphasized paragraph into the context builder:
@@ -258,16 +234,16 @@ const buildSubSlides = ({
 };
 
 // Wraps each top-level h2 plus its following siblings - up to the next h2,
-// Part divider, TableOfContents, or footnotes appendix - in a slide frame headed by a
-// numbered kicker. Returns the slide sections in document order so the
-// TableOfContents completion can link to them.
+// outline placeholder (a Part divider or overview), or footnotes appendix -
+// in a slide frame headed by a numbered kicker. Returns the slide sections
+// in document order so the outline can carry them.
 const wrapSlides = (
   tree: Root,
-  parts: Map<Element, NumberedPart>,
-): ReadonlyArray<SlideSection> => {
-  const sections: Array<SlideSection> = [];
+  parts: Map<Element, DocumentOutlinePart>,
+): ReadonlyArray<DocumentOutlineSection> => {
+  const sections: Array<DocumentOutlineSection> = [];
   const rewritten: Array<RootContent> = [];
-  let currentPart: NumberedPart | undefined;
+  let currentPart: DocumentOutlinePart | undefined;
   let indexInPart = 0;
   let index = 0;
   while (index < tree.children.length) {
@@ -296,8 +272,7 @@ const wrapSlides = (
         sibling === undefined ||
         !isSlideContent(sibling) ||
         (isElement(sibling) && sibling.tagName === "h2") ||
-        (isElement(sibling) && parts.has(sibling)) ||
-        hasProperty(sibling, "data-table-of-contents") ||
+        hasProperty(sibling, OUTLINE_PLACEHOLDER_ATTRIBUTE) ||
         isFootnotesSection(sibling)
       ) {
         break;
@@ -322,9 +297,10 @@ const wrapSlides = (
     };
     const id = child.properties.id;
     sections.push({
-      id: typeof id === "string" ? id : undefined,
-      label,
-      part: currentPart,
+      number: label,
+      title,
+      ...(typeof id === "string" ? { id } : {}),
+      ...(currentPart === undefined ? {} : { part: currentPart }),
     });
     const sectionBody = body.slice(1);
     const hasSubSlides = sectionBody.some(
@@ -359,96 +335,13 @@ const wrapSlides = (
   return sections;
 };
 
-const findTableOfContents = (node: Root | Element): Element | undefined => {
-  for (const child of node.children) {
-    if (!isElement(child)) {
-      continue;
-    }
-    if (child.properties["data-table-of-contents"] !== undefined) {
-      return child;
-    }
-    const nested = findTableOfContents(child);
-    if (nested !== undefined) {
-      return nested;
-    }
-  }
-  return undefined;
-};
-
-const fillTableOfContentsNumber = (row: Element, label: string): void => {
-  for (const child of row.children) {
-    if (
-      isElement(child) &&
-      child.properties["data-table-of-contents-num"] !== undefined
-    ) {
-      child.children = [{ type: "text", value: label }];
-      return;
-    }
-  }
-};
-
-// Completes the TableOfContents the view rendered as placeholders: each row links to
-// its slide's section and shows its slide number, and a part group header
-// precedes the first row of every part. Rows map to slides by document
-// order; the table-of-contents-matches-sections lint rule owns reporting mismatches, so
-// a row without a slide keeps its placeholder instead of failing delivery.
-const completeTableOfContents = (
-  tree: Root,
-  sections: ReadonlyArray<SlideSection>,
-): void => {
-  const overview = findTableOfContents(tree);
-  if (overview === undefined) {
-    return;
-  }
-  const rewritten: Array<ElementContent> = [];
-  let rowIndex = 0;
-  let headedPart: number | undefined;
-  for (const child of overview.children) {
-    if (
-      !isElement(child) ||
-      child.properties["data-table-of-contents-row"] === undefined
-    ) {
-      rewritten.push(child);
-      continue;
-    }
-    const section = sections[rowIndex];
-    rowIndex += 1;
-    if (section === undefined) {
-      rewritten.push(child);
-      continue;
-    }
-    if (section.part !== undefined && section.part.number !== headedPart) {
-      headedPart = section.part.number;
-      rewritten.push({
-        type: "element",
-        tagName: "p",
-        properties: {
-          "data-table-of-contents-group": "",
-          className: [...TOC_GROUP_CLASSES],
-        },
-        children: [
-          {
-            type: "text",
-            value: `[${section.part.number}] ${section.part.title}`,
-          },
-        ],
-      });
-    }
-    if (section.id !== undefined) {
-      child.properties.href = `#${section.id}`;
-    }
-    fillTableOfContentsNumber(child, section.label);
-    rewritten.push(child);
-  }
-  overview.children = rewritten;
-};
-
 /** Creates the rehype transform that applies the deck reading paradigm. */
 export const rehypeDeckTransform =
-  ({ partIds }: { readonly partIds?: Array<string> } = {}) =>
+  ({ outline }: { readonly outline?: MutableDocumentOutline } = {}) =>
   (tree: Root) => {
-    const parts = new Map<Element, NumberedPart>();
-    numberParts({ node: tree, assigned: parts, partIds });
+    const parts = new Map<Element, DocumentOutlinePart>();
+    collectParts({ node: tree, assigned: parts });
     const sections = wrapSlides(tree, parts);
-    completeTableOfContents(tree, sections);
+    outline?.parts.push(...parts.values());
+    outline?.sections.push(...sections);
   };
