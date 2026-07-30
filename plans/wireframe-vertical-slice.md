@@ -119,12 +119,43 @@ CSS cannot divide a container width by a logical width to produce a unitless `tr
 Worse, a 1024px tablet artboard scaled into a ~700px column renders its labels at roughly 9px.
 A wireframe whose text a reviewer cannot read fails the plan-quality standards this repository holds itself to.
 
-The slice instead defines a **fit-width, reflow** artboard contract: `viewport` declares the intended device and drives the frame's aspect and internal proportions, the block fills the available width, and content reflows.
+The slice instead defines a **fit-width, reflow** artboard contract: `viewport` declares the intended device and sets the widest the drawing will ever be, the block fills the available width, and content reflows.
 Type stays at reading size at every width from 320px up.
 If a genuinely fixed artboard is later required, it is an opt-in attribute on `Screen`, not the default.
+
+Height follows the same reasoning and was settled by looking at it.
+The first cut held each screen to its device proportions, which left a half-empty rectangle in the middle of the plan; a reviewer reads that emptiness as unfinished work rather than as room the design has left over.
+The artboard now grows with the drawing.
 
 **Three smaller points.**
 
 - The spec's "avoid React" recommendation is stale advice for this repository; following it would mean two rendering techniques instead of one.
 - The spec asks for `reserved` catalog names that reject with "not implemented yet". I recommend leaving unimplemented names simply unknown. `Unknown component "Combobox"` is a true, actionable diagnostic; a reserved name promises a shape we have not designed and creates a compatibility obligation the pre-milestone policy explicitly refuses.
 - The spec asks to bundle a hand-written font. Deferred: it is a licensing review and a payload cost for an effect that stroke geometry already delivers.
+
+## 6. What is built, and what needs a decision
+
+Built and verified: the slice above plus the product-shell vocabulary - `AppShell`, `Sidebar`, `TopBar`, `AppContent`, `PageHeader`, `Nav`, `NavItem`, `Metric`, `Progress`, `Badge`, `Divider`, `ImagePlaceholder`, `List`, `ListItem`.
+A three-screen Eddy's Wallet prototype walks between screens, unit tests cover placement and reference rules, and a browser journey covers the walk, the keyboard route, and a 320px phone.
+
+Three UX questions are worth a decision before the catalog grows further.
+
+### Width: should a wireframe break out of the reading column?
+
+Big Plan's reading column is `74ch`, about 740px.
+A `tablet-landscape` app shell inside it has roughly 490px left for content after the sidebar, so a three-region dashboard reflows to two.
+The reflow is correct responsive behavior and it still reads well, but it is not the layout the author drew.
+
+The alternative is a full-bleed artboard: a wireframe escapes the column and uses the window's width.
+That is a shell change, not a component change, and Big Plan has no full-bleed mechanism today.
+
+### The hand: geometry only, or a bundled handwriting font?
+
+The drawing currently gets its hand-drawn read from stroke geometry alone - lopsided radii, a second offset line, dashed rules, hatched fills - and keeps the document's own typeface.
+Balsamiq's other half is a handwriting font.
+Bundling one is a licensing review and a payload cost, and it makes the drawing louder; it also makes it unmistakably a sketch rather than a proposal.
+
+### Breadth: how much more catalog before this ships?
+
+Form controls (`TextField`, `Select`, `Checkbox`, `Switch`) and data (`Table`, `Timeline`) are the two obvious next sets.
+`Table` needs an authoring shape the current attribute model cannot express - most likely a fenced body, the way `FileTree` already reads a plain-text body - so it is the one that carries design risk.
