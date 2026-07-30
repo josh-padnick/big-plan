@@ -86,4 +86,16 @@ describe("renderCommand", () => {
       code: "GUIDANCE_REQUIRED",
     });
   });
+
+  it("should diagnose a usage error before the guidance prerequisite", async () => {
+    process.env["BIG_PLAN_STATE_DIR"] = join(tempDirectory, "other-state");
+
+    await expect(
+      renderCommand(["plan.mdx", "plan.html", "extra"]),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: 'Unexpected extra argument "extra"',
+      suggestions: ["Usage: big-plan render <input.mdx> [output.html]"],
+    });
+  });
 });

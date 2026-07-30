@@ -15,12 +15,14 @@ const USAGE = "Usage: big-plan validate <input.mdx>";
 export const validateCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
-  const { warnings } = await requireGuidanceAcknowledgment();
+  // A malformed invocation is diagnosed before the guidance prerequisite, so
+  // usage errors never hide behind GUIDANCE_REQUIRED.
   const { inputPath } = parseInputCommandArguments({
     args,
     usage: USAGE,
     maximumArguments: 1,
   });
+  const { warnings } = await requireGuidanceAcknowledgment();
   const { markdown, derived } = await deriveInputFile({
     inputPath,
     usage: USAGE,

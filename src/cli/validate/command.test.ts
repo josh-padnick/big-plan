@@ -101,6 +101,18 @@ describe("validateCommand", () => {
     expect(await readdir(tempDirectory)).toEqual(["state", "table.mdx"]);
   });
 
+  it("should diagnose a usage error before the guidance prerequisite", async () => {
+    process.env["BIG_PLAN_STATE_DIR"] = join(tempDirectory, "other-state");
+
+    await expect(
+      validateCommand(["plan.mdx", "plan.html"]),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: 'Unexpected extra argument "plan.html"',
+      suggestions: ["Usage: big-plan validate <input.mdx>"],
+    });
+  });
+
   it("should stay locked until guidance has been read while compile stays open", async () => {
     process.env["BIG_PLAN_STATE_DIR"] = join(tempDirectory, "other-state");
     const inputPath = join(tempDirectory, "plan.mdx");

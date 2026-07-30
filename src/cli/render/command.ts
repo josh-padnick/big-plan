@@ -6,6 +6,7 @@ import { renderDocument } from "../../render/render-document.js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { runDerivedOutputCommand } from "../_shared/derived-output-command.js";
 import { requireGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
+import { parseInputCommandArguments } from "../_shared/input-command.js";
 
 const USAGE = "Usage: big-plan render <input.mdx> [output.html]";
 
@@ -13,6 +14,10 @@ const USAGE = "Usage: big-plan render <input.mdx> [output.html]";
 export const renderCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
+  // A malformed invocation is diagnosed before the guidance prerequisite, so
+  // usage errors never hide behind GUIDANCE_REQUIRED. The parser is pure, so
+  // the shared workflow below re-parsing the same arguments cannot disagree.
+  parseInputCommandArguments({ args, usage: USAGE, maximumArguments: 2 });
   const { warnings } = await requireGuidanceAcknowledgment();
   return runDerivedOutputCommand({
     args,
