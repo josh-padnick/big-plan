@@ -45,6 +45,9 @@ they stay locked to the card instead of floating in the gutter.
   }
   article .plan-part-group > .plan-collapse-row {
     margin-top: 3.8rem;
+    /* Spacing after the band lives on the row so flex center uses the pill
+       height only - not a trailing margin that pulls the midline down. */
+    margin-bottom: 1.3rem;
   }
 
   /*
@@ -57,8 +60,8 @@ they stay locked to the card instead of floating in the gutter.
   }
   article .plan-collapse-row {
     display: flex;
-    /* flex-start always: collapsed must not switch to center or the chevron
-       translates vertically on click. Only the glyph rotates. */
+    /* Default: top of tall expanded slides. Parts and collapsed chips override
+       to center so the chevron shares the header/chip midline. */
     align-items: flex-start;
     gap: 0.25rem;
     margin-left: -1.65rem;
@@ -71,9 +74,17 @@ they stay locked to the card instead of floating in the gutter.
   }
 
   /*
-     Toggle vertical offset is constant per host kind across expand/collapse
-     so getBoundingClientRect().top does not jump when only aria-expanded
-     and data-collapsed change. Adjust content, not the control.
+     Part band height is the same expanded/collapsed: always center the
+     chevron on the pill. Collapsed chips (slide + sub-slide) also center.
+  */
+  article .plan-part-group > .plan-collapse-row,
+  article [data-collapsible][data-collapsed] > .plan-collapse-row {
+    align-items: center;
+  }
+
+  /*
+     Expanded framed slides keep a fixed top inset near the kicker. Part and
+     collapsed rows zero margin so flex centering owns vertical placement.
   */
   article .plan-collapse-toggle {
     flex: 0 0 1.35rem;
@@ -81,17 +92,21 @@ they stay locked to the card instead of floating in the gutter.
     height: 1.35rem;
     margin-top: 1.15rem;
   }
-  article .plan-slide-group > .plan-collapse-row > .plan-collapse-toggle {
+  article .plan-slide-group:not([data-collapsed]) > .plan-collapse-row > .plan-collapse-toggle {
     margin-top: 0.65rem;
   }
-  article .plan-part-group > .plan-collapse-row > .plan-collapse-toggle {
-    margin-top: 0.5rem;
-  }
+  article .plan-part-group > .plan-collapse-row > .plan-collapse-toggle,
   article
-    [data-collapsible="subslide"]
+    [data-collapsible][data-collapsed]
     > .plan-collapse-row
     > .plan-collapse-toggle {
-    margin-top: 0.85rem;
+    margin-top: 0;
+  }
+  article
+    [data-collapsible="subslide"]:not([data-collapsed])
+    > .plan-collapse-row
+    > .plan-collapse-toggle {
+    margin-top: 1.15rem;
   }
 
   /*
@@ -124,7 +139,7 @@ they stay locked to the card instead of floating in the gutter.
     color: var(--muted-c);
   }
 
-  /* Quiet chevron. */
+  /* Quiet chevron; no margin shift between expanded/collapsed - only rotate. */
   article .plan-collapse-toggle::before {
     content: "";
     display: block;
@@ -134,11 +149,10 @@ they stay locked to the card instead of floating in the gutter.
     border-bottom: 1.35px solid currentColor;
     transform: rotate(45deg);
     transition: transform 0.15s ease;
-    margin-top: -0.12rem;
+    margin: 0;
   }
   article .plan-collapse-toggle[aria-expanded="false"]::before {
     transform: rotate(-45deg);
-    margin-top: 0;
   }
 
   /* Collapsed: hide bodies. */
@@ -178,7 +192,8 @@ article
   > .plan-collapse-row
   > .plan-subpart {
   box-sizing: border-box;
-  margin: 0 0 0.45rem;
+  /* Gap after chips is on the row, not the flex item, so center uses chip box. */
+  margin: 0;
   border: 1px solid var(--edge-c);
   border-radius: 0.65rem;
   background: transparent;
@@ -191,6 +206,10 @@ article
   [data-collapsible="slide"][data-collapsed]:not(.plan-slide-group)
   > .plan-collapse-row {
   margin-top: 0;
+  margin-bottom: 0.45rem;
+}
+article .plan-slide-group[data-collapsed] > .plan-collapse-row {
+  margin-bottom: 0.45rem;
 }
 
 article
@@ -214,6 +233,9 @@ article [data-collapsible="slide"][data-collapsed] > .plan-collapse-row h2 {
    Sub-slide chips: compact single line. Toggle margin is constant (see above);
    only the glyph rotates on click.
 */
+article [data-collapsible="subslide"][data-collapsed] > .plan-collapse-row {
+  margin-bottom: 0.28rem;
+}
 article
   [data-collapsible="subslide"][data-collapsed]
   > .plan-collapse-row
@@ -221,7 +243,7 @@ article
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  margin: 0 0 0.28rem;
+  margin: 0;
   border: 1px solid var(--edge-c);
   border-radius: 0.4rem;
   background: transparent;
