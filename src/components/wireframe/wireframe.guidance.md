@@ -15,6 +15,8 @@ The vocabulary, by what it is for:
 - **Regions** - `Panel` bounds a region, `PageHeader` says what the page is once at the top.
 - **Content** - `Metric` for the number a screen exists to show, `Progress` for how far along something is, `List` and `ListItem` for repeated rows, `Text`, `Heading`, `Badge`, `Divider`, and `ImagePlaceholder` for art nobody has drawn yet.
 - **Navigation** - `Nav` and `NavItem`, with `active` on the current destination. A `NavItem` takes `navigateTo` just like a button.
+- **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, and `Switch` draw as the real controls. Every one needs a `label`; an unlabelled box has not decided what the field is for.
+- **Flow** - `Stepper` and `Step` show where the user is in a multi-step create flow; `Connector` is the arrow between two steps on a canvas, labeled with the condition that follows it.
 
 ```mdx
 <Wireframe id="eddys-wallet" title="Eddy's wallet" initialScreen="home">

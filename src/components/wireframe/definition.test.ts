@@ -427,6 +427,144 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).not.toContain('"style"');
   });
 
+  it("should draw every control as its native element inside its own label", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "TextField",
+              attributes: { label: "Workflow name", kind: "search" },
+            }),
+            element({ name: "TextArea", attributes: { label: "Prompt" } }),
+            element({
+              name: "Select",
+              attributes: { label: "Agent", value: "Writer" },
+            }),
+            element({
+              name: "Checkbox",
+              attributes: { label: "Retry", checked: true },
+            }),
+            element({
+              name: "Switch",
+              attributes: { label: "Pause", on: true },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"tagName":"input"');
+    expect(rendered).toContain('"tagName":"textarea"');
+    expect(rendered).toContain('"tagName":"select"');
+    expect(rendered).toContain('"type":"search"');
+    expect(rendered).toContain('"role":"switch"');
+    // Every control is wrapped by its label, so association needs no id and
+    // two copies of the same wireframe can never collide.
+    expect(rendered.match(/"tagName":"label"/gu)).toHaveLength(5);
+    expect(rendered).not.toContain('"htmlFor"');
+  });
+
+  it("should require a label on a control rather than drawing an unnamed box", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({ name: "TextField", attributes: { placeholder: "Name" } }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message: 'Missing required attribute "label"; expected a string',
+      },
+    ]);
+  });
+
+  it("should report a step written outside its stepper", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Panel",
+              children: [
+                element({ name: "Step", attributes: { label: "Basics" } }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message: "Step belongs inside Stepper, not Panel",
+      },
+    ]);
+  });
+
+  it("should number the steps from the markup rather than from the author", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Stepper",
+              children: [
+                element({
+                  name: "Step",
+                  attributes: { label: "Basics", state: "done" },
+                }),
+                element({
+                  name: "Step",
+                  attributes: { label: "Trigger", state: "current" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"tagName":"ol"');
+    expect(rendered).toContain('"data-wireframe-step":"done"');
+    expect(rendered).toContain('"data-wireframe-step":"current"');
+    // No authored ordinal: the numbers are drawn by a CSS counter.
+    expect(rendered).not.toContain('"1."');
+  });
+
+  it("should keep a connector's condition as text and its arrow as decoration", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Connector",
+              attributes: { direction: "down", label: "on success" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-wireframe-direction":"down"');
+    expect(rendered).toContain("on success");
+    expect(rendered).toContain('"ariaHidden":"true"');
+  });
+
   it("should mark only the initial screen current so an inert document shows every screen", () => {
     const { compiled } = compile({ scopedChildren: [HOME, LESSON] });
     const rendered = html(render(compiled));

@@ -256,8 +256,117 @@ const WireframeElement = ({
           )}
         </li>
       );
+    // Every control is the real element, wrapped in its own label, so the
+    // association needs no generated id and a reviewer meets the affordance
+    // the product will actually have.
+    case "TextField":
+      return (
+        <Field label={node.label} hint={node.hint}>
+          <input
+            className="wireframe-input"
+            type={node.kind}
+            {...(node.placeholder === undefined
+              ? {}
+              : { placeholder: node.placeholder })}
+            {...(node.value === undefined ? {} : { defaultValue: node.value })}
+          />
+        </Field>
+      );
+    case "TextArea":
+      return (
+        <Field label={node.label} hint={node.hint}>
+          <textarea
+            className="wireframe-input wireframe-textarea"
+            rows={3}
+            {...(node.placeholder === undefined
+              ? {}
+              : { placeholder: node.placeholder })}
+            {...(node.value === undefined ? {} : { defaultValue: node.value })}
+          />
+        </Field>
+      );
+    case "Select":
+      return (
+        <Field label={node.label} hint={node.hint}>
+          {/* A wireframe shows the chosen option, not the whole menu. */}
+          <select className="wireframe-input wireframe-select">
+            <option>{node.value}</option>
+          </select>
+        </Field>
+      );
+    case "Checkbox":
+      return (
+        <Field label={node.label} hint={node.hint} inline>
+          <input
+            className="wireframe-tick"
+            type="checkbox"
+            defaultChecked={node.checked}
+          />
+        </Field>
+      );
+    case "Switch":
+      return (
+        <Field label={node.label} hint={node.hint} inline>
+          <input
+            className="wireframe-switch-control"
+            type="checkbox"
+            role="switch"
+            defaultChecked={node.on}
+          />
+        </Field>
+      );
+    case "Stepper":
+      return (
+        <ol className="wireframe-stepper flex flex-wrap items-center">
+          <WireframeElements nodes={node.children} />
+        </ol>
+      );
+    case "Step":
+      return (
+        <li className="wireframe-step" data-wireframe-step={node.state}>
+          {node.label}
+        </li>
+      );
+    case "Connector":
+      // The arrow is decoration; the condition beside it is the meaning, so
+      // the glyph is hidden and any label stays readable text.
+      return (
+        <div
+          className="wireframe-connector flex items-center justify-center"
+          data-wireframe-direction={node.direction}
+        >
+          <span className="wireframe-connector-line" aria-hidden="true" />
+          {node.label === undefined ? null : (
+            <span className="wireframe-connector-label">{node.label}</span>
+          )}
+        </div>
+      );
   }
 };
+
+// One control and the label it belongs to. Wrapping rather than pairing by id
+// keeps every field self-contained, which matters when the same wireframe is
+// drawn more than once in a document.
+const Field = ({
+  label,
+  hint,
+  inline = false,
+  children,
+}: {
+  readonly label: string;
+  readonly hint?: string;
+  readonly inline?: boolean;
+  readonly children: JSX.Element;
+}) => (
+  <label className="wireframe-field" data-wireframe-inline={String(inline)}>
+    {inline ? children : null}
+    <span className="wireframe-field-label">{label}</span>
+    {inline ? null : children}
+    {hint === undefined ? null : (
+      <span className="wireframe-field-hint">{hint}</span>
+    )}
+  </label>
+);
 
 const WireframeElements = ({
   nodes,
