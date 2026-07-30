@@ -9,10 +9,10 @@ import type { CompiledMarkdown, Section } from "./markdown/compile-markdown.js";
 import {
   compileMarkdown,
   compileMarkdownWithModels,
-  serializeMarkdown,
 } from "./markdown/compile-markdown.js";
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
 import { renderPage } from "./page.js";
+import { serializeHtml } from "./serialize-html.js";
 import { renderShell } from "./shell/shell.js";
 
 export type RenderedDocument = {
@@ -49,7 +49,7 @@ const renderCompiledDocument = ({
   const shell = renderShell({
     nav,
     contentIds: elementIds,
-    contentHtml: serializeMarkdown({ root }),
+    contentHtml: serializeHtml({ root }),
   });
   const html = renderPage({
     title: resolvedTitle,

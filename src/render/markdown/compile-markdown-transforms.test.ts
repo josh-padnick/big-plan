@@ -2,11 +2,12 @@
 // syntax highlighting, inert code blocks, and visible footnotes.
 
 import { describe, expect, it } from "vitest";
-import { compileMarkdown, serializeMarkdown } from "./compile-markdown.js";
+import { compileMarkdown } from "./compile-markdown.js";
+import { serializeHtml } from "../serialize-html.js";
 
 const compileAndSerialize = (markdown: string): string => {
   const { root } = compileMarkdown({ markdown });
-  return serializeMarkdown({ root });
+  return serializeHtml({ root });
 };
 
 describe("compileMarkdown tables", () => {

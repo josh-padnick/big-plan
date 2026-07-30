@@ -4,11 +4,12 @@
 // anchors, and the part grouping carried on section metadata.
 
 import { describe, expect, it } from "vitest";
-import { compileMarkdown, serializeMarkdown } from "./compile-markdown.js";
+import { compileMarkdown } from "./compile-markdown.js";
+import { serializeHtml } from "../serialize-html.js";
 
 const compile = (markdown: string) => {
   const compiled = compileMarkdown({ markdown });
-  return { ...compiled, html: serializeMarkdown({ root: compiled.root }) };
+  return { ...compiled, html: serializeHtml({ root: compiled.root }) };
 };
 
 const DECK_FIXTURE = `# Deck plan

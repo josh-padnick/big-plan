@@ -2,14 +2,12 @@
 // disclosures, and end-to-end rendering of the criteria grammar.
 
 import { describe, expect, it } from "vitest";
-import {
-  compileMarkdown,
-  serializeMarkdown,
-} from "../../render/markdown/compile-markdown.js";
+import { compileMarkdown } from "../../render/markdown/compile-markdown.js";
+import { serializeHtml } from "../../render/serialize-html.js";
 
 const render = (markdown: string): string => {
   const { root } = compileMarkdown({ markdown });
-  return serializeMarkdown({ root });
+  return serializeHtml({ root });
 };
 
 const OPEN_DECISION = `<ComplexDecision question="Which store?" status="open">

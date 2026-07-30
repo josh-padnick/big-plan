@@ -1,11 +1,10 @@
 // Validates and compiles an MDX plan into a structured HAST review document plus its title,
-// h2 outline, and element ids, then owns final HTML serialization after
-// transforms finish. The page chrome around that content lives in shell.ts.
+// h2 outline, and element ids. The tree stays structured: the composer owns
+// final HTML serialization, and the page chrome lives in shell.ts.
 
 import type { Element, Root, RootContent } from "hast";
 import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
-import rehypeStringify from "rehype-stringify";
 import remarkGfm from "remark-gfm";
 import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
@@ -355,7 +354,3 @@ export const compileMarkdownWithModels = ({
   });
   return { ...compiled, components };
 };
-
-/** Serializes a compiled review document only after all transforms finish. */
-export const serializeMarkdown = ({ root }: { readonly root: Root }): string =>
-  unified().use(rehypeStringify).stringify(root);

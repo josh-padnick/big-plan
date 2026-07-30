@@ -11,8 +11,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   compileMarkdown,
   MarkdownDiagnosticsError,
-  serializeMarkdown,
 } from "../compile-markdown.js";
+import { serializeHtml } from "../../serialize-html.js";
 import type { ComponentCompilerInput } from "../../../components/_authoring/contract.js";
 import { createDiagnosticCollector } from "../../../components/_authoring/diagnostics.js";
 import type { ComponentDiagnostic } from "../../../components/_authoring/diagnostics.js";
@@ -163,7 +163,7 @@ describe("scoped child dispatch", () => {
     });
 
     expect(diagnostics).toEqual([]);
-    expect(serializeMarkdown({ root })).toBe(
+    expect(serializeHtml({ root })).toBe(
       '<section data-branch-id="decision" data-leaf-label="keep"><p>Leaf with <strong>formatting</strong>.</p></section>',
     );
   });
@@ -186,7 +186,7 @@ describe("scoped child dispatch", () => {
     expect(diagnostics).toEqual([]);
     expect(compileInner).toHaveBeenCalledOnce();
     expect(compileOuter).toHaveBeenCalledOnce();
-    expect(serializeMarkdown({ root })).toBe("<section>React outer</section>");
+    expect(serializeHtml({ root })).toBe("<section>React outer</section>");
   });
 
   it("should compile once without adapting React for model delivery", () => {
@@ -218,7 +218,7 @@ describe("scoped child dispatch", () => {
         model: { value: "compiled" },
       },
     ]);
-    expect(serializeMarkdown({ root })).toBe("");
+    expect(serializeHtml({ root })).toBe("");
   });
 
   it("should collect the model while adapting React for HTML delivery", () => {
@@ -253,7 +253,7 @@ describe("scoped child dispatch", () => {
         model: { value: "compiled" },
       },
     ]);
-    expect(serializeMarkdown({ root })).toBe("<section>React view</section>");
+    expect(serializeHtml({ root })).toBe("<section>React view</section>");
   });
 
   it("should leave an undeclared name unknown within a nested scope", () => {
@@ -356,7 +356,7 @@ describe("scoped child dispatch", () => {
       markdown:
         '<CodeDiff file="src/retry.ts">\n```diff\n@@ -1 +1 @@\n-old\n+new\n```\n\n<Annotation lines="1">\nUse **bounded** retries.\n</Annotation>\n</CodeDiff>\n',
     });
-    const html = serializeMarkdown({ root });
+    const html = serializeHtml({ root });
     expect(html).toContain('data-annotation-lines="1"');
     expect(html).toContain("Use <strong>bounded</strong> retries.");
   });

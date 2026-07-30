@@ -2,14 +2,12 @@
 // option rows, recommended tags, and the question-count summary.
 
 import { describe, expect, it } from "vitest";
-import {
-  compileMarkdown,
-  serializeMarkdown,
-} from "../../render/markdown/compile-markdown.js";
+import { compileMarkdown } from "../../render/markdown/compile-markdown.js";
+import { serializeHtml } from "../../render/serialize-html.js";
 
 const render = (markdown: string): string => {
   const { root } = compileMarkdown({ markdown });
-  return serializeMarkdown({ root });
+  return serializeHtml({ root });
 };
 
 const QUESTION_SET = `<SimpleDecisionSet title="Open questions">

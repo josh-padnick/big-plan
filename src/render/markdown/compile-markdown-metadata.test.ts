@@ -2,7 +2,8 @@
 // titles, and collision-free element IDs.
 
 import { describe, expect, it } from "vitest";
-import { compileMarkdown, serializeMarkdown } from "./compile-markdown.js";
+import { compileMarkdown } from "./compile-markdown.js";
+import { serializeHtml } from "../serialize-html.js";
 
 describe("compileMarkdown sections", () => {
   it("should extract level-two headings as TOC sections when the document has h2s", () => {
@@ -54,14 +55,14 @@ describe("compileMarkdown sections", () => {
     const { root, sections } = compileMarkdown({
       markdown: "## Real section\n\nbody[^1]\n\n[^1]: a note\n",
     });
-    const bodyHtml = serializeMarkdown({ root });
+    const bodyHtml = serializeHtml({ root });
     expect(bodyHtml).toContain('id="footnote-label"');
     expect(sections).toEqual([{ id: "real-section", text: "Real section" }]);
   });
 
   it("should return no sections and empty body when the document is empty", () => {
     const { root, sections } = compileMarkdown({ markdown: "" });
-    const bodyHtml = serializeMarkdown({ root });
+    const bodyHtml = serializeHtml({ root });
     expect(sections).toEqual([]);
     expect(bodyHtml).toBe("");
   });

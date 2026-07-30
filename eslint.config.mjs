@@ -153,7 +153,11 @@ export default tseslint.config(
       composer: {
         files: ["src/render/*.ts"],
         ignores: ["src/render/page.ts", "src/render/escape-html.ts"],
-        imports: ["**/compile-plan-model.js", "**/render-document.js"],
+        imports: [
+          "**/compile-plan-model.js",
+          "**/render-document.js",
+          "**/serialize-html.js",
+        ],
         mayImport: ["markdown", "shell", "page"],
       },
       cli: {
@@ -288,6 +292,12 @@ export default tseslint.config(
     // Co-located component tests may exercise the full authoring pipeline;
     // production compiler, view, and definition files remain boundary-checked.
     files: ["src/components/**/*.test.ts"],
+    rules: { "no-restricted-imports": "off" },
+  },
+  {
+    // Co-located renderer tests assert on serialized HTML, so they may reach
+    // the composer's serializer; production markdown files stay HAST-only.
+    files: ["src/render/**/*.test.ts"],
     rules: { "no-restricted-imports": "off" },
   },
   {
