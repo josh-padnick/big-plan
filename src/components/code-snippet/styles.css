@@ -57,8 +57,4 @@
   article .code-snippet-button[hidden] {
     display: none;
   }
-  article .code-snippet-menu-item:hover,
-  article .code-snippet-button:hover {
-    background: var(--color-edge);
-  }
 }

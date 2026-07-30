@@ -10,13 +10,23 @@
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
+import { VIEWER_SCRIPT } from "./viewer-script.js";
 
 // The shell's own navigation contract: plain text in, so the shell owes
 // nothing to whatever produced the document. Callers map their outline into
-// this shape.
+// this shape; entries carrying a part render grouped beneath non-link part
+// headers while the scroll-spy contract stays per-section.
+export type NavEntryPart = {
+  readonly number: number;
+  readonly title: string;
+  // The part divider's anchor; when present, the act header links to it.
+  readonly id?: string;
+};
+
 export type NavEntry = {
   readonly id: string;
   readonly label: string;
+  readonly part?: NavEntryPart;
 };
 
 export type ShellResult = {
@@ -35,10 +45,21 @@ const LAYOUT_CLASSES =
 const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,74ch)]`;
 const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,74ch)]`;
 
+// Active links change color and border only, never weight, so highlighting
+// can never re-wrap a label. Entries grouped under a part header indent one
+// step so the header reads as their parent.
 const TOC_LINK_CLASSES =
-  "block border-l-2 border-edge px-3 py-[0.3rem] leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:font-semibold aria-[current=true]:text-accent";
+  "block border-l-2 border-edge px-3 py-[0.3rem] leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
+const TOC_GROUPED_LINK_CLASSES =
+  "block border-l-2 border-edge py-[0.3rem] pr-3 pl-5 leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
+const TOC_PART_HEADER_CLASSES =
+  "mt-3 mb-1 block border-l-2 border-transparent px-3 text-[0.6875rem] font-bold tracking-[0.1em] uppercase text-accent hover:text-ink";
 const MOBILE_TOC_LINK_CLASSES =
-  "block border-l-2 border-transparent px-5 py-2.5 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:font-semibold aria-[current=true]:text-accent";
+  "block border-l-2 border-transparent px-5 py-2.5 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
+const MOBILE_TOC_GROUPED_LINK_CLASSES =
+  "block border-l-2 border-transparent py-2.5 pr-5 pl-8 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
+const MOBILE_TOC_PART_HEADER_CLASSES =
+  "block border-l-2 border-transparent px-5 pt-3 pb-1 text-[0.6875rem] font-bold tracking-[0.1em] uppercase text-accent hover:text-ink";
 
 // Allocates the shell-owned overview anchor alongside document-owned ids.
 const createOverviewId = (contentIds: ReadonlyArray<string>): string => {
@@ -52,40 +73,62 @@ const createOverviewId = (contentIds: ReadonlyArray<string>): string => {
   return candidate;
 };
 
-// Sizes every label word at its semibold width via a hidden ::after ghost
-// (see the .toc-word rules), so the active section's bolding can never move
-// a label's line breaks; pseudo-element text stays out of copies and the
-// accessibility tree.
-const bufferedTocLabel = (label: string): string =>
-  label
-    .split(" ")
-    .map(
-      (word) =>
-        `<span class="toc-word" data-word="${escapeHtml(word)}">${escapeHtml(word)}</span>`,
-    )
-    .join(" ");
-
 // Builds links shared by both TOCs; ids are URI-encoded because slugs may
-// contain characters that are not literal-safe inside href values.
+// contain characters that are not literal-safe inside href values. A part's
+// first entry is preceded by a non-link header naming the act, and grouped
+// entries indent beneath it; the data-section-link scroll-spy contract is
+// identical either way.
 const renderTocItems = ({
   nav,
   linkClasses,
+  groupedLinkClasses,
+  partHeaderClasses,
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
   readonly linkClasses: string;
-}): string =>
-  nav
-    .map(
-      (entry) =>
-        `<li><a class="${linkClasses}" data-section-link href="#${encodeURIComponent(entry.id)}">${bufferedTocLabel(entry.label)}</a></li>`,
-    )
-    .join("\n");
+  readonly groupedLinkClasses: string;
+  readonly partHeaderClasses: string;
+}): string => {
+  const items: Array<string> = [];
+  let headedPart: number | undefined;
+  for (const entry of nav) {
+    if (entry.part !== undefined && entry.part.number !== headedPart) {
+      headedPart = entry.part.number;
+      const headerText = `[${entry.part.number}] ${escapeHtml(entry.part.title)}`;
+      // Part headers link to their divider band without joining the
+      // per-section scroll-spy contract, so they never carry
+      // data-section-link.
+      items.push(
+        entry.part.id === undefined
+          ? `<li><span class="${partHeaderClasses}" data-toc-part>${headerText}</span></li>`
+          : `<li><a class="${partHeaderClasses}" data-toc-part href="#${encodeURIComponent(entry.part.id)}">${headerText}</a></li>`,
+      );
+    }
+    const classes = entry.part === undefined ? linkClasses : groupedLinkClasses;
+    items.push(
+      `<li><a class="${classes}" data-section-link href="#${encodeURIComponent(entry.id)}">${escapeHtml(entry.label)}</a></li>`,
+    );
+  }
+  return items.join("\n");
+};
 
-// Builds the desktop sidebar navigation.
-const renderDesktopToc = (nav: ReadonlyArray<NavEntry>): string => {
-  const items = renderTocItems({ nav, linkClasses: TOC_LINK_CLASSES });
+// Builds the desktop sidebar navigation; its "Contents" label doubles as the
+// way back to the very top of the document.
+const renderDesktopToc = ({
+  nav,
+  overviewId,
+}: {
+  readonly nav: ReadonlyArray<NavEntry>;
+  readonly overviewId: string;
+}): string => {
+  const items = renderTocItems({
+    nav,
+    linkClasses: TOC_LINK_CLASSES,
+    groupedLinkClasses: TOC_GROUPED_LINK_CLASSES,
+    partHeaderClasses: TOC_PART_HEADER_CLASSES,
+  });
   return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[5.75rem] wide:block wide:self-start" aria-label="Contents">
-<p class="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-muted">Contents</p>
+<p class="mb-3 text-xs font-semibold uppercase tracking-[0.08em]"><a class="rounded-sm text-muted hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a></p>
 <ol>
 ${items}
 </ol>
@@ -100,7 +143,12 @@ const renderMobileToc = ({
   readonly nav: ReadonlyArray<NavEntry>;
   readonly overviewId: string;
 }): string => {
-  const items = renderTocItems({ nav, linkClasses: MOBILE_TOC_LINK_CLASSES });
+  const items = renderTocItems({
+    nav,
+    linkClasses: MOBILE_TOC_LINK_CLASSES,
+    groupedLinkClasses: MOBILE_TOC_GROUPED_LINK_CLASSES,
+    partHeaderClasses: MOBILE_TOC_PART_HEADER_CLASSES,
+  });
   return `<nav class="sticky top-11 z-10 h-11 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden" data-mobile-toc aria-label="Contents">
 <details class="group relative mx-auto h-full max-w-[74ch]">
 <summary class="flex h-full cursor-pointer list-none items-center gap-3 px-5 py-2 [&amp;::-webkit-details-marker]:hidden">
@@ -133,10 +181,12 @@ export const renderShell = ({
   readonly contentHtml: string;
 }): ShellResult => {
   const hasToc = nav.length > 0;
+  // The viewer script ships only when an affordance in this document uses it.
+  const needsViewerScript = hasToc || contentHtml.includes("data-info-popover");
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="flex h-full items-center px-5 wide:px-6">
-<a class="rounded-sm focus:outline-2 focus:outline-offset-2 focus:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
+<a class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
@@ -144,13 +194,14 @@ export const renderShell = ({
 </header>
 ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}">
-${hasToc ? renderDesktopToc(nav) : ""}
+${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
 <main class="min-w-0" id="${overviewId}">
 <article>
 ${contentHtml}
 </article>
 </main>
-</div>`;
+</div>
+${needsViewerScript ? VIEWER_SCRIPT : ""}`;
   return {
     html,
     styles: GLOBAL_CSS,

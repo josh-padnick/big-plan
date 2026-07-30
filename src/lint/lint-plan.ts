@@ -5,12 +5,28 @@ import remarkGfm from "remark-gfm";
 import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
+import { ledeLengthRule } from "./rules/lede-length.js";
+import { ledePresenceRule } from "./rules/lede-presence.js";
+import { ledeStyleRule } from "./rules/lede-style.js";
 import { markdownTableFormatRule } from "./rules/markdown-table-format.js";
+import { quickSummarySingletonRule } from "./rules/quick-summary-singleton.js";
+import { sectionVocabularyRule } from "./rules/section-vocabulary.js";
+import { tableOfContentsMatchesSectionsRule } from "./rules/table-of-contents-matches-sections.js";
+import { titleLengthRule } from "./rules/title-length.js";
 import type { PlanLintDiagnostic, PlanLintRule } from "./types.js";
 
 export type { PlanLintDiagnostic } from "./types.js";
 
-const RULES: ReadonlyArray<PlanLintRule> = [markdownTableFormatRule];
+const RULES: ReadonlyArray<PlanLintRule> = [
+  markdownTableFormatRule,
+  titleLengthRule,
+  ledePresenceRule,
+  ledeStyleRule,
+  ledeLengthRule,
+  sectionVocabularyRule,
+  quickSummarySingletonRule,
+  tableOfContentsMatchesSectionsRule,
+];
 
 /** Runs every authoring lint rule in stable registry order. */
 export const lintPlan = ({

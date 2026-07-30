@@ -1,0 +1,11 @@
+/* TableOfContents row hover: a subtle ink wash under the row. The ink-mix adapts across
+   light and dark themes and deliberately never shares a fill with the
+   surface-colored Part band - surface means structure, the tint means
+   interactive. The title's accent lives in the view as a group variant,
+   because a rule here would lose to the title's own color utility. */
+
+@layer components {
+  article .table-of-contents-row:hover {
+    background: color-mix(in srgb, var(--ink-c) 4%, transparent);
+  }
+}

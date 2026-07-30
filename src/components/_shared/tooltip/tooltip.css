@@ -1,0 +1,60 @@
+/*
+Owns the fast hover hint shared by icon-only figure controls, keyed off the
+data-tooltip attribute. Browsers hold a native title tooltip back for roughly
+a second, long enough that an icon button reads as unresponsive; this hint
+answers well inside a tenth of a second.
+
+The hint is decoration only. Every control carrying data-tooltip repeats the
+same words in aria-label, so assistive technology reads the name once and
+loses nothing when the hint never renders.
+*/
+
+@layer components {
+  article [data-tooltip] {
+    position: relative;
+  }
+
+  /* Hints open downward and align to the control's right edge because these
+     controls cluster at the right end of a figure header: downward keeps the
+     hint inside figures that clip their own overflow, and right alignment
+     keeps a long hint from spilling past the figure's edge. */
+  article [data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    right: 0;
+    z-index: 50;
+    padding: 0.2rem 0.45rem;
+    border-radius: 0.25rem;
+    background: var(--ink-c);
+    color: var(--bg);
+    font-family: var(--font-sans);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1.35;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    /* The small delay keeps hints from flashing one after another while the
+       pointer sweeps across neighboring controls, and still resolves well
+       within the tenth of a second a reader reads as immediate. */
+    transition: opacity 60ms ease-out 40ms;
+  }
+
+  article [data-tooltip]:hover::after,
+  article [data-tooltip]:focus-visible::after {
+    opacity: 1;
+  }
+
+  /* A control whose menu is open has already answered the question the hint
+     would have answered, and the open menu occupies the same space. */
+  article [data-tooltip][aria-expanded="true"]::after {
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    article [data-tooltip]::after {
+      transition: none;
+    }
+  }
+}

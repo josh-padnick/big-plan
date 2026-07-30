@@ -4,7 +4,7 @@ Start with the root [agent guide](../../AGENTS.md) and the
 [renderer local map](../render/README.md).
 This directory owns checks for any aspect of an authored plan that can be
 statically analyzed.
-Those checks run only as part of `big-plan validate`.
+Those checks run as part of `big-plan validate` and `big-plan render`.
 
 ## Where lint fits
 
@@ -26,25 +26,35 @@ The validate command runs those layers in order:
 ```text
 plan.mdx
   -> validateDocument()  structural compilation and in-memory HTML delivery
-  -> lintPlan()          validate-only authoring rules
+  -> lintPlan()          authoring rules
   -> validation summary or aggregated lint diagnostics
 ```
 
 Structural compilation must succeed before lint runs.
-`big-plan render` and `big-plan compile` do not call `lintPlan()`, so an
-authoring-lint finding never changes their output or component semantics.
-The integration point is
-[`src/cli/validate/command.ts`](../cli/validate/command.ts).
+`big-plan render` applies the same rules after derivation and before writing,
+so a lint finding blocks the review document without changing component
+semantics; `big-plan compile` does not call `lintPlan()`.
+The integration points are
+[`src/cli/validate/command.ts`](../cli/validate/command.ts),
+[`src/cli/render/command.ts`](../cli/render/command.ts), and their shared
+diagnostic formatting in
+[`src/cli/_shared/authoring-lint.ts`](../cli/_shared/authoring-lint.ts).
 
 ## Directory responsibilities
 
-| File or folder                   | Responsibility                                                                                                  |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `lint-plan.ts`                   | Public deep-module interface. It parses the source once, runs the ordered rule registry, and attaches rule IDs. |
-| `types.ts`                       | Private rule and finding contracts plus the public diagnostic shape.                                            |
-| `rules/`                         | One focused module per authoring rule.                                                                          |
-| `rules/markdown-table-format.ts` | Detects strong Markdown-table intent when a missing or malformed delimiter made GFM parse the rows as prose.    |
-| `lint-plan.test.ts`              | Exercises the public interface, source positions, diagnostic order, and conservative near misses.               |
+| File or folder                                | Responsibility                                                                                                     |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `lint-plan.ts`                                | Public deep-module interface. It parses the source once, runs the ordered rule registry, and attaches rule IDs.    |
+| `types.ts`                                    | Private rule and finding contracts plus the public diagnostic shape.                                               |
+| `rules/`                                      | One focused module per authoring rule.                                                                             |
+| `rules/table-of-contents-matches-sections.ts` | Requires a TableOfContents's Entry section names to repeat the document's h2 titles exactly, in order, one to one. |
+| `rules/markdown-table-format.ts`              | Detects strong Markdown-table intent when a missing or malformed delimiter made GFM parse the rows as prose.       |
+| `rules/lede-presence.ts`                      | Requires orientation prose between a plan's level-one title and its first section heading.                         |
+| `rules/lede-length.ts`                        | Keeps the lede within the word budget of a subtitle rather than an opening body paragraph.                         |
+| `rules/lede-style.ts`                         | Requires that lede to open declaratively rather than with a self-referential phrase like "This plan".              |
+| `rules/section-vocabulary.ts`                 | Keeps whole-heading section names in Big Plan's opinionated review vocabulary.                                     |
+| `rules/title-length.ts`                       | Keeps the leading level-one title a punchy noun phrase within word and character budgets.                          |
+| `lint-plan.test.ts`                           | Exercises the public interface, source positions, diagnostic order, and conservative near misses.                  |
 
 `src/lint` is an independent bottom-tier layer in `eslint.config.mjs`.
 It must stay framework-free and may not import the renderer, components, or

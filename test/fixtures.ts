@@ -15,14 +15,38 @@ import { expect, test as base } from "@playwright/test";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+const binPath = join(repoRoot, "bin", "big-plan.mjs");
+
+// Fixtures follow the same workflow a user runs: guidance first, then render.
+// The acknowledgment state lives inside the fixture's temporary directory so
+// workers never read or write the developer's real acknowledgment state.
+const renderThroughCli = async ({
+  inputPath,
+  outputPath,
+  outputDir,
+}: {
+  readonly inputPath: string;
+  readonly outputPath: string;
+  readonly outputDir: string;
+}): Promise<void> => {
+  const env = { ...process.env, BIG_PLAN_STATE_DIR: join(outputDir, "state") };
+  await execFileAsync(process.execPath, [binPath, "guidance"], { env });
+  await execFileAsync(
+    process.execPath,
+    [binPath, "render", inputPath, outputPath],
+    { env },
+  );
+};
 
 type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
   readonly componentsViewerUrl: string;
   readonly apiEndpointsViewerUrl: string;
-  readonly bigDecisionViewerUrl: string;
+  readonly complexDecisionViewerUrl: string;
+  readonly deckViewerUrl: string;
+  readonly flowDiagramViewerUrl: string;
   readonly nestedDecisionViewerUrl: string;
-  readonly smallDecisionSetViewerUrl: string;
+  readonly simpleDecisionSetViewerUrl: string;
   readonly sampleViewerUrl: string;
   readonly tableSchemaViewerUrl: string;
 };
@@ -52,11 +76,11 @@ retry();
 
 const NESTED_DECISION_MDX = `# Nested decisions
 
-<BigDecision question="Which outer option should win?" status="open">
+<ComplexDecision question="Which outer option should win?" status="open">
 
 The outer context introduces a complete decision.
 
-<BigDecision question="Which inner option should win?" status="open">
+<ComplexDecision question="Which inner option should win?" status="open">
 
 <Criterion title="Inner criterion" />
 
@@ -68,7 +92,7 @@ The outer context introduces a complete decision.
 <Score criterion="Inner criterion" verdict="Weak" tone="bad" />
 </Option>
 
-</BigDecision>
+</ComplexDecision>
 
 <Criterion title="Outer criterion" />
 
@@ -80,7 +104,7 @@ The outer context introduces a complete decision.
 <Score criterion="Outer criterion" verdict="Weak" tone="bad" />
 </Option>
 
-</BigDecision>
+</ComplexDecision>
 `;
 
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
@@ -92,12 +116,7 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const inputPath = join(outputDir, "annotation-code.mdx");
       const outputPath = join(outputDir, "annotation-code.html");
       await writeFile(inputPath, ANNOTATION_CODE_MDX, "utf8");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        inputPath,
-        outputPath,
-      ]);
+      await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
@@ -109,12 +128,11 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     async ({}, use) => {
       const outputDir = await mkdtemp(join(tmpdir(), "big-plan-components-"));
       const outputPath = join(outputDir, "components.html");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        join(repoRoot, "examples", "mdx-components.mdx"),
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "mdx-components.mdx"),
         outputPath,
-      ]);
+        outputDir,
+      });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
@@ -126,12 +144,11 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         join(tmpdir(), "big-plan-api-endpoints-"),
       );
       const outputPath = join(outputDir, "api-endpoints.html");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        join(repoRoot, "examples", "api-endpoints.mdx"),
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "api-endpoints.mdx"),
         outputPath,
-      ]);
+        outputDir,
+      });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
@@ -155,27 +172,53 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         `${source}\n## Table Schema Panel 1\n\n## Table Schema Panel 2 Tab\n`,
         "utf8",
       );
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        inputPath,
-        outputPath,
-      ]);
+      await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
     { scope: "worker" },
   ],
-  bigDecisionViewerUrl: [
+  complexDecisionViewerUrl: [
     async ({}, use) => {
-      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-big-decision-"));
-      const outputPath = join(outputDir, "big-decision.html");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        join(repoRoot, "examples", "big-decision.mdx"),
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-complex-decision-"),
+      );
+      const outputPath = join(outputDir, "complex-decision.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "complex-decision.mdx"),
         outputPath,
-      ]);
+        outputDir,
+      });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  // The deck example carries Parts, a TableOfContents, sub-slides, and context
+  // builders, so the deck journey reads the paradigm end to end.
+  deckViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-deck-"));
+      const outputPath = join(outputDir, "deck.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "deck.mdx"),
+        outputPath,
+        outputDir,
+      });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  flowDiagramViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-flow-diagram-"));
+      const outputPath = join(outputDir, "flow-diagram.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "flow-diagram.mdx"),
+        outputPath,
+        outputDir,
+      });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
@@ -189,29 +232,23 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const inputPath = join(outputDir, "nested-decision.mdx");
       const outputPath = join(outputDir, "nested-decision.html");
       await writeFile(inputPath, NESTED_DECISION_MDX, "utf8");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        inputPath,
-        outputPath,
-      ]);
+      await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
     { scope: "worker" },
   ],
-  smallDecisionSetViewerUrl: [
+  simpleDecisionSetViewerUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(
-        join(tmpdir(), "big-plan-small-decision-set-"),
+        join(tmpdir(), "big-plan-simple-decision-set-"),
       );
-      const outputPath = join(outputDir, "small-decision-set.html");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        join(repoRoot, "examples", "small-decision-set.mdx"),
+      const outputPath = join(outputDir, "simple-decision-set.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "simple-decision-set.mdx"),
         outputPath,
-      ]);
+        outputDir,
+      });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
@@ -223,12 +260,11 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     async ({}, use) => {
       const outputDir = await mkdtemp(join(tmpdir(), "big-plan-viewer-"));
       const outputPath = join(outputDir, "sample.html");
-      await execFileAsync(process.execPath, [
-        join(repoRoot, "bin", "big-plan.mjs"),
-        "render",
-        join(repoRoot, "examples", "sample.mdx"),
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "sample.mdx"),
         outputPath,
-      ]);
+        outputDir,
+      });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },

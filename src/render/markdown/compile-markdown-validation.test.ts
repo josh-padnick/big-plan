@@ -5,12 +5,12 @@ import { describe, expect, it } from "vitest";
 import {
   compileMarkdown,
   MarkdownDiagnosticsError,
-  serializeMarkdown,
 } from "./compile-markdown.js";
+import { serializeHtml } from "../serialize-html.js";
 
 const compileAndSerialize = (markdown: string): string => {
   const { root } = compileMarkdown({ markdown });
-  return serializeMarkdown({ root });
+  return serializeHtml({ root });
 };
 
 // Extracts the typed failure while preserving unexpected exceptions.

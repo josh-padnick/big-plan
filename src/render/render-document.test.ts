@@ -88,10 +88,7 @@ describe("renderDocument affordances", () => {
 
   it("should render a TOC nav linking to each h2 when the document has sections", () => {
     expect(html).toContain('aria-label="Contents"');
-    // Labels render word by word so each word carries its bold-width ghost.
-    expect(html).toMatch(
-      /<a[^>]* href="#first-section">(?:<span class="toc-word" data-word="First">First<\/span>) (?:<span class="toc-word" data-word="section">section<\/span>)<\/a>/,
-    );
+    expect(html).toMatch(/<a[^>]* href="#first-section">First section<\/a>/);
   });
 
   it("should render the mobile section disclosure", () => {
@@ -125,9 +122,13 @@ describe("renderDocument affordances", () => {
     expect(html).not.toContain("@import");
   });
 
-  it("should inline one stylesheet and ship no scripts when rendering", () => {
+  it("should inline one stylesheet and only the scroll-spy script when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
-    expect(html).not.toContain("<script>");
+    // The shell's scroll-spy is the single script; plan content can never
+    // contribute another, and nothing external is referenced.
+    expect(html.match(/<script>/g)).toHaveLength(1);
+    expect(html).toContain("data-section-link");
+    expect(html).not.toContain('src="http');
   });
 
   it("should emit theme-aware favicon links as embedded data URIs when rendering", () => {
@@ -149,6 +150,62 @@ describe("renderDocument affordances", () => {
     expect(html).toMatch(
       /<img class="w-27 h-auto" data-logo-dark src="data:image\/svg\+xml;base64,[^"]+" alt="Big Plan" width="1200" height="220">/,
     );
+  });
+});
+
+describe("renderDocument grouped navigation", () => {
+  const PARTED_FIXTURE = `# Deck plan
+
+The lede.
+
+<Part title="Context" />
+
+## Status quo
+
+Today.
+
+<Part title="The proposal" />
+
+## The design
+
+Tomorrow.
+`;
+
+  it("should render linked part headers above their grouped section links", () => {
+    const { html } = renderDocument({
+      markdown: PARTED_FIXTURE,
+      fallbackTitle: "Deck",
+    });
+    expect(html).toMatch(
+      /<a[^>]* data-toc-part href="#part-context">\[1\] Context<\/a>/,
+    );
+    expect(html).toMatch(
+      /<a[^>]* data-toc-part href="#part-the-proposal">\[2\] The proposal<\/a>/,
+    );
+    // Both TOCs group: desktop sidebar plus the mobile disclosure.
+    expect(html.match(/data-toc-part/g)).toHaveLength(4);
+    const header = html.indexOf('href="#part-context"');
+    const section = html.indexOf('data-section-link href="#status-quo"');
+    expect(header).toBeGreaterThan(-1);
+    expect(header).toBeLessThan(section);
+  });
+
+  it("should keep part headers out of the scroll-spy contract", () => {
+    const { html } = renderDocument({
+      markdown: PARTED_FIXTURE,
+      fallbackTitle: "Deck",
+    });
+    expect(html).not.toMatch(/data-section-link[^>]*href="#part-/);
+    expect(html).toMatch(/data-section-link href="#status-quo"/);
+    expect(html).toMatch(/data-section-link href="#the-design"/);
+  });
+
+  it("should render a plain ungrouped TOC when the plan has no parts", () => {
+    const { html } = renderDocument({
+      markdown: "# Plan\n\nLede.\n\n## Only section\n\nBody.\n",
+      fallbackTitle: "Plan",
+    });
+    expect(html).not.toContain("data-toc-part");
   });
 });
 
@@ -192,7 +249,7 @@ describe("renderDocument shell", () => {
 describe("validateDocument", () => {
   it("should collect the same model while completing HTML delivery", () => {
     const markdown =
-      '# Plan\n\n## Scope\n\n<BigDecision question="Q?">\n\n<Callout type="note">\n\nNested context.\n\n</Callout>\n\n<Option title="A" />\n\n<Option title="B" />\n\n</BigDecision>\n';
+      '# Plan\n\n## Scope\n\n<ComplexDecision question="Q?">\n\n<Callout type="note">\n\nNested context.\n\n</Callout>\n\n<Option title="A" />\n\n<Option title="B" />\n\n</ComplexDecision>\n';
     const input = { markdown, fallbackTitle: "Fallback" };
 
     expect(validateDocument(input)).toEqual(compilePlanModel(input));

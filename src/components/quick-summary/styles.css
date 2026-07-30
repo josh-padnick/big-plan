@@ -1,0 +1,7 @@
+/* The Why hero band: a soft accent wash the utility palette cannot express. */
+
+@layer components {
+  article .quick-summary-why {
+    background: color-mix(in srgb, var(--accent-c) 8%, transparent);
+  }
+}

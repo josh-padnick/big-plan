@@ -19,22 +19,42 @@ is styled by its owning module, not here.
     margin: 2.25em 0 0.6em;
   }
   article h1 {
-    font-size: 1.75rem;
+    font-size: 2.5rem;
+    line-height: 1.15;
     margin-top: 0;
+    border-bottom: 1px solid var(--color-edge);
+    padding-bottom: 0.3em;
   }
   article h2 {
-    font-size: 1.35rem;
+    font-size: 2rem;
     border-bottom: 1px solid var(--color-edge);
     padding-bottom: 0.3em;
   }
   article h3 {
-    font-size: 1.15rem;
+    font-size: 1.5rem;
   }
   article h4 {
-    font-size: 1rem;
+    font-size: 1.25rem;
   }
   article h5 {
-    font-size: 0.9375rem;
+    font-size: 1.0625rem;
+  }
+
+  /* The paragraph directly under the title is the plan's lede; it reads as
+     the document's subtitle, and the title's rule moves beneath it so the
+     pair forms one masthead. */
+  article h1:has(+ p) {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 0.3rem;
+  }
+  article h1 + p {
+    font-size: 1.25rem;
+    line-height: 1.5;
+    color: var(--color-muted);
+    border-bottom: 1px solid var(--color-edge);
+    padding-bottom: 0.75em;
+    margin-bottom: 1.5em;
   }
   article h6 {
     font-size: 0.875rem;

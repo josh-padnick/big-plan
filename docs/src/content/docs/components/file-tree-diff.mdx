@@ -79,7 +79,7 @@ It must carry at least one change status; a tree with none is rejected with a po
 - To show both names for a rename, write `old -> new [renamed]`; both sides must stay files or stay directories, and the arrow only pairs with `[renamed]`.
 
 Each changed entry tints its name in the change color and spells out Added, Modified, Deleted, or Renamed at the row's edge; changed files also replace the plain file glyph with a status icon, and deleted names are struck through.
-A note on an entry renders as a comment hint rather than inline text, keeping rows status-first; hovering, focusing, or tapping the hint reveals the note, which also stays available to assistive technology and in copied selections.
+A note on an entry renders as a comment hint rather than inline text, keeping rows status-first; hovering, focusing, or tapping the hint opens the note beside it immediately, and the hint stays a real disclosure that opens in place when scripts are unavailable.
 Every violation - an unknown badge, a rename without its `[renamed]` badge, or a tree with no change at all - reports a positional diagnostic.
 
 ## Combined view

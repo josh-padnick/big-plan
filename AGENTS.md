@@ -45,11 +45,12 @@ Plan-authored code never executes: imports, exports, expressions, and inline JSX
 Big Plan calls the validation-and-translation step **compilation**.
 The output commands compile the authoritative plan source independently, then produce either machine-readable JSON for agents and tools or a self-contained HTML review document for humans.
 The no-write validation command renders the plan in memory while collecting the machine-readable summary, then applies linting rules to the authored plan.
+Human delivery enforces the same linting rules before packaging, and a guidance command prints versioned plan-writing principles whose recent acknowledgment gates validation and human delivery.
 
 ## Architecture at a glance
 
 Big Plan uses one compilation path to produce either machine-readable JSON or a human-readable review document.
-The validate command checks that the review document can be rendered, then applies linting rules to the authored plan:
+The validate command checks that the review document can be rendered, then applies linting rules to the authored plan; the render command applies the same linting rules before writing:
 
 ```text
 MDX plan source
@@ -59,7 +60,7 @@ MDX plan source
      -> machine output -> machine-readable JSON
      -> human output -> React view -> HAST -> document transforms
         -> self-contained HTML review document
-  -> validate only -> linting rules
+  -> validate and human output -> linting rules on the authored plan
 ```
 
 Each component validates its authored attributes and content into plain data describing what it should show.
@@ -67,7 +68,8 @@ Machine delivery collects that data as JSON.
 Human delivery gives the same data to the component's React view, crosses one React-to-HAST boundary, applies document-wide transforms, and packages inert HTML.
 Validation renders the plan in memory while collecting the same component models in one pass.
 It discards the generated HTML, then applies its registered linting rules to the authored plan.
-React is a presentation-edge implementation tool; no React runtime or browser script ships in a rendered document.
+React is a presentation-edge implementation tool; no React runtime ships in a rendered document, and the only browser script is the shell's small self-contained viewer script for navigation scroll-spy and hover popovers.
+Plan content never contributes executable code, and a document stays fully readable with scripts disabled.
 
 Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
 The exact dependency allow-list and completeness guard live in `eslint.config.mjs`.

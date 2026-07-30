@@ -131,6 +131,12 @@ const queryAll = (
 };
 
 describe("renderDatabaseTableSchema validation", () => {
+  // A components-layer hover rule loses to the row's own bg-transparent
+  // utility, so the menu row's highlight has to be a utility too.
+  it("should carry menu-row hover feedback as a utility", () => {
+    expect(JSON.stringify(render().element)).toContain("hover:bg-edge");
+  });
+
   it("should require the name attribute", () => {
     expect(render({ attributes: {} }).diagnostics).toContainEqual({
       line: 3,

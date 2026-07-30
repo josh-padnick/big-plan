@@ -1,0 +1,42 @@
+---
+title: Part
+description: The self-closing act divider - a numbered band that groups the sections after it into one act of the deck.
+---
+
+`Part` divides a plan's sections into numbered acts.
+Each marker renders as a borderless, surface-tinted band carrying an accent `PART N` tag and the act title, and every section after it belongs to that act.
+Big Plan derives slide numbers, sidebar navigation grouping, and [TableOfContents](/components/table-of-contents/) group headers from the dividers, so the deck structure is authored exactly once.
+
+## When to use it
+
+Group a plan of roughly five or more sections into about three acts, canonically Context, The proposal, and Shipping & your review.
+A short plan whose sections already read in one breath does not need dividers.
+
+## Authoring
+
+```mdx
+<Part title="Context" />
+
+## Status quo
+
+...
+
+## Success looks like
+
+...
+
+<Part title="The proposal" />
+
+## The retry queue
+
+...
+```
+
+## The contract
+
+- `title` is required and non-empty; it names the act, never its number.
+- `Part` is self-closing and rejects body content.
+- Numbers are assigned in document order at render time; a title containing its own number would read "Part 1: 1. Context".
+
+Each violation fails `validate` and `render` with a positional diagnostic.
+Run `big-plan guidance Part` for judgment-level usage guidance.

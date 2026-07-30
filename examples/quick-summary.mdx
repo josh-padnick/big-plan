@@ -1,0 +1,37 @@
+# Retry Pipeline Summary Plan
+
+Replace inline payment-capture retries with a persistent queue, summarized here with the `QuickSummary` component.
+
+<QuickSummary>
+
+<Why>
+
+- For checkout to stay fast and reliable, failed captures must retry without blocking requests or losing state on deploys.
+
+</Why>
+
+<What>
+
+- Build a persistent retry queue with explicit state, bounded backoff, and an operator-visible audit trail.
+
+</What>
+
+<How>
+
+- Move capture retries out of the API server and into a queue worker.
+- Record every attempt in the audit trail.
+- Ship operator controls to pause, force, and cancel retries.
+
+</How>
+
+</QuickSummary>
+
+## Why the queue
+
+Inline retries couple checkout latency to processor health and lose retry state on every deploy.
+A persistent queue makes retry state durable, observable, and independent of request lifecycles.
+
+## Acceptance criteria
+
+- A failed capture is retried on schedule after an API-server restart.
+- Operators can pause, force, and cancel retries per merchant.

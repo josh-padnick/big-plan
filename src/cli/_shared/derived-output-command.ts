@@ -37,6 +37,7 @@ export const runDerivedOutputCommand = async <Derived>({
   outputSuffix,
   invalidDocumentMessage,
   derive,
+  verify,
   serialize,
   result,
 }: {
@@ -45,6 +46,7 @@ export const runDerivedOutputCommand = async <Derived>({
   readonly outputSuffix: string;
   readonly invalidDocumentMessage: string;
   readonly derive: (input: DerivationInput) => Derived;
+  readonly verify?: (input: { readonly markdown: string }) => void;
   readonly serialize: (derived: Derived) => string;
   readonly result: (input: {
     readonly derived: Derived;
@@ -66,12 +68,15 @@ export const runDerivedOutputCommand = async <Derived>({
     usage,
   });
 
-  const { derived } = await deriveInputFile({
+  const { markdown, derived } = await deriveInputFile({
     inputPath,
     usage,
     invalidDocumentMessage,
     derive,
   });
+  // Verification runs after structural derivation and before any write, so a
+  // failing check leaves the filesystem untouched.
+  verify?.({ markdown });
 
   await mkdir(dirname(outputPath), { recursive: true });
   await writeGuardedOutput(serialize(derived));

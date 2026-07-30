@@ -60,23 +60,21 @@ export default tseslint.config(
       model: {
         files: [
           "src/components/_authoring/**/*.ts",
+          "src/components/_model/**/*.ts",
           "src/components/*/compile*.ts",
           "src/components/code-diff/unified-diff*.ts",
           "src/components/code-snippet/split-highlighted-lines*.ts",
           "src/components/database-table-schema/derive-index-participation*.ts",
           "src/components/database-table-schema/parse-table-schema*.ts",
-          "src/components/file-tree/derive-tree-view*.ts",
-          "src/components/file-tree/parse-tree-text*.ts",
         ],
         imports: [
           "**/components/_authoring/**",
+          "**/components/_model/**",
           "**/components/*/compile.js",
           "**/components/code-diff/unified-diff.js",
           "**/components/code-snippet/split-highlighted-lines.js",
           "**/components/database-table-schema/derive-index-participation.js",
           "**/components/database-table-schema/parse-table-schema.js",
-          "**/components/file-tree/derive-tree-view.js",
-          "**/components/file-tree/parse-tree-text.js",
         ],
         mayImport: [],
       },
@@ -105,27 +103,20 @@ export default tseslint.config(
           "src/components/_shared/**/*.tsx",
           "src/components/*/view*.ts",
           "src/components/*/view*.tsx",
-          "src/components/file-tree/*-view.tsx",
         ],
-        imports: [
-          "**/components/_shared/**",
-          "**/components/*/view*.js",
-          "**/components/file-tree/*-view.js",
-        ],
+        imports: ["**/components/_shared/**", "**/components/*/view*.js"],
         mayImport: ["model", "icons"],
       },
       components: {
         files: [
           "src/components/_registration/**/*.ts",
           "src/components/*/definition*.ts",
-          "src/components/file-tree/*-definition*.ts",
           "src/components/code-diff/test-fixtures.ts",
           "src/render/markdown/component-pipeline/**/*.ts",
         ],
         imports: [
           "**/components/_registration/**",
           "**/components/*/definition.js",
-          "**/components/file-tree/*-definition.js",
           "**/render/markdown/component-pipeline/**",
         ],
         mayImport: ["icons", "model", "ui"],
@@ -153,7 +144,11 @@ export default tseslint.config(
       composer: {
         files: ["src/render/*.ts"],
         ignores: ["src/render/page.ts", "src/render/escape-html.ts"],
-        imports: ["**/compile-plan-model.js", "**/render-document.js"],
+        imports: [
+          "**/compile-plan-model.js",
+          "**/render-document.js",
+          "**/serialize-html.js",
+        ],
         mayImport: ["markdown", "shell", "page"],
       },
       cli: {
@@ -288,6 +283,12 @@ export default tseslint.config(
     // Co-located component tests may exercise the full authoring pipeline;
     // production compiler, view, and definition files remain boundary-checked.
     files: ["src/components/**/*.test.ts"],
+    rules: { "no-restricted-imports": "off" },
+  },
+  {
+    // Co-located renderer tests assert on serialized HTML, so they may reach
+    // the composer's serializer; production markdown files stay HAST-only.
+    files: ["src/render/**/*.test.ts"],
     rules: { "no-restricted-imports": "off" },
   },
   {

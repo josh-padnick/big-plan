@@ -1,4 +1,4 @@
-// Exercises the authoring lint interface through its first table-format rule,
+// Exercises the authoring lint interface through its registered rules,
 // including intended findings, source positions, and conservative near misses.
 
 import { describe, expect, it } from "vitest";
@@ -9,12 +9,12 @@ describe("lintPlan markdown-table-format", () => {
     expect(
       lintPlan({
         markdown:
-          "# Plan\n\n## Ownership\n\n| Name | Owner |\n| API | Platform |\n",
+          "# Plan\n\nA lede.\n\n## Ownership\n\n| Name | Owner |\n| API | Platform |\n",
       }),
     ).toEqual([
       {
         ruleId: "markdown-table-format",
-        line: 6,
+        line: 8,
         column: 1,
         message:
           'Table-like block needs a valid delimiter row with 2 columns, for example "| --- | --- |"',
@@ -129,5 +129,333 @@ describe("lintPlan markdown-table-format", () => {
     ],
   ])("should not report %s", (_label, markdown) => {
     expect(lintPlan({ markdown })).toEqual([]);
+  });
+});
+
+describe("lintPlan lede-presence", () => {
+  it("should report the first section heading when the title has no lede", () => {
+    expect(
+      lintPlan({ markdown: "# Ship the skill\n\n## Status quo\n\nToday.\n" }),
+    ).toEqual([
+      {
+        ruleId: "lede-presence",
+        line: 3,
+        column: 1,
+        message:
+          "Open with a lede: one concise sentence after the title stating the plan's thesis, before the first section heading",
+      },
+    ]);
+  });
+
+  it.each([
+    [
+      "a title followed by a lede paragraph",
+      "# Ship the skill\n\nOne sentence of thesis.\n\n## Status quo\n\nToday.\n",
+    ],
+    [
+      "a title followed by a component",
+      '# Ship the skill\n\n<Callout type="note">\n\nContext.\n\n</Callout>\n\n## Status quo\n\nToday.\n',
+    ],
+    [
+      "a title followed by a blockquote",
+      "# Ship the skill\n\n> Review goal.\n\n## Status quo\n\nToday.\n",
+    ],
+    ["a document without a level-one title", "## Status quo\n\nToday.\n"],
+    ["a title with no sections at all", "# Ship the skill\n"],
+  ])("should not report %s", (_label, markdown) => {
+    expect(lintPlan({ markdown })).toEqual([]);
+  });
+});
+
+describe("lintPlan title-length", () => {
+  it("should report a title longer than eight words", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# Ship the official Big Plan skill users install into their agents\n\nLede.\n",
+      }),
+    ).toEqual([
+      {
+        ruleId: "title-length",
+        line: 1,
+        column: 1,
+        message:
+          "Keep the title a punchy noun phrase of at most 8 words and 60 characters naming the outcome",
+      },
+    ]);
+  });
+
+  it("should report a title longer than sixty characters", () => {
+    expect(
+      lintPlan({
+        markdown: `# Institutionalize cross-organizational containerization\n\nLede.\n`,
+      }),
+    ).toEqual([]);
+    expect(
+      lintPlan({
+        markdown: `# Institutionalize cross-organizational containerization computations\n\nLede.\n`,
+      }),
+    ).toMatchObject([{ ruleId: "title-length", line: 1 }]);
+  });
+
+  it.each([
+    [
+      "an eight-word title",
+      "# Add an official installable skill to Big Plan\n\nLede.\n",
+    ],
+    [
+      "a title with inline code",
+      "# Ship the `big-plan skill` command\n\nLede.\n",
+    ],
+    [
+      "a document without a leading title",
+      "Prose first.\n\n# A very long title that would otherwise be flagged here\n",
+    ],
+  ])("should not report %s", (_label, markdown) => {
+    expect(lintPlan({ markdown })).toEqual([]);
+  });
+});
+
+describe("lintPlan lede-style", () => {
+  it.each([
+    ["I propose one version-controlled skill file."],
+    ["This plan adds per-key rate limiting."],
+    ["this document exercises every major shape."],
+    ["We will move retries into a queue."],
+  ])("should report a lede opening with %j", (lede) => {
+    expect(lintPlan({ markdown: `# Title\n\n${lede}\n` })).toEqual([
+      {
+        ruleId: "lede-style",
+        line: 3,
+        column: 1,
+        message:
+          'Write the lede as a declarative subtitle describing the delivered outcome, not an opener like "I propose" or "This plan"',
+      },
+    ]);
+  });
+
+  it.each([
+    [
+      "a declarative lede",
+      "# Title\n\nA durable retry pipeline replaces inline retries.\n",
+    ],
+    [
+      "a lede mentioning the phrase later in the sentence",
+      "# Title\n\nEverything this plan touches stays local.\n",
+    ],
+    [
+      "a component directly after the title",
+      '# Title\n\n<Callout type="note">\n\nI propose nothing here.\n\n</Callout>\n',
+    ],
+    [
+      "a document without a leading title",
+      "This plan is referenced in prose.\n",
+    ],
+  ])("should not report %s", (_label, markdown) => {
+    expect(lintPlan({ markdown })).toEqual([]);
+  });
+});
+
+describe("lintPlan lede-length", () => {
+  it("should report a lede longer than thirty words with its count", () => {
+    const longLede = Array.from({ length: 31 }, (_, i) => `word${i}`).join(" ");
+    expect(lintPlan({ markdown: `# Title\n\n${longLede}\n` })).toEqual([
+      {
+        ruleId: "lede-length",
+        line: 3,
+        column: 1,
+        message:
+          "Keep the lede at most 30 words (currently 31); it is the subtitle, so move supporting detail into the sections below",
+      },
+    ]);
+  });
+
+  it("should count words inside inline code and emphasis", () => {
+    const words = Array.from({ length: 29 }, (_, i) => `word${i}`).join(" ");
+    expect(
+      lintPlan({ markdown: `# Title\n\n${words} \`code\` *emphasis*\n` }),
+    ).toMatchObject([{ ruleId: "lede-length" }]);
+  });
+
+  it.each([
+    [
+      "a thirty-word lede",
+      `# Title\n\n${Array.from({ length: 30 }, (_, i) => `word${i}`).join(" ")}\n`,
+    ],
+    [
+      "a long second paragraph after a short lede",
+      `# Title\n\nShort subtitle.\n\n${Array.from({ length: 40 }, (_, i) => `word${i}`).join(" ")}\n`,
+    ],
+    [
+      "a component directly after the title",
+      '# Title\n\n<Callout type="note">\n\nContext.\n\n</Callout>\n',
+    ],
+  ])("should not report %s", (_label, markdown) => {
+    expect(lintPlan({ markdown })).toEqual([]);
+  });
+});
+
+describe("lintPlan quick-summary-singleton", () => {
+  it("should report each QuickSummary after the first", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n<QuickSummary>\n\n- A.\n\n</QuickSummary>\n\n## S\n\n<QuickSummary>\n\n- B.\n\n</QuickSummary>\n",
+      }),
+    ).toEqual([
+      {
+        ruleId: "quick-summary-singleton",
+        line: 13,
+        column: 1,
+        message:
+          "Only one QuickSummary is allowed; merge the key points into the first one",
+      },
+    ]);
+  });
+
+  it("should not report a single QuickSummary", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n<QuickSummary>\n\n- A.\n\n</QuickSummary>\n\n## S\n\nBody.\n",
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("lintPlan section-vocabulary", () => {
+  it.each([
+    ["## Desired outcome\n", 1],
+    ["# T\n\nLede.\n\n### Desired Outcomes\n", 5],
+    ["# T\n\nLede.\n\n## Definition of done\n", 5],
+  ])(
+    "should prefer Acceptance criteria over the heading in %j",
+    (markdown, line) => {
+      expect(lintPlan({ markdown })).toEqual([
+        {
+          ruleId: "section-vocabulary",
+          line,
+          column: 1,
+          message:
+            'Name this section "Acceptance criteria"; it is Big Plan\'s vocabulary for the contract this heading introduces',
+        },
+      ]);
+    },
+  );
+
+  it.each([
+    [
+      "the preferred heading itself",
+      "# T\n\nLede.\n\n## Acceptance criteria\n",
+    ],
+    [
+      "a heading that merely contains a discouraged phrase",
+      "# T\n\nLede.\n\n## Desired outcome of phase one\n",
+    ],
+    [
+      "prose mentioning a discouraged phrase",
+      "# T\n\nThe desired outcome appears in prose.\n",
+    ],
+  ])("should not report %s", (_label, markdown) => {
+    expect(lintPlan({ markdown })).toEqual([]);
+  });
+});
+
+describe("lintPlan table-of-contents-matches-sections", () => {
+  const plan = (overview: string): string =>
+    `# T\n\nLede.\n\n${overview}\n## Status quo\n\nA.\n\n## The design\n\nB.\n`;
+
+  it("should accept a TableOfContents whose entries repeat every section title in order", () => {
+    expect(
+      lintPlan({
+        markdown: plan(
+          '<TableOfContents>\n<Entry section="Status quo" gist="Today" />\n<Entry section="The design" gist="Tomorrow" />\n</TableOfContents>\n',
+        ),
+      }),
+    ).toEqual([]);
+  });
+
+  it("should report a mismatched entry at the TableOfContents's position", () => {
+    expect(
+      lintPlan({
+        markdown: plan(
+          '<TableOfContents>\n<Entry section="Status quo" gist="Today" />\n<Entry section="Design" gist="Tomorrow" />\n</TableOfContents>\n',
+        ),
+      }),
+    ).toEqual([
+      {
+        ruleId: "table-of-contents-matches-sections",
+        line: 5,
+        column: 1,
+        message:
+          'TableOfContents entry 2 says "Design" but section 2 is titled "The design"; list every section title exactly, in document order',
+      },
+    ]);
+  });
+
+  it("should report entries in the wrong order as pairwise mismatches", () => {
+    const findings = lintPlan({
+      markdown: plan(
+        '<TableOfContents>\n<Entry section="The design" gist="Tomorrow" />\n<Entry section="Status quo" gist="Today" />\n</TableOfContents>\n',
+      ),
+    });
+    expect(findings).toHaveLength(2);
+    expect(findings[0]?.message).toContain(
+      'TableOfContents entry 1 says "The design"',
+    );
+    expect(findings[1]?.message).toContain(
+      'TableOfContents entry 2 says "Status quo"',
+    );
+  });
+
+  it("should report a missing entry for an uncovered section", () => {
+    expect(
+      lintPlan({
+        markdown: plan(
+          '<TableOfContents>\n<Entry section="Status quo" gist="Today" />\n</TableOfContents>\n',
+        ),
+      }),
+    ).toEqual([
+      {
+        ruleId: "table-of-contents-matches-sections",
+        line: 5,
+        column: 1,
+        message:
+          'TableOfContents is missing an entry for section 2 ("The design")',
+      },
+    ]);
+  });
+
+  it("should report an extra entry beyond the document's sections", () => {
+    expect(
+      lintPlan({
+        markdown: plan(
+          '<TableOfContents>\n<Entry section="Status quo" gist="Today" />\n<Entry section="The design" gist="Tomorrow" />\n<Entry section="Rollout" gist="Later" />\n</TableOfContents>\n',
+        ),
+      }),
+    ).toEqual([
+      {
+        ruleId: "table-of-contents-matches-sections",
+        line: 5,
+        column: 1,
+        message:
+          'TableOfContents entry 3 ("Rollout") has no matching section; a TableOfContents lists exactly the document\'s sections',
+      },
+    ]);
+  });
+
+  it("should compare over text content when a section title carries inline code", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '# T\n\nLede.\n\n<TableOfContents>\n<Entry section="The skill command" gist="Prints it" />\n</TableOfContents>\n## The `skill` command\n\nA.\n',
+      }),
+    ).toEqual([]);
+  });
+
+  it("should report nothing when the plan has no TableOfContents", () => {
+    expect(
+      lintPlan({ markdown: "# T\n\nLede.\n\n## Status quo\n\nA.\n" }),
+    ).toEqual([]);
   });
 });

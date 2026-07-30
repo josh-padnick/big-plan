@@ -9,10 +9,10 @@ import type { CompiledMarkdown, Section } from "./markdown/compile-markdown.js";
 import {
   compileMarkdown,
   compileMarkdownWithModels,
-  serializeMarkdown,
 } from "./markdown/compile-markdown.js";
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
 import { renderPage } from "./page.js";
+import { serializeHtml } from "./serialize-html.js";
 import { renderShell } from "./shell/shell.js";
 
 export type RenderedDocument = {
@@ -28,12 +28,28 @@ const renderCompiledDocument = ({
   readonly compiled: CompiledMarkdown;
   readonly fallbackTitle: string;
 }): RenderedDocument => {
-  const { root, sections, elementIds, title } = compiled;
+  const { root, sections, elementIds, title, partIds } = compiled;
   const resolvedTitle = title ?? fallbackTitle;
+  // A section's part gains the rendered divider's anchor so the TOC's act
+  // headers link to the divider band itself.
+  const nav = sections.map((section) => {
+    if (section.part === undefined) {
+      return { id: section.id, label: section.text };
+    }
+    const partId = partIds[section.part.number - 1];
+    return {
+      id: section.id,
+      label: section.text,
+      part: {
+        ...section.part,
+        ...(partId === undefined || partId === "" ? {} : { id: partId }),
+      },
+    };
+  });
   const shell = renderShell({
-    nav: sections.map((section) => ({ id: section.id, label: section.text })),
+    nav,
     contentIds: elementIds,
-    contentHtml: serializeMarkdown({ root }),
+    contentHtml: serializeHtml({ root }),
   });
   const html = renderPage({
     title: resolvedTitle,

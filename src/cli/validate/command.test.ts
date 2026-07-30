@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { compileCommand } from "../compile/command.js";
+import { recordGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
 import { renderCommand } from "../render/command.js";
 import { validateCommand } from "./command.js";
 
@@ -13,9 +14,12 @@ let tempDirectory = "";
 
 beforeEach(async () => {
   tempDirectory = await mkdtemp(join(tmpdir(), "big-plan-validate-"));
+  process.env["BIG_PLAN_STATE_DIR"] = join(tempDirectory, "state");
+  await recordGuidanceAcknowledgment();
 });
 
 afterEach(async () => {
+  delete process.env["BIG_PLAN_STATE_DIR"];
   await rm(tempDirectory, { recursive: true, force: true });
 });
 
@@ -24,7 +28,7 @@ describe("validateCommand", () => {
     const inputPath = join(tempDirectory, "plan.mdx");
     await writeFile(
       inputPath,
-      '# Rollout plan\n\n## Scope\n\n<Callout type="note">\n\nOne increment.\n\n</Callout>\n',
+      '# Rollout plan\n\nOne lede sentence.\n\n## Scope\n\n<Callout type="note">\n\nOne increment.\n\n</Callout>\n',
       "utf8",
     );
     const entriesBefore = await readdir(tempDirectory);
@@ -34,6 +38,10 @@ describe("validateCommand", () => {
       title: "Rollout plan",
       sections: 1,
       components: 1,
+      help: [
+        "Lint checks only what is statically analyzable; render the plan and reread the document exactly as your human will",
+        "Judge it against the principles from `big-plan guidance` before presenting it",
+      ],
     });
     expect(await readdir(tempDirectory)).toEqual(entriesBefore);
   });
@@ -72,14 +80,14 @@ describe("validateCommand", () => {
     await expect(renderCommand([inputPath])).rejects.toMatchObject({
       suggestions,
     });
-    expect(await readdir(tempDirectory)).toEqual(["invalid.mdx"]);
+    expect(await readdir(tempDirectory)).toEqual(["invalid.mdx", "state"]);
   });
 
   it("should reject a malformed Markdown table through authoring lint", async () => {
     const inputPath = join(tempDirectory, "table.mdx");
     await writeFile(
       inputPath,
-      "# Ownership\n\n| Name | Owner |\n| API | Platform |\n",
+      "# Ownership\n\nA lede.\n\n| Name | Owner |\n| API | Platform |\n",
       "utf8",
     );
 
@@ -87,9 +95,38 @@ describe("validateCommand", () => {
       code: "VALIDATION_ERROR",
       message: "Plan failed authoring lint",
       suggestions: [
-        '4:1 [markdown-table-format] Table-like block needs a valid delimiter row with 2 columns, for example "| --- | --- |"',
+        '6:1 [markdown-table-format] Table-like block needs a valid delimiter row with 2 columns, for example "| --- | --- |"',
       ],
     });
-    expect(await readdir(tempDirectory)).toEqual(["table.mdx"]);
+    expect(await readdir(tempDirectory)).toEqual(["state", "table.mdx"]);
+  });
+
+  it("should diagnose a usage error before the guidance prerequisite", async () => {
+    process.env["BIG_PLAN_STATE_DIR"] = join(tempDirectory, "other-state");
+
+    await expect(
+      validateCommand(["plan.mdx", "plan.html"]),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: 'Unexpected extra argument "plan.html"',
+      suggestions: ["Usage: big-plan validate <input.mdx>"],
+    });
+  });
+
+  it("should stay locked until guidance has been read while compile stays open", async () => {
+    process.env["BIG_PLAN_STATE_DIR"] = join(tempDirectory, "other-state");
+    const inputPath = join(tempDirectory, "plan.mdx");
+    await writeFile(inputPath, "# Plan\n\nLede.\n\n## Scope\n\nOne.\n", "utf8");
+
+    await expect(validateCommand([inputPath])).rejects.toMatchObject({
+      code: "GUIDANCE_REQUIRED",
+      suggestions: [
+        "Run `big-plan guidance` to read how to write a plan a human loves to review",
+        "Guidance is acknowledged per directory and expires after 24 hours or when the guidance changes",
+      ],
+    });
+    await expect(compileCommand([inputPath])).resolves.toMatchObject({
+      title: "Plan",
+    });
   });
 });

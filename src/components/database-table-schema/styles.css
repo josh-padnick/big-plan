@@ -163,8 +163,4 @@
   article .table-schema-menu-separator {
     background: var(--color-edge);
   }
-  article .table-schema-menu-item:hover,
-  article .table-schema-button:hover {
-    background: var(--color-edge);
-  }
 }

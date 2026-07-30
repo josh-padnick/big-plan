@@ -1,11 +1,10 @@
 // Validates and compiles an MDX plan into a structured HAST review document plus its title,
-// h2 outline, and element ids, then owns final HTML serialization after
-// transforms finish. The page chrome around that content lives in shell.ts.
+// h2 outline, and element ids. The tree stays structured: the composer owns
+// final HTML serialization, and the page chrome lives in shell.ts.
 
 import type { Element, Root, RootContent } from "hast";
 import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
-import rehypeStringify from "rehype-stringify";
 import remarkGfm from "remark-gfm";
 import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
@@ -19,11 +18,21 @@ import type { ComponentDiagnostic } from "../../components/_authoring/diagnostic
 import { rehypeRenderComponents } from "./component-pipeline/deliver.js";
 import type { CollectedComponentModel } from "./component-pipeline/deliver.js";
 export type { CollectedComponentModel } from "./component-pipeline/deliver.js";
+import { completeOutlinePlaceholders } from "./component-pipeline/outline-placeholder.js";
+import type { DeferredOutlinePresentations } from "./component-pipeline/outline-placeholder.js";
+import { rehypeDeckTransform } from "./deck-transform.js";
+import type { MutableDocumentOutline } from "./deck-transform.js";
 import { remarkValidateComponents } from "./component-pipeline/validate-authoring.js";
+
+export type SectionPart = {
+  readonly number: number;
+  readonly title: string;
+};
 
 export type Section = {
   readonly id: string;
   readonly text: string;
+  readonly part?: SectionPart;
 };
 
 export type CompiledMarkdown = {
@@ -31,6 +40,9 @@ export type CompiledMarkdown = {
   readonly sections: ReadonlyArray<Section>;
   readonly elementIds: ReadonlyArray<string>;
   readonly title: string | undefined;
+  // Rendered Part divider anchors in document order, so navigation can link
+  // each act header to its divider; parts carry no anchor in model delivery.
+  readonly partIds: ReadonlyArray<string>;
 };
 
 export type CompiledMarkdownModel = {
@@ -144,13 +156,48 @@ const findTitle = (node: StructuredParent): string | undefined => {
   return undefined;
 };
 
+// Reads the static string value of one authored attribute on a not-yet
+// compiled component node; expression-valued attributes are rejected later by
+// component delivery, so they read as absent here.
+const staticAttribute = ({
+  node,
+  name,
+}: {
+  readonly node: MdxJsxFlowElement;
+  readonly name: string;
+}): string | undefined => {
+  for (const attribute of node.attributes) {
+    if (attribute.type === "mdxJsxAttribute" && attribute.name === name) {
+      return typeof attribute.value === "string" ? attribute.value : undefined;
+    }
+  }
+  return undefined;
+};
+
+// Carries the part a document-order walk is currently inside, so every
+// section collected after a Part marker knows the act it belongs to.
+type PartTracker = {
+  part: SectionPart | undefined;
+  count: number;
+};
+
 // Gathers every slugged h2 in document order, at any nesting depth, so
-// sections inside containers such as blockquotes still reach the TOC.
+// sections inside containers such as blockquotes still reach the TOC. Part
+// markers still ride the tree untranslated here, so the same walk assigns
+// each section its act.
 const collectSections = (
   node: StructuredParent,
   sections: Array<Section>,
+  tracker: PartTracker,
 ): void => {
   for (const child of node.children) {
+    if (child.type === "mdxJsxFlowElement" && child.name === "Part") {
+      tracker.count += 1;
+      tracker.part = {
+        number: tracker.count,
+        title: staticAttribute({ node: child, name: "title" }) ?? "",
+      };
+    }
     if (child.type === "element") {
       const id = child.properties.id;
       if (
@@ -158,11 +205,15 @@ const collectSections = (
         typeof id === "string" &&
         id !== FOOTNOTE_LABEL_ID
       ) {
-        sections.push({ id, text: textOf(child) });
+        sections.push({
+          id,
+          text: textOf(child),
+          ...(tracker.part === undefined ? {} : { part: tracker.part }),
+        });
       }
     }
     if (child.type === "element" || child.type === "mdxJsxFlowElement") {
-      collectSections(child, sections);
+      collectSections(child, sections, tracker);
     }
   }
 };
@@ -178,7 +229,7 @@ const rehypeCollectMetadata =
   ({ metadata }: { readonly metadata: MarkdownMetadata }) =>
   (tree: Root): void => {
     metadata.title = findTitle(tree);
-    collectSections(tree, metadata.sections);
+    collectSections(tree, metadata.sections, { part: undefined, count: 0 });
   };
 
 // Gathers ids from rendered elements for page-shell namespace allocation.
@@ -215,6 +266,11 @@ const compileMarkdownTree = ({
 }): CompiledMarkdown => {
   const diagnostics = createDiagnosticCollector();
   const metadata: MarkdownMetadata = { title: undefined, sections: [] };
+  // Outline-aware components defer their presentation behind placeholders;
+  // the deck transform fills the outline, and the completion pass then
+  // presents every placeholder against it.
+  const deferredOutline: DeferredOutlinePresentations = [];
+  const outline: MutableDocumentOutline = { parts: [], sections: [] };
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -238,11 +294,21 @@ const compileMarkdownTree = ({
       diagnostics,
       ...(models === undefined ? {} : { models }),
       ...(collectModels === undefined ? {} : { collectModels }),
+      deferOutline: deferredOutline,
     })
     // Detection stays opt-in through the fence language: undeclared and
     // unknown languages remain readable without guessed tokenization.
     .use(rehypeHighlight)
-    .use(rehypeWrapTables);
+    .use(rehypeWrapTables)
+    .use(rehypeDeckTransform, { outline })
+    .use(() => (tree: Root) => {
+      completeOutlinePlaceholders({
+        tree,
+        presentations: deferredOutline,
+        outline,
+        diagnostics,
+      });
+    });
   // Only parsing reflects author mistakes; a transform that throws is a
   // renderer defect and must surface as an internal error, not as a
   // diagnostic blaming the document.
@@ -266,6 +332,7 @@ const compileMarkdownTree = ({
     sections: metadata.sections,
     elementIds,
     title: metadata.title,
+    partIds: outline.parts.map((part) => part.id ?? ""),
   };
 };
 
@@ -303,7 +370,3 @@ export const compileMarkdownWithModels = ({
   });
   return { ...compiled, components };
 };
-
-/** Serializes a compiled review document only after all transforms finish. */
-export const serializeMarkdown = ({ root }: { readonly root: Root }): string =>
-  unified().use(rehypeStringify).stringify(root);

@@ -16,7 +16,7 @@ One decision only.
 
 </Callout>
 
-<BigDecision question="Which store?" status="open">
+<ComplexDecision question="Which store?" status="open">
 
 <Criterion title="Setup" />
 
@@ -32,16 +32,16 @@ One decision only.
 
 </Option>
 
-</BigDecision>
+</ComplexDecision>
 `;
 
 const bigDecisionModelOf = (markdown: string): Record<string, unknown> => {
   const plan = compilePlanModel({ markdown, fallbackTitle: "fallback" });
   const entry = plan.components.find(
-    ({ component }) => component === "BigDecision",
+    ({ component }) => component === "ComplexDecision",
   );
   if (entry === undefined || typeof entry.model !== "object") {
-    throw new Error("BigDecision model missing");
+    throw new Error("ComplexDecision model missing");
   }
   return entry.model as Record<string, unknown>;
 };
@@ -54,7 +54,7 @@ describe("compilePlanModel", () => {
     expect(plan.sections.map(({ text }) => text)).toEqual(["Decision"]);
     expect(plan.components.map(({ component }) => component)).toEqual([
       "Callout",
-      "BigDecision",
+      "ComplexDecision",
     ]);
     const callout = plan.components[0];
     expect(callout?.line).toBe(5);
@@ -108,11 +108,11 @@ describe("compilePlanModel", () => {
   it("should list a parent before its nested component in document order", () => {
     const plan = compilePlanModel({
       markdown:
-        '<BigDecision question="Q?">\n\n<Callout type="note">\n\nNested context.\n\n</Callout>\n\n<Option title="A" />\n\n<Option title="B" />\n\n</BigDecision>\n',
+        '<ComplexDecision question="Q?">\n\n<Callout type="note">\n\nNested context.\n\n</Callout>\n\n<Option title="A" />\n\n<Option title="B" />\n\n</ComplexDecision>\n',
       fallbackTitle: "x",
     });
     expect(plan.components.map(({ component }) => component)).toEqual([
-      "BigDecision",
+      "ComplexDecision",
       "Callout",
     ]);
   });
@@ -120,7 +120,7 @@ describe("compilePlanModel", () => {
   it("should hard-fail on diagnostics exactly as rendering does", () => {
     expect(() =>
       compilePlanModel({
-        markdown: '<BigDecision question="Q?">\n\n</BigDecision>\n',
+        markdown: '<ComplexDecision question="Q?">\n\n</ComplexDecision>\n',
         fallbackTitle: "x",
       }),
     ).toThrow(MarkdownDiagnosticsError);
@@ -130,7 +130,7 @@ describe("compilePlanModel", () => {
     try {
       compilePlanModel({
         markdown:
-          '<BigDecision question="Q?">\n\n<Option title="A" />\n\n<Option title="A" />\n\n</BigDecision>\n',
+          '<ComplexDecision question="Q?">\n\n<Option title="A" />\n\n<Option title="A" />\n\n</ComplexDecision>\n',
         fallbackTitle: "x",
       });
       throw new Error("expected diagnostics");

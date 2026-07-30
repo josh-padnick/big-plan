@@ -2,32 +2,42 @@
 // by the Markdown validation and delivery phases.
 
 import type { ScopedChildDefinition } from "../_authoring/contract.js";
-import { BIG_DECISION_COMPONENT_DEFINITION } from "../big-decision/definition.js";
+import { COMPLEX_DECISION_COMPONENT_DEFINITION } from "../complex-decision/definition.js";
 import { CALLOUT_COMPONENT_DEFINITION } from "../callout/definition.js";
 import { CODE_DIFF_COMPONENT_DEFINITION } from "../code-diff/definition.js";
 import { CODE_SNIPPET_COMPONENT_DEFINITION } from "../code-snippet/definition.js";
 import { DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION } from "../database-table-schema/definition.js";
-import { FILE_TREE_DIFF_COMPONENT_DEFINITION } from "../file-tree/file-tree-diff-definition.js";
-import { FILE_TREE_COMPONENT_DEFINITION } from "../file-tree/file-tree-definition.js";
+import { DECISION_COMPONENT_DEFINITION } from "../decision/definition.js";
+import { FILE_TREE_DIFF_COMPONENT_DEFINITION } from "../file-tree-diff/definition.js";
+import { FILE_TREE_COMPONENT_DEFINITION } from "../file-tree/definition.js";
+import { FLOW_DIAGRAM_COMPONENT_DEFINITION } from "../flow-diagram/definition.js";
 import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "../graphql-operation/definition.js";
 import { GRPC_METHOD_COMPONENT_DEFINITION } from "../grpc-method/definition.js";
 import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "../http-endpoint/definition.js";
-import { SMALL_DECISION_SET_COMPONENT_DEFINITION } from "../small-decision-set/definition.js";
+import { PART_COMPONENT_DEFINITION } from "../part/definition.js";
+import { QUICK_SUMMARY_COMPONENT_DEFINITION } from "../quick-summary/definition.js";
+import { SIMPLE_DECISION_SET_COMPONENT_DEFINITION } from "../simple-decision-set/definition.js";
+import { TABLE_OF_CONTENTS_COMPONENT_DEFINITION } from "../table-of-contents/definition.js";
 import type { ComponentDefinition } from "./define-component.js";
 
 export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
   {
-    BigDecision: BIG_DECISION_COMPONENT_DEFINITION,
+    ComplexDecision: COMPLEX_DECISION_COMPONENT_DEFINITION,
     Callout: CALLOUT_COMPONENT_DEFINITION,
     CodeDiff: CODE_DIFF_COMPONENT_DEFINITION,
     CodeSnippet: CODE_SNIPPET_COMPONENT_DEFINITION,
     DatabaseTableSchema: DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION,
+    Decision: DECISION_COMPONENT_DEFINITION,
     FileTree: FILE_TREE_COMPONENT_DEFINITION,
     FileTreeDiff: FILE_TREE_DIFF_COMPONENT_DEFINITION,
+    FlowDiagram: FLOW_DIAGRAM_COMPONENT_DEFINITION,
     GraphqlOperation: GRAPHQL_OPERATION_COMPONENT_DEFINITION,
     GrpcMethod: GRPC_METHOD_COMPONENT_DEFINITION,
     HttpEndpoint: HTTP_ENDPOINT_COMPONENT_DEFINITION,
-    SmallDecisionSet: SMALL_DECISION_SET_COMPONENT_DEFINITION,
+    Part: PART_COMPONENT_DEFINITION,
+    QuickSummary: QUICK_SUMMARY_COMPONENT_DEFINITION,
+    SimpleDecisionSet: SIMPLE_DECISION_SET_COMPONENT_DEFINITION,
+    TableOfContents: TABLE_OF_CONTENTS_COMPONENT_DEFINITION,
   };
 
 export type ComponentRegistry = Readonly<Record<string, ComponentDefinition>>;

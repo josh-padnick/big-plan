@@ -9,9 +9,9 @@ import { FAVICON_DARK_SRC, FAVICON_LIGHT_SRC } from "./branding.generated.js";
 import { escapeHtml } from "./escape-html.js";
 
 /**
- * Wraps body markup in a self-contained inert HTML document. Favicons and
- * styles are embedded, so callers guarantee they reference no external
- * resources.
+ * Wraps body markup in a self-contained HTML document. Favicons and styles
+ * are embedded, so callers guarantee they reference no external resources
+ * and contribute no plan-authored executable code.
  */
 export const renderPage = ({
   title,

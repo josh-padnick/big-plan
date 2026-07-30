@@ -120,7 +120,7 @@ README.md [modified]
 </FileTreeDiff>
 `;
 
-const BIG_DECISION_FIXTURE = `<BigDecision question="Which persistence layer should back review comments?" status="open">
+const COMPLEX_DECISION_FIXTURE = `<ComplexDecision question="Which persistence layer should back review comments?" status="open">
 
 Comments need durable identities and ordered replies without blocking a later multi-reviewer workflow.
 
@@ -164,12 +164,12 @@ The repository layer isolates SQL, so swapping engines later costs a data migrat
 
 </Reversibility>
 
-</BigDecision>
+</ComplexDecision>
 `;
 
-const SMALL_DECISION_SET_FIXTURE = `<SmallDecisionSet title="Open questions">
+const SIMPLE_DECISION_SET_FIXTURE = `<SimpleDecisionSet title="Open questions">
 
-<SmallDecision question="Should the first release ship behind a feature flag?">
+<SimpleDecision question="Should the first release ship behind a feature flag?">
 
 <Option title="Yes" recommended>
 
@@ -183,9 +183,9 @@ Avoids the flag-cleanup follow-up task.
 
 </Option>
 
-</SmallDecision>
+</SimpleDecision>
 
-<SmallDecision question="When do we remove the legacy endpoint?">
+<SimpleDecision question="When do we remove the legacy endpoint?">
 
 <Option title="Same release" />
 
@@ -195,9 +195,9 @@ Gives integrators one cycle of overlap.
 
 </Option>
 
-</SmallDecision>
+</SimpleDecision>
 
-</SmallDecisionSet>
+</SimpleDecisionSet>
 `;
 
 /** Renders an MDX fixture through the CLI and returns the output HTML path. */
@@ -268,14 +268,14 @@ const shootFileTreeDiff = async (page, path) => {
   await page.locator("figure[data-file-tree-diff]").screenshot({ path });
 };
 
-/** Screenshots the BigDecision figure element. */
-const shootBigDecision = async (page, path) => {
-  await page.locator("figure[data-big-decision]").screenshot({ path });
+/** Screenshots the ComplexDecision figure element. */
+const shootComplexDecision = async (page, path) => {
+  await page.locator("figure[data-complex-decision]").screenshot({ path });
 };
 
-/** Screenshots the SmallDecisionSet figure element. */
-const shootSmallDecisionSet = async (page, path) => {
-  await page.locator("figure[data-small-decision-set]").screenshot({ path });
+/** Screenshots the SimpleDecisionSet figure element. */
+const shootSimpleDecisionSet = async (page, path) => {
+  await page.locator("figure[data-simple-decision-set]").screenshot({ path });
 };
 
 /** Screenshots a square crop beginning at the review document's article. */
@@ -330,16 +330,16 @@ const SHOTS = [
     shoot: shootFigure,
   },
   {
-    name: "big-decision",
-    mdx: BIG_DECISION_FIXTURE,
-    base: "big-decision",
-    shoot: shootBigDecision,
+    name: "complex-decision",
+    mdx: COMPLEX_DECISION_FIXTURE,
+    base: "complex-decision",
+    shoot: shootComplexDecision,
   },
   {
-    name: "small-decision-set",
-    mdx: SMALL_DECISION_SET_FIXTURE,
-    base: "small-decision-set",
-    shoot: shootSmallDecisionSet,
+    name: "simple-decision-set",
+    mdx: SIMPLE_DECISION_SET_FIXTURE,
+    base: "simple-decision-set",
+    shoot: shootSimpleDecisionSet,
   },
   {
     name: "snippet",

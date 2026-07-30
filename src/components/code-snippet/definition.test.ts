@@ -93,6 +93,12 @@ const render = ({
 };
 
 describe("renderCodeSnippet attributes", () => {
+  // A components-layer hover rule loses to the row's own bg-transparent
+  // utility, so the menu row's highlight has to be a utility too.
+  it("should carry menu-row hover feedback as a utility", () => {
+    expect(JSON.stringify(render().element)).toContain("hover:bg-edge");
+  });
+
   it("should accept an omitted file when another snippet capability is used", () => {
     expect(
       render({ attributes: { showLineNumbers: true } }).diagnostics,

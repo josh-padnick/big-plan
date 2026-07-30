@@ -1,0 +1,48 @@
+---
+title: Decision
+description: The default decision card - each option carries its own verdict-lined considerations, read one option at a time.
+---
+
+`Decision` presents one tradeoff as stacked option cards.
+Each option lists its considerations inline as scannable title-verdict lines, so a reviewer reads one option in full instead of cross-referencing a matrix.
+Escalate to [ComplexDecision](/components/complex-decision/) when options need side-by-side scoring across shared criteria, and drop to [SimpleDecisionSet](/components/simple-decision-set/) for quick calls.
+
+## Authoring
+
+```mdx
+<Decision question="How does the skill reach the end user's agent?" status="open">
+
+Context the reviewer needs before the options.
+
+<Option title="Embedded in the CLI" recommended summary="A skill command prints the file verbatim.">
+
+<Consideration title="Version fidelity" verdict="Exact" tone="good">
+
+The skill is compiled into the package, so it can never disagree with the installed CLI.
+
+</Consideration>
+
+<Consideration title="Works offline" verdict="Yes" tone="good" />
+
+Optional prose detail after the considerations.
+
+</Option>
+
+<Option title="Docs-site download" summary="Setup fetches the skill from the docs site.">
+
+<Consideration title="Version fidelity" verdict="Drifts" tone="bad" />
+
+</Option>
+
+</Decision>
+```
+
+## The contract
+
+- `question` is required; `status` is `open`, `decided`, or `deferred` (default `open`).
+- At least two `Option` children, at most one marked `recommended`.
+- Every `Option` needs at least one `Consideration` with a required `title` and `verdict`; `tone` is `good`, `bad`, `mixed`, or `neutral` (default `neutral`).
+- Consideration and option bodies are markdown without headings, footnotes, or typed components.
+
+Each violation fails `validate` and `render` with a positional diagnostic.
+Run `big-plan guidance Decision` for judgment-level usage guidance.

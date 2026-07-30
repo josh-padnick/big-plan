@@ -23,7 +23,7 @@ const MenuItemButton = ({
 }) => (
   <button
     type="button"
-    className="code-snippet-menu-item flex w-full cursor-pointer items-center gap-[0.45rem] whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-[0.3rem] text-left text-xs text-ink [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted"
+    className="code-snippet-menu-item flex w-full cursor-pointer items-center gap-[0.45rem] whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-[0.3rem] text-left text-xs text-ink hover:bg-edge [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted"
     role="menuitem"
     tabIndex={-1}
     {...{ [`data-snippet-${action}`]: "" }}
@@ -39,11 +39,11 @@ const ActionsMenu = ({ filePath }: { readonly filePath?: string }) => (
   <span className="code-snippet-menu relative inline-flex" data-snippet-menu="">
     <button
       type="button"
-      className="code-snippet-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
+      className="code-snippet-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
       aria-label="More actions"
       aria-haspopup="menu"
       aria-expanded="false"
-      title="More actions"
+      data-tooltip="More actions"
       hidden
       data-snippet-menu-button=""
       data-size="xs"

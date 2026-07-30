@@ -1,0 +1,57 @@
+---
+title: QuickSummary
+description: A standout card of the plan's key points, capped at five bullets and six hundred characters so it stays a summary.
+---
+
+`QuickSummary` opens a plan with the few points a reviewer must know, rendered as a labeled card that stands apart from body prose.
+Its caps are the point: a summary that cannot grow cannot become an aggregation of the whole plan.
+
+## When to use it
+
+Place one `QuickSummary` directly after the plan's lede, before any section.
+A reader who stops after it should know what will change, how it will work, which decisions the plan needs from them, and the biggest risk.
+
+### When not to use it
+
+Do not use it anywhere but the top of the document, and never as a section recap.
+If a point only matters to readers of one section, it belongs in that section.
+
+## Authoring
+
+The body holds `Why`, `What`, and `How` facet sections; the card renders Why as an accent hero band above What and How cards:
+
+```mdx
+<QuickSummary>
+
+<Why>
+
+- For checkout to stay fast, failed captures must retry without blocking requests.
+
+</Why>
+
+<What>
+
+- Build a persistent retry queue with explicit state and an audit trail.
+
+</What>
+
+<How>
+
+- Move capture retries out of the API server and into a queue worker.
+- Ship operator controls to pause, force, and cancel retries.
+
+</How>
+
+</QuickSummary>
+```
+
+## The contract
+
+- `Why` and `What` are required; `How` is optional; each at most once, in that order.
+- Each facet's body is exactly one bullet list: one bullet for `Why` and `What`, at most 3 for `How`; prose, headings, and other components are rejected.
+- At most 450 characters of readable text across all facets, counted after collapsing whitespace and including inline code and emphasis.
+- At most one `QuickSummary` per document, enforced by the `quick-summary-singleton` linting rule.
+- No attributes on the component or its facets.
+
+Each violation fails `validate` and `render` with a positional diagnostic.
+Run `big-plan guidance QuickSummary` for judgment-level usage guidance.

@@ -1,6 +1,7 @@
 # Payments Retry Architecture Plan
 
-This plan proposes a durable retry pipeline for failed payment captures.
+A durable retry pipeline takes over failed payment captures.
+
 Today a failed capture is retried inline by the API server, which couples checkout latency to processor health and silently drops retries when a pod restarts.
 The proposal moves retries into a persistent queue with explicit state, bounded backoff, and an operator-facing audit trail.[^1]
 

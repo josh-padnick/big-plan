@@ -13,6 +13,22 @@ Confirm that Node.js 22 or newer is available.
 node --version
 ```
 
+## Read the guidance
+
+Before writing the plan, run:
+
+```sh
+npx big-plan guidance
+```
+
+It prints the plan-writing principles and unlocks `validate` and `render` for the working directory for 24 hours.
+Both commands fail with `GUIDANCE_REQUIRED` until it has been run.
+
+## Validate while authoring
+
+Use `npx big-plan validate <plan.mdx>` as the correction loop while writing.
+Rendering enforces the same linting rules, so validate until clean before handing anything to a human.
+
 ## Render the review document
 
 From the working directory that contains the plan path, run:

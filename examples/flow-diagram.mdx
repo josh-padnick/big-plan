@@ -1,0 +1,64 @@
+# Ship the official Big Plan skill
+
+One version-controlled skill file reaches every surface an end user meets, demonstrated here with `FlowDiagram` diagrams for the delivery pipeline and its prerequisite.
+
+## The delivery pipeline
+
+The authored file is the only hand-edited copy; everything a user meets derives from it.
+
+<FlowDiagram>
+
+<Stage title="Source of truth">
+<Node id="authored" label="Author once" code="assets/skill/SKILL.md" tone="source" />
+</Stage>
+
+<Stage title="Generate">
+<Node id="generator" label="Generate" code="scripts/gen-skill.mjs" />
+</Stage>
+
+<Stage title="Available through">
+<Node id="cli" label="CLI" code="big-plan skill" tone="destination" />
+<Node id="docs" label="Docs" code="big-plan.ai/skill.md" tone="destination" />
+<Node id="setup" label="Setup" tone="destination">
+
+The agent installs the skill
+
+</Node>
+</Stage>
+
+<Edge from="authored" to="generator" label="feeds" />
+<Edge from="generator" to="cli" />
+<Edge from="generator" to="docs" />
+<Edge from="generator" to="setup" />
+
+One authored file - three surfaces - no content drift.
+
+</FlowDiagram>
+
+## Sequencing
+
+The skill's first instruction runs a command another change introduces, so the dependency is explicit.
+
+<FlowDiagram>
+
+<Stage title="Prerequisite">
+<Node id="readability" label="Readability PR #33" badge="Open - must merge first" badgeTone="warning">
+
+Adds the `big-plan guidance` command
+
+</Node>
+</Stage>
+
+<Stage title="This plan">
+<Node id="skill" label="Skill PR" tone="source">
+
+Calls `big-plan guidance` in its workflow
+
+</Node>
+</Stage>
+
+<Edge from="readability" to="skill" label="unblocks" />
+
+Until #33 merges, branch the skill PR from it; afterward, branch from `main`.
+
+</FlowDiagram>

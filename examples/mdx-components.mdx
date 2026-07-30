@@ -1,6 +1,7 @@
 # Edge Cache Revalidation Plan
 
-This plan moves catalog-page cache revalidation out of request handlers and into a small background queue.
+Catalog-page cache revalidation moves out of request handlers and into a small background queue.
+
 Today an expired entry makes the first reader wait for an origin fetch, so traffic spikes amplify latency precisely when the cache should protect the service.
 The proposed stale-while-revalidate path keeps reads fast, bounds origin concurrency, and preserves the current cache key contract.
 
@@ -31,7 +32,7 @@ It already has regional concurrency controls and the required service account.
 
 The queue boundary is the remaining architectural choice in this excerpt, so its options stay grouped with the tradeoffs the reviewer must judge.
 
-<BigDecision question="Where should refresh-job deduplication live?" status="open">
+<ComplexDecision question="Where should refresh-job deduplication live?" status="open">
 
 The enqueue path must collapse repeated refreshes for the same cache key without coupling request handlers to worker internals.
 
@@ -77,15 +78,15 @@ Moving the check later means re-teaching every producer, so pick the boundary no
 
 </Reversibility>
 
-</BigDecision>
+</ComplexDecision>
 
 ## Remaining questions
 
 The smaller calls do not need tradeoff cards; they collect at the end as a compact question list.
 
-<SmallDecisionSet title="Open questions">
+<SimpleDecisionSet title="Open questions">
 
-<SmallDecision question="Should the refresh queue name include the region?">
+<SimpleDecision question="Should the refresh queue name include the region?">
 
 <Option title="Yes" recommended>
 
@@ -99,9 +100,9 @@ One name is simpler until a second region actually ships.
 
 </Option>
 
-</SmallDecision>
+</SimpleDecision>
 
-<SmallDecision question="Backfill the cold cache before or after the cutover?">
+<SimpleDecision question="Backfill the cold cache before or after the cutover?">
 
 <Option title="Before">
 
@@ -115,9 +116,9 @@ Avoids double-writing entries the cutover would invalidate anyway.
 
 </Option>
 
-</SmallDecision>
+</SimpleDecision>
 
-</SmallDecisionSet>
+</SimpleDecisionSet>
 
 ## Planned file changes
 
