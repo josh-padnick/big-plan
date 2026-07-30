@@ -37,8 +37,10 @@ they stay locked to the card instead of floating in the gutter.
   }
 
   /* Spacing that used to live on chrome (mt-12 / part mt) sits on the row so
-     the toggle and header move together - never a floating gutter orphan. */
-  article .plan-slide-group:not([data-collapsed]) > .plan-collapse-row {
+     the toggle and header move together - never a floating gutter orphan.
+     Slide-group lead-in is constant across expand/collapse so the chevron
+     does not translate vertically on click (only rotates). */
+  article .plan-slide-group > .plan-collapse-row {
     margin-top: 3rem;
   }
   article .plan-part-group > .plan-collapse-row {
@@ -55,6 +57,8 @@ they stay locked to the card instead of floating in the gutter.
   }
   article .plan-collapse-row {
     display: flex;
+    /* flex-start always: collapsed must not switch to center or the chevron
+       translates vertically on click. Only the glyph rotates. */
     align-items: flex-start;
     gap: 0.25rem;
     margin-left: -1.65rem;
@@ -66,8 +70,9 @@ they stay locked to the card instead of floating in the gutter.
   }
 
   /*
-     Expanded: toggle sits near the kicker line of a framed slide. Collapsed
-     chips center the control in unlayered rules below.
+     Toggle vertical offset is constant per host kind across expand/collapse
+     so getBoundingClientRect().top does not jump when only aria-expanded
+     and data-collapsed change. Adjust content, not the control.
   */
   article .plan-collapse-toggle {
     flex: 0 0 1.35rem;
@@ -76,10 +81,16 @@ they stay locked to the card instead of floating in the gutter.
     margin-top: 1.15rem;
   }
   article .plan-slide-group > .plan-collapse-row > .plan-collapse-toggle {
-    margin-top: 0.15rem;
+    margin-top: 0.65rem;
   }
   article .plan-part-group > .plan-collapse-row > .plan-collapse-toggle {
     margin-top: 0.5rem;
+  }
+  article
+    [data-collapsible="subslide"]
+    > .plan-collapse-row
+    > .plan-collapse-toggle {
+    margin-top: 0.85rem;
   }
 
   /*
@@ -174,22 +185,11 @@ article
   padding: 0.65rem 1.15rem;
 }
 
-/*
-   Collapsed slide-level rows share one alignment. Expanded slide-groups keep
-   their 3rem lead-in above; collapsing drops that lead-in and the viewer
-   script stabilizes scroll so the header does not leap in the viewport.
-*/
-article [data-collapsible="slide"][data-collapsed] > .plan-collapse-row {
-  align-items: center;
-  margin-top: 0;
-}
-
+/* Simple slides have no lead-in; slide-groups keep their constant 3rem above. */
 article
-  [data-collapsible="slide"][data-collapsed]
-  > .plan-collapse-row
-  > .plan-collapse-toggle {
+  [data-collapsible="slide"][data-collapsed]:not(.plan-slide-group)
+  > .plan-collapse-row {
   margin-top: 0;
-  align-self: center;
 }
 
 article
@@ -210,30 +210,9 @@ article [data-collapsible="slide"][data-collapsed] > .plan-collapse-row h2 {
 }
 
 /*
-   Sub-slide chips: single compact row; kicker + chevron vertically centered.
+   Sub-slide chips: compact single line. Toggle margin is constant (see above);
+   only the glyph rotates on click.
 */
-article [data-collapsible="subslide"][data-collapsed] > .plan-collapse-row {
-  align-items: center;
-}
-
-article
-  [data-collapsible="subslide"][data-collapsed]
-  > .plan-collapse-row
-  > .plan-collapse-toggle {
-  margin-top: 0;
-  align-self: center;
-  width: 1.1rem;
-  height: 1.1rem;
-  flex-basis: 1.1rem;
-}
-
-article
-  [data-collapsible="subslide"][data-collapsed]
-  > .plan-collapse-row
-  > .plan-collapse-toggle::before {
-  margin-top: 0;
-}
-
 article
   [data-collapsible="subslide"][data-collapsed]
   > .plan-collapse-row
@@ -246,8 +225,8 @@ article
   border-radius: 0.4rem;
   background: transparent;
   /* Single-line chip; override expanded py-5 / wide py utilities. */
-  padding: 0.18rem 0.7rem;
-  min-height: 1.1rem;
+  padding: 0.55rem 0.7rem 0.55rem;
+  min-height: 0;
 }
 
 article
