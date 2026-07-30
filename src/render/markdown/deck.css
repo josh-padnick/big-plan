@@ -63,6 +63,7 @@ they stay locked to the card instead of floating in the gutter.
     gap: 0.25rem;
     margin-left: -1.65rem;
     width: calc(100% + 1.65rem);
+    cursor: pointer;
   }
   article .plan-collapse-row > :not([data-collapse-toggle]) {
     flex: 1 1 auto;

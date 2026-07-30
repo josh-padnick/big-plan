@@ -250,10 +250,31 @@ export const VIEWER_SCRIPT = `<script>
         }
       }, 150);
     });
+    const toggle = () =>
+      setCollapsed(block, !block.hasAttribute("data-collapsed"));
+    // Chevron stays the keyboard/a11y control; stopPropagation so the row
+    // handler does not double-toggle.
     button.addEventListener("click", (event) => {
       event.preventDefault();
-      setCollapsed(block, !block.hasAttribute("data-collapsed"));
+      event.stopPropagation();
+      toggle();
     });
+    // Whole header chrome (chevron + kicker + title) toggles; body is a
+    // sibling of the row and is never in this hit target.
+    const row = block.querySelector(":scope > [data-collapse-row]");
+    if (row !== null) {
+      row.setAttribute("data-collapse-hit", "");
+      row.addEventListener("click", (event) => {
+        if (
+          event.target.closest(
+            "a, button, input, textarea, select, summary, label",
+          )
+        )
+          return;
+        event.preventDefault();
+        toggle();
+      });
+    }
   }
   const expandAncestors = (target) => {
     let node = target;

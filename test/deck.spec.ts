@@ -98,6 +98,19 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 
+  await test.step("clicking the slide title toggles expand and collapse", async () => {
+    const successHost = page.locator(
+      '[data-collapsible="slide"][data-collapse-id="success-looks-like"]',
+    );
+    await expect(successHost).not.toHaveAttribute("data-collapsed", "");
+    await successHost.getByRole("heading", { level: 2 }).click();
+    await expect(successHost).toHaveAttribute("data-collapsed", "");
+    await successHost
+      .locator(":scope > [data-collapse-row] [data-slide-kicker]")
+      .click();
+    await expect(successHost).not.toHaveAttribute("data-collapsed", "");
+  });
+
   await test.step("hover host keeps the toggle while moving onto it", async () => {
     const successHost = page.locator(
       '[data-collapsible="slide"][data-collapse-id="success-looks-like"]',
