@@ -199,6 +199,39 @@ export const VIEWER_SCRIPT = `<script>
     }
     const button = toggleFor(block);
     if (button === null) continue;
+    // Host already spans the outside toggle gutter; a short leave delay is
+    // defense in depth if the pointer briefly exits during the move.
+    let leaveTimer = 0;
+    block.addEventListener("pointerenter", () => {
+      if (leaveTimer !== 0) {
+        clearTimeout(leaveTimer);
+        leaveTimer = 0;
+      }
+      block.setAttribute("data-collapse-hover", "");
+    });
+    block.addEventListener("pointerleave", () => {
+      if (leaveTimer !== 0) clearTimeout(leaveTimer);
+      leaveTimer = setTimeout(() => {
+        leaveTimer = 0;
+        if (!block.matches(":focus-within")) {
+          block.removeAttribute("data-collapse-hover");
+        }
+      }, 150);
+    });
+    block.addEventListener("focusout", (event) => {
+      if (
+        event.relatedTarget instanceof Node &&
+        block.contains(event.relatedTarget)
+      )
+        return;
+      if (leaveTimer !== 0) clearTimeout(leaveTimer);
+      leaveTimer = setTimeout(() => {
+        leaveTimer = 0;
+        if (!block.matches(":hover") && !block.matches(":focus-within")) {
+          block.removeAttribute("data-collapse-hover");
+        }
+      }, 150);
+    });
     button.addEventListener("click", (event) => {
       event.preventDefault();
       setCollapsed(block, !block.hasAttribute("data-collapsed"));

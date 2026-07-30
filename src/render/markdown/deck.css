@@ -2,8 +2,8 @@
 Deck styles for markdown-generated markup the slide transform wraps: the h2
 inside a slide frame cannot carry utility classes, so its in-slide identity
 lives here. The slide frame and kicker themselves carry utilities assigned by
-the transform. Collapse controls sit outside the frame and never indent the
-reading column when expanded.
+the transform. Collapse controls sit outside the frame on a shared hover host
+so the reading column is never indented when expanded.
 */
 
 @layer components {
@@ -36,20 +36,26 @@ reading column when expanded.
     margin-top: 0.8rem;
   }
 
-  /* Outside toggle: invisible until the host is hovered or focused so the
-     expanded deck matches pre-collapse layout; focus-visible always shows it
-     for keyboard users. */
+  /*
+     Shared hover host: left padding is the outside-toggle gutter; equal
+     negative margin keeps the frame aligned with the pre-collapse column.
+     The gutter is part of the host hit box, so moving onto the toggle never
+     clears :hover.
+  */
+  article .plan-collapse-host {
+    padding-left: 1.75rem;
+    margin-left: -1.75rem;
+  }
+
+  /* Outside toggle: subtle until the whole host is hovered or focused. */
   article .plan-collapse-toggle {
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.12s ease;
   }
-  article .plan-collapsible:hover > .plan-collapse-toggle,
-  article .plan-collapsible:focus-within > .plan-collapse-toggle,
-  article .plan-part-group:hover > .plan-collapse-toggle,
-  article .plan-part-group:focus-within > .plan-collapse-toggle,
-  article .plan-slide-group:hover > .plan-collapse-toggle,
-  article .plan-slide-group:focus-within > .plan-collapse-toggle,
+  article .plan-collapse-host:hover > .plan-collapse-toggle,
+  article .plan-collapse-host:focus-within > .plan-collapse-toggle,
+  article .plan-collapse-host[data-collapse-hover] > .plan-collapse-toggle,
   article .plan-collapse-toggle:focus-visible {
     opacity: 1;
     pointer-events: auto;
@@ -82,10 +88,9 @@ reading column when expanded.
     display: none;
   }
   article
-    section.plan-slide[data-collapsible][data-collapsed]
-    > :not([data-collapse-toggle]):not([data-slide-kicker]):not(h2):not(
-      h3[data-slide-kicker]
-    ) {
+    [data-collapsible][data-collapsed]
+    > .plan-slide
+    > :not([data-slide-kicker]):not(h2):not(h3[data-slide-kicker]) {
     display: none;
   }
 }

@@ -71,29 +71,40 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
   const toc = page.getByRole("navigation", { name: "Contents" });
 
   await test.step("blocks start open so body content is visible", async () => {
-    const statusSlide = page.locator(
+    const statusHost = page.locator(
       '[data-collapsible="slide"][data-collapse-id="status-quo"]',
     );
-    await expect(statusSlide).not.toHaveAttribute("data-collapsed", "");
-    await expect(statusSlide.getByText("Inline retries")).toBeVisible();
+    await expect(statusHost).not.toHaveAttribute("data-collapsed", "");
+    await expect(statusHost.getByText("Inline retries")).toBeVisible();
     await expect(
       page.getByRole("heading", { level: 2, name: "Status quo" }),
     ).toBeVisible();
   });
 
   await test.step("collapsing a slide hides its body but keeps the title", async () => {
-    const statusSlide = page.locator(
+    const statusHost = page.locator(
       '[data-collapsible="slide"][data-collapse-id="status-quo"]',
     );
-    const toggle = statusSlide.locator(":scope > [data-collapse-toggle]");
-    await statusSlide.hover();
-    await toggle.click({ force: true });
-    await expect(statusSlide).toHaveAttribute("data-collapsed", "");
-    await expect(statusSlide.getByText("Inline retries")).toBeHidden();
+    const toggle = statusHost.locator(":scope > [data-collapse-toggle]");
+    await statusHost.hover();
+    await toggle.click();
+    await expect(statusHost).toHaveAttribute("data-collapsed", "");
+    await expect(statusHost.getByText("Inline retries")).toBeHidden();
     await expect(
       page.getByRole("heading", { level: 2, name: "Status quo" }),
     ).toBeVisible();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  await test.step("hover host keeps the toggle while moving onto it", async () => {
+    const successHost = page.locator(
+      '[data-collapsible="slide"][data-collapse-id="success-looks-like"]',
+    );
+    const toggle = successHost.locator(":scope > [data-collapse-toggle]");
+    await successHost.locator(".plan-slide").hover();
+    await expect(toggle).toBeVisible();
+    await toggle.hover();
+    await expect(toggle).toBeVisible();
   });
 
   await test.step("collapsing a sub-slide hides only that frame's body", async () => {
@@ -101,11 +112,9 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
       '[data-collapsible="subslide"][data-collapse-id="the-worker"]',
     );
     await worker.hover();
-    await worker.locator(":scope > [data-collapse-toggle]").click({ force: true });
+    await worker.locator(":scope > [data-collapse-toggle]").click();
     await expect(worker).toHaveAttribute("data-collapsed", "");
-    await expect(
-      worker.getByText("Claims due schedules"),
-    ).toBeHidden();
+    await expect(worker.getByText("Claims due schedules")).toBeHidden();
     await expect(
       page.locator(
         '[data-collapsible="subslide"][data-collapse-id="the-audit-trail"]',
@@ -118,9 +127,7 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
       '[data-collapsible="part"][data-collapse-id="part-the-proposal"]',
     );
     await proposal.hover();
-    await proposal
-      .locator(":scope > [data-collapse-toggle]")
-      .click({ force: true });
+    await proposal.locator(":scope > [data-collapse-toggle]").click();
     await expect(proposal).toHaveAttribute("data-collapsed", "");
     await expect(
       proposal.locator(":scope > [data-collapse-body]"),
