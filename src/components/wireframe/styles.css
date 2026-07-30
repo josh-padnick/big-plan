@@ -1,0 +1,260 @@
+/*
+Wireframe's hand-drawn visual language.
+
+Two jobs live here. First, isolation: the reading column styles headings,
+paragraphs, and controls with element selectors, and a wireframe is a drawing
+rather than prose, so every one of those is neutralized inside the root.
+Second, the sketch itself: uneven strokes, a second offset line, and paper
+grid, all authored as static CSS so the same source always renders the same
+marks and a plan diff never jitters.
+*/
+
+@layer components {
+  /* One wobbly rounded rectangle, drawn twice, reads as a pen stroke. The
+     radii are deliberately lopsided; every element reuses them so the whole
+     drawing looks like one hand. */
+  .wireframe {
+    --wf-stroke: color-mix(in srgb, var(--color-ink) 55%, transparent);
+    --wf-stroke-soft: color-mix(in srgb, var(--color-ink) 22%, transparent);
+    --wf-fill: color-mix(in srgb, var(--color-ink) 6%, transparent);
+    --wf-sketch: 255px 15px 225px 15px / 15px 225px 15px 255px;
+    --wf-sketch-alt: 225px 15px 255px 15px / 15px 255px 15px 225px;
+    margin: 1.75rem 0;
+  }
+
+  /* Isolation from the reading column's element selectors. */
+  .wireframe h3,
+  .wireframe h4,
+  .wireframe h5 {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .wireframe h3 {
+    font-size: 1.125rem;
+  }
+  .wireframe h4 {
+    font-size: 1rem;
+  }
+  .wireframe h5 {
+    font-size: 0.9375rem;
+  }
+  .wireframe p {
+    margin: 0;
+  }
+  .wireframe button {
+    font: inherit;
+    color: inherit;
+  }
+
+  .wireframe-caption {
+    margin-bottom: 0.5rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+
+  /* The switcher only means something once a script can act on it, so it
+     stays hidden in an inert document where every screen is already shown. */
+  .wireframe-switcher {
+    display: none;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-bottom: 0.75rem;
+  }
+  [data-wireframe-interactive] .wireframe-switcher {
+    display: flex;
+  }
+  .wireframe-switch {
+    padding: 0.2rem 0.6rem;
+    border: 2px solid transparent;
+    border-radius: var(--wf-sketch);
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+    cursor: pointer;
+  }
+  .wireframe-switch:hover {
+    background: var(--wf-fill);
+  }
+  .wireframe-switch[aria-current="true"] {
+    border-color: var(--wf-stroke);
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+
+  .wireframe-screens {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  [data-wireframe-interactive] .wireframe-screen:not([data-wireframe-current]) {
+    display: none;
+  }
+
+  .wireframe-screen-caption {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--color-muted);
+  }
+  .wireframe-screen-name {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  /* The artboard is the device being designed for. Its preset sets the widest
+     the drawing will ever be; inside the review column it fills the width it
+     is given and reflows, so labels stay at reading size from a narrow phone
+     to a wide desktop.
+
+     Height follows the drawing rather than the device. Holding a screen to
+     its device proportions leaves a half-empty rectangle in the middle of a
+     plan, and a reviewer reads that emptiness as unfinished work rather than
+     as room the design has left over. */
+  .wireframe-artboard {
+    display: flex;
+    min-height: 9rem;
+    margin-inline: auto;
+    padding: 0.875rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch);
+    background-color: var(--color-paper);
+    background-image:
+      repeating-linear-gradient(
+        to right,
+        var(--wf-fill) 0 1px,
+        transparent 1px 24px
+      ),
+      repeating-linear-gradient(
+        to bottom,
+        var(--wf-fill) 0 1px,
+        transparent 1px 24px
+      );
+    font-size: 0.9375rem;
+    line-height: 1.45;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"] {
+    max-width: 390px;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-landscape"] {
+    max-width: 844px;
+  }
+  .wireframe-artboard[data-wireframe-viewport="tablet-portrait"] {
+    max-width: 834px;
+  }
+  .wireframe-artboard[data-wireframe-viewport="tablet-landscape"] {
+    max-width: 1112px;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"] {
+    max-width: 1440px;
+  }
+  .wireframe-canvas {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Regions share a row; controls and copy keep their own size. */
+  .wireframe-row > .wireframe-panel,
+  .wireframe-row > .wireframe-stack,
+  .wireframe-row > .wireframe-row {
+    flex: 1 1 0;
+    min-width: 11rem;
+  }
+
+  .wireframe-panel {
+    position: relative;
+    padding: 0.75rem 0.875rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch);
+    background: var(--color-paper);
+  }
+  /* The second, offset stroke: the line a pen leaves when the hand repeats
+     a rectangle it has already drawn. */
+  .wireframe-panel::after {
+    content: "";
+    position: absolute;
+    inset: 3px -3px -3px 3px;
+    border: 1px solid var(--wf-stroke-soft);
+    border-radius: var(--wf-sketch-alt);
+    pointer-events: none;
+  }
+  .wireframe-panel-head {
+    margin-bottom: 0.5rem;
+  }
+  .wireframe-eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .wireframe-text[data-wireframe-role="helper"] {
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+  }
+  .wireframe-text[data-wireframe-role="muted"] {
+    color: var(--color-muted);
+  }
+
+  .wireframe-button {
+    align-self: flex-start;
+    padding: 0.3rem 0.85rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch);
+    box-shadow: 2px 3px 0 -1px var(--wf-stroke-soft);
+    background: transparent;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .wireframe-button:hover {
+    background: var(--wf-fill);
+  }
+  .wireframe-button:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  .wireframe-button[data-wireframe-emphasis="primary"] {
+    border-color: var(--color-ink);
+    background: color-mix(in srgb, var(--color-ink) 86%, transparent);
+    color: var(--color-paper);
+  }
+  .wireframe-button[data-wireframe-emphasis="primary"]:hover {
+    background: var(--color-ink);
+  }
+  .wireframe-button[data-wireframe-emphasis="tertiary"] {
+    padding-inline: 0.25rem;
+    border-color: transparent;
+    box-shadow: none;
+    text-decoration: underline;
+    text-decoration-style: wavy;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  .wireframe-button[data-wireframe-emphasis="destructive"] {
+    border-color: var(--callout-danger-c);
+    color: var(--callout-danger-c);
+  }
+  /* A button that moves the prototype says so, so a reader knows which marks
+     on the page are worth clicking. */
+  .wireframe-button[data-wireframe-navigate]::after {
+    content: " \2197";
+    opacity: 0.55;
+  }
+
+  /* Paper beats interaction: printing a plan shows every screen. */
+  @media print {
+    [data-wireframe-interactive]
+      .wireframe-screen:not([data-wireframe-current]) {
+      display: block;
+    }
+    [data-wireframe-interactive] .wireframe-switcher {
+      display: none;
+    }
+  }
+}

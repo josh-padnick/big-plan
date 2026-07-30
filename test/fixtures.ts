@@ -61,6 +61,7 @@ type WorkerFixtures = {
   readonly sampleViewerUrl: string;
   readonly tableSchemaViewerUrl: string;
   readonly weightedAuditDecisionAnalysisViewerUrl: string;
+  readonly wireframeViewerUrl: string;
 };
 
 const ANNOTATION_CODE_MDX = `# Annotation code
@@ -521,6 +522,20 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const outputPath = join(outputDir, "sample.html");
       await renderThroughCli({
         inputPath: join(repoRoot, "examples", "sample.mdx"),
+        outputPath,
+        outputDir,
+      });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  wireframeViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-wireframe-"));
+      const outputPath = join(outputDir, "wireframe.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "wireframe.mdx"),
         outputPath,
         outputDir,
       });

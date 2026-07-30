@@ -19,6 +19,7 @@ import { PART_COMPONENT_DEFINITION } from "../part/definition.js";
 import { QUICK_SUMMARY_COMPONENT_DEFINITION } from "../quick-summary/definition.js";
 import { QUICK_DECISION_COMPONENT_DEFINITION } from "../quick-decision/definition.js";
 import { TABLE_OF_CONTENTS_COMPONENT_DEFINITION } from "../table-of-contents/definition.js";
+import { WIREFRAME_COMPONENT_DEFINITION } from "../wireframe/definition.js";
 import type { ComponentDefinition } from "./define-component.js";
 
 export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
@@ -40,6 +41,7 @@ export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
     QuickSummary: QUICK_SUMMARY_COMPONENT_DEFINITION,
     QuickDecision: QUICK_DECISION_COMPONENT_DEFINITION,
     TableOfContents: TABLE_OF_CONTENTS_COMPONENT_DEFINITION,
+    Wireframe: WIREFRAME_COMPONENT_DEFINITION,
   };
 
 export type ComponentRegistry = Readonly<Record<string, ComponentDefinition>>;
