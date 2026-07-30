@@ -146,6 +146,16 @@ const WireframeElement = ({
           <WireframeElements nodes={node.children} />
         </div>
       );
+    case "BottomBar":
+      return (
+        <div
+          className="wireframe-bottom-bar flex flex-wrap items-center justify-between gap-2"
+          role="navigation"
+          aria-label="Primary destinations"
+        >
+          <WireframeElements nodes={node.children} />
+        </div>
+      );
     case "PageHeader":
       return (
         <header className="wireframe-page-header flex flex-wrap items-center gap-3">

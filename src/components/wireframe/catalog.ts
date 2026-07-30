@@ -338,7 +338,7 @@ const CATALOG = {
     acceptsChildren: true,
     allowedChildren: ["Sidebar", "TopBar", "AppContent"],
     summary:
-      "The product frame: a sidebar, an optional top bar, and the content region.",
+      "The product frame: a flush-left sidebar on desktop, optional top bar, and content region. Tablet viewports relax the gutters; phone screens should prefer TopBar and BottomBar instead.",
     example:
       "<AppShell><Sidebar>...</Sidebar><AppContent>...</AppContent></AppShell>",
     compile: ({ attributes, children, position, diagnostics }) => {
@@ -395,7 +395,8 @@ const CATALOG = {
     category: "layout",
     acceptsChildren: true,
     // A phone screen has a top bar without having a shell around it.
-    allowedParents: ["AppShell", "Screen"],
+    // Stack is allowed so authors can group the bar with the page body.
+    allowedParents: ["AppShell", "Screen", "Stack"],
     summary:
       "A strip across the top of a shell or a screen for the title and actions.",
     example: '<TopBar title="Dashboard">...</TopBar>',
@@ -412,6 +413,26 @@ const CATALOG = {
         ...(validated.title === undefined ? {} : { title: validated.title }),
         children,
       };
+    },
+  },
+  BottomBar: {
+    category: "layout",
+    acceptsChildren: true,
+    // Phone destinations live at the bottom. A desktop shell uses Sidebar.
+    allowedParents: ["Screen", "Stack"],
+    summary:
+      "A phone tab strip across the bottom of the screen. Reach for it on mobile-portrait; keep desktop navigation in Sidebar.",
+    example:
+      '<BottomBar><Button label="Inbox" emphasis="primary" /><Button label="Settings" /></BottomBar>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      validateComponentAttributes({
+        component: "BottomBar",
+        attributes,
+        position,
+        diagnostics,
+        schema: EMPTY_SCHEMA,
+      });
+      return { element: "BottomBar", children };
     },
   },
   PageHeader: {
