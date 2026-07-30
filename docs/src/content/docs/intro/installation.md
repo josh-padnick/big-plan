@@ -14,7 +14,8 @@ Install Big Plan for me using `npm i -g big-plan`, then read
 https://big-plan.ai/setup.md and set yourself up to use it.
 ```
 
-The agent installs the CLI, reads [setup.md](/setup.md), adopts the plan-review workflow, and adds the rule to your project's agent instructions so every future session keeps it.
+The agent installs the CLI, reads [setup.md](/setup.md), can install the thin skill shell via `big-plan skill write`, adopts the plan-review workflow, and adds the rule to your project's agent instructions so every future session keeps it.
+Authoring principles stay in `big-plan guidance`, so package upgrades refresh them without hand-editing skill files.
 
 ## Or install it yourself
 

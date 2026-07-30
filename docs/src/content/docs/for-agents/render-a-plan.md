@@ -45,7 +45,7 @@ npx big-plan render plans/implementation.mdx
 ```
 
 The command creates `plans/implementation.html` next to the source plan.
-Give the human reviewer that HTML path and wait for agreement before acting on the plan.
+Give the human reviewer that HTML path as a full absolute path or `file://` URL and wait for agreement before acting on the plan.
 
 To choose a different location, pass it as the second argument:
 

@@ -7,6 +7,7 @@ import { runAxiCli } from "axi-sdk-js";
 import { compileCommand } from "./compile/command.js";
 import { guidanceCommand } from "./guidance/command.js";
 import { renderCommand } from "./render/command.js";
+import { skillCommand } from "./skill/command.js";
 import { validateCommand } from "./validate/command.js";
 
 // The README tagline verbatim, so the CLI and the docs never drift apart.
@@ -20,6 +21,8 @@ Usage:
                                              (required before validate and
                                              render), or one component's
                                              usage guidance
+  big-plan skill [write <path>]               Print the agent skill shell, or
+                                             write it to an explicit path
   big-plan render <input.mdx> [output.html]   Render an MDX plan to a
                                              single self-contained HTML file
                                              (defaults to <input>.html)
@@ -65,6 +68,7 @@ export const main = async (): Promise<void> => {
     }),
     commands: {
       guidance: (args) => guidanceCommand(args),
+      skill: (args) => skillCommand(args),
       render: (args) => renderCommand(args),
       compile: (args) => compileCommand(args),
       validate: (args) => validateCommand(args),

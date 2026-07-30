@@ -3,20 +3,23 @@ title: CLI reference
 description: Reference the complete Big Plan command surface, defaults, results, and errors.
 ---
 
-Big Plan exposes four commands through the `big-plan` executable: `guidance` for the plan-writing principles, `validate` for a no-write authoring check, `render` for the human-facing HTML document, and `compile` for the machine-facing plan model.
+Big Plan exposes five product commands through the `big-plan` executable: `guidance` for the plan-writing principles, `skill` for the agent skill shell, `validate` for a no-write authoring check, `render` for the human-facing HTML document, and `compile` for the machine-facing plan model.
 The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors, and result serialization.
+`axi-sdk-js` also reserves a built-in `update` command for optional package self-update of global installs.
 
 ## Commands
 
 ```text
 big-plan guidance [component]
+big-plan skill [write <path>]
 big-plan validate <input.mdx>
 big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
 ```
 
 `guidance` optionally takes one component name.
-For the other commands `<input.mdx>` is required.
+`skill` with no arguments prints the skill shell; `skill write <path>` writes it only when that action is explicit.
+For the plan-file commands `<input.mdx>` is required.
 `validate` accepts no output argument.
 The output argument is optional for `render` and `compile`.
 
@@ -24,6 +27,8 @@ The equivalent package runner forms are:
 
 ```sh
 npx big-plan guidance
+npx big-plan skill
+npx big-plan skill write <path/to/SKILL.md>
 npx big-plan validate <input.mdx>
 npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
@@ -41,7 +46,22 @@ The component form records no acknowledgment, and an unknown name fails with the
 `validate` and `render` require a current acknowledgment and fail with a structured `GUIDANCE_REQUIRED` error until `guidance` has been run.
 An acknowledgment is current when it was recorded for the same working directory within the last 24 hours against the guidance content the installed CLI ships.
 Updating Big Plan to a release with changed guidance therefore re-locks both commands until `guidance` is read again.
-`compile` is not gated, so machine tooling can compile a plan model without the authoring workflow.
+`compile` and `skill` are not gated, so machine tooling and skill install can run without the authoring workflow.
+
+## Skill shell
+
+`skill` prints the thin agent skill document embedded in the package (authored at `assets/skill/SKILL.md` and generated into the CLI).
+The shell tells agents when to use Big Plan, how to invoke the CLI, and that they must run `big-plan guidance` for live authoring rules.
+It does not duplicate plan-writing principles; those stay in `guidance` so package upgrades refresh authoring policy without editing installed skill files.
+
+With no arguments, `skill` returns the Markdown skill text (including harness-oriented frontmatter) and writes nothing.
+`skill write <path>` creates parent directories as needed and writes that text to the resolved path.
+Write is the only mutation path; unknown options and unknown actions fail with `VALIDATION_ERROR` and leave the filesystem unchanged.
+Overwriting an existing file at that path is allowed only because `write` was explicit.
+
+After a package upgrade, new guidance is available immediately via `big-plan guidance`.
+Re-run `skill write` only when the thin shell itself changed.
+Prefer `npx big-plan@latest` for always-current one-off runs; see [Use the skill](/for-agents/use-the-skill/) for the full update-propagation story.
 
 Acknowledgment state lives outside the project: in `.big-plan/` under the user's home directory, falling back to a `big-plan/` directory under the system temporary directory when the home directory rejects writes, as workspace-scoped sandboxes commonly do.
 Setting the `BIG_PLAN_STATE_DIR` environment variable pins state to exactly one directory, which test suites and sandboxed environments use to keep state isolated.
@@ -121,6 +141,11 @@ On success, each command returns a structured result for `axi-sdk-js` to seriali
 It writes no output.
 
 `guidance` returns the guidance Markdown itself rather than a structured result.
+`skill` with no arguments returns the skill Markdown the same way.
+`skill write` returns:
+
+- `written`: the absolute output path.
+- `help`: a reminder that authoring rules still come from `guidance`, and when to re-run `skill write`.
 
 ## Errors
 
@@ -156,6 +181,6 @@ Successful validation exits `0`; operational or internal failures use `1`.
 
 ## Top-level help and version
 
-The CLI configures top-level help that lists all four commands and the derived-output defaults.
+The CLI configures top-level help that lists the product commands and the derived-output defaults.
 It also reads the package version for version output.
 If that version cannot be read from the package metadata, version reporting is left unconfigured instead of crashing the CLI.

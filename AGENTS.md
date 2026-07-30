@@ -134,6 +134,7 @@ Route by the kind of fact:
 - A directory-scoped, multi-file, unenforced placement boundary lives in that directory's `README.md` local map.
 - An architectural decision and its rationale live in an ADR when the decision needs a durable record.
 - A repeatable whole-task workflow becomes a skill only after the workflow has repeated and proven easy to get wrong.
+- The installable Big Plan agent skill shell is authored at `assets/skill/SKILL.md`, embedded by `scripts/gen-skill.mjs`, and delivered by `big-plan skill`; live authoring rules stay in `big-plan guidance` (see `docs/src/content/docs/for-agents/use-the-skill.md`).
 - Future work, sequencing, and delivery status live in temporary planning artifacts or issue tracking.
 - Product orientation, cross-directory architecture, repository-wide vocabulary, and cross-cutting conventions with no deeper owner live in this guide.
 - The gold-standard plan-quality testing workflow (context-free generation, co-refine, backport, re-verify) lives in this guide under [Gold-standard plan-quality testing](#gold-standard-plan-quality-testing).
@@ -271,6 +272,8 @@ Generated files carry `.generated.` in their name and are committed beside the s
 - `src/render/global.css` and its imported styles are authored inputs to the generated embedded stylesheet.
 - Logos and favicons under `assets/` are authored inputs to the generated embedded branding module.
 - Font binaries under `assets/fonts/` are authored inputs to the generated embedded `@font-face` stylesheet; [`assets/fonts/README.md`](assets/fonts/README.md) owns their licensing record.
+- `assets/skill/SKILL.md` is the authored input to the generated skill module consumed by `big-plan skill`.
+- `assets/guidance/plan-guidance.md` and component `*.guidance.md` files are authored inputs to the generated guidance module.
 
 The root README owns generation commands; CI detects drift.
 
