@@ -50,7 +50,7 @@ The body holds `Why`, `What`, and `How` facet sections; the card renders Why as 
 - `Why` and `What` are required; `How` is optional; each at most once, in that order.
 - Each facet's body is exactly one bullet list: one bullet for `Why` and `What`, at most 3 for `How`; prose, headings, and other components are rejected.
 - At most 450 characters of readable text across all facets, counted after collapsing whitespace and including inline code and emphasis.
-- At most one `QuickSummary` per document, enforced by the `single-quick-summary` linting rule.
+- At most one `QuickSummary` per document, enforced by the `quick-summary-singleton` linting rule.
 - No attributes on the component or its facets.
 
 Each violation fails `validate` and `render` with a positional diagnostic.

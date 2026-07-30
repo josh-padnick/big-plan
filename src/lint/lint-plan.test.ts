@@ -132,13 +132,13 @@ describe("lintPlan markdown-table-format", () => {
   });
 });
 
-describe("lintPlan plan-lede", () => {
+describe("lintPlan lede-presence", () => {
   it("should report the first section heading when the title has no lede", () => {
     expect(
       lintPlan({ markdown: "# Ship the skill\n\n## Status quo\n\nToday.\n" }),
     ).toEqual([
       {
-        ruleId: "plan-lede",
+        ruleId: "lede-presence",
         line: 3,
         column: 1,
         message:
@@ -295,7 +295,7 @@ describe("lintPlan lede-length", () => {
   });
 });
 
-describe("lintPlan single-quick-summary", () => {
+describe("lintPlan quick-summary-singleton", () => {
   it("should report each QuickSummary after the first", () => {
     expect(
       lintPlan({
@@ -304,7 +304,7 @@ describe("lintPlan single-quick-summary", () => {
       }),
     ).toEqual([
       {
-        ruleId: "single-quick-summary",
+        ruleId: "quick-summary-singleton",
         line: 13,
         column: 1,
         message:

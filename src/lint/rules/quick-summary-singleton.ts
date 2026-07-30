@@ -1,4 +1,4 @@
-// Implements the single-quick-summary authoring rule: a plan carries at most
+// Implements the quick-summary-singleton authoring rule: a plan carries at most
 // one QuickSummary, so the reviewer always has exactly one place to start.
 
 import type { Node, Parent } from "unist";
@@ -43,7 +43,7 @@ const checkSingleQuickSummary = ({
   return findings;
 };
 
-export const singleQuickSummaryRule: PlanLintRule = {
-  id: "single-quick-summary",
+export const quickSummarySingletonRule: PlanLintRule = {
+  id: "quick-summary-singleton",
   check: checkSingleQuickSummary,
 };

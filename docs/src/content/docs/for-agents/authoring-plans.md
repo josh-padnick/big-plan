@@ -67,7 +67,7 @@ They can check any statically analyzable aspect of an authored plan.
 `title-length` keeps a plan's leading level-one title a punchy noun phrase: at most eight words and sixty characters.
 A document that does not open with a level-one title is left alone.
 
-`plan-lede` requires a plan that opens with a level-one title to state its thesis in prose before the first section heading, so the reader is oriented before structure begins.
+`lede-presence` requires a plan that opens with a level-one title to state its thesis in prose before the first section heading, so the reader is oriented before structure begins.
 Any flow content after the title satisfies it; a title followed directly by another heading is the finding.
 
 `lede-style` requires that lede to read as a declarative subtitle describing the delivered outcome.
@@ -80,7 +80,7 @@ Big Plan renders the paragraph directly under the title as the document's subtit
 A heading reading exactly "Desired outcome", "Desired outcomes", or "Definition of done" is flagged with the preferred heading "Acceptance criteria".
 Prose mentioning those phrases, and headings that merely contain them, are never flagged.
 
-`single-quick-summary` allows at most one `QuickSummary` per plan, so the reviewer always has exactly one place to start.
+`quick-summary-singleton` allows at most one `QuickSummary` per plan, so the reviewer always has exactly one place to start.
 
 `table-of-contents-matches-sections` requires a `TableOfContents`'s Entry section names to repeat the document's h2 titles exactly, in order, one to one.
 Every mismatch - a wrong name, a missing section, or an extra entry - is reported at the TableOfContents's position, so the overview can never drift from the plan it summarizes.

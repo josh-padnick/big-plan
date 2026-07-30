@@ -1,4 +1,4 @@
-// Implements the plan-lede authoring rule: a plan that opens with a title
+// Implements the lede-presence authoring rule: a plan that opens with a title
 // must state its thesis in prose before the first section heading, so the
 // reader is oriented before structure begins.
 
@@ -43,7 +43,7 @@ const checkPlanLede = ({
   ];
 };
 
-export const planLedeRule: PlanLintRule = {
-  id: "plan-lede",
+export const ledePresenceRule: PlanLintRule = {
+  id: "lede-presence",
   check: checkPlanLede,
 };
