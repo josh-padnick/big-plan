@@ -37,10 +37,9 @@ they stay locked to the card instead of floating in the gutter.
   }
 
   /* Spacing that used to live on chrome (mt-12 / part mt) sits on the row so
-     the toggle and header move together - never a floating gutter orphan.
-     Slide-group lead-in is constant across expand/collapse so the chevron
-     does not translate vertically on click (only rotates). */
-  article .plan-slide-group > .plan-collapse-row {
+     the toggle and header move together. Slide-group lead-in is expanded-only
+     so collapsed chips under a Part share one uniform inter-item gap. */
+  article .plan-slide-group:not([data-collapsed]) > .plan-collapse-row {
     margin-top: 3rem;
   }
   article .plan-part-group > .plan-collapse-row {
@@ -201,14 +200,12 @@ article
   padding: 0.65rem 1.15rem;
 }
 
-/* Simple slides have no lead-in; slide-groups keep their constant 3rem above. */
-article
-  [data-collapsible="slide"][data-collapsed]:not(.plan-slide-group)
-  > .plan-collapse-row {
+/*
+   Uniform collapsed list under a Part: every slide-level row (simple or
+   group) uses the same top/bottom gap - no leftover 3rem group lead-in.
+*/
+article [data-collapsible="slide"][data-collapsed] > .plan-collapse-row {
   margin-top: 0;
-  margin-bottom: 0.45rem;
-}
-article .plan-slide-group[data-collapsed] > .plan-collapse-row {
   margin-bottom: 0.45rem;
 }
 
@@ -230,11 +227,23 @@ article [data-collapsible="slide"][data-collapsed] > .plan-collapse-row h2 {
 }
 
 /*
-   Sub-slide chips: compact single line. Toggle margin is constant (see above);
-   only the glyph rotates on click.
+   Sub-slide chips: one tight row. Expanded keeps top-aligned toggle (margin);
+   collapsed zeros that margin and uses equal pad so chevron + kicker text
+   share one midline (measure mid-Y of button vs h3, not a tall empty box).
 */
 article [data-collapsible="subslide"][data-collapsed] > .plan-collapse-row {
+  align-items: center;
   margin-bottom: 0.28rem;
+}
+article
+  [data-collapsible="subslide"][data-collapsed]
+  > .plan-collapse-row
+  > .plan-collapse-toggle {
+  margin-top: 0;
+  /* Match single-line kicker height so flex center equals text center. */
+  height: 1.15rem;
+  flex-basis: 1.15rem;
+  width: 1.15rem;
 }
 article
   [data-collapsible="subslide"][data-collapsed]
@@ -247,9 +256,10 @@ article
   border: 1px solid var(--edge-c);
   border-radius: 0.4rem;
   background: transparent;
-  /* Single-line chip; override expanded py-5 / wide py utilities. */
-  padding: 0.55rem 0.7rem 0.55rem;
+  /* Symmetric pad around the kicker line only - override expanded py-5. */
+  padding: 0.4rem 0.75rem;
   min-height: 0;
+  line-height: 1;
 }
 
 article
@@ -258,8 +268,12 @@ article
   > .plan-slide
   > h3[data-slide-kicker] {
   margin: 0;
-  line-height: 1.15;
+  padding: 0;
+  line-height: 1.2;
   font-size: 0.6875rem;
+  /* Kill kicker utility mb that top-biases the label inside the chip. */
+  margin-bottom: 0;
+  margin-top: 0;
 }
 
 /* Part band: keep surface chrome; tighten only the trailing gap. */
