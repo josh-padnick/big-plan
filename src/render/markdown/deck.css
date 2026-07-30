@@ -56,7 +56,7 @@ they stay locked to the card instead of floating in the gutter.
   article .plan-collapse-row {
     display: flex;
     align-items: flex-start;
-    gap: 0.2rem;
+    gap: 0.25rem;
     margin-left: -1.65rem;
     width: calc(100% + 1.65rem);
   }
@@ -66,39 +66,20 @@ they stay locked to the card instead of floating in the gutter.
   }
 
   /*
-     Toggle sits in the gutter column, top-aligned to the header with a small
-     inset so it reads with the kicker line (not flush, not mid-card).
+     Expanded: toggle sits near the kicker line of a framed slide. Collapsed
+     chips center the control in unlayered rules below.
   */
   article .plan-collapse-toggle {
     flex: 0 0 1.35rem;
     width: 1.35rem;
     height: 1.35rem;
-    margin-top: 1.15rem; /* expanded slide py-5 + kicker start */
+    margin-top: 1.15rem;
   }
   article .plan-slide-group > .plan-collapse-row > .plan-collapse-toggle {
-    margin-top: 0.15rem; /* subpart has no card padding when expanded */
+    margin-top: 0.15rem;
   }
   article .plan-part-group > .plan-collapse-row > .plan-collapse-toggle {
-    margin-top: 0.5rem; /* slightly into the part band padding */
-  }
-  /* Collapsed chips are shorter: tuck the chevron near the top of the box. */
-  article
-    [data-collapsible][data-collapsed]
-    > .plan-collapse-row
-    > .plan-collapse-toggle {
-    margin-top: 0.38rem;
-  }
-  article
-    [data-collapsible="subslide"][data-collapsed]
-    > .plan-collapse-row
-    > .plan-collapse-toggle {
-    margin-top: 0.3rem;
-  }
-  article
-    .plan-part-group[data-collapsed]
-    > .plan-collapse-row
-    > .plan-collapse-toggle {
-    margin-top: 0.45rem;
+    margin-top: 0.5rem;
   }
 
   /*
@@ -158,58 +139,130 @@ they stay locked to the card instead of floating in the gutter.
     > :not([data-slide-kicker]):not(h2):not(h3[data-slide-kicker]) {
     display: none;
   }
+}
 
-  /*
-     Uniform, tight collapsed header chips for every slide-like unit so a
-     stack of collapsed sections forms one consistent column.
-  */
-  article [data-collapsible][data-collapsed] .plan-slide,
-  article [data-collapsible][data-collapsed] .plan-subpart {
-    margin-top: 0;
-    margin-bottom: 0.4rem;
-    border: 1px solid var(--edge-c);
-    border-radius: 0.55rem;
-    background: transparent;
-    padding: 0.4rem 0.9rem;
-  }
-  /* Sub-slide chips are single-line kickers - keep them especially short. */
-  article [data-collapsible="subslide"][data-collapsed] .plan-slide {
-    padding: 0.32rem 0.85rem;
-    margin-bottom: 0.35rem;
-  }
-  article [data-collapsible][data-collapsed] .plan-slide > h2,
-  article [data-collapsible][data-collapsed] .plan-subpart > h2 {
-    margin: 0;
-    font-size: 1.35rem;
-    line-height: 1.25;
-  }
-  article
-    [data-collapsible][data-collapsed]
-    .plan-slide
-    > h3[data-slide-kicker] {
-    margin: 0;
-  }
-  article
-    [data-collapsible][data-collapsed]
-    .plan-slide
-    > [data-slide-kicker]:not(h3),
-  article
-    [data-collapsible][data-collapsed]
-    .plan-subpart
-    > [data-slide-kicker] {
-    margin: 0 0 0.15rem;
-  }
-  article
-    [data-collapsible][data-collapsed]
-    .plan-slide
-    > [data-slide-kicker]:not(h3):last-child {
-    margin-bottom: 0;
-  }
+/*
+   Collapsed chrome is unlayered on purpose so slide utilities (py-5, mb-6)
+   cannot produce uneven heights between simple slides and slide-groups.
+*/
 
-  /* Collapsed part: keep the act band; tighten trailing gap under it. */
-  article [data-collapsible="part"][data-collapsed] [data-part] {
-    margin-bottom: 0.5rem;
-  }
+article [data-collapsible][data-collapsed] > [data-collapse-body] {
+  display: none;
+}
+
+/*
+   Slide-level collapsed headers: one shared formula for .plan-slide and
+   .plan-subpart. Keep title/kicker metrics equal to expanded headers
+   (1.6rem h2, kicker rhythm) so expand/collapse does not reflow the frame;
+   only the body disappears. Shared padding/border makes every chip under a
+   Part the same height.
+*/
+article
+  [data-collapsible="slide"][data-collapsed]
+  > .plan-collapse-row
+  > .plan-slide,
+article
+  [data-collapsible="slide"][data-collapsed]
+  > .plan-collapse-row
+  > .plan-subpart {
+  box-sizing: border-box;
+  margin: 0 0 0.45rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.65rem;
+  background: transparent;
+  /* Identical padding for every collapsed slide-level unit. */
+  padding: 0.65rem 1.15rem;
+}
+
+/*
+   Collapsed slide-level rows share one alignment. Expanded slide-groups keep
+   their 3rem lead-in above; collapsing drops that lead-in and the viewer
+   script stabilizes scroll so the header does not leap in the viewport.
+*/
+article [data-collapsible="slide"][data-collapsed] > .plan-collapse-row {
+  align-items: center;
+  margin-top: 0;
+}
+
+article
+  [data-collapsible="slide"][data-collapsed]
+  > .plan-collapse-row
+  > .plan-collapse-toggle {
+  margin-top: 0;
+  align-self: center;
+}
+
+article
+  [data-collapsible="slide"][data-collapsed]
+  > .plan-collapse-row
+  [data-slide-kicker]:not(h3) {
+  margin: 0 0 0.3rem;
+  line-height: 1.2;
+}
+
+article [data-collapsible="slide"][data-collapsed] > .plan-collapse-row h2 {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+/*
+   Sub-slide chips: single compact row; kicker + chevron vertically centered.
+*/
+article [data-collapsible="subslide"][data-collapsed] > .plan-collapse-row {
+  align-items: center;
+}
+
+article
+  [data-collapsible="subslide"][data-collapsed]
+  > .plan-collapse-row
+  > .plan-collapse-toggle {
+  margin-top: 0;
+  align-self: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-basis: 1.1rem;
+}
+
+article
+  [data-collapsible="subslide"][data-collapsed]
+  > .plan-collapse-row
+  > .plan-collapse-toggle::before {
+  margin-top: 0;
+}
+
+article
+  [data-collapsible="subslide"][data-collapsed]
+  > .plan-collapse-row
+  > .plan-slide {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  margin: 0 0 0.28rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.4rem;
+  background: transparent;
+  /* Single-line chip; override expanded py-5 / wide py utilities. */
+  padding: 0.18rem 0.7rem;
+  min-height: 1.1rem;
+}
+
+article
+  [data-collapsible="subslide"][data-collapsed]
+  > .plan-collapse-row
+  > .plan-slide
+  > h3[data-slide-kicker] {
+  margin: 0;
+  line-height: 1.15;
+  font-size: 0.6875rem;
+}
+
+/* Part band: keep surface chrome; tighten only the trailing gap. */
+article [data-collapsible="part"][data-collapsed] > .plan-collapse-row [data-part] {
+  margin-bottom: 0.5rem;
 }
 
 /* A slide's h2 sits below the kicker and the frame's top padding, and a

@@ -169,6 +169,11 @@ export const VIEWER_SCRIPT = `<script>
       ":scope > [data-collapse-row] > [data-collapse-toggle], :scope > [data-collapse-toggle]",
     );
   const setCollapsed = (block, collapsed) => {
+    // Keep the header row fixed in the viewport so expand only grows content
+    // downward - never jumps the section up the page.
+    const anchor =
+      block.querySelector(":scope > [data-collapse-row]") || block;
+    const beforeTop = anchor.getBoundingClientRect().top;
     if (collapsed) block.setAttribute("data-collapsed", "");
     else block.removeAttribute("data-collapsed");
     const button = toggleFor(block);
@@ -186,9 +191,20 @@ export const VIEWER_SCRIPT = `<script>
         localStorage.setItem(storageKey(id), collapsed ? "1" : "0");
       } catch (_) {}
     }
-    if (typeof window.__bigPlanRefreshScrollSpy === "function") {
-      window.__bigPlanRefreshScrollSpy();
-    }
+    const stabilize = () => {
+      const afterTop = anchor.getBoundingClientRect().top;
+      const delta = afterTop - beforeTop;
+      if (Math.abs(delta) > 0.5) {
+        const se = document.scrollingElement;
+        if (se) se.scrollTop += delta;
+        else window.scrollBy(0, delta);
+      }
+      if (typeof window.__bigPlanRefreshScrollSpy === "function") {
+        window.__bigPlanRefreshScrollSpy();
+      }
+    };
+    stabilize();
+    requestAnimationFrame(stabilize);
   };
   for (const block of blocks) {
     const id = block.getAttribute("data-collapse-id");
