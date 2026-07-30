@@ -127,6 +127,7 @@ Route by the kind of fact:
 - A repeatable whole-task workflow becomes a skill only after the workflow has repeated and proven easy to get wrong.
 - Future work, sequencing, and delivery status live in temporary planning artifacts or issue tracking.
 - Product orientation, cross-directory architecture, repository-wide vocabulary, and cross-cutting conventions with no deeper owner live in this guide.
+- The gold-standard plan-quality testing workflow (context-free generation, co-refine, backport, re-verify) lives in this guide under [Gold-standard plan-quality testing](#gold-standard-plan-quality-testing).
 
 ### README principles
 
@@ -165,6 +166,69 @@ Apply these review conventions by judgment:
 - Write focused, user-oriented tests with `should ... when ...` descriptions and coverage of degenerate and boundary cases.
 - Structure long browser journeys as named `test.step` phases so the test reads as a story and a failure names its phase.
 
+## Gold-standard plan-quality testing
+
+This section owns the durable procedure for improving Big Plan's plan quality as a product.
+It is not unit testing, Playwright journey testing, or ordinary contribution verification.
+Those remain under [Engineering rules](#engineering-rules), `test/`, and [CONTRIBUTING.md](CONTRIBUTING.md).
+Current product capabilities and authoring guidance remain in `docs/`; point there rather than restating them.
+
+### What "good" means
+
+The gold standard for working on Big Plan quality is:
+
+1. A **context-free agent** (no prior conversation about the desired plan shape, and no private captain preferences beyond what Big Plan itself teaches) uses Big Plan to produce a plan.
+2. A human evaluates whether that plan, produced **solely via the tool**, meets expectations.
+3. Feedback from that evaluation is used to improve Big Plan itself, not only to patch one plan for one task.
+
+Re-running full context-free generation after every small product improvement is intentionally expensive.
+Do not treat it as a cheap inner loop.
+The practical workflow is therefore two parts: refine a generated plan cheaply, then backport durable improvements into the product and re-run context-free generation as the expensive verification step.
+
+### Part A - Generate, then co-refine a plan (cheap loop)
+
+Use this loop to design the quality bar for a chosen scenario without paying for a clean re-generation on every edit.
+
+1. Start from Big Plan **status quo** (current main, or the current published behavior you intend to improve).
+2. Have a **context-free agent** generate an initial plan for the chosen scenario using Big Plan only.
+   Do not seed that agent with the desired plan shape, private acceptance criteria, or prior refinement conversation.
+3. Work with a normal (context-rich) agent to improve that plan until it reflects the desired quality bar.
+   Edits may include the plan source (MDX) and, when useful for speed, direct edits to the rendered HTML review document.
+   Example of a speed edit only: renumber acceptance criteria as AC1, AC2, and so on in the review document while shaping the bar.
+   That numbering example is illustrative of a presentation standard you might want later; it is not a claim that the product already enforces it.
+4. Stop when the plan is a **reference-quality artifact** for the scenario: it encodes the acceptance criteria and presentation standards you want Big Plan to produce next time without hand-editing.
+
+Part A evaluates and designs the target.
+It does **not** prove that Big Plan, unaided, will produce that quality on a fresh run.
+
+### Captain gate from Part A to Part B
+
+Treat captain language such as "this looks good, let's backport" as the handoff from Part A into Part B.
+Until that gate (or an equivalent explicit decision to improve the product), keep changes in the plan refinement loop rather than treating hand-edits as product proof.
+
+### Part B - Backport into Big Plan, then re-verify (expensive proof)
+
+Use this loop to make durable product improvements and prove them with a clean generation.
+
+1. Backport every durable improvement from the refined reference plan into the **Big Plan product** wherever that behavior is owned.
+   Owners may include authoring guidance, lint rules, components, examples, install or setup docs, agent-facing prompts, and related surfaces under the [documentation map](#documentation-map) and [source ownership](#source-ownership-and-placement).
+2. Run **context-free plan generation again** with the updated tool: a clean agent, the same scenario intent, and no carrying over of the hand-refined plan text.
+3. Compare the newly generated plan against the refined reference and the latest acceptance criteria for the scenario.
+4. If the new plan still falls short, either refine the reference further (return to Part A as needed) or continue product changes.
+   Do not treat hand-edits alone as proof the tool improved.
+
+Full context-free re-generation is the expensive verification step.
+Run it when you need evidence that the product, not the conversation, now produces the desired quality.
+Do not re-run it after every small product edit; batch durable changes, then pay for the clean proof when the backport set is ready to evaluate.
+
+### Out of scope for this workflow
+
+- Ordinary unit tests and Playwright engineering tests already described elsewhere in this guide.
+- A full automation harness for context-free runs.
+  Document and follow the procedure first; tooling can come later if the manual loop proves too costly.
+- Speculative product changes made only because they appeared as examples in a refined plan.
+  For example, implementing numbered acceptance criteria (AC1, AC2, ...) would be a future feature that **uses** this workflow; it is not part of documenting the workflow.
+
 ## Generated sources
 
 Edit authored inputs, run their generator, and never hand-edit generated output.
@@ -180,3 +244,10 @@ The root README owns generation commands; CI detects drift.
 Follow [CONTRIBUTING.md](CONTRIBUTING.md) for the normal branch, commit, pull-request, and verification workflow.
 Before editing, inspect the working tree and preserve changes you did not create.
 Keep each change scoped to its approved purpose, and never repair unrelated work as a side effect.
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.
