@@ -6,8 +6,8 @@ Each form factor is a parallel prototype of the same product so reviewers compar
 
 ## Desktop web SaaS
 
-Professional flush-left shell.
-Sidebar hard against the browser content edge, main canvas filling the rest.
+Flush shell, narrow nav rail, primary content that dominates secondary rails.
+Settings use a Linear-style sub-nav plus one dense field column.
 Create is a full page route, not a floating sheet.
 
 <Wireframe
@@ -49,8 +49,8 @@ Create is a full page route, not a floating sheet.
             navigateTo="d-compose"
           />
         </PageHeader>
-        <Row gap="md">
-          <Panel eyebrow="Queue" title="Open conversations">
+        <Row gap="sm">
+          <Panel eyebrow="Queue" title="Open conversations" span="main">
             <List>
               <ListItem
                 label="Cannot complete checkout"
@@ -72,6 +72,11 @@ Create is a full page route, not a floating sheet.
                 meta="Unassigned · 3d"
                 value="#4790"
               />
+              <ListItem
+                label="Export CSV truncates rows"
+                meta="Mine · 4d"
+                value="#4788"
+              />
             </List>
             <Button
               label="Open #4821"
@@ -79,10 +84,18 @@ Create is a full page route, not a floating sheet.
               navigateTo="d-ticket"
             />
           </Panel>
-          <Stack gap="md">
+          <Stack gap="sm" span="rail">
             <Panel title="Today">
-              <Metric label="First response" value="11m" note="Target under 15m" />
-              <Progress label="Sla health" value="88" detail="22 of 25 on time" />
+              <Metric
+                label="First response"
+                value="11m"
+                note="Target under 15m"
+              />
+              <Progress
+                label="Sla health"
+                value="88"
+                detail="22 of 25 on time"
+              />
             </Panel>
             <Panel title="Need attention">
               <Text text="2 tickets breach in under an hour." role="helper" />
@@ -116,11 +129,15 @@ Create is a full page route, not a floating sheet.
           description="Opened by Maya Chen · Northwind"
           badge="Priority"
         >
-          <Button label="Back to inbox" emphasis="tertiary" navigateTo="d-inbox" />
+          <Button
+            label="Back to inbox"
+            emphasis="tertiary"
+            navigateTo="d-inbox"
+          />
           <Button label="Resolve" emphasis="primary" />
         </PageHeader>
-        <Row gap="md">
-          <Panel title="Conversation">
+        <Row gap="sm">
+          <Panel title="Conversation" span="main">
             <List>
               <ListItem
                 label="Maya · Customer"
@@ -137,6 +154,11 @@ Create is a full page route, not a floating sheet.
                 meta="2m ago"
                 value="Chrome 128 · cart cart_9f2a"
               />
+              <ListItem
+                label="System"
+                meta="1m ago"
+                value="Linked prior freeze #4410"
+              />
             </List>
             <TextArea
               label="Reply"
@@ -147,7 +169,7 @@ Create is a full page route, not a floating sheet.
               <Button label="Send reply" emphasis="primary" />
             </Row>
           </Panel>
-          <Stack gap="md">
+          <Stack gap="sm" span="rail">
             <Panel title="Properties">
               <Select label="Status" value="Open" />
               <Select label="Assignee" value="Alex Rivera" />
@@ -156,8 +178,16 @@ Create is a full page route, not a floating sheet.
             </Panel>
             <Panel title="Related">
               <List>
-                <ListItem label="Prior checkout freeze" meta="Resolved" value="#4410" />
-                <ListItem label="Stripe outage note" meta="Internal" value="Doc" />
+                <ListItem
+                  label="Prior checkout freeze"
+                  meta="Resolved"
+                  value="#4410"
+                />
+                <ListItem
+                  label="Stripe outage note"
+                  meta="Internal"
+                  value="Doc"
+                />
               </List>
             </Panel>
           </Stack>
@@ -187,10 +217,14 @@ Create is a full page route, not a floating sheet.
           description="Full-page create route in the product shell."
         >
           <Button label="Cancel" emphasis="tertiary" navigateTo="d-inbox" />
-          <Button label="Create ticket" emphasis="primary" navigateTo="d-ticket" />
+          <Button
+            label="Create ticket"
+            emphasis="primary"
+            navigateTo="d-ticket"
+          />
         </PageHeader>
-        <Row gap="md">
-          <Panel title="Ticket">
+        <Row gap="sm">
+          <Panel title="Ticket" span="main">
             <TextField
               label="Subject"
               placeholder="Short summary the team will scan"
@@ -203,12 +237,12 @@ Create is a full page route, not a floating sheet.
             />
             <Checkbox label="Request customer email on create" checked />
           </Panel>
-          <Panel title="Routing">
+          <Panel title="Routing" span="rail">
             <Select label="Team" value="Payments" />
             <Select label="Assignee" value="Unassigned" />
             <Switch label="Watch this ticket" on />
             <Text
-              text="Create stays inside the web shell so reviewers judge a page, not a modal sheet."
+              text="Create stays a page in the shell, not a modal sheet."
               role="helper"
             />
           </Panel>
@@ -222,7 +256,7 @@ Create is a full page route, not a floating sheet.
     name="Desktop · Settings"
     viewport="desktop"
     chrome="browser"
-    url="app.harbor.team/settings/workspace"
+    url="app.harbor.team/settings/notifications"
   >
     <AppShell>
       <Sidebar brand="Harbor" mode="Acme Support">
@@ -233,20 +267,32 @@ Create is a full page route, not a floating sheet.
       </Sidebar>
       <AppContent>
         <PageHeader
-          title="Workspace settings"
-          description="Defaults for Acme Support."
+          title="Settings"
+          description="Workspace defaults for Acme Support."
         />
-        <Row gap="md">
-          <Panel title="Notifications">
+        <Row gap="sm">
+          <Panel span="rail">
+            <Nav label="Settings sections">
+              <NavItem label="Notifications" active />
+              <NavItem label="Business hours" />
+              <NavItem label="Integrations" />
+              <NavItem label="Members" />
+            </Nav>
+          </Panel>
+          <Stack gap="sm" span="main">
+            <Heading text="Notifications" level="2" />
+            <Text
+              text="Choose how agents hear about assignment and Sla risk."
+              role="helper"
+            />
             <Switch label="Email on assignment" on />
             <Switch label="Slack on Sla risk" on />
             <Switch label="Digest every morning" />
-          </Panel>
-          <Panel title="Business hours">
-            <Select label="Timezone" value="America/Los_Angeles" />
-            <TextField label="Weekdays" value="09:00 – 17:00" />
+            <Divider label="Channels" />
+            <Select label="Default Slack channel" value="#support-alerts" />
+            <TextField label="Digest hour" value="08:00" />
             <Button label="Save changes" emphasis="primary" />
-          </Panel>
+          </Stack>
         </Row>
       </AppContent>
     </AppShell>
@@ -256,7 +302,7 @@ Create is a full page route, not a floating sheet.
 ## Tablet
 
 Same product on a landscape tablet.
-Master/detail density with more breathing room in the shell.
+Master/detail density with card surfaces and breathing room.
 Still a browser product, intentionally tablet-shaped.
 
 <Wireframe
@@ -296,7 +342,11 @@ Still a browser product, intentionally tablet-shaped.
             <Text text="Maya Chen · Northwind" role="helper" />
             <Heading text="Cannot complete checkout" level="2" />
             <Text text="Card form freezes on submit in Chrome." />
-            <Button label="Open full ticket" emphasis="secondary" navigateTo="t-ticket" />
+            <Button
+              label="Open full ticket"
+              emphasis="secondary"
+              navigateTo="t-ticket"
+            />
           </Panel>
         </Row>
       </AppContent>
@@ -393,9 +443,8 @@ Still a browser product, intentionally tablet-shaped.
 
 ## Phone
 
-Single column inside phone chrome.
-Destinations live in a bottom bar.
-Create is a focused stack, not a desktop form squeezed narrow.
+True mobile: phone chrome, single column, bottom tab bar, list → detail.
+No left rail and no tablet card stacking.
 
 <Wireframe
   id="harbor-phone"
@@ -408,24 +457,27 @@ Create is a focused stack, not a desktop form squeezed narrow.
     viewport="mobile-portrait"
     chrome="phone"
   >
-    <Stack gap="md">
+    <Stack gap="sm">
       <TopBar title="Harbor">
-        <Badge label="12 open" />
+        <Badge label="12" />
       </TopBar>
-      <PageHeader title="Inbox" description="Pull to refresh in product." />
-      <Panel>
-        <List>
-          <ListItem label="Checkout freeze" meta="14m" value="#4821" />
-          <ListItem label="SSO timeout" meta="2h" value="#4818" />
-          <ListItem label="Invoice PDF" meta="1d" value="#4802" />
-          <ListItem label="Webhook retries" meta="3d" value="#4790" />
-        </List>
-        <Button label="Open #4821" emphasis="primary" navigateTo="m-ticket" />
-      </Panel>
+      <TextField
+        label="Search"
+        kind="search"
+        placeholder="Search tickets"
+      />
+      <List>
+        <ListItem label="Checkout freeze" meta="14m" value="#4821" />
+        <ListItem label="SSO timeout" meta="2h" value="#4818" />
+        <ListItem label="Invoice PDF" meta="1d" value="#4802" />
+        <ListItem label="Webhook retries" meta="3d" value="#4790" />
+        <ListItem label="CSV export truncates" meta="4d" value="#4788" />
+      </List>
+      <Button label="Open #4821" emphasis="primary" navigateTo="m-ticket" />
       <BottomBar>
         <Button label="Inbox" emphasis="primary" />
         <Button label="New" navigateTo="m-compose" />
-        <Button label="Settings" navigateTo="m-settings" />
+        <Button label="More" navigateTo="m-settings" />
       </BottomBar>
     </Stack>
   </Screen>
@@ -436,30 +488,24 @@ Create is a focused stack, not a desktop form squeezed narrow.
     viewport="mobile-portrait"
     chrome="phone"
   >
-    <Stack gap="md">
+    <Stack gap="sm">
       <TopBar title="#4821">
         <Button label="Back" emphasis="tertiary" navigateTo="m-inbox" />
       </TopBar>
-      <PageHeader
-        title="Cannot complete checkout"
-        description="Maya Chen · Northwind"
-        badge="Priority"
-      />
-      <Panel title="Thread">
-        <List>
-          <ListItem label="Maya" meta="14m" value="Freezes on submit" />
-          <ListItem label="Alex" meta="8m" value="Need cart id" />
-          <ListItem label="Maya" meta="2m" value="cart_9f2a" />
-        </List>
-      </Panel>
-      <Panel title="Reply">
-        <TextArea label="Message" placeholder="Reply..." />
-        <Button label="Send" emphasis="primary" />
-      </Panel>
+      <Heading text="Cannot complete checkout" level="2" />
+      <Text text="Maya Chen · Northwind · Priority" role="helper" />
+      <Divider />
+      <List>
+        <ListItem label="Maya" meta="14m" value="Freezes on submit" />
+        <ListItem label="Alex" meta="8m" value="Need cart id" />
+        <ListItem label="Maya" meta="2m" value="cart_9f2a" />
+      </List>
+      <TextArea label="Reply" placeholder="Reply..." />
+      <Button label="Send" emphasis="primary" />
       <BottomBar>
         <Button label="Inbox" navigateTo="m-inbox" />
         <Button label="New" navigateTo="m-compose" />
-        <Button label="Settings" navigateTo="m-settings" />
+        <Button label="More" navigateTo="m-settings" />
       </BottomBar>
     </Stack>
   </Screen>
@@ -470,46 +516,43 @@ Create is a focused stack, not a desktop form squeezed narrow.
     viewport="mobile-portrait"
     chrome="phone"
   >
-    <Stack gap="md">
+    <Stack gap="sm">
       <TopBar title="New ticket">
         <Button label="Close" emphasis="tertiary" navigateTo="m-inbox" />
       </TopBar>
-      <Panel title="Details">
-        <TextField label="Subject" placeholder="Summary" />
-        <Select label="Customer" value="Northwind Labs" />
-        <Select label="Priority" value="Normal" />
-        <TextArea label="Description" placeholder="What happened?" />
-        <Button label="Create ticket" emphasis="primary" navigateTo="m-ticket" />
-      </Panel>
+      <TextField label="Subject" placeholder="Summary" />
+      <Select label="Customer" value="Northwind Labs" />
+      <Select label="Priority" value="Normal" />
+      <TextArea label="Description" placeholder="What happened?" />
+      <Button label="Create" emphasis="primary" navigateTo="m-ticket" />
       <BottomBar>
         <Button label="Inbox" navigateTo="m-inbox" />
         <Button label="New" emphasis="primary" />
-        <Button label="Settings" navigateTo="m-settings" />
+        <Button label="More" navigateTo="m-settings" />
       </BottomBar>
     </Stack>
   </Screen>
 
   <Screen
     id="m-settings"
-    name="Phone · Settings"
+    name="Phone · More"
     viewport="mobile-portrait"
     chrome="phone"
   >
-    <Stack gap="md">
-      <TopBar title="Settings" />
-      <Panel title="Notifications">
-        <Switch label="Email on assignment" on />
-        <Switch label="Push for Sla risk" on />
-        <Switch label="Quiet hours" />
-      </Panel>
-      <Panel title="Account">
-        <Text text="Alex Rivera · agent" role="helper" />
-        <Button label="Sign out" emphasis="destructive" />
-      </Panel>
+    <Stack gap="sm">
+      <TopBar title="More" />
+      <List>
+        <ListItem label="Notifications" meta="On" />
+        <ListItem label="Quiet hours" meta="Off" />
+        <ListItem label="Account" meta="Alex Rivera" />
+      </List>
+      <Switch label="Email on assignment" on />
+      <Switch label="Push for Sla risk" on />
+      <Button label="Sign out" emphasis="destructive" />
       <BottomBar>
         <Button label="Inbox" navigateTo="m-inbox" />
         <Button label="New" navigateTo="m-compose" />
-        <Button label="Settings" emphasis="primary" />
+        <Button label="More" emphasis="primary" />
       </BottomBar>
     </Stack>
   </Screen>
