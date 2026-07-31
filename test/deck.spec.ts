@@ -416,6 +416,56 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
       ),
     ).toBeVisible();
   });
+
+  await test.step("a hashchange expands collapsed ancestors and lands on the target", async () => {
+    await page.evaluate(() => {
+      location.hash = "#status-quo";
+    });
+    await expect(page).toHaveURL(/#status-quo$/);
+    const shipping = page.locator(
+      '[data-collapsible="part"][data-collapse-id="part-shipping-your-review"]',
+    );
+    await shipping.evaluate((element) =>
+      element.scrollIntoView({ block: "end" }),
+    );
+    await shipping
+      .locator(":scope > [data-collapse-header] > [data-collapse-toggle]")
+      .click();
+    await expect(shipping).toHaveAttribute("data-collapsed", "");
+    await page.evaluate(() => {
+      const scrollIntoView = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (options) {
+        if (this.id === "acceptance-criteria") {
+          document.documentElement.setAttribute(
+            "data-hash-target-scrolled",
+            "",
+          );
+        }
+        scrollIntoView.call(this, options);
+      };
+    });
+    await page.evaluate(() => {
+      location.hash = "#acceptance-criteria";
+    });
+    await expect(page).toHaveURL(/#acceptance-criteria$/);
+    await expect(shipping).not.toHaveAttribute("data-collapsed", "");
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-hash-target-scrolled",
+      "",
+    );
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
+    await expect(
+      page.getByRole("heading", {
+        level: 2,
+        name: "Acceptance criteria",
+      }),
+    ).toBeInViewport();
+  });
 });
 
 test("should draw the FlowDiagram pipeline as staged cards with an explicit fork", async ({

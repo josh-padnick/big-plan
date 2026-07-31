@@ -315,14 +315,15 @@ export const VIEWER_SCRIPT = `<script>
       node = node.parentElement;
     }
     if (expanded) refreshScrollSpy();
+    return expanded;
   };
   const expandHash = (hash) => {
-    if (!hash || hash === "#") return;
+    if (!hash || hash === "#") return null;
     const id = decodeURIComponent(hash.slice(1));
-    if (id === "") return;
+    if (id === "") return null;
     const target = document.getElementById(id);
-    if (target === null) return;
-    expandAncestors(target);
+    if (target === null) return null;
+    return { revealed: expandAncestors(target), target };
   };
   document.addEventListener("click", (event) => {
     const link = event.target.closest('a[href^="#"]');
@@ -333,7 +334,8 @@ export const VIEWER_SCRIPT = `<script>
   });
   expandHash(location.hash);
   addEventListener("hashchange", () => {
-    expandHash(location.hash);
+    const result = expandHash(location.hash);
+    if (result !== null && result.revealed) result.target.scrollIntoView();
   });
 })();
 </script>`;
