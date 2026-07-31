@@ -65,7 +65,7 @@ const screen = ({
 }): ScopedChild =>
   element({
     name: "Screen",
-    attributes: { id, name, ...attributes },
+    attributes: { id, name, device: "desktop", ...attributes },
     children,
   });
 
@@ -142,8 +142,8 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
         {
           id: "home",
           name: "Wallet home",
-          viewport: "desktop",
-          chrome: "none",
+          device: "desktop",
+
           children: [
             {
               element: "Panel",
@@ -165,8 +165,8 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
         {
           id: "lesson",
           name: "Loan lesson",
-          viewport: "desktop",
-          chrome: "none",
+          device: "desktop",
+
           children: [{ element: "Text", text: "Lesson 3 of 6", role: "body" }],
         },
       ],
@@ -330,7 +330,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       scopedChildren: [
         screen({
           id: "home",
-          attributes: { viewport: "watch" },
+          attributes: { device: "watch" },
           children: [element({ name: "Text", attributes: { text: "Hi" } })],
         }),
       ],
@@ -340,7 +340,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
         line: 5,
         column: 1,
         message:
-          'Invalid value for attribute "viewport"; expected one of: mobile-portrait, mobile-landscape, tablet-portrait, tablet-landscape, desktop',
+          'Invalid value for attribute "device"; expected one of: desktop, tablet, tablet-portrait, phone',
       },
     ]);
   });
@@ -588,17 +588,17 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       scopedChildren: [
         screen({
           id: "home",
-          attributes: { chrome: "browser", url: "app.example.dev/workflows" },
+          attributes: { url: "app.example.dev/workflows" },
           children: [element({ name: "Text", attributes: { text: "Hi" } })],
         }),
       ],
     });
     expect(diagnostics).toEqual([]);
     expect(compiled.model).toMatchObject({
-      screens: [{ chrome: "browser", url: "app.example.dev/workflows" }],
+      screens: [{ url: "app.example.dev/workflows" }],
     });
     const rendered = html(render(compiled));
-    expect(rendered).toContain('"data-wireframe-chrome":"browser"');
+    expect(rendered).toContain('"data-wireframe-device":"desktop"');
     expect(rendered).toContain("app.example.dev/workflows");
   });
 
@@ -610,8 +610,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
           id: "desk-home",
           name: "Desktop inbox",
           attributes: {
-            viewport: "desktop",
-            chrome: "browser",
+            device: "desktop",
             url: "app.harbor.team/inbox",
           },
           children: [
@@ -650,8 +649,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
           id: "tablet-home",
           name: "Tablet inbox",
           attributes: {
-            viewport: "tablet-landscape",
-            chrome: "browser",
+            device: "tablet",
             url: "app.harbor.team/inbox",
           },
           children: [
@@ -690,8 +688,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
           id: "phone-home",
           name: "Phone inbox",
           attributes: {
-            viewport: "mobile-portrait",
-            chrome: "phone",
+            device: "phone",
           },
           children: [
             element({
@@ -735,28 +732,23 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       screens: [
         {
           id: "desk-home",
-          viewport: "desktop",
-          chrome: "browser",
+          device: "desktop",
           url: "app.harbor.team/inbox",
         },
         {
           id: "tablet-home",
-          viewport: "tablet-landscape",
-          chrome: "browser",
+          device: "tablet",
         },
         {
           id: "phone-home",
-          viewport: "mobile-portrait",
-          chrome: "phone",
+          device: "phone",
         },
       ],
     });
     const rendered = html(render(compiled));
-    expect(rendered).toContain('"data-wireframe-viewport":"desktop"');
-    expect(rendered).toContain('"data-wireframe-viewport":"tablet-landscape"');
-    expect(rendered).toContain('"data-wireframe-viewport":"mobile-portrait"');
-    expect(rendered).toContain('"data-wireframe-chrome":"browser"');
-    expect(rendered).toContain('"data-wireframe-chrome":"phone"');
+    expect(rendered).toContain('"data-wireframe-device":"desktop"');
+    expect(rendered).toContain('"data-wireframe-device":"tablet"');
+    expect(rendered).toContain('"data-wireframe-device":"phone"');
     expect(rendered).toContain("wireframe-app-shell");
     expect(rendered).toContain("wireframe-sidebar");
     expect(rendered).toContain("wireframe-bottom-bar");
@@ -768,7 +760,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       scopedChildren: [
         screen({
           id: "home",
-          attributes: { viewport: "mobile-portrait", chrome: "phone" },
+          attributes: { device: "phone" },
           children: [
             element({
               name: "BottomBar",
@@ -815,9 +807,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
         }),
         screen({
           id: "ticket",
-          children: [
-            element({ name: "Text", attributes: { text: "Ticket" } }),
-          ],
+          children: [element({ name: "Text", attributes: { text: "Ticket" } })],
         }),
       ],
     });
@@ -832,7 +822,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       scopedChildren: [
         screen({
           id: "ticket",
-          attributes: { viewport: "desktop", chrome: "browser" },
+          attributes: { device: "desktop" },
           children: [
             element({
               name: "List",
@@ -879,8 +869,8 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
         screen({
           id: "ticket",
           attributes: {
-            viewport: "desktop",
-            chrome: "browser",
+            device: "desktop",
+
             url: "app.harbor.team/inbox?ticket=1",
           },
           children: [
@@ -896,7 +886,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
                       children: [
                         element({
                           name: "ListItem",
-                          attributes: { label: "#1" },
+                          attributes: { label: "#1", selected: true },
                         }),
                       ],
                     }),
@@ -954,7 +944,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       scopedChildren: [
         screen({
           id: "home",
-          attributes: { url: "app.example.dev/workflows" },
+          attributes: { device: "phone", url: "app.example.dev/workflows" },
           children: [element({ name: "Text", attributes: { text: "Hi" } })],
         }),
       ],
@@ -963,19 +953,199 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       {
         line: 5,
         column: 1,
-        message:
-          'Attribute "url" needs chrome="browser"; only a browser frame has an address bar',
+        message: 'Attribute "url" is unavailable on device="phone"',
       },
     ]);
     // The address is dropped rather than drawn somewhere it does not belong.
-    expect(compiled.model).toMatchObject({ screens: [{ chrome: "none" }] });
+    expect(compiled.model).toMatchObject({ screens: [{ device: "phone" }] });
     expect(html(render(compiled))).not.toContain("app.example.dev");
   });
 
-  it("should leave a screen unframed unless the author asks for a frame", () => {
+  it("should derive the frame from the screen device", () => {
     const { compiled } = compile({ scopedChildren: [HOME] });
-    expect(compiled.model).toMatchObject({ screens: [{ chrome: "none" }] });
-    expect(html(render(compiled))).toContain('"data-wireframe-chrome":"none"');
+    expect(compiled.model).toMatchObject({
+      screens: [{ device: "desktop" }],
+    });
+    expect(html(render(compiled))).toContain("wireframe-browser-bar");
+  });
+
+  it("should reject the split viewport and chrome attributes", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          attributes: { viewport: "desktop", chrome: "phone" },
+          children: [element({ name: "Text", attributes: { text: "Hi" } })],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Unknown attribute "viewport" on Screen',
+      'Unknown attribute "chrome" on Screen',
+    ]);
+  });
+
+  it("should expand an opt-in triage pattern into panels and a rail", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "ticket",
+          attributes: { pattern: "triage" },
+          children: [
+            element({
+              name: "Panel",
+              attributes: { title: "Queue" },
+              children: [
+                element({
+                  name: "List",
+                  children: [
+                    element({
+                      name: "ListItem",
+                      attributes: { label: "Checkout freeze", selected: true },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+            element({
+              name: "Panel",
+              attributes: { title: "Conversation" },
+              children: [element({ name: "Text", attributes: { text: "Hi" } })],
+            }),
+            element({
+              name: "Panel",
+              attributes: { title: "Properties" },
+              children: [
+                element({ name: "Text", attributes: { text: "Open" } }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(compiled.model).toMatchObject({
+      screens: [
+        {
+          pattern: "triage",
+          children: [
+            {
+              element: "Row",
+              children: [
+                { element: "Panel", span: "list", title: "Queue" },
+                { element: "Panel", span: "main", title: "Conversation" },
+                {
+                  element: "Rail",
+                  children: [{ element: "Panel", title: "Properties" }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("should report detail with no selected record", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "ticket",
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Panel",
+                  attributes: { span: "list" },
+                  children: [
+                    element({
+                      name: "List",
+                      children: [
+                        element({
+                          name: "ListItem",
+                          attributes: { label: "Checkout freeze" },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                element({
+                  name: "Panel",
+                  attributes: { span: "main" },
+                  children: [
+                    element({ name: "Text", attributes: { text: "Detail" } }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "ticket" shows detail beside a record list, but no ListItem or Table row is selected',
+    ]);
+  });
+
+  it("should reject a desktop shell on a phone screen", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "phone",
+          attributes: { device: "phone" },
+          children: [
+            element({
+              name: "AppShell",
+              children: [
+                element({ name: "Sidebar" }),
+                element({
+                  name: "AppContent",
+                  children: [
+                    element({ name: "Text", attributes: { text: "Hi" } }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Phone Screen "phone" cannot contain AppShell or Sidebar; use TopBar, one content column, and BottomBar',
+    ]);
+  });
+
+  it("should count a composer send button as the screen's filled action", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "reply",
+          children: [
+            element({
+              name: "Panel",
+              children: [
+                element({
+                  name: "TextArea",
+                  attributes: { label: "Reply" },
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Send reply" },
+                }),
+              ],
+            }),
+            element({
+              name: "Button",
+              attributes: { label: "Resolve", emphasis: "primary" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "reply" draws 2 filled actions (Resolve, Send reply); keep one primary action, counting a composer\'s Send button',
+    ]);
   });
 
   it("should read a fenced table into columns and rows", () => {

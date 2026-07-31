@@ -426,7 +426,7 @@ const CATALOG = {
     acceptsChildren: true,
     allowedChildren: ["Sidebar", "TopBar", "AppContent"],
     summary:
-      "The product frame: a flush-left sidebar on desktop, optional top bar, and content region. Tablet viewports relax the gutters; phone screens should prefer TopBar and BottomBar instead.",
+      "The product frame: a flush-left sidebar on desktop, optional top bar, and content region. Tablet devices relax the gutters; phone screens use TopBar and BottomBar instead.",
     example:
       "<AppShell><Sidebar>...</Sidebar><AppContent>...</AppContent></AppShell>",
     compile: ({ attributes, children, position, diagnostics }) => {
@@ -509,7 +509,7 @@ const CATALOG = {
     // Phone destinations live at the bottom. A desktop shell uses Sidebar.
     allowedParents: ["Screen", "Stack"],
     summary:
-      "A phone tab strip across the bottom of the screen. Reach for it on mobile-portrait; keep desktop navigation in Sidebar.",
+      "A phone tab strip across the bottom of the screen. Reach for it on device=phone; keep desktop navigation in Sidebar.",
     example:
       '<BottomBar><Button label="Inbox" emphasis="primary" /><Button label="Settings" /></BottomBar>',
     compile: ({ attributes, children, position, diagnostics }) => {

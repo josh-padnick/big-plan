@@ -7,7 +7,8 @@
 // column layout and grouping, and one maximize behavior shared by every figure
 // family, a decision matrix's column highlight, rationale swap, and confirm
 // step, wireframe screen navigation driven entirely by renderer-emitted data
-// attributes, and the diagram leg in ./diagram-script.ts. Plan content never
+// attributes plus true-width scaling, and the diagram leg in
+// ./diagram-script.ts. Plan content never
 // contributes script, and every affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
@@ -378,6 +379,62 @@ export const VIEWER_SCRIPT = `<script>
       openButton.focus();
     }
   });
+})();
+(() => {
+  const roots = Array.from(document.querySelectorAll("[data-wireframe]"));
+  const fit = (screen) => {
+    const frame = screen.querySelector(":scope > .wireframe-frame");
+    if (frame === null || screen.clientWidth === 0) return;
+    // offsetWidth stays in the frame's unscaled coordinate space. Writing a
+    // numeric zoom avoids relying on unsupported length division in CSS.
+    frame.style.zoom = "1";
+    frame.style.zoom = String(
+      Math.min(1, screen.clientWidth / frame.offsetWidth),
+    );
+  };
+  for (const root of roots) {
+    const screens = Array.from(
+      root.querySelectorAll("[data-wireframe-screen]"),
+    );
+    if (screens.length === 0) continue;
+    // Fit while every screen still participates in layout. Marking the root
+    // interactive then narrows it to one screen; without this script the
+    // complete storyboard remains readable, with true-width frames scrolling.
+    for (const screen of screens) fit(screen);
+    root.setAttribute("data-wireframe-interactive", "");
+    const show = (id) => {
+      let current = null;
+      for (const screen of screens) {
+        const active = screen.getAttribute("data-wireframe-screen") === id;
+        screen.toggleAttribute("data-wireframe-current", active);
+        if (active) current = screen;
+      }
+      for (const tab of root.querySelectorAll("[data-wireframe-switch]")) {
+        if (tab.getAttribute("data-wireframe-navigate") === id)
+          tab.setAttribute("aria-current", "true");
+        else tab.removeAttribute("aria-current");
+      }
+      if (current !== null) requestAnimationFrame(() => fit(current));
+    };
+    root.addEventListener("click", (event) => {
+      const trigger =
+        event.target instanceof Element
+          ? event.target.closest("[data-wireframe-navigate]")
+          : null;
+      if (trigger === null || !root.contains(trigger)) return;
+      const id = trigger.getAttribute("data-wireframe-navigate");
+      if (screens.some((screen) => screen.getAttribute("data-wireframe-screen") === id))
+        show(id);
+    });
+  }
+  addEventListener("resize", () => {
+    for (const root of roots) {
+      const current = root.querySelector(
+        "[data-wireframe-screen][data-wireframe-current]",
+      );
+      if (current !== null) fit(current);
+    }
+  }, { passive: true });
 })();
 (() => {
   const blocks = Array.from(document.querySelectorAll("[data-collapsible]"));
@@ -1857,39 +1914,6 @@ export const VIEWER_SCRIPT = `<script>
       if (choice !== null) choice.focus();
     });
     sync();
-   for (const root of document.querySelectorAll("[data-wireframe]")) {
-    const screens = Array.from(
-      root.querySelectorAll("[data-wireframe-screen]"),
-    );
-    if (screens.length === 0) continue;
-    // Marking the root interactive is what narrows the drawing to one screen.
-    // An inert document keeps every screen on the page, so the storyboard
-    // stays readable without this script.
-    root.setAttribute("data-wireframe-interactive", "");
-    const show = (id) => {
-      for (const screen of screens) {
-        screen.toggleAttribute(
-          "data-wireframe-current",
-          screen.getAttribute("data-wireframe-screen") === id,
-        );
-      }
-      for (const tab of root.querySelectorAll("[data-wireframe-switch]")) {
-        if (tab.getAttribute("data-wireframe-navigate") === id)
-          tab.setAttribute("aria-current", "true");
-        else tab.removeAttribute("aria-current");
-      }
-    };
-    root.addEventListener("click", (event) => {
-      const trigger =
-        event.target instanceof Element
-          ? event.target.closest("[data-wireframe-navigate]")
-          : null;
-      if (trigger === null || !root.contains(trigger)) return;
-      const id = trigger.getAttribute("data-wireframe-navigate");
-      if (screens.some((s) => s.getAttribute("data-wireframe-screen") === id))
-        show(id);
-    });
-   }
 })();
 ${DIAGRAM_SCRIPT}
 </script>`;

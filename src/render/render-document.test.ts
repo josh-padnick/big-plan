@@ -131,12 +131,10 @@ describe("renderDocument affordances", () => {
     }
   });
 
-  it("should never pull a wireframe outside the element that holds it", () => {
-    // A drawing used to borrow free page margin with a negative margin keyed
-    // on a marker attribute. Inside a collapsible slide the wrapper the deck
-    // transform inserts broke the selector that widened the card, so the
-    // drawing bled past its own border. The column is wide now and there is
-    // nothing to borrow; this fails if that mechanism ever comes back.
+  it("should let a desktop wireframe and its slide borrow measured page room", () => {
+    // The shell publishes only the page room that actually exists, and the
+    // slide grows with its drawing. That keeps the 920px painted cap inside
+    // the slide instead of letting a negative margin look like overflow.
     const deckWireframe = `# Deck
 
 The lede.
@@ -146,7 +144,7 @@ The lede.
 ## A screen
 
 <Wireframe id="wf" initialScreen="one">
-  <Screen id="one" name="One" viewport="desktop" chrome="browser">
+  <Screen id="one" name="One" device="desktop">
     <Text text="Drawn inside a collapsible slide." />
   </Screen>
 </Wireframe>
@@ -157,10 +155,9 @@ The lede.
     });
     expect(deckHtml).toContain("data-collapsible");
     expect(deckHtml).toContain("data-wireframe=");
-    expect(deckHtml).not.toContain("--reading-free-inline");
-    expect(deckHtml).not.toContain("data-wireframe-desktop");
-    // A desktop screen is capped instead, so it stays a screen rather than
-    // growing with the window.
+    expect(deckHtml).toContain("--reading-free-inline");
+    expect(deckHtml).toContain("data-wireframe-desktop");
+    // The true 1440px layout scales into the shared desktop review cap.
     expect(deckHtml).toContain("max-width:920px");
   });
 

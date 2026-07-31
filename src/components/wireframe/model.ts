@@ -1,5 +1,5 @@
 // Owns Wireframe's framework-free vocabulary: the constrained design tokens a
-// plan author may write, the viewport presets that shape an artboard, and the
+// plan author may write, the device presets that shape an artboard, and the
 // validated node union every accepted wireframe compiles into. Nothing here
 // knows about React, HTML, or CSS; the view consumes this model and the
 // catalog produces it.
@@ -97,21 +97,6 @@ export const WIREFRAME_DIRECTIONS: ReadonlyArray<WireframeDirection> = [
   "down",
 ];
 
-/**
- * The frame drawn around a screen.
- *
- * A wireframe of a web product that floats on the page reads as a tablet app
- * no matter what is inside it. The frame is what tells a reviewer which kind
- * of product they are looking at, before they read a single label.
- */
-export type WireframeChrome = "none" | "browser" | "phone";
-
-export const WIREFRAME_CHROMES: ReadonlyArray<WireframeChrome> = [
-  "none",
-  "browser",
-  "phone",
-];
-
 // How wide a block of content is allowed to get. Prose stops being readable
 // somewhere past 80 characters, so a desktop screen constrains its reading
 // content rather than letting it run the full width of the window.
@@ -177,43 +162,52 @@ export const WIREFRAME_HEADING_LEVELS: ReadonlyArray<WireframeHeadingLevel> = [
   "3",
 ];
 
-export type WireframeViewport =
-  | "mobile-portrait"
-  | "mobile-landscape"
-  | "tablet-portrait"
-  | "tablet-landscape"
-  | "desktop";
+/**
+ * The device a screen is designed for.
+ *
+ * One value owns both logical width and frame. Keeping those decisions
+ * together makes incoherent combinations such as desktop content in a phone
+ * shell impossible to author.
+ */
+export type WireframeDevice =
+  "desktop" | "tablet" | "tablet-portrait" | "phone";
 
-export const WIREFRAME_VIEWPORTS: ReadonlyArray<WireframeViewport> = [
-  "mobile-portrait",
-  "mobile-landscape",
-  "tablet-portrait",
-  "tablet-landscape",
+export const WIREFRAME_DEVICES: ReadonlyArray<WireframeDevice> = [
   "desktop",
+  "tablet",
+  "tablet-portrait",
+  "phone",
+];
+
+/** An optional proven layout that expands into the open wireframe vocabulary. */
+export type WireframePattern = "list-detail" | "triage" | "create" | "settings";
+
+export const WIREFRAME_PATTERNS: ReadonlyArray<WireframePattern> = [
+  "list-detail",
+  "triage",
+  "create",
+  "settings",
 ];
 
 /**
- * One viewport preset's logical dimensions and reader-facing name.
+ * One device preset's logical width and reader-facing name.
  *
- * The dimensions describe the device an author is designing for; they are not
- * the size the artboard renders at. A wireframe block fills the width it is
- * given up to the preset's logical width and reflows, so labels stay at
- * reading size from a 320px phone to a wide desktop review surface.
+ * The artboard lays out at this true width and scales as one unit to fit the
+ * review surface. Height deliberately follows content: a fixed device height
+ * would turn short screens into half-empty rectangles.
  */
-export type WireframeViewportPreset = {
+export type WireframeDevicePreset = {
   readonly label: string;
   readonly width: number;
-  readonly height: number;
 };
 
-export const WIREFRAME_VIEWPORT_PRESETS: Readonly<
-  Record<WireframeViewport, WireframeViewportPreset>
+export const WIREFRAME_DEVICE_PRESETS: Readonly<
+  Record<WireframeDevice, WireframeDevicePreset>
 > = {
-  "mobile-portrait": { label: "Phone", width: 390, height: 844 },
-  "mobile-landscape": { label: "Phone, landscape", width: 844, height: 390 },
-  "tablet-portrait": { label: "Tablet", width: 834, height: 1112 },
-  "tablet-landscape": { label: "Tablet, landscape", width: 1112, height: 834 },
-  desktop: { label: "Desktop", width: 1440, height: 900 },
+  desktop: { label: "Desktop", width: 1440 },
+  tablet: { label: "Tablet, landscape", width: 1112 },
+  "tablet-portrait": { label: "Tablet", width: 834 },
+  phone: { label: "Phone", width: 390 },
 };
 
 /**
@@ -441,8 +435,8 @@ export type WireframeElementName = WireframeNode["element"];
 export type WireframeScreen = {
   readonly id: string;
   readonly name: string;
-  readonly viewport: WireframeViewport;
-  readonly chrome: WireframeChrome;
+  readonly device: WireframeDevice;
+  readonly pattern?: WireframePattern;
   // The address shown in the browser frame. It says which route of the
   // product this screen is, which a reviewer otherwise has to infer.
   readonly url?: string;

@@ -13,7 +13,7 @@ import type {
   WireframeScreen,
   WireframeSpace,
 } from "./model.js";
-import { WIREFRAME_VIEWPORT_PRESETS } from "./model.js";
+import { WIREFRAME_DEVICE_PRESETS } from "./model.js";
 
 // Token-to-utility maps are written as literals so the stylesheet generator
 // sees every class this view can emit.
@@ -554,12 +554,14 @@ const Screen = ({
   // printing it again only competes with that.
   readonly named: boolean;
 }) => {
-  const preset = WIREFRAME_VIEWPORT_PRESETS[screen.viewport];
+  const preset = WIREFRAME_DEVICE_PRESETS[screen.device];
+  const phone = screen.device === "phone";
   return (
     <section
       className="wireframe-screen"
       aria-label={`${screen.name}, ${preset.label}`}
       data-wireframe-screen={screen.id}
+      data-wireframe-device={screen.device}
       {...(current ? { "data-wireframe-current": "" } : {})}
     >
       <div className="wireframe-screen-caption">
@@ -569,24 +571,27 @@ const Screen = ({
           <span />
         )}
         <span className="wireframe-screen-viewport">
-          {preset.label} - {preset.width}x{preset.height}
+          {preset.label} · {preset.width}px wide · content height
         </span>
       </div>
-      <div className="wireframe-frame" data-wireframe-chrome={screen.chrome}>
-        {screen.chrome === "browser" ? (
+      <div className="wireframe-frame" data-wireframe-device={screen.device}>
+        {phone ? null : (
           <div className="wireframe-browser-bar">
             <span className="wireframe-browser-dots" aria-hidden="true" />
             <span className="wireframe-browser-address">
               {screen.url ?? " "}
             </span>
           </div>
-        ) : null}
-        {screen.chrome === "phone" ? (
+        )}
+        {phone ? (
           <span className="wireframe-phone-notch" aria-hidden="true" />
         ) : null}
         <div
           className="wireframe-artboard"
-          data-wireframe-viewport={screen.viewport}
+          data-wireframe-device={screen.device}
+          {...(screen.pattern === undefined
+            ? {}
+            : { "data-wireframe-pattern": screen.pattern })}
         >
           <div className="wireframe-canvas flex flex-col gap-4">
             <WireframeElements nodes={screen.children} />
@@ -598,7 +603,13 @@ const Screen = ({
 };
 
 export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
-  <figure className="wireframe" data-wireframe={model.id}>
+  <figure
+    className="wireframe"
+    data-wireframe={model.id}
+    {...(model.screens.some((screen) => screen.device === "desktop")
+      ? { "data-wireframe-desktop": "" }
+      : {})}
+  >
     {model.title === undefined ? null : (
       <figcaption className="wireframe-caption">{model.title}</figcaption>
     )}

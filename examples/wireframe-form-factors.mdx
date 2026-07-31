@@ -49,8 +49,8 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
   <Screen
     id="d-ticket"
     name="Desktop · Ticket"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.harbor.team/inbox?ticket=4821"
   >
     <AppShell>
@@ -67,7 +67,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
           title="Cannot complete checkout"
           description="#4821 · Maya Chen · Northwind"
         >
-          <Button label="Resolve" emphasis="primary" />
+          <Button label="Resolve" emphasis="secondary" />
         </PageHeader>
         <Row gap="none">
           <Panel span="list">
@@ -127,7 +127,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
             />
             <Divider />
             <Row gap="sm">
-              <Button label="Reply" emphasis="primary" />
+              <Button label="Reply" emphasis="tertiary" />
               <Button label="Internal note" emphasis="tertiary" />
             </Row>
             <TextArea label="Message" placeholder="Write a reply…" />
@@ -166,8 +166,8 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
   <Screen
     id="d-inbox"
     name="Desktop · Inbox"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.harbor.team/inbox"
   >
     <AppShell>
@@ -197,7 +197,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
         </Row>
         <Row gap="sm" justify="between">
           <Row gap="sm">
-            <Button label="All 12" emphasis="primary" />
+            <Button label="All 12" emphasis="tertiary" />
             <Button label="Mine 4" emphasis="tertiary" />
             <Button label="Unassigned 3" emphasis="tertiary" />
           </Row>
@@ -261,7 +261,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
             <Metric label="First response" value="11m" note="Target 15m" />
             <Button
               label="View ticket"
-              emphasis="primary"
+              emphasis="secondary"
               navigateTo="d-ticket"
             />
           </Panel>
@@ -273,8 +273,8 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
   <Screen
     id="d-compose"
     name="Desktop · New ticket"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.harbor.team/tickets/new"
   >
     <AppShell>
@@ -353,8 +353,8 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
   <Screen
     id="d-settings"
     name="Desktop · Settings"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.harbor.team/settings/notifications"
   >
     <AppShell>
@@ -431,8 +431,8 @@ Master/detail with intentional card surfaces and breathing room.
   <Screen
     id="t-inbox"
     name="Tablet · Inbox"
-    viewport="tablet-landscape"
-    chrome="browser"
+    device="tablet"
+
     url="app.harbor.team/inbox"
   >
     <AppShell>
@@ -474,8 +474,8 @@ Master/detail with intentional card surfaces and breathing room.
   <Screen
     id="t-ticket"
     name="Tablet · Ticket"
-    viewport="tablet-landscape"
-    chrome="browser"
+    device="tablet"
+
     url="app.harbor.team/tickets/4821"
   >
     <AppShell>
@@ -489,7 +489,7 @@ Master/detail with intentional card surfaces and breathing room.
       <AppContent>
         <PageHeader title="#4821 Checkout freeze" badge="Priority">
           <Button label="Back" emphasis="tertiary" navigateTo="t-inbox" />
-          <Button label="Resolve" emphasis="primary" />
+          <Button label="Resolve" emphasis="secondary" />
         </PageHeader>
         <Panel title="Thread">
           <List>
@@ -507,8 +507,8 @@ Master/detail with intentional card surfaces and breathing room.
   <Screen
     id="t-compose"
     name="Tablet · New ticket"
-    viewport="tablet-landscape"
-    chrome="browser"
+    device="tablet"
+
     url="app.harbor.team/tickets/new"
   >
     <AppShell>
@@ -536,8 +536,8 @@ Master/detail with intentional card surfaces and breathing room.
   <Screen
     id="t-settings"
     name="Tablet · Settings"
-    viewport="tablet-landscape"
-    chrome="browser"
+    device="tablet"
+
     url="app.harbor.team/settings"
   >
     <AppShell>
@@ -585,8 +585,8 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
   <Screen
     id="m-ticket"
     name="Phone · Ticket"
-    viewport="mobile-portrait"
-    chrome="phone"
+    device="phone"
+
   >
     <Stack gap="sm">
       <TopBar title="#4821">
@@ -621,7 +621,7 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
       />
       <Divider />
       <Row gap="sm">
-        <Button label="Reply" emphasis="primary" />
+        <Button label="Reply" emphasis="tertiary" />
         <Button label="Internal note" emphasis="tertiary" />
       </Row>
       <TextArea label="Message" placeholder="Write a reply…" />
@@ -640,8 +640,8 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
   <Screen
     id="m-inbox"
     name="Phone · Inbox"
-    viewport="mobile-portrait"
-    chrome="phone"
+    device="phone"
+
   >
     <Stack gap="sm">
       <TopBar title="Inbox">
@@ -657,7 +657,7 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
         <Button label="Filter" emphasis="tertiary" />
       </Row>
       <Row gap="xs">
-        <Button label="All 12" emphasis="primary" />
+        <Button label="All 12" emphasis="tertiary" />
         <Button label="Mine 4" emphasis="tertiary" />
         <Button label="Unassigned 3" emphasis="tertiary" />
         <Button label="SLA 2" emphasis="tertiary" />
@@ -705,8 +705,8 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
   <Screen
     id="m-compose"
     name="Phone · New ticket"
-    viewport="mobile-portrait"
-    chrome="phone"
+    device="phone"
+
   >
     <Stack gap="sm">
       <TopBar title="New ticket">
@@ -757,8 +757,8 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
   <Screen
     id="m-settings"
     name="Phone · More"
-    viewport="mobile-portrait"
-    chrome="phone"
+    device="phone"
+
   >
     <Stack gap="sm">
       <TopBar title="More" />

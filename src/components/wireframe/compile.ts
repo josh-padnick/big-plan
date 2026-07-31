@@ -15,10 +15,11 @@ import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
 import { wireframeElementFor } from "./catalog.js";
 import type { WireframeElementDefinition } from "./catalog.js";
 import {
-  WIREFRAME_CHROMES,
-  WIREFRAME_VIEWPORTS,
+  WIREFRAME_DEVICES,
+  WIREFRAME_PATTERNS,
   type CompiledWireframe,
   type WireframeNode,
+  type WireframePattern,
   type WireframeScreen,
 } from "./model.js";
 
@@ -33,8 +34,8 @@ const WIREFRAME_SCHEMA = {
 const SCREEN_SCHEMA = {
   id: { kind: "string", required: true, nonEmpty: true },
   name: { kind: "string", required: true, nonEmpty: true },
-  viewport: { kind: "enum", values: WIREFRAME_VIEWPORTS },
-  chrome: { kind: "enum", values: WIREFRAME_CHROMES },
+  device: { kind: "enum", values: WIREFRAME_DEVICES, required: true },
+  pattern: { kind: "enum", values: WIREFRAME_PATTERNS },
   url: { kind: "string", nonEmpty: true },
 } satisfies ComponentAttributeSchema;
 
@@ -186,6 +187,294 @@ const compileNodes = ({
     return [node];
   });
 
+/** Every node in one screen, in authored order, at any depth. */
+const flatten = (
+  nodes: ReadonlyArray<WireframeNode>,
+): ReadonlyArray<WireframeNode> =>
+  nodes.flatMap((node) =>
+    "children" in node ? [node, ...flatten(node.children)] : [node],
+  );
+
+const panelWithSpan = ({
+  panel,
+  span,
+}: {
+  readonly panel: Extract<WireframeNode, { readonly element: "Panel" }>;
+  readonly span: "fill" | "list" | "main";
+}): WireframeNode => ({ ...panel, span });
+
+// A pattern is a convenience expansion into the same open vocabulary authors
+// can write by hand. It never introduces a closed region model.
+const patternedRow = ({
+  pattern,
+  panels,
+}: {
+  readonly pattern: WireframePattern;
+  readonly panels: ReadonlyArray<
+    Extract<WireframeNode, { readonly element: "Panel" }>
+  >;
+}): WireframeNode => {
+  const [first, second, third] = panels;
+  const fallback: Extract<WireframeNode, { readonly element: "Panel" }> = {
+    element: "Panel",
+    span: "fill",
+    surface: "plain",
+    children: [],
+  };
+  const lead = first ?? fallback;
+  const main = second ?? fallback;
+  const assist = third ?? fallback;
+  const children: ReadonlyArray<WireframeNode> =
+    pattern === "triage"
+      ? [
+          panelWithSpan({ panel: lead, span: "list" }),
+          panelWithSpan({ panel: main, span: "main" }),
+          {
+            element: "Rail",
+            children: [panelWithSpan({ panel: assist, span: "fill" })],
+          },
+        ]
+      : pattern === "create"
+        ? [
+            panelWithSpan({ panel: lead, span: "main" }),
+            {
+              element: "Rail",
+              children: [panelWithSpan({ panel: main, span: "fill" })],
+            },
+          ]
+        : [
+            panelWithSpan({ panel: lead, span: "list" }),
+            panelWithSpan({ panel: main, span: "main" }),
+          ];
+  return {
+    element: "Row",
+    gap: "none",
+    align: "stretch",
+    justify: "start",
+    children,
+  };
+};
+
+const expandPanelSlots = ({
+  nodes,
+  pattern,
+  position,
+  diagnostics,
+}: {
+  readonly nodes: ReadonlyArray<WireframeNode>;
+  readonly pattern: WireframePattern;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): ReadonlyArray<WireframeNode> => {
+  const expected = pattern === "triage" ? 3 : 2;
+  const panels = nodes.filter(
+    (node): node is Extract<WireframeNode, { readonly element: "Panel" }> =>
+      node.element === "Panel",
+  );
+  if (panels.length !== expected) {
+    diagnostics.add({
+      message: `Screen pattern="${pattern}" needs ${expected} direct Panel slots; it found ${panels.length}. Remove pattern to lay the screen out by hand.`,
+      position,
+    });
+    return nodes;
+  }
+  const firstPanel = nodes.findIndex((node) => node.element === "Panel");
+  const withoutPanels = nodes.filter((node) => node.element !== "Panel");
+  return [
+    ...withoutPanels.slice(0, firstPanel),
+    patternedRow({ pattern, panels }),
+    ...withoutPanels.slice(firstPanel),
+  ];
+};
+
+const expandPattern = ({
+  nodes,
+  pattern,
+  position,
+  diagnostics,
+}: {
+  readonly nodes: ReadonlyArray<WireframeNode>;
+  readonly pattern: WireframePattern | undefined;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): ReadonlyArray<WireframeNode> => {
+  if (pattern === undefined) {
+    return nodes;
+  }
+  const shell = nodes.find((node) => node.element === "AppShell");
+  if (shell === undefined || shell.element !== "AppShell") {
+    return expandPanelSlots({ nodes, pattern, position, diagnostics });
+  }
+  return nodes.map((node) =>
+    node.element !== "AppShell"
+      ? node
+      : {
+          ...node,
+          children: node.children.map((child) =>
+            child.element !== "AppContent"
+              ? child
+              : {
+                  ...child,
+                  children: expandPanelSlots({
+                    nodes: child.children,
+                    pattern,
+                    position,
+                    diagnostics,
+                  }),
+                },
+          ),
+        },
+  );
+};
+
+const childNodes = (node: WireframeNode): ReadonlyArray<WireframeNode> =>
+  "children" in node ? node.children : [];
+
+const spanOf = (node: WireframeNode): string | undefined =>
+  node.element === "Panel" || node.element === "Stack" ? node.span : undefined;
+
+/** A detail pane that shows content must name the selected record beside it. */
+const checkSelection = ({
+  screen,
+  position,
+  diagnostics,
+}: {
+  readonly screen: WireframeScreen;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
+    for (const node of nodes) {
+      if (node.element === "Row") {
+        const rail = node.children.find((child) => child.element === "Rail");
+        const dependent =
+          node.children.find((child) => spanOf(child) === "main") ?? rail;
+        const authoredSource = node.children.find(
+          (child) => spanOf(child) === "list",
+        );
+        const inferredSource =
+          dependent === rail
+            ? node.children.find(
+                (child) =>
+                  child !== dependent &&
+                  flatten([child]).some(
+                    (candidate) =>
+                      candidate.element === "List" ||
+                      candidate.element === "Table",
+                  ),
+              )
+            : undefined;
+        const source = authoredSource ?? inferredSource;
+        if (
+          source !== undefined &&
+          dependent !== undefined &&
+          flatten(childNodes(dependent)).length > 0
+        ) {
+          const sourceNodes = flatten([source]);
+          const hasRecords = sourceNodes.some(
+            (candidate) =>
+              candidate.element === "List" || candidate.element === "Table",
+          );
+          const selected = sourceNodes.filter(
+            (candidate) =>
+              (candidate.element === "ListItem" && candidate.selected) ||
+              (candidate.element === "Table" &&
+                candidate.selected !== undefined),
+          );
+          if (hasRecords && selected.length !== 1) {
+            diagnostics.add({
+              message:
+                selected.length === 0
+                  ? `Screen "${screen.id}" shows detail beside a record list, but no ListItem or Table row is selected`
+                  : `Screen "${screen.id}" selects ${selected.length} records beside one detail pane; select exactly one`,
+              position,
+            });
+          }
+        }
+      }
+      visit(childNodes(node));
+    }
+  };
+  visit(screen.children);
+};
+
+/** A phone uses its compact shell primitives, never a stacked desktop shell. */
+const checkPhoneShell = ({
+  screen,
+  position,
+  diagnostics,
+}: {
+  readonly screen: WireframeScreen;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  if (screen.device !== "phone") {
+    return;
+  }
+  const forbidden = flatten(screen.children).filter(
+    (node) => node.element === "AppShell" || node.element === "Sidebar",
+  );
+  if (forbidden.length > 0) {
+    diagnostics.add({
+      message: `Phone Screen "${screen.id}" cannot contain AppShell or Sidebar; use TopBar, one content column, and BottomBar`,
+      position,
+    });
+  }
+};
+
+/** A screen has one filled action; a send action beside a composer counts. */
+const checkOneFilledAction = ({
+  screen,
+  position,
+  diagnostics,
+}: {
+  readonly screen: WireframeScreen;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const all = flatten(screen.children);
+  const filled = new Set<WireframeNode>(
+    all.filter(
+      (node) => node.element === "Button" && node.emphasis === "primary",
+    ),
+  );
+  // BottomBar uses emphasis="primary" to mark the current destination. Its
+  // buttons are navigation state, not filled actions in the screen's work.
+  all
+    .filter((node) => node.element === "BottomBar")
+    .flatMap((node) => flatten(node.children))
+    .forEach((node) => filled.delete(node));
+  const markComposerSends = (nodes: ReadonlyArray<WireframeNode>): void => {
+    for (const node of nodes) {
+      const children = childNodes(node);
+      if (children.length > 0) {
+        const descendants = flatten(children);
+        if (descendants.some((candidate) => candidate.element === "TextArea")) {
+          descendants.forEach((candidate) => {
+            if (
+              candidate.element === "Button" &&
+              /^send(?:\s|$)/iu.test(candidate.label)
+            ) {
+              filled.add(candidate);
+            }
+          });
+        }
+        markComposerSends(children);
+      }
+    }
+  };
+  markComposerSends(screen.children);
+  if (filled.size > 1) {
+    const labels = [...filled].flatMap((node) =>
+      node.element === "Button" ? [node.label] : [],
+    );
+    diagnostics.add({
+      message: `Screen "${screen.id}" draws ${filled.size} filled actions (${labels.join(", ")}); keep one primary action, counting a composer's Send button`,
+      position,
+    });
+  }
+};
+
 /** Compiles one Screen and the artboard it holds. */
 const compileScreen = ({
   child,
@@ -210,20 +499,24 @@ const compileScreen = ({
       position: child.position,
     });
   }
-  // An address only means something inside a browser frame; anywhere else it
-  // would be drawn nowhere and quietly lost.
-  if (validated.url !== undefined && validated.chrome !== "browser") {
+  // A phone frame has no browser address bar.
+  if (validated.url !== undefined && validated.device === "phone") {
     diagnostics.add({
-      message:
-        'Attribute "url" needs chrome="browser"; only a browser frame has an address bar',
+      message: 'Attribute "url" is unavailable on device="phone"',
       position: child.position,
     });
   }
-  const children = compileNodes({
+  const authoredChildren = compileNodes({
     children: child.scopedChildren ?? [],
     parent: { name: SCREEN_ELEMENT },
     diagnostics,
     references,
+  });
+  const children = expandPattern({
+    nodes: authoredChildren,
+    pattern: validated.pattern,
+    position: child.position,
+    diagnostics,
   });
   if (children.length === 0) {
     diagnostics.add({
@@ -234,16 +527,20 @@ const compileScreen = ({
   if (validated.id === undefined || validated.name === undefined) {
     return undefined;
   }
-  return {
+  const screen: WireframeScreen = {
     id: validated.id,
     name: validated.name,
-    viewport: validated.viewport ?? "desktop",
-    chrome: validated.chrome ?? "none",
-    ...(validated.url === undefined || validated.chrome !== "browser"
+    device: validated.device ?? "desktop",
+    ...(validated.pattern === undefined ? {} : { pattern: validated.pattern }),
+    ...(validated.url === undefined || validated.device === "phone"
       ? {}
       : { url: validated.url }),
     children,
   };
+  checkSelection({ screen, position: child.position, diagnostics });
+  checkPhoneShell({ screen, position: child.position, diagnostics });
+  checkOneFilledAction({ screen, position: child.position, diagnostics });
+  return screen;
 };
 
 // Every screen id is a navigation target, so a repeat would make one of them

@@ -19,8 +19,8 @@ Click through it. Every arrow in the sketch is a screen you can reach.
   <Screen
     id="home"
     name="Home"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.fabrica.dev/acme-robotics"
   >
     <AppShell>
@@ -83,8 +83,8 @@ Onboarding brief | #1038 | [Succeeded:success] | 2d ago
   <Screen
     id="library"
     name="Workflow library"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.fabrica.dev/acme-robotics/workflows"
   >
     <AppShell>
@@ -135,8 +135,8 @@ Weekly rollup | Sam | 5 | Retired | [Archived]
   <Screen
     id="canvas"
     name="Canvas builder"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.fabrica.dev/acme-robotics/workflows/nightly-digest/edit"
   >
     <AppShell>
@@ -214,8 +214,8 @@ Weekly rollup | Sam | 5 | Retired | [Archived]
   <Screen
     id="step-config"
     name="Step configuration"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.fabrica.dev/acme-robotics/workflows/nightly-digest/steps/2"
   >
     <AppShell>
@@ -299,8 +299,8 @@ Value | Comes from | Type
   <Screen
     id="runs"
     name="Run history"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.fabrica.dev/acme-robotics/runs"
   >
     <AppShell>
@@ -355,8 +355,8 @@ Run | Workflow | Result | Cost | Started
   <Screen
     id="run-detail"
     name="Run detail"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.fabrica.dev/acme-robotics/runs/1042"
   >
     <AppShell>
@@ -399,7 +399,7 @@ Step | State | Took
             <Panel eyebrow="Step 3" title="Waiting on you" surface="filled">
               <Text text="Approve to publish tonight's digest to the wiki." />
               <Row gap="sm" justify="start">
-                <Button label="Approve" emphasis="primary" />
+                <Button label="Approve" emphasis="secondary" />
                 <Button label="Send back" navigateTo="step-config" />
               </Row>
             </Panel>
@@ -427,8 +427,8 @@ Step | State | Took
   <Screen
     id="create-basics"
     name="Create workflow"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.fabrica.dev/acme-robotics/workflows/new"
   >
     <AppShell>
@@ -484,8 +484,8 @@ Step | State | Took
   <Screen
     id="create-trigger"
     name="Create workflow, trigger"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.fabrica.dev/acme-robotics/workflows/new/trigger"
   >
     <AppShell>
@@ -538,8 +538,8 @@ Step | State | Took
   <Screen
     id="settings"
     name="Settings"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.fabrica.dev/acme-robotics/settings"
   >
     <AppShell>
@@ -597,8 +597,8 @@ Step | State | Took
   <Screen
     id="empty"
     name="Empty library"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
+
     url="app.fabrica.dev/nova-labs/workflows"
   >
     <AppShell>
@@ -640,8 +640,8 @@ Step | State | Took
   <Screen
     id="error"
     name="Mobile only: run failed"
-    viewport="mobile-portrait"
-    chrome="phone"
+    device="phone"
+
   >
     <TopBar title="Run #1040" />
     <Stack gap="md">
