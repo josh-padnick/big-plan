@@ -86,6 +86,14 @@
   article [data-figure-maximizable][data-figure-maximized] {
     position: fixed;
     inset: 1.5rem;
+    /* The panel owns its own geometry outright. A family may constrain its
+       resting size - DataTable sizes to its contents with `w-fit max-w-full` -
+       and a width utility beats the insets, which would anchor the panel left
+       and leave it short of the right edge. */
+    width: auto;
+    max-width: none;
+    height: auto;
+    max-height: none;
     z-index: 70;
     margin: 0;
     display: flex;

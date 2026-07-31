@@ -2,14 +2,27 @@
 // a scroll-spy that marks the section being read with aria-current on its TOC
 // links (falling back to the overview links above the first section), hover
 // popovers that float [data-info-popover] disclosures beside their triggers,
-// collapse toggles for deck parts, slides, and sub-slides, and one maximize
-// behavior shared by every figure family. Plan content never contributes
-// script, and every affordance keeps a no-JS fallback.
+// collapse toggles for deck parts, slides, and sub-slides, DataTable sorting,
+// filtering, text fit, column layout and grouping, and one maximize behavior
+// shared by every figure family. Plan content never contributes script, and
+// every affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
 // sibling. Every collapse query here is a direct-child lookup relying on that
 // shape, so read those invariants before changing this or the deck transform.
+//
+// The DataTable leg reads the contract owned by components/data-table/view.tsx,
+// and the maximize leg the one owned by
+// components/_model/figure-controls/figure-controls.ts. This file is a string
+// template and cannot import either, so a change to those attribute spellings
+// changes the strings here too.
+//
+// The DataTable leg reads the contract owned by components/data-table/view.tsx:
+// [data-data-table] wraps one scroll container holding one table whose head
+// cells carry data-table-column indices matching every body cell's index, and
+// whose rows carry data-table-row in authored order. Group subheadings live in
+// the same tbody but are chrome, so they never count, sort, or match a filter.
 //
 // The maximize leg reads the contract owned by
 // components/_model/figure-controls/figure-controls.ts. This file is a string
@@ -343,6 +356,543 @@ export const VIEWER_SCRIPT = `<script>
     const result = expandHash(location.hash);
     if (result !== null && result.revealed) result.target.scrollIntoView();
   });
+})();
+(() => {
+  const tables = Array.from(document.querySelectorAll("[data-data-table]"));
+  if (tables.length === 0) return;
+  const docKey =
+    document.documentElement.getAttribute("data-plan-id") ||
+    document.title ||
+    location.pathname;
+  const FITS = ["wrap", "truncate", "scroll"];
+  const read = (key) => {
+    try {
+      return JSON.parse(localStorage.getItem(key) || "null");
+    } catch (_) {
+      return null;
+    }
+  };
+  const write = (key, value) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (_) {}
+  };
+
+  for (const figure of tables) {
+    const grid = figure.querySelector("table");
+    if (grid === null) continue;
+    const headRow = grid.querySelector("thead tr");
+    const body = grid.querySelector("tbody");
+    if (headRow === null || body === null) continue;
+    const heads = Array.from(headRow.children);
+    // Group subheadings live in the same tbody but are chrome, not data: they
+    // never count, never sort, and never match a filter on their own.
+    const rows = Array.from(body.querySelectorAll("[data-table-row]"));
+    const columnCount = heads.length;
+    const authoredFit = figure.getAttribute("data-table-fit") || "wrap";
+    const storageKey =
+      "big-plan:datatable:" +
+      docKey +
+      ":" +
+      (figure.getAttribute("data-table-id") || "table");
+    const countLabel = figure.querySelector("[data-table-count]");
+    const empty = figure.querySelector("[data-table-empty]");
+    const filterInput = figure.querySelector("[data-table-filter-input]");
+    const fitButton = figure.querySelector("[data-table-fit-button]");
+    const fitList = figure.querySelector("[data-table-fit-list]");
+    const resetButton = figure.querySelector("[data-table-reset]");
+    let groupRows = Array.from(
+      figure.querySelectorAll("[data-table-group-heading]"),
+    );
+    let groupColumn = Number(
+      figure.getAttribute("data-table-group-column") || "-1",
+    );
+    const authoredGroupColumn = groupColumn;
+    const menuButton = figure.querySelector("[data-table-menu-button]");
+    const menuList = figure.querySelector("[data-table-menu-list]");
+    // Sorting and filtering read a cell's complete text, never what the
+    // current fit lets the reader see, so a clamped cell still compares and
+    // still matches on everything the author wrote.
+    const textOf = (row, column) => {
+      const cell = row.children[column];
+      return cell === undefined ? "" : (cell.textContent || "").trim();
+    };
+    let sortColumn = -1;
+    let sortDirection = 0;
+    for (let index = 0; index < columnCount; index += 1) {
+      const declared = heads[index].getAttribute("data-table-sorted");
+      if (declared !== null) {
+        sortColumn = index;
+        sortDirection = declared === "desc" ? -1 : 1;
+      }
+    }
+
+    const currentOrder = () =>
+      Array.from(headRow.children).map((head) =>
+        Number(head.getAttribute("data-table-column")),
+      );
+    const hiddenColumns = () =>
+      Array.from(headRow.children)
+        .filter((head) => head.hidden)
+        .map((head) => Number(head.getAttribute("data-table-column")));
+    // The grouping column ships hidden because its band already says it, so
+    // "authored" for reset purposes is what the server rendered, not "all
+    // visible".
+    const authoredHidden = hiddenColumns();
+    const syncGroupSpans = () => {
+      const visible = columnCount - hiddenColumns().length;
+      for (const row of groupRows) {
+        const cell = row.firstElementChild;
+        if (cell !== null) cell.colSpan = visible;
+      }
+    };
+
+    const persist = () => {
+      write(storageKey, {
+        order: currentOrder(),
+        hidden: hiddenColumns(),
+        fit: figure.getAttribute("data-table-fit"),
+        group: groupColumn,
+      });
+    };
+
+    const setFit = (fit, save) => {
+      if (FITS.indexOf(fit) === -1) return;
+      figure.setAttribute("data-table-fit", fit);
+      const choices = figure.querySelectorAll("[data-table-fit-choice]");
+      for (const choice of choices) {
+        choice.setAttribute(
+          "aria-checked",
+          choice.getAttribute("data-table-fit-choice") === fit
+            ? "true"
+            : "false",
+        );
+      }
+      if (save !== false) persist();
+    };
+
+    const setColumnHidden = (column, hidden, save) => {
+      // The first authored column carries row identity; hiding it would leave
+      // every remaining cell unattributable. The grouping column is exempt,
+      // because its band states the value the column would have shown - and
+      // it may itself be the first column.
+      if (column === 0 && column !== groupColumn) return;
+      for (const head of headRow.children) {
+        if (Number(head.getAttribute("data-table-column")) !== column) continue;
+        head.hidden = hidden;
+      }
+      for (const row of rows) {
+        for (const cell of row.children) {
+          if (Number(cell.getAttribute("data-table-column")) !== column)
+            continue;
+          cell.hidden = hidden;
+        }
+      }
+      const toggle = figure.querySelector(
+        '[data-table-column-toggle="' + column + '"]',
+      );
+      if (toggle !== null) {
+        toggle.setAttribute("aria-checked", hidden ? "false" : "true");
+      }
+      // A subheading spans the grid, so its span has to follow the grid.
+      syncGroupSpans();
+      if (save !== false) persist();
+    };
+
+    const moveColumn = (from, to, save) => {
+      if (from === to || to < 0 || to >= columnCount) return;
+      const moveWithin = (parent) => {
+        const items = Array.from(parent.children);
+        const moving = items[from];
+        const reference = from < to ? items[to].nextSibling : items[to];
+        parent.insertBefore(moving, reference);
+      };
+      moveWithin(headRow);
+      for (const row of rows) moveWithin(row);
+      if (save !== false) persist();
+    };
+
+    const applyOrder = (order) => {
+      for (let target = 0; target < order.length; target += 1) {
+        const positions = currentOrder();
+        const from = positions.indexOf(order[target]);
+        if (from === -1 || from === target) continue;
+        moveColumn(from, target, false);
+      }
+    };
+
+    const applyFilter = () => {
+      const query = (filterInput === null ? "" : filterInput.value || "")
+        .trim()
+        .toLowerCase();
+      let shown = 0;
+      for (const row of rows) {
+        const match =
+          query === "" ||
+          Array.from(row.children).some(
+            (cell) =>
+              !cell.hidden &&
+              (cell.textContent || "").toLowerCase().indexOf(query) !== -1,
+          );
+        row.hidden = !match;
+        if (match) shown += 1;
+      }
+      for (const heading of groupRows) {
+        const label = heading.getAttribute("data-table-group-heading");
+        heading.hidden = !rows.some(
+          (row) => !row.hidden && row.getAttribute("data-table-group") === label,
+        );
+      }
+      if (countLabel !== null) {
+        countLabel.textContent =
+          query === ""
+            ? rows.length + " rows"
+            : shown + " of " + rows.length + " rows";
+      }
+      if (empty !== null) {
+        empty.hidden = shown !== 0;
+        if (shown === 0) empty.textContent = 'No rows match "' + query + '".';
+      }
+    };
+
+    const compare = (a, b, column, type) => {
+      const left = textOf(a, column);
+      const right = textOf(b, column);
+      // An empty cell has nothing to say, so it sorts last whichever way the
+      // reader asked rather than crowding one end of the answer.
+      if (left === "" && right === "") return 0;
+      if (left === "") return 1;
+      if (right === "") return -1;
+      if (type === "number" || type === "date") {
+        const x =
+          type === "number"
+            ? Number(left.replace(/[^0-9.eE+-]/g, ""))
+            : Date.parse(left);
+        const y =
+          type === "number"
+            ? Number(right.replace(/[^0-9.eE+-]/g, ""))
+            : Date.parse(right);
+        const xBad = !isFinite(x) || isNaN(x);
+        const yBad = !isFinite(y) || isNaN(y);
+        if (xBad && yBad) return 0;
+        if (xBad) return 1;
+        if (yBad) return -1;
+        return x === y ? 0 : x < y ? -1 : 1;
+      }
+      return left.localeCompare(right, undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
+    };
+
+    const applySort = () => {
+      for (const head of headRow.children) {
+        const index = Number(head.getAttribute("data-table-column"));
+        const active = index === sortColumn && sortDirection !== 0;
+        if (active) {
+          head.setAttribute(
+            "aria-sort",
+            sortDirection === 1 ? "ascending" : "descending",
+          );
+          head.setAttribute(
+            "data-table-sorted",
+            sortDirection === 1 ? "asc" : "desc",
+          );
+        } else {
+          head.setAttribute("aria-sort", "none");
+          head.removeAttribute("data-table-sorted");
+        }
+        const glyph = head.querySelector("[data-lucide=chevrons-up-down]");
+        const up = head.querySelector("[data-lucide=arrow-up]");
+        const down = head.querySelector("[data-lucide=arrow-down]");
+        if (glyph !== null) glyph.hidden = active;
+        if (up !== null) up.hidden = !(active && sortDirection === 1);
+        if (down !== null) down.hidden = !(active && sortDirection === -1);
+      }
+      const ordered = rows.slice();
+      if (sortDirection !== 0 && sortColumn >= 0) {
+        const type =
+          heads[sortColumn].getAttribute("data-table-type") || "text";
+        // Sorting is stable, so a second sort keeps the previous answer as the
+        // tiebreaker and two clicks build a two-key view.
+        const positions = new Map();
+        ordered.forEach((row, index) => positions.set(row, index));
+        ordered.sort((a, b) => {
+          const verdict = compare(a, b, sortColumn, type) * sortDirection;
+          return verdict === 0 ? positions.get(a) - positions.get(b) : verdict;
+        });
+        if (groupRows.length !== 0) {
+          // Re-append below restores group order; this keeps the array the
+          // script reasons about in the same order the reader will see.
+          const groupOrder = groupRows.map((heading) =>
+            heading.getAttribute("data-table-group-heading"),
+          );
+          ordered.sort(
+            (a, b) =>
+              groupOrder.indexOf(a.getAttribute("data-table-group")) -
+              groupOrder.indexOf(b.getAttribute("data-table-group")),
+          );
+        }
+      } else {
+        ordered.sort(
+          (a, b) =>
+            Number(a.getAttribute("data-table-row")) -
+            Number(b.getAttribute("data-table-row")),
+        );
+      }
+      // On a grouped table the subheadings are the outer order, so sorting
+      // rearranges rows inside a group and never across one.
+      if (groupRows.length === 0) {
+        for (const row of ordered) body.appendChild(row);
+      } else {
+        for (const heading of groupRows) {
+          const label = heading.getAttribute("data-table-group-heading");
+          body.appendChild(heading);
+          for (const row of ordered) {
+            if (row.getAttribute("data-table-group") === label)
+              body.appendChild(row);
+          }
+        }
+      }
+      rows.length = 0;
+      for (const row of ordered) rows.push(row);
+    };
+
+    // Grouping is a setting, so the reader can move it to another column.
+    // This is the one place the script builds markup rather than toggling it;
+    // the row it creates matches the server-rendered band exactly, because
+    // both are the same contract.
+    const buildBand = (label) => {
+      const row = document.createElement("tr");
+      row.className = "data-table-group-row";
+      row.setAttribute("data-table-group-heading", label);
+      const cell = document.createElement("th");
+      cell.setAttribute("scope", "colgroup");
+      cell.textContent = label;
+      row.appendChild(cell);
+      return row;
+    };
+    const setGroupColumn = (next, save) => {
+      if (next === groupColumn) return;
+      for (const band of groupRows) band.remove();
+      groupRows = [];
+      // The old grouping column goes back to being an ordinary visible column;
+      // the new one hides, because its band now says what it said.
+      if (groupColumn >= 0) setColumnHidden(groupColumn, false, false);
+      groupColumn = next;
+      if (groupColumn >= 0) setColumnHidden(groupColumn, true, false);
+      for (const row of rows) {
+        if (groupColumn < 0) {
+          row.removeAttribute("data-table-group");
+          continue;
+        }
+        row.setAttribute("data-table-group", textOf(row, groupColumn));
+      }
+      if (groupColumn >= 0) {
+        const seen = [];
+        for (const row of rows) {
+          const label = row.getAttribute("data-table-group");
+          if (seen.indexOf(label) === -1) seen.push(label);
+        }
+        for (const label of seen) groupRows.push(buildBand(label));
+      }
+      figure.toggleAttribute("data-table-grouped", groupColumn >= 0);
+      // Column 0 is only lockable while it is not the one supplying bands.
+      const firstToggle = figure.querySelector('[data-table-column-toggle="0"]');
+      if (firstToggle !== null) firstToggle.disabled = groupColumn !== 0;
+      for (const choice of figure.querySelectorAll("[data-table-group-choice]")) {
+        choice.setAttribute(
+          "aria-checked",
+          Number(choice.getAttribute("data-table-group-choice")) === groupColumn
+            ? "true"
+            : "false",
+        );
+      }
+      applySort();
+      syncGroupSpans();
+      applyFilter();
+      if (save !== false) persist();
+    };
+
+    // Restore the reader's saved layout before wiring controls, so the first
+    // paint after a reload already matches what they left.
+    const saved = read(storageKey);
+    if (saved !== null && typeof saved === "object") {
+      if (Array.isArray(saved.order) && saved.order.length === columnCount) {
+        applyOrder(saved.order);
+      }
+      if (Array.isArray(saved.hidden)) {
+        for (const column of saved.hidden) setColumnHidden(column, true, false);
+      }
+      if (typeof saved.fit === "string") setFit(saved.fit, false);
+      if (typeof saved.group === "number" && saved.group < columnCount) {
+        setGroupColumn(saved.group, false);
+      }
+    }
+    // Every control ships dormant so a document read without scripts shows no
+    // affordance that cannot act. Enabling them is the last thing this leg
+    // does for a table, after its state is already restored.
+    figure.setAttribute("data-table-reorderable", "");
+    figure.setAttribute("data-table-interactive", "");
+    for (const control of figure.querySelectorAll(
+      "[data-table-filter],[data-table-fit-button],[data-table-menu-button],[data-table-reset]",
+    )) {
+      control.hidden = false;
+    }
+
+    for (const head of headRow.children) {
+      head.setAttribute("draggable", "true");
+      const button = head.querySelector("[data-table-sort]");
+      if (button !== null) {
+        button.disabled = false;
+        button.addEventListener("click", () => {
+          const index = Number(head.getAttribute("data-table-column"));
+          if (index === sortColumn) {
+            // Three states, because the author's order is information and a
+            // table that cannot return to it loses that on the first click.
+            sortDirection =
+              sortDirection === 1 ? -1 : sortDirection === -1 ? 0 : 1;
+            if (sortDirection === 0) sortColumn = -1;
+          } else {
+            sortColumn = index;
+            sortDirection = 1;
+          }
+          applySort();
+          applyFilter();
+        });
+        button.addEventListener("keydown", (event) => {
+          if (!event.altKey) return;
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          const positions = Array.from(headRow.children);
+          const from = positions.indexOf(head);
+          moveColumn(from, from + (event.key === "ArrowLeft" ? -1 : 1));
+          button.focus();
+        });
+      }
+      head.addEventListener("dragstart", (event) => {
+        const positions = Array.from(headRow.children);
+        event.dataTransfer.setData(
+          "text/plain",
+          String(positions.indexOf(head)),
+        );
+        event.dataTransfer.effectAllowed = "move";
+      });
+      head.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        const box = head.getBoundingClientRect();
+        const after = event.clientX > box.left + box.width / 2;
+        head.classList.toggle("data-table-head-drop-before", !after);
+        head.classList.toggle("data-table-head-drop-after", after);
+      });
+      const clear = () => {
+        head.classList.remove("data-table-head-drop-before");
+        head.classList.remove("data-table-head-drop-after");
+      };
+      head.addEventListener("dragleave", clear);
+      head.addEventListener("dragend", clear);
+      head.addEventListener("drop", (event) => {
+        event.preventDefault();
+        clear();
+        const from = Number(event.dataTransfer.getData("text/plain"));
+        const positions = Array.from(headRow.children);
+        const to = positions.indexOf(head);
+        if (!isNaN(from)) moveColumn(from, to);
+      });
+    }
+
+    if (filterInput !== null) {
+      filterInput.addEventListener("input", applyFilter);
+      filterInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        filterInput.value = "";
+        applyFilter();
+      });
+    }
+
+    const resetLayout = () => {
+      for (let column = 0; column < columnCount; column += 1) {
+        setColumnHidden(column, authoredHidden.indexOf(column) !== -1, false);
+      }
+      applyOrder(Array.from({ length: columnCount }, (_, index) => index));
+      setGroupColumn(authoredGroupColumn, false);
+      sortColumn = -1;
+      sortDirection = 0;
+      applySort();
+      setFit(authoredFit, false);
+      persist();
+      applyFilter();
+    };
+    if (resetButton !== null) {
+      resetButton.addEventListener("click", resetLayout);
+    }
+
+    // Both popovers behave identically, so they share one wiring pass; only
+    // one may be open at a time, because two overlapping menus in a figure
+    // header is chrome fighting itself.
+    const popovers = [
+      { button: menuButton, list: menuList },
+      { button: fitButton, list: fitList },
+    ].filter((entry) => entry.button !== null && entry.list !== null);
+    const closeMenus = () => {
+      for (const entry of popovers) {
+        entry.list.hidden = true;
+        entry.button.setAttribute("aria-expanded", "false");
+      }
+    };
+    for (const entry of popovers) {
+      entry.button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const open = entry.list.hidden;
+        closeMenus();
+        entry.list.hidden = !open;
+        entry.button.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+      // A menu stays open across consecutive choices, because choosing
+      // columns is a comparison rather than a single answer.
+      entry.list.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const toggle = event.target.closest("[data-table-column-toggle]");
+        if (toggle !== null) {
+          const column = Number(
+            toggle.getAttribute("data-table-column-toggle"),
+          );
+          setColumnHidden(
+            column,
+            toggle.getAttribute("aria-checked") === "true",
+          );
+          applyFilter();
+          return;
+        }
+        const choice = event.target.closest("[data-table-fit-choice]");
+        if (choice !== null) {
+          setFit(choice.getAttribute("data-table-fit-choice"));
+          return;
+        }
+        const group = event.target.closest("[data-table-group-choice]");
+        if (group !== null) {
+          setGroupColumn(Number(group.getAttribute("data-table-group-choice")));
+        }
+      });
+    }
+    if (popovers.length !== 0) {
+      document.addEventListener("click", (event) => {
+        // A click inside either of this figure's popovers is the reader still
+        // using it; anything else dismisses.
+        const inside =
+          event.target instanceof Element &&
+          figure.contains(event.target) &&
+          event.target.closest("[data-table-menu]") !== null;
+        if (!inside) closeMenus();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeMenus();
+      });
+    }
+
+    applySort();
+    applyFilter();
+  }
 })();
 (() => {
   // One maximize behavior for every figure family: tables, code snippets,

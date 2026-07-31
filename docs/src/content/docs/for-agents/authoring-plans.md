@@ -40,7 +40,7 @@ A gated document only works while it is short enough to actually be read, so it 
 
 Standard Markdown plus GFM tables, task lists, footnotes, and literal autolinks all work.
 Fenced code blocks with a supported declared language receive syntax highlighting; unknown and undeclared languages stay plain.
-Components are flow-level JSX elements from the built-in [component registry](/components/), plus scoped child components such as `Annotation`, `Entry`, `Option`, and `Score` that are valid only in the hierarchy declared by their parent.
+Components are flow-level JSX elements from the built-in [component registry](/components/), plus scoped child components such as `Annotation`, `Column`, `Entry`, `Option`, and `Score` that are valid only in the hierarchy declared by their parent.
 Component attributes are strings (`title="Rollout"`) or bare shorthand booleans (`showLineNumbers`) where a component's schema allows them.
 
 ## What a plan may not contain
