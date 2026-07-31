@@ -10,6 +10,7 @@ Everything on this page is shipped and works today.
 - One reading column with warm, paper-like light and dark palettes.
 - A palette that follows your OS preference through CSS alone.
 - A sticky branding bar whose logo follows the active theme.
+- In-document `Maximize` controls for fenced code, code snippets and diffs, tree diffs, complex decisions, and database schemas, with Escape restoring the reading view.
 
 ## Navigation
 
@@ -42,7 +43,7 @@ Everything on this page is shipped and works today.
 ## Output
 
 - One self-contained HTML file with styling and branding embedded.
-- One small embedded viewer script (TOC scroll-spy, hover popovers, deck collapse); content stays fully readable with scripts disabled.
+- One small embedded viewer script (TOC scroll-spy, hover popovers, deck collapse, figure maximize); content stays fully readable with scripts disabled.
 - No external requests, ever.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 

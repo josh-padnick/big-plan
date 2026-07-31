@@ -370,8 +370,10 @@ export const VIEWER_SCRIPT = `<script>
     if (trigger === null) return;
     const grow = trigger.querySelector("[data-lucide=maximize-2]");
     const shrink = trigger.querySelector("[data-lucide=minimize-2]");
-    if (grow !== null) grow.hidden = maximized;
-    if (shrink !== null) shrink.hidden = !maximized;
+    // SVGElement does not reflect a hidden property into markup the way an
+    // HTMLElement does, so toggle the actual attribute both glyphs ship with.
+    if (grow !== null) grow.toggleAttribute("hidden", maximized);
+    if (shrink !== null) shrink.toggleAttribute("hidden", !maximized);
     const label = maximized
       ? "Restore " + subjectOf(frame) + " size"
       : "Maximize " + subjectOf(frame);
