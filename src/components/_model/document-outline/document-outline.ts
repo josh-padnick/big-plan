@@ -3,6 +3,8 @@
 // document, and outline-aware component views consume it to render their
 // complete markup, so no transform needs to know any component's markup.
 
+import type { SlideTypeId } from "../../../plan-vocabulary/slide-types/index.js";
+
 /** One Part divider: its document-order number, act title, and anchor. */
 export type DocumentOutlinePart = {
   readonly number: number;
@@ -14,8 +16,10 @@ export type DocumentOutlinePart = {
 export type DocumentOutlineSection = {
   // The slide number in reading form: "3" alone, "1.2" inside a part.
   readonly number: string;
+  readonly name: string;
   readonly title: string;
-  readonly id?: string;
+  readonly id: string;
+  readonly type?: SlideTypeId;
   readonly part?: DocumentOutlinePart;
 };
 

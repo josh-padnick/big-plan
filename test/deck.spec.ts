@@ -39,8 +39,11 @@ test("should read the deck plan through parts, the overview, and sub-slides", as
     });
     await expect(row.locator("[data-table-of-contents-num]")).toHaveText("1.1");
     await row.click();
-    await expect(page).toHaveURL(/#status-quo$/);
-    const heading = page.getByRole("heading", { level: 2, name: "Status quo" });
+    await expect(page).toHaveURL(/#inline-retries-delay-checkout$/);
+    const heading = page.getByRole("heading", {
+      level: 2,
+      name: "Inline retries delay checkout",
+    });
     await expect(heading).toBeInViewport();
     const box = await boxOf(heading);
     expect(box.y).toBeGreaterThan(0);
@@ -72,18 +75,29 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
 
   await test.step("blocks start open so body content is visible", async () => {
     const statusHost = page.locator(
-      '[data-collapsible="slide"][data-collapse-id="status-quo"]',
+      '[data-collapsible="slide"][data-collapse-id="inline-retries-delay-checkout"]',
+    );
+    await expect(statusHost).toHaveAttribute("data-slide-type", "status-quo");
+    await expect(statusHost.locator("[data-slide-kicker]")).toHaveText(
+      "1.1 / Status quo",
     );
     await expect(statusHost).not.toHaveAttribute("data-collapsed", "");
-    await expect(statusHost.getByText("Inline retries")).toBeVisible();
     await expect(
-      page.getByRole("heading", { level: 2, name: "Status quo" }),
+      statusHost.getByText(
+        "Inline retries couple checkout latency to processor health.",
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        level: 2,
+        name: "Inline retries delay checkout",
+      }),
     ).toBeVisible();
   });
 
   await test.step("collapsing a slide hides its body but keeps the title", async () => {
     const statusHost = page.locator(
-      '[data-collapsible="slide"][data-collapse-id="status-quo"]',
+      '[data-collapsible="slide"][data-collapse-id="inline-retries-delay-checkout"]',
     );
     const toggle = statusHost.locator(
       ":scope > [data-collapse-header] > [data-collapse-toggle]",
@@ -91,9 +105,16 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     await statusHost.hover();
     await toggle.click();
     await expect(statusHost).toHaveAttribute("data-collapsed", "");
-    await expect(statusHost.getByText("Inline retries")).toBeHidden();
     await expect(
-      page.getByRole("heading", { level: 2, name: "Status quo" }),
+      statusHost.getByText(
+        "Inline retries couple checkout latency to processor health.",
+      ),
+    ).toBeHidden();
+    await expect(
+      page.getByRole("heading", {
+        level: 2,
+        name: "Inline retries delay checkout",
+      }),
     ).toBeVisible();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
@@ -167,14 +188,16 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
   // selecting or clicking ordinary prose collapsed the slide.
   await test.step("clicking slide body content does not collapse the slide", async () => {
     const statusHost = page.locator(
-      '[data-collapsible="slide"][data-collapse-id="status-quo"]',
+      '[data-collapsible="slide"][data-collapse-id="inline-retries-delay-checkout"]',
     );
     // An earlier step left this slide collapsed; reopen it first.
     if ((await statusHost.getAttribute("data-collapsed")) !== null) {
       await statusHost.locator(":scope > [data-collapse-header]").click();
     }
     await expect(statusHost).not.toHaveAttribute("data-collapsed", "");
-    await statusHost.getByText("Inline retries").click();
+    await statusHost
+      .getByText("Inline retries couple checkout latency to processor health.")
+      .click();
     await expect(statusHost).not.toHaveAttribute("data-collapsed", "");
   });
 
@@ -412,10 +435,10 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
 
   await test.step("a TOC jump expands collapsed ancestors and lands on the target", async () => {
     await toc.getByRole("link", { name: "Acceptance criteria" }).click();
-    await expect(page).toHaveURL(/#acceptance-criteria$/);
+    await expect(page).toHaveURL(/#restarts-preserve-scheduled-retries$/);
     const heading = page.getByRole("heading", {
       level: 2,
-      name: "Acceptance criteria",
+      name: "Restarts preserve scheduled retries",
     });
     const shipping = page.locator(
       '[data-collapsible="part"][data-collapse-id="part-shipping-your-review"]',
@@ -430,16 +453,16 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     await expect(heading).toBeInViewport();
     await expect(
       page.locator(
-        '[data-collapsible="slide"][data-collapse-id="acceptance-criteria"]',
+        '[data-collapsible="slide"][data-collapse-id="restarts-preserve-scheduled-retries"]',
       ),
     ).toBeVisible();
   });
 
   await test.step("a hashchange expands collapsed ancestors and lands on the target", async () => {
     await page.evaluate(() => {
-      location.hash = "#status-quo";
+      location.hash = "#inline-retries-delay-checkout";
     });
-    await expect(page).toHaveURL(/#status-quo$/);
+    await expect(page).toHaveURL(/#inline-retries-delay-checkout$/);
     const shipping = page.locator(
       '[data-collapsible="part"][data-collapse-id="part-shipping-your-review"]',
     );
@@ -453,7 +476,7 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     await page.evaluate(() => {
       const scrollIntoView = Element.prototype.scrollIntoView;
       Element.prototype.scrollIntoView = function (options) {
-        if (this.id === "acceptance-criteria") {
+        if (this.id === "restarts-preserve-scheduled-retries") {
           document.documentElement.setAttribute(
             "data-hash-target-scrolled",
             "",
@@ -463,9 +486,9 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
       };
     });
     await page.evaluate(() => {
-      location.hash = "#acceptance-criteria";
+      location.hash = "#restarts-preserve-scheduled-retries";
     });
-    await expect(page).toHaveURL(/#acceptance-criteria$/);
+    await expect(page).toHaveURL(/#restarts-preserve-scheduled-retries$/);
     await expect(shipping).not.toHaveAttribute("data-collapsed", "");
     await expect(page.locator("html")).toHaveAttribute(
       "data-hash-target-scrolled",
@@ -480,7 +503,7 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     await expect(
       page.getByRole("heading", {
         level: 2,
-        name: "Acceptance criteria",
+        name: "Restarts preserve scheduled retries",
       }),
     ).toBeInViewport();
   });

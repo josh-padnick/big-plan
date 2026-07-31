@@ -12,6 +12,7 @@ import type {
 } from "../_authoring/contract.js";
 import type { DocumentOutline } from "../_model/document-outline/document-outline.js";
 import { EMPTY_DOCUMENT_OUTLINE } from "../_model/document-outline/document-outline.js";
+import type { SlideTypeId } from "../../plan-vocabulary/slide-types/index.js";
 
 /**
  * What the deck transform needs to place one component instance in the
@@ -20,7 +21,8 @@ import { EMPTY_DOCUMENT_OUTLINE } from "../_model/document-outline/document-outl
  */
 export type OutlineMarker =
   | { readonly kind: "part"; readonly title: string; readonly id?: string }
-  | { readonly kind: "boundary" };
+  | { readonly kind: "boundary" }
+  | { readonly kind: "slide"; readonly type: SlideTypeId };
 
 export type CompiledComponent = {
   readonly model: unknown;

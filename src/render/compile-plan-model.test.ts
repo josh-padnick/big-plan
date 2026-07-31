@@ -69,7 +69,7 @@ describe("compilePlanModel", () => {
     const plan = compilePlanModel({ markdown: PLAN, fallbackTitle: "x" });
 
     expect(plan.title).toBe("Storage plan");
-    expect(plan.sections.map(({ text }) => text)).toEqual(["Decision"]);
+    expect(plan.sections.map(({ name }) => name)).toEqual(["Decision"]);
     expect(plan.components.map(({ component }) => component)).toEqual([
       "Callout",
       "DecisionAnalysis",
@@ -119,7 +119,11 @@ describe("compilePlanModel", () => {
 
     expect(plan.title).toBe("Nested title");
     expect(plan.sections).toEqual([
-      { id: "nested-section", text: "Nested section" },
+      {
+        id: "nested-section",
+        name: "Nested section",
+        title: "Nested section",
+      },
     ]);
   });
 

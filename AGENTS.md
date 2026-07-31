@@ -64,6 +64,7 @@ Human delivery enforces the same linting rules before packaging, and a guidance 
 ## Architecture at a glance
 
 Big Plan uses one compilation path to produce either machine-readable JSON or a human-readable review document.
+The framework-free plan vocabulary is the shared bottom tier for guidance-bearing concepts consumed by compilation, lint, and rendering.
 The validate command checks that the review document can be rendered, then applies linting rules to the authored plan; the render command applies the same linting rules before writing:
 
 ```text
@@ -95,6 +96,7 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 | `src/cli/`               | Public command dispatch, shared input and safe derived-output workflows, errors, and result serialization. Give each public command a non-underscored folder; keep reusable command mechanics in `_shared/` and business semantics below the CLI. |
 | `src/components/`        | Built-in components as vertical slices. Put a new component in its own folder and follow the infrastructure boundaries in the [components local map](src/components/README.md).                                                                   |
 | `src/lint/`              | Framework-free, validate-only linting rules for statically analyzable aspects of an authored plan. Keep rules independent and register them in a deterministic order.                                                                             |
+| `src/plan-vocabulary/`   | Framework-free, guidance-bearing plan vocabulary shared by component compilation, lint, and rendering. Keep each slide type in its own file and assemble the closed catalog through its registry.                                                 |
 | `src/render/`            | Pure document compilation and delivery orchestration. Put cross-document pipeline behavior here and follow the stage boundaries in the [renderer local map](src/render/README.md); keep component-specific behavior in its component slice.       |
 | `src/render/shell/`      | Viewer chrome, reading layout, branding, and responsive navigation. Do not put document packaging here.                                                                                                                                           |
 | `src/render/page.ts`     | Doctype, head, embedded delivery assets, favicons, and the final inert HTML envelope.                                                                                                                                                             |

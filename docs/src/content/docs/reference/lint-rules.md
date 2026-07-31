@@ -33,6 +33,10 @@ Big Plan renders the paragraph directly under the title as the document's subtit
 
 `quick-summary-singleton` allows at most one `QuickSummary` per plan, so the reviewer always has exactly one place to start.
 
+`slide-type-structure` enforces only objective facts from the registered catalog.
+Singleton types may appear at most once, `desired-experience` and `desired-outcome` may not appear together, and `acceptance-criteria` must follow every other typed slide.
+It does not require any type, judge whether content matches a type, lint “Success looks like”, or enforce the plain-language title discipline.
+
 `slide-leading-title` requires a slide or sub-slide to name its message before it shows anything.
 A component, fenced code block, standalone image, or table as the first block under an h2 or h3 is flagged; a sub-slide fixes it with an h4 title above the figure, and a slide with a title line or context builder.
 Prose, a context builder, an image used inside a sentence, and a section that opens straight into its sub-slides are never flagged.
@@ -46,7 +50,8 @@ A `Part` marker's act name and titles nested inside a component, such as an `Opt
 A list counts as grouped when its items carry nested items; a table counts as grouped when its first column repeats, which is what a grouping dimension looks like once equal values sit together.
 Splitting a long collection into several shorter labelled lists satisfies the rule the same way, because no single list then reaches the threshold.
 
-`table-of-contents-matches-sections` requires a `TableOfContents`'s Entry section names to repeat the document's h2 titles exactly, in order, one to one.
+`table-of-contents-matches-sections` requires a `TableOfContents`'s Entry section names to repeat the document's structural names exactly, in order, one to one.
+For a typed slide that is the catalog name; for an untyped slide it is the h2 title.
 Every mismatch - a wrong name, a missing section, or an extra entry - is reported at the TableOfContents's position, so the overview can never drift from the plan it summarizes.
 
 `markdown-table-format` catches table-shaped outer-pipe rows whose delimiter row is missing or malformed:

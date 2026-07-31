@@ -20,18 +20,20 @@ The acknowledgment is recorded per directory and expires after 24 hours, or imme
 `compile` stays open, because it produces machine-readable output rather than a document a human will read.
 
 Run `big-plan guidance <Component>` for one component's usage guidance, which is authored beside that component rather than in the shared principles.
+Run `big-plan guidance Slide` once before drafting to receive the complete guidance-bearing slide-type catalog; it is one digest for the whole authoring pass, not a per-slide command.
 
 ## Where each kind of rule lives
 
 Big Plan keeps one home per fact:
 
-| Kind of rule                           | Lives in                                | Why there                                                                           |
-| -------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------- |
-| Anything you have to judge             | `big-plan guidance`                     | It is gated, so every authoring session reads it                                    |
-| Judgment specific to one component     | `big-plan guidance <Component>`         | Authored beside that component, so it cannot drift from what the component enforces |
-| Anything the compiler or lint enforces | The diagnostic itself                   | It reaches you at the moment of failure, with your file in hand                     |
-| Exhaustive matching boundaries         | [Linting rules](/reference/lint-rules/) | Too long for a gated document, and needed only when a diagnostic surprises you      |
-| Per-component attributes and shapes    | [Components](/components/)              | Reference you look up, not principles you internalize                               |
+| Kind of rule                           | Lives in                                | Why there                                                                            |
+| -------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------ |
+| Anything you have to judge             | `big-plan guidance`                     | It is gated, so every authoring session reads it                                     |
+| Judgment specific to one component     | `big-plan guidance <Component>`         | Authored beside that component, so it cannot drift from what the component enforces  |
+| Judgment specific to one slide type    | `big-plan guidance Slide`               | Generated from the shared type records, so matching and writing advice stay attached |
+| Anything the compiler or lint enforces | The diagnostic itself                   | It reaches you at the moment of failure, with your file in hand                      |
+| Exhaustive matching boundaries         | [Linting rules](/reference/lint-rules/) | Too long for a gated document, and needed only when a diagnostic surprises you       |
+| Per-component attributes and shapes    | [Components](/components/)              | Reference you look up, not principles you internalize                                |
 
 Guidance stays short on purpose.
 A gated document only works while it is short enough to actually be read, so it carries judgment plus a pointer, never a second copy of what a validator already says precisely and at the right moment.
@@ -42,6 +44,7 @@ Standard Markdown plus GFM tables, task lists, footnotes, and literal autolinks 
 Fenced code blocks with a supported declared language receive syntax highlighting; unknown and undeclared languages stay plain.
 Components are flow-level JSX elements from the built-in [component registry](/components/), plus scoped child components such as `Annotation`, `Column`, `Entry`, `Option`, and `Score` that are valid only in the hierarchy declared by their parent.
 Component attributes are strings (`title="Rollout"`) or bare shorthand booleans (`showLineNumbers`) where a component's schema allows them.
+A self-closing [`Slide`](/components/slide/) marker may appear directly above a top-level h2 to apply one registered slide type; an untyped h2 remains valid.
 
 ## What a plan may not contain
 
@@ -80,7 +83,8 @@ It answers nothing about whether the plan reads well; `big-plan guidance` owns t
 Guidance is generated, not edited in place.
 
 - A new principle is authored in `assets/guidance/plan-guidance.md`, or in `src/components/<component>/<component>.guidance.md` when it belongs to one component.
-- `scripts/gen-guidance.mjs` embeds both into the CLI and derives a version hash from their content, which is what expires prior acknowledgments.
+- A slide type's matching boundary and specific guidance live together in its one file under `src/plan-vocabulary/slide-types/`; the [`Slide` reference](/components/slide/#growing-the-catalog) owns the contribution path.
+- `scripts/gen-guidance.mjs` embeds the principles, component guidance, and generated slide catalog into the CLI and derives a version hash from their content, which is what expires prior acknowledgments.
 - A new statically checkable rule is a module under `src/lint/rules/`, registered in `src/lint/lint-plan.ts`, and documented in [Linting rules](/reference/lint-rules/).
 
 Before adding a rule, decide which rung it belongs on.

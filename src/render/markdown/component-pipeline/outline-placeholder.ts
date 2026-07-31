@@ -19,6 +19,7 @@ import type { ReactHastAdapter } from "./react-hast-adapter.js";
 // the ordinary id.
 export const OUTLINE_PLACEHOLDER_ATTRIBUTE = "data-outline-placeholder";
 export const OUTLINE_PART_TITLE_ATTRIBUTE = "data-outline-part-title";
+export const OUTLINE_SLIDE_TYPE_ATTRIBUTE = "data-outline-slide-type";
 
 /** Deferred outline presentations in placeholder-index order. */
 export type DeferredOutlinePresentations = Array<
@@ -29,9 +30,11 @@ export type DeferredOutlinePresentations = Array<
 export const createOutlinePlaceholder = ({
   index,
   marker,
+  position,
 }: {
   readonly index: number;
   readonly marker: OutlineMarker;
+  readonly position?: Root["position"];
 }): Element => ({
   type: "element",
   tagName: "div",
@@ -43,8 +46,12 @@ export const createOutlinePlaceholder = ({
           ...(marker.id === undefined ? {} : { id: marker.id }),
         }
       : {}),
+    ...(marker.kind === "slide"
+      ? { [OUTLINE_SLIDE_TYPE_ATTRIBUTE]: marker.type }
+      : {}),
   },
   children: [],
+  ...(position === undefined ? {} : { position }),
 });
 
 const isElement = (node: RootContent | ElementContent): node is Element =>

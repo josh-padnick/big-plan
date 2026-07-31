@@ -31,8 +31,12 @@ The frame most worth the reviewer's attention is usually in the middle of the ch
 
 A rendered plan reads as a deck: every section is one slide carrying one thought, stated mostly in bullets, at roughly one screen of content.
 If a section needs a second screen, it holds a second thought; split it into h3 sub-slides, each of which renders as its own numbered frame.
+Before drafting, run `big-plan guidance Slide` once for the complete slide-type catalog.
+For each intended slide, ask whether its purpose matches a defined type; when one fits, use its `Slide` marker and type-specific guidance, and when none fits, author an untyped slide under these general principles rather than forcing a match.
+Typed coverage is not a quality target.
 Group the slides with `Part` markers into about three acts - Context, The proposal, and Shipping & your review - adapting the names when this plan demands it.
 Part 1 canonically holds "Status quo" and then "Success looks like": what is true today, and the outcome-level success a sponsor would repeat.
+"Desired experience" for a new feature and "Desired outcome" for other work are light recommendations when their sharper framing fits; they do not replace or invalidate "Success looks like".
 Place the verification contract near the end and make every criterion independently checkable; "Acceptance criteria" and "Definition of done" both name it well.
 "Desired outcome" is not that contract - it names the outcome-level result a sponsor would repeat, which is a higher rung and belongs earlier if the plan needs it.
 Put a `TableOfContents` directly after the `QuickSummary`: one row per section, so the reviewer sees the whole argument before reading any of it.
@@ -42,8 +46,11 @@ Fold "why X rather than Y" justifications into the surrounding story or a decisi
 ## 5. Lead with the title, and say it once
 
 Every slide and sub-slide names its message before it shows anything; the reader has to know what they are looking at before they look at it.
-An h2 is already the slide's headline, but an h3 renders only as a small kicker, so a sub-slide that leads with a figure needs an h4 title of its own.
-Write that title as the message rather than the topic: "Escape unwinds one level at a time" beats "Dismissal".
+An h2 is the slide's title.
+On a typed slide the catalog supplies the reusable structural name shown in the kicker, overview, and navigation, while the h2 states this plan's specific message; on an untyped slide the h2 remains both name and title.
+Normally keep a typed title distinct from its name and write it in plain language: concrete nouns and active verbs, without evaluative adjectives, superlatives, slogans, or abstract noun stacks.
+That discipline stays judgment guidance because broad title lint would falsely flag legitimate domain language; an identical name and title remains structurally valid when a distinct title would be strained.
+An h3 renders only as a small kicker, so a sub-slide that leads with a figure needs an h4 title of its own.
 
 A fully emphasized paragraph (`*like this*`) renders as the context builder - one muted orienting line - but only as the first block under the heading, so a title and a context builder are alternatives, never a sequence.
 Keep it only when it adds what the heading does not already carry, and when the slide carries a reader action - a decision, a question, something to verify - let it declare that action ("We need to decide where the skill ships.").
@@ -114,6 +121,7 @@ Big Plan ships components that present specific kinds of information better than
 - `QuickSummary` for the key points a reviewer reads first.
 - `TableOfContents` for the plan in one look: one linked row per section, directly after the quick summary.
 - `Part` to divide the slides into numbered acts.
+- `Slide` to apply a catalog type and its specific authoring guidance when the slide's purpose matches.
 - `Decision` for a tradeoff read option by option; `DecisionAnalysis` for a full criteria matrix; `QuickDecision` for quick calls.
 - `FlowDiagram` for genuinely relational content - a flow, dependency, or fan-out - drawn as staged cards with directed connectors.
 - `CodeDiff` and `CodeSnippet` for concrete code the reviewer should see.

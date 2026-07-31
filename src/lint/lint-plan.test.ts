@@ -378,11 +378,80 @@ describe("lintPlan verification-contract vocabulary", () => {
   });
 });
 
+describe("lintPlan slide-type-structure", () => {
+  it("should reject a duplicate singleton type at the second marker", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '<Slide type="status-quo" />\n\n## Today\n\nA.\n\n<Slide type="status-quo" />\n\n## The inherited constraint\n\nB.\n',
+      }),
+    ).toEqual([
+      {
+        ruleId: "slide-type-structure",
+        line: 7,
+        column: 1,
+        message: "Use at most one Status quo slide in a plan",
+      },
+    ]);
+  });
+
+  it("should reject using both outcome types", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '<Slide type="desired-experience" />\n\n## Reviewers leave feedback in place\n\nA.\n\n<Slide type="desired-outcome" />\n\n## Review state survives regeneration\n\nB.\n',
+      }),
+    ).toEqual([
+      {
+        ruleId: "slide-type-structure",
+        line: 7,
+        column: 1,
+        message:
+          "Use either Desired experience for a new feature or Desired outcome for other work, not both",
+      },
+    ]);
+  });
+
+  it("should require Acceptance criteria to be the last typed slide", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '<Slide type="acceptance-criteria" />\n\n## The change has checkable proof\n\nA.\n\n<Slide type="user-journey" />\n\n## A reviewer accepts the plan\n\nB.\n',
+      }),
+    ).toEqual([
+      {
+        ruleId: "slide-type-structure",
+        line: 1,
+        column: 1,
+        message: "Acceptance criteria must be the last typed slide in the plan",
+      },
+    ]);
+  });
+
+  it("should allow repeated User journey types and canonical Success looks like", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '## Success looks like\n\nA.\n\n<Slide type="user-journey" />\n\n## A reviewer opens the plan\n\nB.\n\n<Slide type="user-journey" />\n\n## A reviewer accepts the plan\n\nC.\n',
+      }),
+    ).toEqual([]);
+  });
+
+  it("should leave plain-language title judgment to guidance", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '<Slide type="status-quo" />\n\n## The ultimate revolutionary architecture\n\nA.\n',
+      }),
+    ).toEqual([]);
+  });
+});
+
 describe("lintPlan table-of-contents-matches-sections", () => {
   const plan = (overview: string): string =>
     `# T\n\nLede.\n\n${overview}\n## Status quo\n\nA.\n\n## The design\n\nB.\n`;
 
-  it("should accept a TableOfContents whose entries repeat every section title in order", () => {
+  it("should accept a TableOfContents whose entries repeat every section name in order", () => {
     expect(
       lintPlan({
         markdown: plan(
@@ -405,9 +474,18 @@ describe("lintPlan table-of-contents-matches-sections", () => {
         line: 5,
         column: 1,
         message:
-          'TableOfContents entry 2 says "Design" but section 2 is titled "The design"; list every section title exactly, in document order',
+          'TableOfContents entry 2 says "Design" but section 2 is named "The design"; list every section name exactly, in document order',
       },
     ]);
+  });
+
+  it("should compare a typed slide against its catalog name rather than its h2 title", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '# T\n\nLede.\n\n<TableOfContents>\n<Entry section="Status quo" gist="Today" />\n</TableOfContents>\n\n<Slide type="status-quo" />\n\n## Inline retries delay checkout\n\nA.\n',
+      }),
+    ).toEqual([]);
   });
 
   it("should report entries in the wrong order as pairwise mismatches", () => {

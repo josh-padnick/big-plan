@@ -11,8 +11,12 @@ describe("compileMarkdown sections", () => {
       markdown: "# Title\n\n## Background\n\ntext\n\n## Rollout plan\n",
     });
     expect(sections).toEqual([
-      { id: "background", text: "Background" },
-      { id: "rollout-plan", text: "Rollout plan" },
+      { id: "background", name: "Background", title: "Background" },
+      {
+        id: "rollout-plan",
+        name: "Rollout plan",
+        title: "Rollout plan",
+      },
     ]);
   });
 
@@ -21,7 +25,11 @@ describe("compileMarkdown sections", () => {
       markdown: "## Goals & non-goals (v2)!\n",
     });
     expect(sections).toEqual([
-      { id: "goals--non-goals-v2", text: "Goals & non-goals (v2)!" },
+      {
+        id: "goals--non-goals-v2",
+        name: "Goals & non-goals (v2)!",
+        title: "Goals & non-goals (v2)!",
+      },
     ]);
   });
 
@@ -40,7 +48,11 @@ describe("compileMarkdown sections", () => {
       markdown: "## The `retry` *loop*\n",
     });
     expect(sections).toEqual([
-      { id: "the-retry-loop", text: "The retry loop" },
+      {
+        id: "the-retry-loop",
+        name: "The retry loop",
+        title: "The retry loop",
+      },
     ]);
   });
 
@@ -57,7 +69,13 @@ describe("compileMarkdown sections", () => {
     });
     const bodyHtml = serializeHtml({ root });
     expect(bodyHtml).toContain('id="footnote-label"');
-    expect(sections).toEqual([{ id: "real-section", text: "Real section" }]);
+    expect(sections).toEqual([
+      {
+        id: "real-section",
+        name: "Real section",
+        title: "Real section",
+      },
+    ]);
   });
 
   it("should return no sections and empty body when the document is empty", () => {
@@ -83,7 +101,13 @@ describe("compileMarkdown component ids", () => {
 `,
     });
 
-    expect(sections).toEqual([{ id: "decision-foo", text: "Decision Foo" }]);
+    expect(sections).toEqual([
+      {
+        id: "decision-foo",
+        name: "Decision Foo",
+        title: "Decision Foo",
+      },
+    ]);
     expect(elementIds).toContain("decision-foo-2");
     expect(new Set(elementIds).size).toBe(elementIds.length);
   });
@@ -113,8 +137,16 @@ describe("compileMarkdown component ids", () => {
     });
 
     expect(sections).toEqual([
-      { id: "decision-foo", text: "Decision Foo" },
-      { id: "decision-bar", text: "Decision Bar" },
+      {
+        id: "decision-foo",
+        name: "Decision Foo",
+        title: "Decision Foo",
+      },
+      {
+        id: "decision-bar",
+        name: "Decision Bar",
+        title: "Decision Bar",
+      },
     ]);
     expect(elementIds).toContain("decision-foo-2");
     expect(elementIds).toContain("decision-bar-2");

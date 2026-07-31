@@ -17,9 +17,16 @@ import type {
   DocumentOutlinePart,
   DocumentOutlineSection,
 } from "../../components/_model/document-outline/document-outline.js";
+import type { DiagnosticCollector } from "../../components/_authoring/diagnostics.js";
+import {
+  isSlideTypeId,
+  slideTypeFor,
+  type SlideTypeDefinition,
+} from "../../plan-vocabulary/slide-types/index.js";
 import {
   OUTLINE_PART_TITLE_ATTRIBUTE,
   OUTLINE_PLACEHOLDER_ATTRIBUTE,
+  OUTLINE_SLIDE_TYPE_ATTRIBUTE,
 } from "./component-pipeline/outline-placeholder.js";
 import { appendCollapseBody, createCollapsible } from "./deck-collapse.js";
 
@@ -62,6 +69,11 @@ const isNonPartOutlinePlaceholder = (node: RootContent): boolean =>
   isElement(node) &&
   node.properties[OUTLINE_PLACEHOLDER_ATTRIBUTE] !== undefined &&
   node.properties[OUTLINE_PART_TITLE_ATTRIBUTE] === undefined;
+
+const isIgnorableBetweenMarkerAndHeading = (
+  node: RootContent | ElementContent,
+): boolean =>
+  node.type === "comment" || (node.type === "text" && node.value.trim() === "");
 
 // Tailwind utilities remain private styling implementation; the data
 // attributes are the stable behavior-bearing interfaces used by tests.
@@ -135,6 +147,70 @@ export type MutableDocumentOutline = {
   readonly sections: Array<DocumentOutlineSection>;
 };
 
+// Consumes every typed Slide placeholder before framing. A valid marker is a
+// top-level sibling immediately before its h2 (blank text is ignorable);
+// anything else receives a positional structural diagnostic and emits no
+// marker HTML.
+const collectSlideTypes = ({
+  tree,
+  diagnostics,
+}: {
+  readonly tree: Root;
+  readonly diagnostics: DiagnosticCollector;
+}): Map<Element, SlideTypeDefinition> => {
+  const assigned = new Map<Element, SlideTypeDefinition>();
+
+  const consume = (parent: Root | Element): void => {
+    let index = 0;
+    while (index < parent.children.length) {
+      const child = parent.children[index];
+      if (child === undefined || !isElement(child)) {
+        index += 1;
+        continue;
+      }
+      const authoredType = child.properties[OUTLINE_SLIDE_TYPE_ATTRIBUTE];
+      if (authoredType === undefined) {
+        consume(child);
+        index += 1;
+        continue;
+      }
+      let nextIndex = index + 1;
+      while (nextIndex < parent.children.length) {
+        const candidate = parent.children[nextIndex];
+        if (
+          candidate === undefined ||
+          !isIgnorableBetweenMarkerAndHeading(candidate)
+        ) {
+          break;
+        }
+        nextIndex += 1;
+      }
+      const next = parent.children[nextIndex];
+      if (
+        parent.type !== "root" ||
+        next === undefined ||
+        !isElement(next) ||
+        next.tagName !== "h2"
+      ) {
+        diagnostics.add({
+          message:
+            "Slide must be a top-level self-closing marker immediately followed by the h2 it describes",
+          position: child.position,
+        });
+      } else if (
+        typeof authoredType === "string" &&
+        isSlideTypeId(authoredType)
+      ) {
+        assigned.set(next, slideTypeFor(authoredType));
+      }
+      parent.children.splice(index, 1);
+    }
+  };
+
+  consume(tree);
+  return assigned;
+};
+
 // Numbers every part placeholder in document order, reading the act title
 // and anchor the placeholder attributes carry, and mapping each placeholder
 // element so the top-level slide walk can group sections under it.
@@ -199,11 +275,13 @@ const buildSubSlides = ({
   body,
   label,
   kicker,
+  slideType,
 }: {
   readonly heading: Element;
   readonly body: ReadonlyArray<ElementContent>;
   readonly label: string;
   readonly kicker: Element;
+  readonly slideType?: SlideTypeDefinition;
 }): Element => {
   const firstH3 = body.findIndex(
     (node) => isElement(node) && node.tagName === "h3",
@@ -275,7 +353,11 @@ const buildSubSlides = ({
     kind: "slide",
     collapseId,
     tagName: "section",
-    properties: { "data-slide": "", "data-subpart": "" },
+    properties: {
+      "data-slide": "",
+      "data-subpart": "",
+      ...(slideType === undefined ? {} : { "data-slide-type": slideType.id }),
+    },
     className: SLIDE_GROUP_CLASSES,
     chrome: [kicker, heading],
     body: groupBody,
@@ -290,6 +372,7 @@ const buildSubSlides = ({
 const wrapSlides = (
   tree: Root,
   parts: Map<Element, DocumentOutlinePart>,
+  slideTypes: Map<Element, SlideTypeDefinition>,
 ): ReadonlyArray<DocumentOutlineSection> => {
   const sections: Array<DocumentOutlineSection> = [];
   const rewritten: Array<RootContent> = [];
@@ -384,6 +467,8 @@ const wrapSlides = (
         ? `${indexInPart}`
         : `${currentPart.number}.${indexInPart}`;
     const title = textOf(child);
+    const slideType = slideTypes.get(child);
+    const name = slideType?.name ?? title;
     const kicker: Element = {
       type: "element",
       tagName: "p",
@@ -391,13 +476,15 @@ const wrapSlides = (
         "data-slide-kicker": "",
         className: [...KICKER_CLASSES],
       },
-      children: [{ type: "text", value: `${label} / ${title}` }],
+      children: [{ type: "text", value: `${label} / ${name}` }],
     };
     const id = child.properties.id;
     sections.push({
       number: label,
+      name,
       title,
-      ...(typeof id === "string" ? { id } : {}),
+      id: typeof id === "string" ? id : label,
+      ...(slideType === undefined ? {} : { type: slideType.id }),
       ...(currentPart === undefined ? {} : { part: currentPart }),
     });
     const sectionBody = body.slice(1);
@@ -411,6 +498,7 @@ const wrapSlides = (
           body: sectionBody,
           label,
           kicker,
+          ...(slideType === undefined ? {} : { slideType }),
         }),
       );
       index = end;
@@ -424,7 +512,12 @@ const wrapSlides = (
         kind: "slide",
         collapseId,
         tagName: "section",
-        properties: { "data-slide": "" },
+        properties: {
+          "data-slide": "",
+          ...(slideType === undefined
+            ? {}
+            : { "data-slide-type": slideType.id }),
+        },
         className: SLIDE_CLASSES,
         chrome: [kicker, child],
         body: sectionBody,
@@ -439,11 +532,18 @@ const wrapSlides = (
 
 /** Creates the rehype transform that applies the deck reading paradigm. */
 export const rehypeDeckTransform =
-  ({ outline }: { readonly outline?: MutableDocumentOutline } = {}) =>
+  ({
+    outline,
+    diagnostics,
+  }: {
+    readonly outline?: MutableDocumentOutline;
+    readonly diagnostics: DiagnosticCollector;
+  }) =>
   (tree: Root) => {
+    const slideTypes = collectSlideTypes({ tree, diagnostics });
     const parts = new Map<Element, DocumentOutlinePart>();
     collectParts({ node: tree, assigned: parts });
-    const sections = wrapSlides(tree, parts);
+    const sections = wrapSlides(tree, parts, slideTypes);
     outline?.parts.push(...parts.values());
     outline?.sections.push(...sections);
   };

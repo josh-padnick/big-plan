@@ -4,6 +4,8 @@
 
 import { describe, expect, it } from "vitest";
 import { COMPONENT_GUIDANCE } from "../../cli/guidance/content.generated.js";
+import { validateSlideTypeCatalog } from "../../plan-vocabulary/slide-types/catalog-validation.js";
+import { SLIDE_TYPES } from "../../plan-vocabulary/slide-types/index.js";
 import { REGISTERED_COMPONENT_NAMES } from "./registry.js";
 
 describe("component usage guidance", () => {
@@ -17,5 +19,14 @@ describe("component usage guidance", () => {
     for (const [name, guidance] of Object.entries(COMPONENT_GUIDANCE)) {
       expect(guidance.startsWith(`# Using ${name} well`)).toBe(true);
     }
+  });
+
+  it("should keep every slide type complete and paired only with registered components", () => {
+    expect(
+      validateSlideTypeCatalog({
+        types: SLIDE_TYPES,
+        componentNames: REGISTERED_COMPONENT_NAMES,
+      }),
+    ).toEqual([]);
   });
 });

@@ -332,17 +332,20 @@ describe("deck section metadata", () => {
     expect(sections).toEqual([
       {
         id: "status-quo",
-        text: "Status quo",
+        name: "Status quo",
+        title: "Status quo",
         part: { number: 1, title: "Context" },
       },
       {
         id: "success-looks-like",
-        text: "Success looks like",
+        name: "Success looks like",
+        title: "Success looks like",
         part: { number: 1, title: "Context" },
       },
       {
         id: "the-design",
-        text: "The design",
+        name: "The design",
+        title: "The design",
         part: { number: 2, title: "The proposal" },
       },
     ]);
@@ -350,14 +353,18 @@ describe("deck section metadata", () => {
 
   it("should leave sections partless when the document has no Part markers", () => {
     const { sections } = compile("## One\n\nA.\n");
-    expect(sections).toEqual([{ id: "one", text: "One" }]);
+    expect(sections).toEqual([{ id: "one", name: "One", title: "One" }]);
   });
 
   it("should leave sections before the first Part partless", () => {
     const { sections } = compile(
       '## Preamble\n\nA.\n\n<Part title="Context" />\n\n## Status quo\n\nB.\n',
     );
-    expect(sections[0]).toEqual({ id: "preamble", text: "Preamble" });
+    expect(sections[0]).toEqual({
+      id: "preamble",
+      name: "Preamble",
+      title: "Preamble",
+    });
     expect(sections[1]).toMatchObject({
       part: { number: 1, title: "Context" },
     });

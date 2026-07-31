@@ -49,9 +49,9 @@ diagnostic formatting in
 | `rules/`          | One focused module per authoring rule.                                                                           |
 | `rules/*.test.ts` | Colocated tests exercise the public interface, source positions, diagnostic order, and conservative near misses. |
 
-`src/lint` is an independent bottom-tier layer in `eslint.config.mjs`.
-It must stay framework-free and may not import the renderer, components, or
-CLI.
+`src/lint` is an independent framework-free layer in `eslint.config.mjs`.
+It may consume the lower `src/plan-vocabulary/` data tier, but it may not
+import the renderer, components, or CLI.
 The CLI may call its public interface, but lint never calls upward.
 
 ## Rule contract

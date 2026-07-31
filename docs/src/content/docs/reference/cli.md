@@ -36,6 +36,7 @@ It deliberately prescribes principles rather than a template, so each plan keeps
 Running it also records a guidance acknowledgment for the current working directory.
 
 With a component name, `big-plan guidance <Component>` prints that component's judgment-level usage guidance instead: when to reach for it and what belongs in it.
+`big-plan guidance Slide` returns every registered slide type and its matching, authoring, component-pairing, cardinality, and placement guidance in one call for the whole plan.
 The component form records no acknowledgment, and an unknown name fails with the list of components that have guidance.
 
 `validate` and `render` require a current acknowledgment and fail with a structured `GUIDANCE_REQUIRED` error until `guidance` has been run.
@@ -74,7 +75,7 @@ The JSON written by `compile` is Big Plan's **compiled plan model**: a structure
 `compile` validates the plan exactly as `render` does - every diagnostic hard-fails both commands identically - and writes that representation as pretty-printed JSON:
 
 - `title`: the document title.
-- `sections`: the level-two section outline with ids and text.
+- `sections`: the level-two section outline with `id`, structural `name`, h2 `title`, and optional registered `type`.
 - `components`: every component instance in document order, each with its `component` name, source `line` and `column`, and its compiled `model` - the same typed model the renderer consumes, so structure can never drift from rendering.
 
 Prose fields inside models (context paragraphs, option bodies) are HAST subtrees: plain JSON objects describing the markdown content.

@@ -54,6 +54,18 @@ describe("guidanceCommand", () => {
     });
   });
 
+  it("should print the complete slide catalog in one guidance call", async () => {
+    const output = await guidanceCommand(["Slide"]);
+
+    expect(output).toContain("# Using Slide well");
+    expect(output).toContain("### Status quo (`status-quo`)");
+    expect(output).toContain("### Desired experience (`desired-experience`)");
+    expect(output).toContain("### Desired outcome (`desired-outcome`)");
+    expect(output).toContain("### User journey (`user-journey`)");
+    expect(output).toContain("### Acceptance criteria (`acceptance-criteria`)");
+    expect(output).toContain("Components that pair well");
+  });
+
   it("should list the known components when the component is unknown", async () => {
     await expect(guidanceCommand(["Unknown"])).rejects.toMatchObject({
       code: "VALIDATION_ERROR",

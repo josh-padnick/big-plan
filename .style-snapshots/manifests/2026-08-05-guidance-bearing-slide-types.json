@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "feat: add guidance-bearing slide types [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "examples/deck.mdx",
+      "propertyDeltas": [
+        {
+          "property": "section headings (Context and Plan sections)",
+          "from": "h2 text repeats the structural name: \"Status quo\", \"Acceptance criteria\"",
+          "to": "typed Slide marker supplies the structural name and the h2 states the full claim: \"Inline retries delay checkout\", \"Restarts preserve scheduled retries\""
+        }
+      ]
+    },
+    {
+      "path": "src/components/slide/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "Slide presentation edge",
+          "from": "absent",
+          "to": "hidden marker element that the deck transform consumes before presentation, so it contributes no visible box"
+        }
+      ]
+    },
+    {
+      "path": "src/components/table-of-contents/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "row label vocabulary (comments only)",
+          "from": "row text described as the section title",
+          "to": "row text described as the structural section name; rendered markup and classes are unchanged"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/compile-markdown-metadata.test.ts",
+      "propertyDeltas": [
+        {
+          "property": "test expectations",
+          "from": "sections expose one text field",
+          "to": "sections expose distinct name and title fields; no rendering behavior of its own"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/compile-markdown.ts",
+      "propertyDeltas": [
+        {
+          "property": "section model",
+          "from": "one text field used for both navigation and heading",
+          "to": "distinct name, title, and optional type read back from the completed outline; navigation keeps the name, so navigation captures stay pixel-identical"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/component-pipeline/deliver.ts",
+      "propertyDeltas": [
+        {
+          "property": "outline-aware component delivery order",
+          "from": "model delivery presented outline-aware components immediately",
+          "to": "model delivery defers them behind the same outline placeholder as human delivery, which emits no additional HTML"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/component-pipeline/outline-placeholder.ts",
+      "propertyDeltas": [
+        {
+          "property": "placeholder attributes",
+          "from": "part title only",
+          "to": "part title plus the slide type and authored position; the placeholder is consumed before serialization and never renders"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/deck-transform.test.ts",
+      "propertyDeltas": [
+        {
+          "property": "test expectations",
+          "from": "kicker name derives from the heading text",
+          "to": "kicker name derives from the assigned slide type; no rendering behavior of its own"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/deck-transform.ts",
+      "propertyDeltas": [
+        {
+          "property": "slide kicker name",
+          "from": "always the h2 text",
+          "to": "the slide type's canonical name when a typed Slide marker precedes the h2, leaving the h2 free to state the full claim"
+        }
+      ]
+    },
+    {
+      "path": "src/render/render-document.ts",
+      "propertyDeltas": [
+        {
+          "property": "navigation label source",
+          "from": "section.text",
+          "to": "section.name, which keeps the same rendered words for untyped sections and uses the type name for typed ones"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "deck__document__desktop__dark.png",
+      "changedPixels": 6525,
+      "before": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "8a7f3f9258a1bdcaec2c0da3b446908a1ac5fe893c2f3598bb50a77055b473a0"
+      },
+      "after": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "2a0bc934f812156e30a98a2d0a9139c6c16edb09949c07fb2b4ac8e7d44056f3"
+      },
+      "propertyDeltas": [
+        {
+          "property": "typed section heading text",
+          "from": "\"Status quo\" and \"Acceptance criteria\"",
+          "to": "\"Inline retries delay checkout\" and \"Restarts preserve scheduled retries\"; kickers and layout are unchanged at desktop width"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__light.png",
+      "changedPixels": 6526,
+      "before": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "7ed5a0d06a43b0197364005962d8922bde9f0203c3ddf84cfaef1cd051afbed5"
+      },
+      "after": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "4abbc899929e8955912243a7811f1963a07847ff28502286cb4ccb5a94a00c26"
+      },
+      "propertyDeltas": [
+        {
+          "property": "typed section heading text",
+          "from": "\"Status quo\" and \"Acceptance criteria\"",
+          "to": "\"Inline retries delay checkout\" and \"Restarts preserve scheduled retries\"; kickers and layout are unchanged at desktop width"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__dark.png",
+      "changedPixels": 165084,
+      "before": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "fb1f61c86a0ad418644c0cc713a5c7b56a04fcf84eb8d5bd3bfc78197f2a56ef"
+      },
+      "after": {
+        "width": 350,
+        "height": 3418,
+        "sha256": "9a98980c944c57f52c4495107d105f01201f9fffbd55afe76c395463e13b5aa5"
+      },
+      "propertyDeltas": [
+        {
+          "property": "document height at phone width",
+          "from": "3352px with single-line typed section headings",
+          "to": "3418px because the longer full-claim headings wrap, shifting everything below them"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__light.png",
+      "changedPixels": 165292,
+      "before": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "61201bb1f302929b59904a19afa9e87f663ac3bceec58c3357f9559ffab5721d"
+      },
+      "after": {
+        "width": 350,
+        "height": 3418,
+        "sha256": "64a928d7135a277863183aa1658af5bc68642f64c795705a7a919ea284456911"
+      },
+      "propertyDeltas": [
+        {
+          "property": "document height at phone width",
+          "from": "3352px with single-line typed section headings",
+          "to": "3418px because the longer full-claim headings wrap, shifting everything below them"
+        }
+      ]
+    }
+  ]
+}

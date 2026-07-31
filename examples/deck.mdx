@@ -35,7 +35,9 @@ A durable retry queue replaces inline payment-capture retries, demonstrated here
 
 <Part title="Context" />
 
-## Status quo
+<Slide type="status-quo" />
+
+## Inline retries delay checkout
 
 - Inline retries couple checkout latency to processor health.
 - Retry state lives in process memory, so every deploy loses it.
@@ -76,7 +78,9 @@ A queue worker owns retries end to end.
 - Ship the queue worker second, shadowing inline retries.
 - Cut over and add operator controls last.
 
-## Acceptance criteria
+<Slide type="acceptance-criteria" />
+
+## Restarts preserve scheduled retries
 
 - A failed capture is retried on schedule after an API-server restart.
 - Operators can pause, force, and cancel retries per merchant.

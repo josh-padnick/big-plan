@@ -1,5 +1,5 @@
 // Compiles TableOfContents's authored form into its plan model: one overview entry
-// per Entry, each naming a section and its one-line gist. Section links,
+// per Entry, each carrying a section's structural name and one-line gist. Section links,
 // slide numbers, and part group headers are document-order knowledge the
 // view reads from the document outline the renderer computes.
 
