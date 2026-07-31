@@ -170,6 +170,9 @@ Apply these review conventions by judgment:
 - Use Lucide for icons and keep framework-neutral glyph data in `src/icons/lucide/`; components never define icon paths locally.
 - Author component markup with Tailwind utilities where practical.
   Reserve stylesheets for variants, state, pseudo-elements, live-application-created elements, and plain generated markup that cannot carry utility classes.
+  A colocated stylesheet writes into `@layer components`, which loses to every Tailwind utility on the same element no matter how specific the selector.
+  When a state rule must override a property a resting utility sets, declare that state in its own `@layer` rather than moving the resting utility into a stylesheet or hunting for a more specific selector.
+  Layer order follows first appearance, so a layer introduced after Tailwind's is the last one and outranks `utilities` by construction; `_shared/figure-controls/figure-controls.css` is the precedent.
 - Keep logic in pure modules and unit-test it there.
   Reserve Playwright for critical user journeys.
 - Write focused, user-oriented tests with `should ... when ...` descriptions and coverage of degenerate and boundary cases.
