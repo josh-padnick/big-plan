@@ -9,7 +9,8 @@ body visibility - never header margins, padding, border, or toggle insets.
   /* A slide frame is a calm reading surface: no hover or scroll wash, ever.
      The reader tracks position through the kickers and the TOC scroll-spy. */
   article .plan-slide > h2 {
-    margin: 0 0 1rem;
+    /* Tight to the first body line / context builder (Proximity). */
+    margin: 0 0 0.2rem;
     border-bottom: none;
     padding-bottom: 0;
     font-size: 1.6rem;
@@ -26,8 +27,9 @@ body visibility - never header margins, padding, border, or toggle insets.
     padding-bottom: 0;
     font-size: 1.6rem;
   }
+  /* Proximity: title + first line (context builder) read as one unit. */
   article .plan-subpart > h2 ~ * {
-    margin-top: 0.8rem;
+    margin-top: 0.15rem;
     margin-bottom: 0;
   }
 
@@ -43,10 +45,14 @@ body visibility - never header margins, padding, border, or toggle insets.
     margin-top: 0;
     margin-bottom: 0.5rem;
   }
-  /* Expanded reading air for slide-groups: on the body only (hidden when
-     collapsed), never on the header row. */
+  /* Body follows the slide-group header tightly so the context builder sits
+     just under the h2 (Proximity); spacing is constant for geometry-stable
+     collapse because only body visibility toggles. */
   article .plan-slide-group > [data-collapse-body] {
-    margin-top: 0.75rem;
+    margin-top: 0.15rem;
+  }
+  article .plan-slide > [data-collapse-body] {
+    margin-top: 0.15rem;
   }
 
   /*
