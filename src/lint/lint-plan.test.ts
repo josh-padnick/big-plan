@@ -493,6 +493,24 @@ describe("lintPlan slide-leading-title", () => {
     ).toEqual([{ ruleId: "slide-leading-title", line: 7 }]);
   });
 
+  it("should report a slide whose first block is a linked image", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## The pipeline\n\n[![Pipeline](p.png)](p.png)\n",
+      }).map(({ ruleId, line }) => ({ ruleId, line })),
+    ).toEqual([{ ruleId: "slide-leading-title", line: 7 }]);
+  });
+
+  it("should report a slide whose first block is a reference-linked image", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## The pipeline\n\n[![Pipeline][pipeline]][detail]\n\n[pipeline]: p.png\n[detail]: pipeline.md\n",
+      }).map(({ ruleId, line }) => ({ ruleId, line })),
+    ).toEqual([{ ruleId: "slide-leading-title", line: 7 }]);
+  });
+
   it("should accept a sub-slide that titles the figure with an h4 first", () => {
     expect(
       lintPlan({
@@ -524,6 +542,15 @@ describe("lintPlan slide-leading-title", () => {
     expect(
       lintPlan({
         markdown: "# T\n\nLede.\n\n## Badges\n\nStatus ![ok](o.png) today.\n",
+      }),
+    ).toEqual([]);
+  });
+
+  it("should accept a text link used as prose", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## The pipeline\n\n[Read the pipeline guide](pipeline.md).\n",
       }),
     ).toEqual([]);
   });
