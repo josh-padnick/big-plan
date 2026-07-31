@@ -1,4 +1,7 @@
-/* TableOfContents row hover: a subtle ink wash under the row. The ink-mix adapts across
+/* TableOfContents row hover: a subtle ink wash under the row, which hugs its
+   own text rather than the container. A highlight running the full width
+   points at empty space the entry does not occupy, so the row is sized to the
+   wider of its two lines and the wash stops there. The ink-mix adapts across
    light and dark themes and deliberately never shares a fill with the
    surface-colored Part band - surface means structure, the tint means
    interactive. The title's accent lives in the view as a group variant,
