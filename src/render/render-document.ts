@@ -5,12 +5,17 @@ import {
   componentsInDocumentOrder,
   type PlanModel,
 } from "./compile-plan-model.js";
-import type { CompiledMarkdown, Section } from "./markdown/compile-markdown.js";
+import type {
+  BlockDescriptor,
+  CompiledMarkdown,
+  Section,
+} from "./markdown/compile-markdown.js";
 import {
   compileMarkdown,
   compileMarkdownWithModels,
 } from "./markdown/compile-markdown.js";
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
+export type { BlockDescriptor } from "./markdown/compile-markdown.js";
 import { renderPage } from "./page.js";
 import { derivePlanId } from "./plan-id.js";
 import { serializeHtml } from "./serialize-html.js";
@@ -20,6 +25,9 @@ export type RenderedDocument = {
   readonly html: string;
   readonly title: string;
   readonly sections: ReadonlyArray<Section>;
+  // Every commentable unit the document addressed, so a caller holding the
+  // rendered page can resolve a comment target without parsing the HTML back.
+  readonly blocks: ReadonlyArray<BlockDescriptor>;
 };
 
 const renderCompiledDocument = ({
@@ -31,7 +39,7 @@ const renderCompiledDocument = ({
   readonly fallbackTitle: string;
   readonly planId?: string;
 }): RenderedDocument => {
-  const { root, sections, elementIds, title, partIds } = compiled;
+  const { root, sections, elementIds, title, partIds, blocks } = compiled;
   const resolvedTitle = title ?? fallbackTitle;
   // A section's part gains the rendered divider's anchor so the TOC's act
   // headers link to the divider band itself.
@@ -62,7 +70,7 @@ const renderCompiledDocument = ({
     bodyHtml: shell.html,
     planId,
   });
-  return { html, title: resolvedTitle, sections };
+  return { html, title: resolvedTitle, sections, blocks };
 };
 
 /**
@@ -104,7 +112,10 @@ export const validateDocument = ({
   readonly fallbackTitle: string;
 }): PlanModel => {
   const compiled = compileMarkdownWithModels({ markdown });
-  const rendered = renderCompiledDocument({ compiled, fallbackTitle });
+  const rendered = renderCompiledDocument({
+    compiled,
+    fallbackTitle,
+  });
   return {
     title: rendered.title,
     sections: compiled.sections,

@@ -90,7 +90,7 @@ describe("deck slide frames", () => {
 
   it("should keep the lede and title outside any slide frame", () => {
     const { html } = compile("# Title\n\nThe lede.\n\n## One\n\nA.\n");
-    expect(html).toMatch(/<h1 id="title">Title<\/h1>/);
+    expect(html).toMatch(/<h1 id="title"[^>]*>Title<\/h1>/);
     expect(html).not.toMatch(
       /<section data-slide[^>]*>(?:(?!<\/section>).)*<h1/,
     );

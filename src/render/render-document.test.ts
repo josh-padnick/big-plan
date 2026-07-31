@@ -71,7 +71,7 @@ describe("renderDocument affordances", () => {
       "<del>",
       "<code>",
       "<pre",
-      "<blockquote>",
+      "<blockquote",
       "<ul>",
       "<ol>",
       'input type="checkbox"',

@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import type { DiagnosticCollector } from "../../../components/_authoring/diagnostics.js";
 import type { DocumentOutline } from "../../../components/_model/document-outline/document-outline.js";
 import type { OutlineMarker } from "../../../components/_registration/define-component.js";
+import { COMPONENT_NAME_ATTRIBUTE } from "./component-name.js";
 import { reactToHast } from "./react-hast-adapter.js";
 import type { ReactHastAdapter } from "./react-hast-adapter.js";
 
@@ -29,14 +30,21 @@ export type DeferredOutlinePresentations = Array<
 export const createOutlinePlaceholder = ({
   index,
   marker,
+  component,
 }: {
   readonly index: number;
   readonly marker: OutlineMarker;
+  // The authored name, held across deferral so the presented root carries the
+  // same component identity a directly delivered root does.
+  readonly component?: string;
 }): Element => ({
   type: "element",
   tagName: "div",
   properties: {
     [OUTLINE_PLACEHOLDER_ATTRIBUTE]: String(index),
+    ...(component === undefined
+      ? {}
+      : { [COMPONENT_NAME_ATTRIBUTE]: component }),
     ...(marker.kind === "part"
       ? {
           [OUTLINE_PART_TITLE_ATTRIBUTE]: marker.title,
@@ -78,6 +86,11 @@ const presentPlaceholder = ({
     diagnostics.add({
       message: `Internal error: outline presentation ${index} produced no element`,
     });
+    return undefined;
+  }
+  const component = placeholder.properties[COMPONENT_NAME_ATTRIBUTE];
+  if (typeof component === "string") {
+    rendered.properties[COMPONENT_NAME_ATTRIBUTE] = component;
   }
   return rendered;
 };
