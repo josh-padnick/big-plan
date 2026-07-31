@@ -12,7 +12,7 @@ Reading on anyway is a fine way to audit exactly what your agent is told.
 ## What's here
 
 - [Render a plan](/for-agents/render-a-plan/): the operational loop for rendering a plan and handing it to a human for review.
-- [Authoring plans](/for-agents/authoring-plans/): the MDX plan format a document must satisfy.
+- [Authoring plans](/for-agents/authoring-plans/): what a plan document is, how the guidance gate works, and where each kind of rule lives.
 - [setup.md](/setup.md): the one-time setup instructions an agent follows after installing Big Plan.
 
 ## Read these docs as Markdown

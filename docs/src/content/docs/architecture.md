@@ -45,7 +45,7 @@ A plan is an MDX document made from Markdown and built-in components.
 Imports, exports, expressions, and inline JSX are rejected.
 A plan is prose plus components, nothing else.
 That keeps every plan greppable and diffable, which the review workflow depends on, and it means the renderer never has to run code an agent wrote.
-The full contract lives in [Authoring plans](/for-agents/authoring-plans/).
+The full contract lives in [Authoring plans](/for-agents/authoring-plans/) and [Linting rules](/reference/lint-rules/).
 
 ## Each component supports both output modes
 

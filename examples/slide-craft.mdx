@@ -1,0 +1,169 @@
+# Index every document for instant search
+
+Search results come from a live index that reflects a save within one second.
+
+<QuickSummary>
+
+<Why>
+
+- Writers stop trusting search the moment it returns a document they already fixed.
+
+</Why>
+
+<What>
+
+- Build a live index that reflects every save within a second, and treat a stale result as a defect.
+
+</What>
+
+<How>
+
+- Give every indexed unit a stable address that survives a rewrite.
+- Rebuild only the fragments a save touched.
+- Publish the index behind a version so a reader never sees a half-written state.
+
+</How>
+
+</QuickSummary>
+
+<TableOfContents>
+<Entry section="Status quo" gist="A nightly rebuild means search answers yesterday's question" />
+<Entry section="Success looks like" gist="What a writer can say after a week of trusting search" />
+<Entry section="Fragment identity" gist="Why an indexed unit needs an address of its own" />
+<Entry section="The indexing pipeline" gist="Save, re-fragment, publish, and what each step may assume" />
+<Entry section="Quality criteria" gist="How we judge the index, grouped by what breaking each one costs" />
+<Entry section="Acceptance criteria" gist="The checkable contract for done" />
+</TableOfContents>
+
+<Part title="Context" />
+
+## Status quo
+
+*One nightly job owns the whole index, so freshness is a scheduling accident.*
+
+**The rebuild is all or nothing.**
+A single cron job reads every document, tokenizes it, and swaps a new index into place.
+There is no smaller unit of work, so a one-word fix and a thousand-document import cost the same eight minutes.
+
+**Writers see the gap and route around it.**
+Support logs show writers re-saving a document two or three times when search does not reflect an edit, then giving up and sharing a direct link instead.
+The behavior we are paying for is not slow search; it is abandoned search.
+
+**Nothing addresses a piece of a document.**
+The index stores one record per document, so a hit on a long page drops the reader at the top of it.
+The section a query actually matched is known during tokenization and thrown away before storage.
+
+## Success looks like
+
+*What a writer can say after living with search for a week.*
+
+**Finding**
+
+- I search a phrase I typed a minute ago and the document is there.
+- A hit lands me on the section that matched, not at the top of a long page.
+
+**Trusting**
+
+- I never see a document that I already deleted or renamed.
+- When the index is behind, the product tells me instead of pretending.
+
+<Part title="The proposal" />
+
+## Fragment identity
+
+*The address every later stage depends on.*
+
+**The problem.** A save rewrites a document's prose, so an index built on line numbers or offsets is invalidated by an edit that changed nothing the reader cares about.
+Without an address that survives a rewrite, incremental indexing collapses into a full rebuild, and a search hit cannot be linked to the place it matched.
+
+**The model.** A fragment is one addressable unit of a document: a heading together with the prose beneath it, down to the next heading of the same or higher level.
+Its address is the document id plus the slug of that heading, disambiguated by ordinal when two headings slug alike.
+
+**Why headings rather than paragraphs.** A heading is the smallest unit an author deliberately names, so its slug changes only when the author changes the name.
+Paragraph boundaries move on every edit and would churn the whole index with them.
+
+**[REQUIREMENT]** One module owns the address format, and the writer, the indexer, and the search API all read it from there.
+
+**[REQUIREMENT]** A fragment whose heading is reworded is a new fragment, and the old one is deleted in the same publish.
+
+**[CONSTRAINT]** An address never encodes position: no line numbers, no character offsets, and no ordinal that depends on an unrelated section.
+
+**[NON-GOAL]** No cross-document fragments, and no addressing inside a code block or a table cell.
+Those are search results a reader cannot act on.
+
+## The indexing pipeline
+
+*How a save becomes a published index without a full rebuild.*
+
+### End to end
+
+#### A save touches only the fragments it changed
+
+<FlowDiagram>
+
+<Stage title="Write">
+<Node id="save" label="Save" tone="source" />
+</Stage>
+
+<Stage title="Re-fragment">
+<Node id="split" label="Split" code="fragment/split.ts" />
+</Stage>
+
+<Stage title="Compare">
+<Node id="diff" label="Diff" />
+</Stage>
+
+<Stage title="Publish">
+<Node id="index" label="Changed fragments" tone="destination" />
+<Node id="version" label="New index version" tone="destination" />
+</Stage>
+
+<Edge from="save" to="split" label="enqueues" />
+<Edge from="split" to="diff" />
+<Edge from="diff" to="index" />
+<Edge from="diff" to="version" />
+
+Only the fragments whose text changed are rewritten; the rest are untouched.
+
+</FlowDiagram>
+
+### What each stage may assume
+
+#### Every stage is safe to run twice
+
+- **Split** is pure: the same document text always produces the same fragments and addresses.
+- **Diff** compares content hashes, so a save that changed only whitespace publishes nothing.
+- **Publish** is idempotent per address, so a retried job cannot duplicate a fragment.
+- **[CONSTRAINT]** A reader's query is served from one index version for its whole lifetime, so a publish in flight can never split a result set across two states of the world.
+
+<Part title="Shipping & your review" />
+
+## Quality criteria
+
+*How we judge the index once it ships.*
+
+Grouped by what breaking each one costs:
+
+- **Correctness** - break one of these and search returns a wrong answer.
+- **Experience** - break one and search still answers, but writers stop trusting it.
+- **Operability** - break one and the failure is invisible until a writer reports it.
+
+| Group | Criterion | Pass looks like |
+| --- | --- | --- |
+| Correctness | Freshness | A save is searchable within one second |
+| Correctness | Deletion | A deleted document leaves the index in the same publish |
+| Correctness | Address stability | A reworded paragraph keeps its fragment address |
+| Experience | Hit precision | A result opens at the section that matched |
+| Experience | Ranking | The document just edited outranks a stale near-match |
+| Experience | Honest staleness | The product says so when the index is behind |
+| Operability | Publish visibility | Every publish records its version, size, and duration |
+| Operability | Replay | Any document can be re-fragmented on demand |
+| Operability | Cost ceiling | A large import stays within one queue budget |
+
+## Acceptance criteria
+
+- A save is reflected in search results within one second at the 95th percentile.
+- Editing one section of a fifty-section document rewrites exactly one fragment.
+- Deleting a document removes every one of its fragments in the same publish.
+- A search hit links to the heading anchor of the fragment that matched.
+- Replaying a publish for an unchanged document writes nothing and bumps no version.

@@ -52,7 +52,6 @@ diagnostic formatting in
 | `rules/lede-presence.ts`                      | Requires orientation prose between a plan's level-one title and its first section heading.                         |
 | `rules/lede-length.ts`                        | Keeps the lede within the word budget of a subtitle rather than an opening body paragraph.                         |
 | `rules/lede-style.ts`                         | Requires that lede to open declaratively rather than with a self-referential phrase like "This plan".              |
-| `rules/section-vocabulary.ts`                 | Keeps whole-heading section names in Big Plan's opinionated review vocabulary.                                     |
 | `rules/title-length.ts`                       | Keeps the leading level-one title a punchy noun phrase within word and character budgets.                          |
 | `lint-plan.test.ts`                           | Exercises the public interface, source positions, diagnostic order, and conservative near misses.                  |
 
@@ -98,8 +97,8 @@ line:column [rule-id] message
 3. Register the rule in `RULES` in `lint-plan.ts`.
 4. Add focused tests through `lintPlan()` for findings, positions, document
    order, and realistic near misses that must remain accepted.
-5. Document user-visible behavior in the authoring guide when it changes the
-   contract agents need to follow.
+5. Document the rule and its matching boundaries in the
+   [linting rules reference](../../docs/src/content/docs/reference/lint-rules.md).
 
 Authoring lint should be conservative.
 A rule needs a clear, statically testable contract because a false positive

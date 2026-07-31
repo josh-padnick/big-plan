@@ -8,4 +8,4 @@ Place it directly after the lede, before any section.
 - `What` is one complete imperative sentence naming what you will build.
 - `How` lists the actions you will take, each bullet imperative: "Embed the skill text...", never "The skill is embedded...".
 - Speak in commitments throughout, summarize at the altitude of intent, and let every dropped detail live in a section below.
-- A requirement the requester dictated is not automatically summary-worthy: unless it is the mission itself, it belongs in Acceptance criteria, where it is verified rather than repeated.
+- A requirement the requester dictated is not automatically summary-worthy: unless it is the mission itself, it belongs in the verification contract, where it is verified rather than repeated.

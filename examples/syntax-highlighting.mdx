@@ -4,6 +4,8 @@ Switch your OS color-scheme preference to compare the light and dark palettes; t
 
 ## SQL
 
+*A join and aggregate, where keywords, functions, and literals each take their own token color.*
+
 ```sql
 SELECT users.id, users.email, COUNT(orders.id) AS order_count
 FROM users
@@ -14,6 +16,8 @@ ORDER BY order_count DESC;
 ```
 
 ## TypeScript
+
+*Types, template literals, and a ternary, so the palette is exercised beyond keywords.*
 
 ```typescript
 type Plan = {
@@ -27,6 +31,8 @@ export const summarize = (plan: Plan): string =>
 
 ## Bash
 
+*A shebang, a strict-mode line, and a loop with an interpolated variable.*
+
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
@@ -37,6 +43,8 @@ done
 ```
 
 ## JSON
+
+*Keys, string values, and an array, which is the smallest useful contrast test.*
 
 ```json
 {

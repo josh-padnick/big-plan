@@ -323,40 +323,13 @@ describe("lintPlan quick-summary-singleton", () => {
   });
 });
 
-describe("lintPlan section-vocabulary", () => {
+describe("lintPlan verification-contract vocabulary", () => {
   it.each([
-    ["## Desired outcome\n", 1],
-    ["# T\n\nLede.\n\n### Desired Outcomes\n", 5],
-    ["# T\n\nLede.\n\n## Definition of done\n", 5],
-  ])(
-    "should prefer Acceptance criteria over the heading in %j",
-    (markdown, line) => {
-      expect(lintPlan({ markdown })).toEqual([
-        {
-          ruleId: "section-vocabulary",
-          line,
-          column: 1,
-          message:
-            'Name this section "Acceptance criteria"; it is Big Plan\'s vocabulary for the contract this heading introduces',
-        },
-      ]);
-    },
-  );
-
-  it.each([
-    [
-      "the preferred heading itself",
-      "# T\n\nLede.\n\n## Acceptance criteria\n",
-    ],
-    [
-      "a heading that merely contains a discouraged phrase",
-      "# T\n\nLede.\n\n## Desired outcome of phase one\n",
-    ],
-    [
-      "prose mentioning a discouraged phrase",
-      "# T\n\nThe desired outcome appears in prose.\n",
-    ],
-  ])("should not report %s", (_label, markdown) => {
+    ["Acceptance criteria", "# T\n\nLede.\n\n## Acceptance criteria\n"],
+    ["Definition of done", "# T\n\nLede.\n\n## Definition of done\n"],
+    ["Desired outcome", "# T\n\nLede.\n\n## Desired outcome\n"],
+    ["Desired outcomes", "# T\n\nLede.\n\n### Desired Outcomes\n"],
+  ])("should accept a section named %s", (_label, markdown) => {
     expect(lintPlan({ markdown })).toEqual([]);
   });
 });

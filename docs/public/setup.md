@@ -46,3 +46,4 @@ Report the installed version, where you added the workflow rule, and offer to re
 - https://big-plan.ai/llms.txt - map of every docs page in clean markdown.
 - https://big-plan.ai/for-agents/render-a-plan.md - the operational rendering workflow.
 - https://big-plan.ai/for-agents/authoring-plans.md - the plan document format.
+- https://big-plan.ai/reference/lint-rules.md - every authoring rule the validator enforces.
