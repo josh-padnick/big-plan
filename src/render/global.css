@@ -41,7 +41,7 @@ Light and dark follow the reader's OS in inert exports.
   /* The standard width: what a passage of prose, and anything that reads
      like one, is held to. Fixed rather than measured in characters so every
      block shares one right edge whatever size its type is. */
-  --measure: 34rem;
+  --measure: 45.5rem;
   /* A card hugging standard-width content: the measure plus its own padding. */
   --card-measure: calc(var(--measure) + 2.5rem);
   /* A card hugging a drawing, which is capped well under the column. */
