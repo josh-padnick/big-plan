@@ -2,6 +2,7 @@
 // declared visual contract: exact pixel identity or an approved move manifest.
 
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   copyFile,
   cp,
@@ -71,47 +72,80 @@ const listFiles = async (directory) => {
   return files.sort();
 };
 
-/** Counts exact RGBA differences and returns a red diagnostic PNG. */
-const comparePngs = async ({ beforePath, afterPath }) => {
-  const before = PNG.sync.read(await readFile(beforePath));
-  const after = PNG.sync.read(await readFile(afterPath));
-  if (before.width !== after.width || before.height !== after.height) {
-    return {
-      changedPixels: null,
-      dimensions: `${before.width}x${before.height} -> ${after.width}x${after.height}`,
-      diff: null,
-    };
-  }
+/** Reads stable pixel evidence without depending on PNG encoder metadata. */
+const readCapture = async (path) => {
+  const png = PNG.sync.read(await readFile(path));
+  const sha256 = createHash("sha256")
+    .update(`width:${png.width};height:${png.height};rgba:`)
+    .update(png.data)
+    .digest("hex");
+  return {
+    width: png.width,
+    height: png.height,
+    sha256,
+    data: png.data,
+  };
+};
 
-  const diff = new PNG({ width: before.width, height: before.height });
+/** Removes decoded pixel bytes from evidence written to manifests and CI. */
+const captureIdentity = (capture) =>
+  capture === null
+    ? null
+    : {
+        width: capture.width,
+        height: capture.height,
+        sha256: capture.sha256,
+      };
+
+/** Counts exact RGBA differences, including pixels added by dimension changes. */
+const comparePngs = async ({ beforePath, afterPath }) => {
+  const before = beforePath === null ? null : await readCapture(beforePath);
+  const after = afterPath === null ? null : await readCapture(afterPath);
+  const width = Math.max(before?.width ?? 0, after?.width ?? 0);
+  const height = Math.max(before?.height ?? 0, after?.height ?? 0);
+  const diff = new PNG({ width, height });
   let changedPixels = 0;
-  for (let offset = 0; offset < before.data.length; offset += 4) {
-    const changed =
-      before.data[offset] !== after.data[offset] ||
-      before.data[offset + 1] !== after.data[offset + 1] ||
-      before.data[offset + 2] !== after.data[offset + 2] ||
-      before.data[offset + 3] !== after.data[offset + 3];
-    if (changed) {
-      changedPixels += 1;
-      diff.data[offset] = 255;
-      diff.data[offset + 1] = 0;
-      diff.data[offset + 2] = 0;
-      diff.data[offset + 3] = 255;
-    } else {
-      diff.data[offset] = 0;
-      diff.data[offset + 1] = 0;
-      diff.data[offset + 2] = 0;
-      diff.data[offset + 3] = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const beforeOffset =
+        before !== null && x < before.width && y < before.height
+          ? (y * before.width + x) * 4
+          : null;
+      const afterOffset =
+        after !== null && x < after.width && y < after.height
+          ? (y * after.width + x) * 4
+          : null;
+      const changed =
+        beforeOffset === null ||
+        afterOffset === null ||
+        before.data[beforeOffset] !== after.data[afterOffset] ||
+        before.data[beforeOffset + 1] !== after.data[afterOffset + 1] ||
+        before.data[beforeOffset + 2] !== after.data[afterOffset + 2] ||
+        before.data[beforeOffset + 3] !== after.data[afterOffset + 3];
+      const diffOffset = (y * width + x) * 4;
+      if (changed) {
+        changedPixels += 1;
+        diff.data[diffOffset] = 255;
+        diff.data[diffOffset + 1] = 0;
+        diff.data[diffOffset + 2] = 0;
+        diff.data[diffOffset + 3] = 255;
+      } else {
+        diff.data[diffOffset] = 0;
+        diff.data[diffOffset + 1] = 0;
+        diff.data[diffOffset + 2] = 0;
+        diff.data[diffOffset + 3] = 0;
+      }
     }
   }
   return {
     changedPixels,
-    dimensions: `${before.width}x${before.height}`,
-    diff,
+    before: captureIdentity(before),
+    after: captureIdentity(after),
+    diff: changedPixels === 0 ? null : diff,
   };
 };
 
-/** Returns each changed capture, including missing or newly added images. */
+/** Returns deterministic evidence for every capture on either side. */
 const compareCaptureSets = async ({ beforeDirectory, afterDirectory }) => {
   const beforeFiles = (await listFiles(beforeDirectory)).filter((path) =>
     path.endsWith(".png"),
@@ -120,27 +154,59 @@ const compareCaptureSets = async ({ beforeDirectory, afterDirectory }) => {
     path.endsWith(".png"),
   );
   const allFiles = [...new Set([...beforeFiles, ...afterFiles])].sort();
-  const changes = [];
+  const captures = [];
 
   for (const capture of allFiles) {
-    if (!beforeFiles.includes(capture) || !afterFiles.includes(capture)) {
-      changes.push({
-        capture,
-        changedPixels: null,
-        dimensions: beforeFiles.includes(capture) ? "removed" : "added",
-        diff: null,
-      });
-      continue;
-    }
     const comparison = await comparePngs({
-      beforePath: join(beforeDirectory, capture),
-      afterPath: join(afterDirectory, capture),
+      beforePath: beforeFiles.includes(capture)
+        ? join(beforeDirectory, capture)
+        : null,
+      afterPath: afterFiles.includes(capture)
+        ? join(afterDirectory, capture)
+        : null,
     });
-    if (comparison.changedPixels !== 0) {
-      changes.push({ capture, ...comparison });
-    }
+    captures.push({ capture, ...comparison });
   }
-  return changes;
+  return captures;
+};
+
+/** Normalizes object key order before exact manifest evidence comparison. */
+const normalizeIdentity = (identity) =>
+  identity === null
+    ? null
+    : {
+        width: identity.width,
+        height: identity.height,
+        sha256: identity.sha256,
+      };
+
+/** Selects the deterministic evidence shared by manifests and CI ledgers. */
+const captureEvidence = ({ capture, changedPixels, before, after }) => ({
+  capture,
+  changedPixels,
+  before: normalizeIdentity(before),
+  after: normalizeIdentity(after),
+});
+
+/** Writes one durable machine-readable evidence ledger per relevant commit. */
+const writeEvidenceLedger = async ({ artifactDirectory, entry, captures }) => {
+  await mkdir(artifactDirectory, { recursive: true });
+  await writeFile(
+    join(artifactDirectory, "evidence.json"),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        commit: entry.commit,
+        parent: entry.parent,
+        subject: entry.subject,
+        visualKind: entry.visualKind,
+        captures: captures.map(captureEvidence),
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
 };
 
 /** Preserves both images and a red pixel mask for CI artifact inspection. */
@@ -268,13 +334,39 @@ const validateManifest = async ({
     );
   }
 
+  const isIdentity = (value) =>
+    value === null ||
+    (typeof value === "object" &&
+      value !== null &&
+      Number.isInteger(value.width) &&
+      value.width > 0 &&
+      Number.isInteger(value.height) &&
+      value.height > 0 &&
+      typeof value.sha256 === "string" &&
+      /^[0-9a-f]{64}$/.test(value.sha256));
+  for (const entry of manifest.captureChanges) {
+    if (
+      typeof entry.capture !== "string" ||
+      !Number.isInteger(entry.changedPixels) ||
+      entry.changedPixels < 0 ||
+      !isIdentity(entry.before) ||
+      !isIdentity(entry.after)
+    ) {
+      throw new Error(
+        `${subject}: every captureChanges entry requires capture, exact changedPixels, and before/after dimensions and SHA-256 hashes.`,
+      );
+    }
+  }
+
   const expectedCaptures = manifest.captureChanges
-    .map((entry) => entry.capture)
-    .sort();
-  const actualCaptures = changes.map((change) => change.capture).sort();
+    .map(captureEvidence)
+    .sort((left, right) => left.capture.localeCompare(right.capture));
+  const actualCaptures = changes
+    .map(captureEvidence)
+    .sort((left, right) => left.capture.localeCompare(right.capture));
   if (JSON.stringify(expectedCaptures) !== JSON.stringify(actualCaptures)) {
     throw new Error(
-      `${subject}: changed captures ${JSON.stringify(actualCaptures)} do not match manifest ${JSON.stringify(expectedCaptures)}.`,
+      `${subject}: exact capture evidence does not match the approved manifest.`,
     );
   }
 };
@@ -323,8 +415,10 @@ export const verifyHistory = async ({
     )
       .split("\n")
       .filter(Boolean);
-    const stylingFiles = changedFiles.filter((path) =>
-      patterns.some((pattern) => pattern.test(path)),
+    const stylingFiles = changedFiles.filter(
+      (path) =>
+        config.fixturePaths.includes(path) ||
+        patterns.some((pattern) => pattern.test(path)),
     );
     if (stylingFiles.length === 0) {
       continue;
@@ -403,12 +497,19 @@ export const verifyHistory = async ({
     for (const entry of relevant) {
       const beforeDirectory = await captureCommit(entry.parent);
       const afterDirectory = await captureCommit(entry.commit);
-      const changes = await compareCaptureSets({
+      const captures = await compareCaptureSets({
         beforeDirectory,
         afterDirectory,
       });
+      const changes = captures.filter((capture) => capture.changedPixels > 0);
+      const artifactDirectory = join(artifactRoot, entry.commit.slice(0, 12));
+      await writeEvidenceLedger({
+        artifactDirectory,
+        entry,
+        captures,
+      });
       await writeArtifacts({
-        artifactDirectory: join(artifactRoot, entry.commit.slice(0, 12)),
+        artifactDirectory,
         changes,
         beforeDirectory,
         afterDirectory,
@@ -418,7 +519,7 @@ export const verifyHistory = async ({
         const detail = changes
           .map(
             (change) =>
-              `${change.capture} (${change.changedPixels ?? change.dimensions} changed pixels)`,
+              `${change.capture} (${change.changedPixels} changed pixels)`,
           )
           .join(", ");
         throw new Error(

@@ -3,7 +3,6 @@
   "fixturePaths": ["examples/sample.mdx"],
   "stylingFilePatterns": [
     "^\\.style-snapshots/config\\.json$",
-    "^examples/kitchen-sink\\.mdx$",
     "^src/.*\\.css$",
     "^src/components/(?:.*/)?view[^/]*\\.tsx$",
     "^src/components/_shared/.*\\.tsx$",
