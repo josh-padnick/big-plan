@@ -166,7 +166,7 @@ export const VIEWER_SCRIPT = `<script>
       else open();
     });
     summary.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || !info.open) return;
       event.bigPlanEscapeHandled = true;
       close();
     });
@@ -368,8 +368,8 @@ export const VIEWER_SCRIPT = `<script>
   if (tables.length === 0) return;
   const docKey =
     document.documentElement.getAttribute("data-plan-id") ||
-    document.title ||
-    location.pathname;
+    location.pathname ||
+    document.title;
   const FITS = ["wrap", "truncate", "scroll"];
   const read = (key) => {
     try {
@@ -847,7 +847,7 @@ export const VIEWER_SCRIPT = `<script>
     if (filterInput !== null) {
       filterInput.addEventListener("input", applyFilter);
       filterInput.addEventListener("keydown", (event) => {
-        if (event.key !== "Escape") return;
+        if (event.key !== "Escape" || filterInput.value === "") return;
         event.bigPlanEscapeHandled = true;
         filterInput.value = "";
         applyFilter();
@@ -1011,12 +1011,69 @@ export const VIEWER_SCRIPT = `<script>
   // a keyboard reader must land back on the control they pressed - but the
   // ring and its tooltip should only reappear for the reader who needs them.
   let openedByKeyboard = false;
+  let isolatedElements = [];
+  let dialogAttributes = null;
   const subjectOf = (frame) =>
     frame.getAttribute("data-figure-maximizable") || "figure";
+  const isolate = (frame) => {
+    let branch = frame;
+    while (branch.parentElement !== null) {
+      const parent = branch.parentElement;
+      for (const sibling of parent.children) {
+        if (
+          sibling !== branch &&
+          sibling instanceof HTMLElement &&
+          !sibling.inert
+        ) {
+          sibling.inert = true;
+          isolatedElements.push(sibling);
+        }
+      }
+      if (parent === document.body) break;
+      branch = parent;
+    }
+  };
+  const restoreIsolation = () => {
+    for (const element of isolatedElements) element.inert = false;
+    isolatedElements = [];
+  };
+  const restoreAttribute = (element, name, value) => {
+    if (value === null) element.removeAttribute(name);
+    else element.setAttribute(name, value);
+  };
+  const focusableElements = (frame) =>
+    Array.from(
+      frame.querySelectorAll(
+        'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter(
+      (element) =>
+        element instanceof HTMLElement && element.getClientRects().length !== 0,
+    );
   const setMaximized = (frame, maximized) => {
     const trigger = frame.querySelector("[data-figure-maximize]");
-    if (maximized) frame.setAttribute("data-figure-maximized", "");
-    else frame.removeAttribute("data-figure-maximized");
+    if (maximized) {
+      dialogAttributes = {
+        frame,
+        role: frame.getAttribute("role"),
+        ariaModal: frame.getAttribute("aria-modal"),
+        ariaLabel: frame.getAttribute("aria-label"),
+      };
+      frame.setAttribute("data-figure-maximized", "");
+      frame.setAttribute("role", "dialog");
+      frame.setAttribute("aria-modal", "true");
+      frame.setAttribute("aria-label", "Maximized " + subjectOf(frame));
+      isolate(frame);
+    } else {
+      frame.removeAttribute("data-figure-maximized");
+      restoreIsolation();
+      if (dialogAttributes?.frame === frame) {
+        restoreAttribute(frame, "role", dialogAttributes.role);
+        restoreAttribute(frame, "aria-modal", dialogAttributes.ariaModal);
+        restoreAttribute(frame, "aria-label", dialogAttributes.ariaLabel);
+        dialogAttributes = null;
+      }
+    }
     open = maximized ? frame : null;
     // The backdrop lives on the root so no ancestor of the figure can clip it.
     document.documentElement.toggleAttribute(
@@ -1052,6 +1109,23 @@ export const VIEWER_SCRIPT = `<script>
     });
   }
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Tab" && open !== null) {
+      const focusable = focusableElements(open);
+      if (focusable.length !== 0) {
+        const current = document.activeElement;
+        const outside = current === null || !open.contains(current);
+        const atStart = current === focusable[0];
+        const atEnd = current === focusable[focusable.length - 1];
+        if (outside || (event.shiftKey && atStart) || (!event.shiftKey && atEnd)) {
+          event.preventDefault();
+          const target = event.shiftKey
+            ? focusable[focusable.length - 1]
+            : focusable[0];
+          target.focus();
+        }
+      }
+      return;
+    }
     if (
       event.key !== "Escape" ||
       event.bigPlanEscapeHandled === true ||

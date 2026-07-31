@@ -78,8 +78,14 @@ test("should maximize and restore every supported figure family in both themes",
 
         await trigger.click();
         await expect(frame).toHaveAttribute("data-figure-maximized", "");
+        await expect(frame).toHaveAttribute("role", "dialog");
+        await expect(frame).toHaveAttribute("aria-modal", "true");
         await expect(page.locator("html")).toHaveAttribute(
           "data-figure-maximized-open",
+          "",
+        );
+        await expect(page.locator("body > header")).toHaveAttribute(
+          "inert",
           "",
         );
         await expect(trigger).toHaveAccessibleName(figureCase.restoreLabel);
@@ -128,10 +134,34 @@ test("should maximize and restore every supported figure family in both themes",
           expect(presentation.bodyOverflow).toBeNull();
         }
 
-        await page.keyboard.press("Escape");
+        await page.keyboard.press("Shift+Tab");
+        await expect
+          .poll(() =>
+            frame.evaluate((element) =>
+              element.contains(document.activeElement),
+            ),
+          )
+          .toBe(true);
+
+        if (figureCase.name === "ComplexDecision") {
+          const info = frame.locator("details[data-info-popover]").first();
+          const summary = info.locator("summary");
+          await summary.focus();
+          await info.evaluate((element) => {
+            if (element instanceof HTMLDetailsElement) element.open = false;
+          });
+          await summary.press("Escape");
+        } else {
+          await page.keyboard.press("Escape");
+        }
         await expect(frame).not.toHaveAttribute("data-figure-maximized");
+        await expect(frame).not.toHaveAttribute("role");
+        await expect(frame).not.toHaveAttribute("aria-modal");
         await expect(page.locator("html")).not.toHaveAttribute(
           "data-figure-maximized-open",
+        );
+        await expect(page.locator("body > header")).not.toHaveAttribute(
+          "inert",
         );
         await expect(trigger).toHaveAccessibleName(figureCase.maximizeLabel);
         await expect(trigger).toBeFocused();

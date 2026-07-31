@@ -247,7 +247,7 @@ const ResetButton = () => (
 // worse promise than no search box at all.
 const FilterField = ({ id }: { readonly id: string }) => (
   <span
-    className="data-table-filter relative inline-flex items-center"
+    className="data-table-filter relative inline-flex items-center max-[55.999rem]:min-w-0 max-[55.999rem]:flex-1"
     hidden
     data-table-filter
   >
@@ -256,7 +256,7 @@ const FilterField = ({ id }: { readonly id: string }) => (
     </span>
     <input
       type="search"
-      className="data-table-filter-input h-6 w-32 rounded-md border border-edge-strong bg-transparent py-0 pr-2 pl-[1.35rem] text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+      className="data-table-filter-input h-6 w-32 rounded-md border border-edge-strong bg-transparent py-0 pr-2 pl-[1.35rem] text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent max-[55.999rem]:w-full"
       placeholder="Filter rows"
       aria-label="Filter rows"
       data-table-filter-input={id}
@@ -274,20 +274,20 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
     data-table-fit={model.fit}
     data-table-group-column={model.groupColumn}
   >
-    <figcaption className="data-table-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem]">
+    <figcaption className="data-table-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem] max-[55.999rem]:flex-col max-[55.999rem]:items-stretch max-[55.999rem]:gap-[0.3rem]">
       <span className="data-table-identity flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted">
         {lucideIconToReact({ icon: TABLE_ICON, hidden: false })}
         <span className="data-table-title min-w-0 truncate font-semibold text-ink">
           {model.title ?? "Table"}
         </span>
         <span
-          className="data-table-count shrink-0 text-xs text-muted"
+          className="data-table-count min-w-0 text-xs text-muted"
           data-table-count
         >
           {`${model.rows.length} rows`}
         </span>
       </span>
-      <span className="data-table-controls flex shrink-0 items-center gap-1">
+      <span className="data-table-controls flex shrink-0 items-center gap-1 max-[55.999rem]:w-full">
         {model.filter ? <FilterField id={model.id} /> : null}
         <ColumnsMenu columns={model.columns} groupColumn={model.groupColumn} />
         <FitMenu fit={model.fit} />
