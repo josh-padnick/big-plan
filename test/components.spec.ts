@@ -60,7 +60,7 @@ test("should preserve component content without controls when JavaScript is disa
   );
   await expect(schema.locator('[data-schema-badge="pk"]')).toBeVisible();
   const controls = page.locator(
-    "[data-diff-toggle-group], [data-diff-menu-button], [data-diff-expand], [data-schema-menu-button], [data-schema-expand]",
+    "[data-diff-toggle-group], [data-diff-menu-button], [data-schema-menu-button], [data-code-diff] [data-figure-maximize], [data-database-table-schema] [data-figure-maximize]",
   );
   await expect(controls).toHaveCount(8);
   for (const control of await controls.all()) {
