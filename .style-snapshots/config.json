@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "fixturePaths": ["examples/sample.mdx"],
+  "stylingFilePatterns": [
+    "^\\.style-snapshots/config\\.json$",
+    "^examples/kitchen-sink\\.mdx$",
+    "^src/.*\\.css$",
+    "^src/components/(?:.*/)?view[^/]*\\.tsx$",
+    "^src/components/_shared/.*\\.tsx$",
+    "^src/render/global\\.generated\\.ts$",
+    "^src/render/(?:markdown|shell)/.*\\.ts$"
+  ],
+  "manifestDirectory": ".style-snapshots/manifests",
+  "captureCommand": [
+    "node",
+    "{harnessRoot}/scripts/style-snapshots/capture.mjs"
+  ],
+  "documents": [
+    {
+      "name": "sample",
+      "source": "examples/sample.mdx",
+      "captures": [
+        {
+          "name": "document",
+          "selector": "article",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            },
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": []
+        }
+      ]
+    }
+  ]
+}
