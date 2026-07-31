@@ -18,6 +18,7 @@ import {
   type ComponentRegistry,
   type ScopedParentDefinition,
 } from "../../../components/_registration/registry.js";
+import { COMPONENT_NAME_ATTRIBUTE } from "./component-name.js";
 import { createOutlinePlaceholder } from "./outline-placeholder.js";
 import type { DeferredOutlinePresentations } from "./outline-placeholder.js";
 import { reactToHast } from "./react-hast-adapter.js";
@@ -188,6 +189,21 @@ const renderFlowElement = ({
       model: compiled.model,
     });
   }
+  // The authored component name rides on its own rendered root so later
+  // document-wide passes can name what a reader is pointing at without knowing
+  // any component's markup. Both deliveries mark it, so a model carrying a
+  // nested presentation stays identical to the same nesting in HTML.
+  const named = (element: Element | undefined): Element | undefined => {
+    if (element !== undefined && name !== null) {
+      element.properties[COMPONENT_NAME_ATTRIBUTE] = name;
+    }
+    return element;
+  };
+  if (delivery.kind === "model") {
+    return materializeModel
+      ? named(delivery.adapt(compiled.presentation()))
+      : undefined;
+  }
   // An outline-aware component defers its presentation behind a placeholder
   // until the deck transform has computed the document outline. A model being
   // materialized inside a parent's body never reaches the document tree, so
@@ -202,14 +218,10 @@ const renderFlowElement = ({
       index: delivery.deferOutline.length - 1,
       marker: compiled.outline.marker,
       ...(node.position === undefined ? {} : { position: node.position }),
+      ...(name === null ? {} : { component: name }),
     });
   }
-  if (delivery.kind === "model") {
-    return materializeModel
-      ? delivery.adapt(compiled.presentation())
-      : undefined;
-  }
-  const rendered = delivery.adapt(compiled.presentation());
+  const rendered = named(delivery.adapt(compiled.presentation()));
   if (rendered !== undefined) {
     return rendered;
   }

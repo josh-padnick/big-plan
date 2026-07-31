@@ -164,7 +164,7 @@ describe("scoped child dispatch", () => {
 
     expect(diagnostics).toEqual([]);
     expect(serializeHtml({ root })).toBe(
-      '<section data-branch-id="decision" data-leaf-label="keep"><p>Leaf with <strong>formatting</strong>.</p></section>',
+      '<section data-branch-id="decision" data-leaf-label="keep" data-component="NestedFixture"><p>Leaf with <strong>formatting</strong>.</p></section>',
     );
   });
 
@@ -186,7 +186,9 @@ describe("scoped child dispatch", () => {
     expect(diagnostics).toEqual([]);
     expect(compileInner).toHaveBeenCalledOnce();
     expect(compileOuter).toHaveBeenCalledOnce();
-    expect(serializeHtml({ root })).toBe("<section>React outer</section>");
+    expect(serializeHtml({ root })).toBe(
+      '<section data-component="Outer">React outer</section>',
+    );
   });
 
   it("should compile once without adapting React for model delivery", () => {
@@ -253,7 +255,9 @@ describe("scoped child dispatch", () => {
         model: { value: "compiled" },
       },
     ]);
-    expect(serializeHtml({ root })).toBe("<section>React view</section>");
+    expect(serializeHtml({ root })).toBe(
+      '<section data-component="Fixture">React view</section>',
+    );
   });
 
   it("should leave an undeclared name unknown within a nested scope", () => {
