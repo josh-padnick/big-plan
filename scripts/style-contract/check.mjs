@@ -9,6 +9,7 @@ import postcss from "postcss";
 const ESCAPE_HATCH_MARKER = "CSS escape hatch:";
 const OVERRIDE_MARKER = "Override invariant:";
 const CASCADE_ORDER = "theme, base, components, utilities, bp-state";
+const CASCADE_ENTRYPOINT = "src/render/global.css";
 const ALLOWED_BLOCK_LAYERS = new Set(["components", "bp-state"]);
 const CONCRETE_REASONS = [
   /externally owned markup/i,
@@ -82,6 +83,7 @@ const ancestorsOf = (node) => {
  */
 export const checkStylesheetContract = async ({ sourceRoot }) => {
   const failures = [];
+  const cascadeDeclarations = [];
   for (const stylesheet of await findStylesheets(sourceRoot)) {
     const relativePath = relative(
       dirnameOfSource(sourceRoot),
@@ -103,6 +105,7 @@ export const checkStylesheetContract = async ({ sourceRoot }) => {
 
     root.walkAtRules("layer", (layer) => {
       if (layer.nodes === undefined) {
+        cascadeDeclarations.push({ relativePath, layer });
         if (layer.params !== CASCADE_ORDER) {
           failures.push(
             diagnostic({
@@ -166,6 +169,20 @@ export const checkStylesheetContract = async ({ sourceRoot }) => {
         }
       }
     });
+  }
+  const canonicalDeclarations = cascadeDeclarations.filter(
+    ({ layer }) => layer.params === CASCADE_ORDER,
+  );
+  if (
+    canonicalDeclarations.length !== 1 ||
+    canonicalDeclarations[0].relativePath !== CASCADE_ENTRYPOINT
+  ) {
+    const locations = canonicalDeclarations
+      .map(({ relativePath }) => relativePath)
+      .join(", ");
+    failures.push(
+      `${CASCADE_ENTRYPOINT}: exactly one canonical "@layer ${CASCADE_ORDER};" declaration is required at the stylesheet entrypoint${locations.length === 0 ? "" : `; found at ${locations}`}.`,
+    );
   }
   return failures;
 };

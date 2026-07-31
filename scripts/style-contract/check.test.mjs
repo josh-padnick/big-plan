@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import { checkStylesheetContract } from "./check.mjs";
 
@@ -17,7 +17,9 @@ const checkSource = async (stylesheets) => {
   await mkdir(sourceRoot);
   try {
     for (const [name, source] of Object.entries(stylesheets)) {
-      await writeFile(join(sourceRoot, name), source, "utf8");
+      const path = join(sourceRoot, name);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, source, "utf8");
     }
     return await checkStylesheetContract({ sourceRoot });
   } finally {
@@ -27,7 +29,7 @@ const checkSource = async (stylesheets) => {
 
 test("should accept ordinary, primitive, and explained override rules", async () => {
   const failures = await checkSource({
-    "valid.css": `${HEADER}
+    "render/global.css": `${HEADER}
 @layer theme, base, components, utilities, bp-state;
 :root { --color-example: red; color-scheme: light dark; }
 @layer components { .generated-child { color: var(--color-example); } }
@@ -42,6 +44,9 @@ test("should accept ordinary, primitive, and explained override rules", async ()
 
 test("should report missing reasons, unlayered rules, unknown layers, and unexplained overrides", async () => {
   const failures = await checkSource({
+    "render/global.css": `${HEADER}
+@layer theme, base, components, utilities, bp-state;
+`,
     "missing-reason.css":
       "/* Component styles. */ @layer components { .owned { color: red; } }",
     "unlayered.css": `${HEADER} .generated-child { color: red; }`,
@@ -53,4 +58,37 @@ test("should report missing reasons, unlayered rules, unknown layers, and unexpl
   assert.match(failures.join("\n"), /presentation rule is unlayered/);
   assert.match(failures.join("\n"), /may use only/);
   assert.match(failures.join("\n"), /Override invariant:/);
+});
+
+test("should require one canonical layer order at the stylesheet entrypoint", async () => {
+  const missing = await checkSource({
+    "render/global.css": `${HEADER}
+@layer components { .generated-child { color: red; } }
+`,
+  });
+  assert.match(missing.join("\n"), /exactly one canonical/);
+
+  const misplaced = await checkSource({
+    "render/global.css": HEADER,
+    "other.css": `${HEADER}
+@layer theme, base, components, utilities, bp-state;
+`,
+  });
+  assert.match(
+    misplaced.join("\n"),
+    /found at src\/other\.css/,
+  );
+
+  const duplicated = await checkSource({
+    "render/global.css": `${HEADER}
+@layer theme, base, components, utilities, bp-state;
+`,
+    "other.css": `${HEADER}
+@layer theme, base, components, utilities, bp-state;
+`,
+  });
+  assert.match(
+    duplicated.join("\n"),
+    /found at src\/other\.css, src\/render\/global\.css|found at src\/render\/global\.css, src\/other\.css/,
+  );
 });

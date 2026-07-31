@@ -38,3 +38,10 @@ jobs:
       - run: bun run test
       - name: Styling commits must match their visual contract
         run: bun run verify:style-history -- --base origin/main
+      - name: Upload styling history evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: style-history-${{ github.sha }}
+          path: test-results/style-history
+          if-no-files-found: warn
