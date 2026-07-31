@@ -777,7 +777,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain("Home");
   });
 
-  it("should let a desktop row claim main and rail widths", () => {
+  it("should let a desktop row claim list, main, and rail widths", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [
         screen({
@@ -785,12 +785,27 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
           attributes: {
             viewport: "desktop",
             chrome: "browser",
-            url: "app.harbor.team/tickets/1",
+            url: "app.harbor.team/inbox?ticket=1",
           },
           children: [
             element({
               name: "Row",
               children: [
+                element({
+                  name: "Panel",
+                  attributes: { title: "Queue", span: "list" },
+                  children: [
+                    element({
+                      name: "List",
+                      children: [
+                        element({
+                          name: "ListItem",
+                          attributes: { label: "#1" },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
                 element({
                   name: "Panel",
                   attributes: { title: "Conversation", span: "main" },
@@ -827,11 +842,13 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(compiled.model.screens[0]?.children[0]).toMatchObject({
       element: "Row",
       children: [
+        { element: "Panel", span: "list", title: "Queue" },
         { element: "Panel", span: "main", title: "Conversation" },
         { element: "Stack", span: "rail" },
       ],
     });
     const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-wireframe-span":"list"');
     expect(rendered).toContain('"data-wireframe-span":"main"');
     expect(rendered).toContain('"data-wireframe-span":"rail"');
   });
