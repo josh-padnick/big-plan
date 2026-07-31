@@ -2,9 +2,10 @@
 // a scroll-spy that marks the section being read with aria-current on its TOC
 // links (falling back to the overview links above the first section), hover
 // popovers that float [data-info-popover] disclosures beside their triggers,
-// collapse toggles for deck parts, slides, and sub-slides, and one maximize
-// behavior shared by every figure family. Plan content never contributes
-// script, and every affordance keeps a no-JS fallback.
+// collapse toggles for deck parts, slides, and sub-slides, one maximize
+// behavior shared by every figure family, and the diagram leg in
+// ./diagram-script.ts. Plan content never contributes script, and every
+// affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
@@ -15,6 +16,9 @@
 // components/_model/figure-controls/figure-controls.ts. This file is a string
 // template and cannot import it, so a change to those attribute spellings
 // changes the strings here too.
+
+import { DIAGRAM_SCRIPT } from "./diagram-script.js";
+
 export const VIEWER_SCRIPT = `<script>
 (() => {
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
@@ -430,4 +434,5 @@ export const VIEWER_SCRIPT = `<script>
     );
   }
 })();
+${DIAGRAM_SCRIPT}
 </script>`;

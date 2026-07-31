@@ -13,6 +13,14 @@ import {
   type ScopedChild,
 } from "../_authoring/contract.js";
 import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
+import {
+  flowEdgeAnchor,
+  flowFigureAnchor,
+  flowFooterAnchor,
+  flowNodeAnchor,
+  flowStageAnchor,
+  resolveStageIds,
+} from "./anchors.js";
 
 export type FlowDiagramTone = "source" | "neutral" | "destination";
 
@@ -28,6 +36,9 @@ const BADGE_TONES: ReadonlyArray<FlowDiagramBadgeTone> = ["neutral", "warning"];
 
 export type CompiledFlowDiagramNode = {
   readonly id: string;
+  // The element's address, formed by ./anchors.ts and spent by the compiled
+  // model, the rendered attributes, and the feedback package alike.
+  readonly anchor: string;
   readonly label: string;
   readonly tone: FlowDiagramTone;
   // A technical identifier line (a path, command, or PR number) rendered in
@@ -43,25 +54,34 @@ export type CompiledFlowDiagramNode = {
 };
 
 export type CompiledFlowDiagramStage = {
+  // The authored id when given, otherwise the slugged title; an id keeps the
+  // stage's address stable across a reworded heading.
+  readonly id: string;
+  readonly anchor: string;
   readonly title: string;
   readonly nodes: ReadonlyArray<CompiledFlowDiagramNode>;
 };
 
 export type CompiledFlowDiagramEdge = {
+  readonly anchor: string;
   readonly from: string;
   readonly to: string;
   readonly label?: string;
 };
 
 export type CompiledFlowDiagram = {
+  // The figure's own address; every element anchor inside extends it.
+  readonly anchor: string;
   readonly stages: ReadonlyArray<CompiledFlowDiagramStage>;
   readonly edges: ReadonlyArray<CompiledFlowDiagramEdge>;
   // Inline content of the optional footer paragraph authored directly in the
   // FlowDiagram body: the takeaway or the conditional the diagram cannot draw.
   readonly footer?: ReadonlyArray<ElementContent>;
+  readonly footerAnchor?: string;
 };
 
 const STAGE_SCHEMA = {
+  id: { kind: "string", nonEmpty: true },
   title: { kind: "string", required: true, nonEmpty: true },
 } satisfies ComponentAttributeSchema;
 
@@ -117,9 +137,11 @@ const singleParagraphContent = ({
 // node's own position.
 const compileNode = ({
   child,
+  figure,
   diagnostics,
 }: {
   readonly child: ScopedChild;
+  readonly figure: string;
   readonly diagnostics: DiagnosticCollector;
 }): CompiledFlowDiagramNode | undefined => {
   const validated = validateComponentAttributes({
@@ -146,6 +168,7 @@ const compileNode = ({
   }
   return {
     id: validated.id,
+    anchor: flowNodeAnchor({ figure, nodeId: validated.id }),
     label: validated.label,
     tone: validated.tone ?? "neutral",
     ...(validated.code === undefined ? {} : { code: validated.code }),
@@ -155,14 +178,25 @@ const compileNode = ({
   };
 };
 
+// A stage before the diagram knows every stage's title: its own address
+// depends on whether a sibling slugs the same way, which only the whole
+// diagram can answer.
+type StageDraft = {
+  readonly authoredId?: string;
+  readonly title: string;
+  readonly nodes: ReadonlyArray<CompiledFlowDiagramNode>;
+};
+
 // Validates one Stage and its Node children into a column model.
 const compileStage = ({
   child,
+  figure,
   diagnostics,
 }: {
   readonly child: ScopedChild;
+  readonly figure: string;
   readonly diagnostics: DiagnosticCollector;
-}): CompiledFlowDiagramStage => {
+}): StageDraft => {
   const validated = validateComponentAttributes({
     component: "Stage",
     attributes: child.attributes,
@@ -184,9 +218,10 @@ const compileStage = ({
     });
   }
   return {
+    ...(validated.id === undefined ? {} : { authoredId: validated.id }),
     title: validated.title ?? "",
     nodes: scoped.flatMap((node) => {
-      const compiled = compileNode({ child: node, diagnostics });
+      const compiled = compileNode({ child: node, figure, diagnostics });
       return compiled === undefined ? [] : [compiled];
     }),
   };
@@ -196,9 +231,11 @@ const compileStage = ({
 // whole diagram, so they run after all stages compile.
 const compileEdge = ({
   child,
+  figure,
   diagnostics,
 }: {
   readonly child: ScopedChild;
+  readonly figure: string;
   readonly diagnostics: DiagnosticCollector;
 }): CompiledFlowDiagramEdge | undefined => {
   const validated = validateComponentAttributes({
@@ -219,6 +256,11 @@ const compileEdge = ({
     return undefined;
   }
   return {
+    anchor: flowEdgeAnchor({
+      figure,
+      from: validated.from,
+      to: validated.to,
+    }),
     from: validated.from,
     to: validated.to,
     ...(validated.label === undefined ? {} : { label: validated.label }),
@@ -319,6 +361,7 @@ export const compileFlowDiagramComponent = ({
   scopedChildren,
   position,
   diagnostics,
+  ids,
 }: ComponentCompilerInput): CompiledFlowDiagram => {
   validateComponentAttributes({
     component: "FlowDiagram",
@@ -337,11 +380,31 @@ export const compileFlowDiagramComponent = ({
       position,
     });
   }
-  const stages = stageChildren.map((child) =>
-    compileStage({ child, diagnostics }),
+  // The figure's ordinal among the document's diagrams is what its address is
+  // made of; a compile with no document around it is the first diagram.
+  const figure = flowFigureAnchor({
+    ordinal: ids?.nextOrdinal({ component: "FlowDiagram" }) ?? 1,
+  });
+  const drafts = stageChildren.map((child) =>
+    compileStage({ child, figure, diagnostics }),
   );
+  const stageIds = resolveStageIds(
+    drafts.map((draft) => ({
+      ...(draft.authoredId === undefined ? {} : { id: draft.authoredId }),
+      title: draft.title,
+    })),
+  );
+  const stages = drafts.map((draft, index) => {
+    const id = stageIds[index] ?? `stage-${index + 1}`;
+    return {
+      id,
+      anchor: flowStageAnchor({ figure, stageId: id }),
+      title: draft.title,
+      nodes: draft.nodes,
+    };
+  });
   const edges = edgeChildren.flatMap((child) => {
-    const edge = compileEdge({ child, diagnostics });
+    const edge = compileEdge({ child, figure, diagnostics });
     return edge === undefined ? [] : [edge];
   });
   if (stageChildren.length >= 2 && edges.length === edgeChildren.length) {
@@ -354,8 +417,11 @@ export const compileFlowDiagramComponent = ({
     diagnostics,
   });
   return {
+    anchor: figure,
     stages,
     edges,
-    ...(footer.length === 0 ? {} : { footer }),
+    ...(footer.length === 0
+      ? {}
+      : { footer, footerAnchor: flowFooterAnchor({ figure }) }),
   };
 };

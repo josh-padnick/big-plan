@@ -40,7 +40,7 @@ One authored file - no content drift.
 
 ## The contract
 
-- At least two `Stage` children, each with a required non-empty `title` and at least one `Node`.
+- At least two `Stage` children, each with a required non-empty `title`, an optional `id`, and at least one `Node`.
 - `Node` requires a unique `id` and a `label`; `code` is an optional monospace identifier line, `badge` an optional status pill with `badgeTone` `neutral` or `warning`, and `tone` is `source`, `neutral` (default), or `destination`.
 - A `Node` body is at most one short paragraph: the relationship explained at the point of connection.
 - Every `Edge` needs `from` and `to` naming node ids in adjacent stages, read left to right; `label` carries the verb.
@@ -49,3 +49,12 @@ One authored file - no content drift.
 
 Each violation fails `validate` and `render` with a positional diagnostic.
 Run `big-plan guidance FlowDiagram` for judgment-level usage guidance.
+
+## Reading and marking up a diagram
+
+A diagram is the widest thing a plan can hold, so a rendered document gives the reader more than a scrolling strip.
+
+- **Maximize.** Every diagram carries the shared maximize control. It opens the figure over the reading column, fits the artboard to the available width - never above 100 percent - and zooms between 25 and 400 percent by button, by `+`, `-`, `0`, and `1`, or by dragging and arrowing the artboard around. Escape closes it and returns focus to the control that opened it.
+- **Elements are addressable.** Each stage, node, edge, and footer, plus the figure itself, carries an anchor such as `component/FlowDiagram#1/node/apply`. The same strings appear in the machine-readable `compile` output, so an agent and a reviewer name the same piece. A node keeps its anchor when its label, tone, or stage changes; a stage keeps its anchor across a reworded title only if the author gave it an `id`.
+- **Comment and correct.** Hovering or focusing an element rings it and offers one chip; the actions behind it are Comment, Suggest edit, and Propose removal. A proposal repaints the document - a removal ghosts the element and its incident edges and says "Removed"; an edit renders the replacement on a highlight with the original still available - and never writes to the plan source. Everything is revertible, and "Show original" hides the whole proposal layer.
+- **Without scripts.** The document renders every diagram in full, shows no control that cannot act, and keeps horizontal scrolling as its fallback.
