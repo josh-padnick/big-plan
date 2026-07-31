@@ -228,8 +228,8 @@
 
   /* A subheading row is a band across the grid, not another data row: it
      carries the group's name at label weight and repeats nothing, because the
-     value that names the group has been lifted out of every row beneath it. */
-  /* A band stays exactly as tall as its label needs. The separation between
+     value that names the group has been lifted out of every row beneath it.
+     A band stays exactly as tall as its label needs. The separation between
      groups is whitespace under each group's last visible row, never padding
      inside the band, so adding air never fattens the tinted strip. */
   article .data-table-grid tbody tr[data-table-group-end] td {
@@ -302,63 +302,5 @@
     tr:last-child
     td {
     border-bottom: 0;
-  }
-
-  /* A subheading row is a band across the grid, not another data row: it
-     carries the group's name at label weight and repeats nothing, because the
-     value that names the group has been lifted out of every row beneath it. */
-  article .data-table-group-row > th {
-    background: var(--surface-c);
-    border-bottom: 1px solid var(--edge-c);
-    padding: 0.45rem 0.6rem 0.35rem;
-    color: var(--color-ink);
-    font-size: 0.6875rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-align: left;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-  article .data-table-group-row[hidden] {
-    display: none;
-  }
-  article .data-table-group-row:hover > th {
-    background: var(--surface-c);
-  }
-  /* A grouped table indents its first column under the band so the hierarchy
-     is visible without a second border. */
-  article [data-table-grouped] .data-table-grid td[data-table-column="0"] {
-    padding-left: 1.15rem;
-  }
-
-  /* Menu and chrome surfaces mirror the schema figure so the two read as one
-     family rather than two products. */
-  article .data-table-menu-list {
-    background: var(--diff-header-bg);
-    box-shadow: 0 6px 18px rgb(12 10 8 / 0.18);
-  }
-  article .data-table-menu-list[hidden],
-  article .data-table-button[hidden],
-  article [data-table-fit-list][hidden],
-  article .data-table-filter[hidden],
-  article .data-table-empty[hidden] {
-    display: none;
-  }
-  article .data-table-menu-separator {
-    background: var(--color-edge);
-  }
-  article .data-table-menu-item[aria-checked="false"] [data-lucide="check"] {
-    visibility: hidden;
-  }
-  article .data-table-menu-item:disabled {
-    cursor: default;
-    opacity: 0.55;
-  }
-  article .data-table-button[aria-pressed="true"] {
-    background: var(--color-edge);
-    color: var(--color-ink);
-  }
-  article .data-table-filter-input::-webkit-search-cancel-button {
-    appearance: none;
   }
 }
