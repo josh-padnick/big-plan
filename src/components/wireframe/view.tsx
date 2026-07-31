@@ -481,9 +481,14 @@ const WireframeElements = ({
 const Screen = ({
   screen,
   current,
+  named,
 }: {
   readonly screen: WireframeScreen;
   readonly current: boolean;
+  // Whether the screen's name is worth drawing. With one screen there is no
+  // switcher for it to name and the prose above already said what this is, so
+  // printing it again only competes with that.
+  readonly named: boolean;
 }) => {
   const preset = WIREFRAME_VIEWPORT_PRESETS[screen.viewport];
   return (
@@ -494,7 +499,11 @@ const Screen = ({
       {...(current ? { "data-wireframe-current": "" } : {})}
     >
       <div className="wireframe-screen-caption">
-        <span className="wireframe-screen-name">{screen.name}</span>
+        {named ? (
+          <span className="wireframe-screen-name">{screen.name}</span>
+        ) : (
+          <span />
+        )}
         <span className="wireframe-screen-viewport">
           {preset.label} - {preset.width}x{preset.height}
         </span>
@@ -553,6 +562,7 @@ export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
           key={screen.id}
           screen={screen}
           current={screen.id === model.initialScreenId}
+          named={model.screens.length > 1}
         />
       ))}
     </div>
