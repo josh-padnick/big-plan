@@ -53,6 +53,9 @@ diagnostic formatting in
 | `rules/lede-length.ts`                        | Keeps the lede within the word budget of a subtitle rather than an opening body paragraph.                         |
 | `rules/lede-style.ts`                         | Requires that lede to open declaratively rather than with a self-referential phrase like "This plan".              |
 | `rules/title-length.ts`                       | Keeps the leading level-one title a punchy noun phrase within word and character budgets.                          |
+| `rules/slide-leading-title.ts`                | Requires a slide or sub-slide to name its message before its first block is a figure.                              |
+| `rules/subtitle-duplication.ts`               | Rejects a leading context builder or a figure's own label that restates the heading above it.                      |
+| `rules/collection-grouping.ts`                | Requires a list or table past eight items to be grouped rather than flat.                                          |
 | `lint-plan.test.ts`                           | Exercises the public interface, source positions, diagnostic order, and conservative near misses.                  |
 
 `src/lint` is an independent bottom-tier layer in `eslint.config.mjs`.
@@ -105,6 +108,25 @@ A rule needs a clear, statically testable contract because a false positive
 makes a valid plan impossible to validate.
 Prefer an objective check with explicit non-findings over a subjective style
 opinion.
+
+## What stays guidance, not lint
+
+`big-plan guidance` teaches principles this layer deliberately does not
+enforce, because judging them needs a reader rather than a parse.
+
+The clearest case is the rule that a slide introducing a concept the reader
+has no model for must open with the problem it solves.
+Deciding whether a concept is novel means knowing what this reader already
+believes, and deciding whether a sentence states a problem rather than a
+definition means reading it.
+A check approximating either would fire on correct plans, which is the one
+failure mode this layer cannot afford.
+
+The three slide-craft rules here are the statically decidable subset of that
+same guidance: whether a heading's next block is a figure, whether two authored
+strings are the same name, and how many items a collection holds.
+When a guidance principle cannot be reduced to a question of that kind, it
+stays guidance and says so where it is written.
 
 ## The first rule: Markdown table format
 

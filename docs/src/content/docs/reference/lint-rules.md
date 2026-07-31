@@ -33,6 +33,19 @@ Big Plan renders the paragraph directly under the title as the document's subtit
 
 `quick-summary-singleton` allows at most one `QuickSummary` per plan, so the reviewer always has exactly one place to start.
 
+`slide-leading-title` requires a slide or sub-slide to name its message before it shows anything.
+A component, fenced code block, standalone image, or table as the first block under an h2 or h3 is flagged; a sub-slide fixes it with an h4 title above the figure, and a slide with a title line or context builder.
+Prose, a context builder, an image used inside a sentence, and a section that opens straight into its sub-slides are never flagged.
+
+`subtitle-duplication` rejects a leading context builder, or a figure's own `title`, that restates the heading above it.
+Comparison ignores case, punctuation, and a leading article.
+It flags an exact normalized match, the same words reordered, or a contained phrase of at least two words that covers at least half the longer name; a heading's words merely appearing inside a longer, more specific label are left alone.
+A `Part` marker's act name and titles nested inside a component, such as an `Option` or `Criterion`, are never compared.
+
+`collection-grouping` requires a list past eight items, or a table past eight body rows, to be grouped.
+A list counts as grouped when its items carry nested items; a table counts as grouped when its first column repeats, which is what a grouping dimension looks like once equal values sit together.
+Splitting a long collection into several shorter labelled lists satisfies the rule the same way, because no single list then reaches the threshold.
+
 `table-of-contents-matches-sections` requires a `TableOfContents`'s Entry section names to repeat the document's h2 titles exactly, in order, one to one.
 Every mismatch - a wrong name, a missing section, or an extra entry - is reported at the TableOfContents's position, so the overview can never drift from the plan it summarizes.
 
