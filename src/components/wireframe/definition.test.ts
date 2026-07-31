@@ -1228,6 +1228,33 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     ]);
   });
 
+  it("should count a composer send button among direct screen children", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "reply",
+          children: [
+            element({
+              name: "TextArea",
+              attributes: { label: "Reply" },
+            }),
+            element({
+              name: "Button",
+              attributes: { label: "Send reply" },
+            }),
+            element({
+              name: "Button",
+              attributes: { label: "Resolve", emphasis: "primary" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "reply" draws 2 filled actions (Resolve, Send reply); keep one primary action, counting a composer\'s Send button',
+    ]);
+  });
+
   it("should read a fenced table into columns and rows", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [

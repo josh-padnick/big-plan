@@ -449,20 +449,20 @@ const checkOneFilledAction = ({
     .filter((node) => node.element === "Button");
   stateButtons.forEach((node) => filled.delete(node));
   const markComposerSends = (nodes: ReadonlyArray<WireframeNode>): void => {
+    const descendants = flatten(nodes);
+    if (descendants.some((candidate) => candidate.element === "TextArea")) {
+      descendants.forEach((candidate) => {
+        if (
+          candidate.element === "Button" &&
+          /^send(?:\s|$)/iu.test(candidate.label)
+        ) {
+          filled.add(candidate);
+        }
+      });
+    }
     for (const node of nodes) {
       const children = childNodes(node);
       if (children.length > 0) {
-        const descendants = flatten(children);
-        if (descendants.some((candidate) => candidate.element === "TextArea")) {
-          descendants.forEach((candidate) => {
-            if (
-              candidate.element === "Button" &&
-              /^send(?:\s|$)/iu.test(candidate.label)
-            ) {
-              filled.add(candidate);
-            }
-          });
-        }
         markComposerSends(children);
       }
     }

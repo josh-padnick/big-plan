@@ -157,6 +157,12 @@ The lede.
     expect(deckHtml).toContain("data-wireframe=");
     expect(deckHtml).toContain("--reading-free-inline");
     expect(deckHtml).toContain("data-wireframe-desktop");
+    expect(deckHtml).toContain(
+      "[data-slide]:has(>[data-collapse-body] [data-wireframe-desktop]):not([data-slide] [data-slide])",
+    );
+    expect(deckHtml).toContain(
+      ".wireframe[data-wireframe-desktop]:not([data-slide] *)",
+    );
     // The true 1440px layout scales into the shared desktop review cap.
     expect(deckHtml).toContain("max-width:920px");
   });

@@ -239,11 +239,20 @@ Light and dark follow the reader's OS in inert exports.
       --reading-free-inline: max(0px, (100cqw - 74ch) / 2 - 0.5rem);
     }
   }
-  [data-slide]:has(> [data-wireframe-desktop]) {
+  [data-slide]:has(> [data-collapse-body] [data-wireframe-desktop]):not(
+      [data-slide] [data-slide]
+    ) {
     margin-right: calc(-1 * var(--reading-free-inline, 0px));
   }
-  [data-slide]:has(> [data-wireframe-desktop])
-    > *:not([data-wireframe-desktop]) {
+  [data-slide]:has(> [data-collapse-body] [data-wireframe-desktop]):not(
+      [data-slide] [data-slide]
+    )
+    > [data-collapse-header],
+  [data-slide]:has(> [data-collapse-body] [data-wireframe-desktop]):not(
+      [data-slide] [data-slide]
+    )
+    > [data-collapse-body]
+    > :not([data-wireframe-desktop], [data-slide]) {
     max-width: 74ch;
   }
 
