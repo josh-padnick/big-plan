@@ -16,6 +16,9 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Styling history verification replays every relevant commit.
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           # Reads the packageManager field so CI and local bun stay in lockstep.
@@ -33,3 +36,5 @@ jobs:
             exit 1
           fi
       - run: bun run test
+      - name: Styling commits must match their visual contract
+        run: bun run verify:style-history -- --base origin/main
