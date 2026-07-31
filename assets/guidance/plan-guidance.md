@@ -48,6 +48,7 @@ Write that title as the message rather than the topic: "Escape unwinds one level
 A fully emphasized paragraph (`*like this*`) renders as the context builder - one muted orienting line - but only as the first block under the heading, so a title and a context builder are alternatives, never a sequence.
 Keep it only when it adds what the heading does not already carry, and when the slide carries a reader action - a decision, a question, something to verify - let it declare that action ("We need to decide where the skill ships.").
 Never let a subtitle or a figure's own label restate the heading above it.
+Lint blocks both a figure that leads its slide and a subtitle or label that restates the heading.
 
 ## 6. Open a novel idea with the problem it solves
 
@@ -74,6 +75,7 @@ Pick the dimension that helps the reviewer judge - importance, lifecycle stage, 
 - **Experience** - break one and the feature still works, but it frustrates.
 
 In a table, make that dimension the first column so rows sharing a group sit together.
+Lint blocks a flat list or table past eight items.
 
 ## 8. Visual layout: Proximity, Alignment, Repetition, Contrast (CRAP)
 
