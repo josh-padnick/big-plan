@@ -158,6 +158,13 @@ classes.
     .flow-diagram-viewport[data-flow-panning] {
     cursor: grabbing;
   }
+  /* The tray sits above the overlay by design, so the promoted artboard keeps
+     out from under it rather than hiding its own right-hand stages. */
+  :root[data-flow-tray-open]
+    .flow-diagram[data-figure-maximized]
+    .flow-diagram-viewport {
+    padding-right: calc(min(22rem, 100vw - 2rem) + 2rem);
+  }
   /* The footer is the figure's own line, not part of the scrolling surface. */
   .flow-diagram[data-figure-maximized] > [data-flow-diagram-footer] {
     flex: none;

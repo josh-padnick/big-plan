@@ -429,6 +429,13 @@ export const DIAGRAM_SCRIPT = `
     trayCount.textContent = String(drafts.length);
     tray.hidden = drafts.length === 0 || !trayOpen;
     launcher.hidden = drafts.length === 0 || trayOpen;
+    // A promoted figure keeps its artboard clear of the open tray. The tray
+    // deliberately sits above the overlay, so without this the widest part of
+    // the diagram would be the part nobody can see.
+    document.documentElement.toggleAttribute("data-flow-tray-open", !tray.hidden);
+    for (const diagram of diagrams) {
+      if (isMaximized(diagram)) fit(diagram);
+    }
   };
 
   const revealTarget = (node) => {
