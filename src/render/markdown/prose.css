@@ -15,15 +15,21 @@ is styled by its owning module, not here.
      column and everything else breaks out to fill it - the classic breakout,
      with the constraint on the text rather than on its container.
 
-     Only prose that sits directly in the reading flow is held back. A
-     paragraph inside a component belongs to that component's layout. The one
-     exception is a callout, which is a block of prose wearing chrome: left
-     full width it would be a wide box holding a narrow column of text. */
-  :is(article, [data-slide], [data-collapse-body])
-    > :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6, .callout) {
-    /* 54ch of this typeface lands around 72 characters a line: the `ch` unit
-       measures a zero, which is narrower than the average letter. */
+     It applies wherever prose ends up, including inside a component, because
+     a wider column lengthened those lines too. A table cell and a wireframe
+     are the exceptions: both are drawings of a layout, not passages to read.
+
+     54ch of this typeface lands around 72 characters a line, since the `ch`
+     unit measures a zero and a zero is narrower than the average letter. */
+  article :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6),
+  article > .callout,
+  :is([data-slide], [data-collapse-body]) > .callout {
     max-width: 54ch;
+  }
+  article
+    :is(td, th, .wireframe)
+    :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6) {
+    max-width: none;
   }
 
   article h1,
