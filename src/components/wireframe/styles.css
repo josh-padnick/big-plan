@@ -878,6 +878,14 @@ marks and a plan diff never jitters.
     white-space: nowrap;
   }
 
+  /* A details rail keeps a conventional width so the main content stays the
+     dominant pane; below a narrow container it wraps under instead of
+     squeezing both. */
+  .wireframe-rail {
+    flex: 0 1 17rem;
+    min-width: 12rem;
+  }
+
   /* Prose stops being readable somewhere past 80 characters, so a screen
      holds its reading content to a measure instead of letting it run the
      whole window. */
