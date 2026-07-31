@@ -292,6 +292,16 @@ export type WireframeNode =
       readonly label: string;
       readonly meta?: string;
       readonly value?: string;
+      // Selected row in a master queue. Wireframe language only - not interactive.
+      readonly selected: boolean;
+    }
+  | {
+      // One message in a conversation timeline (not a table row).
+      readonly element: "Message";
+      readonly author: string;
+      readonly time: string;
+      readonly text: string;
+      readonly kind: "customer" | "agent" | "internal";
     }
   | {
       readonly element: "TextField";

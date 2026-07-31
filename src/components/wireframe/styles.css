@@ -268,17 +268,17 @@ marks and a plan diff never jitters.
     flex: 1 1 0;
     min-width: 10rem;
   }
-  /* Master queue in a desktop workspace (~320-380px class at full artboard). */
+  /* Compact ticket queue (~collapsible). Wider lists use main + rail instead. */
   .wireframe-row > [data-wireframe-span="list"] {
-    flex: 0 0 12.5rem;
-    max-width: 14rem;
-    min-width: 10rem;
+    flex: 0 0 11rem;
+    max-width: 12.5rem;
+    min-width: 9.5rem;
   }
-  /* Secondary properties / settings sub-nav (~280-320px class). */
+  /* Details / settings sub-nav (~280-320px class at full artboard). */
   .wireframe-row > [data-wireframe-span="rail"] {
-    flex: 0 0 10.25rem;
-    max-width: 11rem;
-    min-width: 8.5rem;
+    flex: 0 0 11rem;
+    max-width: 12.5rem;
+    min-width: 9rem;
   }
 
   .wireframe-panel {
@@ -355,11 +355,10 @@ marks and a plan diff never jitters.
     border-color: var(--callout-danger-c);
     color: var(--callout-danger-c);
   }
-  /* A button that moves the prototype says so, so a reader knows which marks
-     on the page are worth clicking. */
+  /* Prototype navigation is data-only. A diagonal arrow reads as "external
+     link" in product UI reviews, so walkable buttons do not draw one. */
   .wireframe-button[data-wireframe-navigate]::after {
-    content: " \2197";
-    opacity: 0.55;
+    content: none;
   }
 
   /* The product frame defaults to a desktop-native flush shell: sidebar hard
@@ -421,16 +420,91 @@ marks and a plan diff never jitters.
   .wireframe-artboard[data-wireframe-viewport="desktop"] .wireframe-app-content {
     gap: 0.55rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="desktop"] .wireframe-panel {
-    padding: 0.55rem 0.7rem;
-  }
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
-    .wireframe-panel-body {
-    gap: 0.45rem;
-  }
   .wireframe-artboard[data-wireframe-viewport="desktop"]
     .wireframe-page-header {
     padding-bottom: 0.35rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-page-header
+    .wireframe-heading {
+    font-size: 1.35rem;
+  }
+  /* Consistent pane system: content hierarchy from layout and type, not from
+     every region wearing the same heavy outline. Major panes use a single
+     divider; outlined boxes stay for controls. */
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row {
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 0;
+    min-height: 18rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel,
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-stack {
+    display: flex;
+    flex-direction: column;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 0.35rem 0.7rem;
+    min-height: 100%;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel
+    > .wireframe-panel-body {
+    flex: 1;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel::after {
+    display: none;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row
+    > * + * {
+    border-left: 1px solid var(--wf-stroke-soft);
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    .wireframe-panel-body {
+    gap: 0.45rem;
+    min-height: 0;
+  }
+  /* Conversation column: timeline grows, composer pins to the foot. */
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    .wireframe-panel-body:has([data-wireframe-message]) {
+    display: flex;
+    flex-direction: column;
+    min-height: 16rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    .wireframe-panel-body:has([data-wireframe-message])
+    > .wireframe-divider,
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    .wireframe-panel-body:has([data-wireframe-message])
+    > .wireframe-divider-labeled {
+    margin-top: auto;
+  }
+  /* Settings form stays a readable measure, not full bleed. */
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row
+    > [data-wireframe-span="main"].wireframe-stack {
+    max-width: 28rem;
   }
 
   /* Tablet shells keep breathing room and a card-like rail: intentional for
@@ -766,20 +840,72 @@ marks and a plan diff never jitters.
     padding: 0;
   }
   .wireframe-list-item {
-    padding: 0.35rem 0;
-    border-bottom: 1px dashed var(--wf-stroke-soft);
+    padding: 0.4rem 0.35rem;
+    border-bottom: 1px solid var(--wf-stroke-soft);
     font-size: 0.875rem;
   }
   .wireframe-list-item:last-child {
     border-bottom: 0;
   }
+  /* Selected queue row: tint + accent edge (color is never the only cue). */
+  .wireframe-list-item[data-wireframe-selected] {
+    background: var(--wf-fill);
+    box-shadow: inset 3px 0 0 var(--color-ink);
+  }
+  .wireframe-list-label {
+    min-width: 0;
+  }
   .wireframe-list-meta {
+    flex: none;
     font-size: 0.75rem;
     color: var(--color-muted);
   }
   .wireframe-list-value {
+    flex: none;
+    margin-left: auto;
+    text-align: right;
     font-weight: 600;
+    font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
+    color: var(--color-muted);
+    white-space: nowrap;
+  }
+
+  /* Conversation timeline messages (not table rows). */
+  .wireframe-message {
+    padding: 0.45rem 0.5rem;
+    border-left: 2px solid var(--wf-stroke-soft);
+    background: color-mix(in srgb, var(--color-paper) 70%, var(--wf-fill));
+  }
+  .wireframe-message[data-wireframe-message="customer"] {
+    border-left-color: var(--wf-stroke);
+  }
+  .wireframe-message[data-wireframe-message="agent"] {
+    border-left-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-paper));
+  }
+  .wireframe-message[data-wireframe-message="internal"] {
+    border-left-style: dashed;
+    border-left-color: var(--callout-warning-c);
+    background: color-mix(
+      in srgb,
+      var(--callout-warning-bg) 55%,
+      var(--color-paper)
+    );
+  }
+  .wireframe-message-meta {
+    font-size: 0.75rem;
+    color: var(--color-muted);
+  }
+  .wireframe-composer {
+    margin-top: auto;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--wf-stroke-soft);
+  }
+  .wireframe-unsaved-bar {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--wf-stroke);
+    background: var(--wf-fill);
   }
 
   /* Controls are the real elements, so they arrive carrying the browser's own

@@ -156,6 +156,16 @@ const LIST_ITEM_SCHEMA = {
   label: { kind: "string", required: true, nonEmpty: true },
   meta: { kind: "string", nonEmpty: true },
   value: { kind: "string", nonEmpty: true },
+  selected: { kind: "booleanShorthand" },
+} satisfies ComponentAttributeSchema;
+
+const MESSAGE_KINDS = ["customer", "agent", "internal"] as const;
+
+const MESSAGE_SCHEMA = {
+  author: { kind: "string", required: true, nonEmpty: true },
+  time: { kind: "string", required: true, nonEmpty: true },
+  text: { kind: "string", required: true, nonEmpty: true },
+  kind: { kind: "enum", values: MESSAGE_KINDS },
 } satisfies ComponentAttributeSchema;
 
 // A labelled control. The label is required on every one of them: a wireframe
@@ -634,9 +644,10 @@ const CATALOG = {
     category: "content",
     acceptsChildren: false,
     allowedParents: ["List"],
-    summary: "One row: what it is, when it happened, and what it was worth.",
+    summary:
+      "One row: identity, context, and a trailing value. Mark selected on the active queue row.",
     example:
-      '<ListItem label="Weekly allowance" meta="Today" value="+$5.00" />',
+      '<ListItem label="Checkout freeze" meta="Open · Maya" value="14m · #4821" selected />',
     compile: ({ attributes, position, diagnostics }) => {
       const validated = validateComponentAttributes({
         component: "ListItem",
@@ -650,6 +661,31 @@ const CATALOG = {
         label: validated.label ?? "",
         ...(validated.meta === undefined ? {} : { meta: validated.meta }),
         ...(validated.value === undefined ? {} : { value: validated.value }),
+        selected: validated.selected === true,
+      };
+    },
+  },
+  Message: {
+    category: "content",
+    acceptsChildren: false,
+    summary:
+      "One conversation message in a timeline. kind is customer, agent, or internal.",
+    example:
+      '<Message author="Maya" time="14m" kind="customer" text="Form freezes" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Message",
+        attributes,
+        position,
+        diagnostics,
+        schema: MESSAGE_SCHEMA,
+      });
+      return {
+        element: "Message",
+        author: validated.author ?? "",
+        time: validated.time ?? "",
+        text: validated.text ?? "",
+        kind: validated.kind ?? "customer",
       };
     },
   },

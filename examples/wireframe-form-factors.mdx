@@ -6,54 +6,163 @@ Each form factor is a parallel prototype so reviewers compare real device layout
 
 ## Desktop web SaaS
 
-Persistent left nav + content workspace.
-Every desktop screen names a real product pattern; on-screen copy is product UI only (no keyboard cheatsheets or layout notes inside the artboard).
+One consistent pane model: fixed global nav, then workspace panes (list, main, details).
+Content hierarchy comes from type and layout; major panes use dividers rather than competing card outlines.
+
+### Ticket - design rationale (priority 1)
+
+- **Pattern:** Front / Zendesk **three-pane** - compact queue | conversation timeline | properties rail.
+- **Structure:** Properties and Related sit in a **right rail**, not under the queue. Conversation is the widest column. Composer is pinned under the timeline.
+- **State:** Current ticket is selected in the queue; titles match the inbox subject line.
+- **Messages:** Timeline with customer / agent / internal kinds, not table rows.
+- **Actions:** Segmented Reply vs Internal note; **Send reply** primary.
 
 ### Inbox - design rationale
 
-- **Pattern:** Front / Intercom **list + inspector** (dense queue, selected row previewed in a side panel).
-- **Width for context:** queue claims most of the canvas; inspector holds the selected ticket and one SLA metric - not a second dashboard of cards.
-- **Hierarchy:** one primary action (`New ticket`); views are quiet tertiary filters; open the selected ticket from the inspector, not a second CTA under the list.
-- **CRAP:** repeated list-row structure; filters and header aligned; preview content is proximity-grouped under one panel.
-- **Shell:** global nav stable (Inbox active); views stay in content, not as global destinations.
-
-Self-critique fixed before present: removed keyboard meta from the UI; removed under-list "Open selected"; collapsed dual Preview/Attention panels into one inspector.
-
-### Ticket - design rationale
-
-- **Pattern:** Front / Zendesk **three-pane workspace** (queue | conversation | properties).
-- **Width for context:** queue stays so triage continues; conversation is the primary surface; properties are a narrow rail - not equal thirds.
-- **Hierarchy:** `Resolve` is the page primary; `Send` is the thread primary; `Internal` is tertiary next to `Reply` mode.
-- **CRAP:** same global shell as every other screen; related fields grouped under Properties; Related list sits under them.
-- **Shell:** Inbox remains active; no separate "back" control - the queue is the navigation.
-
-Self-critique fixed: stripped layout/keyboard meta; removed redundant "Back to full inbox"; stopped putting process notes in the composer.
+- **Pattern:** Front / Intercom **list + inspector**.
+- **Scanning:** Rows use stable columns (subject, status·assignee, age·id); selected row is tinted with an edge accent.
+- **Views vs filters:** saved views (All / Mine / Unassigned) separate from filter chips (Waiting, SLA risk), with counts.
+- **Inspector:** no generic "Selected" heading; slightly wider preview; **View ticket** (not external-arrow language).
+- **Tools:** search and sort near the header.
 
 ### New ticket - design rationale
 
-- **Pattern:** Linear / GitHub **create page** (main form + right context rail).
-- **Width for context:** full-width subject/description in the main column; rail holds duplicate detection and routing only.
-- **Hierarchy:** one primary `Create ticket`; Cancel is tertiary; rail has no competing primary.
-- **CRAP:** form fields stack with shared left edge; routing controls grouped; duplicate list sits above them.
-- **Shell:** same global nav; Inbox not active (create is a route off inbox).
-
-Self-critique fixed: removed draft/sticky meta copy; shortened receipt hint to product language.
+- **Pattern:** Linear / GitHub **create form + routing rail**.
+- **Order:** Customer → Subject → Description.
+- **Duplicates:** only after subject text exists; actions Open / Link / Dismiss.
+- **Routing:** "Suggested from similar tickets" explanation.
+- **Actions:** **Create ticket**, **Send a confirmation email** with destination address.
 
 ### Settings - design rationale
 
-- **Pattern:** Linear / Stripe **settings two-column** (section nav + single field column).
-- **Width for context:** sub-nav is a rail; fields fill one readable column - not two equal cards.
-- **Hierarchy:** page title is the section name; `Save` is the only primary; Discard is tertiary for dirty state.
-- **CRAP:** nav items repeat the same row treatment; switches and selects align as one vertical rhythm.
-- **Shell:** Settings active in global nav.
-
-Self-critique fixed: no instructional helpers; no fake "search settings" without a search field; denser field stack without decorative panels.
+- **Pattern:** Linear / Stripe **settings nav + form**.
+- **Dependencies:** Digest hour disabled while digest is off; Slack channel note when Slack alerts off; hints under the affected control.
+- **Sections:** Notifications, Channels, Digest (named, not a lone divider).
+- **Save model:** explicit Save/Discard with an unsaved-changes bar (not only a tiny badge).
+- **Measure:** form column capped for readability.
 
 <Wireframe
   id="harbor-desktop"
   title="Harbor on desktop"
-  initialScreen="d-inbox"
+  initialScreen="d-ticket"
 >
+  <Screen
+    id="d-ticket"
+    name="Desktop · Ticket"
+    viewport="desktop"
+    chrome="browser"
+    url="app.harbor.team/inbox?ticket=4821"
+  >
+    <AppShell>
+      <Sidebar brand="Harbor" mode="Acme Support">
+        <Nav label="Global">
+          <NavItem label="Inbox" active />
+          <NavItem label="Customers" />
+          <NavItem label="Reports" />
+          <NavItem label="Settings" navigateTo="d-settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="Cannot complete checkout"
+          description="#4821 · Maya Chen · Northwind"
+        >
+          <Button label="Resolve" emphasis="primary" />
+        </PageHeader>
+        <Row gap="none">
+          <Panel span="list">
+            <List>
+              <ListItem
+                label="Cannot complete checkout"
+                meta="Priority · Maya"
+                value="14m · #4821"
+                selected
+              />
+              <ListItem
+                label="SSO session expires early"
+                meta="Waiting · Lee"
+                value="2h · #4818"
+              />
+              <ListItem
+                label="Invoice PDF missing line items"
+                meta="Mine · Alex"
+                value="1d · #4802"
+              />
+              <ListItem
+                label="Webhook retries exhausting"
+                meta="Unassigned"
+                value="3d · #4790"
+              />
+              <ListItem
+                label="Export CSV truncates rows"
+                meta="Mine · Alex"
+                value="4d · #4788"
+              />
+            </List>
+          </Panel>
+          <Panel span="main">
+            <Message
+              author="Maya"
+              time="14m"
+              kind="customer"
+              text="Card form freezes on submit in Chrome."
+            />
+            <Message
+              author="Alex"
+              time="8m"
+              kind="agent"
+              text="Thanks - can you share the cart id and browser version?"
+            />
+            <Message
+              author="Maya"
+              time="2m"
+              kind="customer"
+              text="Chrome 128 · cart_9f2a"
+            />
+            <Message
+              author="Alex"
+              time="1m"
+              kind="internal"
+              text="Linked prior freeze #4410. Do not promise an ETA."
+            />
+            <Divider />
+            <Row gap="sm">
+              <Button label="Reply" emphasis="primary" />
+              <Button label="Internal note" emphasis="tertiary" />
+            </Row>
+            <TextArea label="Message" placeholder="Write a reply…" />
+            <Button label="Send reply" emphasis="primary" />
+          </Panel>
+          <Stack gap="md" span="rail">
+            <Stack gap="sm">
+              <Heading text="Properties" level="3" />
+              <Select label="Status" value="Open" />
+              <Select label="Assignee" value="Alex Rivera" />
+              <Select label="Team" value="Payments" />
+              <TextField label="Customer" value="Northwind Labs" />
+              <Text text="Changes save automatically" role="helper" />
+            </Stack>
+            <Stack gap="sm">
+              <Heading text="Related" level="3" />
+              <List>
+                <ListItem
+                  label="Prior checkout freeze"
+                  meta="Resolved"
+                  value="#4410"
+                />
+                <ListItem
+                  label="Stripe outage note"
+                  meta="Internal"
+                  value="Doc"
+                />
+              </List>
+            </Stack>
+          </Stack>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
   <Screen
     id="d-inbox"
     name="Desktop · Inbox"
@@ -78,169 +187,84 @@ Self-critique fixed: no instructional helpers; no fake "search settings" without
             navigateTo="d-compose"
           />
         </PageHeader>
-        <Row gap="sm">
-          <Button label="All" emphasis="primary" />
-          <Button label="Mine" emphasis="tertiary" />
-          <Button label="Unassigned" emphasis="tertiary" />
-          <Button label="SLA risk" emphasis="tertiary" />
-          <Button label="Waiting" emphasis="tertiary" />
+        <Row gap="sm" justify="between">
+          <TextField
+            label="Search"
+            kind="search"
+            placeholder="Search tickets"
+          />
+          <Select label="Sort" value="Newest activity" />
         </Row>
-        <Row gap="sm">
-          <Panel title="Open" span="main">
+        <Row gap="sm" justify="between">
+          <Row gap="sm">
+            <Button label="All 12" emphasis="primary" />
+            <Button label="Mine 4" emphasis="tertiary" />
+            <Button label="Unassigned 3" emphasis="tertiary" />
+          </Row>
+          <Row gap="sm">
+            <Text text="Filters" role="helper" />
+            <Button label="Waiting 3" emphasis="tertiary" />
+            <Button label="SLA risk 2" emphasis="tertiary" />
+          </Row>
+        </Row>
+        <Row gap="none">
+          <Panel span="main">
             <List>
               <ListItem
                 label="Cannot complete checkout"
-                meta="Priority · Maya · 14m"
-                value="#4821"
+                meta="Priority · Maya"
+                value="14m · #4821"
+                selected
               />
               <ListItem
                 label="SSO session expires early"
-                meta="Waiting · Lee · 2h"
-                value="#4818"
+                meta="Waiting · Lee"
+                value="2h · #4818"
               />
               <ListItem
                 label="Invoice PDF missing line items"
-                meta="Mine · Alex · 1d"
-                value="#4802"
+                meta="Open · Alex"
+                value="1d · #4802"
               />
               <ListItem
                 label="Webhook retries exhausting"
-                meta="Unassigned · 3d"
-                value="#4790"
+                meta="Unassigned"
+                value="3d · #4790"
               />
               <ListItem
                 label="Export CSV truncates rows"
-                meta="Mine · Alex · 4d"
-                value="#4788"
+                meta="Open · Alex"
+                value="4d · #4788"
               />
               <ListItem
                 label="Refund double-charged"
-                meta="Priority · Sam · 5d"
-                value="#4771"
+                meta="Priority · Sam"
+                value="5d · #4771"
               />
               <ListItem
                 label="API key rotation failed"
-                meta="Waiting · 6d"
-                value="#4760"
+                meta="Waiting"
+                value="6d · #4760"
               />
               <ListItem
                 label="Seat limit block"
-                meta="Unassigned · 1w"
-                value="#4755"
+                meta="Unassigned"
+                value="1w · #4755"
               />
             </List>
           </Panel>
-          <Panel title="Selected" span="rail">
-            <Badge label="#4821" />
-            <Heading text="Cannot complete checkout" level="3" />
+          <Panel span="rail">
+            <Badge label="#4821 · Priority" />
+            <Heading text="Cannot complete checkout" level="2" />
             <Text text="Maya Chen · Northwind" role="helper" />
             <Text text="Card form freezes on submit in Chrome." />
             <Metric label="First response" value="11m" note="Target 15m" />
             <Button
-              label="Open conversation"
+              label="View ticket"
               emphasis="primary"
               navigateTo="d-ticket"
             />
           </Panel>
-        </Row>
-      </AppContent>
-    </AppShell>
-  </Screen>
-
-  <Screen
-    id="d-ticket"
-    name="Desktop · Ticket"
-    viewport="desktop"
-    chrome="browser"
-    url="app.harbor.team/inbox?ticket=4821"
-  >
-    <AppShell>
-      <Sidebar brand="Harbor" mode="Acme Support">
-        <Nav label="Global">
-          <NavItem label="Inbox" active />
-          <NavItem label="Customers" />
-          <NavItem label="Reports" />
-          <NavItem label="Settings" navigateTo="d-settings" />
-        </Nav>
-      </Sidebar>
-      <AppContent>
-        <PageHeader
-          title="Cannot complete checkout"
-          description="#4821 · Maya Chen · Northwind"
-        >
-          <Button label="Resolve" emphasis="primary" />
-        </PageHeader>
-        <Row gap="sm">
-          <Panel title="Queue" span="list">
-            <List>
-              <ListItem
-                label="Checkout freeze"
-                meta="Now · 14m"
-                value="#4821"
-              />
-              <ListItem label="SSO timeout" meta="Waiting · 2h" value="#4818" />
-              <ListItem label="Invoice PDF" meta="Mine · 1d" value="#4802" />
-              <ListItem
-                label="Webhook retries"
-                meta="Unassigned · 3d"
-                value="#4790"
-              />
-              <ListItem label="CSV export" meta="Mine · 4d" value="#4788" />
-            </List>
-          </Panel>
-          <Panel title="Conversation" span="main">
-            <List>
-              <ListItem
-                label="Maya · Customer"
-                meta="14m"
-                value="Card form freezes on submit"
-              />
-              <ListItem
-                label="Alex · Reply"
-                meta="8m"
-                value="Need browser and cart id"
-              />
-              <ListItem
-                label="Maya · Customer"
-                meta="2m"
-                value="Chrome 128 · cart_9f2a"
-              />
-              <ListItem
-                label="Alex · Note"
-                meta="1m"
-                value="Linked prior freeze #4410"
-              />
-            </List>
-            <Divider />
-            <Row gap="sm">
-              <Button label="Reply" emphasis="primary" />
-              <Button label="Internal" emphasis="tertiary" />
-            </Row>
-            <TextArea label="Message" placeholder="Write a reply…" />
-            <Button label="Send" emphasis="primary" />
-          </Panel>
-          <Stack gap="sm" span="rail">
-            <Panel title="Properties">
-              <Select label="Status" value="Open" />
-              <Select label="Assignee" value="Alex Rivera" />
-              <Select label="Team" value="Payments" />
-              <TextField label="Customer" value="Northwind Labs" />
-            </Panel>
-            <Panel title="Related">
-              <List>
-                <ListItem
-                  label="Prior checkout freeze"
-                  meta="Resolved"
-                  value="#4410"
-                />
-                <ListItem
-                  label="Stripe outage note"
-                  meta="Internal"
-                  value="Doc"
-                />
-              </List>
-            </Panel>
-          </Stack>
         </Row>
       </AppContent>
     </AppShell>
@@ -271,38 +295,56 @@ Self-critique fixed: no instructional helpers; no fake "search settings" without
             navigateTo="d-ticket"
           />
         </PageHeader>
-        <Row gap="sm">
-          <Panel title="Details" span="main">
+        <Row gap="none">
+          <Panel span="main">
+            <Select label="Customer" value="Northwind Labs" />
             <TextField
               label="Subject"
+              value="Cannot complete checkout"
               placeholder="Short summary the team will scan"
             />
             <TextArea
               label="Description"
               placeholder="What happened, who is affected, error text…"
             />
-            <Select label="Customer" value="Northwind Labs" />
             <Select label="Priority" value="Normal" />
             <Checkbox
-              label="Email customer a receipt"
+              label="Send a confirmation email"
               checked
-              hint="They can reply in this thread."
+              hint="To maya@northwind.example"
             />
           </Panel>
-          <Panel title="Routing" span="rail">
-            <Text text="Possible duplicate" role="helper" />
-            <List>
-              <ListItem
-                label="Prior checkout freeze"
-                meta="Close match"
-                value="#4410"
+          <Stack gap="md" span="rail">
+            <Stack gap="sm">
+              <Heading text="Possible duplicates" level="3" />
+              <Text
+                text="Shown after subject text is entered"
+                role="helper"
               />
-            </List>
-            <Divider />
-            <Select label="Team" value="Payments" />
-            <Select label="Assignee" value="Unassigned" />
-            <Switch label="Watch this ticket" on />
-          </Panel>
+              <List>
+                <ListItem
+                  label="Prior checkout freeze"
+                  meta="Close match"
+                  value="#4410"
+                />
+              </List>
+              <Row gap="sm">
+                <Button label="Open" emphasis="tertiary" />
+                <Button label="Link" emphasis="tertiary" />
+                <Button label="Dismiss" emphasis="tertiary" />
+              </Row>
+            </Stack>
+            <Stack gap="sm">
+              <Heading text="Routing" level="3" />
+              <Text
+                text="Suggested from similar tickets"
+                role="helper"
+              />
+              <Select label="Team" value="Payments" />
+              <Select label="Assignee" value="Unassigned" />
+              <Switch label="Watch this ticket" on />
+            </Stack>
+          </Stack>
         </Row>
       </AppContent>
     </AppShell>
@@ -325,11 +367,13 @@ Self-critique fixed: no instructional helpers; no fake "search settings" without
         </Nav>
       </Sidebar>
       <AppContent>
-        <PageHeader title="Notifications" badge="Unsaved">
+        <PageHeader title="Settings" />
+        <Row gap="sm">
+          <Text text="You have unsaved changes" role="helper" />
           <Button label="Discard" emphasis="tertiary" />
           <Button label="Save" emphasis="primary" />
-        </PageHeader>
-        <Row gap="sm">
+        </Row>
+        <Row gap="none">
           <Panel span="rail">
             <Nav label="Settings">
               <NavItem label="Notifications" active />
@@ -338,16 +382,35 @@ Self-critique fixed: no instructional helpers; no fake "search settings" without
               <NavItem label="Members" />
             </Nav>
           </Panel>
-          <Stack gap="sm" span="main">
-            <Switch label="Email on assignment" on />
-            <Switch label="Slack on SLA risk" on />
+          <Stack gap="md" span="main">
+            <Heading text="Notifications" level="2" />
             <Switch
-              label="Digest every morning"
-              hint="Needs email on assignment"
+              label="Email on assignment"
+              on
+              hint="Notify the assignee when a ticket is given to them."
             />
-            <Divider label="Channels" />
-            <Select label="Default Slack channel" value="#support-alerts" />
-            <TextField label="Digest hour" value="08:00" />
+            <Switch
+              label="Slack on SLA risk"
+              on
+              hint="Posts to the channel below when a ticket nears breach."
+            />
+            <Heading text="Channels" level="3" />
+            <Select
+              label="Default Slack channel"
+              value="#support-alerts"
+              hint="Used while Slack on SLA risk is on."
+            />
+            <Heading text="Digest" level="3" />
+            <Switch label="Digest every morning" />
+            <Text
+              text="Digest hour is unavailable while the morning digest is off."
+              role="helper"
+            />
+            <TextField
+              label="Digest hour"
+              value="—"
+              hint="Enable morning digest to set a time."
+            />
           </Stack>
         </Row>
       </AppContent>

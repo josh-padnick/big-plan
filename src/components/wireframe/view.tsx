@@ -257,7 +257,10 @@ const WireframeElement = ({
       );
     case "ListItem":
       return (
-        <li className="wireframe-list-item flex flex-wrap items-baseline gap-2">
+        <li
+          className="wireframe-list-item flex flex-nowrap items-baseline gap-2"
+          {...(node.selected ? { "data-wireframe-selected": "" } : {})}
+        >
           <span className="wireframe-list-label grow">{node.label}</span>
           {node.meta === undefined ? null : (
             <span className="wireframe-list-meta">{node.meta}</span>
@@ -266,6 +269,26 @@ const WireframeElement = ({
             <span className="wireframe-list-value">{node.value}</span>
           )}
         </li>
+      );
+    case "Message":
+      return (
+        <div
+          className="wireframe-message flex flex-col gap-1"
+          data-wireframe-message={node.kind}
+        >
+          <div className="wireframe-message-meta flex flex-wrap items-baseline justify-between gap-2">
+            <span>
+              {node.author}
+              {node.kind === "customer"
+                ? " · Customer"
+                : node.kind === "agent"
+                  ? " · Reply"
+                  : " · Internal note"}
+            </span>
+            <span>{node.time}</span>
+          </div>
+          <p className="wireframe-text">{node.text}</p>
+        </div>
       );
     // Every control is the real element, wrapped in its own label, so the
     // association needs no generated id and a reviewer meets the affordance
