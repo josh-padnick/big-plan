@@ -227,9 +227,9 @@ const FitMenu = ({ fit }: { readonly fit: DataTableFit }) => (
   </span>
 );
 
-// Reset undoes sort, column order, column visibility, and fit at once, so it
-// stands beside the two controls that create that state rather than inside
-// one of them.
+// Reset undoes sort, column order, column visibility, fit, and grouping at
+// once, so it stands beside the two controls that create that state rather
+// than inside one of them.
 const ResetButton = () => (
   <button
     type="button"

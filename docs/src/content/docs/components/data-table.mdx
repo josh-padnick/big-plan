@@ -1,6 +1,6 @@
 ---
 title: DataTable
-description: A component for a dataset the reviewer queries in place - sortable columns, optional search, chooseable columns, group-by, and a text-fit choice instead of a horizontal scrollbar.
+description: A component for a dataset the reviewer queries in place - sortable columns, optional search, selectable columns, group-by, and a text-fit choice instead of a horizontal scrollbar.
 ---
 
 `DataTable` renders tabular data a reviewer needs to work with rather than read through: it sorts by any column, narrows to matching rows, hides columns that are not part of the current question, bands rows under a grouping column, and lets the reader choose how cells meet the available width - so a reference grid stays useful instead of becoming a wall the reviewer scrolls past.
@@ -45,7 +45,7 @@ The body is one fenced block with language `table` holding an ordinary GFM pipe 
 </DataTable>
 ```
 
-With no `Column` children every column is text, sortable, left-aligned, wrapping, and shown in authored order.
+With no `Column` children every column is text and sortable, takes its alignment from the delimiter row, inherits the table's fit, and is shown in authored order.
 
 ### Attributes
 
@@ -94,7 +94,7 @@ Everything below is the reader's, not the author's, and none of it changes the p
 
 - **Sort** by clicking a header; three states, ending back at authored order.
 - **Search** to narrow rows, with a live count and a named empty state.
-- **Choose columns** from the columns menu. The first column cannot be hidden, because hiding the row identity makes every remaining cell unreadable.
+- **Choose columns** from the columns menu. The first column cannot be hidden unless it supplies the grouping bands, because otherwise hiding the row identity makes every remaining cell unreadable.
 - **Group by** any column, or not at all.
 - **Text fit** between wrap, truncate, and scroll.
 - **Reorder columns** by dragging a header, or with <kbd>Alt</kbd> and an arrow key from a focused header.

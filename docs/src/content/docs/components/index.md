@@ -18,7 +18,7 @@ A component's attributes are strings or bare booleans, structured data arrives a
 | [Callout](/components/callout/)                           | Surface a note, tip, warning, or danger so reviewers cannot miss it.                                                 |
 | [CodeDiff](/components/code-diff/)                        | Review one file's unified diff with gutters and line-anchored annotations.                                           |
 | [CodeSnippet](/components/code-snippet/)                  | Inspect existing code with optional file identity, file-absolute line numbers, and annotations.                      |
-| [DataTable](/components/data-table/)                      | Query a dataset in place: sortable columns, optional search, chooseable columns, grouping, and text fit.             |
+| [DataTable](/components/data-table/)                      | Query a dataset in place: sortable columns, optional search, selectable columns, grouping, and text fit.             |
 | [DatabaseTableSchema](/components/database-table-schema/) | Review one table's DBML-subset schema and titled verbatim DDL.                                                       |
 | [Decision](/components/decision/)                         | Review one tradeoff option by option, each carrying its own verdict-lined considerations.                            |
 | [FileTree](/components/file-tree/)                        | Show a plain file hierarchy with optional per-entry notes.                                                           |
