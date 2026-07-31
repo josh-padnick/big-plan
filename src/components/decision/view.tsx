@@ -21,7 +21,7 @@ import {
   ComparisonMatrix,
   MATRIX_TONE_ICONS,
   matrixToneClass,
-  type MatrixTone,
+  type MatrixToneParity,
 } from "../_shared/comparison-matrix/comparison-matrix.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
@@ -30,7 +30,7 @@ import { SectionLabel } from "../_shared/labeled-section/labeled-section.js";
 
 // Decision's tones are the shared matrix vocabulary; the alias fails the
 // build if the two ever diverge.
-const _TONE_PARITY: DecisionTone = "good" satisfies MatrixTone;
+const _TONE_PARITY: MatrixToneParity<DecisionTone> = true;
 
 const TONE_WORDS = {
   good: "Favourable",
@@ -250,7 +250,7 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecision }) => {
   const inputId = `${model.id}-proposal-choice`;
   const textId = `${model.id}-proposal-text`;
   return (
-    <div className="decision-propose mt-4" data-option-proposal="">
+    <div className="decision-propose" data-option-proposal="">
       <label className="decision-propose-link" htmlFor={inputId}>
         <input
           className="sr-only"
@@ -263,11 +263,11 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecision }) => {
         />
         <span>{"Propose another approach"}</span>
       </label>
-      <div
-        className="decision-proposal mt-2.5"
-        data-decision-proposal=""
-        hidden
-      >
+      {/* Visibility is CSS keyed on the radio, not the hidden attribute, so
+          activating the link reveals the field with the viewer script
+          disabled - the component promises everything but confirm works
+          without scripts. */}
+      <div className="decision-proposal mt-2.5" data-decision-proposal="">
         <label className="sr-only" htmlFor={textId}>
           {"Proposed approach"}
         </label>
@@ -381,7 +381,10 @@ export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
       )}
       <fieldset className="decision-fieldset m-0 min-w-0 border-0 p-0">
         <legend className="sr-only">{model.question}</legend>
-        <div className="decision-zone-matrix flex flex-wrap items-baseline justify-between gap-x-3 border-t border-edge px-5 pt-4 pb-2.5">
+        <div
+          className="decision-zone-matrix flex flex-wrap items-baseline justify-between gap-x-3 border-t border-edge px-5 pt-4 pb-2.5"
+          data-decision-compare=""
+        >
           <SectionLabel
             label={answerable ? "Choose one" : "Options"}
             dataProperties={{ "data-decision-choose-label": "" }}
@@ -393,10 +396,16 @@ export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
             {"Scroll sideways to compare every option."}
           </p>
         </div>
-        <div className="decision-zone-matrix border-b border-edge pb-2">
+        <div
+          className="decision-zone-matrix border-b border-edge pb-2"
+          data-decision-compare=""
+        >
           <Matrix model={model} answerable={answerable} />
         </div>
-        <div className="decision-zone-rationale px-5 pt-4 pb-5">
+        <div
+          className="decision-zone-rationale px-5 pt-4 pb-4"
+          data-decision-explain=""
+        >
           <SectionLabel label="Why this option" />
           <div
             className="decision-rationale mt-2"
@@ -412,8 +421,16 @@ export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
               />
             ))}
           </div>
-          {answerable ? <ProposeLink model={model} /> : null}
         </div>
+        {/* The escape hatch sits outside the rationale zone and shares its
+            surface: a confirmed proposal retires the comparison and its
+            reasoning, but the reader's own words must survive as the
+            recorded answer. */}
+        {answerable ? (
+          <div className="decision-zone-rationale px-5 pb-5">
+            <ProposeLink model={model} />
+          </div>
+        ) : null}
       </fieldset>
       {answerable ? <AnswerControls /> : null}
     </figure>
