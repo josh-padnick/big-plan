@@ -88,7 +88,9 @@ const KICKER_CLASSES = [
 // kicker and h2 stand above the numbered sub-slide frames. Top spacing is
 // owned by the collapse host CSS so collapsed headers do not keep a dead
 // margin that leaves the toggle floating above the chrome.
-const SUBPART_CLASSES = ["plan-subpart", "mb-4"] as const;
+// No bottom margin: body (context builder) follows tightly under the h2
+// (Proximity). Spacing to the next peer slide lives on the host, not here.
+const SUBPART_CLASSES = ["plan-subpart"] as const;
 
 // A sub-slide's kicker is its heading: the h3 keeps its anchor and outline
 // role while rendering as the numbered small-caps line. No bottom margin -
