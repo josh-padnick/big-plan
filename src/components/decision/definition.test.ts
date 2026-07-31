@@ -255,6 +255,42 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     ]);
   });
 
+  it("should reject duplicate option titles", () => {
+    const { diagnostics } = render([
+      option({
+        title: "Embedded",
+        considerations: [consideration("Cost", "Low")],
+      }),
+      option({
+        title: "Embedded",
+        considerations: [consideration("Cost", "High")],
+      }),
+    ]);
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: 'Duplicate Option title "Embedded" in Decision',
+      },
+    ]);
+  });
+
+  it("should render the proposal field without needing a script to reveal it", () => {
+    const { element } = render(twoOptions());
+    const rendered = JSON.stringify(element);
+    const field = rendered.slice(rendered.indexOf('data-decision-proposal"'));
+    // The hidden attribute would make the field script-only; CSS keyed on the
+    // radio is what keeps it reachable with scripts disabled.
+    expect(field.slice(0, 200)).not.toContain('"hidden":true');
+  });
+
+  it("should mark the compare and explain zones so an answer can retire them", () => {
+    const { element } = render(twoOptions());
+    const rendered = JSON.stringify(element);
+    expect(rendered).toContain("data-decision-compare");
+    expect(rendered).toContain("data-decision-explain");
+  });
+
   it("should reject a chosen option outside a decided decision", () => {
     const { diagnostics } = render(twoOptions({ chosen: true }));
     expect(diagnostics).toEqual([

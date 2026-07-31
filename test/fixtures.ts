@@ -45,6 +45,7 @@ type WorkerFixtures = {
   readonly complexDecisionViewerUrl: string;
   readonly deckViewerUrl: string;
   readonly decisionViewerUrl: string;
+  readonly nestedDecisionMatrixViewerUrl: string;
   readonly flowDiagramViewerUrl: string;
   readonly nestedDecisionViewerUrl: string;
   readonly simpleDecisionSetViewerUrl: string;
@@ -73,6 +74,35 @@ retry();
 </Annotation>
 
 </CodeDiff>
+`;
+
+// Two Decisions, one inside the other's context, so the specs can prove an
+// outer selector never binds the inner one's controls.
+const NESTED_DECISION_MATRIX_MDX = `# Nested decision matrices
+
+<Decision question="Which outer channel?">
+
+<Decision question="Which inner channel?">
+
+<Option title="Inner A" recommended summary="First inner option.">
+<Consideration title="Cost" verdict="Low" tone="good" />
+</Option>
+
+<Option title="Inner B" summary="Second inner option.">
+<Consideration title="Cost" verdict="High" tone="bad" />
+</Option>
+
+</Decision>
+
+<Option title="Outer A" recommended summary="First outer option.">
+<Consideration title="Cost" verdict="Low" tone="good" />
+</Option>
+
+<Option title="Outer B" summary="Second outer option.">
+<Consideration title="Cost" verdict="High" tone="bad" />
+</Option>
+
+</Decision>
 `;
 
 const NESTED_DECISION_MDX = `# Nested decisions
@@ -173,6 +203,20 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         `${source}\n## Table Schema Panel 1\n\n## Table Schema Panel 2 Tab\n`,
         "utf8",
       );
+      await renderThroughCli({ inputPath, outputPath, outputDir });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  nestedDecisionMatrixViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-nested-decision-matrix-"),
+      );
+      const inputPath = join(outputDir, "nested-decision-matrix.mdx");
+      const outputPath = join(outputDir, "nested-decision-matrix.html");
+      await writeFile(inputPath, NESTED_DECISION_MATRIX_MDX, "utf8");
       await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });

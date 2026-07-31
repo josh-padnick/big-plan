@@ -142,6 +142,15 @@
     visibility: visible;
   }
 
+  /* The proposal field belongs to its radio, so CSS alone reveals it. This is
+     what keeps the no-script promise: without the viewer script the link still
+     checks its radio and the field still appears. */
+  article
+    .decision-propose:not(:has([data-decision-proposal-choice]:checked))
+    .decision-proposal {
+    display: none;
+  }
+
   /* The escape hatch reads as a quiet link, never as a fourth column. */
   article .decision-propose-link {
     display: inline-flex;

@@ -122,32 +122,36 @@ export const VIEWER_SCRIPT = `<script>
   for (const decision of document.querySelectorAll(
     "[data-decision-selector]",
   )) {
-    const confirm = decision.querySelector("[data-decision-confirm]");
-    const change = decision.querySelector("[data-decision-change]");
-    const footer = decision.querySelector("[data-decision-footer]");
-    const answer = decision.querySelector("[data-decision-answer]");
-    const answerTitle = decision.querySelector("[data-decision-answer-title]");
-    const answerLead = decision.querySelector("[data-decision-answer-lead]");
-    const summary = decision.querySelector(
-      "[data-decision-selection-summary]",
-    );
-    const rationale = decision.querySelector("[data-decision-rationale]");
-    const proposal = decision.querySelector("[data-decision-proposal]");
-    const proposalText = decision.querySelector("[data-decision-proposal-text]");
-    const question = decision.querySelector("[data-decision-question]");
+    // A Decision may sit inside another Decision's context, so every lookup
+    // is scoped to the nearest owning selector. Without this an outer
+    // Decision binds the inner one's controls and the two corrupt each other.
+    const mine = (node) =>
+      node !== null && node.closest("[data-decision-selector]") === decision;
+    const own = (selector) => {
+      const found = decision.querySelector(selector);
+      return mine(found) ? found : null;
+    };
+    const ownAll = (selector) =>
+      Array.from(decision.querySelectorAll(selector)).filter(mine);
+
+    const confirm = own("[data-decision-confirm]");
+    const change = own("[data-decision-change]");
+    const footer = own("[data-decision-footer]");
+    const answer = own("[data-decision-answer]");
+    const answerTitle = own("[data-decision-answer-title]");
+    const answerLead = own("[data-decision-answer-lead]");
+    const summary = own("[data-decision-selection-summary]");
+    const rationale = own("[data-decision-rationale]");
+    const question = own("[data-decision-question]");
+    const proposalText = own("[data-decision-proposal-text]");
+    const propose = own("[data-option-proposal]");
     if (confirm === null || change === null || answer === null) continue;
-    const choices = Array.from(
-      decision.querySelectorAll("[data-decision-choice]"),
-    );
-    const panels = Array.from(
-      decision.querySelectorAll("[data-rationale-panel]"),
-    );
-    const cells = Array.from(
-      decision.querySelectorAll("[data-decision-column]"),
-    );
-    const columnHeaders = Array.from(
-      decision.querySelectorAll(".decision-column"),
-    );
+    const choices = ownAll("[data-decision-choice]");
+    const panels = ownAll("[data-rationale-panel]");
+    const cells = ownAll("[data-decision-column]");
+    const columnHeaders = ownAll(".decision-column");
+    const compareZones = ownAll("[data-decision-compare]");
+    const explainZone = own("[data-decision-explain]");
     const picked = () => choices.find((choice) => choice.checked) || null;
     const proposes = (choice) =>
       choice instanceof Element &&
@@ -183,7 +187,6 @@ export const VIEWER_SCRIPT = `<script>
       const index = choice === null ? null : choice.getAttribute("data-option-index");
       showPanel(index === null ? defaultIndex : index);
       paintColumn(index, false);
-      if (proposal !== null) proposal.hidden = !proposing;
       confirm.textContent = proposing ? "Submit proposal" : "Confirm choice";
       confirm.disabled =
         choice === null || (proposing && proposalValue() === "");
@@ -197,34 +200,43 @@ export const VIEWER_SCRIPT = `<script>
       }
     };
     decision.addEventListener("change", (event) => {
+      if (!mine(event.target)) return;
       sync();
       if (proposes(event.target) && proposalText !== null) proposalText.focus();
     });
     if (proposalText !== null) proposalText.addEventListener("input", sync);
 
-    const propose = decision.querySelector("[data-option-proposal]");
     const compress = (answered) => {
       if (footer !== null) footer.hidden = answered;
-      // Once an answer is recorded, offering to propose something else only
-      // duplicates the change action beside it.
-      if (propose !== null) propose.hidden = answered;
       answer.hidden = !answered;
       const choice = picked();
-      const index = choice === null ? null : choice.getAttribute("data-option-index");
-      // Answering drops the columns the reader turned down, so the record
-      // reads as one option against the criteria rather than a live matrix.
+      const proposing = proposes(choice);
+      const index =
+        choice === null ? null : choice.getAttribute("data-option-index");
+      // A proposal is not one of the columns, so compressing to it means
+      // retiring the comparison entirely and leaving the reader's own words
+      // standing. Hiding columns by index would strand the criterion labels
+      // beside an unrelated rationale.
+      const retireComparison = answered && proposing;
+      for (const zone of compareZones) zone.hidden = retireComparison;
+      if (explainZone !== null) explainZone.hidden = retireComparison;
+      // The propose block carries the recorded proposal, so it survives a
+      // proposal answer and only retires when a column won.
+      if (propose !== null) propose.hidden = answered && !proposing;
+      // Answering with a column drops the ones the reader turned down, so the
+      // record reads as one option against the criteria, not a live matrix.
       for (const cell of cells) {
         const kept = cell.getAttribute("data-decision-column") === index;
-        cell.hidden = answered && !kept;
+        cell.hidden = answered && !proposing && !kept;
       }
       for (const header of columnHeaders) {
-        if (answered && header.getAttribute("data-decision-column") === index) {
+        if (answered && !proposing && header.getAttribute("data-decision-column") === index) {
           header.setAttribute("data-option-chosen", "");
         } else if (answered) {
           header.removeAttribute("data-option-chosen");
         }
       }
-      paintColumn(index, answered);
+      paintColumn(proposing ? null : index, answered);
     };
 
     confirm.addEventListener("click", () => {

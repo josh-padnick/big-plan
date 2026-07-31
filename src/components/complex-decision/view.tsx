@@ -25,7 +25,7 @@ import {
   ComparisonMatrix,
   MATRIX_TONE_ICONS,
   matrixToneClass,
-  type MatrixTone,
+  type MatrixToneParity,
 } from "../_shared/comparison-matrix/comparison-matrix.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
@@ -37,7 +37,7 @@ import {
 
 // ComplexDecision's tones are the shared matrix vocabulary; the alias fails
 // the build if the two ever diverge.
-const _TONE_PARITY: ComplexDecisionTone = "good" satisfies MatrixTone;
+const _TONE_PARITY: MatrixToneParity<ComplexDecisionTone> = true;
 
 // Full screen stays reserved for the live review application; the in-column
 // matrix scrolls horizontally, so the inert document loses nothing.

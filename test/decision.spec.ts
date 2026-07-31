@@ -131,3 +131,91 @@ test("should render a decided decision as a record, not a control", async ({
     decided.locator("[data-decision-choice]").first(),
   ).toBeDisabled();
 });
+
+test("should keep a nested decision's controls out of its parent", async ({
+  page,
+  nestedDecisionMatrixViewerUrl,
+}) => {
+  await page.goto(nestedDecisionMatrixViewerUrl);
+  const decisions = page.locator("[data-decision-selector]");
+  await expect(decisions).toHaveCount(2);
+  // The outer decision encloses the inner one, so document order puts the
+  // outer first and every one of its queries would otherwise reach inside.
+  const outer = decisions.first();
+  const inner = decisions.nth(1);
+
+  await test.step("answering the inner decision leaves the outer untouched", async () => {
+    await inner
+      .locator("th.decision-column")
+      .first()
+      .locator("[data-decision-choice]")
+      .check();
+    await inner.locator("[data-decision-confirm]").click();
+    await expect(inner.locator("[data-decision-answer]")).toBeVisible();
+    // The outer encloses the inner, so a descendant query would find the
+    // inner's controls first; the outer's own footer is a direct child.
+    const outerFooter = outer.locator("> [data-decision-footer]");
+    await expect(outerFooter).toBeVisible();
+    await expect(outerFooter.locator("[data-decision-confirm]")).toBeDisabled();
+    await expect(
+      outerFooter.locator("[data-decision-selection-summary]"),
+    ).toContainText("Nothing selected yet");
+  });
+
+  await test.step("each decision records exactly its own answer", async () => {
+    const queued = await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            bigPlanDecisionAnswers?: ReadonlyArray<{ option: string }>;
+          }
+        ).bigPlanDecisionAnswers ?? [],
+    );
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.option).toBe("Inner A");
+  });
+});
+
+test("should compress to the reader's own words when a proposal wins", async ({
+  page,
+  decisionViewerUrl,
+}) => {
+  await page.goto(decisionViewerUrl);
+  const decision = page.locator("[data-decision-selector]").first();
+
+  await test.step("the proposal field appears without the viewer script", async () => {
+    await page.setContent(await page.content(), {
+      waitUntil: "domcontentloaded",
+    });
+    const scriptless = page.locator("[data-decision-selector]").first();
+    await scriptless.locator(".decision-propose-link").click();
+    await expect(scriptless.locator("[data-decision-proposal]")).toBeVisible();
+  });
+
+  await page.goto(decisionViewerUrl);
+  await test.step("confirming a proposal retires the comparison, not the columns", async () => {
+    await decision.locator(".decision-propose-link").click();
+    await decision
+      .locator("[data-decision-proposal-text]")
+      .fill("Ship it as an npx-installable package instead.");
+    await decision.locator("[data-decision-confirm]").click();
+    await expect(decision.locator("[data-decision-answer]")).toBeVisible();
+    // The matrix and its rationale are about options the reader rejected.
+    await expect(
+      decision.locator("[data-decision-compare]").first(),
+    ).toBeHidden();
+    await expect(decision.locator("[data-decision-explain]")).toBeHidden();
+    // The reader's own words stay on screen as the recorded answer.
+    await expect(
+      decision.locator("[data-decision-proposal-text]"),
+    ).toBeVisible();
+  });
+
+  await test.step("changing restores the comparison", async () => {
+    await decision.locator("[data-decision-change]").click();
+    await expect(
+      decision.locator("[data-decision-compare]").first(),
+    ).toBeVisible();
+    await expect(decision.locator("[data-decision-explain]")).toBeVisible();
+  });
+});

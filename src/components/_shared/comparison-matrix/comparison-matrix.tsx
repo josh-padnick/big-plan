@@ -23,6 +23,18 @@ import type { LucideIcon } from "../../../icons/lucide-icon.js";
 /** The verdict tones every comparison matrix speaks. */
 export type MatrixTone = "good" | "bad" | "mixed" | "neutral";
 
+/**
+ * Resolves to `true` only when two unions are mutually assignable. A component
+ * asserts `MatrixToneParity<ItsOwnTone> = true`, which stops compiling the
+ * moment either union gains or loses a member - a one-sided `satisfies` check
+ * would still accept a tone added on only one side.
+ */
+export type MatrixToneParity<Tone> = [Tone] extends [MatrixTone]
+  ? [MatrixTone] extends [Tone]
+    ? true
+    : never
+  : never;
+
 /** One glyph per tone, so a tone never reaches the reader as colour alone. */
 export const MATRIX_TONE_ICONS = {
   good: CHECK_ICON,
