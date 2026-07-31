@@ -101,9 +101,7 @@ const DiffHeader = ({
   readonly title: string | undefined;
   readonly entries: ReadonlyArray<TreeEntry>;
 }) => (
-  <figcaption
-    className="file-tree-header file-tree-diff-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.65rem] py-[0.4rem] font-sans text-sm font-semibold text-ink"
-  >
+  <figcaption className="file-tree-header file-tree-diff-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.65rem] py-[0.4rem] font-sans text-sm font-semibold text-ink">
     {title === undefined ? null : (
       <span className="file-tree-diff-title truncate">{title}</span>
     )}

@@ -6,8 +6,8 @@
    corner, so it reads as one surface rather than a sheet cut off at an edge.
    Its scroll region owns the remaining height and pads generously on every
    side, because a promoted figure is being read closely rather than skimmed.
-   A viewport-covering shadow spread dims whatever is behind it, so the panel
-   is the only thing competing for attention.
+   A viewport-covering body pseudo-element dims whatever is behind it, so the
+   panel is the only thing competing for attention.
 
    WHY THIS IS A STYLESHEET AND NOT UTILITIES
    The repo authors markup with Tailwind utilities and reserves stylesheets
@@ -71,9 +71,8 @@
    sits above `utilities` ends the argument once: a figure keeps its ordinary
    resting utilities, and promotion always wins. */
 @layer figure-maximized {
-  /* Two attributes, so the promoted state outranks the per-family rules that
-       set a resting margin or position; those are equally specific and are
-       imported after this file. */
+  /* Keep the complete promoted-frame geometry together in the layer that
+     outranks every resting utility and per-family rule. */
   article [data-figure-maximizable][data-figure-maximized] {
     position: fixed;
     inset: 1.5rem;
