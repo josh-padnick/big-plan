@@ -1057,8 +1057,13 @@ export const DIAGRAM_SCRIPT = `
     // the same reason: it must not cover the element it acts on, and it must
     // not bury a neighbour either - which is exactly what it did when it was
     // simply pinned above the selection.
+    // The bar dodges the cards and the verb chips, not the small-caps stage
+    // headers. It is transient chrome the reviewer summoned deliberately, and
+    // treating an 11-pixel heading as something worth being pushed below the
+    // selection for is how it ended up below when the captain asked for
+    // above.
     const obstacles = (c ? elementsIn(diagram) : [])
-      .filter((n) => n !== selected && kindOf(n) !== "figure")
+      .filter((n) => n !== selected && (kindOf(n) === "node" || kindOf(n) === "edge"))
       .map(obstacleRectOf)
       .filter((r) => r !== null);
     const room = {
@@ -1267,8 +1272,8 @@ export const DIAGRAM_SCRIPT = `
     const scope = activeDiagram();
     const mine = drafts.filter((d) => d.diagram === scope);
     if (scope) {
-      const label = scope.getAttribute("aria-label") || "this diagram";
-      trayScope.textContent = label.split(",")[0];
+      trayScope.textContent =
+        scope.getAttribute("data-flow-scope") || "This diagram";
     }
     for (const draft of mine) {
       const item = el("li", "flow-tray-item");

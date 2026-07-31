@@ -464,6 +464,11 @@ export const FlowDiagram = ({
     <figure
       className="flow-diagram mb-5 min-w-0"
       data-flow-diagram
+      // The collector names the diagram it belongs to from here, not from the
+      // accessible name: the shared maximize leg rewrites that label while the
+      // figure is promoted, and a collector that renames itself to "Maximized
+      // diagram" mid-session is naming the wrong thing.
+      data-flow-scope={`Flow: ${firstStageTitle} to ${lastStageTitle}`}
       {...{ [MAXIMIZABLE_ATTRIBUTE]: "diagram" }}
       // The one capability the diagram adds to the shared maximize primitive:
       // the promoted figure gets a scaling, pannable surface.
