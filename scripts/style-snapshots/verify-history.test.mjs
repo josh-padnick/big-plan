@@ -4,7 +4,8 @@
 
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -33,7 +34,19 @@ const onePixelPng = ({ red, green, blue }) => {
   png.data[1] = green;
   png.data[2] = blue;
   png.data[3] = 255;
-  return PNG.sync.write(png).toString("base64");
+  return PNG.sync.write(png);
+};
+
+const pngIdentity = (buffer) => {
+  const png = PNG.sync.read(buffer);
+  return {
+    width: png.width,
+    height: png.height,
+    sha256: createHash("sha256")
+      .update(`width:${png.width};height:${png.height};rgba:`)
+      .update(png.data)
+      .digest("hex"),
+  };
 };
 
 test("should stop at the commit whose screenshots exceed its visual contract", async () => {
@@ -55,6 +68,12 @@ test("should stop at the commit whose screenshots exceed its visual contract", a
       blue: onePixelPng({ red: 0, green: 0, blue: 255 }),
       green: onePixelPng({ red: 0, green: 255, blue: 0 }),
     };
+    const encodedColors = Object.fromEntries(
+      Object.entries(colors).map(([name, buffer]) => [
+        name,
+        buffer.toString("base64"),
+      ]),
+    );
     await writeFile(
       join(repoRoot, "capture.mjs"),
       `import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -62,7 +81,7 @@ import { join } from "node:path";
 const checkout = process.env.STYLE_SNAPSHOT_CHECKOUT;
 const output = process.env.STYLE_SNAPSHOT_OUTPUT_DIR;
 const style = (await readFile(join(checkout, "style.txt"), "utf8")).split(/\\s/)[0];
-const colors = ${JSON.stringify(colors)};
+const colors = ${JSON.stringify(encodedColors)};
 await mkdir(output, { recursive: true });
 await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"));
 `,
@@ -87,11 +106,21 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
     const base = await commit({ repoRoot, subject: "test: establish fixture" });
 
     await writeFile(
+      join(repoRoot, "fixture.txt"),
+      "updated stable fixture\n",
+      "utf8",
+    );
+    const fixtureCommit = await commit({
+      repoRoot,
+      subject: "test: update the configured fixture [visual:empty]",
+    });
+
+    await writeFile(
       join(repoRoot, "style.txt"),
       "red\ncomment-only change\n",
       "utf8",
     );
-    await commit({
+    const emptyStyleCommit = await commit({
       repoRoot,
       subject: "style: preserve the red pixel [visual:empty]",
     });
@@ -101,37 +130,54 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
     await mkdir(join(repoRoot, ".style-snapshots", "manifests"), {
       recursive: true,
     });
-    await writeFile(
-      join(repoRoot, ".style-snapshots", "manifests", "blue.json"),
-      JSON.stringify(
-        {
-          schemaVersion: 1,
-          commitSubject: approvedSubject,
-          stylingFiles: [
-            {
-              path: "style.txt",
-              propertyDeltas: [{ property: "color", from: "red", to: "blue" }],
-            },
-          ],
-          captureChanges: [
-            {
-              capture: "state.png",
-              propertyDeltas: [{ property: "color", from: "red", to: "blue" }],
-            },
-          ],
-        },
-        null,
-        2,
-      ),
-      "utf8",
+    const manifestPath = join(
+      repoRoot,
+      ".style-snapshots",
+      "manifests",
+      "blue.json",
     );
-    await commit({ repoRoot, subject: approvedSubject });
+    const redIdentity = pngIdentity(colors.red);
+    const approvedManifest = {
+      schemaVersion: 1,
+      commitSubject: approvedSubject,
+      stylingFiles: [
+        {
+          path: "style.txt",
+          propertyDeltas: [{ property: "color", from: "red", to: "blue" }],
+        },
+      ],
+      captureChanges: [
+        {
+          capture: "state.png",
+          changedPixels: 1,
+          // Deliberately use a different valid JSON key order than the
+          // verifier emits; semantic evidence identity must still compare.
+          before: {
+            sha256: redIdentity.sha256,
+            height: redIdentity.height,
+            width: redIdentity.width,
+          },
+          after: pngIdentity(colors.blue),
+          propertyDeltas: [{ property: "color", from: "red", to: "blue" }],
+        },
+      ],
+    };
+    const writeManifest = async (manifest) => {
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8",
+      );
+    };
+    await writeManifest(approvedManifest);
+    const approvedCommit = await commit({ repoRoot, subject: approvedSubject });
 
+    const passingArtifacts = join(repoRoot, "artifacts-passing");
     const passing = await verifyHistory({
       repoRoot,
       base,
       configPath,
-      artifactRoot: join(repoRoot, "artifacts-passing"),
+      artifactRoot: passingArtifacts,
     });
     assert.deepEqual(
       passing.map((result) => ({
@@ -141,9 +187,50 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
       })),
       [
         { visualKind: "empty", changedCaptures: 0, changedPixels: 0 },
+        { visualKind: "empty", changedCaptures: 0, changedPixels: 0 },
         { visualKind: "approved", changedCaptures: 1, changedPixels: 1 },
       ],
     );
+    for (const commitHash of [
+      fixtureCommit,
+      emptyStyleCommit,
+      approvedCommit,
+    ]) {
+      const ledger = JSON.parse(
+        await readFile(
+          join(passingArtifacts, commitHash.slice(0, 12), "evidence.json"),
+          "utf8",
+        ),
+      );
+      assert.equal(ledger.commit, commitHash);
+      assert.equal(ledger.captures[0].capture, "state.png");
+      assert.match(ledger.captures[0].before.sha256, /^[0-9a-f]{64}$/);
+      assert.match(ledger.captures[0].after.sha256, /^[0-9a-f]{64}$/);
+    }
+
+    await writeManifest({
+      ...approvedManifest,
+      captureChanges: [
+        {
+          ...approvedManifest.captureChanges[0],
+          after: pngIdentity(colors.green),
+        },
+      ],
+    });
+    await git(repoRoot, ["add", manifestPath]);
+    await git(repoRoot, ["commit", "--amend", "--no-edit"]);
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: join(repoRoot, "artifacts-mismatched-manifest"),
+      }),
+      /exact capture evidence does not match the approved manifest/,
+    );
+    await writeManifest(approvedManifest);
+    await git(repoRoot, ["add", manifestPath]);
+    await git(repoRoot, ["commit", "--amend", "--no-edit"]);
 
     await writeFile(join(repoRoot, "style.txt"), "green\n", "utf8");
     await commit({
