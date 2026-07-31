@@ -495,47 +495,9 @@ classes.
   }
 
   /* --- Proposals --------------------------------------------------------- */
+  /* The states themselves live in their own layer below; only the resting
+     furniture a proposal borrows stays here. */
 
-  /* Removed, never vanished: the element keeps its place, its label is
-     struck, and the word "Removed" states the state so the ghosting only
-     reinforces it. The marks stay at full contrast; only the content fades. */
-  [data-flow-proposed~="removed"] :is(strong, code, [data-flow-field]) {
-    opacity: 0.5;
-    text-decoration: line-through;
-  }
-  /* Border style is not available here: the card's border utility sits in a
-     later cascade layer and would win. The tint, the strike, and the word
-     "Removed" carry the state instead. */
-  [data-flow-proposed~="removed"].flow-diagram-node {
-    background: color-mix(in srgb, var(--diff-remove-c) 9%, transparent);
-    border-color: color-mix(in srgb, var(--diff-remove-c) 55%, var(--edge-c));
-  }
-  /* An edge touching a removed element ghosts with it, so a reviewer can see
-     what re-wiring their proposal implies. */
-  [data-flow-proposed~="removed"][data-flow-element="edge"],
-  [data-flow-proposed~="removed-incident"][data-flow-element="edge"],
-  [data-flow-proposed~="removed-incident"].flow-diagram-fork-stub {
-    --flow-line-c: color-mix(in srgb, var(--muted-c) 35%, transparent);
-  }
-  [data-flow-proposed~="removed-incident"]
-    :is(strong, code, [data-flow-field]) {
-    opacity: 0.45;
-  }
-
-  /* Edited in place, on a wash that clears AA in both themes, with the
-     original still available. */
-  [data-flow-field][data-flow-edited] {
-    border-radius: 0.2rem;
-    padding: 0 0.15rem;
-    background: var(--flow-edit-bg);
-    box-shadow: inset 0 -1px 0 var(--flow-edit-edge);
-    /* Proposed text reads at full ink. A muted code or body line on the wash
-       is only 3.4:1, and the colour cannot be set directly because text-muted
-       is a utility in a later cascade layer - re-pointing the token that
-       utility reads is what a component rule can actually win. */
-    color: var(--ink-c);
-    --muted-c: var(--ink-c);
-  }
   .flow-diagram-original {
     margin-left: 0.35rem;
     color: var(--muted-c);
@@ -753,5 +715,53 @@ classes.
     clip-path: inset(50%);
     white-space: nowrap;
     border: 0;
+  }
+}
+
+/* A proposal repaints an element the author already styled with resting
+   utilities - a card's border, a body line's muted colour - so these rules
+   live in their own layer, declared after Tailwind's and therefore last.
+   The alternative is the cascade-chasing that `_shared/figure-controls`
+   documents and deletes: dragging resting utilities into stylesheets, or
+   re-pointing the token a utility happens to read. Both only relocate the
+   fragility. See AGENTS.md under Engineering rules. */
+@layer flow-proposed {
+  /* Removed, never vanished: the element keeps its place, its label is
+     struck, and the word "Removed" states the state so the ghosting only
+     reinforces it. The marks stay at full contrast; only the content fades. */
+  [data-flow-proposed~="removed"] :is(strong, code, [data-flow-field]) {
+    opacity: 0.5;
+    text-decoration: line-through;
+  }
+  /* A dashed border says "proposed" at a glance in a way a tint alone cannot,
+     and the layer is what lets a state rule outrank the card's resting
+     `border` utility. */
+  [data-flow-proposed~="removed"].flow-diagram-node {
+    border-style: dashed;
+    background: color-mix(in srgb, var(--diff-remove-c) 9%, transparent);
+    border-color: color-mix(in srgb, var(--diff-remove-c) 55%, var(--edge-c));
+  }
+  /* An edge touching a removed element ghosts with it, so a reviewer can see
+     what re-wiring their proposal implies. */
+  [data-flow-proposed~="removed"][data-flow-element="edge"],
+  [data-flow-proposed~="removed-incident"][data-flow-element="edge"],
+  [data-flow-proposed~="removed-incident"].flow-diagram-fork-stub {
+    --flow-line-c: color-mix(in srgb, var(--muted-c) 35%, transparent);
+  }
+  [data-flow-proposed~="removed-incident"]
+    :is(strong, code, [data-flow-field]) {
+    opacity: 0.45;
+  }
+
+  /* Edited in place, on a wash that clears AA in both themes, with the
+     original still available. Proposed text reads at full ink: a muted code
+     or body line on the wash is only 3.4:1, and this layer can simply say so
+     rather than working around the `text-muted` utility underneath. */
+  [data-flow-field][data-flow-edited] {
+    border-radius: 0.2rem;
+    padding: 0 0.15rem;
+    background: var(--flow-edit-bg);
+    box-shadow: inset 0 -1px 0 var(--flow-edit-edge);
+    color: var(--ink-c);
   }
 }
