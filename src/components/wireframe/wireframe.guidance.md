@@ -9,6 +9,9 @@ A hand-drawn sketch of a product screen, drawn from a fixed vocabulary so a revi
 - Pick the `viewport` the design is really for. The artboard reflows to the reader's width instead of shrinking the text, so the preset sets the shape rather than the final size.
 - Say what kind of product this is with `chrome`. A web product uses `chrome="browser"` and a `url`, which tells a reviewer the route before they read a label; a phone screen uses `chrome="phone"`. An unframed screen floats on the page and reads as a tablet app whatever is inside it, so frame every screen of a real product and keep the frame the same across the prototype.
 
+For how slides, headings, and components sit on the **plan page** (Contrast, Repetition, Alignment, Proximity), follow plan-writing guidance CRAP via `big-plan guidance` section "Lay out slides with CRAP".
+Wireframe guidance owns **product UI** form factors inside the artboard, not deck layout.
+
 ## Form-factor honesty
 
 A prototype that claims three devices must actually be designed three times.
@@ -17,97 +20,91 @@ Each form factor is a **native layout language**, not a stretched or shrunken ve
 
 | Form factor | `viewport` | `chrome` | Shell |
 | --- | --- | --- | --- |
-| Desktop web SaaS | `desktop` | `browser` + `url` | `AppShell` + flush-left `Sidebar` + `AppContent`. Linear/GitHub/Notion density. |
+| Desktop web SaaS | `desktop` | `browser` + `url` | Stable `AppShell` + flush-left `Sidebar` + `AppContent`. Workspace density. |
 | Tablet | `tablet-landscape` or `tablet-portrait` | `browser` when it is a web app | Master/detail, wider gutters, card surfaces OK. |
 | Phone | `mobile-portrait` | `phone` | Single column. `TopBar` + `BottomBar`. No left rail. |
 
 When the same product must be reviewed on more than one form factor, author parallel prototypes (separate `Wireframe` blocks or clearly labeled sections), each with its own screens and navigation path.
 Do not mix phone chrome with a desktop sidebar on one screen.
 
-## Visual mockup best practices by form factor
+## Central product principle
 
-These rules are the bar for multi-device showcases.
-Tablet quality is the reference; desktop and phone must feel equally intentional.
-Prefer real product references: Linear/GitHub/Notion for desktop, iOS HIG for phone, iPadOS multi-column for tablet.
+**Use desktop width to keep relevant context visible, not to make containers and controls larger.**
 
-### Desktop web SaaS
+Design each interface around the user's primary job.
+Make the next action obvious, preserve context, minimize interruption.
 
-**Pass when:** the drawing reads as a professional B2B web app, not a large tablet inside a browser frame.
+## Responsive product design guidelines
 
-**Shell**
+Accepted bar for wireframe product mockups.
+Skip any "momentum / enjoyment" framing - clarity and speed are enough.
 
-- Flush-left sidebar rail hard against the browser content edge, full height.
-- Narrow nav rail (short labels) - not a third of the canvas.
-- Main canvas claims most of the width.
+### Core
 
-**Detail / master layouts (ticket, document, canvas)**
+1. Design for the form factor (desktop is not scaled mobile; mobile is not shrunken desktop).
+2. Use space to expose useful context (master-detail, previews, rails, filters) - not to inflate chrome.
+3. Keep the product shell stable across screens.
+4. Distinguish navigation from actions (global destinations vs in-page work vs primary buttons).
+5. Make direct interaction the default (whole row clickable; clear selected / active / disabled states).
 
-- The primary surface dominates: conversation, document, or canvas at roughly 60-75% of the main column.
-- Secondary panes (properties, metadata, related) are narrow rails.
-- Use `span="main"` on the primary `Panel` or `Stack`, and `span="rail"` on secondary ones.
-- Do **not** put equal-width panels in a `Row` for app chrome + primary + properties - that becomes equal thirds.
+### Desktop workspace
 
-**Settings / admin**
+6. Treat desktop as a **workspace**: master-detail, panes, independent scroll regions, sticky headers/composers/save bars, remembered selection and pane sizes.
+7. Favor **useful density**: tables and decision columns, sticky headers, full-height lists; borders mark hierarchy, not decorative card stacks.
+8. Support **keyboard-speed** workflows: search / Cmd+K, list J/K, Enter to open, Cmd+Enter to send or create, multi-select, visible focus and selection.
 
-- Prefer Linear-style settings: a settings **sub-nav** (`span="rail"` list of sections) plus **one dense field column** (`span="main"`).
-- Do **not** stack two large equal cards side-by-side like a tablet dashboard unless the real product does that.
-- Prefer vertical form rhythm, tighter gaps, full-width field groups inside the content column.
+Desktop shell and density specifics:
 
-**Density**
+- Flush-left global nav rail, identical destinations on every screen (for example Inbox, Customers, Reports, Settings).
+- Keep **global destinations** separate from **contextual views** (Mine, Unassigned, SLA risk) - views live with the inbox content, not mixed into global nav as peers of Settings.
+- Master-detail for record work: do **not** replace the queue when opening a ticket. Prefer narrow global nav | list (`span="list"`) | flexible primary (`span="main"`) | properties (`span="rail"`).
+- Secondary panes are rails, not equal thirds with the primary surface.
+- Settings: Linear-style sub-nav + one dense field column; label/control rows; sticky save; show unsaved / disabled save when idle.
+- Create/edit: full-page routes or true modals; main form for input; right rail for intelligence (duplicates, related, routing rationale) - not prototype meta copy inside the UI.
 
-- Tighter vertical rhythm than tablet; more information per viewport.
-- Create/edit as full-page routes or true modals - not oversized iPad sheets.
+### Mobile
 
-**Anti-patterns**
+9. Optimize for essential mobile jobs (triage, quick respond, capture, alerts) - bury rare admin behind More / overflow.
+10. Design for thumb and interruption (compact top bar, composer near the bottom of the scroll, bottom primary nav, progressive disclosure).
+11. Follow mobile navigation conventions (back, dismiss, bottom tabs, list → detail push).
+12. Design for interruption and recovery (drafts, preserve list position, retry, undo) - sketch the affordance even at low fidelity.
 
-- Ticket detail with conversation and properties as equal thirds.
-- Settings as two large floating cards sharing the main canvas.
-- Floating card sidebar with outer margin (the shell is flush by default; do not invent card chrome around the rail).
+Phone musts: `viewport="mobile-portrait"`, `chrome="phone"`, single column, `BottomBar` for primary destinations, no desktop `AppShell` rail.
 
-### Tablet / iPad
+### Lists, forms, actions, state
 
-**Pass when:** intentional multi-column tablet UI - master/detail and card surfaces are welcome.
+13. Easy-to-scan rows: identity, key context, state, recency; selection and urgency unmistakable (not color alone; explicit counts).
+14. Focused forms; progressive disclosure; drafts; desktop label/control alignment.
+15. Secondary space for intelligence (duplicates, related, routing, impact) - not empty decorative panels.
+16. Model dependencies visibly (this setting enables that control).
+17. Clear action hierarchy (one primary; separate destructive).
+18. Visible system state (selected, disabled, empty, unsaved, loading) as labels or badges the sketch can show without polish.
 
-- Wider gutters and card-like sidebar are fine; the tablet treatment is deliberate.
-- Equal-width panels in a `Row` often fit tablet master/detail.
-- Do not force desktop density (narrow rails, cramped settings columns) onto tablet.
+### Anti-patterns
 
-### Phone / iPhone
-
-**Pass when:** true mobile - **not** a vertical iPad.
-
-**Must**
-
-- `viewport="mobile-portrait"` with `chrome="phone"` (tall, narrow device frame).
-- Single column only.
-- Primary destinations in `BottomBar` (optionally a compact `TopBar` for title/actions).
-- Touch-sized controls; fewer fields per screen; progressive disclosure.
-- List → detail push navigation, not multi-pane side-by-side.
-
-**Anti-patterns**
-
-- Desktop/tablet `AppShell` with a left nav squeezed into a tall artboard.
-- Side-by-side property columns on phone.
-- The same card layout as iPad with only the viewport height changed.
+- Equal-width columns for global chrome + primary + properties.
+- Ticket detail that **drops** the queue (full-page only) when the product is a triage workspace.
+- Settings as two large side-by-side cards.
+- Floating card sidebar with outer margin on desktop.
+- Phone as a vertical iPad (AppShell rail, multi-pane, tablet card stack).
+- Inflating padding and card chrome to "use" desktop width.
 
 ### Authoring checklist
 
-Before parking a multi-form-factor showcase:
-
-1. Desktop: primary content width clearly greater than secondary rails (`span="main"` / `span="rail"`); settings Linear-like.
-2. Tablet: multi-column intentional; still great - do not regress.
-3. Phone: bottom nav, single column, phone chrome, no vertical-iPad shell.
-4. Guidance followed so the next agent does not re-learn these from screenshots.
+1. Desktop: stable global shell on every screen; master-detail where the job is triage-to-record; `span="list"|"main"|"rail"` proportions; keyboard hints where they matter.
+2. Tablet: multi-column intentional; do not regress.
+3. Phone: essential jobs only; bottom nav; list → detail; recovery affordances sketched.
+4. No "enjoyable momentum" theater - only clarity, context, and next action.
 
 ## Vocabulary
 
-- **Frame** - `AppShell` holds `Sidebar`, an optional `TopBar`, and `AppContent`. Reach for it whenever the screen sits inside a product, and skip it for a single focused page. On desktop the shell is flush-left; on tablet it keeps breathing room. Phone screens skip `AppShell` and use `TopBar` + `BottomBar`.
-- **Layout** - `Stack` runs down, `Row` runs across. Panels in a `Row` share width by default (`span="fill"`). On desktop detail screens set `span="main"` and `span="rail"`.
+- **Frame** - `AppShell` holds `Sidebar`, an optional `TopBar`, and `AppContent`. On desktop the shell is flush-left and **stable** (same global nav every screen). Phone screens skip `AppShell` and use `TopBar` + `BottomBar`.
+- **Layout** - `Stack` runs down, `Row` runs across. In a `Row`, `span="fill"` shares width; `span="list"` is a master queue; `span="main"` is the primary surface; `span="rail"` is secondary properties or settings sub-nav.
 - **Regions** - `Panel` bounds a region, `PageHeader` says what the page is once at the top.
-- **Content** - `Metric` for the number a screen exists to show, `Progress` for how far along something is, `List` and `ListItem` for repeated rows, `Text`, `Heading`, `Badge`, `Divider`, and `ImagePlaceholder` for art nobody has drawn yet.
-- **Navigation** - `Nav` and `NavItem`, with `active` on the current destination. A `NavItem` takes `navigateTo` just like a button. On a phone, put primary destinations in `BottomBar` instead of a sidebar.
-- **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, and `Switch` draw as the real controls. Every one needs a `label`; an unlabelled box has not decided what the field is for.
-- **Flow** - `Stepper` and `Step` show where the user is in a multi-step create flow; `Connector` is the arrow between two steps on a canvas, labeled with the condition that follows it.
+- **Content** - `Metric`, `Progress`, `List` / `ListItem`, `Text`, `Heading`, `Badge`, `Divider`, `ImagePlaceholder`.
+- **Navigation** - `Nav` / `NavItem` for destinations; `BottomBar` for phone primary destinations.
+- **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, `Switch` - every control needs a `label`.
+- **Flow** - `Stepper` / `Step`, `Connector`.
 
 ```mdx
 <Wireframe id="harbor-desktop" title="Harbor, desktop" initialScreen="ticket">
@@ -116,69 +113,40 @@ Before parking a multi-form-factor showcase:
     name="Ticket"
     viewport="desktop"
     chrome="browser"
-    url="app.harbor.team/tickets/4821"
+    url="app.harbor.team/inbox?ticket=4821"
   >
     <AppShell>
       <Sidebar brand="Harbor" mode="Acme Support">
-        <Nav label="Main">
-          <NavItem label="Inbox" navigateTo="inbox" />
+        <Nav label="Global">
+          <NavItem label="Inbox" active />
+          <NavItem label="Customers" />
+          <NavItem label="Reports" />
           <NavItem label="Settings" navigateTo="settings" />
         </Nav>
       </Sidebar>
       <AppContent>
-        <PageHeader title="#4821 Checkout freeze" badge="Priority" />
+        <PageHeader title="Inbox" description="12 open">
+          <Text text="Cmd+K search · J/K move · Enter open" role="helper" />
+        </PageHeader>
         <Row gap="sm">
+          <Panel title="Queue" span="list">
+            <List>
+              <ListItem label="Checkout freeze" meta="Selected · 14m" value="#4821" />
+              <ListItem label="SSO timeout" meta="Waiting · 2h" value="#4818" />
+            </List>
+          </Panel>
           <Panel title="Conversation" span="main">
             <List>
-              <ListItem label="Maya" meta="14m" value="Form freezes" />
+              <ListItem label="Maya · Customer" meta="14m" value="Form freezes" />
             </List>
-            <TextArea label="Reply" placeholder="Write a reply..." />
-            <Button label="Send reply" emphasis="primary" />
+            <Text text="Mode: Reply · Internal note" role="helper" />
+            <TextArea label="Composer" placeholder="Cmd+Enter to send" />
+            <Button label="Send" emphasis="primary" />
           </Panel>
-          <Stack gap="sm" span="rail">
-            <Panel title="Properties">
-              <Select label="Status" value="Open" />
-              <Select label="Assignee" value="Alex" />
-            </Panel>
-            <Panel title="Related">
-              <List>
-                <ListItem label="Prior freeze" meta="Resolved" value="#4410" />
-              </List>
-            </Panel>
-          </Stack>
-        </Row>
-      </AppContent>
-    </AppShell>
-  </Screen>
-  <Screen
-    id="settings"
-    name="Settings"
-    viewport="desktop"
-    chrome="browser"
-    url="app.harbor.team/settings"
-  >
-    <AppShell>
-      <Sidebar brand="Harbor">
-        <Nav label="Main">
-          <NavItem label="Inbox" navigateTo="inbox" />
-          <NavItem label="Settings" active />
-        </Nav>
-      </Sidebar>
-      <AppContent>
-        <PageHeader title="Settings" />
-        <Row gap="sm">
-          <Panel span="rail">
-            <Nav label="Settings sections">
-              <NavItem label="Notifications" active />
-              <NavItem label="Business hours" />
-            </Nav>
+          <Panel title="Properties" span="rail">
+            <Select label="Status" value="Open" />
+            <Select label="Assignee" value="Alex" />
           </Panel>
-          <Stack gap="sm" span="main">
-            <Heading text="Notifications" level="2" />
-            <Switch label="Email on assignment" on />
-            <Switch label="Slack on Sla risk" on />
-            <Button label="Save" emphasis="primary" />
-          </Stack>
         </Row>
       </AppContent>
     </AppShell>
