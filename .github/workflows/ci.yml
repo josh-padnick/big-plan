@@ -37,7 +37,9 @@ jobs:
           fi
       - run: bun run test
       - name: Styling commits must match their visual contract
-        run: bun run verify:style-history -- --base origin/main
+        env:
+          STYLE_HISTORY_BASE: ${{ github.ref == 'refs/heads/main' && github.event.before || 'origin/main' }}
+        run: bun run verify:style-history -- --base "$STYLE_HISTORY_BASE"
       - name: Upload styling history evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,6 +1,6 @@
 // Captures the configured review-document states from an isolated historical
-// checkout. The history verifier owns checkout orchestration and supplies the
-// current fixture source to every parent and child it compares.
+// checkout. The history verifier owns checkout orchestration; each checkout
+// keeps its revision-local fixture syntax so both sides compile compatibly.
 
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
@@ -66,6 +66,15 @@ const renderDocument = async ({ source, outputPath, stateDirectory }) => {
 const applyActions = async ({ page, actions }) => {
   for (const action of actions) {
     const locator = page.locator(action.selector);
+    const count = await locator.count();
+    if (count === 0) {
+      return false;
+    }
+    if (count !== 1) {
+      throw new Error(
+        `Screenshot action selector "${action.selector}" matched ${count} elements; selectors must identify one state owner.`,
+      );
+    }
     switch (action.type) {
       case "click":
         await locator.click();
@@ -88,6 +97,7 @@ const applyActions = async ({ page, actions }) => {
         throw new Error(`Unknown screenshot action "${String(action.type)}".`);
     }
   }
+  return true;
 };
 
 /** Turns a logical capture tuple into one stable manifest key. */
@@ -131,10 +141,25 @@ try {
             }, theme);
             await page.addStyleTag({
               content:
-                "*,*::before,*::after{animation:none!important;caret-color:transparent!important;transition:none!important}",
+                "*,*::before,*::after{animation:none!important;caret-color:transparent!important;transition:none!important}*{scrollbar-width:none!important}*::-webkit-scrollbar{display:none!important}",
             });
-            await applyActions({ page, actions: capture.actions });
+            const actionsAvailable = await applyActions({
+              page,
+              actions: capture.actions,
+            });
+            if (!actionsAvailable) {
+              continue;
+            }
             const target = page.locator(capture.selector);
+            const targetCount = await target.count();
+            if (targetCount === 0) {
+              continue;
+            }
+            if (targetCount !== 1) {
+              throw new Error(
+                `Screenshot selector "${capture.selector}" matched ${targetCount} elements; selectors must identify one visual surface.`,
+              );
+            }
             await target.waitFor({ state: "visible" });
             await target.screenshot({
               animations: "disabled",
