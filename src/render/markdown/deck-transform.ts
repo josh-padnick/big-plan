@@ -211,6 +211,10 @@ const buildSubSlides = ({
   const intro = body.slice(0, firstH3);
   const collapseId =
     typeof heading.properties.id === "string" ? heading.properties.id : label;
+  // A section split into sub-slides opens with a context builder just like
+  // any other slide (Repetition); without this its leading emphasized line
+  // stayed raw italic prose while every peer slide rendered a muted line.
+  applyContextBuilder(intro);
   const groupBody: Array<ElementContent> = [...intro];
   let index = firstH3;
   let subIndex = 0;
