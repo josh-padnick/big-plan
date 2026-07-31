@@ -727,7 +727,7 @@ export const DIAGRAM_SCRIPT = `
     return w > 0 && h > 0 ? w * h : 0;
   };
 
-  const placeLabel = ({ label, subject, obstacles, bounds, textRects }) => {
+  const placeLabel = ({ label, subject, obstacles, bounds, textRects, allowBadge }) => {
     const size = label.getBoundingClientRect();
     const w = size.width, h = size.height;
     const gap = 5;
@@ -759,7 +759,7 @@ export const DIAGRAM_SCRIPT = `
     // Which corner is decided by the subject's own words, not by a guess: the
     // badge goes wherever it covers least of the text being proposed against,
     // which is the second half of what the captain asked for.
-    if (subject.width > w + 10 && subject.height > h + 8) {
+    if (allowBadge && subject.width > w + 10 && subject.height > h + 8) {
       const inset = 3;
       const corners = [
         [subject.right - w - inset, subject.bottom - h - inset],
@@ -884,7 +884,12 @@ export const DIAGRAM_SCRIPT = `
         .concat(Array.from(spec.subject.querySelectorAll(
           ".flow-diagram-original, .flow-diagram-original-block")))
         .map((f) => f.getBoundingClientRect());
-      const best = placeLabel({ label, subject, obstacles, bounds, textRects });
+      // Only a node draws a card, so only a node has a corner to badge. An
+      // edge's rectangle is mostly the invisible padding that makes a
+      // two-pixel connector clickable, and a badge dropped inside it reads as
+      // sitting on whatever is next door.
+      const allowBadge = kindOf(spec.subject) === "node";
+      const best = placeLabel({ label, subject, obstacles, bounds, textRects, allowBadge });
       if (!best) { label.hidden = true; continue; }
       label.style.left = best.x + "px";
       label.style.top = best.y + "px";
