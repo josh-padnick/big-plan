@@ -9,12 +9,13 @@
    A viewport-covering shadow spread dims whatever is behind it, so the panel
    is the only thing competing for attention.
 
-   ORDER MATTERS IN THIS FILE
-   The maximized rules come last on purpose. They override per-family base
-   rules of equal specificity - `.code-figure` sets `position: relative` for
-   its floating control bar, and a promoted panel must be `position: fixed`
-   instead. Moving the maximized block above them silently un-fixes the panel:
-   it stays in the reading column and the inset means nothing. */
+   WHY THIS IS A STYLESHEET AND NOT UTILITIES
+   The repo authors markup with Tailwind utilities and reserves stylesheets
+   for variants, state, pseudo-elements, and generated markup. All three
+   exceptions apply here: promotion is a state a script toggles, the backdrop
+   is a pseudo-element, and the code-figure chrome is emitted by a document
+   transform. Everything a figure looks like at rest stays in utilities on the
+   figure itself. */
 
 @layer components {
   article .figure-control[hidden] {
@@ -55,12 +56,24 @@
       transition: opacity 0.15s ease;
     }
   }
+}
 
-  /* --- Promoted to the viewport. Keep this block last. ------------------ */
+/* Promoted state lives in its own layer, declared after Tailwind's, so it is
+   the last layer and outranks `utilities` by construction.
 
+   WHY A LAYER AND NOT MORE SPECIFIC SELECTORS
+   The first attempt put these rules in `components` and then chased the
+   cascade: a resting `mb-5` utility beat the panel's `margin: 0` and left it
+   one margin short of its inset, an `overflow-hidden` utility beat its
+   `overflow: auto` and clipped tall figures, and both were "fixed" by moving
+   five components' resting utilities into stylesheets - which fights the
+   Tailwind-first convention and only relocates the fragility. A layer that
+   sits above `utilities` ends the argument once: a figure keeps its ordinary
+   resting utilities, and promotion always wins. */
+@layer figure-maximized {
   /* Two attributes, so the promoted state outranks the per-family rules that
-     set a resting margin or position; those are equally specific and are
-     imported after this file. */
+       set a resting margin or position; those are equally specific and are
+       imported after this file. */
   article [data-figure-maximizable][data-figure-maximized] {
     position: fixed;
     inset: 1.5rem;
@@ -74,10 +87,10 @@
     box-shadow: 0 18px 56px rgb(0 0 0 / 0.45);
   }
   /* The backdrop is a pseudo-element on the body rather than a spread shadow
-     on the panel. A shadow is clipped by any ancestor that bounds the figure -
-     a slide card, a scroll container - which leaves undimmed strips wherever
-     the clip falls. The body is above all of them and owns no such clip, and
-     a pseudo-element needs no node for the script to create or clean up. */
+       on the panel. A shadow is clipped by any ancestor that bounds the figure -
+       a slide card, a scroll container - which leaves undimmed strips wherever
+       the clip falls. The body is above all of them and owns no such clip, and
+       a pseudo-element needs no node for the script to create or clean up. */
   body::after {
     content: "";
     position: fixed;
@@ -100,7 +113,7 @@
     }
   }
   /* The header band, whatever the family calls it, stays put while the body
-     scrolls beneath it. */
+       scrolls beneath it. */
   article [data-figure-maximized] > figcaption,
   article [data-figure-maximized] > .figure-control-bar {
     flex: none;
@@ -112,13 +125,13 @@
     padding: 1.5rem 1.75rem 3rem;
   }
   /* A family whose content is several siblings after its caption marks no
-     body; the panel then scrolls as a whole and pads its own floor. */
+       body; the panel then scrolls as a whole and pads its own floor. */
   article [data-figure-maximized]:not(:has(> [data-figure-body])) {
     overflow: auto;
     padding-bottom: 3rem;
   }
   /* Promoted, the code bar stops floating over the code and becomes a real
-     band, because a maximized block is being read rather than skimmed past. */
+       band, because a maximized block is being read rather than skimmed past. */
   article .code-figure[data-figure-maximized] > .figure-control-bar {
     position: static;
     opacity: 1;
