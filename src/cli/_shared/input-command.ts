@@ -9,6 +9,9 @@ import { MarkdownDiagnosticsError } from "../../render/render-document.js";
 type DerivationInput = {
   readonly markdown: string;
   readonly fallbackTitle: string;
+  // Where the plan lives, so a derivation that needs the plan's identity on
+  // disk - the id that namespaces a reviewer's drafts - can compute it.
+  readonly inputPath: string;
 };
 
 /** Parses one required input plus a command-defined number of trailing args. */
@@ -82,6 +85,7 @@ export const deriveInputFile = async <Derived>({
       derived: derive({
         markdown,
         fallbackTitle: basename(inputPath, extname(inputPath)),
+        inputPath,
       }),
     };
   } catch (error: unknown) {

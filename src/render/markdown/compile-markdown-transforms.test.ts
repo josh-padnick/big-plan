@@ -62,7 +62,7 @@ describe("compileMarkdown code highlighting", () => {
     const bodyHtml = compileAndSerialize(
       "```sql\nSELECT 1;\n```\n\n```\nplain block\n```\n",
     );
-    expect(bodyHtml.match(/<pre>/g)).toHaveLength(2);
+    expect(bodyHtml.match(/<pre[ >]/g)).toHaveLength(2);
     expect(bodyHtml).not.toContain("<button");
     expect(bodyHtml).not.toContain("data-copy-code");
   });

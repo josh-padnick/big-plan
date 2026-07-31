@@ -2,7 +2,7 @@
 // around the pure renderer, supplying only HTML-specific derivation,
 // serialization, and result facts to the shared safe output workflow.
 
-import { renderDocument } from "../../render/render-document.js";
+import { derivePlanId, renderDocument } from "../../render/render-document.js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { runDerivedOutputCommand } from "../_shared/derived-output-command.js";
 import { requireGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
@@ -24,7 +24,14 @@ export const renderCommand = async (
     usage: USAGE,
     outputSuffix: ".html",
     invalidDocumentMessage: "Cannot render document with invalid MDX",
-    derive: renderDocument,
+    // The plan's own path names its persistence namespace, so a reviewer's
+    // drafts belong to this plan and never to another that shares its title.
+    derive: ({ markdown, fallbackTitle, inputPath }) =>
+      renderDocument({
+        markdown,
+        fallbackTitle,
+        identity: { planId: derivePlanId({ planPath: inputPath }) },
+      }),
     // A document a human is asked to review must also pass authoring lint, so
     // a lint finding can never reach the reviewer through render.
     verify: assertPlanPassesLint,

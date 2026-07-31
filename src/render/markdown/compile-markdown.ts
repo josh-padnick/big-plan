@@ -20,6 +20,9 @@ import type { CollectedComponentModel } from "./component-pipeline/deliver.js";
 export type { CollectedComponentModel } from "./component-pipeline/deliver.js";
 import { completeOutlinePlaceholders } from "./component-pipeline/outline-placeholder.js";
 import type { DeferredOutlinePresentations } from "./component-pipeline/outline-placeholder.js";
+import { rehypeBlockIdentity } from "./block-identity.js";
+import type { BlockDescriptor } from "./block-identity.js";
+export type { BlockDescriptor } from "./block-identity.js";
 import { rehypeDeckTransform } from "./deck-transform.js";
 import type { MutableDocumentOutline } from "./deck-transform.js";
 import { remarkValidateComponents } from "./component-pipeline/validate-authoring.js";
@@ -43,6 +46,9 @@ export type CompiledMarkdown = {
   // Rendered Part divider anchors in document order, so navigation can link
   // each act header to its divider; parts carry no anchor in model delivery.
   readonly partIds: ReadonlyArray<string>;
+  // Every commentable unit this compile addressed, in document order, so a
+  // feedback package can be resolved without re-reading the HTML.
+  readonly blocks: ReadonlyArray<BlockDescriptor>;
 };
 
 export type CompiledMarkdownModel = {
@@ -271,6 +277,7 @@ const compileMarkdownTree = ({
   // presents every placeholder against it.
   const deferredOutline: DeferredOutlinePresentations = [];
   const outline: MutableDocumentOutline = { parts: [], sections: [] };
+  const blocks: Array<BlockDescriptor> = [];
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -308,7 +315,10 @@ const compileMarkdownTree = ({
         outline,
         diagnostics,
       });
-    });
+    })
+    // Identity runs last, over the finished deck, so every block it addresses
+    // is the one the reader will actually point at.
+    .use(rehypeBlockIdentity, { blocks });
   // Only parsing reflects author mistakes; a transform that throws is a
   // renderer defect and must surface as an internal error, not as a
   // diagnostic blaming the document.
@@ -333,6 +343,7 @@ const compileMarkdownTree = ({
     elementIds,
     title: metadata.title,
     partIds: outline.parts.map((part) => part.id ?? ""),
+    blocks,
   };
 };
 

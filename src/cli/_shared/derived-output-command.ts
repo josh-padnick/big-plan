@@ -12,6 +12,7 @@ import {
 type DerivationInput = {
   readonly markdown: string;
   readonly fallbackTitle: string;
+  readonly inputPath: string;
 };
 
 const defaultOutputPath = ({

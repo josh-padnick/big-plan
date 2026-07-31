@@ -40,7 +40,7 @@ describe("deck slide frames", () => {
     const { html } = compile("## One\n\nAlpha.\n\n## Two\n\nBeta.\n");
     expect(html.match(/<section data-slide/g)).toHaveLength(2);
     expect(html).toMatch(
-      /<section data-slide[^>]*><p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one">One<\/h2>\n<p>Alpha\.<\/p>\n<\/section>/,
+      /<section data-slide[^>]*><p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one"[^>]*>One<\/h2>\n<p[^>]*>Alpha\.<\/p>\n<\/section>/,
     );
   });
 
@@ -73,7 +73,7 @@ describe("deck slide frames", () => {
 
   it("should keep the lede and title outside any slide frame", () => {
     const { html } = compile("# Title\n\nThe lede.\n\n## One\n\nA.\n");
-    expect(html).toMatch(/<h1 id="title">Title<\/h1>/);
+    expect(html).toMatch(/<h1 id="title"[^>]*>Title<\/h1>/);
     expect(html).not.toMatch(
       /<section data-slide[^>]*>(?:(?!<\/section>).)*<h1/,
     );
@@ -128,7 +128,7 @@ What lands where.
   it("should render the section header as a parent block above sub-slide frames", () => {
     const { html } = compile(SUBSLIDE_FIXTURE);
     expect(html).toMatch(
-      /<div data-subpart[^>]*><p data-slide-kicker[^>]*>1\.2 \/ Implementation<\/p><h2 id="implementation">Implementation<\/h2>\n<p>An intro line\.<\/p>\n<\/div>/,
+      /<div data-subpart[^>]*><p data-slide-kicker[^>]*>1\.2 \/ Implementation<\/p><h2 id="implementation"[^>]*>Implementation<\/h2>\n<p[^>]*>An intro line\.<\/p>\n<\/div>/,
     );
   });
 
@@ -136,7 +136,7 @@ What lands where.
     const { html } = compile(SUBSLIDE_FIXTURE);
     expect(html.match(/data-subslide/g)).toHaveLength(2);
     expect(html).toMatch(
-      /<section data-slide[^>]* data-subslide[^>]*><h3 id="pipeline" data-slide-kicker[^>]*>1\.2\.1 \/ Pipeline<\/h3>\n<p>How it travels\.<\/p>\n<\/section>/,
+      /<section data-slide[^>]* data-subslide[^>]*><h3 id="pipeline" data-slide-kicker[^>]*>1\.2\.1 \/ Pipeline<\/h3>\n<p[^>]*>How it travels\.<\/p>\n<\/section>/,
     );
     expect(html).toContain(">1.2.2 / Planned changes</h3>");
   });

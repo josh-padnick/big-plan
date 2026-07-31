@@ -18,14 +18,26 @@ export const renderPage = ({
   styles,
   bodyClassName,
   bodyHtml,
+  rootAttributes = {},
 }: {
   readonly title: string;
   readonly styles: string;
   readonly bodyClassName: string;
   readonly bodyHtml: string;
+  // Document-level facts the viewer reads before any markup: the plan's
+  // persistence id, and - only when a review runtime served this copy - the
+  // session it belongs to. Values are escaped here; callers supply data, not
+  // markup.
+  readonly rootAttributes?: Readonly<Record<string, string>>;
 }): string => {
+  // Names are code-supplied literals, so anything else is a caller defect
+  // rather than something to escape into the markup.
+  const root = Object.entries(rootAttributes)
+    .filter(([name]) => /^data-[a-z-]+$/.test(name))
+    .map(([name, value]) => ` ${name}="${escapeHtml(value)}"`)
+    .join("");
   return `<!doctype html>
-<html lang="en">
+<html lang="en"${root}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
