@@ -51,6 +51,8 @@ Light and dark follow the reader's OS in inert exports.
   --measure: 34rem;
   /* A card hugging standard-width content: the measure plus its own padding. */
   --card-measure: calc(var(--measure) + 2.5rem);
+  /* A card hugging a drawing, which is capped well under the column. */
+  --card-figure: calc(920px + 2.5rem);
   --bg: #f7f5f0;
   --ink-c: #211e1a;
   --muted-c: #6f695c;
@@ -228,8 +230,13 @@ Light and dark follow the reader's OS in inert exports.
   [data-slide] {
     max-width: var(--card-measure);
   }
+  /* A drawing needs more than the measure but far less than the column, so it
+     gets its own step rather than being lumped in with a table. Two steps left
+     a card holding a 920px drawing sitting 600px wider than it. */
+  [data-slide]:has(.wireframe) {
+    max-width: var(--card-figure);
+  }
   [data-slide]:has(table),
-  [data-slide]:has(.wireframe),
   [data-slide]:has([data-table-scroll-container]) {
     max-width: none;
   }
