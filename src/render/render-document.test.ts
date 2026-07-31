@@ -131,10 +131,9 @@ describe("renderDocument affordances", () => {
     }
   });
 
-  it("should let a desktop wireframe and its slide borrow measured page room", () => {
-    // The shell publishes only the page room that actually exists, and the
-    // slide grows with its drawing. That keeps the 920px painted cap inside
-    // the slide instead of letting a negative margin look like overflow.
+  it("should hold a standard desktop wireframe inside its slide", () => {
+    // The content column and figure card account for nested card chrome, so
+    // the standard screen stays inside the card without a margin escape.
     const deckWireframe = `# Deck
 
 The lede.
@@ -155,10 +154,10 @@ The lede.
     });
     expect(deckHtml).toContain("data-collapsible");
     expect(deckHtml).toContain("data-wireframe=");
-    expect(deckHtml).toContain("--reading-free-inline");
     expect(deckHtml).toContain("data-wireframe-desktop");
     // The true 1440px layout scales into the shared desktop review cap.
-    expect(deckHtml).toContain("max-width:920px");
+    expect(deckHtml).toContain("max-width:48rem");
+    expect(deckHtml).not.toContain("--reading-free-inline");
   });
 
   it("should inline one stylesheet and only the scroll-spy script when rendering", () => {
@@ -293,9 +292,8 @@ describe("renderDocument shell", () => {
     expect(html).toContain("</html>");
     expect(html).not.toContain("<nav");
     expect(html).not.toContain("<script>");
-    // The no-TOC shell keeps the same reading measure; wide figures borrow
-    // only the free margin that the shell publishes.
-    expect(html).toContain("wide:grid-cols-[minmax(0,74ch)]");
+    // The no-TOC shell keeps the same figure-safe content column.
+    expect(html).toContain("wide:grid-cols-[minmax(0,54.5rem)]");
   });
 
   it("should omit the TOC when the document has headings but no h2s", () => {

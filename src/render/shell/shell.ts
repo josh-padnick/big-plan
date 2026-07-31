@@ -41,13 +41,13 @@ export type ShellResult = {
 const BODY_CLASSES =
   "bg-paper font-sans text-base leading-[1.65] text-ink antialiased";
 
-// Stacked reading layout below the wide breakpoint; sidebar plus one reading
-// column above it. Wide figures borrow the measured free page margin instead
-// of making every plan block live in an oversized column.
+// Stacked reading layout below the wide breakpoint; sidebar plus one content
+// column above it. The wide column contains a standard desktop wireframe
+// through nested card chrome, while prose holds its own narrower measure.
 const LAYOUT_CLASSES =
   "grid grid-cols-[minmax(0,1fr)] justify-center gap-8 px-5 pt-16 pb-16 wide:gap-14 wide:px-6 wide:pt-12 wide:pb-20";
-const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,74ch)]`;
-const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,74ch)]`;
+const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,54.5rem)]`;
+const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,54.5rem)]`;
 
 // Active links change color and border only, never weight, so highlighting
 // can never re-wrap a label. Entries grouped under a part header carry the

@@ -44,8 +44,10 @@ Light and dark follow the reader's OS in inert exports.
   --measure: 45.5rem;
   /* A card hugging standard-width content: the measure plus its own padding. */
   --card-measure: calc(var(--measure) + 2.5rem);
-  /* A card hugging a drawing, which is capped well under the column. */
-  --card-figure: calc(920px + 2.5rem);
+  /* A card that can contain the standard 48rem desktop wireframe through
+     one nested sub-slide. The extra 6.5rem covers both cards' inline padding
+     and borders, so the drawing never has to escape either border. */
+  --card-figure: 54.5rem;
   --bg: #f7f5f0;
   --ink-c: #211e1a;
   --muted-c: #6f695c;
@@ -203,33 +205,6 @@ Light and dark follow the reader's OS in inert exports.
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.14);
 }
 
-/* Publish the free margin beside the centered reading column. Desktop
-   drawings borrow the right half without guessing at viewport or scrollbar
-   geometry; prose keeps its normal measure. */
-[data-reading-layout] {
-  container-type: inline-size;
-}
-article {
-  --reading-free-inline: 0px;
-}
-@container (width >= 53rem) {
-  [data-reading-layout="with-toc"] article {
-    --reading-free-inline: max(
-      0px,
-      (100cqw - 15rem - 3.5rem - 74ch) / 2 - 0.5rem
-    );
-  }
-  [data-reading-layout="without-toc"] article {
-    --reading-free-inline: max(0px, (100cqw - 74ch) / 2 - 0.5rem);
-  }
-}
-[data-slide]:has(> [data-wireframe-desktop]) {
-  margin-right: calc(-1 * var(--reading-free-inline, 0px));
-}
-[data-slide]:has(> [data-wireframe-desktop]) > *:not([data-wireframe-desktop]) {
-  max-width: 74ch;
-}
-
 /* EXPERIMENT - per-slide width. Delete this block to revert.
 
    A card much wider than its own contents reads as an empty frame around a
@@ -241,9 +216,8 @@ article {
 [data-slide] {
   max-width: var(--card-measure);
 }
-/* A drawing needs more than the measure but far less than the column, so it
-   gets its own step rather than being lumped in with a table. Two steps left
-   a card holding a 920px drawing sitting 600px wider than it. */
+/* A drawing gets the exact room needed for the standard desktop screen and
+   the deepest card nesting a deck can add around it. */
 [data-slide]:has(.wireframe) {
   max-width: var(--card-figure);
 }
