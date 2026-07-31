@@ -76,14 +76,15 @@ stability follow from the layout instead of from hand-tuned insets.
     the pointer cursor never lies and this row's height never changes.
   */
   article [data-collapse-header] {
-    display: flex;
-    align-items: center;
-    gap: var(--deck-toggle-gap);
+    /* Containing block for the toggle, which is positioned OUT OF FLOW so its
+       escape into the gutter cannot move the chrome. The header is otherwise
+       a plain block, so the kicker and title start at the card's content edge
+       - the same left edge as the body below them. */
+    position: relative;
     cursor: pointer;
     min-width: 0;
   }
   article .plan-collapse-chrome {
-    flex: 1 1 auto;
     min-width: 0;
   }
   /* Chrome owns no outer margin; --deck-gap-title-body owns the one below. */
@@ -101,16 +102,25 @@ stability follow from the layout instead of from hand-tuned insets.
     per-kind inset that goes stale when padding changes.
   */
   article .plan-collapse-toggle {
-    flex: 0 0 var(--deck-toggle-size);
+    /*
+      Out of flow on purpose. As an in-flow flex item a negative margin-left
+      shrinks the item's OUTER width, which drags every later item left by the
+      same amount - so the escape meant to move only the chevron also pulled
+      the kicker and title out of alignment with the body by exactly one card
+      padding. Absolute positioning moves the chevron alone.
+
+      right:100% puts it just left of the header box; the margin then clears
+      the card's own padding so it lands in the gutter outside the border.
+      One variable still drives padding and escape together.
+    */
+    position: absolute;
+    right: 100%;
+    margin-right: calc(var(--deck-pad-x, 0rem) + var(--deck-toggle-gap));
+    /* Centred on header chrome whose height never changes between states. */
+    top: 50%;
+    transform: translateY(-50%);
     width: var(--deck-toggle-size);
     height: var(--deck-toggle-size);
-    margin-left: calc(
-      -1 *
-        (
-          var(--deck-pad-x, 0rem) + var(--deck-toggle-size) +
-            var(--deck-toggle-gap)
-        )
-    );
     color: color-mix(in oklab, var(--muted-c) 68%, transparent);
     opacity: 0.4;
     transition:

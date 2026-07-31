@@ -239,6 +239,46 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     expect(drift.headerLeft).toBeLessThan(0.5);
   });
 
+  // Regression: the toggle used to be an in-flow flex item with a negative
+  // margin. That shrinks the item's OUTER width, dragging the kicker and
+  // title left by one card padding while the body stayed put, so header
+  // chrome and content sat on two different left edges.
+  await test.step("header chrome shares the body's left edge at every level", async () => {
+    const worst = await page.evaluate(() => {
+      const offsets: Array<{ kind: string; delta: number }> = [];
+      for (const block of document.querySelectorAll("[data-collapsible]")) {
+        const header = block.querySelector(
+          ":scope > [data-collapse-header]",
+        ) as HTMLElement | null;
+        const body = block.querySelector(
+          ":scope > [data-collapse-body]",
+        ) as HTMLElement | null;
+        if (header === null || body === null) continue;
+        if (block.hasAttribute("data-collapsed")) continue;
+        const chrome =
+          (header.querySelector(
+            ":scope > .plan-collapse-chrome",
+          ) as HTMLElement) ?? header;
+        const content = Array.from(body.children).find(
+          (child) => child.getBoundingClientRect().width > 0,
+        );
+        if (content === undefined) continue;
+        offsets.push({
+          kind: block.getAttribute("data-collapsible") ?? "?",
+          delta:
+            chrome.getBoundingClientRect().left -
+            content.getBoundingClientRect().left,
+        });
+      }
+      return {
+        checked: offsets.length,
+        max: offsets.reduce((acc, o) => Math.max(acc, Math.abs(o.delta)), 0),
+      };
+    });
+    expect(worst.checked).toBeGreaterThan(0);
+    expect(worst.max).toBeLessThan(0.5);
+  });
+
   await test.step("collapsing a part tucks away every slide in the act", async () => {
     const proposal = page.locator(
       '[data-collapsible="part"][data-collapse-id="part-the-proposal"]',
