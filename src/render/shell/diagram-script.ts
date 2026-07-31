@@ -1,11 +1,24 @@
-// The diagram leg of the viewer script: the zoom surface a promoted
-// FlowDiagram opts into, element targeting, and the proposal layer.
+// The diagram leg of the viewer script: the canvas a FlowDiagram becomes, the
+// selection model a reviewer works through, and the proposal layer their edits
+// paint.
 //
 // WHY IT LIVES BESIDE viewer-script.ts RATHER THAN INSIDE IT
 // The shared maximize behavior is small enough to read in place; this leg is
 // not, and it is the only part of the document's script that knows anything
 // about one component. Keeping it in its own module lets the shell's script
 // stay a list of legs.
+//
+// THREE IDEAS, IN ORDER
+//  1. A CANVAS. Not a scrolling figure. No scrollbars in either axis: the
+//     artboard is placed by one transform and the reader zooms and pans it,
+//     with the trackpad gestures any canvas tool answers to - pinch to zoom,
+//     two fingers to pan - plus drag and the toolbar for everyone else.
+//  2. SELECTION. Not hover. Hovering says only "this is clickable". Clicking
+//     selects, the selection persists, and its actions ride a bar that cannot
+//     slip out from under the pointer the way a hover-revealed button did.
+//  3. IN PLACE. A selected element is edited where it lives - type into it,
+//     press Delete - and the proposal layer paints the result. Only a comment
+//     needs a compose surface, because only a comment has nowhere to be typed.
 //
 // WHAT IT MAY AND MAY NOT ASSUME
 // It reads two contracts it cannot import, because a string template has no
@@ -15,25 +28,26 @@
 // spelling changes the strings here too.
 //
 // It never promotes or restores a figure itself. The shared leg owns that
-// toggle; this one watches for the attribute and lights the zoom surface when
-// the frame declares data-figure-surface="zoom".
+// toggle; this one watches for the attribute and refits the canvas.
 //
 // THE TRANSPORT IS A STUB, ON PURPOSE
 // Drafts live in memory and Send does nothing. Commenting Phase 1 owns the
-// real draft store, tray, and package; this leg exists so the targeting and
-// proposal design can be tried end to end before that lands, and the tray
-// says so on its face rather than pretending to deliver.
+// real draft store, tray, and package; this leg exists so the interaction
+// design can be tried end to end before that lands, and the tray says so on
+// its face rather than pretending to deliver.
 
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { PENCIL_LINE_ICON } from "../../icons/lucide/pencil-line.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
+import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { lucideIconToMarkup } from "./lucide-icon-markup.js";
 
 const ICON_COMMENT = lucideIconToMarkup(MESSAGE_SQUARE_ICON);
 const ICON_EDIT = lucideIconToMarkup(PENCIL_LINE_ICON);
-const ICON_REMOVE = lucideIconToMarkup(X_ICON);
+const ICON_DELETE = lucideIconToMarkup(TRASH_2_ICON);
 const ICON_REVERT = lucideIconToMarkup(ROTATE_CCW_ICON);
+const ICON_CLOSE = lucideIconToMarkup(X_ICON);
 
 export const DIAGRAM_SCRIPT = `
 (() => {
@@ -43,9 +57,12 @@ export const DIAGRAM_SCRIPT = `
   const ICON = {
     comment: '${ICON_COMMENT}',
     edit: '${ICON_EDIT}',
-    remove: '${ICON_REMOVE}',
+    del: '${ICON_DELETE}',
     revert: '${ICON_REVERT}',
+    close: '${ICON_CLOSE}',
   };
+  const ZOOM_MIN = 0.25;
+  const ZOOM_MAX = 4;
   const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 2.5, 3, 4];
   const FIELD_LABELS = {
     label: "Label",
@@ -55,6 +72,12 @@ export const DIAGRAM_SCRIPT = `
     title: "Title",
     footer: "Footer paragraph",
   };
+  // How far the artboard may be pushed past the canvas edge before it stops,
+  // so a diagram can never be flung out of sight.
+  const PAN_MARGIN = 56;
+
+  // Set by a pan that actually moved, read by the click that follows it.
+  let suppressClick = false;
 
   const clamp = (value, low, high) => Math.max(low, Math.min(value, high));
   const el = (tag, className, text) => {
@@ -63,7 +86,7 @@ export const DIAGRAM_SCRIPT = `
     if (text !== undefined) node.textContent = text;
     return node;
   };
-  const quote = (value) => String.fromCharCode(8220) + value + String.fromCharCode(8221);
+  const quote = (v) => String.fromCharCode(8220) + v + String.fromCharCode(8221);
 
   // --- Announcements ----------------------------------------------------
   const live = el("div", "flow-diagram-live");
@@ -77,11 +100,12 @@ export const DIAGRAM_SCRIPT = `
   };
 
   // --- Reading the diagram out of the DOM -------------------------------
-  const kindOf = (node) => node.getAttribute("data-flow-element");
-  const nameOf = (node) => node.getAttribute("data-flow-name") || "element";
-  const anchorOf = (node) => node.getAttribute("data-flow-anchor") || "";
-  const targetsIn = (diagram) =>
-    [diagram].concat(Array.from(diagram.querySelectorAll("[data-flow-element]")));
+  const kindOf = (n) => n.getAttribute("data-flow-element");
+  const nameOf = (n) => n.getAttribute("data-flow-name") || "element";
+  const anchorOf = (n) => n.getAttribute("data-flow-anchor") || "";
+  const elementsIn = (diagram) =>
+    Array.from(diagram.querySelectorAll("[data-flow-element]"));
+  const targetsIn = (diagram) => [diagram].concat(elementsIn(diagram));
   const fieldsIn = (node) => {
     const own = [];
     for (const field of node.querySelectorAll("[data-flow-field]")) {
@@ -89,10 +113,8 @@ export const DIAGRAM_SCRIPT = `
     }
     return own;
   };
-  const nodesIn = (diagram) =>
-    Array.from(diagram.querySelectorAll('[data-flow-element="node"]'));
-  const edgesIn = (diagram) =>
-    Array.from(diagram.querySelectorAll('[data-flow-element="edge"]'));
+  const nodesIn = (d) => Array.from(d.querySelectorAll('[data-flow-element="node"]'));
+  const edgesIn = (d) => Array.from(d.querySelectorAll('[data-flow-element="edge"]'));
 
   // Originals live here rather than in attributes: a proposal repaints the
   // document and must be able to put back exactly what the agent wrote.
@@ -116,13 +138,12 @@ export const DIAGRAM_SCRIPT = `
     const diagram = node.closest("[data-flow-diagram]");
     if (kind === "node") {
       const id = node.getAttribute("data-flow-node");
-      const before = [];
-      const after = [];
+      const before = [], after = [];
+      const find = (wanted) =>
+        nodesIn(diagram).find((n) => n.getAttribute("data-flow-node") === wanted);
       for (const edge of edgesIn(diagram)) {
         const from = edge.getAttribute("data-flow-edge-from");
         const to = edge.getAttribute("data-flow-edge-to");
-        const find = (wanted) =>
-          nodesIn(diagram).find((n) => n.getAttribute("data-flow-node") === wanted);
         if (to === id && find(from)) before.push(labelOfNode(find(from)));
         if (from === id && find(to)) after.push(labelOfNode(find(to)));
       }
@@ -142,18 +163,444 @@ export const DIAGRAM_SCRIPT = `
   // --- The draft store (in memory; nothing is persisted or sent) ---------
   let drafts = [];
   let nextId = 1;
-  const draftsFor = (node) => drafts.filter((d) => d.element === node);
+  const removalOn = (node) =>
+    drafts.find((d) => d.kind === "remove-element" && d.element === node);
 
-  // --- The proposal layer ------------------------------------------------
-  // Every change repaints from the draft list rather than patching in place,
-  // so a revert can never leave a half-applied proposal behind.
+  // --- The canvas ---------------------------------------------------------
+  // One transform per diagram. Nothing scrolls; x, y and zoom are the whole
+  // state, and every affordance is re-anchored from them.
+  const canvas = new Map();
+  for (const diagram of diagrams) {
+    const viewport = diagram.querySelector("[data-flow-viewport]");
+    const sizer = diagram.querySelector("[data-flow-sizer]");
+    const artboard = diagram.querySelector("[data-flow-artboard]");
+    if (!viewport || !sizer || !artboard) continue;
+    canvas.set(diagram, { viewport, sizer, artboard, x: 0, y: 0, zoom: 1 });
+    diagram.setAttribute("data-flow-canvas", "");
+  }
+
+  const applyTransform = (diagram) => {
+    const c = canvas.get(diagram);
+    if (!c) return;
+    c.sizer.style.transform =
+      "translate(" + c.x + "px," + c.y + "px) scale(" + c.zoom + ")";
+    const readout = diagram.querySelector("[data-flow-zoom-readout]");
+    if (readout) readout.textContent = Math.round(c.zoom * 100) + "%";
+    reanchor();
+  };
+
+  const clampPan = (diagram) => {
+    const c = canvas.get(diagram);
+    if (!c) return;
+    const vw = c.viewport.clientWidth, vh = c.viewport.clientHeight;
+    const aw = c.artboard.offsetWidth * c.zoom;
+    const ah = c.artboard.offsetHeight * c.zoom;
+    c.x = aw <= vw
+      ? clamp(c.x, -PAN_MARGIN, vw - aw + PAN_MARGIN)
+      : clamp(c.x, vw - aw - PAN_MARGIN, PAN_MARGIN);
+    c.y = ah <= vh
+      ? clamp(c.y, -PAN_MARGIN, vh - ah + PAN_MARGIN)
+      : clamp(c.y, vh - ah - PAN_MARGIN, PAN_MARGIN);
+  };
+
+  // Zoom about a point, so the artboard pixel under the pointer stays put -
+  // the thing that makes pinch feel like pinch rather than like a slider.
+  const zoomAbout = (diagram, nextZoom, px, py) => {
+    const c = canvas.get(diagram);
+    if (!c) return;
+    c.userZoomed = true;
+    const z1 = clamp(nextZoom, ZOOM_MIN, ZOOM_MAX);
+    if (z1 === c.zoom) return;
+    const ratio = z1 / c.zoom;
+    c.x = px - (px - c.x) * ratio;
+    c.y = py - (py - c.y) * ratio;
+    c.zoom = z1;
+    clampPan(diagram);
+    applyTransform(diagram);
+  };
+
+  const zoomCentered = (diagram, nextZoom) => {
+    const c = canvas.get(diagram);
+    if (!c) return;
+    zoomAbout(diagram, nextZoom, c.viewport.clientWidth / 2, c.viewport.clientHeight / 2);
+  };
+
+  // Fit is measured when it is asked for, never at load: a figure inside a
+  // collapsed slide is display:none and measures zero.
+  const fit = (diagram) => {
+    const c = canvas.get(diagram);
+    if (!c) return;
+    const vw = c.viewport.clientWidth, vh = c.viewport.clientHeight;
+    const aw = c.artboard.offsetWidth, ah = c.artboard.offsetHeight;
+    if (!aw || !ah || !vw || !vh) return;
+    // Capped at 100 percent, so a small diagram is never blown into a poster.
+    const pad = 24;
+    c.zoom = clamp(Math.min((vw - pad) / aw, (vh - pad) / ah, 1), ZOOM_MIN, ZOOM_MAX);
+    c.x = (vw - aw * c.zoom) / 2;
+    c.y = (vh - ah * c.zoom) / 2;
+    c.userZoomed = false;
+    applyTransform(diagram);
+  };
+
+  // An edit changes how wide a node is, which changes how much room the
+  // diagram needs. A canvas the reader has not taken control of follows the
+  // content; one they have zoomed themselves is left exactly where they put
+  // it, because moving it under them would be worse than a little clipping.
+  const refitIfUntouched = (diagram) => {
+    const c = canvas.get(diagram);
+    if (!c || c.userZoomed) return;
+    sizeRestingCanvas(diagram);
+    fit(diagram);
+  };
+
+  const stepZoom = (diagram, direction) => {
+    const c = canvas.get(diagram);
+    if (!c) return;
+    let next;
+    if (direction > 0) {
+      next = ZOOM_STEPS.find((s) => s > c.zoom + 0.001);
+      if (next === undefined) next = ZOOM_MAX;
+    } else {
+      const lower = ZOOM_STEPS.filter((s) => s < c.zoom - 0.001);
+      next = lower.length ? lower[lower.length - 1] : ZOOM_MIN;
+    }
+    zoomCentered(diagram, next);
+  };
+
+  // At rest the canvas has no height of its own, so it takes the one the
+  // fitted artboard wants - capped, because a tall diagram should not push the
+  // rest of the plan off the screen.
+  const sizeRestingCanvas = (diagram) => {
+    const c = canvas.get(diagram);
+    if (!c || diagram.hasAttribute("data-figure-maximized")) return;
+    const available = c.viewport.clientWidth;
+    const aw = c.artboard.offsetWidth, ah = c.artboard.offsetHeight;
+    if (!aw || !ah || !available) return;
+    const scale = Math.min(available / aw, 1);
+    const height = Math.min(ah * scale + 24, Math.round(innerHeight * 0.7));
+    c.viewport.style.height = Math.max(height, 140) + "px";
+  };
+
+  for (const diagram of diagrams) {
+    const c = canvas.get(diagram);
+    if (!c) continue;
+
+    // Trackpad first: a pinch arrives as a wheel event with ctrlKey set, and
+    // two-finger panning as a plain wheel with both deltas. Both are ours, so
+    // both are prevented - otherwise the page scrolls out from under the
+    // gesture and the browser runs its own zoom on top of it.
+    c.viewport.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      const rect = c.viewport.getBoundingClientRect();
+      if (event.ctrlKey || event.metaKey) {
+        const factor = Math.exp(-event.deltaY * 0.01);
+        zoomAbout(diagram, c.zoom * factor, event.clientX - rect.left, event.clientY - rect.top);
+        return;
+      }
+      c.x -= event.deltaX;
+      c.y -= event.deltaY;
+      clampPan(diagram);
+      applyTransform(diagram);
+    }, { passive: false });
+
+    // Drag to pan, for a mouse. A drag that never really moved is a click, so
+    // the threshold decides between panning and selecting.
+    let pan = null;
+    c.viewport.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      if (event.target.closest("[data-flow-editing], button, a, select, textarea, input")) return;
+      pan = { id: event.pointerId, sx: event.clientX, sy: event.clientY, ox: c.x, oy: c.y, moved: false };
+    });
+    c.viewport.addEventListener("pointermove", (event) => {
+      if (!pan || event.pointerId !== pan.id) return;
+      const dx = event.clientX - pan.sx, dy = event.clientY - pan.sy;
+      if (!pan.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+      if (!pan.moved) {
+        pan.moved = true;
+        c.viewport.setAttribute("data-flow-panning", "");
+        c.viewport.setPointerCapture(pan.id);
+      }
+      c.x = pan.ox + dx;
+      c.y = pan.oy + dy;
+      clampPan(diagram);
+      applyTransform(diagram);
+    });
+    const endPan = () => {
+      if (!pan) return;
+      c.viewport.removeAttribute("data-flow-panning");
+      if (c.viewport.hasPointerCapture(pan.id)) c.viewport.releasePointerCapture(pan.id);
+      // A pan that moved swallows the click, so dragging never also selects.
+      suppressClick = pan.moved;
+      pan = null;
+    };
+    c.viewport.addEventListener("pointerup", endPan);
+    c.viewport.addEventListener("pointercancel", endPan);
+
+    // An overflow:hidden box still scrolls when the browser pulls focus into
+    // something outside it - which happens the moment a field near an edge
+    // becomes editable. That silent scroll would desync every fixed
+    // affordance from the artboard, so it is undone and turned into a pan.
+    c.viewport.addEventListener("scroll", () => {
+      if (!c.viewport.scrollLeft && !c.viewport.scrollTop) return;
+      c.x -= c.viewport.scrollLeft;
+      c.y -= c.viewport.scrollTop;
+      c.viewport.scrollLeft = 0;
+      c.viewport.scrollTop = 0;
+      clampPan(diagram);
+      applyTransform(diagram);
+    });
+
+    for (const button of diagram.querySelectorAll("[data-flow-zoom]")) {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const action = button.getAttribute("data-flow-zoom");
+        if (action === "fit") fit(diagram);
+        else stepZoom(diagram, action === "in" ? 1 : -1);
+      });
+    }
+    const zoomControls = diagram.querySelector("[data-flow-zoom-controls]");
+    if (zoomControls) zoomControls.hidden = false;
+
+    // The shared leg owns promoting the frame; this one only reacts, so the
+    // two can never disagree about who is maximized.
+    new MutationObserver(() => {
+      if (diagram.hasAttribute("data-figure-maximized")) {
+        c.viewport.style.height = "";
+      } else {
+        sizeRestingCanvas(diagram);
+      }
+      requestAnimationFrame(() => fit(diagram));
+    }).observe(diagram, { attributes: true, attributeFilter: ["data-figure-maximized"] });
+
+  }
+
+  // --- Selection ----------------------------------------------------------
+  let selected = null;
+  let editing = null;
+
+  const select = (node) => {
+    if (selected === node) { reanchor(); return; }
+    if (selected) selected.removeAttribute("data-flow-selected");
+    selected = node;
+    if (selected) {
+      selected.setAttribute("data-flow-selected", "");
+      announce("Selected " + nameOf(selected));
+    }
+    buildActionBar();
+  };
+  const deselect = () => {
+    stopEditing(true);
+    if (selected) selected.removeAttribute("data-flow-selected");
+    selected = null;
+    buildActionBar();
+  };
+
+  for (const diagram of diagrams) {
+    const c = canvas.get(diagram);
+    if (!c) continue;
+    c.viewport.addEventListener("click", (event) => {
+      if (suppressClick) { suppressClick = false; return; }
+      if (event.target.closest("[data-flow-editing]")) return;
+      const node = event.target.closest("[data-flow-element]");
+      if (node && node !== diagram) select(node);
+      else deselect();
+    });
+    // Double-click goes straight into the words: the shortest path from
+    // "that is wrong" to typing the right thing.
+    c.viewport.addEventListener("dblclick", (event) => {
+      const field = event.target.closest("[data-flow-field]");
+      if (!field) return;
+      const node = field.closest("[data-flow-element]");
+      if (!node) return;
+      event.preventDefault();
+      select(node);
+      startEditing(field);
+    });
+    // Tab reaches the figure itself, which is how the whole diagram becomes
+    // commentable without every background click selecting it.
+    diagram.addEventListener("focusin", (event) => {
+      if (event.target === diagram) select(diagram);
+    });
+  }
+
+  // --- Editing in place ---------------------------------------------------
+  const startEditing = (field) => {
+    if (!field) return;
+    stopEditing(true);
+    const node = field.closest("[data-flow-element]");
+    if (removalOn(node)) return;
+    editing = { field, node, before: field.textContent };
+    field.setAttribute("data-flow-editing", "");
+    field.setAttribute("contenteditable", "plaintext-only");
+    field.focus();
+    const range = document.createRange();
+    range.selectNodeContents(field);
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    reanchor();
+  };
+
+  const stopEditing = (cancel) => {
+    if (!editing) return;
+    const { field, node, before } = editing;
+    editing = null;
+    field.removeAttribute("contenteditable");
+    field.removeAttribute("data-flow-editing");
+    const next = (field.textContent || "").trim();
+    const original = originalText.get(field);
+    const name = field.getAttribute("data-flow-field");
+    if (cancel) {
+      field.textContent = before;
+      paint();
+      return;
+    }
+    // One edit per field: typing it back to what the agent wrote is not a
+    // proposal, it is a change of mind, so the draft goes away entirely.
+    drafts = drafts.filter(
+      (d) => !(d.kind === "edit-text" && d.element === node && d.fieldName === name),
+    );
+    if (next && next !== original) {
+      drafts.push({
+        id: nextId++, kind: "edit-text", diagram: node.closest("[data-flow-diagram]") || node,
+        element: node, anchor: anchorOf(node), field, fieldName: name,
+        before: original, after: next,
+      });
+      announce("Edited " + (FIELD_LABELS[name] || name).toLowerCase() + " of " + nameOf(node));
+    }
+    trayOpen = true;
+    paint();
+  };
+
+  document.addEventListener("keydown", (event) => {
+    if (editing) {
+      if (event.key === "Escape") { event.stopPropagation(); stopEditing(true); }
+      else if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); stopEditing(false); }
+      return;
+    }
+    if (!compose.hidden) return;
+    if (!selected) return;
+    const active = document.activeElement;
+    if (active && active.closest && active.closest(".flow-diagram-compose, .flow-tray")) return;
+    if (event.key === "Escape") { event.stopPropagation(); deselect(); return; }
+    if (event.key === "Delete" || event.key === "Backspace") {
+      if (kindOf(selected) === "figure") return;
+      event.preventDefault();
+      toggleRemoval(selected);
+      return;
+    }
+    if (event.key === "Enter") {
+      const first = fieldsIn(selected)[0];
+      if (first) { event.preventDefault(); startEditing(first); }
+      return;
+    }
+    if (event.key.indexOf("Arrow") === 0) {
+      const diagram = selected.closest("[data-flow-diagram]") || selected;
+      const order = targetsIn(diagram);
+      const index = order.indexOf(selected);
+      const next = event.key === "ArrowRight" || event.key === "ArrowDown" ? index + 1 : index - 1;
+      if (next >= 0 && next < order.length) {
+        event.preventDefault();
+        select(order[next]);
+        bringIntoView(order[next]);
+      }
+    }
+  }, true);
+
+  // Blur commits, so clicking away from a field is the same as pressing Enter.
+  document.addEventListener("focusout", (event) => {
+    if (editing && event.target === editing.field) {
+      setTimeout(() => { if (editing && editing.field === event.target) stopEditing(false); }, 0);
+    }
+  });
+
+  const toggleRemoval = (node) => {
+    const existing = removalOn(node);
+    if (existing) {
+      drafts = drafts.filter((d) => d !== existing);
+      announce("Restored " + nameOf(node));
+    } else {
+      // A removal supersedes text edits on the same element: two contradictory
+      // instructions on one element make the agent guess.
+      const withdrawn = drafts.filter((d) => d.kind === "edit-text" && d.element === node);
+      drafts = drafts.filter((d) => !(d.kind === "edit-text" && d.element === node));
+      const note = withdrawn.length
+        ? "Withdrew " + withdrawn.length + " pending edit" + (withdrawn.length === 1 ? "" : "s") +
+          " on this element (" +
+          withdrawn.map((d) => (FIELD_LABELS[d.fieldName] || d.fieldName).toLowerCase()).join(", ") + ")."
+        : "";
+      drafts.push({
+        id: nextId++, kind: "remove-element",
+        diagram: node.closest("[data-flow-diagram]") || node,
+        element: node, anchor: anchorOf(node), reason: "",
+        consequence: consequenceOf(node), note,
+      });
+      announce("Deleted " + nameOf(node));
+    }
+    trayOpen = true;
+    paint();
+  };
+
+  // --- Consequences -------------------------------------------------------
+  const incidentEdges = (diagram, ids) =>
+    edgesIn(diagram).filter(
+      (e) => ids.indexOf(e.getAttribute("data-flow-edge-from")) !== -1 ||
+             ids.indexOf(e.getAttribute("data-flow-edge-to")) !== -1,
+    );
+  const removedNodeIdsFor = (node) => {
+    const kind = kindOf(node);
+    if (kind === "node") return [node.getAttribute("data-flow-node")];
+    if (kind === "stage") {
+      const stage = node.getAttribute("data-flow-stage");
+      return nodesIn(node.closest("[data-flow-diagram]"))
+        .filter((n) => n.getAttribute("data-flow-in-stage") === stage)
+        .map((n) => n.getAttribute("data-flow-node"));
+    }
+    return [];
+  };
+  // The compiler requires every node after the first stage to have exactly one
+  // incoming edge, so a removal can leave the flow unbuildable. The reviewer
+  // is told in words, from the compiled shape in the DOM.
+  const consequenceOf = (node) => {
+    const diagram = node.closest("[data-flow-diagram]");
+    if (!diagram) return "";
+    const gone = removedNodeIdsFor(node);
+    const goneEdges = kindOf(node) === "edge" ? [node] : incidentEdges(diagram, gone);
+    const sentences = [];
+    if (kindOf(node) === "stage" && gone.length > 0) {
+      sentences.push(gone.length + (gone.length === 1 ? " node loses its stage" : " nodes lose their stage"));
+    }
+    const orphans = [];
+    for (const candidate of nodesIn(diagram)) {
+      const id = candidate.getAttribute("data-flow-node");
+      if (gone.indexOf(id) !== -1) continue;
+      const incoming = edgesIn(diagram).filter((e) => e.getAttribute("data-flow-edge-to") === id);
+      if (incoming.length === 0) continue;
+      if (incoming.filter((e) => goneEdges.indexOf(e) === -1).length === 0) orphans.push(labelOfNode(candidate));
+    }
+    if (orphans.length > 0) {
+      const named = orphans.map(quote);
+      const list = named.length === 1
+        ? named[0]
+        : named.slice(0, -1).join(", ") + " and " + named[named.length - 1];
+      sentences.push(
+        "removing this leaves " + list +
+        (orphans.length === 1 ? " with no incoming edge" : " with no incoming edges") +
+        "; the agent will re-wire",
+      );
+    }
+    return sentences.join("; ");
+  };
+
+  // --- The proposal layer -------------------------------------------------
+  const showingOriginal = (diagram) => diagram.hasAttribute("data-flow-original");
+
   const clearLayer = () => {
     for (const diagram of diagrams) {
       diagram.removeAttribute("data-flow-proposed");
-      for (const node of diagram.querySelectorAll("[data-flow-proposed]")) {
-        node.removeAttribute("data-flow-proposed");
+      for (const n of diagram.querySelectorAll("[data-flow-proposed]")) {
+        n.removeAttribute("data-flow-proposed");
       }
-      for (const mark of diagram.querySelectorAll(".flow-diagram-marks")) mark.remove();
       for (const old of diagram.querySelectorAll(".flow-diagram-original, .flow-diagram-original-block")) old.remove();
       for (const field of diagram.querySelectorAll("[data-flow-edited]")) {
         field.innerHTML = originalHtml.get(field);
@@ -161,30 +608,12 @@ export const DIAGRAM_SCRIPT = `
       }
     }
   };
-
   const addProposedState = (node, state) => {
     const current = (node.getAttribute("data-flow-proposed") || "").split(" ").filter(Boolean);
     if (current.indexOf(state) === -1) current.push(state);
     node.setAttribute("data-flow-proposed", current.join(" "));
   };
 
-  const marksOf = (node) => {
-    let marks = node.querySelector(":scope > .flow-diagram-marks");
-    if (!marks) {
-      marks = el("span", "flow-diagram-marks");
-      marks.setAttribute("aria-hidden", "true");
-      node.appendChild(marks);
-    }
-    return marks;
-  };
-  const addMark = (node, kind, text) => {
-    const mark = el("span", "flow-diagram-mark", text);
-    mark.setAttribute("data-kind", kind);
-    marksOf(node).appendChild(mark);
-  };
-
-  // An element's accessible name states its proposed state, so a reviewer who
-  // cannot see the ghosting still knows what the artboard now claims.
   const baseName = new WeakMap();
   const restateName = (node, suffix) => {
     if (!baseName.has(node)) baseName.set(node, node.getAttribute("aria-label") || "");
@@ -198,84 +627,24 @@ export const DIAGRAM_SCRIPT = `
     }
   };
 
-  const incidentEdges = (diagram, nodeIds) =>
-    edgesIn(diagram).filter(
-      (edge) =>
-        nodeIds.indexOf(edge.getAttribute("data-flow-edge-from")) !== -1 ||
-        nodeIds.indexOf(edge.getAttribute("data-flow-edge-to")) !== -1,
-    );
-  const removedNodeIdsFor = (node) => {
-    const kind = kindOf(node);
-    if (kind === "node") return [node.getAttribute("data-flow-node")];
-    if (kind === "stage") {
-      const stage = node.getAttribute("data-flow-stage");
-      return nodesIn(node.closest("[data-flow-diagram]"))
-        .filter((n) => n.getAttribute("data-flow-in-stage") === stage)
-        .map((n) => n.getAttribute("data-flow-node"));
-    }
-    return [];
-  };
-
-  // The compiler requires every node after the first stage to have exactly one
-  // incoming edge, so a removal can leave the flow unbuildable. The reviewer
-  // is told in words, at proposal time, from the compiled shape in the DOM.
-  const consequenceOf = (node) => {
-    const diagram = node.closest("[data-flow-diagram]");
-    const gone = removedNodeIdsFor(node);
-    const goneEdges = kindOf(node) === "edge" ? [node] : incidentEdges(diagram, gone);
-    const sentences = [];
-    if (kindOf(node) === "stage" && gone.length > 0) {
-      sentences.push(
-        gone.length +
-          (gone.length === 1 ? " node loses its stage" : " nodes lose their stage"),
-      );
-    }
-    const orphans = [];
-    for (const candidate of nodesIn(diagram)) {
-      const id = candidate.getAttribute("data-flow-node");
-      if (gone.indexOf(id) !== -1) continue;
-      const incoming = edgesIn(diagram).filter((e) => e.getAttribute("data-flow-edge-to") === id);
-      if (incoming.length === 0) continue;
-      const surviving = incoming.filter((e) => goneEdges.indexOf(e) === -1);
-      if (surviving.length === 0) orphans.push(labelOfNode(candidate));
-    }
-    if (orphans.length > 0) {
-      const named = orphans.map(quote);
-      const list =
-        named.length === 1
-          ? named[0]
-          : named.slice(0, -1).join(", ") + " and " + named[named.length - 1];
-      sentences.push(
-        "removing this leaves " +
-          list +
-          (orphans.length === 1 ? " with no incoming edge" : " with no incoming edges") +
-          "; the agent will re-wire",
-      );
-    }
-    return sentences.join("; ");
-  };
-
-  // Show original is a paint-time state, not a coat of CSS: the proposal layer
-  // rewrites text, and no stylesheet can put the agent's words back. The
-  // figure carries data-flow-original; the control carries
-  // data-flow-show-original, so the two never read as one selector.
-  const showingOriginal = (diagram) =>
-    diagram.hasAttribute("data-flow-original");
+  // Every label a proposal needs, described here and placed by the collision
+  // engine below rather than parented to the artwork it names.
+  let labelSpecs = [];
 
   const paint = () => {
     clearLayer();
     resetNames();
-    // Removals first, so an edit withdrawn by a removal never paints.
+    labelSpecs = [];
     for (const draft of drafts) {
       if (draft.kind !== "remove-element") continue;
       if (showingOriginal(draft.diagram)) continue;
       const node = draft.element;
       addProposedState(node, "removed");
-      addMark(node, "removed", "Removed");
       restateName(node, ", proposed for removal");
+      labelSpecs.push({ subject: node, kind: "removed", text: "Removed" });
       const diagram = node.closest("[data-flow-diagram]");
       const gone = removedNodeIdsFor(node);
-      if (kindOf(node) !== "edge") {
+      if (kindOf(node) !== "edge" && diagram) {
         for (const edge of incidentEdges(diagram, gone)) {
           addProposedState(edge, "removed-incident");
           restateName(edge, ", touches an element proposed for removal");
@@ -285,11 +654,11 @@ export const DIAGRAM_SCRIPT = `
             addProposedState(stub, "removed-incident");
           }
         }
-      }
-      if (kindOf(node) === "stage") {
-        for (const card of nodesIn(diagram)) {
-          if (gone.indexOf(card.getAttribute("data-flow-node")) !== -1) {
-            addProposedState(card, "removed-incident");
+        if (kindOf(node) === "stage") {
+          for (const card of nodesIn(diagram)) {
+            if (gone.indexOf(card.getAttribute("data-flow-node")) !== -1) {
+              addProposedState(card, "removed-incident");
+            }
           }
         }
       }
@@ -301,13 +670,10 @@ export const DIAGRAM_SCRIPT = `
       if (!field) continue;
       field.textContent = draft.after;
       field.setAttribute("data-flow-edited", "");
-      addMark(draft.element, "edited", "Edited");
       restateName(draft.element, ", edited from " + quote(draft.before));
-      // A short field carries its original struck beside it; a paragraph's
-      // waits behind the marker and the figure's Show original toggle.
+      labelSpecs.push({ subject: draft.element, kind: "edited", text: "Edited" });
       if (draft.fieldName === "body" || draft.fieldName === "footer") {
-        const block = el("span", "flow-diagram-original-block", draft.before);
-        draft.element.appendChild(block);
+        draft.element.appendChild(el("span", "flow-diagram-original-block", draft.before));
       } else {
         const struck = el("s", "flow-diagram-original", draft.before);
         if (field.parentNode) field.parentNode.insertBefore(struck, field.nextSibling);
@@ -319,8 +685,10 @@ export const DIAGRAM_SCRIPT = `
       counts.set(draft.element, (counts.get(draft.element) || 0) + 1);
     }
     for (const entry of counts) {
-      addMark(entry[0], "comment", String(entry[1]));
       restateName(entry[0], entry[1] === 1 ? ", 1 comment" : ", " + entry[1] + " comments");
+      if (kindOf(entry[0]) !== "figure") {
+        labelSpecs.push({ subject: entry[0], kind: "comment", text: String(entry[1]) });
+      }
     }
     for (const diagram of diagrams) {
       const mine = drafts.filter((d) => d.diagram === diagram);
@@ -331,20 +699,375 @@ export const DIAGRAM_SCRIPT = `
         total.hidden = mine.length === 0;
         total.textContent = mine.length === 1 ? "1 note" : mine.length + " notes";
       }
-      const showOriginal = diagram.querySelector("[data-flow-show-original]");
-      if (showOriginal) showOriginal.hidden = proposals.length === 0;
+      const group = diagram.querySelector("[data-flow-proposal-group]");
+      if (group) group.hidden = proposals.length === 0;
       const revertAll = diagram.querySelector("[data-flow-revert-all]");
       if (revertAll) revertAll.hidden = proposals.length < 2;
       if (proposals.length === 0) {
         diagram.removeAttribute("data-flow-original");
+        const showOriginal = diagram.querySelector("[data-flow-show-original]");
         if (showOriginal) showOriginal.setAttribute("aria-pressed", "false");
       }
     }
     renderTray();
-    positionChip();
+    for (const diagram of diagrams) refitIfUntouched(diagram);
+    buildActionBar();
+    reanchor();
   };
 
-  // --- The feedback tray (a stand-in for commenting Phase 1) -------------
+  // --- Collision-aware placement -----------------------------------------
+  // The problem this solves, in the captain's words: a proposal label hides
+  // behind other nodes, and it obscures the very thing that was deleted. So
+  // the subject's own rectangle is an obstacle too, not just its neighbours,
+  // and a label that cannot find clear air keeps a leader line back to what it
+  // names rather than sitting on top of it.
+  const overlapArea = (a, b) => {
+    const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+    const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+    return w > 0 && h > 0 ? w * h : 0;
+  };
+
+  const placeLabel = ({ label, subject, obstacles, bounds, textRects }) => {
+    const size = label.getBoundingClientRect();
+    const w = size.width, h = size.height;
+    const gap = 5;
+    const cx = subject.left + subject.width / 2;
+    const cy = subject.top + subject.height / 2;
+    const fits = (x, y) => ({
+      left: x, top: y, right: x + w, bottom: y + h, width: w, height: h,
+    });
+    // Covering the subject is the failure the captain named first, so it is
+    // the most expensive thing a placement can do; covering a neighbour is the
+    // second. Distance from the subject is a tie-break, never a trade the
+    // engine makes against legibility.
+    const costOf = (rect) => {
+      let cost = overlapArea(rect, subject) * 6;
+      for (const obstacle of obstacles) cost += overlapArea(rect, obstacle) * 2;
+      return cost;
+    };
+    const clampedAt = (x, y) =>
+      fits(
+        clamp(x, bounds.left + 2, Math.max(bounds.left + 2, bounds.right - w - 2)),
+        clamp(y, bounds.top + 2, Math.max(bounds.top + 2, bounds.bottom - h - 2)),
+      );
+
+    // First choice for a subject big enough to carry it: a badge inside its own
+    // corner, the way any design tool badges an object. Inside is what makes it
+    // reliable - it belongs to its subject unmistakably and it cannot collide
+    // with a neighbour however tightly the diagram is packed.
+    //
+    // Which corner is decided by the subject's own words, not by a guess: the
+    // badge goes wherever it covers least of the text being proposed against,
+    // which is the second half of what the captain asked for.
+    if (subject.width > w + 10 && subject.height > h + 8) {
+      const inset = 3;
+      const corners = [
+        [subject.right - w - inset, subject.bottom - h - inset],
+        [subject.right - w - inset, subject.top + inset],
+      ];
+      let bestBadge = null;
+      for (const [x, y] of corners) {
+        const rect = fits(x, y);
+        let covered = 0;
+        for (const text of textRects) covered += overlapArea(rect, text);
+        for (const obstacle of obstacles) covered += overlapArea(rect, obstacle) * 4;
+        if (bestBadge === null || covered < bestBadge.covered) bestBadge = { rect, covered };
+      }
+      // A badge that would sit squarely on the words helps nobody; that case
+      // falls through to the placements outside.
+      if (bestBadge && bestBadge.covered < w * h * 0.35) {
+        return { x: bestBadge.rect.left, y: bestBadge.rect.top, rect: bestBadge.rect, badge: true };
+      }
+    }
+
+    // Preferred placements, closest and least intrusive first.
+    const candidates = [
+      [subject.right - w, subject.top - h - gap],
+      [cx - w / 2, subject.top - h - gap],
+      [subject.left, subject.top - h - gap],
+      [subject.right + gap, cy - h / 2],
+      [subject.left - w - gap, cy - h / 2],
+      [cx - w / 2, subject.bottom + gap],
+      [subject.right - w, subject.bottom + gap],
+      [subject.right + gap, subject.top - h - gap],
+      [subject.left - w - gap, subject.top - h - gap],
+      [subject.right + gap, subject.bottom + gap],
+      [subject.left - w - gap, subject.bottom + gap],
+    ];
+    let best = null;
+    candidates.forEach(([x, y], order) => {
+      const rect = clampedAt(x, y);
+      const cost = costOf(rect) + order * 30;
+      if (best === null || cost < best.cost) best = { rect, cost };
+    });
+    if (best && best.cost === 0) return { x: best.rect.left, y: best.rect.top, rect: best.rect };
+
+    // Nothing adjacent is clear, so look further out: a ring search for the
+    // nearest spot that collides with nothing at all. A label that has to
+    // travel keeps a leader line home, which is still far better than one
+    // sitting on the node it describes.
+    for (let radius = 24; radius <= 220; radius += 16) {
+      let ringBest = null;
+      for (let angle = 0; angle < 360; angle += 15) {
+        const rad = (angle * Math.PI) / 180;
+        const rect = clampedAt(
+          cx - w / 2 + Math.cos(rad) * radius,
+          cy - h / 2 + Math.sin(rad) * radius,
+        );
+        const cost = costOf(rect);
+        if (cost === 0) {
+          // Prefer staying level with the subject: a label directly above or
+          // below reads as belonging to it more than one off a diagonal.
+          const bias = Math.abs(Math.sin(rad)) * 4;
+          if (ringBest === null || bias < ringBest.bias) ringBest = { rect, bias };
+        }
+      }
+      if (ringBest) return { x: ringBest.rect.left, y: ringBest.rect.top, rect: ringBest.rect };
+    }
+    return best ? { x: best.rect.left, y: best.rect.top, rect: best.rect } : null;
+  };
+
+  // One pool of label elements, reused across repaints so a repaint does not
+  // churn the DOM on every keystroke.
+  const labelPool = [];
+  const leaderPool = [];
+  const takeFrom = (pool, className) => {
+    for (const item of pool) if (item.hidden) return item;
+    const made = el("div", className);
+    made.hidden = true;
+    document.body.appendChild(made);
+    pool.push(made);
+    return made;
+  };
+
+  const chromeRects = (diagram) => {
+    const rects = [];
+    if (!actionBar.hidden) rects.push(actionBar.getBoundingClientRect());
+    if (!compose.hidden) rects.push(compose.getBoundingClientRect());
+    if (!tray.hidden) rects.push(tray.getBoundingClientRect());
+    const toolbar = diagram.querySelector("[data-flow-controls]");
+    if (toolbar) rects.push(toolbar.getBoundingClientRect());
+    return rects;
+  };
+
+  const reanchorLabels = () => {
+    for (const item of labelPool) item.hidden = true;
+    for (const item of leaderPool) item.hidden = true;
+    const placed = [];
+    for (const spec of labelSpecs) {
+      const diagram = spec.subject.closest("[data-flow-diagram]");
+      const c = diagram ? canvas.get(diagram) : null;
+      if (!c) continue;
+      const subject = spec.subject.getBoundingClientRect();
+      const bounds = c.viewport.getBoundingClientRect();
+      // A subject scrolled out of the canvas gets no label; there is nothing
+      // for it to point at.
+      if (subject.right < bounds.left || subject.left > bounds.right ||
+          subject.bottom < bounds.top || subject.top > bounds.bottom) continue;
+      const label = takeFrom(labelPool, "flow-diagram-plabel");
+      label.setAttribute("data-kind", spec.kind);
+      label.textContent = spec.text;
+      label.hidden = false;
+      // Other elements, everything already placed this pass, and the viewer's
+      // own chrome. A label that ducks behind the action bar is just as hidden
+      // as one that ducks behind a node.
+      const obstacles = elementsIn(diagram)
+        .filter((n) => n !== spec.subject && kindOf(n) !== "figure")
+        .map((n) => n.getBoundingClientRect())
+        .filter((r) => overlapArea(r, bounds) > 0)
+        .concat(chromeRects(diagram))
+        .concat(placed);
+      // Every word the subject shows, so a badge can be put where they are
+      // not - including the struck original a proposal just added, which is
+      // not a field and would otherwise be invisible to the placement.
+      const textRects = fieldsIn(spec.subject)
+        .concat(Array.from(spec.subject.querySelectorAll(
+          ".flow-diagram-original, .flow-diagram-original-block")))
+        .map((f) => f.getBoundingClientRect());
+      const best = placeLabel({ label, subject, obstacles, bounds, textRects });
+      if (!best) { label.hidden = true; continue; }
+      label.style.left = best.x + "px";
+      label.style.top = best.y + "px";
+      placed.push(best.rect);
+      // Draw a leader only when the placement had to travel: an adjacent label
+      // needs no line, and a distant one is unreadable without it.
+      const dx = Math.max(subject.left - best.rect.right, best.rect.left - subject.right, 0);
+      const dy = Math.max(subject.top - best.rect.bottom, best.rect.top - subject.bottom, 0);
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (!best.badge && distance > 12) {
+        const leader = takeFrom(leaderPool, "flow-diagram-leader");
+        const fromX = best.rect.left + best.rect.width / 2;
+        const fromY = best.rect.top + best.rect.height / 2;
+        const toX = clamp(fromX, subject.left, subject.right);
+        const toY = clamp(fromY, subject.top, subject.bottom);
+        const length = Math.sqrt((toX - fromX) ** 2 + (toY - fromY) ** 2);
+        leader.hidden = false;
+        leader.style.left = fromX + "px";
+        leader.style.top = fromY + "px";
+        leader.style.width = length + "px";
+        leader.style.transform = "rotate(" + Math.atan2(toY - fromY, toX - fromX) + "rad)";
+      }
+    }
+  };
+
+  // --- The action bar a selection offers ----------------------------------
+  const actionBar = el("div", "flow-diagram-actionbar");
+  actionBar.hidden = true;
+  document.body.appendChild(actionBar);
+
+  const addAction = (action, icon, text, onClick, title) => {
+    const button = el("button", "flow-diagram-actionbar-button");
+    button.type = "button";
+    button.setAttribute("data-flow-action", action);
+    button.title = title || text;
+    button.innerHTML = icon + "<span>" + text + "</span>";
+    button.addEventListener("click", (event) => { event.stopPropagation(); onClick(); });
+    actionBar.appendChild(button);
+  };
+
+  const buildActionBar = () => {
+    actionBar.textContent = "";
+    if (!selected) { actionBar.hidden = true; return; }
+    const removal = removalOn(selected);
+    addAction("comment", ICON.comment, "Comment", () => openCompose(selected));
+    if (!removal && fieldsIn(selected).length > 0) {
+      addAction("edit", ICON.edit, "Edit", () => startEditing(fieldsIn(selected)[0]),
+        "Edit in place - or double-click the text");
+    }
+    if (kindOf(selected) !== "figure") {
+      actionBar.appendChild(el("span", "flow-diagram-actionbar-sep"));
+      if (removal) addAction("revert", ICON.revert, "Restore", () => toggleRemoval(selected));
+      else addAction("delete", ICON.del, "Delete", () => toggleRemoval(selected), "Delete - or press Delete");
+    }
+    actionBar.hidden = false;
+    reanchor();
+  };
+
+  const positionActionBar = () => {
+    if (!selected || actionBar.hidden) return;
+    const diagram = selected.closest("[data-flow-diagram]") || selected;
+    const c = canvas.get(diagram);
+    const subject = selected.getBoundingClientRect();
+    const size = actionBar.getBoundingClientRect();
+    const bounds = c ? c.viewport.getBoundingClientRect()
+                     : { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+    if (c && (subject.bottom < bounds.top || subject.top > bounds.bottom)) {
+      actionBar.style.visibility = "hidden";
+      return;
+    }
+    actionBar.style.visibility = "visible";
+    // Above the element by preference, below when there is no room - the bar
+    // must never cover what it acts on.
+    let top = subject.top - size.height - 6;
+    if (top < Math.max(bounds.top, 0) + 2) top = subject.bottom + 6;
+    actionBar.style.left = clamp(subject.left, 8, innerWidth - size.width - 8) + "px";
+    actionBar.style.top = clamp(top, 8, innerHeight - size.height - 8) + "px";
+  };
+
+  // Everything anchored to the artboard is re-placed together, because every
+  // one of them moves when the canvas does.
+  let reanchorScheduled = false;
+  const reanchor = () => {
+    if (reanchorScheduled) return;
+    reanchorScheduled = true;
+    requestAnimationFrame(() => {
+      reanchorScheduled = false;
+      positionActionBar();
+      reanchorLabels();
+      positionCompose();
+    });
+  };
+
+  const bringIntoView = (node) => {
+    const diagram = node.closest("[data-flow-diagram]");
+    const c = diagram ? canvas.get(diagram) : null;
+    if (!c) return;
+    const subject = node.getBoundingClientRect();
+    const bounds = c.viewport.getBoundingClientRect();
+    let dx = 0, dy = 0;
+    if (subject.left < bounds.left + 16) dx = bounds.left + 16 - subject.left;
+    if (subject.right > bounds.right - 16) dx = bounds.right - 16 - subject.right;
+    if (subject.top < bounds.top + 16) dy = bounds.top + 16 - subject.top;
+    if (subject.bottom > bounds.bottom - 16) dy = bounds.bottom - 16 - subject.bottom;
+    if (dx || dy) {
+      c.x += dx; c.y += dy;
+      clampPan(diagram);
+      applyTransform(diagram);
+    }
+  };
+
+  // --- Comment compose ----------------------------------------------------
+  // The one surface that survives the redesign: a comment has nowhere in the
+  // diagram to be typed, so it gets a card. Edits and deletions do not.
+  const compose = el("div", "flow-diagram-compose");
+  compose.hidden = true;
+  compose.setAttribute("role", "dialog");
+  document.body.appendChild(compose);
+  let composeSubject = null;
+
+  const closeCompose = () => {
+    compose.hidden = true;
+    compose.textContent = "";
+    composeSubject = null;
+  };
+
+  const positionCompose = () => {
+    if (compose.hidden || !composeSubject) return;
+    const subject = composeSubject.getBoundingClientRect();
+    const size = compose.getBoundingClientRect();
+    compose.style.left = clamp(subject.left, 8, innerWidth - size.width - 8) + "px";
+    const below = subject.bottom + 8;
+    compose.style.top =
+      (below + size.height > innerHeight - 8
+        ? clamp(subject.top - size.height - 8, 8, innerHeight - size.height - 8)
+        : below) + "px";
+  };
+
+  const openCompose = (node) => {
+    compose.textContent = "";
+    composeSubject = node;
+    compose.appendChild(el("p", "flow-diagram-compose-title", "Comment"));
+    compose.appendChild(el("p", "flow-diagram-compose-target", "Flow: " + nameOf(node)));
+    const label = el("label", "", "Your note");
+    const textarea = document.createElement("textarea");
+    label.appendChild(textarea);
+    compose.appendChild(label);
+    const row = el("div", "flow-diagram-compose-row");
+    const cancel = el("button", "flow-diagram-button", "Cancel");
+    cancel.type = "button";
+    cancel.addEventListener("click", closeCompose);
+    const save = el("button", "flow-diagram-button", "Save comment");
+    save.type = "button";
+    save.setAttribute("data-variant", "primary");
+    save.addEventListener("click", () => {
+      const value = textarea.value.trim();
+      if (!value) { textarea.focus(); return; }
+      drafts.push({
+        id: nextId++, kind: "comment",
+        diagram: node.closest("[data-flow-diagram]") || node,
+        element: node, anchor: anchorOf(node), body: value,
+      });
+      announce("Comment saved on " + nameOf(node));
+      closeCompose();
+      trayOpen = true;
+      paint();
+    });
+    row.appendChild(cancel);
+    row.appendChild(save);
+    compose.appendChild(row);
+    compose.hidden = false;
+    positionCompose();
+    textarea.focus();
+  };
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || compose.hidden) return;
+    event.stopPropagation();
+    closeCompose();
+    if (selected) selected.focus({ preventScroll: true });
+  }, true);
+
+  // --- The feedback tray (a stand-in for commenting Phase 1) --------------
   const tray = el("aside", "flow-tray");
   tray.hidden = true;
   tray.setAttribute("aria-label", "Feedback tray");
@@ -355,7 +1078,7 @@ export const DIAGRAM_SCRIPT = `
   const trayClose = el("button", "flow-tray-close");
   trayClose.type = "button";
   trayClose.setAttribute("aria-label", "Hide the feedback tray");
-  trayClose.innerHTML = ICON.remove;
+  trayClose.innerHTML = ICON.close;
   trayHeader.appendChild(trayClose);
   const trayList = el("ul", "flow-tray-list");
   const trayFoot = el("div", "flow-tray-foot");
@@ -364,11 +1087,8 @@ export const DIAGRAM_SCRIPT = `
   const traySend = el("button", "flow-diagram-button", "Send feedback to agent");
   traySend.type = "button";
   traySend.disabled = true;
-  const trayStub = el(
-    "p",
-    "flow-tray-stub",
-    "Preview only: nothing is sent and nothing is written to the plan source. The real package ships with commenting Phase 1.",
-  );
+  const trayStub = el("p", "flow-tray-stub",
+    "Preview only: nothing is sent and nothing is written to the plan source. The real package ships with commenting Phase 1.");
   trayFoot.appendChild(traySend);
   trayFoot.appendChild(trayStub);
   tray.appendChild(trayHeader);
@@ -385,11 +1105,7 @@ export const DIAGRAM_SCRIPT = `
   trayClose.addEventListener("click", () => { trayOpen = false; renderTray(); });
   launcher.addEventListener("click", () => { trayOpen = true; renderTray(); });
 
-  const KIND_LABEL = {
-    comment: "Comment",
-    "edit-text": "Edit",
-    "remove-element": "Remove",
-  };
+  const KIND_LABEL = { comment: "Comment", "edit-text": "Edit", "remove-element": "Delete" };
 
   const renderTray = () => {
     trayList.textContent = "";
@@ -398,15 +1114,12 @@ export const DIAGRAM_SCRIPT = `
       const head = el("div", "flow-tray-item-head");
       const target = el("button", "flow-tray-target", "Flow: " + nameOf(draft.element));
       target.type = "button";
-      target.addEventListener("click", () => revealTarget(draft.element));
+      target.addEventListener("click", () => { select(draft.element); bringIntoView(draft.element); });
       head.appendChild(target);
-      const kind = el(
-        "span",
-        "flow-tray-kind",
+      const kind = el("span", "flow-tray-kind",
         draft.kind === "edit-text"
           ? KIND_LABEL[draft.kind] + " " + (FIELD_LABELS[draft.fieldName] || draft.fieldName).toLowerCase()
-          : KIND_LABEL[draft.kind],
-      );
+          : KIND_LABEL[draft.kind]);
       kind.setAttribute("data-kind", draft.kind);
       head.appendChild(kind);
       item.appendChild(head);
@@ -414,13 +1127,11 @@ export const DIAGRAM_SCRIPT = `
       if (where) item.appendChild(el("div", "flow-tray-where", where));
       if (draft.kind === "edit-text") {
         const value = el("div", "flow-tray-value");
-        const struck = el("s", "", draft.before);
-        value.appendChild(struck);
+        value.appendChild(el("s", "", draft.before));
         value.appendChild(document.createTextNode(" " + String.fromCharCode(8594) + " " + draft.after));
         item.appendChild(value);
       }
       if (draft.body) item.appendChild(el("div", "flow-tray-value", draft.body));
-      if (draft.reason) item.appendChild(el("div", "flow-tray-value", "Reason: " + draft.reason));
       if (draft.consequence) item.appendChild(el("div", "flow-tray-value", "Consequence: " + draft.consequence));
       if (draft.note) item.appendChild(el("div", "flow-tray-note", draft.note));
       const revert = el("button", "flow-tray-revert", "Revert");
@@ -436,398 +1147,7 @@ export const DIAGRAM_SCRIPT = `
     trayCount.textContent = String(drafts.length);
     tray.hidden = drafts.length === 0 || !trayOpen;
     launcher.hidden = drafts.length === 0 || trayOpen;
-    // A promoted figure keeps its artboard clear of the open tray. The tray
-    // deliberately sits above the overlay, so without this the widest part of
-    // the diagram would be the part nobody can see.
-    document.documentElement.toggleAttribute("data-flow-tray-open", !tray.hidden);
-    for (const diagram of diagrams) {
-      if (isMaximized(diagram)) fit(diagram);
-    }
   };
-
-  const revealTarget = (node) => {
-    const diagram = node.closest("[data-flow-diagram]");
-    const viewport = diagram.querySelector("[data-flow-viewport]");
-    node.scrollIntoView({ block: "center", inline: "center" });
-    if (viewport) {
-      const box = node.getBoundingClientRect();
-      const frame = viewport.getBoundingClientRect();
-      if (box.left < frame.left || box.right > frame.right) {
-        viewport.scrollLeft += box.left - frame.left - frame.width / 2 + box.width / 2;
-      }
-    }
-    setTarget(node);
-    node.focus({ preventScroll: true });
-  };
-
-  // --- Targeting: one ring, one chip -------------------------------------
-  const chip = el("button", "flow-diagram-chip");
-  chip.type = "button";
-  chip.hidden = true;
-  chip.innerHTML = ICON.comment + "<span>Comment</span>";
-  document.body.appendChild(chip);
-
-  let targeted = null;
-  let clearTimer = null;
-
-  const setTarget = (node) => {
-    if (targeted === node) return;
-    if (targeted) targeted.removeAttribute("data-flow-targeted");
-    targeted = node;
-    if (targeted) {
-      targeted.setAttribute("data-flow-targeted", "");
-      chip.setAttribute("aria-label", "Feedback on " + nameOf(targeted));
-    }
-    positionChip();
-  };
-
-  const positionChip = () => {
-    if (!targeted) { chip.hidden = true; return; }
-    const box = targeted.getBoundingClientRect();
-    if (box.width === 0 && box.height === 0) { chip.hidden = true; return; }
-    const diagram = targeted.closest("[data-flow-diagram]") || targeted;
-    const viewport = diagram.querySelector("[data-flow-viewport]");
-    if (viewport && kindOf(targeted) !== "figure" && kindOf(targeted) !== "footer") {
-      const frame = viewport.getBoundingClientRect();
-      if (box.right < frame.left || box.left > frame.right || box.bottom < frame.top || box.top > frame.bottom) {
-        chip.hidden = true;
-        return;
-      }
-    }
-    chip.hidden = false;
-    const size = chip.getBoundingClientRect();
-    // The figure's own chip goes left, because its top-right corner already
-    // holds the figure's control bar.
-    const left = kindOf(targeted) === "figure" ? box.left + 4 : box.right - size.width;
-    chip.style.left = clamp(left, 8, innerWidth - size.width - 8) + "px";
-    chip.style.top = clamp(box.top - size.height - 4, 8, innerHeight - size.height - 8) + "px";
-  };
-
-  // --- Actions and compose ----------------------------------------------
-  const actions = el("div", "flow-diagram-actions");
-  actions.hidden = true;
-  actions.setAttribute("role", "menu");
-  document.body.appendChild(actions);
-  const compose = el("div", "flow-diagram-compose");
-  compose.hidden = true;
-  compose.setAttribute("role", "dialog");
-  document.body.appendChild(compose);
-
-  const closeCompose = () => { compose.hidden = true; compose.textContent = ""; };
-  const closeActions = () => { actions.hidden = true; actions.textContent = ""; };
-  const anythingOpen = () => !actions.hidden || !compose.hidden;
-
-  const placeNear = (panel, box) => {
-    panel.style.left = "0px";
-    panel.style.top = "0px";
-    const size = panel.getBoundingClientRect();
-    panel.style.left = clamp(box.left, 8, innerWidth - size.width - 8) + "px";
-    const below = box.bottom + 6;
-    panel.style.top =
-      (below + size.height > innerHeight - 8
-        ? clamp(box.top - size.height - 6, 8, innerHeight - size.height - 8)
-        : below) + "px";
-  };
-
-  const editableFields = (node) =>
-    fieldsIn(node).map((field) => ({
-      field,
-      name: field.getAttribute("data-flow-field"),
-    }));
-
-  const openActions = (node) => {
-    closeCompose();
-    actions.textContent = "";
-    actions.appendChild(el("div", "flow-diagram-actions-target", nameOf(node)));
-    const add = (action, icon, text) => {
-      const button = el("button", "flow-diagram-action");
-      button.type = "button";
-      button.setAttribute("data-flow-action", action);
-      button.innerHTML = icon + "<span>" + text + "</span>";
-      button.addEventListener("click", () => { closeActions(); openCompose(node, action); });
-      actions.appendChild(button);
-    };
-    add("comment", ICON.comment, "Comment");
-    if (editableFields(node).length > 0) add("edit", ICON.edit, "Suggest edit");
-    if (kindOf(node) !== "figure") add("remove", ICON.remove, "Propose removal");
-    actions.hidden = false;
-    placeNear(actions, node.getBoundingClientRect());
-    const first = actions.querySelector("button");
-    if (first) first.focus();
-  };
-
-  const openCompose = (node, action) => {
-    closeActions();
-    compose.textContent = "";
-    const titles = { comment: "Comment", edit: "Suggest an edit", remove: "Propose removal" };
-    compose.appendChild(el("p", "flow-diagram-compose-title", titles[action]));
-    compose.appendChild(el("p", "flow-diagram-compose-target", "Flow: " + nameOf(node)));
-    let select = null;
-    let textarea = null;
-    let before = null;
-    const fields = editableFields(node);
-    if (action === "edit") {
-      if (fields.length > 1) {
-        const wrap = el("label", "", "Field");
-        select = document.createElement("select");
-        for (const entry of fields) {
-          const option = document.createElement("option");
-          option.value = entry.name;
-          option.textContent = FIELD_LABELS[entry.name] || entry.name;
-          select.appendChild(option);
-        }
-        wrap.appendChild(select);
-        compose.appendChild(wrap);
-      }
-      before = el("p", "flow-diagram-compose-before");
-      compose.appendChild(before);
-    }
-    if (action === "remove") {
-      // The implication comes before the reason box: a reviewer should read
-      // what the removal breaks before deciding how to justify it.
-      const consequence = consequenceOf(node);
-      compose.appendChild(
-        el(
-          "p",
-          "flow-diagram-compose-consequence",
-          consequence
-            ? "Consequence: " + consequence + "."
-            : "Nothing downstream loses its only incoming edge.",
-        ),
-      );
-    }
-    const label = el(
-      "label",
-      "",
-      action === "comment" ? "Your note" : action === "edit" ? "Replacement text" : "Reason (optional)",
-    );
-    textarea = document.createElement("textarea");
-    label.appendChild(textarea);
-    compose.appendChild(label);
-    const syncField = () => {
-      const name = select ? select.value : fields[0] ? fields[0].name : null;
-      const entry = fields.find((f) => f.name === name);
-      const text = entry ? originalText.get(entry.field) : "";
-      textarea.value = text;
-      before.textContent = "";
-      before.appendChild(document.createTextNode("Currently: "));
-      before.appendChild(el("s", "", text));
-    };
-    if (action === "edit") {
-      syncField();
-      if (select) select.addEventListener("change", syncField);
-    }
-    const row = el("div", "flow-diagram-compose-row");
-    const cancel = el("button", "flow-diagram-button", "Cancel");
-    cancel.type = "button";
-    cancel.addEventListener("click", () => { closeCompose(); if (targeted) targeted.focus(); });
-    const save = el(
-      "button",
-      "flow-diagram-button",
-      action === "comment" ? "Save comment" : action === "edit" ? "Propose edit" : "Propose removal",
-    );
-    save.type = "button";
-    save.setAttribute("data-variant", action === "remove" ? "danger" : "primary");
-    save.addEventListener("click", () => commit(node, action, select, textarea, fields));
-    row.appendChild(cancel);
-    row.appendChild(save);
-    compose.appendChild(row);
-    compose.hidden = false;
-    placeNear(compose, node.getBoundingClientRect());
-    textarea.focus();
-  };
-
-  const commit = (node, action, select, textarea, fields) => {
-    const diagram = node.closest("[data-flow-diagram]") || node;
-    const value = textarea.value.trim();
-    if (action === "comment") {
-      if (!value) { textarea.focus(); return; }
-      drafts.push({
-        id: nextId++, kind: "comment", diagram, element: node,
-        anchor: anchorOf(node), body: value,
-      });
-      announce("Comment saved on " + nameOf(node));
-    } else if (action === "edit") {
-      const name = select ? select.value : fields[0] ? fields[0].name : null;
-      const entry = fields.find((f) => f.name === name);
-      if (!entry || !value) { textarea.focus(); return; }
-      // At most one edit per field; a second proposal replaces the first.
-      drafts = drafts.filter(
-        (d) => !(d.kind === "edit-text" && d.element === node && d.fieldName === name),
-      );
-      drafts.push({
-        id: nextId++, kind: "edit-text", diagram, element: node,
-        anchor: anchorOf(node), field: entry.field, fieldName: name,
-        before: originalText.get(entry.field), after: value,
-      });
-      announce("Edit proposed on " + nameOf(node));
-    } else {
-      // A removal supersedes text edits on the same element: two contradictory
-      // instructions on one element make the agent guess.
-      const withdrawn = drafts.filter((d) => d.kind === "edit-text" && d.element === node);
-      drafts = drafts.filter((d) => !(d.kind === "edit-text" && d.element === node));
-      drafts = drafts.filter((d) => !(d.kind === "remove-element" && d.element === node));
-      const note = withdrawn.length
-        ? "Withdrew " + withdrawn.length + " pending edit" + (withdrawn.length === 1 ? "" : "s") +
-          " on this element (" +
-          withdrawn.map((d) => (FIELD_LABELS[d.fieldName] || d.fieldName).toLowerCase()).join(", ") + ")."
-        : "";
-      drafts.push({
-        id: nextId++, kind: "remove-element", diagram, element: node,
-        anchor: anchorOf(node), reason: value, consequence: consequenceOf(node), note,
-      });
-      announce("Removal proposed on " + nameOf(node));
-    }
-    closeCompose();
-    trayOpen = true;
-    paint();
-    if (node.isConnected) node.focus({ preventScroll: true });
-  };
-
-  chip.addEventListener("pointerenter", () => clearTimeout(clearTimer));
-  chip.addEventListener("click", () => { if (targeted) openActions(targeted); });
-
-  // --- Zoom and pan -------------------------------------------------------
-  const surfaces = new Map();
-  for (const diagram of diagrams) {
-    const viewport = diagram.querySelector("[data-flow-viewport]");
-    const artboard = diagram.querySelector("[data-flow-artboard]");
-    const sizer = diagram.querySelector("[data-flow-sizer]");
-    if (!viewport || !artboard || !sizer) continue;
-    surfaces.set(diagram, { viewport, artboard, sizer, zoom: 1 });
-  }
-
-  const applyZoom = (diagram, next, anchorPoint) => {
-    const surface = surfaces.get(diagram);
-    if (!surface) return;
-    const previous = surface.zoom;
-    const zoom = clamp(next, ZOOM_STEPS[0], ZOOM_STEPS[ZOOM_STEPS.length - 1]);
-    const point = anchorPoint || {
-      x: surface.viewport.scrollLeft + surface.viewport.clientWidth / 2,
-      y: surface.viewport.scrollTop + surface.viewport.clientHeight / 2,
-    };
-    surface.zoom = zoom;
-    surface.artboard.style.setProperty("--flow-zoom", String(zoom));
-    const width = surface.artboard.offsetWidth;
-    const height = surface.artboard.offsetHeight;
-    surface.sizer.style.width = width * zoom + "px";
-    surface.sizer.style.height = height * zoom + "px";
-    surface.viewport.scrollLeft = (point.x / previous) * zoom - surface.viewport.clientWidth / 2;
-    surface.viewport.scrollTop = (point.y / previous) * zoom - surface.viewport.clientHeight / 2;
-    const readout = diagram.querySelector("[data-flow-zoom-readout]");
-    if (readout) readout.textContent = Math.round(zoom * 100) + "%";
-    positionChip();
-  };
-  // Fit is measured when the overlay opens, never at page load: a figure
-  // inside a collapsed slide is display:none and measures zero.
-  const fit = (diagram) => {
-    const surface = surfaces.get(diagram);
-    if (!surface) return;
-    const style = getComputedStyle(surface.viewport);
-    const available =
-      surface.viewport.clientWidth -
-      parseFloat(style.paddingLeft || "0") -
-      parseFloat(style.paddingRight || "0");
-    const natural = surface.artboard.offsetWidth;
-    if (natural === 0 || available <= 0) return;
-    // Capped at 100 percent, so a small diagram is never blown into a poster.
-    applyZoom(diagram, Math.min(1, available / natural));
-  };
-  const stepZoom = (diagram, direction) => {
-    const surface = surfaces.get(diagram);
-    if (!surface) return;
-    const current = surface.zoom;
-    let next;
-    if (direction > 0) {
-      next = ZOOM_STEPS.find((step) => step > current + 0.001);
-      if (next === undefined) next = ZOOM_STEPS[ZOOM_STEPS.length - 1];
-    } else {
-      const lower = ZOOM_STEPS.filter((step) => step < current - 0.001);
-      next = lower.length ? lower[lower.length - 1] : ZOOM_STEPS[0];
-    }
-    applyZoom(diagram, next);
-  };
-  const resetZoom = (diagram) => {
-    const surface = surfaces.get(diagram);
-    if (!surface) return;
-    surface.artboard.style.removeProperty("--flow-zoom");
-    surface.sizer.style.removeProperty("width");
-    surface.sizer.style.removeProperty("height");
-    surface.zoom = 1;
-    const readout = diagram.querySelector("[data-flow-zoom-readout]");
-    if (readout) readout.textContent = "100%";
-  };
-
-  const isMaximized = (diagram) => diagram.hasAttribute("data-figure-maximized");
-
-  for (const diagram of diagrams) {
-    for (const button of diagram.querySelectorAll("[data-flow-zoom]")) {
-      button.addEventListener("click", (event) => {
-        event.stopPropagation();
-        const action = button.getAttribute("data-flow-zoom");
-        if (action === "fit") fit(diagram);
-        else stepZoom(diagram, action === "in" ? 1 : -1);
-      });
-    }
-    // The shared leg owns promoting the frame; this one only reacts to it, so
-    // the two families can never disagree about who is maximized.
-    new MutationObserver(() => {
-      const controls = diagram.querySelector("[data-flow-zoom-controls]");
-      if (isMaximized(diagram)) {
-        if (controls) controls.hidden = false;
-        requestAnimationFrame(() => fit(diagram));
-      } else {
-        if (controls) controls.hidden = true;
-        resetZoom(diagram);
-      }
-      positionChip();
-    }).observe(diagram, { attributes: true, attributeFilter: ["data-figure-maximized"] });
-
-    const surface = surfaces.get(diagram);
-    if (surface) {
-      let panning = null;
-      surface.viewport.addEventListener("pointerdown", (event) => {
-        if (!isMaximized(diagram) || event.button !== 0) return;
-        if (event.target.closest("button, a, select, textarea, input")) return;
-        panning = {
-          id: event.pointerId,
-          x: event.clientX,
-          y: event.clientY,
-          left: surface.viewport.scrollLeft,
-          top: surface.viewport.scrollTop,
-          moved: false,
-        };
-      });
-      surface.viewport.addEventListener("pointermove", (event) => {
-        if (!panning || event.pointerId !== panning.id) return;
-        const dx = event.clientX - panning.x;
-        const dy = event.clientY - panning.y;
-        if (!panning.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
-        if (!panning.moved) {
-          panning.moved = true;
-          surface.viewport.setAttribute("data-flow-panning", "");
-          surface.viewport.setPointerCapture(panning.id);
-        }
-        surface.viewport.scrollLeft = panning.left - dx;
-        surface.viewport.scrollTop = panning.top - dy;
-      });
-      // Drop the grabbing cursor before releasing capture, and only release a
-      // capture the viewport actually holds: a pointer that ended outside the
-      // window leaves no capture to release, and a throw here would strand the
-      // surface looking like it is still being dragged.
-      const endPan = () => {
-        if (!panning) return;
-        surface.viewport.removeAttribute("data-flow-panning");
-        if (surface.viewport.hasPointerCapture(panning.id)) {
-          surface.viewport.releasePointerCapture(panning.id);
-        }
-        panning = null;
-      };
-      surface.viewport.addEventListener("pointerup", endPan);
-      surface.viewport.addEventListener("pointercancel", endPan);
-      surface.viewport.addEventListener("scroll", positionChip, { passive: true });
-    }
-  }
 
   // --- Figure-level proposal chrome --------------------------------------
   for (const diagram of diagrams) {
@@ -846,101 +1166,31 @@ export const DIAGRAM_SCRIPT = `
     if (revertAll) {
       revertAll.addEventListener("click", (event) => {
         event.stopPropagation();
-        const removed = drafts.filter((d) => d.diagram === diagram && d.kind !== "comment").length;
+        const count = drafts.filter((d) => d.diagram === diagram && d.kind !== "comment").length;
         drafts = drafts.filter((d) => !(d.diagram === diagram && d.kind !== "comment"));
-        announce("Reverted " + removed + " proposals in this diagram");
+        announce("Reverted " + count + " proposals in this diagram");
         paint();
       });
     }
   }
 
-  // --- Pointer and keyboard reach ----------------------------------------
+  document.addEventListener("pointerdown", (event) => {
+    if (compose.contains(event.target) || actionBar.contains(event.target) || tray.contains(event.target)) return;
+    if (event.target.closest("[data-flow-diagram]")) return;
+    closeCompose();
+    deselect();
+  });
+  // First layout runs last: fitting the canvas re-anchors the action bar and
+  // the label layer, so both have to exist before anything is fitted.
   for (const diagram of diagrams) {
-    diagram.addEventListener("pointerover", (event) => {
-      if (anythingOpen()) return;
-      if (event.target.closest(".flow-diagram-controls")) return;
-      const node = event.target.closest("[data-flow-element]");
-      if (!node) return;
-      clearTimeout(clearTimer);
-      setTarget(node);
-    });
-    diagram.addEventListener("pointerleave", () => {
-      if (anythingOpen()) return;
-      clearTimeout(clearTimer);
-      clearTimer = setTimeout(() => setTarget(null), 160);
-    });
-    diagram.addEventListener("focusin", (event) => {
-      const node = event.target.closest("[data-flow-element]");
-      if (node && diagram.contains(node)) setTarget(node);
-    });
-    diagram.addEventListener("keydown", (event) => {
-      const node = event.target.closest("[data-flow-element]");
-      if (!node) return;
-      const order = targetsIn(diagram);
-      const index = order.indexOf(node);
-      const surface = surfaces.get(diagram);
-      const panning = isMaximized(diagram) && kindOf(node) === "figure" && surface;
-      const step = event.shiftKey ? 160 : 40;
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openActions(node);
-        return;
-      }
-      if (panning && event.key.indexOf("Arrow") === 0) {
-        event.preventDefault();
-        if (event.key === "ArrowLeft") surface.viewport.scrollLeft -= step;
-        if (event.key === "ArrowRight") surface.viewport.scrollLeft += step;
-        if (event.key === "ArrowUp") surface.viewport.scrollTop -= step;
-        if (event.key === "ArrowDown") surface.viewport.scrollTop += step;
-        return;
-      }
-      let next = -1;
-      if (event.key === "ArrowRight" || event.key === "ArrowDown") next = index + 1;
-      if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = index - 1;
-      if (event.key === "Home") next = 0;
-      if (event.key === "End") next = order.length - 1;
-      if (next >= 0 && next < order.length) {
-        event.preventDefault();
-        order[next].focus({ preventScroll: false });
-        setTarget(order[next]);
-        return;
-      }
-      if (!isMaximized(diagram)) return;
-      if (event.key === "+" || event.key === "=") { event.preventDefault(); stepZoom(diagram, 1); }
-      if (event.key === "-") { event.preventDefault(); stepZoom(diagram, -1); }
-      if (event.key === "0") { event.preventDefault(); fit(diagram); }
-      if (event.key === "1") { event.preventDefault(); applyZoom(diagram, 1); }
-    });
+    sizeRestingCanvas(diagram);
+    fit(diagram);
   }
 
-  // Escape unwinds one level at a time: a compose card or an actions popover
-  // first, then the overlay the shared leg owns. Capture, so this leg is
-  // asked before the maximize leg closes the panel underneath an open card.
-  document.addEventListener(
-    "keydown",
-    (event) => {
-      if (event.key !== "Escape") return;
-      if (!compose.hidden) {
-        event.stopPropagation();
-        closeCompose();
-        if (targeted) targeted.focus({ preventScroll: true });
-        return;
-      }
-      if (!actions.hidden) {
-        event.stopPropagation();
-        closeActions();
-        if (targeted) targeted.focus({ preventScroll: true });
-      }
-    },
-    true,
-  );
-
-  document.addEventListener("pointerdown", (event) => {
-    if (actions.contains(event.target) || compose.contains(event.target) || chip.contains(event.target)) return;
-    closeActions();
-    closeCompose();
-  });
-  addEventListener("scroll", positionChip, { passive: true, capture: true });
-  addEventListener("resize", () => { positionChip(); }, { passive: true });
+  addEventListener("scroll", reanchor, { passive: true, capture: true });
+  addEventListener("resize", () => {
+    for (const diagram of diagrams) sizeRestingCanvas(diagram);
+    reanchor();
+  }, { passive: true });
 })();
 `;

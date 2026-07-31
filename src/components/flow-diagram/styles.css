@@ -35,9 +35,16 @@ classes.
       var(--callout-warning-c) 60%,
       var(--edge-c)
     );
-    /* The warning hue at full strength is only 3.6:1 on its own wash in the
-       light theme. Pulled 30 percent toward the document ink it clears AA in
-       both themes wherever a proposal writes warning-toned text. */
+  }
+
+  /* Declared at the document root, not on the figure: the proposal labels and
+     the feedback tray are appended to the body so they can be placed in
+     viewport pixels, and a token scoped to .flow-diagram simply does not
+     resolve out there - the label drew transparent-on-paper and vanished.
+     The warning hue at full strength is only 3.6:1 on its own wash in the
+     light theme; pulled 30 percent toward the document ink it clears AA in
+     both themes wherever a proposal writes warning-toned text. */
+  :root {
     --flow-warn-ink: color-mix(
       in srgb,
       var(--callout-warning-c) 70%,
@@ -127,12 +134,19 @@ classes.
     bottom: 50%;
   }
 
-  /* --- The zoom surface ------------------------------------------------- */
+  /* --- The canvas --------------------------------------------------------
+     A diagram is a canvas, not a scrolling figure: no scrollbars in either
+     axis, and the reader zooms and pans instead. The artboard is placed by a
+     single transform the viewer leg drives, so nothing here reflows as the
+     zoom changes - the grid is content-sized, and anything that reflowed
+     would change line wrapping, column widths, and connector geometry as the
+     reader zooms.
+
+     Without scripts there is no canvas, so the resting rules stay an ordinary
+     scrolling strip and everything below hangs off data-flow-canvas, which
+     the leg sets on init. */
 
   .flow-diagram-artboard {
-    /* Geometric scale, never the zoom property and never a font multiplier:
-       the grid is content-sized, so anything that reflows would change line
-       wrapping, column widths, and connector geometry as the reader zooms. */
     transform: scale(var(--flow-zoom, 1));
     transform-origin: 0 0;
     width: max-content;
@@ -140,32 +154,45 @@ classes.
   .flow-diagram-sizer {
     width: max-content;
   }
-  /* Promoted, the viewport owns the panel's remaining height and the reader
-     drags the artboard around inside it. The generous shared padding would
-     eat the width a fitted artboard wants, so the diagram trims it. */
-  .flow-diagram[data-figure-maximized] .flow-diagram-viewport {
-    cursor: grab;
-    overscroll-behavior: contain;
-    padding: 1rem 1.25rem;
-    /* A diagram smaller than the panel sits in the middle of it rather than
-       stranded in the top-left corner. Safe centering keeps the start edge
-       reachable once the artboard outgrows the panel. */
-    display: flex;
-    align-items: safe center;
-    justify-content: safe center;
+
+  /* The no-JS fallback, and the only place overflow is declared: a utility on
+     the element would sit in a later cascade layer than this stylesheet and
+     the canvas rule below could never turn it off. */
+  .flow-diagram-viewport {
+    overflow-x: auto;
   }
-  .flow-diagram[data-figure-maximized]
-    .flow-diagram-viewport[data-flow-panning] {
+  .flow-diagram[data-flow-canvas] .flow-diagram-viewport {
+    position: relative;
+    overflow: hidden;
+    overscroll-behavior: contain;
+    /* The gestures are ours: the browser must not also scroll the page or
+       run its own pinch-zoom underneath them. */
+    touch-action: none;
+    cursor: grab;
+  }
+  .flow-diagram[data-flow-canvas] .flow-diagram-viewport[data-flow-panning] {
     cursor: grabbing;
   }
-  /* The tray sits above the overlay by design, so the promoted artboard keeps
-     out from under it rather than hiding its own right-hand stages. */
-  :root[data-flow-tray-open]
-    .flow-diagram[data-figure-maximized]
-    .flow-diagram-viewport {
-    padding-right: calc(min(22rem, 100vw - 2rem) + 2rem);
+  .flow-diagram[data-flow-canvas] .flow-diagram-sizer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: max-content;
+    /* The canvas transform lives here, so the origin has to live here too:
+       scaling about the default centre shifts the artboard by half the size
+       it just lost, and every fixed affordance anchored to it inherits the
+       error. */
+    transform-origin: 0 0;
+    will-change: transform;
   }
-  /* The footer is the figure's own line, not part of the scrolling surface. */
+  .flow-diagram[data-flow-canvas] .flow-diagram-artboard {
+    transform: none;
+  }
+  /* Promoted, the canvas takes the panel's remaining height. */
+  .flow-diagram[data-figure-maximized] .flow-diagram-viewport {
+    padding: 0;
+  }
+  /* The footer is the figure's own line, not part of the canvas. */
   .flow-diagram[data-figure-maximized] > [data-flow-diagram-footer] {
     flex: none;
     padding: 0 1.75rem 1rem;
@@ -205,10 +232,23 @@ classes.
     background: color-mix(in srgb, var(--accent-c) 16%, transparent);
     color: var(--accent-c);
   }
+  /* A hairline, not a rule: enough to group four sets of controls, quiet
+     enough that the toolbar still reads as one band. */
+  .flow-diagram-toolbar-sep {
+    width: 1px;
+    height: 0.85rem;
+    flex: none;
+    margin: 0 0.2rem;
+    background: color-mix(in srgb, var(--ink-c) 18%, transparent);
+  }
 
-  /* --- Targeting --------------------------------------------------------- */
+  /* --- Selection ---------------------------------------------------------
+     Selection, not hover, is the interaction model. Hovering says only "this
+     is clickable"; clicking selects, the selection persists, and the actions
+     ride a fixed-position bar that cannot slip out from under the pointer the
+     way a hover-revealed button did. */
 
-  /* A connector is two pixels of paint, so the thing a reviewer aims at is
+  /* A connector is two pixels of paint, so the thing a reviewer clicks is
      this padded rectangle over its whole cell, never the line. */
   .flow-diagram-hit {
     position: absolute;
@@ -220,34 +260,64 @@ classes.
     inset: 0.1rem 0;
   }
 
+  .flow-diagram[data-flow-canvas]
+    [data-flow-element]:not([data-flow-element="figure"]) {
+    cursor: pointer;
+  }
+  /* Hover is a whisper: a tint that says "clickable" and nothing that competes
+     with the selected element or moves when you reach for it. */
+  .flow-diagram[data-flow-canvas]
+    [data-flow-element]:not([data-flow-element="figure"]):hover {
+    background-color: color-mix(in srgb, var(--accent-c) 7%, transparent);
+  }
+  .flow-diagram[data-flow-canvas]
+    [data-flow-element="edge"]:hover
+    > .flow-diagram-hit {
+    background: color-mix(in srgb, var(--accent-c) 7%, transparent);
+  }
+
   [data-flow-element] {
     outline-offset: 2px;
   }
-  /* Focus and hover draw the same ring: the script targets a focused element,
-     so a second user-agent ring on top would say the same thing in a colour
-     the document never uses. */
-  [data-flow-targeted],
+  [data-flow-selected],
   [data-flow-element]:focus-visible {
     outline: 2px solid var(--accent-c);
   }
-  [data-flow-element="edge"][data-flow-targeted],
+  [data-flow-element="edge"][data-flow-selected],
   [data-flow-element="edge"]:focus-visible {
     outline: none;
   }
+  [data-flow-element="edge"][data-flow-selected] > .flow-diagram-hit,
   [data-flow-element="edge"]:focus-visible > .flow-diagram-hit {
     outline: 2px solid var(--accent-c);
+    background: color-mix(in srgb, var(--accent-c) 10%, transparent);
   }
-  [data-flow-element="edge"][data-flow-targeted] > .flow-diagram-hit {
-    outline: 2px solid var(--accent-c);
-    background: color-mix(in srgb, var(--accent-c) 8%, transparent);
-  }
-  [data-flow-element="figure"][data-flow-targeted] {
+  [data-flow-element="figure"][data-flow-selected] {
     outline-offset: 4px;
   }
 
-  /* The chip and the popovers float above the document so a scroll container
-     inside the figure can never clip them. */
-  .flow-diagram-chip,
+  /* --- Editing in place ---------------------------------------------------
+     A field is edited where it lives. No compose box stands between the
+     reviewer and the words they are changing. */
+
+  [data-flow-editing] {
+    outline: 2px solid var(--accent-c);
+    outline-offset: 2px;
+    border-radius: 0.2rem;
+    background: var(--bg);
+    cursor: text;
+    min-width: 2ch;
+  }
+  [data-flow-editing]:focus {
+    outline: 2px solid var(--accent-c);
+  }
+
+  /* --- The fixed affordance layer ----------------------------------------
+     Everything a reviewer aims at lives here, outside the artboard, in
+     viewport pixels. That is what keeps the action bar and every proposal
+     label the same visual size at 25 percent and at 400: they are never
+     inside the thing being scaled. */
+
   .flow-diagram-actions,
   .flow-diagram-compose {
     position: fixed;
@@ -256,44 +326,121 @@ classes.
   }
   /* Every one of these sets its own display, so the user-agent's [hidden]
      rule loses to it and the attribute has to be honored here. */
-  .flow-diagram-chip[hidden],
+  .flow-diagram-actionbar[hidden],
   .flow-diagram-actions[hidden],
   .flow-diagram-compose[hidden],
   .flow-diagram-zoom[hidden],
+  .flow-diagram-proposal-group[hidden],
   .flow-diagram-total[hidden] {
     display: none;
   }
-  .flow-diagram-chip {
+
+  /* The action bar a selection offers: one row of small buttons, in viewport
+     pixels, anchored beside the selected element and re-anchored whenever the
+     canvas moves. It never appears on hover, so it can never slip away as the
+     pointer travels toward it. */
+  .flow-diagram-actionbar {
+    position: fixed;
+    z-index: 76;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+    padding: 0.15rem;
+    border: 1px solid var(--edge-c);
+    border-radius: 0.4rem;
+    background: var(--bg);
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.22);
+    font-family: var(--font-sans);
+  }
+  .flow-diagram-actionbar-button {
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
     height: 1.5rem;
-    padding: 0 0.5rem;
-    border: 1px solid var(--edge-c);
-    border-radius: 999px;
-    background: var(--bg);
+    padding: 0 0.4rem;
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
     color: var(--ink-c);
+    font-family: inherit;
     font-size: 0.6875rem;
     font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+    white-space: nowrap;
   }
-  .flow-diagram-chip:hover {
-    border-color: var(--accent-c);
-    color: var(--accent-c);
+  .flow-diagram-actionbar-button:hover {
+    background: var(--surface-c);
   }
-  .flow-diagram-chip svg {
-    width: 0.75rem;
-    height: 0.75rem;
+  .flow-diagram-actionbar-button:focus-visible {
+    outline: 2px solid var(--accent-c);
+    outline-offset: -1px;
+  }
+  .flow-diagram-actionbar-button[data-flow-action="delete"] {
+    color: var(--diff-remove-c);
+  }
+  .flow-diagram-actionbar-button[data-flow-action="revert"] {
+    color: var(--muted-c);
+  }
+  .flow-diagram-actionbar-button svg {
+    width: 0.8125rem;
+    height: 0.8125rem;
+    flex: none;
+  }
+  .flow-diagram-actionbar-sep {
+    width: 1px;
+    align-self: stretch;
+    margin: 0.15rem 0.1rem;
+    background: var(--edge-c);
   }
 
-  .flow-diagram-actions,
-  .flow-diagram-compose {
-    border: 1px solid var(--edge-c);
-    border-radius: var(--radius-md);
-    background: var(--bg);
-    box-shadow: 0 8px 28px rgb(0 0 0 / 0.24);
+  /* A proposal label. It lives in the fixed layer for two reasons: it must
+     stay legible at every zoom, and it must be free to move where it does not
+     collide - which it cannot do while parented to the artwork it describes. */
+  .flow-diagram-plabel {
+    position: fixed;
+    z-index: 74;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    height: 1.05rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    font-family: var(--font-sans);
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: none;
   }
+  .flow-diagram-plabel[hidden] {
+    display: none;
+  }
+  .flow-diagram-plabel[data-kind="removed"] {
+    background: var(--diff-remove-c);
+    color: var(--bg);
+  }
+  .flow-diagram-plabel[data-kind="edited"] {
+    background: var(--flow-warn-ink);
+    color: var(--bg);
+  }
+  .flow-diagram-plabel[data-kind="comment"] {
+    background: var(--accent-c);
+    color: var(--bg);
+  }
+  /* A leader line from the label back to its subject, drawn only when the
+     placement had to move the label away from the element it names. */
+  .flow-diagram-leader {
+    position: fixed;
+    z-index: 73;
+    height: 1px;
+    transform-origin: 0 50%;
+    background: color-mix(in srgb, var(--ink-c) 35%, transparent);
+    pointer-events: none;
+  }
+  .flow-diagram-leader[hidden] {
+    display: none;
+  }
+
   .flow-diagram-actions {
     display: flex;
     flex-direction: column;
@@ -304,7 +451,7 @@ classes.
      a keyboard reviewer never meets a stray user-agent blue. */
   .flow-diagram-action:focus-visible,
   .flow-diagram-button:focus-visible,
-  .flow-diagram-chip:focus-visible,
+  .flow-diagram-actionbar-button:focus-visible,
   .flow-tray-target:focus-visible,
   .flow-tray-revert:focus-visible,
   .flow-tray-close:focus-visible,
@@ -441,57 +588,12 @@ classes.
     cursor: not-allowed;
   }
 
-  /* --- Markers ----------------------------------------------------------- */
-
-  /* Markers counter-scale, so a count stays legible at 25 percent and does
-     not grow into a blot at 400. */
-  .flow-diagram-marks {
-    position: absolute;
-    top: -0.5rem;
-    right: -0.4rem;
-    display: flex;
-    align-items: center;
-    gap: 0.2rem;
-    transform: scale(calc(1 / var(--flow-zoom, 1)));
-    transform-origin: 100% 0;
-    font-family: var(--font-sans);
-    pointer-events: none;
-  }
+  /* Every element is a positioning context: the connector hit area and the
+     in-place edit outline both hang off it. Proposal labels do not - they
+     live in the fixed layer above, which is what lets them stay one size and
+     move out of a collision. */
   [data-flow-element] {
     position: relative;
-  }
-  /* The figure's own count lives in its control bar, so a corner marker there
-     would only collide with the controls. */
-  [data-flow-element="figure"] > .flow-diagram-marks {
-    display: none;
-  }
-  [data-flow-element="footer"] > .flow-diagram-marks {
-    top: -0.35rem;
-    right: 0;
-  }
-  .flow-diagram-mark {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.15rem;
-    height: 1rem;
-    padding: 0 0.35rem;
-    border-radius: 999px;
-    font-size: 0.625rem;
-    font-weight: 700;
-    line-height: 1;
-    white-space: nowrap;
-  }
-  .flow-diagram-mark[data-kind="comment"] {
-    background: var(--accent-c);
-    color: var(--bg);
-  }
-  .flow-diagram-mark[data-kind="removed"] {
-    background: var(--diff-remove-c);
-    color: var(--bg);
-  }
-  .flow-diagram-mark[data-kind="edited"] {
-    background: var(--flow-warn-ink);
-    color: var(--bg);
   }
 
   /* --- Proposals --------------------------------------------------------- */
@@ -726,12 +828,14 @@ classes.
    re-pointing the token a utility happens to read. Both only relocate the
    fragility. See AGENTS.md under Engineering rules. */
 @layer flow-proposed {
-  /* Removed, never vanished: the element keeps its place, its label is
-     struck, and the word "Removed" states the state so the ghosting only
-     reinforces it. The marks stay at full contrast; only the content fades. */
+  /* Removed, never vanished: the element keeps its place and its content goes
+     red and struck through. Ghosting it to a low opacity said "removed" only
+     to someone who already knew; red and a strike say it outright, and the
+     content stays legible enough to see what you are removing. */
   [data-flow-proposed~="removed"] :is(strong, code, [data-flow-field]) {
-    opacity: 0.5;
+    color: var(--diff-remove-c);
     text-decoration: line-through;
+    text-decoration-thickness: 1.5px;
   }
   /* A dashed border says "proposed" at a glance in a way a tint alone cannot,
      and the layer is what lets a state rule outrank the card's resting
@@ -748,6 +852,9 @@ classes.
   [data-flow-proposed~="removed-incident"].flow-diagram-fork-stub {
     --flow-line-c: color-mix(in srgb, var(--muted-c) 35%, transparent);
   }
+  /* An element only implied by someone else's removal is ghosted rather than
+     reddened: it says "this goes too" without claiming the reviewer asked
+     for it. */
   [data-flow-proposed~="removed-incident"]
     :is(strong, code, [data-flow-field]) {
     opacity: 0.45;

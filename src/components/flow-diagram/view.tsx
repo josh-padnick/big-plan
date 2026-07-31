@@ -47,10 +47,12 @@ const EDGE_LABEL_CLASSES =
   "absolute -top-[1.15rem] left-1/2 -translate-x-1/2 text-[0.6875rem] whitespace-nowrap text-muted";
 
 // Grid template column widths: card columns size to content, connector
-// columns stay narrow so cards dominate, and a fork column is narrower
-// still because its branches carry no labels of their own.
-const LINK_COLUMN = "5rem";
-const FORK_COLUMN = "3rem";
+// columns hold a verb label without crowding it, and a fork column is
+// narrower because its branches carry shorter ones. Both are wide enough that
+// a label like "streams" reads as a word rather than as a smudge between two
+// cards - the tightest case the captain called out.
+const LINK_COLUMN = "7rem";
+const FORK_COLUMN = "4.75rem";
 
 // Every targetable element declares the same four things, so the viewer leg
 // can treat a stage, a node, an edge, and the footer alike.
@@ -186,6 +188,12 @@ const branchPosition = ({
 }): "first" | "middle" | "last" =>
   index === 0 ? "first" : index === count - 1 ? "last" : "middle";
 
+// A hairline between control groups, so "2 notes Show original Revert all
+// minus 100% plus Fit Maximize" reads as four units instead of one run-on.
+const ToolbarSeparator = () => (
+  <span className="flow-diagram-toolbar-sep" aria-hidden />
+);
+
 const CONTROL_CLASSES =
   "figure-control inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md border-0 bg-transparent px-1 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 
@@ -209,8 +217,9 @@ const IconControl = ({
   </button>
 );
 
-// Fit, zoom, and the readout only mean something once the figure fills the
-// overlay, so the group ships hidden and the viewer leg reveals it there.
+// A diagram is a canvas wherever it sits, so zoom belongs to the reading
+// column as much as to the overlay. The group ships hidden and the viewer leg
+// reveals it, because without scripts there is no canvas to zoom.
 const ZoomControls = () => (
   <span
     className="flow-diagram-zoom inline-flex shrink-0 items-center gap-0.5"
@@ -249,28 +258,34 @@ const ProposalControls = () => (
       data-flow-total
       hidden
     />
-    <button
-      type="button"
-      className={CONTROL_CLASSES}
-      data-flow-show-original
-      aria-pressed="false"
+    <span
+      className="flow-diagram-proposal-group inline-flex items-center gap-0.5"
+      data-flow-proposal-group
       hidden
     >
-      <span className="font-sans text-[0.6875rem] font-semibold">
-        Show original
-      </span>
-    </button>
-    <button
-      type="button"
-      className={CONTROL_CLASSES}
-      data-flow-revert-all
-      hidden
-    >
-      {lucideIconToReact({ icon: ROTATE_CCW_ICON, hidden: false })}
-      <span className="font-sans text-[0.6875rem] font-semibold">
-        Revert all
-      </span>
-    </button>
+      <ToolbarSeparator />
+      <button
+        type="button"
+        className={CONTROL_CLASSES}
+        data-flow-show-original
+        aria-pressed="false"
+      >
+        <span className="font-sans text-[0.6875rem] font-semibold">
+          Show original
+        </span>
+      </button>
+      <button
+        type="button"
+        className={CONTROL_CLASSES}
+        data-flow-revert-all
+        hidden
+      >
+        {lucideIconToReact({ icon: ROTATE_CCW_ICON, hidden: false })}
+        <span className="font-sans text-[0.6875rem] font-semibold">
+          Revert all
+        </span>
+      </button>
+    </span>
   </>
 );
 
@@ -462,18 +477,27 @@ export const FlowDiagram = ({
         className="figure-control-bar flow-diagram-controls"
         data-flow-controls
       >
+        {/* Four units, separated: the notes count, the proposal controls, the
+            zoom group, and maximize. Each separator hides itself when the
+            group beside it is dormant, so a diagram nobody has marked up
+            never shows a rule with nothing on one side of it. */}
         <ProposalControls />
-        <ZoomControls />
+        <span className="flow-diagram-zoom-group inline-flex items-center gap-0.5">
+          <ToolbarSeparator />
+          <ZoomControls />
+        </span>
+        <ToolbarSeparator />
         <MaximizeButton subject="diagram" />
       </div>
+      {/* The canvas. Without scripts this is an ordinary scrolling strip, the
+          only honest fallback; the viewer leg marks the figure
+          data-flow-canvas on init and it becomes a surface you zoom and pan
+          instead - no scrollbars, standard trackpad gestures. */}
       <div
-        className="flow-diagram-viewport overflow-x-auto"
+        className="flow-diagram-viewport"
         data-flow-viewport
         data-figure-body
       >
-        {/* The sizer carries the scaled artboard's footprint: a transform
-            changes no layout box, so without it a zoomed diagram would have
-            nothing to scroll. */}
         <div className="flow-diagram-sizer" data-flow-sizer>
           <div className="flow-diagram-artboard" data-flow-artboard>
             <div
