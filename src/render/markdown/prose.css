@@ -25,6 +25,9 @@ is styled by its owning module, not here.
   article :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6, pre),
   article .callout,
   article [data-quick-summary] {
+    /* One width, and the same one for a bare paragraph as for a block
+       wearing chrome, so their edges line up down the column rather than a
+       callout sitting inset from the prose beside it. */
     max-width: var(--measure);
   }
   article
