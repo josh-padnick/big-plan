@@ -84,5 +84,6 @@ Guidance is generated, not edited in place.
 - A new statically checkable rule is a module under `src/lint/rules/`, registered in `src/lint/lint-plan.ts`, and documented in [Linting rules](/reference/lint-rules/).
 
 Before adding a rule, decide which rung it belongs on.
-A check a parse can decide belongs in lint, where it blocks precisely and says so once.
+A statically analyzable authoring-quality check over structurally valid input belongs in lint, where it blocks precisely and says so once.
+Structural acceptance - unknown components, required children, and attribute shapes - stays in the component compilers so every command rejects it.
 A judgment a reader has to make belongs in guidance, and nowhere else.
