@@ -10,6 +10,7 @@
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
+import { REVIEW_SCRIPT } from "./review-script.js";
 import { VIEWER_SCRIPT } from "./viewer-script.js";
 
 // The shell's own navigation contract: plain text in, so the shell owes
@@ -183,6 +184,10 @@ export const renderShell = ({
   const hasToc = nav.length > 0;
   // The viewer script ships only when an affordance in this document uses it.
   const needsViewerScript = hasToc || contentHtml.includes("data-info-popover");
+  // Commenting ships wherever there is something to comment on. It degrades to
+  // drafts held in the browser when no review runtime served this copy, so a
+  // plain rendered file stays useful without one.
+  const needsReviewScript = contentHtml.includes("data-block-id");
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="flex h-full items-center px-5 wide:px-6">
@@ -201,7 +206,8 @@ ${contentHtml}
 </article>
 </main>
 </div>
-${needsViewerScript ? VIEWER_SCRIPT : ""}`;
+${needsViewerScript ? VIEWER_SCRIPT : ""}
+${needsReviewScript ? REVIEW_SCRIPT : ""}`;
   return {
     html,
     styles: GLOBAL_CSS,

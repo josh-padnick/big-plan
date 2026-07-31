@@ -7,6 +7,7 @@ import { runAxiCli } from "axi-sdk-js";
 import { compileCommand } from "./compile/command.js";
 import { guidanceCommand } from "./guidance/command.js";
 import { renderCommand } from "./render/command.js";
+import { reviewCommand } from "./review/command.js";
 import { validateCommand } from "./validate/command.js";
 
 // The README tagline verbatim, so the CLI and the docs never drift apart.
@@ -29,6 +30,11 @@ Usage:
   big-plan validate <input.mdx>               Check structure, HTML delivery,
                                              and authoring lint without
                                              writing an output file
+  big-plan review <input.mdx>                 Serve the plan on loopback for
+                                             interactive review: comment on
+                                             blocks and selected text, then
+                                             send one feedback package to the
+                                             agent
 `;
 
 // Reads this package's own version for --version output, tolerating a missing
@@ -68,6 +74,7 @@ export const main = async (): Promise<void> => {
       render: (args) => renderCommand(args),
       compile: (args) => compileCommand(args),
       validate: (args) => validateCommand(args),
+      review: (args) => reviewCommand(args),
     },
   });
 };
