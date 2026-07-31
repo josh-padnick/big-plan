@@ -244,6 +244,17 @@ describe("renderDocument shell", () => {
     expect(html).not.toContain("<nav");
     expect(html).toContain("<h1");
   });
+
+  it("should ship the viewer script for a fenced block without a TOC", () => {
+    const { html, sections } = renderDocument({
+      markdown: "```\nA dense sketch\n```\n",
+      fallbackTitle: "Sketch",
+    });
+    expect(sections.length).toBe(0);
+    expect(html).not.toContain("<nav");
+    expect(html).toContain('data-figure-maximizable="code"');
+    expect(html).toContain("<script>");
+  });
 });
 
 describe("validateDocument", () => {

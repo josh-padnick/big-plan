@@ -7,6 +7,7 @@
      leaves the promoted panel one margin short of its bottom inset. */
   article [data-complex-decision] {
     margin-bottom: 1.25rem;
+    overflow: hidden;
   }
   article .complex-decision-status-open {
     color: var(--callout-warning-c);

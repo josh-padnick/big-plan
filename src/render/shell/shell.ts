@@ -207,7 +207,8 @@ export const renderShell = ({
   const needsViewerScript =
     hasToc ||
     contentHtml.includes("data-info-popover") ||
-    contentHtml.includes("data-collapsible");
+    contentHtml.includes("data-collapsible") ||
+    contentHtml.includes("data-figure-maximizable");
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="flex h-full items-center px-5 wide:px-6">
