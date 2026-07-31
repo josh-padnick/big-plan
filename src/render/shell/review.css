@@ -1,0 +1,622 @@
+/*
+The commenting chrome: the tray rail, the compose card, the hover affordance,
+and the chips that mark an annotated block. Every element styled here is
+created live by assets/review/review.js rather than authored as markup, and
+the chips are drawn from an attribute through a pseudo-element, so this is
+stylesheet work by the rule rather than by preference: there is no authored
+markup to carry a utility class.
+
+Nothing here is load-bearing for reading. With scripts disabled none of these
+elements exist and the document is exactly the document it always was.
+*/
+
+[data-review-root] {
+  position: relative;
+  z-index: 40;
+}
+
+/* The tray's entry point docks into the branding bar rather than floating
+   over the page: a plan has no persistent "Add note" button by design. */
+[data-review-toggle] {
+  position: fixed;
+  top: 0.3rem;
+  right: 1rem;
+  z-index: 45;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted-c);
+  font-size: 0.8125rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+[data-review-toggle]:hover {
+  color: var(--ink-c);
+  border-color: var(--muted-c);
+}
+[data-review-toggle] svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+[data-review-toggle-count] {
+  min-width: 1.2rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--surface-c);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: center;
+}
+[data-review-toggle][data-review-has-pending="true"] {
+  color: var(--accent-c);
+  border-color: var(--accent-c);
+}
+[data-review-toggle][data-review-has-pending="true"]
+  [data-review-toggle-count] {
+  background: var(--accent-c);
+  color: var(--bg);
+}
+
+/* Nothing pending, but the agent is doing something with what was already
+   sent: the entry point carries that tone, so the wait is never silent. */
+[data-review-toggle][data-review-has-pending="false"][data-review-agent-tone="working"]
+  [data-review-toggle-count] {
+  background: var(--callout-note-bg);
+  color: var(--callout-note-c);
+}
+[data-review-toggle][data-review-has-pending="false"][data-review-agent-tone="ready"]
+  [data-review-toggle-count] {
+  background: var(--diff-add-bg);
+  color: var(--diff-add-c);
+}
+[data-review-toggle][data-review-has-pending="false"][data-review-agent-tone="failed"]
+  [data-review-toggle-count] {
+  background: var(--callout-danger-bg);
+  color: var(--callout-danger-c);
+}
+
+/* ------------------------------------------------------------------- rail */
+
+[data-review-rail] {
+  position: fixed;
+  top: 2.75rem;
+  right: 0;
+  bottom: 0;
+  z-index: 44;
+  display: flex;
+  width: min(22rem, 100vw);
+  flex-direction: column;
+  border-left: 1px solid var(--edge-c);
+  background: var(--bg);
+  box-shadow: -8px 0 24px rgb(0 0 0 / 0.06);
+  font-size: 0.875rem;
+}
+[data-review-rail][hidden] {
+  display: none;
+}
+
+/* Opening the tray reclaims width from the page rather than covering the
+   column: the reading measure is unchanged, it simply re-centres. */
+@media (width >= 56rem) {
+  :root[data-review-open] body {
+    padding-right: 22rem;
+  }
+}
+
+/* Below that width there is no room to give, so the tray becomes a full sheet
+   rather than a narrow strip cropping the document behind it. */
+@media (width < 56rem) {
+  [data-review-rail] {
+    width: 100vw;
+  }
+}
+
+[data-review-rail-head] {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid var(--edge-c);
+}
+[data-review-rail-head] h2 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--ink-c);
+}
+[data-review-count] {
+  margin-left: auto;
+  color: var(--muted-c);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+[data-review-hide] {
+  display: inline-flex;
+  padding: 0.2rem;
+  border-radius: 0.3rem;
+  color: var(--muted-c);
+  cursor: pointer;
+}
+[data-review-hide]:hover {
+  background: var(--surface-c);
+  color: var(--ink-c);
+}
+[data-review-hide] svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+[data-review-scroll] {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  /* Extra bottom room so the last row clears the send bar rather than ending
+     flush against it at the scroll boundary. */
+  padding: 0.7rem 0.9rem 1.2rem;
+}
+
+[data-review-empty] {
+  margin: 0.4rem 0 0;
+  color: var(--muted-c);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+[data-review-empty][hidden] {
+  display: none;
+}
+
+[data-review-drafts],
+[data-review-sent-list] {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-review-row] {
+  margin-bottom: 0.55rem;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.5rem;
+  background: var(--surface-c);
+}
+/* A target label is a whole block's words, so it is held to one line and
+   ellipsized; the full label stays available as the control's title. */
+[data-review-row-target] {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+  color: var(--accent-c);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+button[data-review-row-target] {
+  cursor: pointer;
+}
+button[data-review-row-target]:hover {
+  text-decoration: underline;
+}
+[data-review-row-body] {
+  margin: 0;
+  color: var(--ink-c);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+[data-review-row-actions] {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+[data-review-row-actions] button {
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.3rem;
+  background: var(--bg);
+  color: var(--muted-c);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+[data-review-row-actions] button:hover {
+  color: var(--ink-c);
+  border-color: var(--muted-c);
+}
+[data-review-row-delete]:hover {
+  color: var(--diff-remove-c);
+  border-color: var(--diff-remove-c);
+}
+[data-review-row-save] {
+  color: var(--bg) !important;
+  background: var(--accent-c) !important;
+  border-color: var(--accent-c) !important;
+}
+
+[data-review-sent] {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px dashed var(--edge-c);
+}
+[data-review-sent][hidden] {
+  display: none;
+}
+[data-review-sent] h3 {
+  margin: 0 0 0.45rem;
+  color: var(--muted-c);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+[data-review-sent-row] {
+  background: transparent;
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+[data-review-send-bar] {
+  padding: 0.7rem 0.9rem;
+  border-top: 1px solid var(--edge-c);
+}
+[data-review-send] {
+  width: 100%;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--accent-c);
+  border-radius: 0.4rem;
+  background: var(--accent-c);
+  color: var(--bg);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+[data-review-send][disabled] {
+  border-color: var(--edge-c);
+  background: var(--surface-c);
+  color: var(--muted-c);
+  cursor: default;
+}
+[data-review-send][data-review-busy] {
+  opacity: 0.6;
+}
+[data-review-send-note] {
+  margin: 0.45rem 0 0;
+  color: var(--muted-c);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+[data-review-send-note]:empty {
+  display: none;
+}
+
+/* ------------------------------------------------------------ agent panel */
+
+[data-review-agent] {
+  padding: 0.7rem 0.9rem 0.9rem;
+  border-top: 1px solid var(--edge-c);
+  background: var(--surface-c);
+}
+[data-review-agent-head] {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+[data-review-agent-head] h3 {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-c);
+}
+[data-review-agent-state] {
+  margin-left: auto;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+[data-review-agent-state][data-tone="idle"] {
+  background: var(--callout-warning-bg);
+  color: var(--callout-warning-c);
+}
+[data-review-agent-state][data-tone="working"] {
+  background: var(--callout-note-bg);
+  color: var(--callout-note-c);
+}
+[data-review-agent-state][data-tone="ready"] {
+  background: var(--diff-add-bg);
+  color: var(--diff-add-c);
+}
+[data-review-agent-state][data-tone="failed"] {
+  background: var(--callout-danger-bg);
+  color: var(--callout-danger-c);
+}
+
+[data-review-field-label] {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--muted-c);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+[data-review-agent-input],
+[data-review-compose-input],
+[data-review-row-input] {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--ink-c);
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+[data-review-agent-input]:focus-visible,
+[data-review-compose-input]:focus-visible,
+[data-review-row-input]:focus-visible {
+  outline: 2px solid var(--accent-c);
+  outline-offset: 1px;
+}
+
+[data-review-attach] {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+  color: var(--muted-c);
+  font-size: 0.75rem;
+}
+[data-review-attach][hidden] {
+  display: none;
+}
+
+[data-review-agent-save] {
+  margin-top: 0.45rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--ink-c);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+[data-review-agent-save]:hover {
+  border-color: var(--accent-c);
+  color: var(--accent-c);
+}
+
+[data-review-progress] {
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+[data-review-progress][hidden] {
+  display: none;
+}
+[data-review-progress-step] {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.2rem 0;
+  font-size: 0.75rem;
+}
+[data-review-progress-state] {
+  min-width: 3.6rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+}
+[data-review-progress-state="done"] {
+  background: var(--diff-add-bg);
+  color: var(--diff-add-c);
+}
+[data-review-progress-state="live"] {
+  background: var(--callout-note-bg);
+  color: var(--callout-note-c);
+}
+[data-review-progress-state="waiting"] {
+  background: var(--surface-c);
+  color: var(--muted-c);
+}
+[data-review-progress-state="failed"] {
+  background: var(--callout-danger-bg);
+  color: var(--callout-danger-c);
+}
+[data-review-progress-label] {
+  color: var(--ink-c);
+}
+[data-review-progress-detail] {
+  color: var(--muted-c);
+}
+
+/* ------------------------------------------------------------- affordance */
+
+[data-review-affordance] {
+  position: fixed;
+  z-index: 46;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted-c);
+  font-size: 0.75rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+}
+[data-review-affordance][hidden] {
+  display: none;
+}
+[data-review-affordance]:hover,
+[data-review-affordance]:focus-visible {
+  border-color: var(--accent-c);
+  color: var(--accent-c);
+}
+[data-review-affordance] svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+/* ---------------------------------------------------------------- compose */
+
+[data-review-compose] {
+  position: fixed;
+  z-index: 47;
+  padding: 0.75rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.6rem;
+  background: var(--bg);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.16);
+}
+[data-review-compose][hidden] {
+  display: none;
+}
+[data-review-compose][data-review-compose-centered] {
+  top: 50%;
+  left: 50%;
+  width: min(24rem, calc(100vw - 2rem));
+  transform: translate(-50%, -50%);
+}
+[data-review-compose-target] {
+  margin: 0 0 0.4rem;
+  overflow: hidden;
+  color: var(--accent-c);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+[data-review-compose-quote] {
+  margin: 0 0 0.5rem;
+  padding: 0.3rem 0.55rem;
+  border-left: 2px solid var(--edge-c);
+  color: var(--muted-c);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  max-height: 5rem;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+[data-review-compose-quote][hidden] {
+  display: none;
+}
+[data-review-compose-hint] {
+  margin: 0.35rem 0 0;
+  color: var(--muted-c);
+  font-size: 0.6875rem;
+}
+[data-review-compose-actions] {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+[data-review-compose-actions] button {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--muted-c);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+[data-review-compose-save] {
+  border-color: var(--accent-c) !important;
+  background: var(--accent-c) !important;
+  color: var(--bg) !important;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------- chips and flashes */
+
+[data-review-annotated] {
+  position: relative;
+}
+[data-review-annotated]::after {
+  content: attr(data-review-annotated);
+  position: absolute;
+  top: 0;
+  right: -1.85rem;
+  display: inline-flex;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  pointer-events: none;
+}
+[data-review-chip-tone="draft"]::after {
+  background: var(--accent-c);
+  color: var(--bg);
+}
+[data-review-chip-tone="sent"]::after {
+  background: var(--surface-c);
+  color: var(--muted-c);
+  border: 1px solid var(--edge-c);
+}
+@media (width < 56rem) {
+  [data-review-annotated]::after {
+    right: 0;
+    top: -0.5rem;
+  }
+}
+
+[data-review-flash] {
+  animation: big-plan-review-flash 1.4s ease-out;
+}
+@keyframes big-plan-review-flash {
+  0% {
+    background: var(--annotation-bg);
+  }
+  100% {
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-review-flash] {
+    animation: none;
+    outline: 2px solid var(--annotation-c);
+    outline-offset: 2px;
+  }
+}
+
+/* The announcement channel for keyboard navigation stays audible to screen
+   readers while taking no visual space. */
+[data-review-live] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

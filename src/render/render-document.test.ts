@@ -162,12 +162,14 @@ The lede.
     expect(deckHtml).not.toContain("--reading-free-inline");
   });
 
-  it("should inline one stylesheet and one viewer script when rendering", () => {
+  it("should inline one stylesheet and only the shell's own scripts when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
-    // The shell's viewer behavior is the single script; plan content can never
+    // The shell contributes exactly two scripts - the viewer's scroll-spy and
+    // popovers, and the reviewer's commenting surface. Plan content can never
     // contribute another, and nothing external is referenced.
-    expect(html.match(/<script>/g)).toHaveLength(1);
+    expect(html.match(/<script>/g)).toHaveLength(2);
     expect(html).toContain("data-section-link");
+    expect(html).toContain("data-block-id");
     expect(html).not.toContain('src="http');
   });
 
