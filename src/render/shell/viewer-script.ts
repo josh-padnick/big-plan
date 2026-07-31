@@ -157,10 +157,8 @@ export const VIEWER_SCRIPT = `<script>
 (() => {
   const blocks = Array.from(document.querySelectorAll("[data-collapsible]"));
   if (blocks.length === 0) return;
-  const docKey =
-    document.documentElement.getAttribute("data-plan-id") ||
-    document.title ||
-    location.pathname;
+  const planId = document.documentElement.getAttribute("data-plan-id");
+  const docKey = planId || document.title + ":" + location.pathname;
   const storageKey = (id) => "big-plan:collapse:" + docKey + ":" + id;
   // deck-collapse.ts guarantees one header per collapsible and that the body
   // is its sibling, so every lookup here is a direct-child query.
@@ -193,6 +191,11 @@ export const VIEWER_SCRIPT = `<script>
       } catch (_) {}
     }
   };
+  const refreshScrollSpy = () => {
+    if (typeof window.__bigPlanRefreshScrollSpy === "function") {
+      window.__bigPlanRefreshScrollSpy();
+    }
+  };
   // Holds a chosen element still in the viewport across a layout change, then
   // refreshes the scroll-spy. Header chrome is geometry-stable, so a single
   // toggle normally measures zero drift; this still matters when the document
@@ -210,9 +213,7 @@ export const VIEWER_SCRIPT = `<script>
           else window.scrollBy(0, delta);
         }
       }
-      if (typeof window.__bigPlanRefreshScrollSpy === "function") {
-        window.__bigPlanRefreshScrollSpy();
-      }
+      refreshScrollSpy();
     };
     settle();
     requestAnimationFrame(settle);
@@ -244,12 +245,14 @@ export const VIEWER_SCRIPT = `<script>
       for (const block of blocks) applyCollapsed(block, collapsed);
     });
   };
+  let restoredCollapse = false;
   for (const block of blocks) {
     const id = block.getAttribute("data-collapse-id");
     if (id !== null && id !== "") {
       try {
         if (localStorage.getItem(storageKey(id)) === "1") {
-          setCollapsed(block, true);
+          applyCollapsed(block, true);
+          restoredCollapse = true;
         }
       } catch (_) {}
     }
@@ -277,6 +280,7 @@ export const VIEWER_SCRIPT = `<script>
       toggle();
     });
   }
+  if (restoredCollapse) refreshScrollSpy();
   // Bulk controls ship hidden so a scripts-disabled document never offers a
   // control it cannot honour; revealing them here is what makes them real.
   for (const controls of document.querySelectorAll(
@@ -298,16 +302,19 @@ export const VIEWER_SCRIPT = `<script>
     });
   }
   const expandAncestors = (target) => {
+    let expanded = false;
     let node = target;
     while (node instanceof Element) {
       if (
         node.hasAttribute("data-collapsible") &&
         node.hasAttribute("data-collapsed")
       ) {
-        setCollapsed(node, false);
+        applyCollapsed(node, false);
+        expanded = true;
       }
       node = node.parentElement;
     }
+    if (expanded) refreshScrollSpy();
   };
   const expandHash = (hash) => {
     if (!hash || hash === "#") return;

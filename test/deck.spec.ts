@@ -373,35 +373,46 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
   });
 
   await test.step("collapsing a part tucks away every slide in the act", async () => {
-    const proposal = page.locator(
-      '[data-collapsible="part"][data-collapse-id="part-the-proposal"]',
+    const shipping = page.locator(
+      '[data-collapsible="part"][data-collapse-id="part-shipping-your-review"]',
     );
-    await proposal.hover();
-    await proposal
+    await shipping.evaluate((element) =>
+      element.scrollIntoView({ block: "end" }),
+    );
+    await shipping.hover();
+    await shipping
       .locator(":scope > [data-collapse-header] > [data-collapse-toggle]")
       .click();
-    await expect(proposal).toHaveAttribute("data-collapsed", "");
+    await expect(shipping).toHaveAttribute("data-collapsed", "");
     await expect(
-      proposal.locator(":scope > [data-collapse-body]"),
+      shipping.locator(":scope > [data-collapse-body]"),
     ).toBeHidden();
-    await expect(page.locator("#part-the-proposal")).toBeVisible();
+    await expect(
+      shipping.locator(":scope > [data-collapse-header]"),
+    ).toBeVisible();
   });
 
   await test.step("a TOC jump expands collapsed ancestors and lands on the target", async () => {
-    await toc.getByRole("link", { name: "The retry queue" }).click();
-    await expect(page).toHaveURL(/#the-retry-queue$/);
-    const proposal = page.locator(
-      '[data-collapsible="part"][data-collapse-id="part-the-proposal"]',
-    );
-    await expect(proposal).not.toHaveAttribute("data-collapsed", "");
+    await toc.getByRole("link", { name: "Acceptance criteria" }).click();
+    await expect(page).toHaveURL(/#acceptance-criteria$/);
     const heading = page.getByRole("heading", {
       level: 2,
-      name: "The retry queue",
+      name: "Acceptance criteria",
     });
+    const shipping = page.locator(
+      '[data-collapsible="part"][data-collapse-id="part-shipping-your-review"]',
+    );
+    await expect(shipping).not.toHaveAttribute("data-collapsed", "");
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
     await expect(heading).toBeInViewport();
     await expect(
       page.locator(
-        '[data-collapsible="slide"][data-collapse-id="the-retry-queue"]',
+        '[data-collapsible="slide"][data-collapse-id="acceptance-criteria"]',
       ),
     ).toBeVisible();
   });
