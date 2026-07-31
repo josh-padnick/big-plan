@@ -1,0 +1,38 @@
+/* The comparison-matrix skeleton and tone vocabulary shared by Decision and
+   ComplexDecision. Keeping the table chrome and the meaning of a tone in one
+   place is what stops two components with the same shape from drifting into
+   two dialects; where a tone is painted stays with each component, which the
+   module comment beside this file explains. */
+
+@layer components {
+  /* The prose stylesheet tints and borders markdown-table cells; a comparison
+     matrix draws its own row rules and sits on the card surface. */
+  article .comparison-matrix th,
+  article .comparison-matrix td {
+    border-bottom: 0;
+    background: transparent;
+  }
+  /* The 1px height lets a header cell's content stretch to the tallest column
+     in the row, so every column shares one baseline. */
+  article .comparison-matrix thead th {
+    height: 1px;
+  }
+  article .comparison-matrix-row > th,
+  article .comparison-matrix-row > td {
+    border-top: 1px solid var(--edge-c);
+  }
+
+  /* One tone, one colour, wherever a matrix chooses to spend it. */
+  article .matrix-tone-good {
+    --matrix-tone: var(--decision-pro-c);
+  }
+  article .matrix-tone-bad {
+    --matrix-tone: var(--decision-con-c);
+  }
+  article .matrix-tone-mixed {
+    --matrix-tone: var(--callout-warning-c);
+  }
+  article .matrix-tone-neutral {
+    --matrix-tone: var(--ink-c);
+  }
+}

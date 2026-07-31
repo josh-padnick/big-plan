@@ -19,11 +19,14 @@ import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-ma
 import { INFO_ICON } from "../../icons/lucide/info.js";
 import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
-import { MINUS_ICON } from "../../icons/lucide/minus.js";
-import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import { UNDO_2_ICON } from "../../icons/lucide/undo-2.js";
-import { X_ICON } from "../../icons/lucide/x.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
+import {
+  ComparisonMatrix,
+  MATRIX_TONE_ICONS,
+  matrixToneClass,
+  type MatrixTone,
+} from "../_shared/comparison-matrix/comparison-matrix.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { BadgePill } from "../_shared/badge-pill/badge-pill.js";
@@ -32,12 +35,9 @@ import {
   SectionLabel,
 } from "../_shared/labeled-section/labeled-section.js";
 
-const TONE_ICONS = {
-  good: CHECK_ICON,
-  bad: X_ICON,
-  mixed: TRIANGLE_ALERT_ICON,
-  neutral: MINUS_ICON,
-} satisfies Record<ComplexDecisionTone, typeof CHECK_ICON>;
+// ComplexDecision's tones are the shared matrix vocabulary; the alias fails
+// the build if the two ever diverge.
+const _TONE_PARITY: ComplexDecisionTone = "good" satisfies MatrixTone;
 
 // Full screen stays reserved for the live review application; the in-column
 // matrix scrolls horizontally, so the inert document loses nothing.
@@ -229,9 +229,12 @@ const ScoreCell = ({
       "-"
     ) : (
       <div
-        className={`complex-decision-tone-${score.tone} flex items-start gap-1.5 [&>svg]:mt-[calc((1lh-0.875rem)/2)] [&>svg]:size-3.5 [&>svg]:shrink-0`}
+        className={`complex-decision-score ${matrixToneClass(score.tone)} flex items-start gap-1.5 [&>svg]:mt-[calc((1lh-0.875rem)/2)] [&>svg]:size-3.5 [&>svg]:shrink-0`}
       >
-        {lucideIconToReact({ icon: TONE_ICONS[score.tone], hidden: false })}
+        {lucideIconToReact({
+          icon: MATRIX_TONE_ICONS[score.tone],
+          hidden: false,
+        })}
         <span className="sr-only">{`Tone: ${score.tone}.`}</span>
         <span className="min-w-0">
           {score.verdict}
@@ -275,39 +278,34 @@ const CriterionHeader = ({
 // The comparison matrix: criteria as rows, options as columns, so competing
 // cells sit side by side instead of a serial scroll apart.
 const Matrix = ({ model }: { readonly model: CompiledComplexDecision }) => (
-  <div
-    data-table-scroll-container=""
-    className="relative mt-2.5 overflow-x-auto"
-  >
-    <table className="complex-decision-matrix w-full border-collapse">
-      <thead>
-        <tr>
-          <th scope="col" className="px-3 py-1.5 text-left">
-            <span className="sr-only">{"Criterion"}</span>
+  <ComparisonMatrix className="complex-decision-matrix mt-2.5">
+    <thead>
+      <tr>
+        <th scope="col" className="px-3 py-1.5 text-left">
+          <span className="sr-only">{"Criterion"}</span>
+        </th>
+        {model.options.map((option) => (
+          <th key={option.id} scope="col" className="px-1.5 py-1.5 align-top">
+            <OptionColumn
+              option={option}
+              muted={model.status === "decided" && !option.chosen}
+              reserveDecorators
+            />
           </th>
+        ))}
+      </tr>
+    </thead>
+    <tbody>
+      {model.criteria.map((criterion, index) => (
+        <tr key={criterion.id} className="comparison-matrix-row">
+          <CriterionHeader criterion={criterion} />
           {model.options.map((option) => (
-            <th key={option.id} scope="col" className="px-1.5 py-1.5 align-top">
-              <OptionColumn
-                option={option}
-                muted={model.status === "decided" && !option.chosen}
-                reserveDecorators
-              />
-            </th>
+            <ScoreCell key={option.id} score={option.scores[index]} />
           ))}
         </tr>
-      </thead>
-      <tbody>
-        {model.criteria.map((criterion, index) => (
-          <tr key={criterion.id} className="complex-decision-matrix-row">
-            <CriterionHeader criterion={criterion} />
-            {model.options.map((option) => (
-              <ScoreCell key={option.id} score={option.scores[index]} />
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
+      ))}
+    </tbody>
+  </ComparisonMatrix>
 );
 
 // The stacked fallback when a decision declares no criteria: option identity

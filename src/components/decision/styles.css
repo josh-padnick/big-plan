@@ -13,19 +13,11 @@
    out-rank every variant rule. */
 
 @layer components {
-  /* Verdict tones ride on top of a word and a glyph, so a reader who cannot
-     separate the hues loses nothing. */
-  article .decision-verdict-good {
-    color: var(--decision-pro-c);
-  }
-  article .decision-verdict-bad {
-    color: var(--decision-con-c);
-  }
-  article .decision-verdict-mixed {
-    color: var(--callout-warning-c);
-  }
-  article .decision-verdict-neutral {
-    color: var(--ink-c);
+  /* Decision spends the shared tone colour on the whole verdict: three short
+     rows scan faster in colour, and the word and glyph carry the meaning for
+     any reader who cannot separate the hues. */
+  article .decision-verdict {
+    color: var(--matrix-tone);
   }
 
   article .decision-status-pill {
@@ -37,23 +29,11 @@
     color: var(--decision-pro-c);
   }
 
-  /* The matrix. The prose stylesheet tints and borders markdown tables; this
-     one draws its own row rules and sits on the card surface. */
+  /* The skeleton and row rules come from the shared comparison matrix; what
+     is local is how narrow the label columns stay. */
   article .decision-matrix th,
   article .decision-matrix td {
-    border-bottom: 0;
-    background: transparent;
     vertical-align: top;
-  }
-  article .decision-matrix-row > th,
-  article .decision-matrix-row > td {
-    border-top: 1px solid var(--edge-c);
-  }
-  /* The 1px height lets each header cell's label stretch to the tallest
-     option in the row, so every column shares one baseline and the whole
-     header is clickable down to the matrix rule. */
-  article .decision-matrix thead th {
-    height: 1px;
   }
   article .decision-corner {
     width: 1%;

@@ -1,5 +1,7 @@
 # Using Decision well
 
+**Purpose: ask the reviewer one question and end with their confirmed answer.**
+
 The default decision card: one question, options as columns, criteria as rows, and one rationale panel beneath that explains whichever option the reader is looking at. Comparison comes first, explanation second.
 
 - Reach for it for most tradeoffs; escalate to ComplexDecision only when the call needs weighted scoring or a reversibility record, and drop to SimpleDecisionSet for quick calls.
@@ -14,3 +16,5 @@ The default decision card: one question, options as columns, criteria as rows, a
 - Never announce that an open decision is open - being asked is what makes it open. Set `status="decided"` with a `chosen` Option once the call is made, or `status="deferred"` when it is parked.
 - Every open decision offers a "Propose another approach" link for free; do not author an escape-hatch option yourself.
 - A reviewer's confirmed answer is held in the rendered document and announced on it. Delivering answers back to the agent arrives with review commenting, so ask for the answer in conversation until then.
+
+Choosing between them: `Decision` asks, `ComplexDecision` records, `SimpleDecisionSet` gathers. Decision and ComplexDecision present the same shape - options across, criteria down - on purpose, so a reader who learns one can read the other.

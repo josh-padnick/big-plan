@@ -103,8 +103,9 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"value":"Recommended"');
     expect(rendered).toContain('"value":"Version fidelity"');
     expect(rendered).toContain('"value":"Exact"');
-    expect(rendered).toContain("decision-verdict-good");
-    expect(rendered).toContain("decision-verdict-bad");
+    expect(rendered).toContain("matrix-tone-good");
+    expect(rendered).toContain("matrix-tone-bad");
+    expect(rendered).toContain("comparison-matrix");
     expect(rendered).toContain('"type":"radio"');
     expect(rendered).toContain("data-decision-selector");
     expect(rendered).toContain("decision-matrix");
