@@ -23,9 +23,11 @@ classes.
 @layer components {
   .flow-diagram {
     position: relative;
-    /* One name for the connector paint, so a ghosted edge can fade every
-       line, rail, and arrowhead by overriding a single value. */
+    /* One name for the connector paint and one for its weight, so a ghosted
+       edge can fade every line, rail, and arrowhead by overriding a single
+       value - and a selected one can thicken them the same way. */
     --flow-line-c: var(--muted-c);
+    --flow-line-w: 1.5px;
     /* A washed edit clears AA against the document ink in both themes; the
        mix is taken from the theme's own warning hue rather than a fixed
        yellow, which is unreadable on the dark shell. */
@@ -87,14 +89,14 @@ classes.
      it points at. */
   .flow-diagram-link,
   .flow-diagram-fork-stub {
-    height: 1.5px;
+    height: var(--flow-line-w);
     background: var(--flow-line-c);
   }
   .flow-diagram-link::after {
     content: "";
     position: absolute;
     right: -1px;
-    top: -3.25px;
+    top: calc(var(--flow-line-w) / 2 - 4px);
     border: 4px solid transparent;
     border-left: 6px solid var(--flow-line-c);
   }
@@ -107,8 +109,8 @@ classes.
     position: absolute;
     left: 50%;
     right: 0;
-    top: calc(50% - 0.75px);
-    height: 1.5px;
+    top: calc(50% - var(--flow-line-w) / 2);
+    height: var(--flow-line-w);
     background: var(--flow-line-c);
   }
   .flow-diagram-fork-branch::after {
@@ -121,8 +123,8 @@ classes.
   }
   .flow-diagram-fork-rail {
     position: absolute;
-    left: calc(50% - 0.75px);
-    width: 1.5px;
+    left: calc(50% - var(--flow-line-w) / 2);
+    width: var(--flow-line-w);
     top: 0;
     bottom: 0;
     background: var(--flow-line-c);
@@ -211,8 +213,12 @@ classes.
     opacity: 0;
     pointer-events: none;
   }
+  /* A canvas the reader has zoomed keeps its controls on screen. Fading them
+     out left someone zoomed in with no way back and no sign of where they
+     were - which is what the captain hit in the maximized view. */
   .flow-diagram:hover > .flow-diagram-controls,
   .flow-diagram:focus-within > .flow-diagram-controls,
+  .flow-diagram[data-flow-zoomed] > .flow-diagram-controls,
   .flow-diagram[data-flow-has-feedback] > .flow-diagram-controls,
   .flow-diagram[data-figure-maximized] > .flow-diagram-controls {
     opacity: 1;
@@ -267,52 +273,76 @@ classes.
     [data-flow-element]:not([data-flow-element="figure"]) {
     cursor: pointer;
   }
-  /* Hover is a whisper: a tint that says "clickable" and nothing that competes
-     with the selected element or moves when you reach for it. */
-  .flow-diagram[data-flow-canvas]
-    [data-flow-element]:not([data-flow-element="figure"]):hover {
-    background-color: color-mix(in srgb, var(--accent-c) 7%, transparent);
-  }
-  .flow-diagram[data-flow-canvas]
-    [data-flow-element="edge"]:hover
-    > .flow-diagram-hit {
-    background: color-mix(in srgb, var(--accent-c) 7%, transparent);
+
+  /* Hover and selection speak through outline weight and elevation, never
+     through background. A node's background already carries its tone, so a
+     tint laid over it either vanishes into the tone or fights it - which is
+     exactly what the captain hit. Outline and shadow are channels the artwork
+     itself never uses. */
+  .flow-diagram[data-flow-canvas] [data-flow-element="node"]:hover,
+  .flow-diagram[data-flow-canvas] [data-flow-element="stage"]:hover,
+  .flow-diagram[data-flow-canvas] [data-flow-element="footer"]:hover {
+    outline: 1px solid color-mix(in srgb, var(--accent-c) 55%, transparent);
+    outline-offset: 2px;
+    box-shadow: 0 1px 6px rgb(0 0 0 / 0.1);
   }
 
   [data-flow-element] {
     outline-offset: 2px;
   }
-  [data-flow-selected],
-  [data-flow-element]:focus-visible {
+  [data-flow-selected]:not([data-flow-element="edge"]),
+  [data-flow-element]:not([data-flow-element="edge"]):focus-visible {
     outline: 2px solid var(--accent-c);
-  }
-  [data-flow-element="edge"][data-flow-selected],
-  [data-flow-element="edge"]:focus-visible {
-    outline: none;
-  }
-  [data-flow-element="edge"][data-flow-selected] > .flow-diagram-hit,
-  [data-flow-element="edge"]:focus-visible > .flow-diagram-hit {
-    outline: 2px solid var(--accent-c);
-    background: color-mix(in srgb, var(--accent-c) 10%, transparent);
+    box-shadow: 0 2px 10px rgb(0 0 0 / 0.16);
   }
   [data-flow-element="figure"][data-flow-selected] {
     outline-offset: 4px;
+    box-shadow: none;
+  }
+
+  /* An edge is a line, so it says "selected" the way a line can: its own
+     colour and weight, with its verb in the accent. A rectangle drawn round a
+     connector describes a box that is not there. */
+  [data-flow-element="edge"][data-flow-selected],
+  [data-flow-element="edge"]:focus-visible {
+    outline: none;
+    --flow-line-c: var(--accent-c);
+    --flow-line-w: 2.5px;
+  }
+  .flow-diagram[data-flow-canvas] [data-flow-element="edge"]:hover {
+    --flow-line-c: color-mix(in srgb, var(--accent-c) 70%, var(--muted-c));
+    --flow-line-w: 2px;
+  }
+  [data-flow-element="edge"][data-flow-selected] [data-flow-field="label"],
+  [data-flow-element="edge"]:focus-visible [data-flow-field="label"] {
+    color: var(--accent-c);
+    font-weight: 700;
   }
 
   /* --- Editing in place ---------------------------------------------------
-     A field is edited where it lives. No compose box stands between the
-     reviewer and the words they are changing. */
+     A field being edited reads as an inline input - a quiet box with a caret
+     in it - rather than as a focus ring wrapped round some text. The ring said
+     "this is focused"; the box says "type here", which is what the reviewer
+     needs to know. */
 
   [data-flow-editing] {
-    outline: 2px solid var(--accent-c);
-    outline-offset: 2px;
-    border-radius: 0.2rem;
+    outline: none;
+    border-radius: 0.25rem;
+    padding: 0.05rem 0.3rem;
+    margin: 0 -0.3rem;
     background: var(--bg);
+    box-shadow:
+      inset 0 0 0 1px var(--accent-c),
+      0 1px 4px rgb(0 0 0 / 0.12);
     cursor: text;
-    min-width: 2ch;
+    min-width: 3ch;
+    caret-color: var(--accent-c);
   }
-  [data-flow-editing]:focus {
-    outline: 2px solid var(--accent-c);
+  /* The browser's own selection blue is the one colour on screen that belongs
+     to no theme here; an inline input should look like part of the document. */
+  [data-flow-editing]::selection {
+    background: color-mix(in srgb, var(--accent-c) 30%, transparent);
+    color: var(--ink-c);
   }
 
   /* --- The fixed affordance layer ----------------------------------------
@@ -389,6 +419,15 @@ classes.
     height: 0.8125rem;
     flex: none;
   }
+  /* What a selection can do without a button, said once and quietly. The
+     captain's point was that Edit and Delete buttons made this feel like a
+     mode; the reviewer still has to be told that typing and Delete work. */
+  .flow-diagram-actionbar-hint {
+    padding: 0 0.4rem 0 0.25rem;
+    color: var(--muted-c);
+    font-size: 0.625rem;
+    white-space: nowrap;
+  }
   .flow-diagram-actionbar-sep {
     width: 1px;
     align-self: stretch;
@@ -459,8 +498,10 @@ classes.
   .flow-tray-revert:focus-visible,
   .flow-tray-close:focus-visible,
   .flow-tray-launcher:focus-visible,
-  .flow-diagram-compose select:focus-visible,
-  .flow-diagram-compose textarea:focus-visible {
+  /* Deliberately not the textarea: the composer opens focused, fills the card,
+     and shows a caret. A ring drawn round it only reinstates the boxed-in look
+     the floating surface exists to avoid. */
+  .flow-diagram-compose select:focus-visible {
     outline: 2px solid var(--accent-c);
     outline-offset: 2px;
   }
@@ -501,68 +542,64 @@ classes.
     flex: none;
   }
 
+  /* The comment surface floats ABOVE the diagram and has to look it. Its
+     failure before was reading as one more node: same paper, same border
+     weight, same corner radius. Now it is a composer - a lifted card with a
+     real shadow, a hairline border, a borderless field, and compact inline
+     actions along the bottom. Nothing about it looks like something drawn on
+     the artboard. */
   .flow-diagram-compose {
-    width: min(24rem, calc(100vw - 2rem));
-    padding: 0.6rem 0.7rem 0.7rem;
-  }
-  .flow-diagram-compose-title {
-    margin: 0 0 0.15rem;
-    color: var(--ink-c);
-    font-size: 0.8125rem;
-    font-weight: 600;
+    width: min(23rem, calc(100vw - 2rem));
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--ink-c) 15%, transparent);
+    border-radius: 0.6rem;
+    background: var(--bg);
+    box-shadow:
+      0 16px 40px rgb(0 0 0 / 0.22),
+      0 3px 10px rgb(0 0 0 / 0.1);
+    overflow: hidden;
   }
   .flow-diagram-compose-target {
-    margin: 0 0 0.45rem;
-    color: var(--muted-c);
-    font-size: 0.6875rem;
-  }
-  .flow-diagram-compose label {
-    display: block;
-    margin-bottom: 0.2rem;
+    margin: 0;
+    padding: 0.55rem 0.75rem 0.3rem;
     color: var(--muted-c);
     font-size: 0.6875rem;
     font-weight: 600;
   }
-  .flow-diagram-compose select,
+  /* Borderless, because the card already is the input. A second box inside a
+     floating card is the look the captain was reacting to. */
   .flow-diagram-compose textarea {
+    display: block;
     width: 100%;
-    margin-bottom: 0.5rem;
-    padding: 0.35rem 0.45rem;
-    border: 1px solid var(--edge-c);
-    border-radius: 0.3rem;
-    background: var(--surface-c);
+    min-height: 4.25rem;
+    margin: 0;
+    padding: 0 0.75rem 0.55rem;
+    border: 0;
+    background: transparent;
     color: var(--ink-c);
     font-family: inherit;
     font-size: 0.8125rem;
+    line-height: 1.5;
+    resize: none;
+    outline: none;
   }
-  .flow-diagram-compose textarea {
-    min-height: 4.5rem;
-    resize: vertical;
-  }
-  .flow-diagram-compose-before {
-    margin: -0.25rem 0 0.5rem;
-    color: var(--muted-c);
-    font-size: 0.6875rem;
-  }
-  /* A removal names what it breaks, and says it loudly enough to change the
-     reviewer's mind before they write the reason. */
-  .flow-diagram-compose-consequence {
-    margin: 0 0 0.5rem;
-    padding: 0.35rem 0.45rem;
-    border-radius: 0.3rem;
-    background: color-mix(in srgb, var(--callout-warning-c) 14%, transparent);
-    color: var(--flow-warn-ink);
-    font-size: 0.6875rem;
-    line-height: 1.45;
-  }
-  .flow-diagram-compose-before s {
-    color: var(--diff-remove-c);
+  .flow-diagram-compose textarea::placeholder {
+    color: color-mix(in srgb, var(--muted-c) 75%, transparent);
   }
   .flow-diagram-compose-row {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.4rem;
+    gap: 0.35rem;
+    padding: 0.4rem 0.5rem;
+    border-top: 1px solid color-mix(in srgb, var(--ink-c) 9%, transparent);
+    background: color-mix(in srgb, var(--ink-c) 3%, transparent);
+  }
+  .flow-diagram-compose-hint {
+    margin-right: auto;
+    padding-left: 0.3rem;
+    color: var(--muted-c);
+    font-size: 0.625rem;
   }
   .flow-diagram-button {
     padding: 0.3rem 0.7rem;
@@ -603,34 +640,25 @@ classes.
   /* The states themselves live in their own layer below; only the resting
      furniture a proposal borrows stays here. */
 
+  /* The struck original is a clone of the field's own tag and classes, so it
+     matches the type it sits beside - a monospace identifier's original stays
+     monospace. Only colour and the strike are added. */
   .flow-diagram-original {
     margin-left: 0.35rem;
     color: var(--muted-c);
-    font-weight: 400;
     text-decoration: line-through;
+    opacity: 0.85;
   }
-  /* A paragraph's original is too long to strike inline, so it waits behind
-     the Edited marker and the figure's Show original toggle. */
-  .flow-diagram-original-block {
-    display: none;
-    margin-top: 0.2rem;
-    padding-left: 0.5rem;
-    border-left: 2px solid var(--edge-c);
-    color: var(--muted-c);
-    text-decoration: line-through;
-  }
-  [data-flow-element]:hover > .flow-diagram-original-block,
-  [data-flow-element]:focus-within > .flow-diagram-original-block {
-    display: block;
-  }
+  /* --- The diagram's feedback collector ----------------------------------
+     A LOCAL accumulator, and the UI says so. It gathers everything a reviewer
+     marks up on ONE diagram and hands that batch to the document-wide
+     feedback collector, which lives elsewhere and is not this. Naming the
+     diagram it belongs to, and naming where the batch goes, is the whole
+     point: a bare notes count implied a relationship instead of stating one.
 
-  /* --- The feedback tray -------------------------------------------------
-     A stand-in, not the product's tray. Commenting Phase 1 owns the real
-     draft store, tray, and Send; this one exists so the diagram's targeting
-     and proposal layers can be tried end to end before that lands, and it
-     says so on its face. It sits above the maximized panel deliberately: the
-     overlay covers the reading column, and a reviewer builds one batch in one
-     place whether or not a figure is promoted. */
+     It sits above the maximized panel deliberately: the overlay covers the
+     reading column, and a reviewer builds one batch in one place whether or
+     not a figure is promoted. */
 
   .flow-tray {
     position: fixed;
@@ -652,7 +680,7 @@ classes.
   }
   .flow-tray-header {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 0.4rem;
     padding: 0.5rem 0.6rem;
     border-bottom: 1px solid var(--edge-c);
@@ -777,6 +805,27 @@ classes.
     border-radius: 0 0 var(--radius-md) var(--radius-md);
   }
   .flow-tray-stub {
+    color: var(--muted-c);
+    font-size: 0.6875rem;
+    line-height: 1.4;
+  }
+  /* Which diagram this batch belongs to, under the collector's own name. */
+  .flow-tray-scope {
+    display: block;
+    margin-top: 0.1rem;
+    color: var(--muted-c);
+    font-size: 0.6875rem;
+    font-weight: 400;
+  }
+  .flow-tray-other {
+    color: var(--muted-c);
+    font-size: 0.6875rem;
+    font-style: italic;
+  }
+  .flow-tray-other[hidden] {
+    display: none;
+  }
+  .flow-tray-handoff {
     color: var(--flow-warn-ink);
     font-size: 0.6875rem;
     line-height: 1.4;
