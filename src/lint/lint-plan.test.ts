@@ -484,6 +484,15 @@ describe("lintPlan slide-leading-title", () => {
     ).toEqual([{ ruleId: "slide-leading-title", line: 7 }]);
   });
 
+  it("should report a slide whose first block is a reference-style image", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## The pipeline\n\n![Pipeline][pipeline]\n\n[pipeline]: p.png\n",
+      }).map(({ ruleId, line }) => ({ ruleId, line })),
+    ).toEqual([{ ruleId: "slide-leading-title", line: 7 }]);
+  });
+
   it("should accept a sub-slide that titles the figure with an h4 first", () => {
     expect(
       lintPlan({
@@ -578,6 +587,15 @@ describe("lintPlan subtitle-duplication", () => {
       lintPlan({
         markdown:
           "# T\n\nLede.\n\n## The retry queue\n\n*Retry queue.*\n\nProse.\n",
+      }).map(({ ruleId }) => ruleId),
+    ).toEqual(["subtitle-duplication"]);
+  });
+
+  it("should report identical non-Latin heading and component titles", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '# T\n\nLede.\n\n## Очередь повторов\n\nProse.\n\n<FlowDiagram title="Очередь повторов">\n\nBody.\n\n</FlowDiagram>\n',
       }).map(({ ruleId }) => ruleId),
     ).toEqual(["subtitle-duplication"]);
   });
