@@ -355,6 +355,10 @@ export const VIEWER_SCRIPT = `<script>
   );
   if (frames.length === 0) return;
   let open = null;
+  // How the open panel was activated. Restoring focus is required either way -
+  // a keyboard reader must land back on the control they pressed - but the
+  // ring and its tooltip should only reappear for the reader who needs them.
+  let openedByKeyboard = false;
   const subjectOf = (frame) =>
     frame.getAttribute("data-figure-maximizable") || "figure";
   const setMaximized = (frame, maximized) => {
@@ -384,7 +388,11 @@ export const VIEWER_SCRIPT = `<script>
     const trigger = frame.querySelector("[data-figure-maximize]");
     if (trigger === null) continue;
     trigger.hidden = false;
-    trigger.addEventListener("click", () => {
+    trigger.addEventListener("click", (event) => {
+      // A click synthesised by Enter or Space carries detail 0; a pointer
+      // click carries a click count. That is the activation modality, and it
+      // decides whether the restored focus is visible.
+      openedByKeyboard = event.detail === 0;
       // Only one figure occupies the viewport at a time; promoting a second
       // one restores the first rather than stacking two fixed panels.
       if (open !== null && open !== frame) setMaximized(open, false);
@@ -394,11 +402,32 @@ export const VIEWER_SCRIPT = `<script>
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape" || open === null) return;
     const frame = open;
+    const keyboard = openedByKeyboard;
     setMaximized(frame, false);
     // Focus returns to the control the reader pressed, so Escape lands them
-    // where they were rather than at the top of the document.
+    // where they were rather than at the top of the document. It returns
+    // quietly after a pointer-opened panel: a mouse user who never saw a ring
+    // should not be handed one, and the tooltip keys off :focus-visible too,
+    // so one decision settles both.
     const trigger = frame.querySelector("[data-figure-maximize]");
-    if (trigger !== null) trigger.focus();
+    if (trigger === null) return;
+    if (!keyboard) trigger.setAttribute("data-figure-focus-quiet", "");
+    trigger.focus({ focusVisible: keyboard });
   });
+  // focusVisible is not honoured everywhere; the attribute is the fallback and
+  // is spent the moment the reader does anything else.
+  for (const type of ["keydown", "pointerdown", "blur"]) {
+    document.addEventListener(
+      type,
+      () => {
+        for (const quiet of document.querySelectorAll(
+          "[data-figure-focus-quiet]",
+        )) {
+          quiet.removeAttribute("data-figure-focus-quiet");
+        }
+      },
+      true,
+    );
+  }
 })();
 </script>`;
