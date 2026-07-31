@@ -6,9 +6,48 @@ Each form factor is a parallel prototype so reviewers compare real device layout
 
 ## Desktop web SaaS
 
-Stable global shell on every screen.
-Desktop width keeps context visible (queue + conversation + properties), not larger cards.
-Master-detail ticket work; dense inbox; keyboard-speed hints.
+Persistent left nav + content workspace.
+Every desktop screen names a real product pattern; on-screen copy is product UI only (no keyboard cheatsheets or layout notes inside the artboard).
+
+### Inbox - design rationale
+
+- **Pattern:** Front / Intercom **list + inspector** (dense queue, selected row previewed in a side panel).
+- **Width for context:** queue claims most of the canvas; inspector holds the selected ticket and one SLA metric - not a second dashboard of cards.
+- **Hierarchy:** one primary action (`New ticket`); views are quiet tertiary filters; open the selected ticket from the inspector, not a second CTA under the list.
+- **CRAP:** repeated list-row structure; filters and header aligned; preview content is proximity-grouped under one panel.
+- **Shell:** global nav stable (Inbox active); views stay in content, not as global destinations.
+
+Self-critique fixed before present: removed keyboard meta from the UI; removed under-list "Open selected"; collapsed dual Preview/Attention panels into one inspector.
+
+### Ticket - design rationale
+
+- **Pattern:** Front / Zendesk **three-pane workspace** (queue | conversation | properties).
+- **Width for context:** queue stays so triage continues; conversation is the primary surface; properties are a narrow rail - not equal thirds.
+- **Hierarchy:** `Resolve` is the page primary; `Send` is the thread primary; `Internal` is tertiary next to `Reply` mode.
+- **CRAP:** same global shell as every other screen; related fields grouped under Properties; Related list sits under them.
+- **Shell:** Inbox remains active; no separate "back" control - the queue is the navigation.
+
+Self-critique fixed: stripped layout/keyboard meta; removed redundant "Back to full inbox"; stopped putting process notes in the composer.
+
+### New ticket - design rationale
+
+- **Pattern:** Linear / GitHub **create page** (main form + right context rail).
+- **Width for context:** full-width subject/description in the main column; rail holds duplicate detection and routing only.
+- **Hierarchy:** one primary `Create ticket`; Cancel is tertiary; rail has no competing primary.
+- **CRAP:** form fields stack with shared left edge; routing controls grouped; duplicate list sits above them.
+- **Shell:** same global nav; Inbox not active (create is a route off inbox).
+
+Self-critique fixed: removed draft/sticky meta copy; shortened receipt hint to product language.
+
+### Settings - design rationale
+
+- **Pattern:** Linear / Stripe **settings two-column** (section nav + single field column).
+- **Width for context:** sub-nav is a rail; fields fill one readable column - not two equal cards.
+- **Hierarchy:** page title is the section name; `Save` is the only primary; Discard is tertiary for dirty state.
+- **CRAP:** nav items repeat the same row treatment; switches and selects align as one vertical rhythm.
+- **Shell:** Settings active in global nav.
+
+Self-critique fixed: no instructional helpers; no fake "search settings" without a search field; denser field stack without decorative panels.
 
 <Wireframe
   id="harbor-desktop"
@@ -32,12 +71,7 @@ Master-detail ticket work; dense inbox; keyboard-speed hints.
         </Nav>
       </Sidebar>
       <AppContent>
-        <PageHeader
-          title="Inbox"
-          description="All open · 12 tickets"
-          badge="Live · 3 agents"
-        >
-          <Button label="Cmd+K" emphasis="tertiary" />
+        <PageHeader title="Inbox" description="12 open">
           <Button
             label="New ticket"
             emphasis="primary"
@@ -45,18 +79,14 @@ Master-detail ticket work; dense inbox; keyboard-speed hints.
           />
         </PageHeader>
         <Row gap="sm">
-          <Button label="All 12" emphasis="primary" />
-          <Button label="Mine 4" emphasis="tertiary" />
-          <Button label="Unassigned 3" emphasis="tertiary" />
-          <Button label="SLA risk 2" emphasis="tertiary" />
-          <Button label="Waiting 3" emphasis="tertiary" />
+          <Button label="All" emphasis="primary" />
+          <Button label="Mine" emphasis="tertiary" />
+          <Button label="Unassigned" emphasis="tertiary" />
+          <Button label="SLA risk" emphasis="tertiary" />
+          <Button label="Waiting" emphasis="tertiary" />
         </Row>
         <Row gap="sm">
-          <Panel title="Queue" span="main">
-            <Text
-              text="J/K move · Enter open · X multi-select · sticky header"
-              role="helper"
-            />
+          <Panel title="Open" span="main">
             <List>
               <ListItem
                 label="Cannot complete checkout"
@@ -99,30 +129,19 @@ Master-detail ticket work; dense inbox; keyboard-speed hints.
                 value="#4755"
               />
             </List>
+          </Panel>
+          <Panel title="Selected" span="rail">
+            <Badge label="#4821" />
+            <Heading text="Cannot complete checkout" level="3" />
+            <Text text="Maya Chen · Northwind" role="helper" />
+            <Text text="Card form freezes on submit in Chrome." />
+            <Metric label="First response" value="11m" note="Target 15m" />
             <Button
-              label="Open selected · Enter"
-              emphasis="secondary"
+              label="Open conversation"
+              emphasis="primary"
               navigateTo="d-ticket"
             />
           </Panel>
-          <Stack gap="sm" span="rail">
-            <Panel title="Preview">
-              <Text text="No row selected" role="helper" />
-              <Text text="Select a ticket to preview, or open with Enter." />
-              <Metric label="First response" value="11m" note="Target 15m" />
-              <Progress
-                label="SLA health"
-                value="88"
-                detail="22 of 25 on time"
-              />
-            </Panel>
-            <Panel title="Attention">
-              <List>
-                <ListItem label="2 breach under 1h" meta="SLA" value="!" />
-                <ListItem label="3 waiting on customer" meta="Waiting" value="3" />
-              </List>
-            </Panel>
-          </Stack>
         </Row>
       </AppContent>
     </AppShell>
@@ -146,18 +165,17 @@ Master-detail ticket work; dense inbox; keyboard-speed hints.
       </Sidebar>
       <AppContent>
         <PageHeader
-          title="Inbox / #4821"
-          description="Cannot complete checkout · Maya Chen · Northwind"
+          title="Cannot complete checkout"
+          description="#4821 · Maya Chen · Northwind"
         >
           <Button label="Resolve" emphasis="primary" />
         </PageHeader>
         <Row gap="sm">
           <Panel title="Queue" span="list">
-            <Text text="J/K · selection kept" role="helper" />
             <List>
               <ListItem
                 label="Checkout freeze"
-                meta="Selected · 14m"
+                meta="Now · 14m"
                 value="#4821"
               />
               <ListItem label="SSO timeout" meta="Waiting · 2h" value="#4818" />
@@ -169,7 +187,6 @@ Master-detail ticket work; dense inbox; keyboard-speed hints.
               />
               <ListItem label="CSV export" meta="Mine · 4d" value="#4788" />
             </List>
-            <Button label="Back to full inbox" emphasis="tertiary" navigateTo="d-inbox" />
           </Panel>
           <Panel title="Conversation" span="main">
             <List>
@@ -179,7 +196,7 @@ Master-detail ticket work; dense inbox; keyboard-speed hints.
                 value="Card form freezes on submit"
               />
               <ListItem
-                label="Alex · Public reply"
+                label="Alex · Reply"
                 meta="8m"
                 value="Need browser and cart id"
               />
@@ -189,27 +206,21 @@ Master-detail ticket work; dense inbox; keyboard-speed hints.
                 value="Chrome 128 · cart_9f2a"
               />
               <ListItem
-                label="Alex · Internal note"
+                label="Alex · Note"
                 meta="1m"
-                value="Linked prior freeze #4410 - do not promise ETA"
+                value="Linked prior freeze #4410"
               />
             </List>
-            <Text
-              text="Composer sticky · Mode: Reply | Internal (distinct) · Attach · Saved reply"
-              role="helper"
-            />
-            <TextArea
-              label="Reply to Maya"
-              placeholder="Write reply… Cmd+Enter send"
-            />
-            <Row gap="sm" justify="between">
-              <Button label="Internal note" emphasis="tertiary" />
-              <Button label="Send · Cmd+Enter" emphasis="primary" />
+            <Divider />
+            <Row gap="sm">
+              <Button label="Reply" emphasis="primary" />
+              <Button label="Internal" emphasis="tertiary" />
             </Row>
+            <TextArea label="Message" placeholder="Write a reply…" />
+            <Button label="Send" emphasis="primary" />
           </Panel>
           <Stack gap="sm" span="rail">
             <Panel title="Properties">
-              <Text text="Collapse rail · remembered width" role="helper" />
               <Select label="Status" value="Open" />
               <Select label="Assignee" value="Alex Rivera" />
               <Select label="Team" value="Payments" />
@@ -252,16 +263,16 @@ Master-detail ticket work; dense inbox; keyboard-speed hints.
         </Nav>
       </Sidebar>
       <AppContent>
-        <PageHeader title="New ticket" description="Draft saved · Esc discard">
+        <PageHeader title="New ticket">
           <Button label="Cancel" emphasis="tertiary" navigateTo="d-inbox" />
           <Button
-            label="Create · Cmd+Enter"
+            label="Create ticket"
             emphasis="primary"
             navigateTo="d-ticket"
           />
         </PageHeader>
         <Row gap="sm">
-          <Panel title="Ticket" span="main">
+          <Panel title="Details" span="main">
             <TextField
               label="Subject"
               placeholder="Short summary the team will scan"
@@ -273,33 +284,25 @@ Master-detail ticket work; dense inbox; keyboard-speed hints.
             <Select label="Customer" value="Northwind Labs" />
             <Select label="Priority" value="Normal" />
             <Checkbox
-              label="Email customer on create"
+              label="Email customer a receipt"
               checked
-              hint="Sends a receipt that the ticket was opened; they can reply in-thread."
+              hint="They can reply in this thread."
             />
-            <Text text="Sticky actions · unsaved guard on navigate away" role="helper" />
           </Panel>
-          <Stack gap="sm" span="rail">
-            <Panel title="Intelligence">
-              <Text text="Possible duplicates" role="helper" />
-              <List>
-                <ListItem
-                  label="Prior checkout freeze"
-                  meta="92% match"
-                  value="#4410"
-                />
-              </List>
-              <Divider label="Routing" />
-              <Select label="Team" value="Payments" />
-              <Select label="Assignee" value="Unassigned" />
-              <Text
-                text="Payments owns checkout · 2 open on Alex"
-                role="helper"
+          <Panel title="Routing" span="rail">
+            <Text text="Possible duplicate" role="helper" />
+            <List>
+              <ListItem
+                label="Prior checkout freeze"
+                meta="Close match"
+                value="#4410"
               />
-              <Switch label="Watch this ticket" on />
-              <Select label="Notify" value="Assignee + watchers" />
-            </Panel>
-          </Stack>
+            </List>
+            <Divider />
+            <Select label="Team" value="Payments" />
+            <Select label="Assignee" value="Unassigned" />
+            <Switch label="Watch this ticket" on />
+          </Panel>
         </Row>
       </AppContent>
     </AppShell>
@@ -322,17 +325,13 @@ Master-detail ticket work; dense inbox; keyboard-speed hints.
         </Nav>
       </Sidebar>
       <AppContent>
-        <PageHeader
-          title="Settings"
-          description="Search settings · workspace defaults"
-          badge="Unsaved"
-        >
+        <PageHeader title="Notifications" badge="Unsaved">
           <Button label="Discard" emphasis="tertiary" />
-          <Button label="Save changes" emphasis="primary" />
+          <Button label="Save" emphasis="primary" />
         </PageHeader>
         <Row gap="sm">
           <Panel span="rail">
-            <Nav label="Sections">
+            <Nav label="Settings">
               <NavItem label="Notifications" active />
               <NavItem label="Business hours" />
               <NavItem label="Integrations" />
@@ -340,24 +339,15 @@ Master-detail ticket work; dense inbox; keyboard-speed hints.
             </Nav>
           </Panel>
           <Stack gap="sm" span="main">
-            <Heading text="Notifications" level="2" />
-            <Text
-              text="Label column left · controls right · sticky save when dirty"
-              role="helper"
-            />
             <Switch label="Email on assignment" on />
             <Switch label="Slack on SLA risk" on />
             <Switch
               label="Digest every morning"
-              hint="Requires email on assignment"
+              hint="Needs email on assignment"
             />
             <Divider label="Channels" />
             <Select label="Default Slack channel" value="#support-alerts" />
             <TextField label="Digest hour" value="08:00" />
-            <Text
-              text="Save disabled until a field changes · shown enabled with Unsaved badge"
-              role="helper"
-            />
           </Stack>
         </Row>
       </AppContent>
