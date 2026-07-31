@@ -1,5 +1,5 @@
 // Adapts framework-neutral Lucide icon data to HAST, the rendering edge the
-// deck transform builds against. The React edge has its own adapter in
+// deck and code-figure transforms build against. The React edge has its own adapter in
 // components/_shared/lucide-icon; neither owns glyph data.
 
 import type { Element } from "hast";
@@ -16,8 +16,12 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
  */
 export const lucideIconToHast = ({
   icon,
+  hidden = false,
 }: {
   readonly icon: LucideIcon;
+  // A control that swaps between two glyphs ships both and hides one, so the
+  // viewer script only ever toggles visibility rather than building markup.
+  readonly hidden?: boolean;
 }): Element => ({
   type: "element",
   tagName: "svg",
@@ -31,6 +35,7 @@ export const lucideIconToHast = ({
     "stroke-linejoin": "round",
     "aria-hidden": "true",
     "data-lucide": icon.name,
+    ...(hidden ? { hidden: true } : {}),
   },
   children: icon.node.map(([tagName, properties]) => ({
     type: "element" as const,

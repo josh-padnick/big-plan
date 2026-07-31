@@ -58,12 +58,18 @@ describe("compileMarkdown code highlighting", () => {
     );
   });
 
-  it("should render block code without script-dependent controls", () => {
+  it("should give each block a dormant maximize control and no other chrome", () => {
     const bodyHtml = compileAndSerialize(
       "```sql\nSELECT 1;\n```\n\n```\nplain block\n```\n",
     );
-    expect(bodyHtml.match(/<pre>/g)).toHaveLength(2);
-    expect(bodyHtml).not.toContain("<button");
+    // The fence itself is the panel body, so it carries the body mark.
+    expect(bodyHtml.match(/<pre data-figure-body="">/g)).toHaveLength(2);
+    // A dense sketch a reviewer must read should not be stuck at the width of
+    // the reading column, so every block gets the shared maximize control.
+    expect(bodyHtml.match(/data-figure-maximizable="code"/g)).toHaveLength(2);
+    // It ships hidden: a document read without scripts shows no control that
+    // cannot act.
+    expect(bodyHtml.match(/hidden data-figure-maximize=""/g)).toHaveLength(2);
     expect(bodyHtml).not.toContain("data-copy-code");
   });
 });

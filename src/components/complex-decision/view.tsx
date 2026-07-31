@@ -17,8 +17,6 @@ import type {
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-mark.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
-import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
-import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
 import { MINUS_ICON } from "../../icons/lucide/minus.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import { UNDO_2_ICON } from "../../icons/lucide/undo-2.js";
@@ -31,6 +29,8 @@ import {
   CardSection,
   SectionLabel,
 } from "../_shared/labeled-section/labeled-section.js";
+import { MAXIMIZABLE_ATTRIBUTE } from "../_model/figure-controls/figure-controls.js";
+import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
 const TONE_ICONS = {
   good: CHECK_ICON,
@@ -38,23 +38,6 @@ const TONE_ICONS = {
   mixed: TRIANGLE_ALERT_ICON,
   neutral: MINUS_ICON,
 } satisfies Record<ComplexDecisionTone, typeof CHECK_ICON>;
-
-// Full screen stays reserved for the live review application; the in-column
-// matrix scrolls horizontally, so the inert document loses nothing.
-// Matches the file-tree control look so figure chrome reads as one family.
-const ExpandButton = () => (
-  <button
-    type="button"
-    className="complex-decision-expand inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
-    aria-label="View decision full screen"
-    data-tooltip="View decision full screen"
-    hidden
-    data-decision-expand=""
-  >
-    {lucideIconToReact({ icon: MAXIMIZE_2_ICON, hidden: false })}
-    {lucideIconToReact({ icon: MINIMIZE_2_ICON, hidden: true })}
-  </button>
-);
 
 const StatusPill = ({ status }: { readonly status: ComplexDecisionStatus }) => (
   <BadgePill
@@ -431,8 +414,9 @@ export const ComplexDecision = ({
 }) => (
   <figure
     id={model.id}
-    className="complex-decision mb-5 min-w-0 overflow-hidden rounded-md border border-edge bg-paper"
+    className="complex-decision min-w-0 overflow-hidden rounded-md border border-edge bg-paper"
     data-complex-decision=""
+    {...{ [MAXIMIZABLE_ATTRIBUTE]: "decision" }}
     data-decision-state={model.status}
   >
     <figcaption className="flex items-start justify-between gap-3 bg-header px-4 py-3">
@@ -445,7 +429,7 @@ export const ComplexDecision = ({
           {model.question}
         </p>
       </div>
-      <ExpandButton />
+      <MaximizeButton subject="decision" />
     </figcaption>
     {model.context.length === 0 ? null : (
       <div className="px-4 py-4 text-sm [&>:last-child]:mb-0">

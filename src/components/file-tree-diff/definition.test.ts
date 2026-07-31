@@ -142,7 +142,7 @@ describe("renderFileTreeDiff", () => {
     const serialized = JSON.stringify(render().element);
 
     expect(serialized).toContain('"data-tooltip":"Collapse all folders"');
-    expect(serialized).toContain('"data-tooltip":"View file tree full screen"');
+    expect(serialized).toContain('"data-tooltip":"Maximize tree"');
     expect(serialized).toContain('"data-tooltip":"Side-by-side view"');
     expect(serialized).not.toContain('"title":');
   });

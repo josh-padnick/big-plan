@@ -2,13 +2,19 @@
 // a scroll-spy that marks the section being read with aria-current on its TOC
 // links (falling back to the overview links above the first section), hover
 // popovers that float [data-info-popover] disclosures beside their triggers,
-// and collapse toggles for deck parts, slides, and sub-slides. Plan content
-// never contributes script, and every affordance keeps a no-JS fallback.
+// collapse toggles for deck parts, slides, and sub-slides, and one maximize
+// behavior shared by every figure family. Plan content never contributes
+// script, and every affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
 // sibling. Every collapse query here is a direct-child lookup relying on that
 // shape, so read those invariants before changing this or the deck transform.
+//
+// The maximize leg reads the contract owned by
+// components/_model/figure-controls/figure-controls.ts. This file is a string
+// template and cannot import it, so a change to those attribute spellings
+// changes the strings here too.
 export const VIEWER_SCRIPT = `<script>
 (() => {
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
@@ -336,6 +342,61 @@ export const VIEWER_SCRIPT = `<script>
   addEventListener("hashchange", () => {
     const result = expandHash(location.hash);
     if (result !== null && result.revealed) result.target.scrollIntoView();
+  });
+})();
+(() => {
+  // One maximize behavior for every figure family: tables, code snippets,
+  // diffs, and the plain fenced blocks the code-figure transform wrapped.
+  // The vocabulary is owned by components/_model/figure-controls.ts; this leg
+  // is a string template and cannot import it, so any change there changes
+  // these three attribute names too.
+  const frames = Array.from(
+    document.querySelectorAll("[data-figure-maximizable]"),
+  );
+  if (frames.length === 0) return;
+  let open = null;
+  const subjectOf = (frame) =>
+    frame.getAttribute("data-figure-maximizable") || "figure";
+  const setMaximized = (frame, maximized) => {
+    const trigger = frame.querySelector("[data-figure-maximize]");
+    if (maximized) frame.setAttribute("data-figure-maximized", "");
+    else frame.removeAttribute("data-figure-maximized");
+    open = maximized ? frame : null;
+    // The backdrop lives on the root so no ancestor of the figure can clip it.
+    document.documentElement.toggleAttribute(
+      "data-figure-maximized-open",
+      open !== null,
+    );
+    if (trigger === null) return;
+    const grow = trigger.querySelector("[data-lucide=maximize-2]");
+    const shrink = trigger.querySelector("[data-lucide=minimize-2]");
+    if (grow !== null) grow.hidden = maximized;
+    if (shrink !== null) shrink.hidden = !maximized;
+    const label = maximized
+      ? "Restore " + subjectOf(frame) + " size"
+      : "Maximize " + subjectOf(frame);
+    trigger.setAttribute("aria-label", label);
+    trigger.setAttribute("data-tooltip", label);
+  };
+  for (const frame of frames) {
+    const trigger = frame.querySelector("[data-figure-maximize]");
+    if (trigger === null) continue;
+    trigger.hidden = false;
+    trigger.addEventListener("click", () => {
+      // Only one figure occupies the viewport at a time; promoting a second
+      // one restores the first rather than stacking two fixed panels.
+      if (open !== null && open !== frame) setMaximized(open, false);
+      setMaximized(frame, !frame.hasAttribute("data-figure-maximized"));
+    });
+  }
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || open === null) return;
+    const frame = open;
+    setMaximized(frame, false);
+    // Focus returns to the control the reader pressed, so Escape lands them
+    // where they were rather than at the top of the document.
+    const trigger = frame.querySelector("[data-figure-maximize]");
+    if (trigger !== null) trigger.focus();
   });
 })();
 </script>`;
