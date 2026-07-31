@@ -61,7 +61,7 @@ const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,72rem)]`;
 const TOC_LINK_CLASSES =
   "block border-l-2 border-edge px-3 py-[0.3rem] leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
 const TOC_GROUPED_LINK_CLASSES =
-  "block border-l-2 border-edge py-[0.3rem] pr-3 pl-5 leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
+  "block border-l-2 border-edge py-[0.3rem] pr-3 pl-3.5 leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
 // A part header is a heading over the entries beneath it, not one of them, so
 // it sits flush with the Contents label rather than sharing the rule and inset
 // its section links use.
