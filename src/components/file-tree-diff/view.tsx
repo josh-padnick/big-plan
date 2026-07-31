@@ -103,7 +103,6 @@ const DiffHeader = ({
 }) => (
   <figcaption
     className="file-tree-header file-tree-diff-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.65rem] py-[0.4rem] font-sans text-sm font-semibold text-ink"
-    {...(title === undefined ? { "data-tree-header-without-title": "" } : {})}
   >
     {title === undefined ? null : (
       <span className="file-tree-diff-title truncate">{title}</span>
