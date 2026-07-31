@@ -268,11 +268,11 @@ marks and a plan diff never jitters.
     flex: 1 1 0;
     min-width: 10rem;
   }
-  /* Compact ticket queue (~collapsible). Wider lists use main + rail instead. */
+  /* Compact ticket queue: wide enough for a truncating title + meta line. */
   .wireframe-row > [data-wireframe-span="list"] {
-    flex: 0 0 11rem;
-    max-width: 12.5rem;
-    min-width: 9.5rem;
+    flex: 0 0 13rem;
+    max-width: 15rem;
+    min-width: 11rem;
   }
   /* Details / settings sub-nav (~280-320px class at full artboard). */
   .wireframe-row > [data-wireframe-span="rail"] {
@@ -429,12 +429,12 @@ marks and a plan diff never jitters.
     .wireframe-heading {
     font-size: 1.35rem;
   }
-  /* Consistent pane system: content hierarchy from layout and type, not from
-     every region wearing the same heavy outline. Major panes use a single
-     divider; outlined boxes stay for controls. */
+  /* Consistent pane system: only workspace body rows that carry span panes
+     get multi-pane chrome and min-height. Toolbar rows (search, filters) stay
+     compact - otherwise each inherits 18rem and leaves empty bands. */
   .wireframe-artboard[data-wireframe-viewport="desktop"]
     .wireframe-app-content
-    > .wireframe-row {
+    > .wireframe-row:has([data-wireframe-span]) {
     flex-wrap: nowrap;
     align-items: stretch;
     gap: 0;
@@ -442,11 +442,11 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-viewport="desktop"]
     .wireframe-app-content
-    > .wireframe-row
+    > .wireframe-row:has([data-wireframe-span])
     > .wireframe-panel,
   .wireframe-artboard[data-wireframe-viewport="desktop"]
     .wireframe-app-content
-    > .wireframe-row
+    > .wireframe-row:has([data-wireframe-span])
     > .wireframe-stack {
     display: flex;
     flex-direction: column;
@@ -458,20 +458,37 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-viewport="desktop"]
     .wireframe-app-content
-    > .wireframe-row
+    > .wireframe-row:has([data-wireframe-span])
     > .wireframe-panel
     > .wireframe-panel-body {
     flex: 1;
+    min-width: 0;
+  }
+  /* Queue column: force two-line rows and clip long subjects. */
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row
+    > [data-wireframe-span="list"] {
+    overflow: hidden;
   }
   .wireframe-artboard[data-wireframe-viewport="desktop"]
     .wireframe-app-content
     > .wireframe-row
+    > [data-wireframe-span="list"]
+    .wireframe-list-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span])
     > .wireframe-panel::after {
     display: none;
   }
   .wireframe-artboard[data-wireframe-viewport="desktop"]
     .wireframe-app-content
-    > .wireframe-row
+    > .wireframe-row:has([data-wireframe-span])
     > * + * {
     border-left: 1px solid var(--wf-stroke-soft);
   }
@@ -891,9 +908,11 @@ marks and a plan diff never jitters.
     list-style: none;
     margin: 0;
     padding: 0;
+    min-width: 0;
   }
   .wireframe-list-item {
-    padding: 0.4rem 0.35rem;
+    min-width: 0;
+    padding: 0.45rem 0.35rem;
     border-bottom: 1px solid var(--wf-stroke-soft);
     font-size: 0.875rem;
   }
@@ -905,26 +924,40 @@ marks and a plan diff never jitters.
     background: var(--wf-fill);
     box-shadow: inset 3px 0 0 var(--color-ink);
   }
-  .wireframe-list-label {
+  .wireframe-list-row-primary {
     min-width: 0;
   }
+  /* Single-line truncating title - never word-per-line wrap in a narrow rail. */
+  .wireframe-list-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .wireframe-list-meta {
-    flex: none;
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 0.75rem;
     color: var(--color-muted);
   }
   .wireframe-list-value {
     flex: none;
-    margin-left: auto;
+    max-width: 40%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     text-align: right;
     font-weight: 600;
     font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
     color: var(--color-muted);
-    white-space: nowrap;
   }
   /* Whole-row tappable list entries (mobile inbox). */
   .wireframe-list-row {
+    min-width: 0;
     min-height: 3.25rem;
     margin: 0;
     padding: 0.55rem 0.25rem;
@@ -941,10 +974,6 @@ marks and a plan diff never jitters.
   }
   .wireframe-list-item:has(> .wireframe-list-row) {
     padding: 0;
-  }
-  .wireframe-list-row .wireframe-list-meta {
-    display: block;
-    width: 100%;
   }
 
   /* Conversation timeline messages (not table rows). */

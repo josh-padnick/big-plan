@@ -256,16 +256,21 @@ const WireframeElement = ({
         </ul>
       );
     case "ListItem": {
-      // Mobile lists open a record by tapping the whole row; desktop queues may
-      // only mark selection. Both share the same row chrome.
-      const rowBody = (
+      // Every queue/inbox row is two lines so a narrow desktop list column never
+      // jams title, status, and age onto one flex line (which overflows as
+      // overlapping or one-word-per-line wrapping):
+      //   line 1 - truncating title [trailing value]
+      //   line 2 - metadata
+      const rowInner = (
         <>
-          <span className="wireframe-list-label grow">{node.label}</span>
+          <span className="wireframe-list-row-primary flex w-full min-w-0 flex-nowrap items-baseline gap-2">
+            <span className="wireframe-list-label grow">{node.label}</span>
+            {node.value === undefined ? null : (
+              <span className="wireframe-list-value">{node.value}</span>
+            )}
+          </span>
           {node.meta === undefined ? null : (
             <span className="wireframe-list-meta">{node.meta}</span>
-          )}
-          {node.value === undefined ? null : (
-            <span className="wireframe-list-value">{node.value}</span>
           )}
         </>
       );
@@ -277,28 +282,20 @@ const WireframeElement = ({
           >
             <button
               type="button"
-              className="wireframe-list-row flex w-full flex-col gap-0.5"
+              className="wireframe-list-row flex w-full min-w-0 flex-col gap-0.5"
               data-wireframe-navigate={node.navigateTo}
             >
-              <span className="wireframe-list-row-primary flex w-full flex-nowrap items-baseline gap-2">
-                <span className="wireframe-list-label grow">{node.label}</span>
-                {node.value === undefined ? null : (
-                  <span className="wireframe-list-value">{node.value}</span>
-                )}
-              </span>
-              {node.meta === undefined ? null : (
-                <span className="wireframe-list-meta">{node.meta}</span>
-              )}
+              {rowInner}
             </button>
           </li>
         );
       }
       return (
         <li
-          className="wireframe-list-item flex flex-nowrap items-baseline gap-2"
+          className="wireframe-list-item flex min-w-0 flex-col gap-0.5"
           {...(node.selected ? { "data-wireframe-selected": "" } : {})}
         >
-          {rowBody}
+          {rowInner}
         </li>
       );
     }
