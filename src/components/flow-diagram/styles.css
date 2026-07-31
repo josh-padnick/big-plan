@@ -234,6 +234,9 @@ classes.
   }
   /* A hairline, not a rule: enough to group four sets of controls, quiet
      enough that the toolbar still reads as one band. */
+  .flow-diagram-toolbar-sep[hidden] {
+    display: none;
+  }
   .flow-diagram-toolbar-sep {
     width: 1px;
     height: 0.85rem;
