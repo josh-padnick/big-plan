@@ -9,6 +9,21 @@ is styled by its owning module, not here.
 */
 
 @layer components {
+  /* The content column is wide so that tables, diagrams, and drawings have
+     room. Prose does not want that room: a line much past seventy characters
+     is tiring to track back from. So text holds its own measure inside the
+     column and everything else breaks out to fill it - the classic breakout,
+     with the constraint on the text rather than on its container.
+
+     Only prose that sits directly in the reading flow is held back. A
+     paragraph inside a component belongs to that component's layout. */
+  :is(article, [data-slide], [data-collapse-body])
+    > :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6) {
+    /* 54ch of this typeface lands around 72 characters a line: the `ch` unit
+       measures a zero, which is narrower than the average letter. */
+    max-width: 54ch;
+  }
+
   article h1,
   article h2,
   article h3,
