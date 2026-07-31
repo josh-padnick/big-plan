@@ -485,11 +485,6 @@ classes.
     background: var(--flow-warn-ink);
     color: var(--bg);
   }
-  .flow-diagram-mark[data-kind="withdrawn"] {
-    background: var(--surface-c);
-    border: 1px solid var(--edge-c);
-    color: var(--muted-c);
-  }
 
   /* --- Proposals --------------------------------------------------------- */
 
@@ -549,42 +544,9 @@ classes.
     color: var(--muted-c);
     text-decoration: line-through;
   }
-  .flow-diagram[data-flow-show-original] .flow-diagram-original-block,
   [data-flow-element]:hover > .flow-diagram-original-block,
   [data-flow-element]:focus-within > .flow-diagram-original-block {
     display: block;
-  }
-  /* Show original hides the whole proposal layer, which is also how a
-     reviewer checks what they actually changed. */
-  .flow-diagram[data-flow-show-original] [data-flow-field][data-flow-edited] {
-    background: none;
-    box-shadow: none;
-  }
-  .flow-diagram[data-flow-show-original] .flow-diagram-original,
-  .flow-diagram[data-flow-show-original] .flow-diagram-mark[data-kind="edited"],
-  .flow-diagram[data-flow-show-original]
-    .flow-diagram-mark[data-kind="removed"] {
-    display: none;
-  }
-  .flow-diagram[data-flow-show-original]
-    [data-flow-proposed~="removed"]
-    :is(strong, code, [data-flow-field]),
-  .flow-diagram[data-flow-show-original]
-    [data-flow-proposed~="removed-incident"]
-    :is(strong, code, [data-flow-field]) {
-    opacity: 1;
-    text-decoration: none;
-  }
-  .flow-diagram[data-flow-show-original]
-    [data-flow-proposed~="removed"].flow-diagram-node {
-    border-style: solid;
-    background: var(--surface-c);
-    border-color: var(--edge-c);
-  }
-  .flow-diagram[data-flow-show-original] [data-flow-proposed~="removed"],
-  .flow-diagram[data-flow-show-original]
-    [data-flow-proposed~="removed-incident"] {
-    --flow-line-c: var(--muted-c);
   }
 
   /* --- The feedback tray -------------------------------------------------
