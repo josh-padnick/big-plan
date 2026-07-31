@@ -32,6 +32,7 @@ test("should accept ordinary, primitive, and explained override rules", async ()
     "render/global.css": `${HEADER}
 @layer theme, base, components, utilities, bp-state;
 :root { --color-example: red; color-scheme: light dark; }
+:root[data-theme="dark"]:not([data-print]) { --color-example: blue; }
 @layer components { .generated-child { color: var(--color-example); } }
 @layer bp-state {
   /* Override invariant: collapsed display beats the resting display utility. */
@@ -47,11 +48,11 @@ test("should report missing reasons, unlayered rules, unknown layers, and unexpl
     "render/global.css": `${HEADER}
 @layer theme, base, components, utilities, bp-state;
 `,
-    "missing-reason.css":
+    "components/missing-reason/styles.css":
       "/* Component styles. */ @layer components { .owned { color: red; } }",
-    "unlayered.css": `${HEADER} .generated-child { color: red; }`,
-    "unknown-layer.css": `${HEADER} @layer component-name { .generated-child { color: red; } }`,
-    "unexplained-state.css": `${HEADER} @layer bp-state { [data-open] { display: block; } }`,
+    "components/unlayered/styles.css": `${HEADER} .generated-child { color: red; }`,
+    "components/unknown-layer/styles.css": `${HEADER} @layer component-name { .generated-child { color: red; } }`,
+    "components/unexplained-state/styles.css": `${HEADER} @layer bp-state { [data-open] { display: block; } }`,
   });
   assert.equal(failures.length, 4);
   assert.match(failures.join("\n"), /file-level comment must include/);
@@ -70,25 +71,48 @@ test("should require one canonical layer order at the stylesheet entrypoint", as
 
   const misplaced = await checkSource({
     "render/global.css": HEADER,
-    "other.css": `${HEADER}
+    "components/other/styles.css": `${HEADER}
 @layer theme, base, components, utilities, bp-state;
 `,
   });
   assert.match(
     misplaced.join("\n"),
-    /found at src\/other\.css/,
+    /found at src\/components\/other\/styles\.css/,
   );
 
   const duplicated = await checkSource({
     "render/global.css": `${HEADER}
 @layer theme, base, components, utilities, bp-state;
 `,
-    "other.css": `${HEADER}
+    "components/other/styles.css": `${HEADER}
 @layer theme, base, components, utilities, bp-state;
 `,
   });
   assert.match(
     duplicated.join("\n"),
-    /found at src\/other\.css, src\/render\/global\.css|found at src\/render\/global\.css, src\/other\.css/,
+    /found at src\/components\/other\/styles\.css, src\/render\/global\.css|found at src\/render\/global\.css, src\/components\/other\/styles\.css/,
   );
+});
+
+test("should reject nonvisual support owners, nested layers, and root descendants", async () => {
+  const failures = await checkSource({
+    "render/global.css": `${HEADER}
+@layer theme, base, components, utilities, bp-state;
+:root .card { --color-example: red; }
+`,
+    "_model/example.css": `${HEADER}
+@layer components { .model-owned { color: red; } }
+`,
+    "components/example/styles.css": `${HEADER}
+@layer bp-state {
+  @layer components {
+    .nested { color: red; }
+  }
+}
+`,
+  });
+  assert.match(failures.join("\n"), /outside a visual owner/);
+  assert.match(failures.join("\n"), /presentation rule is unlayered/);
+  assert.match(failures.join("\n"), /nested layer blocks/);
+  assert.match(failures.join("\n"), /Override invariant:/);
 });
