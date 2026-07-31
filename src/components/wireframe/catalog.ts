@@ -20,6 +20,7 @@ import {
   WIREFRAME_FIELD_KINDS,
   WIREFRAME_MEDIA_SHAPES,
   WIREFRAME_SPACES,
+  WIREFRAME_SPANS,
   WIREFRAME_STEP_STATES,
   WIREFRAME_TEXT_ROLES,
   type WireframeElementName,
@@ -66,6 +67,8 @@ export type WireframeElementDefinition = {
 const STACK_SCHEMA = {
   gap: { kind: "enum", values: WIREFRAME_SPACES },
   align: { kind: "enum", values: WIREFRAME_ALIGNMENTS },
+  // main dominates a Row; rail is a narrow secondary column (desktop density).
+  span: { kind: "enum", values: WIREFRAME_SPANS },
 } satisfies ComponentAttributeSchema;
 
 const ROW_SCHEMA = {
@@ -77,6 +80,8 @@ const ROW_SCHEMA = {
 const PANEL_SCHEMA = {
   title: { kind: "string", nonEmpty: true },
   eyebrow: { kind: "string", nonEmpty: true },
+  // main dominates a Row; rail is a narrow secondary column (desktop density).
+  span: { kind: "enum", values: WIREFRAME_SPANS },
 } satisfies ComponentAttributeSchema;
 
 const HEADING_SCHEMA = {
@@ -205,8 +210,9 @@ const CATALOG = {
   Stack: {
     category: "layout",
     acceptsChildren: true,
-    summary: "Stacks its children vertically with one spacing token.",
-    example: '<Stack gap="md">...</Stack>',
+    summary:
+      "Stacks its children vertically with one spacing token. In a Row, span=main or span=rail sets desktop proportions.",
+    example: '<Stack gap="md" span="main">...</Stack>',
     compile: ({ attributes, children, position, diagnostics }) => {
       const validated = validateComponentAttributes({
         component: "Stack",
@@ -219,6 +225,7 @@ const CATALOG = {
         element: "Stack",
         gap: validated.gap ?? "md",
         align: validated.align ?? "stretch",
+        span: validated.span ?? "fill",
         children,
       };
     },
@@ -249,8 +256,9 @@ const CATALOG = {
   Panel: {
     category: "surface",
     acceptsChildren: true,
-    summary: "A bounded region of a screen, optionally titled.",
-    example: '<Panel title="Recent activity">...</Panel>',
+    summary:
+      "A bounded region of a screen, optionally titled. In a Row, span=main makes it dominate; span=rail keeps a narrow secondary column.",
+    example: '<Panel title="Conversation" span="main">...</Panel>',
     compile: ({ attributes, children, position, diagnostics }) => {
       const validated = validateComponentAttributes({
         component: "Panel",
@@ -265,6 +273,7 @@ const CATALOG = {
         ...(validated.eyebrow === undefined
           ? {}
           : { eyebrow: validated.eyebrow }),
+        span: validated.span ?? "fill",
         children,
       };
     },
