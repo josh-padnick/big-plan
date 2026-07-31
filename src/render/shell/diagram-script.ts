@@ -961,12 +961,25 @@ export const DIAGRAM_SCRIPT = `
       return;
     }
     actionBar.style.visibility = "visible";
-    // Above the element by preference, below when there is no room - the bar
-    // must never cover what it acts on.
-    let top = subject.top - size.height - 6;
-    if (top < Math.max(bounds.top, 0) + 2) top = subject.bottom + 6;
-    actionBar.style.left = clamp(subject.left, 8, innerWidth - size.width - 8) + "px";
-    actionBar.style.top = clamp(top, 8, innerHeight - size.height - 8) + "px";
+    // The bar goes through the same placement engine as a proposal label, for
+    // the same reason: it must not cover the element it acts on, and it must
+    // not bury a neighbour either - which is exactly what it did when it was
+    // simply pinned above the selection.
+    const obstacles = (c ? elementsIn(diagram) : [])
+      .filter((n) => n !== selected && kindOf(n) !== "figure")
+      .map((n) => n.getBoundingClientRect());
+    const room = {
+      left: Math.max(bounds.left - 8, 8),
+      top: Math.max(bounds.top - 44, 8),
+      right: Math.min(bounds.right + 8, innerWidth - 8),
+      bottom: Math.min(bounds.bottom + 44, innerHeight - 8),
+    };
+    const best = placeLabel({
+      label: actionBar, subject, obstacles, bounds: room,
+      textRects: [], allowBadge: false,
+    });
+    actionBar.style.left = (best ? best.x : subject.left) + "px";
+    actionBar.style.top = (best ? best.y : subject.top - size.height - 6) + "px";
   };
 
   // Everything anchored to the artboard is re-placed together, because every
