@@ -1,6 +1,6 @@
 // Tests Decision's contract - option and consideration grammar, the
-// recommendation, selection, and comparability invariants - and the radio-card
-// markup its selector renders.
+// recommendation, selection, and comparability invariants - and the
+// comparison-matrix markup its selector renders.
 
 import type { Element } from "hast";
 import { describe, expect, it } from "vitest";
@@ -93,7 +93,7 @@ const twoOptions = ({
 ];
 
 describe("DECISION_COMPONENT_DEFINITION", () => {
-  it("should render an open decision as a radio group with comparison attributes", () => {
+  it("should render an open decision as a comparison matrix with a radio per column", () => {
     const { element, diagnostics } = render(twoOptions());
     expect(diagnostics).toEqual([]);
     const rendered = JSON.stringify(element);
@@ -107,15 +107,38 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain("decision-verdict-bad");
     expect(rendered).toContain('"type":"radio"');
     expect(rendered).toContain("data-decision-selector");
+    expect(rendered).toContain("decision-matrix");
+    expect(rendered).toContain("data-decision-column");
   });
 
-  it("should offer a proposal option and a disabled confirm action when open", () => {
+  it("should give every verdict a word and a glyph, never colour alone", () => {
+    const { element } = render(twoOptions());
+    const rendered = JSON.stringify(element);
+    expect(rendered).toContain('"data-lucide":"check"');
+    expect(rendered).toContain('"data-lucide":"x"');
+    expect(rendered).toContain('"value":" (Favourable)"');
+    expect(rendered).toContain('"value":" (Unfavourable)"');
+  });
+
+  it("should default the rationale panel to the recommended option", () => {
+    const { element } = render(twoOptions());
+    const rendered = JSON.stringify(element);
+    expect(rendered).toContain('"data-default-index":"0"');
+    expect(rendered).toContain("data-rationale-default");
+    expect(
+      JSON.stringify(element).split("data-rationale-panel").length - 1,
+    ).toBe(2);
+  });
+
+  it("should offer a proposal link and a disabled confirm action when open", () => {
     const { element } = render(twoOptions());
     const rendered = JSON.stringify(element);
     expect(rendered).toContain('"value":"Propose another approach"');
+    expect(rendered).toContain("decision-propose-link");
     expect(rendered).toContain("data-decision-proposal-text");
-    expect(rendered).toContain('"value":"Confirm decision"');
+    expect(rendered).toContain('"value":"Confirm choice"');
     expect(rendered).toContain('"disabled":true');
+    expect(rendered).toContain('"value":"Nothing selected yet."');
   });
 
   it("should render a decided decision as a record without a selector", () => {
@@ -129,7 +152,7 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain("data-option-chosen");
     expect(rendered).not.toContain("data-decision-selector");
     expect(rendered).not.toContain('"value":"Propose another approach"');
-    expect(rendered).not.toContain('"value":"Confirm decision"');
+    expect(rendered).not.toContain('"value":"Confirm choice"');
   });
 
   it("should never label an open decision with a status badge", () => {

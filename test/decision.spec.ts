@@ -1,9 +1,9 @@
-// Browser tests of Decision's answering journey: reading the comparison,
-// opening one option's reasoning, picking with the keyboard, proposing an
-// alternative, and confirming. Render-health failures are enforced by the
-// fixtures module.
+// Browser tests of Decision's answering journey: reading the comparison
+// matrix, picking a column, watching the rationale swap without moving the
+// page, proposing an alternative, and confirming. Render-health failures are
+// enforced by the fixtures module.
 
-import { expect, test } from "./fixtures";
+import { boxOf, expect, test } from "./fixtures";
 
 test("should compare, answer, and confirm an open decision", async ({
   page,
@@ -11,7 +11,8 @@ test("should compare, answer, and confirm an open decision", async ({
 }) => {
   await page.goto(decisionViewerUrl);
   const decision = page.locator("[data-decision-selector]").first();
-  const options = decision.locator("[data-decision-option]");
+  const columns = decision.locator("th.decision-column");
+  const confirm = decision.locator("[data-decision-confirm]");
 
   await test.step("the question is asked without an open badge", async () => {
     await expect(decision.locator("[data-decision-question]")).toContainText(
@@ -23,67 +24,95 @@ test("should compare, answer, and confirm an open decision", async ({
     ).toContainText("Choose one");
   });
 
-  await test.step("every option compares the same attributes in the same order", async () => {
-    const attributeNames = (index: number) =>
-      options
-        .nth(index)
-        .locator("[data-decision-attributes] dt")
-        .allInnerTexts();
-    const first = await attributeNames(0);
-    const second = await attributeNames(1);
-    expect(first.length).toBeGreaterThan(0);
-    expect(second).toEqual(first);
+  await test.step("the comparison is a matrix of options over criteria", async () => {
+    await expect(columns).toHaveCount(2);
+    const criteria = await decision
+      .locator("th.decision-criterion")
+      .allInnerTexts();
+    expect(criteria).toEqual([
+      "Version fidelity",
+      "Single source of truth",
+      "Works offline",
+    ]);
+    // Each criterion row carries one cell per option, so the grid is complete.
+    await expect(decision.locator("td.decision-cell")).toHaveCount(6);
   });
 
-  await test.step("reasoning stays collapsed until it is asked for", async () => {
-    const details = options.nth(0).locator("[data-option-details]");
-    const body = details.locator("div").first();
-    await expect(body).toBeHidden();
-    await details.locator("summary").click();
-    await expect(body).toBeVisible();
+  await test.step("every verdict carries a word and a glyph, not colour alone", async () => {
+    const firstCell = decision.locator("td.decision-cell").first();
+    await expect(firstCell).toContainText("Exact");
+    await expect(firstCell.locator("svg[data-lucide]")).toHaveCount(1);
   });
 
-  await test.step("confirming is refused until an option is picked", async () => {
-    await expect(decision.locator("[data-decision-confirm]")).toBeDisabled();
-  });
-
-  await test.step("the keyboard picks an option and lights the confirm action", async () => {
-    await options.nth(0).locator("[data-decision-choice]").focus();
-    await page.keyboard.press("ArrowDown");
+  await test.step("confirming is refused until a column is picked", async () => {
+    await expect(confirm).toBeDisabled();
     await expect(
-      options.nth(1).locator("[data-decision-choice]"),
+      decision.locator("[data-decision-selection-summary]"),
+    ).toContainText("Nothing selected yet");
+  });
+
+  await test.step("choosing a column never moves the page", async () => {
+    const rationale = decision.locator("[data-decision-rationale]");
+    const before = await boxOf(rationale);
+    const heights = [before.height];
+    for (const index of [0, 1]) {
+      await columns.nth(index).locator("[data-decision-choice]").check();
+      heights.push((await boxOf(rationale)).height);
+    }
+    // Layout stability is the point of the single-cell grid: the rationale
+    // region is as tall as the tallest panel and never changes.
+    expect(new Set(heights).size).toBe(1);
+  });
+
+  await test.step("picking a column names the choice and lights the action", async () => {
+    await columns.nth(0).locator("[data-decision-choice]").check();
+    await expect(
+      decision.locator("[data-decision-selection-summary]"),
+    ).toContainText("Embedded in the CLI, printed by a new command selected");
+    await expect(confirm).toBeEnabled();
+    await expect(confirm).toHaveText("Confirm choice");
+  });
+
+  await test.step("the keyboard moves between columns", async () => {
+    await columns.nth(0).locator("[data-decision-choice]").focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(
+      columns.nth(1).locator("[data-decision-choice]"),
     ).toBeChecked();
-    await expect(decision.locator("[data-decision-confirm]")).toBeEnabled();
   });
 
-  await test.step("a proposal asks for text before it can be submitted", async () => {
-    const proposal = decision.locator("[data-option-proposal]");
-    const text = proposal.locator("[data-decision-proposal-text]");
-    await expect(text).toBeHidden();
-    await proposal.locator("[data-decision-choice]").check();
-    await expect(text).toBeVisible();
-    await expect(decision.locator("[data-decision-confirm]")).toBeDisabled();
-    await expect(decision.locator("[data-decision-confirm]")).toHaveText(
-      "Submit proposal",
-    );
-    await text.fill("Ship it as an npx-installable package instead.");
-    await expect(decision.locator("[data-decision-confirm]")).toBeEnabled();
+  await test.step("a proposal is a link that asks for text before submitting", async () => {
+    const proposal = decision.locator("[data-decision-proposal]");
+    await expect(proposal).toBeHidden();
+    // The reader clicks the link, not the visually hidden radio behind it.
+    await decision.locator(".decision-propose-link").click();
+    await expect(
+      decision.locator("[data-decision-proposal-choice]"),
+    ).toBeChecked();
+    await expect(proposal).toBeVisible();
+    await expect(confirm).toHaveText("Submit proposal");
+    await expect(confirm).toBeDisabled();
+    await decision
+      .locator("[data-decision-proposal-text]")
+      .fill("Ship it as an npx-installable package instead.");
+    await expect(confirm).toBeEnabled();
   });
 
-  await test.step("confirming compresses the card to the answer", async () => {
-    await options.nth(0).locator("[data-decision-choice]").check();
-    await decision.locator("[data-decision-confirm]").click();
+  await test.step("confirming compresses the matrix to the chosen column", async () => {
+    await columns.nth(0).locator("[data-decision-choice]").check();
+    await confirm.click();
     await expect(decision.locator("[data-decision-answer]")).toBeVisible();
     await expect(decision.locator("[data-decision-footer]")).toBeHidden();
-    await expect(options.nth(0)).toBeVisible();
-    await expect(options.nth(1)).toBeHidden();
+    await expect(columns.nth(0)).toBeVisible();
+    await expect(columns.nth(1)).toBeHidden();
+    await expect(decision.locator("[data-option-proposal]")).toBeHidden();
   });
 
-  await test.step("changing the decision restores every option", async () => {
+  await test.step("changing the decision restores every column", async () => {
     await decision.locator("[data-decision-change]").click();
     await expect(decision.locator("[data-decision-answer]")).toBeHidden();
-    await expect(options.nth(1)).toBeVisible();
-    await expect(decision.locator("[data-decision-confirm]")).toBeEnabled();
+    await expect(columns.nth(1)).toBeVisible();
+    await expect(confirm).toBeEnabled();
   });
 });
 
