@@ -1,142 +1,122 @@
 /*
-Deck styles for markdown-generated markup the slide transform wraps: the h2
-inside a slide frame cannot carry utility classes, so its in-slide identity
-lives here. Collapse chrome is geometry-stable: expand/collapse only toggles
-body visibility - never header margins, padding, border, or toggle insets.
+Deck geometry: the single owner of every card box and every vertical gap in
+the collapsible deck. deck-collapse.ts owns the DOM shape this relies on and
+documents the invariants; read it first.
+
+WHY ONE OWNER
+Card padding used to live in Tailwind utilities on the frame while gaps lived
+partly on the frame, partly on a wrapper, and partly in unlayered overrides
+that beat the utilities. A visible gap was therefore an emergent SUM across
+those layers, so no declared number stated the distance it produced and every
+tune moved several gaps at once. Two rules keep that from returning:
+
+  1. A frame never carries a vertical margin. Every gap is declared once, by
+     the container that owns the relationship, as `> * + * { margin-top }`.
+     With no competing margin-bottom there is nothing to collapse against,
+     so the declared value IS the rendered distance.
+  2. Card padding is a custom property, so one number drives both the frame's
+     padding and how far the toggle escapes into the gutter.
+
+Collapse changes exactly one thing: `display` on the body. Header chrome
+height is identical in both states, so chevron centering and collapse
+stability follow from the layout instead of from hand-tuned insets.
 */
 
 @layer components {
-  /* A slide frame is a calm reading surface: no hover or scroll wash, ever.
-     The reader tracks position through the kickers and the TOC scroll-spy. */
-  article .plan-slide > h2 {
-    /* Tight to the first body line / context builder (Proximity). */
-    margin: 0 0 0.2rem;
-    border-bottom: none;
-    padding-bottom: 0;
-    font-size: 1.6rem;
-  }
-  article .plan-slide > :last-child {
-    margin-bottom: 0;
-  }
+  article {
+    /* Chrome */
+    --deck-toggle-size: 1.35rem;
+    --deck-toggle-gap: 0.25rem;
 
-  /* The parent header block of a section split into sub-slides: kicker and
-     h2 stand as one unit above the numbered frames. */
-  article .plan-subpart > h2 {
-    /* Match plan-slide h2 so collapsed chip heights stay identical. */
-    margin: 0 0 0.2rem;
-    border-bottom: none;
-    padding-bottom: 0;
-    font-size: 1.6rem;
+    /* Designed gaps. Slide-level and sub-slide-level sit at a 2:1 ratio so a
+       sub-slide reads as belonging to its parent (Proximity/Contrast). */
+    --deck-gap-slide: 1.5rem;
+    --deck-gap-subslide: 0.75rem;
+    --deck-gap-part: 3.8rem;
+
+    /* Header chrome to its body. Small on purpose: the title and the context
+       builder under it are one unit (Proximity). */
+    --deck-gap-title-body: 0.35rem;
+    --deck-gap-band-body: 1.3rem;
   }
 
   /*
-     Geometry-stable host spacing (identical expanded and collapsed).
-     Peer slides under a Part share one host margin - no expand-only lead-in.
+    THE CARD
+    Every frame at a level shares one padding pair, so collapsed chips are
+    uniform by construction: height is always padding*2 + header chrome.
   */
-  article .plan-part-group > .plan-collapse-row {
-    margin-top: 3.8rem;
-    margin-bottom: 1.3rem;
-  }
-  article [data-collapse-body] > [data-collapsible="slide"] {
-    margin-top: 0;
-    margin-bottom: 0.5rem;
-  }
-
-  /*
-     Always-on slide-group chrome (both states): same chip border/pad as a
-     plan-slide frame so collapsed peers under a Part form one list. Body
-     (context builder + sub-slides) lives inside this chip; expand only
-     toggles its visibility.
-  */
-  article .plan-slide-group > .plan-collapse-row > .plan-subpart {
+  article .plan-card {
     box-sizing: border-box;
-    margin: 0;
     border: 1px solid var(--edge-c);
     border-radius: 0.75rem;
     background: transparent;
-    padding: 1.25rem 1.25rem;
+    padding: var(--deck-pad-y) var(--deck-pad-x);
   }
-  article .plan-slide-group > .plan-collapse-row > .plan-subpart > [data-slide-kicker] {
-    margin-bottom: 0.45rem;
+  article .plan-slide.plan-card {
+    --deck-pad-y: 1.25rem;
+    --deck-pad-x: 1.25rem;
   }
-  /* Proximity: context builder / first body line sits tight under the h2. */
-  article .plan-subpart > h2 + [data-collapse-body] {
-    margin-top: 0.15rem;
+  @media (width >= 56rem) {
+    article .plan-slide.plan-card {
+      --deck-pad-y: 1.9rem;
+      --deck-pad-x: 2.1rem;
+    }
   }
-  article .plan-slide > h2 + [data-collapse-body] {
-    margin-top: 0.15rem;
+  /* One level tighter than a slide card (Contrast); uniform among sub-slides. */
+  article .plan-subslide-frame.plan-card {
+    --deck-pad-y: 0.75rem;
+    --deck-pad-x: 1rem;
   }
 
   /*
-     Proximity: sub-slides pack under their parent slide; the gap after the
-     last sub-slide must exceed sub-to-sub spacing so the next peer slide
-     (e.g. 2.2) does not read as another x.y.z. Same expanded and collapsed.
+    THE HIT TARGET
+    Chrome only - deck-collapse.ts guarantees no body content lives here, so
+    the pointer cursor never lies and this row's height never changes.
   */
-  article [data-collapsible="subslide"] {
-    margin-left: 1.5rem;
-    margin-bottom: 0.75rem;
-  }
-  article [data-collapsible="subslide"]:last-child {
-    margin-bottom: 1.5rem;
-  }
-
-  article .plan-collapse-host {
+  article [data-collapse-header] {
+    display: flex;
+    align-items: center;
+    gap: var(--deck-toggle-gap);
+    cursor: pointer;
     min-width: 0;
   }
-  article .plan-collapse-row {
-    display: flex;
-    /* flex-start keeps the toggle top fixed when only body height changes. */
-    align-items: flex-start;
-    gap: 0.25rem;
-    margin-left: -1.65rem;
-    width: calc(100% + 1.65rem);
-    cursor: pointer;
-  }
-  article .plan-collapse-row > :not([data-collapse-toggle]) {
+  article .plan-collapse-chrome {
     flex: 1 1 auto;
     min-width: 0;
   }
-  /* Part band height is constant both states - center the chevron on the pill. */
-  article .plan-part-group > .plan-collapse-row {
-    align-items: center;
+  /* Chrome owns no outer margin; --deck-gap-title-body owns the one below. */
+  article .plan-collapse-chrome > :first-child {
+    margin-top: 0;
+  }
+  article .plan-collapse-chrome > :last-child {
+    margin-bottom: 0;
   }
 
   /*
-     Toggle insets are CONSTANT per host kind (no expanded/collapsed swaps).
-     flex-start + fixed margin-top => top delta 0 when body shows/hides.
+    THE TOGGLE
+    Escapes its own card's padding into the gutter so the reading column is
+    never indented by chrome. Centered on the header by align-items, not by a
+    per-kind inset that goes stale when padding changes.
   */
   article .plan-collapse-toggle {
-    flex: 0 0 1.35rem;
-    width: 1.35rem;
-    height: 1.35rem;
-    margin-top: 1.15rem;
+    flex: 0 0 var(--deck-toggle-size);
+    width: var(--deck-toggle-size);
+    height: var(--deck-toggle-size);
+    margin-left: calc(
+      -1 *
+        (
+          var(--deck-pad-x, 0rem) + var(--deck-toggle-size) +
+            var(--deck-toggle-gap)
+        )
+    );
     color: color-mix(in oklab, var(--muted-c) 68%, transparent);
     opacity: 0.4;
-    pointer-events: auto;
     transition:
       opacity 0.12s ease,
       color 0.12s ease;
   }
-  /* Match always-on subpart chip top pad (same expanded and collapsed). */
-  article .plan-slide-group > .plan-collapse-row > .plan-collapse-toggle {
-    margin-top: 1.15rem;
-  }
-  article .plan-part-group > .plan-collapse-row > .plan-collapse-toggle {
-    margin-top: 0;
-  }
-  article [data-collapsible="subslide"] > .plan-collapse-row > .plan-collapse-toggle {
-    /* Align with comfortable py-3 sub-slide header pad (~0.75rem). */
-    margin-top: 0.75rem;
-  }
-  article .plan-collapse-host:hover > .plan-collapse-row > .plan-collapse-toggle,
-  article
-    .plan-collapse-host:focus-within
-    > .plan-collapse-row
-    > .plan-collapse-toggle,
-  article
-    .plan-collapse-host[data-collapse-hover]
-    > .plan-collapse-row
-    > .plan-collapse-toggle {
+  article [data-collapse-header]:hover > .plan-collapse-toggle,
+  article [data-collapse-header]:focus-within > .plan-collapse-toggle {
     opacity: 0.72;
     color: color-mix(in oklab, var(--muted-c) 82%, transparent);
   }
@@ -156,63 +136,81 @@ body visibility - never header margins, padding, border, or toggle insets.
     border-bottom: 1.35px solid currentColor;
     transform: rotate(45deg);
     transition: transform 0.15s ease;
-    margin: 0;
   }
   article .plan-collapse-toggle[aria-expanded="false"]::before {
     transform: rotate(-45deg);
   }
 
-  /* Sub-slide frame: comfortable pad always; kicker + body stack in-flow. */
-  article .plan-subslide-frame > [data-slide-kicker] {
-    margin: 0;
+  /*
+    THE BODY
+    One rule owns the header-to-body gap; the body's own edges are flattened
+    so prose margins inside cannot add to it.
+  */
+  article .plan-collapse-frame > [data-collapse-body] {
+    margin-top: var(--deck-gap-title-body);
   }
-  article .plan-subslide-frame > [data-collapse-body] {
-    margin-top: 0.75rem;
+  article .plan-part-group > [data-collapse-body] {
+    margin-top: var(--deck-gap-band-body);
+  }
+  article [data-collapse-body] > :first-child {
+    margin-top: 0;
+  }
+  article [data-collapse-body] > :last-child {
+    margin-bottom: 0;
   }
 
-  /* Only body visibility changes - never header chrome. */
-  article [data-collapsible][data-collapsed] > [data-collapse-body],
-  article [data-collapsible][data-collapsed] [data-collapse-body] {
-    display: none;
+  /*
+    THE GAPS
+    Each relationship is declared exactly once, by its container. Frames carry
+    no vertical margin of their own, so these values render literally.
+
+    Derived distance, stated so it is never mistaken for a tunable: the space
+    between the last sub-slide and the next peer slide is not one of these
+    numbers. It necessarily crosses the parent card's edge, so it renders as
+    the group card's bottom padding + its border + --deck-gap-slide. It reads
+    larger than --deck-gap-subslide, which is exactly the grouping cue the
+    reader needs; tune it through the card padding, never with a special-case
+    margin on the last sub-slide.
+  */
+  article > [data-collapsible] + [data-collapsible],
+  article .plan-part-group > [data-collapse-body] > * + * {
+    margin-top: var(--deck-gap-slide);
+  }
+  article .plan-slide-group > [data-collapse-body] > * + * {
+    margin-top: var(--deck-gap-subslide);
+  }
+  /* Nothing inside a gap-owning container carries a competing bottom margin. */
+  article .plan-part-group > [data-collapse-body] > *,
+  article .plan-slide-group > [data-collapse-body] > * {
+    margin-bottom: 0;
+  }
+  /* An act opens with a clear break above its band (Contrast). */
+  article > .plan-part-group,
+  article > [data-collapsible] + .plan-part-group {
+    margin-top: var(--deck-gap-part);
+  }
+
+  /* In-slide heading identity: generated markup that carries no utilities. */
+  article .plan-collapse-chrome > h2 {
+    margin: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+    font-size: 1.6rem;
   }
 }
 
-/* Unlayered: body hide must win over utilities; scroll margins for anchors. */
-article [data-collapsible][data-collapsed] > [data-collapse-body],
-article [data-collapsible][data-collapsed] [data-collapse-body] {
+/* Unlayered: the collapsed state must win over any utility display value. */
+article [data-collapsible][data-collapsed] > [data-collapse-body] {
   display: none;
 }
 
-/*
-   Beat plan-slide utilities so simple slides and slide-group chips share one
-   height formula (padding + kicker + title) in both states. Host owns gaps.
-*/
-article
-  [data-collapsible="slide"]
-  > .plan-collapse-row
-  > .plan-slide {
-  margin-bottom: 0;
-  padding-top: 1.25rem;
-  padding-bottom: 1.25rem;
-  padding-left: 1.25rem;
-  padding-right: 1.25rem;
-}
-article .plan-slide-group > .plan-collapse-row > .plan-subpart {
-  padding-top: 1.25rem;
-  padding-bottom: 1.25rem;
-  padding-left: 1.25rem;
-  padding-right: 1.25rem;
-}
-
-article .plan-slide > h2,
-article .plan-subpart > h2,
-article .plan-slide > h3[data-slide-kicker] {
+article .plan-collapse-chrome > h2,
+article .plan-collapse-chrome > [data-slide-kicker] {
   scroll-margin-top: 8rem;
 }
 @media (width < 56rem) {
-  article .plan-slide > h2,
-  article .plan-subpart > h2,
-  article .plan-slide > h3[data-slide-kicker] {
+  article .plan-collapse-chrome > h2,
+  article .plan-collapse-chrome > [data-slide-kicker] {
     scroll-margin-top: 10.75rem;
   }
 }

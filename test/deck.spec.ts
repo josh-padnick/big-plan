@@ -86,7 +86,7 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
       '[data-collapsible="slide"][data-collapse-id="status-quo"]',
     );
     const toggle = statusHost.locator(
-      ":scope > [data-collapse-row] > [data-collapse-toggle]",
+      ":scope > [data-collapse-header] > [data-collapse-toggle]",
     );
     await statusHost.hover();
     await toggle.click();
@@ -106,19 +106,18 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     await successHost.getByRole("heading", { level: 2 }).click();
     await expect(successHost).toHaveAttribute("data-collapsed", "");
     await successHost
-      .locator(":scope > [data-collapse-row] [data-slide-kicker]")
+      .locator(":scope > [data-collapse-header] [data-slide-kicker]")
       .click();
     await expect(successHost).not.toHaveAttribute("data-collapsed", "");
   });
 
-  await test.step("hover host keeps the toggle while moving onto it", async () => {
+  await test.step("hovering the header keeps the toggle while moving onto it", async () => {
     const successHost = page.locator(
       '[data-collapsible="slide"][data-collapse-id="success-looks-like"]',
     );
-    const toggle = successHost.locator(
-      ":scope > [data-collapse-row] > [data-collapse-toggle]",
-    );
-    await successHost.locator(".plan-slide").hover();
+    const header = successHost.locator(":scope > [data-collapse-header]");
+    const toggle = header.locator(":scope > [data-collapse-toggle]");
+    await header.hover();
     await expect(toggle).toBeVisible();
     await toggle.hover();
     await expect(toggle).toBeVisible();
@@ -130,7 +129,7 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     );
     await worker.hover();
     await worker
-      .locator(":scope > [data-collapse-row] > [data-collapse-toggle]")
+      .locator(":scope > [data-collapse-header] > [data-collapse-toggle]")
       .click();
     await expect(worker).toHaveAttribute("data-collapsed", "");
     await expect(worker.getByText("Claims due schedules")).toBeHidden();
@@ -141,13 +140,51 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     ).toContainText("Every state change");
   });
 
+  // Regression: a sub-slide's body used to sit inside its parent group's hit
+  // target, so toggling one collapsed the other and the page jumped.
+  await test.step("toggling a sub-slide leaves its parent slide expanded", async () => {
+    const worker = page.locator(
+      '[data-collapsible="subslide"][data-collapse-id="the-worker"]',
+    );
+    const parent = worker.locator(
+      'xpath=ancestor::*[@data-collapsible="slide"][1]',
+    );
+    await expect(parent).not.toHaveAttribute("data-collapsed", "");
+    const headerBox = await worker
+      .locator(":scope > [data-collapse-header]")
+      .boundingBox();
+    await worker.locator(":scope > [data-collapse-header]").click();
+    await expect(parent).not.toHaveAttribute("data-collapsed", "");
+    // Header chrome is geometry-stable, so the row must not move on screen.
+    const afterBox = await worker
+      .locator(":scope > [data-collapse-header]")
+      .boundingBox();
+    expect(Math.abs((afterBox?.y ?? 0) - (headerBox?.y ?? 0))).toBeLessThan(1);
+    await worker.locator(":scope > [data-collapse-header]").click();
+  });
+
+  // Regression: body content used to live inside the click hit target, so
+  // selecting or clicking ordinary prose collapsed the slide.
+  await test.step("clicking slide body content does not collapse the slide", async () => {
+    const statusHost = page.locator(
+      '[data-collapsible="slide"][data-collapse-id="status-quo"]',
+    );
+    // An earlier step left this slide collapsed; reopen it first.
+    if ((await statusHost.getAttribute("data-collapsed")) !== null) {
+      await statusHost.locator(":scope > [data-collapse-header]").click();
+    }
+    await expect(statusHost).not.toHaveAttribute("data-collapsed", "");
+    await statusHost.getByText("Inline retries").click();
+    await expect(statusHost).not.toHaveAttribute("data-collapsed", "");
+  });
+
   await test.step("collapsing a part tucks away every slide in the act", async () => {
     const proposal = page.locator(
       '[data-collapsible="part"][data-collapse-id="part-the-proposal"]',
     );
     await proposal.hover();
     await proposal
-      .locator(":scope > [data-collapse-row] > [data-collapse-toggle]")
+      .locator(":scope > [data-collapse-header] > [data-collapse-toggle]")
       .click();
     await expect(proposal).toHaveAttribute("data-collapsed", "");
     await expect(

@@ -7,8 +7,10 @@
 // outline-aware components, and computes the document outline - parts and
 // sections numbered in document order - that those components' views consume
 // once the placeholders are presented. It knows no component's markup.
-// Collapse toggles sit outside frames; expanded markup matches the pre-
-// collapse deck so the reading column is never indented by chrome.
+//
+// Every collapsible level is built through deck-collapse.ts so the header /
+// body split obeys one contract; this file decides only which chrome is
+// header and which content is body, never the collapse shape itself.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 import type {
@@ -19,6 +21,7 @@ import {
   OUTLINE_PART_TITLE_ATTRIBUTE,
   OUTLINE_PLACEHOLDER_ATTRIBUTE,
 } from "./component-pipeline/outline-placeholder.js";
+import { appendCollapseBody, createCollapsible } from "./deck-collapse.js";
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
   node.type === "element";
@@ -62,17 +65,14 @@ const isNonPartOutlinePlaceholder = (node: RootContent): boolean =>
 
 // Tailwind utilities remain private styling implementation; the data
 // attributes are the stable behavior-bearing interfaces used by tests.
-const SLIDE_CLASSES = [
-  "plan-slide",
-  "mb-6",
-  "rounded-xl",
-  "border",
-  "border-edge",
-  "px-5",
-  "py-5",
-  "wide:px-[2.1rem]",
-  "wide:py-[1.9rem]",
-] as const;
+//
+// Card box geometry (border, radius, padding) and every vertical gap are
+// deliberately NOT utilities here: deck.css owns them behind custom
+// properties so one number drives the frame padding and the toggle's escape
+// into the gutter at once. Splitting them between utilities and stylesheet
+// overrides is what previously let "uniform chips" and "centered chevrons"
+// drift apart. These constants carry level identity only.
+const SLIDE_CLASSES = ["plan-slide", "plan-card"] as const;
 
 const KICKER_CLASSES = [
   "plan-slide-kicker",
@@ -84,17 +84,18 @@ const KICKER_CLASSES = [
   "text-accent",
 ] as const;
 
-// The parent header block a sectioned-into-sub-slides section keeps: its
-// kicker and h2 stand above the numbered sub-slide frames. Top spacing is
-// owned by the collapse host CSS so collapsed headers do not keep a dead
-// margin that leaves the toggle floating above the chrome.
-// No bottom margin: body (context builder) follows tightly under the h2
-// (Proximity). Spacing to the next peer slide lives on the host, not here.
-const SUBPART_CLASSES = ["plan-subpart"] as const;
+// A section split into sub-slides is the same slide-level card as any other;
+// it differs only in what its body holds (context builder plus nested
+// sub-slide cards), so it reuses the slide card and adds a marker class the
+// stylesheet uses to space that nested list.
+const SLIDE_GROUP_CLASSES = [
+  "plan-slide",
+  "plan-card",
+  "plan-slide-group",
+] as const;
 
 // A sub-slide's kicker is its heading: the h3 keeps its anchor and outline
-// role while rendering as the numbered small-caps line. No bottom margin -
-// header chrome metrics stay fixed across expand/collapse.
+// role while rendering as the numbered small-caps line.
 const SUBSLIDE_KICKER_CLASSES = [
   "mt-0",
   "mb-0",
@@ -105,62 +106,28 @@ const SUBSLIDE_KICKER_CLASSES = [
   "text-accent",
 ] as const;
 
-// Compact always-on frame for sub-slide headers (kicker only); body lives in
-// data-collapse-body so expand/collapse never restyles this chrome.
+// The sub-slide card: one level tighter than a slide card (Contrast), and
+// uniform among sub-slides because every one shares this constant.
 const SUBSLIDE_FRAME_CLASSES = [
   "plan-slide",
+  "plan-card",
   "plan-subslide-frame",
-  "rounded-xl",
-  "border",
-  "border-edge",
-  "px-4",
-  "py-3",
 ] as const;
 
 // The context builder: one muted line telling the reader what they are
 // looking at, restyled from the slide's leading emphasized paragraph.
+// No top margin: --deck-gap-title-body is the sole owner of the distance to
+// the title above, so the two cannot drift out of agreement.
 const CONTEXT_CLASSES = [
   "plan-slide-context",
-  "-mt-[0.2rem]",
   "mb-[0.9rem]",
   "text-[0.9375rem]",
   "text-muted",
 ] as const;
 
-// One continuous hover host wraps toggle + frame. The toggle sits in a flex
-// row with the header chrome so it never absolutely floats above a margin.
-// Gutter alignment lives in deck.css.
-const COLLAPSE_HOST_CLASSES = ["plan-collapse-host"] as const;
-
-// Toggle classes stay minimal; vertical align to the header is flex-based in
-// deck.css (not absolute top offsets that drift when margins change).
-const TOGGLE_CLASSES = [
-  "plan-collapse-toggle",
-  "inline-flex",
-  "size-5",
-  "shrink-0",
-  "cursor-pointer",
-  "items-center",
-  "justify-center",
-  "rounded-md",
-  "border-0",
-  "bg-transparent",
-  "p-0",
-  "focus-visible:outline-2",
-  "focus-visible:outline-offset-2",
-  "focus-visible:outline-accent",
-] as const;
-
-const COLLAPSE_ROW_CLASSES = ["plan-collapse-row"] as const;
-
-const PART_GROUP_CLASSES = [
-  "plan-part-group",
-  ...COLLAPSE_HOST_CLASSES,
-] as const;
-const SLIDE_GROUP_CLASSES = [
-  "plan-slide-group",
-  ...COLLAPSE_HOST_CLASSES,
-] as const;
+// A Part is a collapsible band rather than a card: no border or padding of
+// its own, since the Part view already draws the band it wraps.
+const PART_GROUP_CLASSES = ["plan-part-group"] as const;
 
 /** The outline holder the transform fills in document order. */
 export type MutableDocumentOutline = {
@@ -223,68 +190,6 @@ const applyContextBuilder = (body: ReadonlyArray<ElementContent>): void => {
   first.properties.className = [...CONTEXT_CLASSES];
 };
 
-// Builds the inert collapse control; the viewer script wires behavior and
-// keeps content fully readable when scripts are disabled.
-const createCollapseToggle = (): Element => ({
-  type: "element",
-  tagName: "button",
-  properties: {
-    type: "button",
-    "data-collapse-toggle": "",
-    "aria-expanded": "true",
-    "aria-label": "Collapse",
-    className: [...TOGGLE_CLASSES],
-  },
-  children: [],
-});
-
-const createCollapseBody = (
-  children: ReadonlyArray<ElementContent>,
-): Element => ({
-  type: "element",
-  tagName: "div",
-  properties: {
-    "data-collapse-body": "",
-  },
-  children: [...children],
-});
-
-// Header row locks the toggle to the first chrome box (slide / subpart /
-// part band). Optional body siblings (part slides, sub-slides) follow.
-const createCollapseHost = ({
-  kind,
-  collapseId,
-  className,
-  header,
-  body,
-}: {
-  readonly kind: "slide" | "subslide" | "part";
-  readonly collapseId: string;
-  readonly className: ReadonlyArray<string>;
-  readonly header: ElementContent;
-  readonly body?: ElementContent;
-}): Element => ({
-  type: "element",
-  tagName: "div",
-  properties: {
-    "data-collapsible": kind,
-    "data-collapse-id": collapseId,
-    className: [...className],
-  },
-  children: [
-    {
-      type: "element",
-      tagName: "div",
-      properties: {
-        "data-collapse-row": "",
-        className: [...COLLAPSE_ROW_CLASSES],
-      },
-      children: [createCollapseToggle(), header],
-    },
-    ...(body === undefined ? [] : [body]),
-  ],
-});
-
 // Splits a section body that contains h3 headings into one collapsible slide
 // group: the parent header stays visible when collapsed, and each h3 run is
 // its own nested collapsible sub-slide. Expanded layout keeps the original
@@ -345,45 +250,31 @@ const buildSubSlides = ({
       children: [{ type: "text", value: `${subLabel} / ${textOf(h3)}` }],
     };
     applyContextBuilder(run);
-    // Header is kicker-only; body is a child collapse region so the frame's
-    // padding/border never change when expanding or collapsing.
-    const frame: Element = {
-      type: "element",
-      tagName: "section",
-      properties: {
-        "data-slide": "",
-        "data-subslide": "",
-        className: [...SUBSLIDE_FRAME_CLASSES],
-      },
-      children: [subKicker, createCollapseBody(run)],
-    };
+    // Chrome is the kicker alone; the h3 run becomes the body.
     groupBody.push(
-      createCollapseHost({
+      createCollapsible({
         kind: "subslide",
         collapseId: subId,
-        className: COLLAPSE_HOST_CLASSES,
-        header: frame,
+        tagName: "section",
+        properties: { "data-slide": "", "data-subslide": "" },
+        className: SUBSLIDE_FRAME_CLASSES,
+        chrome: [subKicker],
+        body: run,
       }),
     );
     index = end;
   }
-  // Context builder + sub-slides live inside the subpart chip so the title
-  // and first line stay one unit, and expand/collapse only toggles body
-  // visibility without restyling the header chrome.
-  const parent: Element = {
-    type: "element",
-    tagName: "div",
-    properties: {
-      "data-subpart": "",
-      className: [...SUBPART_CLASSES],
-    },
-    children: [kicker, heading, createCollapseBody(groupBody)],
-  };
-  return createCollapseHost({
+  // The group is a slide card whose body holds the context builder and the
+  // nested sub-slide cards. Keeping them in the body - never in the header -
+  // is what keeps a sub-slide click from toggling this group.
+  return createCollapsible({
     kind: "slide",
     collapseId,
+    tagName: "section",
+    properties: { "data-slide": "", "data-subpart": "" },
     className: SLIDE_GROUP_CLASSES,
-    header: parent,
+    chrome: [kicker, heading],
+    body: groupBody,
   });
 };
 
@@ -407,11 +298,8 @@ const wrapSlides = (
     if (openPartGroup === undefined) {
       return;
     }
-    // Host is [header-row, ...]; append the act body after the part band row.
-    openPartGroup.children = [
-      ...openPartGroup.children,
-      createCollapseBody(openPartBody),
-    ];
+    // The act's slides are known only now; append them as the body sibling.
+    appendCollapseBody({ host: openPartGroup, children: openPartBody });
     rewritten.push(openPartGroup);
     openPartGroup = undefined;
     openPartBody = [];
@@ -454,11 +342,12 @@ const wrapSlides = (
           : `part-${currentPart?.number ?? indexInPart + 1}`;
       // Part placeholder is the header chrome; outline completion replaces it
       // in place. Body slides are appended on flush.
-      openPartGroup = createCollapseHost({
+      openPartGroup = createCollapsible({
         kind: "part",
         collapseId: partId,
+        tagName: "div",
         className: PART_GROUP_CLASSES,
-        header: child,
+        chrome: [child],
       });
       openPartBody = [];
       index += 1;
@@ -525,23 +414,16 @@ const wrapSlides = (
     }
     applyContextBuilder(sectionBody);
     const collapseId = typeof id === "string" ? id : label;
-    // Kicker + h2 stay in the frame; section body is a collapse region so
-    // expand/collapse only toggles visibility below the header chrome.
-    const frame: Element = {
-      type: "element",
-      tagName: "section",
-      properties: {
-        "data-slide": "",
-        className: [...SLIDE_CLASSES],
-      },
-      children: [kicker, child, createCollapseBody(sectionBody)],
-    };
+    // Kicker + h2 are the chrome; the section body is the collapse region.
     pushNode(
-      createCollapseHost({
+      createCollapsible({
         kind: "slide",
         collapseId,
-        className: COLLAPSE_HOST_CLASSES,
-        header: frame,
+        tagName: "section",
+        properties: { "data-slide": "" },
+        className: SLIDE_CLASSES,
+        chrome: [kicker, child],
+        body: sectionBody,
       }),
     );
     index = end;

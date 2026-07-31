@@ -4,6 +4,11 @@
 // popovers that float [data-info-popover] disclosures beside their triggers,
 // and collapse toggles for deck parts, slides, and sub-slides. Plan content
 // never contributes script, and every affordance keeps a no-JS fallback.
+//
+// The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
+// one header per collapsible, holding chrome only, with the body as its
+// sibling. Every collapse query here is a direct-child lookup relying on that
+// shape, so read those invariants before changing this or the deck transform.
 export const VIEWER_SCRIPT = `<script>
 (() => {
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
@@ -37,26 +42,19 @@ export const VIEWER_SCRIPT = `<script>
     }
     const rect = heading.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return false;
+    // A heading is hidden exactly when it sits in the body of a collapsed
+    // frame. Header chrome is never inside a body, so it always stays
+    // readable - no per-kind special cases needed.
     let node = heading;
     while (node instanceof Element) {
-      if (node.hasAttribute("data-collapsed")) {
-        const body = node.querySelector(":scope > [data-collapse-body]");
-        if (body !== null && body.contains(heading)) return false;
-        if (
-          node.matches("section[data-slide]") &&
-          !heading.matches(
-            "[data-slide-kicker], h2, h3[data-slide-kicker]",
-          ) &&
-          node.contains(heading) &&
-          heading !== node
-        ) {
-          const directChrome =
-            heading.matches("h2, h3[data-slide-kicker], [data-slide-kicker]") &&
-            heading.parentElement === node;
-          if (!directChrome) return false;
-        }
-      }
-      node = node.parentElement;
+      const parent = node.parentElement;
+      if (
+        parent !== null &&
+        node.hasAttribute("data-collapse-body") &&
+        parent.hasAttribute("data-collapsed")
+      )
+        return false;
+      node = parent;
     }
     return true;
   };
@@ -164,15 +162,21 @@ export const VIEWER_SCRIPT = `<script>
     document.title ||
     location.pathname;
   const storageKey = (id) => "big-plan:collapse:" + docKey + ":" + id;
-  const toggleFor = (block) =>
-    block.querySelector(
-      ":scope > [data-collapse-row] > [data-collapse-toggle], :scope > [data-collapse-toggle]",
-    );
+  // deck-collapse.ts guarantees one header per collapsible and that the body
+  // is its sibling, so every lookup here is a direct-child query.
+  const headerFor = (block) =>
+    block.querySelector(":scope > [data-collapse-header]");
+  const toggleFor = (block) => {
+    const header = headerFor(block);
+    return header === null
+      ? null
+      : header.querySelector(":scope > [data-collapse-toggle]");
+  };
   const setCollapsed = (block, collapsed) => {
-    // Keep the header row fixed in the viewport so expand only grows content
-    // downward - never jumps the section up the page.
-    const anchor =
-      block.querySelector(":scope > [data-collapse-row]") || block;
+    // Header chrome is geometry-stable, so this normally measures zero drift.
+    // It still matters when the document shortens enough that the browser
+    // clamps scrollTop, which would otherwise slide the page under the reader.
+    const anchor = headerFor(block) || block;
     const beforeTop = anchor.getBoundingClientRect().top;
     if (collapsed) block.setAttribute("data-collapsed", "");
     else block.removeAttribute("data-collapsed");
@@ -215,66 +219,29 @@ export const VIEWER_SCRIPT = `<script>
         }
       } catch (_) {}
     }
+    const header = headerFor(block);
     const button = toggleFor(block);
-    if (button === null) continue;
-    // Host already spans the outside toggle gutter; a short leave delay is
-    // defense in depth if the pointer briefly exits during the move.
-    let leaveTimer = 0;
-    block.addEventListener("pointerenter", () => {
-      if (leaveTimer !== 0) {
-        clearTimeout(leaveTimer);
-        leaveTimer = 0;
-      }
-      block.setAttribute("data-collapse-hover", "");
-    });
-    block.addEventListener("pointerleave", () => {
-      if (leaveTimer !== 0) clearTimeout(leaveTimer);
-      leaveTimer = setTimeout(() => {
-        leaveTimer = 0;
-        if (!block.matches(":focus-within")) {
-          block.removeAttribute("data-collapse-hover");
-        }
-      }, 150);
-    });
-    block.addEventListener("focusout", (event) => {
-      if (
-        event.relatedTarget instanceof Node &&
-        block.contains(event.relatedTarget)
-      )
-        return;
-      if (leaveTimer !== 0) clearTimeout(leaveTimer);
-      leaveTimer = setTimeout(() => {
-        leaveTimer = 0;
-        if (!block.matches(":hover") && !block.matches(":focus-within")) {
-          block.removeAttribute("data-collapse-hover");
-        }
-      }, 150);
-    });
+    if (header === null || button === null) continue;
     const toggle = () =>
       setCollapsed(block, !block.hasAttribute("data-collapsed"));
-    // Chevron stays the keyboard/a11y control; stopPropagation so the row
-    // handler does not double-toggle.
+    // The chevron stays the keyboard and assistive-technology control;
+    // stopPropagation so the header handler does not double-toggle.
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
       toggle();
     });
-    // Whole header chrome (chevron + kicker + title) toggles; body is a
-    // sibling of the row and is never in this hit target.
-    const row = block.querySelector(":scope > [data-collapse-row]");
-    if (row !== null) {
-      row.setAttribute("data-collapse-hit", "");
-      row.addEventListener("click", (event) => {
-        if (
-          event.target.closest(
-            "a, button, input, textarea, select, summary, label",
-          )
-        )
-          return;
-        event.preventDefault();
-        toggle();
-      });
-    }
+    // The whole header (chevron + kicker + title) is the hit target. It holds
+    // chrome only, so this cannot capture body clicks or a nested region's
+    // click - see the invariants in deck-collapse.ts.
+    header.addEventListener("click", (event) => {
+      if (
+        event.target.closest("a, button, input, textarea, select, summary, label")
+      )
+        return;
+      event.preventDefault();
+      toggle();
+    });
   }
   const expandAncestors = (target) => {
     let node = target;

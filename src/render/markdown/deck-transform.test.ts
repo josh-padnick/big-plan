@@ -40,10 +40,11 @@ describe("deck slide frames", () => {
     const { html } = compile("## One\n\nAlpha.\n\n## Two\n\nBeta.\n");
     expect(html.match(/<section data-slide/g)).toHaveLength(2);
     expect(html).toContain('data-collapsible="slide" data-collapse-id="one"');
-    expect(html).toContain("plan-collapse-host");
-    // Host row owns the toggle; body lives in data-collapse-body under the frame.
+    expect(html).toContain("plan-collapse-frame");
+    // The frame is the card; its header holds the toggle and chrome, and the
+    // body is the header's SIBLING (see deck-collapse.ts invariant 1).
     expect(html).toMatch(
-      /data-collapse-row[^>]*>.*data-collapse-toggle[^>]*>.*<section data-slide[^>]*><p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one">One<\/h2><div data-collapse-body[^>]*>\n?<p>Alpha\.<\/p>/s,
+      /<section data-slide[^>]*data-collapsible="slide"[^>]*><div data-collapse-header[^>]*><button[^>]*data-collapse-toggle[^>]*><\/button><div class="plan-collapse-chrome"><p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one">One<\/h2><\/div><\/div><div data-collapse-body[^>]*>\n?<p>Alpha\.<\/p>/,
     );
     expect(html).not.toContain("data-collapse-chrome");
   });
@@ -84,7 +85,7 @@ describe("deck slide frames", () => {
       /data-collapsible="part" data-collapse-id="part-the-proposal"/,
     );
     expect(html).not.toContain("data-collapsed");
-    expect(html).toContain('data-collapse-toggle');
+    expect(html).toContain("data-collapse-toggle");
   });
 
   it("should keep the lede and title outside any slide frame", () => {
@@ -147,7 +148,7 @@ What lands where.
       /data-collapsible="slide" data-collapse-id="implementation"/,
     );
     expect(html).toMatch(
-      /data-subpart[^>]*><p data-slide-kicker[^>]*>1\.2 \/ Implementation<\/p><h2 id="implementation">Implementation<\/h2>/,
+      /data-subpart[^>]*data-collapsible="slide"[^>]*><div data-collapse-header[^>]*><button[^>]*><\/button><div class="plan-collapse-chrome"><p data-slide-kicker[^>]*>1\.2 \/ Implementation<\/p><h2 id="implementation">Implementation<\/h2><\/div><\/div>/,
     );
     expect(html).toMatch(/data-collapse-body[^>]*>\n?<p>An intro line\.<\/p>/);
   });
@@ -159,7 +160,7 @@ What lands where.
       'data-collapsible="subslide" data-collapse-id="pipeline"',
     );
     expect(html).toMatch(
-      /<h3 id="pipeline" data-slide-kicker[^>]*>1\.2\.1 \/ Pipeline<\/h3><div data-collapse-body[^>]*>\n?<p>How it travels\.<\/p>/,
+      /<h3 id="pipeline" data-slide-kicker[^>]*>1\.2\.1 \/ Pipeline<\/h3><\/div><\/div><div data-collapse-body[^>]*>\n?<p>How it travels\.<\/p>/,
     );
     expect(html).toContain(">1.2.2 / Planned changes</h3>");
   });
@@ -197,7 +198,7 @@ describe("deck context builders", () => {
       "## One\n\n### Two\n\n*The sub-slide's context.*\n\nBody.\n",
     );
     expect(html).toMatch(
-      /<h3 id="two" data-slide-kicker[^>]*>1\.1 \/ Two<\/h3><div data-collapse-body[^>]*>\n?<p data-slide-context[^>]*>The sub-slide's context\.<\/p>/,
+      /<h3 id="two" data-slide-kicker[^>]*>1\.1 \/ Two<\/h3><\/div><\/div><div data-collapse-body[^>]*>\n?<p data-slide-context[^>]*>The sub-slide's context\.<\/p>/,
     );
   });
 
