@@ -21,6 +21,16 @@
   article .figure-control[hidden] {
     display: none;
   }
+  /* A pointer reader who never saw a focus ring should not be handed one when
+     Escape returns focus to the trigger. Focus still lands, so the next Tab
+     continues from here; only the visible treatment is withheld, and the
+     tooltip keys off :focus-visible so it goes quiet with it. */
+  article [data-figure-focus-quiet]:focus-visible {
+    outline: none;
+  }
+  article [data-figure-focus-quiet]:focus-visible::after {
+    content: none;
+  }
 
   /* A plain fenced code block has no caption of its own, so it gets the
      smallest possible one: a control bar that is invisible until the reader
