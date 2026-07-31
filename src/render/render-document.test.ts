@@ -161,7 +161,7 @@ The lede.
     expect(deckHtml).not.toContain("data-wireframe-desktop");
     // A desktop screen is capped instead, so it stays a screen rather than
     // growing with the window.
-    expect(deckHtml).toContain("max-width:1100px");
+    expect(deckHtml).toContain("max-width:920px");
   });
 
   it("should inline one stylesheet and one viewer script when rendering", () => {
