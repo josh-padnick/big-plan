@@ -351,6 +351,12 @@ marks and a plan diff never jitters.
   .wireframe-text[data-wireframe-role="muted"] {
     color: var(--color-muted);
   }
+  .wireframe-text[data-wireframe-role="section"] {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
 
   .wireframe-button {
     align-self: flex-start;
@@ -405,6 +411,31 @@ marks and a plan diff never jitters.
      link" in product UI reviews, so walkable buttons do not draw one. */
   .wireframe-button[data-wireframe-navigate]::after {
     content: none;
+  }
+  .wireframe-segmented-control {
+    align-self: flex-start;
+    overflow: hidden;
+    border: 1px solid var(--wf-stroke-soft);
+    border-radius: 8px;
+  }
+  .wireframe-segmented-control .wireframe-button {
+    min-height: 2rem;
+    padding: 0.25rem 0.65rem;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    color: var(--color-muted);
+    text-decoration: none;
+  }
+  .wireframe-segmented-control .wireframe-button + .wireframe-button {
+    border-left: 1px solid var(--wf-stroke-soft);
+  }
+  .wireframe-segmented-control
+    .wireframe-button[data-wireframe-emphasis="primary"] {
+    box-shadow: inset 0 -2px 0 var(--color-ink);
+    background: color-mix(in srgb, var(--color-ink) 11%, transparent);
+    color: var(--color-ink);
   }
 
   /* The product frame defaults to a desktop-native flush shell: sidebar hard
@@ -604,6 +635,7 @@ marks and a plan diff never jitters.
      at the foot. Never a desktop AppShell rail stacked in a tall artboard. */
   .wireframe-artboard[data-wireframe-device="phone"] {
     padding: 0.45rem 0.5rem 0.35rem;
+    font-size: 1rem;
   }
   .wireframe-artboard[data-wireframe-device="phone"] > .wireframe-canvas {
     gap: 0.45rem;
@@ -627,11 +659,40 @@ marks and a plan diff never jitters.
     gap: 0.35rem;
   }
   .wireframe-artboard[data-wireframe-device="phone"] .wireframe-top-bar {
+    flex-wrap: nowrap;
     padding: 0.45rem 0.15rem 0.55rem;
     border: 0;
     border-bottom: 1px solid var(--wf-stroke-soft);
     border-radius: 0;
     background: transparent;
+  }
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-top-bar
+    > :last-child:not(.wireframe-brand) {
+    margin-left: auto;
+  }
+  /* A bar with a navigable leading action is a push/dismiss header:
+     back or cancel on the left, title centered, overflow on the right. */
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-top-bar:has(> .wireframe-button[data-wireframe-navigate])
+    > .wireframe-brand {
+    order: 2;
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+  }
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-top-bar:has(> .wireframe-button[data-wireframe-navigate])
+    > .wireframe-button[data-wireframe-navigate] {
+    order: 1;
+    margin-left: 0;
+  }
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-top-bar:has(> .wireframe-button[data-wireframe-navigate])
+    > :last-child:not(.wireframe-brand):not(
+      .wireframe-button[data-wireframe-navigate]
+    ) {
+    order: 3;
   }
   .wireframe-artboard[data-wireframe-device="phone"] .wireframe-brand {
     font-size: 1.125rem;
@@ -640,13 +701,89 @@ marks and a plan diff never jitters.
     padding-bottom: 0.3rem;
   }
   .wireframe-artboard[data-wireframe-device="phone"] .wireframe-heading {
-    font-size: 1.15rem;
+    font-size: 1.375rem;
   }
   .wireframe-artboard[data-wireframe-device="phone"] .wireframe-list-item {
     min-height: 3.25rem;
+    font-size: 1rem;
   }
   .wireframe-artboard[data-wireframe-device="phone"] .wireframe-button {
     min-height: 2.75rem;
+    font-size: 1rem;
+  }
+  /* Tertiary still means lower emphasis on a phone, not "looks like prose."
+     A bounded chip gives thumb-sized actions a consistent affordance. */
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-button[data-wireframe-emphasis="tertiary"] {
+    padding: 0.4rem 0.7rem;
+    border: 1px solid var(--wf-stroke-soft);
+    border-radius: 8px;
+    box-shadow: none;
+    background: color-mix(in srgb, var(--color-paper) 88%, var(--wf-fill));
+    text-decoration: none;
+  }
+  /* A search or input with one trailing action behaves as a single toolbar. */
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-row:has(> .wireframe-field:first-child)
+    > .wireframe-field:first-child {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-row:has(> .wireframe-field:first-child)
+    > .wireframe-button:last-child {
+    flex: none;
+    align-self: flex-end;
+  }
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-input {
+    font-size: 1rem;
+  }
+  .wireframe-artboard[data-wireframe-device="phone"]
+    :is(
+      .wireframe-text[data-wireframe-role="helper"],
+      .wireframe-text[data-wireframe-role="muted"],
+      .wireframe-list-meta,
+      .wireframe-list-value,
+      .wireframe-message-meta,
+      .wireframe-field-label,
+      .wireframe-field-hint
+    ) {
+    font-size: 0.8125rem;
+  }
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-text[data-wireframe-role="section"] {
+    margin-top: 0.125rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+  }
+  /* Saved views and their active filter form one control region. */
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-stack:has(
+      > .wireframe-text[data-wireframe-role="section"]
+        + .wireframe-segmented-control
+    ) {
+    padding: 0.45rem 0.5rem 0.55rem;
+    border-radius: 10px;
+    background: var(--wf-fill);
+  }
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-stack:has(
+      > .wireframe-text[data-wireframe-role="section"]
+        + .wireframe-segmented-control
+    )
+    + .wireframe-list {
+    margin-top: 0.25rem;
+  }
+  /* A grouped settings screen ends in a distinct destructive zone. */
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-stack:has(
+      > .wireframe-button[data-wireframe-emphasis="destructive"]
+    ) {
+    margin-top: 0.5rem;
+    padding: 0.75rem 0.5rem 0.25rem;
+    border-top: 1px solid
+      color-mix(in srgb, var(--callout-danger-c) 55%, transparent);
+    background: color-mix(in srgb, var(--callout-danger-bg) 45%, transparent);
   }
   .wireframe-artboard[data-wireframe-device="phone"] .wireframe-composer {
     margin-top: auto;
@@ -676,30 +813,62 @@ marks and a plan diff never jitters.
   }
   .wireframe-bottom-bar {
     margin-top: auto;
-    padding: 0.35rem 0.25rem 0.45rem;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    min-height: 4rem;
+    padding: 0.125rem 0.25rem max(0.125rem, env(safe-area-inset-bottom));
     border-top: 1px solid var(--wf-stroke-soft);
     background: color-mix(in srgb, var(--color-paper) 88%, var(--wf-fill));
   }
-  .wireframe-bottom-bar .wireframe-button {
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-bottom-bar
+    .wireframe-button {
     flex: 1 1 0;
     justify-content: center;
     text-align: center;
-    min-height: 2.75rem;
-    padding: 0.35rem 0.2rem;
-    font-size: 0.6875rem;
+    min-width: 0;
+    min-height: 3.75rem;
+    padding: 0.5rem 0.25rem;
+    font-size: 0.875rem;
     font-weight: 600;
     box-shadow: none;
-    border: 0;
+    border: 1px solid transparent;
     border-radius: 8px;
     background: transparent;
     color: var(--color-muted);
   }
-  .wireframe-bottom-bar .wireframe-button[data-wireframe-emphasis="primary"] {
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-bottom-bar
+    .wireframe-button[data-wireframe-emphasis="primary"] {
     color: var(--color-ink);
-    background: color-mix(in srgb, var(--color-ink) 8%, transparent);
+    box-shadow: inset 0 -3px 0 var(--color-ink);
+    background: transparent;
   }
-  .wireframe-bottom-bar .wireframe-button[data-wireframe-navigate]::after {
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-bottom-bar
+    > .wireframe-button:nth-child(2) {
+    border-color: var(--wf-stroke-soft);
+    border-radius: 999px;
+    background: var(--color-paper);
+    color: var(--color-ink);
+  }
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-bottom-bar
+    .wireframe-button[data-wireframe-navigate]::after {
     content: none;
+  }
+  /* The screen action immediately before tabs pins above the keyboard/safe
+     area. Artboard height remains content-driven: no device-height minimum. */
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-stack
+    > .wireframe-button:has(+ .wireframe-bottom-bar) {
+    position: sticky;
+    z-index: 1;
+    bottom: calc(4rem + env(safe-area-inset-bottom));
+    align-self: stretch;
+    width: 100%;
+    margin-top: auto;
+    text-align: center;
   }
   .wireframe-brand {
     font-size: 1.0625rem;
@@ -1074,6 +1243,11 @@ marks and a plan diff never jitters.
   .wireframe-switch-control:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
+  }
+  .wireframe-input:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+    background: var(--wf-fill);
   }
   .wireframe-textarea {
     resize: vertical;

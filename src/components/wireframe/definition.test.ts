@@ -453,12 +453,23 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
           children: [
             element({
               name: "TextField",
-              attributes: { label: "Workflow name", kind: "search" },
+              attributes: {
+                label: "Workflow name",
+                kind: "search",
+                disabled: true,
+              },
             }),
-            element({ name: "TextArea", attributes: { label: "Prompt" } }),
+            element({
+              name: "TextArea",
+              attributes: { label: "Prompt", disabled: true },
+            }),
             element({
               name: "Select",
-              attributes: { label: "Agent", value: "Writer" },
+              attributes: {
+                label: "Agent",
+                value: "Writer",
+                disabled: true,
+              },
             }),
             element({
               name: "Checkbox",
@@ -479,6 +490,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"tagName":"select"');
     expect(rendered).toContain('"type":"search"');
     expect(rendered).toContain('"role":"switch"');
+    expect(rendered.match(/"disabled":true/gu)).toHaveLength(3);
     // Every control is wrapped by its label, so association needs no id and
     // two copies of the same wireframe can never collide.
     expect(rendered.match(/"tagName":"label"/gu)).toHaveLength(5);
@@ -782,6 +794,74 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     const rendered = html(render(compiled));
     expect(rendered).toContain("wireframe-bottom-bar");
     expect(rendered).toContain("Home");
+  });
+
+  it("should draw a segmented mode without counting its selected state as a second filled action", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "reply",
+          children: [
+            element({
+              name: "SegmentedControl",
+              children: [
+                element({
+                  name: "Button",
+                  attributes: { label: "Reply", emphasis: "primary" },
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Internal note" },
+                }),
+              ],
+            }),
+            element({
+              name: "TextArea",
+              attributes: { label: "Message" },
+            }),
+            element({
+              name: "Button",
+              attributes: { label: "Send reply", emphasis: "primary" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(compiled.model.screens[0]?.children[0]).toMatchObject({
+      element: "SegmentedControl",
+      children: [
+        { element: "Button", label: "Reply", emphasis: "primary" },
+        { element: "Button", label: "Internal note" },
+      ],
+    });
+    const rendered = html(render(compiled));
+    expect(rendered).toContain("wireframe-segmented-control");
+    expect(rendered).toContain('"role":"group"');
+  });
+
+  it("should draw a section label for grouped phone settings", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "settings",
+          attributes: { device: "phone" },
+          children: [
+            element({
+              name: "Text",
+              attributes: { text: "Notifications", role: "section" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(compiled.model.screens[0]?.children[0]).toEqual({
+      element: "Text",
+      text: "Notifications",
+      role: "section",
+    });
+    expect(html(render(compiled))).toContain('"data-wireframe-role":"section"');
   });
 
   it("should let a list row open a screen when navigateTo is set", () => {

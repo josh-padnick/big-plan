@@ -104,7 +104,7 @@ test("should preserve the captain's desktop and phone measurements", async ({
   page,
   wireframeFormFactorsViewerUrl,
 }) => {
-  await page.setViewportSize({ width: 1600, height: 1200 });
+  await page.setViewportSize({ width: 2000, height: 1400 });
   await page.goto(wireframeFormFactorsViewerUrl);
 
   await test.step("desktop drawings borrow width but stop at the shared cap", async () => {
@@ -114,40 +114,100 @@ test("should preserve the captain's desktop and phone measurements", async ({
     await expect
       .poll(() => artboard.evaluate((node) => node.clientWidth))
       .toBe(1440);
-    expect((await boxOf(frame)).width).toBeLessThanOrEqual(920);
+    expect((await boxOf(frame)).width).toBeCloseTo(920, 1);
   });
 
-  await test.step("selection does not indent the selected queue row", async () => {
-    const desktop = page.locator('[data-wireframe-screen="d-ticket"]');
-    const selected = desktop.locator(
-      ".wireframe-list-item[data-wireframe-selected] .wireframe-list-label",
-    );
-    const following = desktop
-      .locator(".wireframe-list-item:not([data-wireframe-selected])")
-      .first()
-      .locator(".wireframe-list-label");
-    expect((await boxOf(selected)).x).toBeCloseTo(
-      (await boxOf(following)).x,
-      1,
-    );
-  });
+  await test.step("selection does not indent Ticket or Inbox queue rows", async () => {
+    const assertAlignedSelection = async (screenId: string): Promise<void> => {
+      const desktop = page.locator(`[data-wireframe-screen="${screenId}"]`);
+      const selected = desktop.locator(
+        ".wireframe-list-item[data-wireframe-selected] .wireframe-list-label",
+      );
+      const following = desktop
+        .locator(".wireframe-list-item:not([data-wireframe-selected])")
+        .first()
+        .locator(".wireframe-list-label");
+      expect((await boxOf(selected)).x).toBeCloseTo(
+        (await boxOf(following)).x,
+        1,
+      );
+    };
 
-  await test.step("phone controls retain measured touch targets", async () => {
+    await assertAlignedSelection("d-ticket");
     await page
       .getByRole("navigation", { name: "Prototype screens" })
-      .last()
-      .getByRole("button", { name: "Phone · Inbox" })
+      .first()
+      .getByRole("button", { name: "Desktop · Inbox" })
       .click();
+    await assertAlignedSelection("d-inbox");
+  });
+
+  const phoneSwitcher = page
+    .getByRole("navigation", { name: "Prototype screens" })
+    .last();
+
+  await test.step("phone controls retain their measured touch targets", async () => {
+    await phoneSwitcher.getByRole("button", { name: "Phone · Inbox" }).click();
     const phone = page.locator('[data-wireframe-screen="m-inbox"]');
     await expect(phone).toBeVisible();
     expect(
       (await boxOf(phone.locator(".wireframe-list-item").first())).height,
     ).toBeGreaterThanOrEqual(52);
     expect(
-      (await boxOf(phone.locator(".wireframe-button").first())).height,
-    ).toBeGreaterThanOrEqual(44);
-    await expect(phone.locator(".wireframe-bottom-bar")).toBeVisible();
+      (await boxOf(phone.getByRole("button", { name: "Filter" }))).height,
+    ).toBe(44);
+    const tabHeights = await phone
+      .locator(".wireframe-bottom-bar .wireframe-button")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => node.getBoundingClientRect().height),
+      );
+    expect(tabHeights).toEqual([60, 60, 60]);
+    expect((await boxOf(phone.locator(".wireframe-bottom-bar"))).height).toBe(
+      65,
+    );
     await expect(phone.locator(".wireframe-app-shell")).toHaveCount(0);
+  });
+
+  await test.step("the rebuilt phone inbox, form, and settings remain intact", async () => {
+    const inbox = page.locator('[data-wireframe-screen="m-inbox"]');
+    await expect(inbox).toContainText("Saved views");
+    await expect(inbox).toContainText("Active filter");
+    await expect(inbox.locator(".wireframe-segmented-control")).toHaveCount(1);
+    await expect(inbox.locator(".wireframe-list-item")).toHaveCount(7);
+
+    await phoneSwitcher
+      .getByRole("button", { name: "Phone · New ticket" })
+      .click();
+    const form = page.locator('[data-wireframe-screen="m-compose"]');
+    await expect(form).toContainText("Attachments");
+    await expect(form).toContainText("Possible match");
+    await expect(form).toContainText("Additional details");
+    await expect(
+      form.getByRole("button", { name: "Create ticket" }),
+    ).toBeVisible();
+
+    await phoneSwitcher
+      .getByRole("button", { name: "Phone · Settings" })
+      .click();
+    const settings = page.locator('[data-wireframe-screen="m-settings"]');
+    await expect(settings).toContainText("Account");
+    await expect(settings).toContainText("Notifications");
+    await expect(settings).toContainText("Personalization");
+    await expect(settings).toContainText("Blocked");
+    await expect(
+      settings.getByRole("button", { name: "Sign out of Alex Rivera" }),
+    ).toBeVisible();
+
+    await settings
+      .locator('[data-wireframe-navigate="m-notifications"]')
+      .click();
+    const notifications = page.locator(
+      '[data-wireframe-screen="m-notifications"]',
+    );
+    await expect(notifications).toBeVisible();
+    await expect(
+      notifications.getByRole("button", { name: "Open system settings" }),
+    ).toBeVisible();
   });
 });
 
