@@ -777,6 +777,52 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain("Home");
   });
 
+  it("should mark a selected queue row and render timeline messages", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "ticket",
+          attributes: { viewport: "desktop", chrome: "browser" },
+          children: [
+            element({
+              name: "List",
+              children: [
+                element({
+                  name: "ListItem",
+                  attributes: {
+                    label: "Checkout freeze",
+                    selected: true,
+                  },
+                }),
+              ],
+            }),
+            element({
+              name: "Message",
+              attributes: {
+                author: "Maya",
+                time: "14m",
+                kind: "customer",
+                text: "Form freezes",
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(compiled.model.screens[0]?.children[0]).toMatchObject({
+      element: "List",
+      children: [{ element: "ListItem", selected: true }],
+    });
+    expect(compiled.model.screens[0]?.children[1]).toMatchObject({
+      element: "Message",
+      kind: "customer",
+    });
+    const rendered = html(render(compiled));
+    expect(rendered).toContain("data-wireframe-selected");
+    expect(rendered).toContain('"data-wireframe-message":"customer"');
+  });
+
   it("should let a desktop row claim list, main, and rail widths", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [

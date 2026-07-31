@@ -103,8 +103,8 @@ Phone musts: `viewport="mobile-portrait"`, `chrome="phone"`, single column, `Bot
 - **Frame** - `AppShell` holds `Sidebar`, an optional `TopBar`, and `AppContent`. On desktop the shell is flush-left and **stable** (same global nav every screen). Phone screens skip `AppShell` and use `TopBar` + `BottomBar`.
 - **Layout** - `Stack` runs down, `Row` runs across. In a `Row`, `span="fill"` shares width; `span="list"` is a master queue; `span="main"` is the primary surface; `span="rail"` is secondary properties or settings sub-nav.
 - **Regions** - `Panel` bounds a region, `PageHeader` says what the page is once at the top.
-- **Content** - `Metric`, `Progress`, `List` / `ListItem`, `Text`, `Heading`, `Badge`, `Divider`, `ImagePlaceholder`.
-- **Navigation** - `Nav` / `NavItem` for destinations; `BottomBar` for phone primary destinations.
+- **Content** - `Metric`, `Progress`, `List` / `ListItem` (use `selected` on the active queue row), `Message` for conversation timelines (`kind` customer|agent|internal), `Text`, `Heading`, `Badge`, `Divider`, `ImagePlaceholder`.
+- **Navigation** - `Nav` / `NavItem` for destinations; `BottomBar` for phone primary destinations. Walkable buttons use `navigateTo` without an external-link arrow glyph.
 - **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, `Switch` - every control needs a `label`.
 - **Flow** - `Stepper` / `Step`, `Connector`.
 
