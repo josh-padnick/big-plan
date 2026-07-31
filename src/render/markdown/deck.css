@@ -98,8 +98,8 @@ stability follow from the layout instead of from hand-tuned insets.
   /*
     THE TOGGLE
     Escapes its own card's padding into the gutter so the reading column is
-    never indented by chrome. Centered on the header by align-items, not by a
-    per-kind inset that goes stale when padding changes.
+    never indented by chrome. Centered on the header by top: 50% plus a
+    transform, not by a per-kind inset that goes stale when padding changes.
   */
   article .plan-collapse-toggle {
     /*

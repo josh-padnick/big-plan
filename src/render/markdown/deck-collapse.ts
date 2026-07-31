@@ -1,8 +1,7 @@
-// Owns the deck's collapse contract: the one canonical DOM shape every
-// collapsible region has, and the vocabulary the geometry (deck.css) and the
-// behavior (shell/viewer-script.ts) both read. Those files are the only
-// consumers, and this module is the single place their shared assumptions
-// live, so a change to one cannot silently invalidate another.
+// Owns the deck's collapse contract: the transform builds every collapsible
+// region through this module, and the geometry (deck.css) and behavior
+// (shell/viewer-script.ts) both read the resulting vocabulary. Their shared
+// assumptions live here so a change to one cannot silently invalidate another.
 //
 // WHY THIS MODULE EXISTS
 // Collapse was first built with the structure implied by the transform, the
@@ -25,11 +24,11 @@
 //     separate wrapper whose geometry could drift from the frame's.
 //
 // GEOMETRY MODEL (deck.css owns the numbers; this is the shape it relies on)
-// The header is a flex row of [toggle, chrome]; the toggle escapes the
-// frame's left padding into the gutter with a negative margin, so the
-// reading column is never indented by chrome. Because the header holds only
-// chrome, its height is identical collapsed and expanded, which makes both
-// chevron centering (align-items: center) and collapse geometry stable by
+// The header is the containing block for [toggle, chrome]; the absolutely
+// positioned toggle escapes the frame's left padding into the gutter without
+// shifting the chrome, so the reading column is never indented by the control.
+// Because the header holds only chrome, its height is identical collapsed and
+// expanded, which makes both chevron centering and collapse geometry stable by
 // construction rather than by keeping hand-tuned insets in agreement.
 // Collapsing sets display:none on the body and changes nothing else.
 

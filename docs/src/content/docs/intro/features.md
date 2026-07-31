@@ -16,7 +16,7 @@ Everything on this page is shipped and works today.
 - A table of contents built from the plan's level-two headings.
 - A sticky sidebar on wide screens; a compact sticky `Sections` menu on narrow ones.
 - Section links scroll smoothly, unless you've asked your OS for reduced motion.
-- Collapse controls on Parts, slides, and sub-slides so you can tuck dense sections away while reading; TOC jumps expand collapsed ancestors.
+- Collapse controls on Parts, slides, and sub-slides, plus document-wide expand-all and collapse-all controls in the table of contents; choices persist for the document, and TOC jumps expand collapsed ancestors.
 
 ## Code
 
