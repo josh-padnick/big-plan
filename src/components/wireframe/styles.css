@@ -325,6 +325,12 @@ marks and a plan diff never jitters.
   .wireframe-text[data-wireframe-role="muted"] {
     color: var(--color-muted);
   }
+  .wireframe-text[data-wireframe-role="section"] {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
 
   .wireframe-button {
     align-self: flex-start;
@@ -613,6 +619,7 @@ marks and a plan diff never jitters.
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"] {
     min-height: 48rem;
     padding: 0.45rem 0.5rem 0.35rem;
+    font-size: 1rem;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     > .wireframe-canvas {
@@ -694,15 +701,77 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-heading {
-    font-size: 1.15rem;
+    font-size: 1.375rem;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-list-item {
     min-height: 3.25rem;
+    font-size: 1rem;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-button {
     min-height: 2.75rem;
+    font-size: 1rem;
+  }
+  /* Tertiary still means lower emphasis on a phone, not "looks like prose."
+     A bounded chip gives thumb-sized actions such as Cancel, Attach, Filter,
+     and Dismiss a consistent affordance without competing with the primary. */
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-button[data-wireframe-emphasis="tertiary"] {
+    padding: 0.4rem 0.7rem;
+    border: 1px solid var(--wf-stroke-soft);
+    border-radius: 8px;
+    box-shadow: none;
+    background: color-mix(in srgb, var(--color-paper) 88%, var(--wf-fill));
+    text-decoration: none;
+  }
+  /* A search or input with one trailing action behaves as a single toolbar:
+     the field takes the available width and the action stays attached to it. */
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-row:has(> .wireframe-field:first-child)
+    > .wireframe-field:first-child {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-row:has(> .wireframe-field:first-child)
+    > .wireframe-button:last-child {
+    flex: none;
+    align-self: flex-end;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-input {
+    font-size: 1rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    :is(
+      .wireframe-text[data-wireframe-role="helper"],
+      .wireframe-text[data-wireframe-role="muted"],
+      .wireframe-list-meta,
+      .wireframe-list-value,
+      .wireframe-message-meta,
+      .wireframe-field-label,
+      .wireframe-field-hint
+    ) {
+    font-size: 0.8125rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-text[data-wireframe-role="section"] {
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+  }
+  /* Grouped mobile settings end in a distinct destructive zone. A Stack
+     keeps its warning copy with the action while this separator makes the
+     zone scan differently from ordinary navigation rows. */
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-stack:has(
+      > .wireframe-button[data-wireframe-emphasis="destructive"]
+    ) {
+    margin-top: 0.5rem;
+    padding: 0.75rem 0.5rem 0.25rem;
+    border-top: 1px solid
+      color-mix(in srgb, var(--callout-danger-c) 55%, transparent);
+    background: color-mix(in srgb, var(--callout-danger-bg) 45%, transparent);
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-composer {
@@ -734,17 +803,22 @@ marks and a plan diff never jitters.
   }
   .wireframe-bottom-bar {
     margin-top: auto;
-    padding: 0.35rem 0.25rem 0.45rem;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    padding: 0.4rem 0.25rem 0.5rem;
     border-top: 1px solid var(--wf-stroke-soft);
     background: color-mix(in srgb, var(--color-paper) 88%, var(--wf-fill));
   }
-  .wireframe-bottom-bar .wireframe-button {
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-bottom-bar
+    .wireframe-button {
     flex: 1 1 0;
     justify-content: center;
     text-align: center;
-    min-height: 2.75rem;
-    padding: 0.35rem 0.2rem;
-    font-size: 0.6875rem;
+    min-width: 0;
+    min-height: 3.5rem;
+    padding: 0.5rem 0.25rem;
+    font-size: 0.8125rem;
     font-weight: 600;
     box-shadow: none;
     border: 0;
@@ -752,11 +826,15 @@ marks and a plan diff never jitters.
     background: transparent;
     color: var(--color-muted);
   }
-  .wireframe-bottom-bar .wireframe-button[data-wireframe-emphasis="primary"] {
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-bottom-bar
+    .wireframe-button[data-wireframe-emphasis="primary"] {
     color: var(--color-ink);
     background: color-mix(in srgb, var(--color-ink) 8%, transparent);
   }
-  .wireframe-bottom-bar .wireframe-button[data-wireframe-navigate]::after {
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-bottom-bar
+    .wireframe-button[data-wireframe-navigate]::after {
     content: none;
   }
   /* Phone artboards with a bottom bar fill the device height so the strip
@@ -778,7 +856,7 @@ marks and a plan diff never jitters.
     > .wireframe-button:has(+ .wireframe-bottom-bar) {
     position: sticky;
     z-index: 1;
-    bottom: 3.5rem;
+    bottom: 4.5rem;
     align-self: stretch;
     width: 100%;
     margin-top: auto;
@@ -1003,6 +1081,7 @@ marks and a plan diff never jitters.
   .wireframe-list-item[data-wireframe-selected] {
     background: var(--wf-fill);
     box-shadow: inset 3px 0 0 var(--color-ink);
+    padding-left: 0.75rem;
   }
   .wireframe-list-row-primary {
     min-width: 0;
@@ -1054,6 +1133,9 @@ marks and a plan diff never jitters.
   }
   .wireframe-list-item:has(> .wireframe-list-row) {
     padding: 0;
+  }
+  .wireframe-list-item[data-wireframe-selected] > .wireframe-list-row {
+    padding-left: 0.75rem;
   }
 
   /* Conversation timeline messages (not table rows). */

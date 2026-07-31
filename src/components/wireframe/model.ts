@@ -112,12 +112,13 @@ export const WIREFRAME_CHROMES: ReadonlyArray<WireframeChrome> = [
   "phone",
 ];
 
-export type WireframeTextRole = "body" | "helper" | "muted";
+export type WireframeTextRole = "body" | "helper" | "muted" | "section";
 
 export const WIREFRAME_TEXT_ROLES: ReadonlyArray<WireframeTextRole> = [
   "body",
   "helper",
   "muted",
+  "section",
 ];
 
 // A heading's rank inside one screen. It never joins the review document's

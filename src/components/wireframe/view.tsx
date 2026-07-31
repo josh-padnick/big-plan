@@ -168,7 +168,7 @@ const WireframeElement = ({
     case "BottomBar":
       return (
         <div
-          className="wireframe-bottom-bar flex flex-wrap items-center justify-between gap-2"
+          className="wireframe-bottom-bar flex flex-nowrap items-center justify-between gap-2"
           role="navigation"
           aria-label="Primary destinations"
         >

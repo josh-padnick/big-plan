@@ -857,6 +857,30 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"data-wireframe-message":"customer"');
   });
 
+  it("should preserve a quiet section label for grouped mobile content", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "more",
+          attributes: { viewport: "mobile-portrait", chrome: "phone" },
+          children: [
+            element({
+              name: "Text",
+              attributes: { text: "Account", role: "section" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(compiled.model.screens[0]?.children[0]).toEqual({
+      element: "Text",
+      text: "Account",
+      role: "section",
+    });
+    expect(html(render(compiled))).toContain('"data-wireframe-role":"section"');
+  });
+
   it("should group mutually exclusive modes as one segmented control", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [

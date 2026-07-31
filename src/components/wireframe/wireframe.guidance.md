@@ -44,6 +44,21 @@ Keep the rationale outside the artboard; the artboard contains only product UI.
 If the screen does not match one of these archetypes, name another proven product pattern and explain why it fits.
 Do not invent a novel shell for a solved workflow.
 
+## Encoding ownership
+
+Use the strongest rung that can carry a rule: **primitive default > compile diagnostic > plan lint > guidance/example**.
+Guidance names capabilities and judgment; it must not become the only owner of geometry or a structurally decidable rule.
+
+| Rule family                                                                                                                                                                      | Highest valid rung           | Current owner                                                                                                                       |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Desktop review width; semantic `list \| main \| rail` proportions; non-wrapping panes; two-line truncating rows; selection-edge inset                                            | Primitive default            | Renderer/view/CSS                                                                                                                   |
+| Phone 16px body + 13px metadata; bounded 44px tertiary actions; 56px tabs; full-width field + trailing action; grouped-settings hierarchy and destructive zone                   | Primitive default            | View/CSS; authors opt into the semantic `section` text role and group the destructive action with its warning                       |
+| Plain regions with outlined boxes reserved for card-like surfaces                                                                                                                | Primitive default candidate  | **Not encoded yet**: `Panel` still draws a box, so the border budget below is guidance until the primitive owns a plain default     |
+| Semantic desktop panes required for 3+ column workspaces; phone viewport/chrome/shell coherence; one primary action per screen; visible detail paired with a selected master row | Compile diagnostic candidate | **Not encoded yet**: treat the related rules below as requirements that belong in compilation, not as permanently prose-only advice |
+| Reference archetype, useful context, content priority, progressive disclosure, interruption/recovery behavior                                                                    | Guidance + pattern examples  | Author judgment; copy a proven skeleton, then adapt its product content                                                             |
+
+When a rendered review exposes a geometry or structural defect, push the fix to the rung named here and shorten the prose after the product carries it.
+
 ## Central product principle
 
 **Use desktop width to keep relevant context visible, not to make containers and controls larger.**
@@ -55,19 +70,19 @@ Make the next action obvious, preserve context, minimize interruption.
 
 Use the form factor's native density rather than stretching one composition.
 
-| Rule             | Desktop                                                                                | Tablet                                                           | Phone                                                |
-| ---------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------- |
-| Density          | Tight 8px rhythm; 20-24px pane padding; multiple useful regions visible                | More breathing room and card-like surfaces are acceptable        | 16px page margins; fewer controls and fields at once |
-| Type hierarchy   | 22-24px page title; 14-16px primary content; 12-13px muted metadata                    | Preserve clear title/content/metadata levels with looser spacing | 20-24px title; 16px body; 13px metadata              |
-| Interaction size | Dense controls may be compact, but targets remain clear                                | Touch-sized controls                                             | 44px minimum controls; 52-64px list rows             |
-| Content measure  | Keep prose and forms near 60-80 characters; do not full-bleed fields across the canvas | Let master/detail surfaces use the device width                  | Single column; progressive disclosure                |
+| Rule             | Desktop                                                                                | Tablet                                                           | Phone                                                  |
+| ---------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------ |
+| Density          | Tight 8px rhythm; 20-24px pane padding; multiple useful regions visible                | More breathing room and card-like surfaces are acceptable        | 16px page margins; fewer controls and fields at once   |
+| Type hierarchy   | 22-24px page title; 14-16px primary content; 12-13px muted metadata                    | Preserve clear title/content/metadata levels with looser spacing | 20-24px title; 16px body; 13px metadata                |
+| Interaction size | Dense controls may be compact, but targets remain clear                                | Touch-sized controls                                             | 44px minimum controls; 52-64px list rows and 56px tabs |
+| Content measure  | Keep prose and forms near 60-80 characters; do not full-bleed fields across the canvas | Let master/detail surfaces use the device width                  | Single column; progressive disclosure                  |
 
-Desktop workspace rows carrying `span="list"`, `span="main"`, or `span="rail"` are one non-wrapping pane system.
+Primitive default: desktop workspace rows carrying `span="list"`, `span="main"`, or `span="rail"` become one non-wrapping pane system.
 They must remain side by side: the list and rail may shrink to their safe minimums, while `main` claims the rest.
 Never let a properties rail silently drop below the primary pane.
 In the real product, collapse secondary panes into drawers at a narrower application breakpoint rather than squeezing them into unreadable columns.
 
-Use one divider between major desktop panes, subtle surface changes for hierarchy, and outlined boxes mainly for inputs or genuinely interactive controls.
+Primitive-default candidate: use one divider between major desktop panes, subtle surface changes for hierarchy, and outlined boxes mainly for inputs or genuinely interactive controls.
 Do not outline every content group.
 
 Every scanning `ListItem` follows one resilient row model:
@@ -75,8 +90,9 @@ Every scanning `ListItem` follows one resilient row model:
 - Line 1: a single-line truncating identity on the left and an optional fixed trailing value (age, amount, id) on the right.
 - Line 2: muted, single-line truncating metadata.
 - Never allow a long label to wrap one word per line or overlap its metadata/value; the label and metadata yield with ellipsis, while the trailing value does not shrink.
-- On phone, `navigateTo` makes the whole 52-64px row the action; do not add an Open button inside or beside it.
-- In a desktop master list, use `selected` so the visible detail has an unmistakable corresponding row (tint + accent edge, never color alone).
+- A selected row's accent edge owns its own inset; never paint the edge beneath the first glyph.
+- Primitive default: on phone, `navigateTo` makes the whole 52-64px row the action; do not add an Open button inside or beside it.
+- Compile-diagnostic candidate: a desktop detail view must pair with a `selected` master row; the primitive supplies its tint, edge, and safe text inset.
 
 ## Responsive product design guidelines
 
@@ -113,10 +129,14 @@ Desktop shell and density specifics:
 11. Follow mobile navigation conventions (back, dismiss, bottom tabs, list → detail push).
 12. Design for interruption and recovery (drafts, preserve list position, retry, undo) - sketch the affordance even at low fidelity.
 
-Phone musts: `viewport="mobile-portrait"`, `chrome="phone"`, single column, `BottomBar` for primary destinations, no desktop `AppShell` rail.
-In a push/dismiss `TopBar`, place back or Cancel at the leading edge, center the record/page title, and put overflow at the trailing edge.
-Keep the originating bottom tab active on a pushed detail screen.
-For keyboard-heavy screens, keep the focused field visible, move the composer or primary create action above the keyboard/safe area, hide nonessential chrome while typing, and preserve both draft content and cursor position across interruption.
+Compile-diagnostic candidate: a phone composition uses `viewport="mobile-portrait"`, `chrome="phone"`, a single column, and `BottomBar` for primary destinations - never a desktop `AppShell` rail.
+Primitive default: in a push/dismiss `TopBar`, a navigable back or Cancel action stays at the leading edge, the record/page title centers, and overflow stays at the trailing edge.
+Compile-diagnostic candidate: keep exactly one originating bottom tab active on a pushed detail screen.
+Primitive defaults make bottom-bar destinations equal 56px targets with 13px labels, set phone body/field text to 16px and metadata to 13px, and render tertiary actions as bounded 44px controls rather than underlined prose.
+They also make the first field in a phone row fill the available width beside its trailing action.
+For grouped settings overviews, opt into `Text role="section"` for the primitive's quiet uppercase group label; row titles and metadata inherit the body/secondary tiers, and a final Stack containing a destructive action becomes a separated danger zone.
+Primitive default: a screen-level primary action immediately before `BottomBar` pins above the keyboard/safe-area position.
+For keyboard-heavy screens, keep the focused field visible, hide nonessential chrome while typing, and preserve both draft content and cursor position across interruption.
 
 ### Lists, forms, actions, state
 
@@ -124,11 +144,11 @@ For keyboard-heavy screens, keep the focused field visible, move the composer or
 14. Focused forms; progressive disclosure; drafts; desktop label/control alignment.
 15. Secondary space for intelligence (duplicates, related, routing, impact) - not empty decorative panels.
 16. Model dependencies visibly (this setting enables that control).
-17. Clear action hierarchy (one primary; separate destructive).
+17. Clear action hierarchy (compile-diagnostic candidate: one primary action per screen, excluding selected mode/tab controls; primitive default: a final destructive group is visually separate).
 18. Visible system state (selected, disabled, empty, unsaved, loading) as labels or badges the sketch can show without polish.
 
 Use `SegmentedControl` for mutually exclusive local modes such as Reply / Internal note.
-Use a persistent warning tint for internal-note mode and change the submit label to match the mode (`Send reply` or `Add internal note`).
+Primitive default: an internal-note `Message` has a persistent warning tint; authors change the submit label to match the mode (`Send reply` or `Add internal note`).
 Use amber/red only for SLA, destructive, or breached states; pair color with text or an icon.
 
 ### Anti-patterns
@@ -145,8 +165,8 @@ Use amber/red only for SLA, destructive, or breached states; pair color with tex
 1. Pattern: each screen names a proven reference archetype in surrounding prose.
 2. Desktop: stable global shell; non-wrapping `list | main | rail` where the job is triage-to-record; main visibly dominates; borders stay within budget.
 3. Tablet: intentional multi-column layout; do not regress it into dense desktop or stretched phone.
-4. Phone: conventional top/bottom chrome; single column; whole-row list actions; touch targets; keyboard/safe-area behavior; recovery.
-5. Rows: long identity/context/value copy truncates predictably; no overlap, clipping, or one-word-per-line wrapping.
+4. Phone: conventional top/bottom chrome; 16px body / 13px metadata; bounded 44px actions; 56px tabs; single column; whole-row list actions; keyboard/safe-area behavior; recovery.
+5. Rows: long identity/context/value copy truncates predictably; selection edges reserve an inset; no overlap, clipping, or one-word-per-line wrapping.
 6. State/actions: one primary action; selected/active/disabled/unsaved states visible; destructive and internal-note modes unmistakable.
 7. Self-critique every screen at its declared viewport before presenting: inspect alignment, overflow, clipping, density, hierarchy, and dead space; fix the three strongest objections.
 
@@ -155,7 +175,7 @@ Use amber/red only for SLA, destructive, or breached states; pair color with tex
 - **Frame** - `AppShell` holds `Sidebar`, an optional `TopBar`, and `AppContent`. On desktop the shell is flush-left and **stable** (same global nav every screen). Phone screens skip `AppShell` and use `TopBar` + `BottomBar`.
 - **Layout** - `Stack` runs down, `Row` runs across. In a `Row`, `span="fill"` shares width and may wrap; a row with `span="list"|"main"|"rail"` is a non-wrapping desktop workspace.
 - **Regions** - `Panel` bounds a region, `PageHeader` says what the page is once at the top.
-- **Content** - `Metric`, `Progress`, `List` / `ListItem` (use `selected` on the active queue row), `Message` for conversation timelines (`kind` customer|agent|internal), `Text`, `Heading`, `Badge`, `Divider`, `ImagePlaceholder`.
+- **Content** - `Metric`, `Progress`, `List` / `ListItem` (use `selected` on the active queue row), `Message` for conversation timelines (`kind` customer|agent|internal), `Text` (`role="section"` for quiet uppercase group labels), `Heading`, `Badge`, `Divider`, `ImagePlaceholder`.
 - **Navigation** - `Nav` / `NavItem` for destinations; `TopBar` + `BottomBar` for conventional phone chrome. Walkable buttons use `navigateTo` without an external-link arrow glyph.
 - **Modes** - `SegmentedControl` holds `Button` children for mutually exclusive modes; make the selected button primary.
 - **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, `Switch` - every control needs a `label`; use `disabled` on text/select controls when a visible dependency makes them unavailable.

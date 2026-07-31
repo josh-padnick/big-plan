@@ -315,7 +315,8 @@ const CATALOG = {
   Text: {
     category: "content",
     acceptsChildren: false,
-    summary: "One line of screen copy: body, helper, or muted.",
+    summary:
+      "One line of screen copy: body, helper, muted, or a quiet uppercase section label.",
     example: '<Text text="You have four tasks left today." />',
     compile: ({ attributes, position, diagnostics }) => {
       const validated = validateComponentAttributes({
