@@ -56,14 +56,17 @@ const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,72rem)
 const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,72rem)]`;
 
 // Active links change color and border only, never weight, so highlighting
-// can never re-wrap a label. Entries grouped under a part header indent one
-// step so the header reads as their parent.
+// can never re-wrap a label. Entries grouped under a part header carry the
+// rule and the inset that make them read as its children.
 const TOC_LINK_CLASSES =
   "block border-l-2 border-edge px-3 py-[0.3rem] leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
 const TOC_GROUPED_LINK_CLASSES =
   "block border-l-2 border-edge py-[0.3rem] pr-3 pl-5 leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
+// A part header is a heading over the entries beneath it, not one of them, so
+// it sits flush with the Contents label rather than sharing the rule and inset
+// its section links use.
 const TOC_PART_HEADER_CLASSES =
-  "mt-3 mb-1 block border-l-2 border-transparent px-3 text-[0.6875rem] font-bold tracking-[0.1em] uppercase text-accent hover:text-ink";
+  "mt-3 mb-1 block pr-3 text-[0.6875rem] font-bold tracking-[0.1em] uppercase text-accent hover:text-ink";
 const MOBILE_TOC_LINK_CLASSES =
   "block border-l-2 border-transparent px-5 py-2.5 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
 const MOBILE_TOC_GROUPED_LINK_CLASSES =
