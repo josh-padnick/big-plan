@@ -230,14 +230,9 @@
      carries the group's name at label weight and repeats nothing, because the
      value that names the group has been lifted out of every row beneath it. */
   /* A band stays exactly as tall as its label needs. The separation between
-     groups is whitespace under the previous group's last row, never padding
-     inside the band, so adding air never fattens the tinted strip. `:has`
-     picks that row out no matter how a sort has reordered the group. */
-  article
-    .data-table-grid
-    tbody
-    tr[data-table-group]:has(+ .data-table-group-row)
-    td {
+     groups is whitespace under each group's last visible row, never padding
+     inside the band, so adding air never fattens the tinted strip. */
+  article .data-table-grid tbody tr[data-table-group-end] td {
     padding-bottom: 1.75rem;
   }
   article .data-table-group-row > th {
