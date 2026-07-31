@@ -49,7 +49,7 @@ Open `plan.html` in your browser, and you should see this:
 
 ![The example plan rendered in the Big Plan viewer, with section navigation, a comparison table, and themed reading column.](../../../assets/viewer-light.png)
 
-The output is one self-contained HTML file: styling and branding embedded, no scripts, and no external requests.
+The output is one self-contained HTML file; [How Big Plan works](/architecture/) describes its offline-delivery guarantees.
 
 ## Next steps
 

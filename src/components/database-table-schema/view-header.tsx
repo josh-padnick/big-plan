@@ -1,6 +1,6 @@
-// Renders DatabaseTableSchema's caption: table identity, table note, and
-// the shared maximize control, and the column and action menus still
-// reserved for the live review application.
+// Renders DatabaseTableSchema's caption: table identity, table note, the
+// shared maximize control, and column and action menus reserved for the live
+// review application.
 
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { COLUMNS_3_COG_ICON } from "../../icons/lucide/columns-3-cog.js";
@@ -15,9 +15,9 @@ import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
 // A transparent resting state keeps the overflow control quieter than the
 // schema it acts on; hover and focus still reveal the full affordance.
-// Shared by the columns, actions, and full-screen controls. The hover
-// background is a utility rather than a stylesheet rule because a
-// components-layer rule loses to the resting bg-transparent utility.
+// Shared by the column and action controls. The hover background is a utility
+// rather than a stylesheet rule because a components-layer rule loses to the
+// resting bg-transparent utility.
 const BUTTON_CLASSES =
   "table-schema-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 // Shared by the actions and columns menus.
@@ -174,9 +174,6 @@ const ColumnsMenu = () => (
     </div>
   </span>
 );
-
-// Both full-screen icons ship server-side so the live application only
-// toggles visibility.
 
 /** Renders the caption: identity and controls, plus the table note beneath
  * them in the same band so the header stays one bordered region. */
