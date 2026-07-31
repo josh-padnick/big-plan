@@ -210,6 +210,29 @@ Tomorrow.
 });
 
 describe("renderDocument shell", () => {
+  it("should stamp a path-and-content identity only for filesystem-backed rendering", () => {
+    const input = {
+      markdown: "# Shared title\n\nA concise plan thesis.\n",
+      fallbackTitle: "Plan",
+    };
+    const first = renderDocument({
+      ...input,
+      planPath: "/plans/first.mdx",
+    }).html;
+    const second = renderDocument({
+      ...input,
+      planPath: "/plans/second.mdx",
+    }).html;
+    const idPattern = /data-plan-id="([a-f0-9]{32})"/;
+    const firstId = first.match(idPattern)?.[1];
+    const secondId = second.match(idPattern)?.[1];
+
+    expect(firstId).toBeDefined();
+    expect(secondId).toBeDefined();
+    expect(firstId).not.toBe(secondId);
+    expect(renderDocument(input).html).not.toContain("data-plan-id");
+  });
+
   it("should escape the title when it contains HTML special characters", () => {
     const { html } = renderDocument({
       markdown: "hello",

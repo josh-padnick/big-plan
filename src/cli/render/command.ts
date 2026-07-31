@@ -24,7 +24,12 @@ export const renderCommand = async (
     usage: USAGE,
     outputSuffix: ".html",
     invalidDocumentMessage: "Cannot render document with invalid MDX",
-    derive: renderDocument,
+    derive: ({ markdown, fallbackTitle, inputPath }) =>
+      renderDocument({
+        markdown,
+        fallbackTitle,
+        planPath: inputPath,
+      }),
     // A document a human is asked to review must also pass authoring lint, so
     // a lint finding can never reach the reviewer through render.
     verify: assertPlanPassesLint,

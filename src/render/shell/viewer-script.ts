@@ -183,8 +183,10 @@ export const VIEWER_SCRIPT = `<script>
   const blocks = Array.from(document.querySelectorAll("[data-collapsible]"));
   if (blocks.length === 0) return;
   const planId = document.documentElement.getAttribute("data-plan-id");
-  const docKey = planId || document.title + ":" + location.pathname;
-  const storageKey = (id) => "big-plan:collapse:" + docKey + ":" + id;
+  const storageKey = (id) =>
+    planId === null || planId === ""
+      ? null
+      : "big-plan:collapse:" + planId + ":" + id;
   // deck-collapse.ts guarantees one header per collapsible and that the body
   // is its sibling, so every lookup here is a direct-child query.
   const headerFor = (block) =>
@@ -211,9 +213,12 @@ export const VIEWER_SCRIPT = `<script>
     }
     const id = block.getAttribute("data-collapse-id");
     if (id !== null && id !== "") {
-      try {
-        localStorage.setItem(storageKey(id), collapsed ? "1" : "0");
-      } catch (_) {}
+      const key = storageKey(id);
+      if (key !== null) {
+        try {
+          localStorage.setItem(key, collapsed ? "1" : "0");
+        } catch (_) {}
+      }
     }
   };
   const refreshScrollSpy = () => {
@@ -274,8 +279,9 @@ export const VIEWER_SCRIPT = `<script>
   for (const block of blocks) {
     const id = block.getAttribute("data-collapse-id");
     if (id !== null && id !== "") {
+      const key = storageKey(id);
       try {
-        if (localStorage.getItem(storageKey(id)) === "1") {
+        if (key !== null && localStorage.getItem(key) === "1") {
           applyCollapsed(block, true);
           restoredCollapse = true;
         }

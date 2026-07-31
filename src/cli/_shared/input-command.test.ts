@@ -56,9 +56,10 @@ describe("deriveInputFile", () => {
         inputPath,
         usage: USAGE,
         invalidDocumentMessage: "Invalid",
-        derive: ({ markdown, fallbackTitle }) => ({
+        derive: ({ markdown, fallbackTitle, inputPath: derivedInputPath }) => ({
           markdown,
           fallbackTitle,
+          inputPath: derivedInputPath,
         }),
       }),
     ).resolves.toEqual({
@@ -66,6 +67,7 @@ describe("deriveInputFile", () => {
       derived: {
         markdown: "# Rollout\n",
         fallbackTitle: "rollout.plan",
+        inputPath,
       },
     });
   });

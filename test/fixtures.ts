@@ -47,6 +47,11 @@ type WorkerFixtures = {
   readonly deckViewerUrl: string;
   readonly flowDiagramViewerUrl: string;
   readonly nestedDecisionViewerUrl: string;
+  readonly planIdCollisionViewerUrls: {
+    readonly first: string;
+    readonly second: string;
+    readonly unidentified: string;
+  };
   readonly simpleDecisionSetViewerUrl: string;
   readonly sampleViewerUrl: string;
   readonly tableSchemaViewerUrl: string;
@@ -106,6 +111,28 @@ The outer context introduces a complete decision.
 </Option>
 
 </ComplexDecision>
+`;
+
+const PLAN_ID_COLLISION_FIRST_MDX = `# Shared title
+
+The first delivery approach keeps its review state isolated.
+
+<Part title="Context" />
+
+## Shared section
+
+The first plan has its own review state.
+`;
+
+const PLAN_ID_COLLISION_SECOND_MDX = `# Shared title
+
+The second delivery approach keeps its review state isolated.
+
+<Part title="Context" />
+
+## Shared section
+
+The second plan must not inherit review state.
 `;
 
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
@@ -249,6 +276,43 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       await writeFile(inputPath, NESTED_DECISION_MDX, "utf8");
       await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  // These documents deliberately share presentation text and collapse ids.
+  // Only the renderer-stamped identity may distinguish their browser state.
+  planIdCollisionViewerUrls: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-plan-id-"));
+      const firstInputPath = join(outputDir, "first.mdx");
+      const secondInputPath = join(outputDir, "second.mdx");
+      const firstOutputPath = join(outputDir, "first.html");
+      const secondOutputPath = join(outputDir, "second.html");
+      const unidentifiedOutputPath = join(outputDir, "unidentified.html");
+      await writeFile(firstInputPath, PLAN_ID_COLLISION_FIRST_MDX, "utf8");
+      await writeFile(secondInputPath, PLAN_ID_COLLISION_SECOND_MDX, "utf8");
+      await renderThroughCli({
+        inputPath: firstInputPath,
+        outputPath: firstOutputPath,
+        outputDir,
+      });
+      await renderThroughCli({
+        inputPath: secondInputPath,
+        outputPath: secondOutputPath,
+        outputDir,
+      });
+      const firstHtml = await readFile(firstOutputPath, "utf8");
+      await writeFile(
+        unidentifiedOutputPath,
+        firstHtml.replace(/ data-plan-id="[^"]+"/, ""),
+        "utf8",
+      );
+      await use({
+        first: pathToFileURL(firstOutputPath).href,
+        second: pathToFileURL(secondOutputPath).href,
+        unidentified: pathToFileURL(unidentifiedOutputPath).href,
+      });
       await rm(outputDir, { recursive: true, force: true });
     },
     { scope: "worker" },
