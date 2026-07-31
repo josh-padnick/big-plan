@@ -21,6 +21,7 @@ import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
 import { lucideIconToHtml } from "./lucide-icon-html.js";
 import { PREFERENCES_SCRIPT } from "./preferences-script.js";
+import { REVIEW_SCRIPT } from "./review-script.js";
 import { VIEWER_SCRIPT } from "./viewer-script.js";
 
 // The shell's own navigation contract: plain text in, so the shell owes
@@ -346,7 +347,8 @@ ${contentHtml}
 </div>
 ${renderPreferencesDialog()}
 ${PREFERENCES_SCRIPT}
-${VIEWER_SCRIPT}`;
+${VIEWER_SCRIPT}
+${REVIEW_SCRIPT}`;
   return {
     html,
     styles: GLOBAL_CSS,

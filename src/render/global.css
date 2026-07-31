@@ -19,6 +19,7 @@ Light and dark follow the reader's OS in inert exports.
 @import "./markdown/prose.css";
 @import "./markdown/deck.css";
 @import "./markdown/syntax-highlighting.css";
+@import "./shell/review.css";
 @import "../components/_shared/comparison-matrix/comparison-matrix.css";
 @import "../components/_shared/figure-controls/figure-controls.css";
 @import "../components/_shared/tooltip/tooltip.css";

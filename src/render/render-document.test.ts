@@ -164,11 +164,12 @@ The lede.
 
   it("should inline the stylesheet and viewer scripts when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
-    // The head preference bootstrap and deferred shell behavior are the only
-    // scripts; plan content can never contribute another, and nothing external
-    // is referenced.
-    expect(html.match(/<script>/g)).toHaveLength(3);
+    // The head preference bootstrap plus the deferred shell and review
+    // behaviors are the only scripts; plan content can never contribute
+    // another, and nothing external is referenced.
+    expect(html.match(/<script>/g)).toHaveLength(4);
     expect(html).toContain("data-section-link");
+    expect(html).toContain("data-block-id");
     expect(html).not.toContain('src="http');
   });
 
