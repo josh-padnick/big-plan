@@ -1,4 +1,5 @@
-/* Callout palette variants and child-content finishing, colocated with the
+/* CSS escape hatch: local readability keeps the palette map and child selector
+   relationship together. Callout palette variants are colocated with the
    component that emits the panel markup. */
 
 @layer components {

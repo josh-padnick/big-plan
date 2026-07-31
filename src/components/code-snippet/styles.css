@@ -1,5 +1,6 @@
-/* CodeSnippet palette-dependent annotations, row/gutter state, and action-menu
-   styles, colocated with the component that owns these selector contracts. */
+/* CSS escape hatch: selector relationships across row, gutter, annotation,
+   and action-menu state. CodeSnippet styles are colocated with the component
+   that owns these contracts. */
 
 @layer components {
   article [data-code-snippet] {
