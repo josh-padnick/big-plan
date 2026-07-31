@@ -28,7 +28,7 @@ describe("validateCommand", () => {
     const inputPath = join(tempDirectory, "plan.mdx");
     await writeFile(
       inputPath,
-      '# Rollout plan\n\nOne lede sentence.\n\n## Scope\n\n<Callout type="note">\n\nOne increment.\n\n</Callout>\n',
+      '# Rollout plan\n\nOne lede sentence.\n\n## Scope\n\nThe first increment is the whole scope.\n\n<Callout type="note">\n\nOne increment.\n\n</Callout>\n',
       "utf8",
     );
     const entriesBefore = await readdir(tempDirectory);

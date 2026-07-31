@@ -300,12 +300,12 @@ describe("lintPlan quick-summary-singleton", () => {
     expect(
       lintPlan({
         markdown:
-          "# T\n\nLede.\n\n<QuickSummary>\n\n- A.\n\n</QuickSummary>\n\n## S\n\n<QuickSummary>\n\n- B.\n\n</QuickSummary>\n",
+          "# T\n\nLede.\n\n<QuickSummary>\n\n- A.\n\n</QuickSummary>\n\n## S\n\nBody.\n\n<QuickSummary>\n\n- B.\n\n</QuickSummary>\n",
       }),
     ).toEqual([
       {
         ruleId: "quick-summary-singleton",
-        line: 13,
+        line: 15,
         column: 1,
         message:
           "Only one QuickSummary is allowed; merge the key points into the first one",
@@ -430,5 +430,344 @@ describe("lintPlan table-of-contents-matches-sections", () => {
     expect(
       lintPlan({ markdown: "# T\n\nLede.\n\n## Status quo\n\nA.\n" }),
     ).toEqual([]);
+  });
+});
+
+describe("lintPlan slide-leading-title", () => {
+  it("should report a sub-slide whose first block is a component", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '# T\n\nLede.\n\n## Delivery\n\nProse.\n\n### Retiring the route\n\n<Callout type="warning" title="Deprecation">\n\nGone next release.\n\n</Callout>\n',
+      }),
+    ).toEqual([
+      {
+        ruleId: "slide-leading-title",
+        line: 11,
+        column: 1,
+        message:
+          "Title this sub-slide above the figure: its h3 renders as a small kicker, so add an h4 line stating the message this figure shows",
+      },
+    ]);
+  });
+
+  it("should report a slide whose first block is a fenced code block", () => {
+    expect(
+      lintPlan({
+        markdown: "# T\n\nLede.\n\n## SQL\n\n```sql\nSELECT 1;\n```\n",
+      }),
+    ).toEqual([
+      {
+        ruleId: "slide-leading-title",
+        line: 7,
+        column: 1,
+        message:
+          "Say what this figure shows before showing it: lead the slide with a title line or a context builder, not the figure",
+      },
+    ]);
+  });
+
+  it("should report a slide whose first block is a table", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## Failure classes\n\n| Code | Retry |\n| --- | --- |\n| 429 | yes |\n",
+      }).map(({ ruleId, line }) => ({ ruleId, line })),
+    ).toEqual([{ ruleId: "slide-leading-title", line: 7 }]);
+  });
+
+  it("should report a slide whose first block is a standalone image", () => {
+    expect(
+      lintPlan({
+        markdown: "# T\n\nLede.\n\n## The pipeline\n\n![Pipeline](p.png)\n",
+      }).map(({ ruleId, line }) => ({ ruleId, line })),
+    ).toEqual([{ ruleId: "slide-leading-title", line: 7 }]);
+  });
+
+  it("should report a slide whose first block is a reference-style image", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## The pipeline\n\n![Pipeline][pipeline]\n\n[pipeline]: p.png\n",
+      }).map(({ ruleId, line }) => ({ ruleId, line })),
+    ).toEqual([{ ruleId: "slide-leading-title", line: 7 }]);
+  });
+
+  it("should report a slide whose first block is a linked image", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## The pipeline\n\n[![Pipeline](p.png)](p.png)\n",
+      }).map(({ ruleId, line }) => ({ ruleId, line })),
+    ).toEqual([{ ruleId: "slide-leading-title", line: 7 }]);
+  });
+
+  it("should report a slide whose first block is a reference-linked image", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## The pipeline\n\n[![Pipeline][pipeline]][detail]\n\n[pipeline]: p.png\n[detail]: pipeline.md\n",
+      }).map(({ ruleId, line }) => ({ ruleId, line })),
+    ).toEqual([{ ruleId: "slide-leading-title", line: 7 }]);
+  });
+
+  it("should accept a sub-slide that titles the figure with an h4 first", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## Delivery\n\nProse.\n\n### End to end\n\n#### One save touches only what changed\n\n<FlowDiagram>\n\nBody.\n\n</FlowDiagram>\n",
+      }),
+    ).toEqual([]);
+  });
+
+  it("should accept a slide that leads with a context builder before the figure", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## SQL\n\n*A join, so every token colour appears at once.*\n\n```sql\nSELECT 1;\n```\n",
+      }),
+    ).toEqual([]);
+  });
+
+  it("should accept a slide whose figure follows ordinary prose", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## The pipeline\n\nThe authored file is the only hand-edited copy.\n\n<FlowDiagram>\n\nBody.\n\n</FlowDiagram>\n",
+      }),
+    ).toEqual([]);
+  });
+
+  it("should accept an image used inside a sentence rather than as a figure", () => {
+    expect(
+      lintPlan({
+        markdown: "# T\n\nLede.\n\n## Badges\n\nStatus ![ok](o.png) today.\n",
+      }),
+    ).toEqual([]);
+  });
+
+  it("should accept a text link used as prose", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## The pipeline\n\n[Read the pipeline guide](pipeline.md).\n",
+      }),
+    ).toEqual([]);
+  });
+
+  it("should leave a section that immediately opens its sub-slides alone", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## Delivery\n\n### First\n\n#### Titled\n\nProse.\n",
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("lintPlan subtitle-duplication", () => {
+  it("should report a figure label repeating its slide heading", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '# T\n\nLede.\n\n## Open questions\n\nThree calls remain.\n\n<SimpleDecisionSet title="Open questions">\n\nBody.\n\n</SimpleDecisionSet>\n',
+      }),
+    ).toEqual([
+      {
+        ruleId: "subtitle-duplication",
+        line: 9,
+        column: 1,
+        message:
+          'Drop this figure\'s title or name what the figure shows: it repeats the heading "Open questions"',
+      },
+    ]);
+  });
+
+  it("should report a context builder repeating its slide heading", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## Quality criteria\n\n*The quality criteria.*\n\nProse.\n",
+      }),
+    ).toEqual([
+      {
+        ruleId: "subtitle-duplication",
+        line: 7,
+        column: 1,
+        message:
+          'Drop this context builder or make it add something: it repeats the heading "Quality criteria"',
+      },
+    ]);
+  });
+
+  it("should report a reordered restatement of the heading", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## Retry queue\n\n*Queue retry.*\n\nProse.\n",
+      }).map(({ ruleId }) => ruleId),
+    ).toEqual(["subtitle-duplication"]);
+  });
+
+  it("should ignore a leading article when comparing", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## The retry queue\n\n*Retry queue.*\n\nProse.\n",
+      }).map(({ ruleId }) => ruleId),
+    ).toEqual(["subtitle-duplication"]);
+  });
+
+  it("should report identical non-Latin heading and component titles", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '# T\n\nLede.\n\n## Очередь повторов\n\nProse.\n\n<FlowDiagram title="Очередь повторов">\n\nBody.\n\n</FlowDiagram>\n',
+      }).map(({ ruleId }) => ruleId),
+    ).toEqual(["subtitle-duplication"]);
+  });
+
+  it("should accept a context builder that adds information", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## Quality criteria\n\n*How we judge the index once it ships.*\n\nProse.\n",
+      }),
+    ).toEqual([]);
+  });
+
+  it("should accept a figure label naming something other than the heading", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '# T\n\nLede.\n\n## Settling the last calls\n\nThree remain.\n\n<SimpleDecisionSet title="Open questions">\n\nBody.\n\n</SimpleDecisionSet>\n',
+      }),
+    ).toEqual([]);
+  });
+
+  it("should accept a heading whose words merely appear inside a longer label", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '# T\n\nLede.\n\n## Pan\n\nProse.\n\n<FlowDiagram title="Drag, scroll, or pan the artboard around at any zoom">\n\nBody.\n\n</FlowDiagram>\n',
+      }),
+    ).toEqual([]);
+  });
+
+  it("should leave a Part marker's act name alone", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '# T\n\nLede.\n\n## Context\n\nProse.\n\n<Part title="Context" />\n\n## Next\n\nProse.\n',
+      }),
+    ).toEqual([]);
+  });
+
+  it("should compare only a leading emphasized paragraph, not a later aside", () => {
+    expect(
+      lintPlan({
+        markdown:
+          "# T\n\nLede.\n\n## Quality criteria\n\nProse.\n\n*The quality criteria.*\n",
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("lintPlan collection-grouping", () => {
+  it("should report a flat list past eight items with its count", () => {
+    const items = Array.from(
+      { length: 9 },
+      (_, index) => `- Item ${index + 1}`,
+    );
+
+    expect(
+      lintPlan({
+        markdown: `# T\n\nLede.\n\n## Acceptance criteria\n\n${items.join("\n")}\n`,
+      }),
+    ).toEqual([
+      {
+        ruleId: "collection-grouping",
+        line: 7,
+        column: 1,
+        message:
+          "Group this 9-item list by a dimension that helps the reviewer judge - importance, lifecycle stage, owner, audience - using a bulleted legend over nested items, or split it into shorter labelled lists",
+      },
+    ]);
+  });
+
+  it("should report a flat table past eight rows with its count", () => {
+    const rows = Array.from(
+      { length: 9 },
+      (_, index) => `| Criterion ${index + 1} | Pass ${index + 1} |`,
+    );
+
+    expect(
+      lintPlan({
+        markdown: `# T\n\nLede.\n\n## Quality criteria\n\nProse.\n\n| Criterion | Pass |\n| --- | --- |\n${rows.join("\n")}\n`,
+      }),
+    ).toEqual([
+      {
+        ruleId: "collection-grouping",
+        line: 9,
+        column: 1,
+        message:
+          "Group this 9-row table by a dimension that helps the reviewer judge - importance, lifecycle stage, owner, audience - and make that dimension the first column so rows sharing a group sit together",
+      },
+    ]);
+  });
+
+  it("should accept a table grouped by a repeating first column", () => {
+    const rows = [
+      ...Array.from({ length: 5 }, (_, i) => `| Correctness | C${i} | P${i} |`),
+      ...Array.from({ length: 4 }, (_, i) => `| Experience | E${i} | P${i} |`),
+    ];
+
+    expect(
+      lintPlan({
+        markdown: `# T\n\nLede.\n\n## Quality criteria\n\nProse.\n\n| Group | Criterion | Pass |\n| --- | --- | --- |\n${rows.join("\n")}\n`,
+      }),
+    ).toEqual([]);
+  });
+
+  it("should accept a long list grouped under nested items", () => {
+    const groups = ["Essential", "Experience", "Operability"].map(
+      (name) =>
+        `- **${name}** - what breaking one costs.\n${Array.from(
+          { length: 3 },
+          (_, i) => `  - ${name} item ${i + 1}`,
+        ).join("\n")}`,
+    );
+
+    expect(
+      lintPlan({
+        markdown: `# T\n\nLede.\n\n## Quality criteria\n\nProse.\n\n${groups.join("\n")}\n`,
+      }),
+    ).toEqual([]);
+  });
+
+  it("should accept a list at the eight-item threshold", () => {
+    const items = Array.from(
+      { length: 8 },
+      (_, index) => `- Item ${index + 1}`,
+    );
+
+    expect(
+      lintPlan({
+        markdown: `# T\n\nLede.\n\n## Acceptance criteria\n\n${items.join("\n")}\n`,
+      }),
+    ).toEqual([]);
+  });
+
+  it("should inspect a long collection nested inside a component body", () => {
+    const items = Array.from(
+      { length: 9 },
+      (_, index) => `- Item ${index + 1}`,
+    );
+
+    expect(
+      lintPlan({
+        markdown: `# T\n\nLede.\n\n## Notes\n\nProse.\n\n<Callout type="note" title="Everything to check">\n\n${items.join("\n")}\n\n</Callout>\n`,
+      }).map(({ ruleId }) => ruleId),
+    ).toEqual(["collection-grouping"]);
   });
 });

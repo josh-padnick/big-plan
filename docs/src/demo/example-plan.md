@@ -17,6 +17,8 @@ Per-key limits at the gateway, with a fixed monthly quota and a burst allowance,
 
 ## Options considered
 
+Only Redis gives replica-wide accuracy within the gateway's latency budget.
+
 | Option                  | Latency | Accuracy             | Operational cost     | Verdict    |
 | ----------------------- | ------- | -------------------- | -------------------- | ---------- |
 | In-process token bucket | ~0 ms   | Poor across replicas | None                 | Rejected   |
@@ -116,6 +118,8 @@ Clients can also inspect their budget directly:
 5. Remove the flag after two quiet weeks.
 
 ## Risks and mitigations
+
+The design deliberately favors availability when its shared dependency fails.
 
 <Callout type="warning" title="Fail-open dependency">
 
