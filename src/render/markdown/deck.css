@@ -50,12 +50,16 @@ body visibility - never header margins, padding, border, or toggle insets.
   }
 
   /*
-     Sub-slide hierarchy: always indented under the parent slide so collapsed
-     x.y.z chips do not read as peer slides (2.2). Same both states.
+     Proximity: sub-slides pack under their parent slide; the gap after the
+     last sub-slide must exceed sub-to-sub spacing so the next peer slide
+     (e.g. 2.2) does not read as another x.y.z. Same expanded and collapsed.
   */
   article [data-collapsible="subslide"] {
     margin-left: 1.5rem;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  article [data-collapsible="subslide"]:last-child {
+    margin-bottom: 1.5rem;
   }
 
   article .plan-collapse-host {
