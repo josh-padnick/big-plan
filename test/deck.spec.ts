@@ -187,8 +187,11 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
       // Transform animates for 150ms, so geometry read straight after a click
       // samples the old state and any comparison passes vacuously.
       const kill = document.createElement("style");
+      // overflow-anchor:none disables Chrome's own scroll anchoring, which
+      // would otherwise compensate for the layout change by itself and hide
+      // whether the viewer script anchors the bulk run at all.
       kill.textContent =
-        "*{transition:none !important;animation:none !important}";
+        "*{transition:none !important;animation:none !important;overflow-anchor:none !important}";
       document.head.appendChild(kill);
       const header = (block: Element) =>
         block.querySelector(":scope > [data-collapse-header]") as HTMLElement;
@@ -277,6 +280,96 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     });
     expect(worst.checked).toBeGreaterThan(0);
     expect(worst.max).toBeLessThan(0.5);
+  });
+
+  await test.step("expand all and collapse all reach every region", async () => {
+    const controls = page.locator("[data-collapse-all-controls]:visible");
+    await expect(controls).toHaveCount(1);
+    const regions = page.locator("[data-collapsible]");
+    const total = await regions.count();
+    await controls.locator("[data-collapse-all]").click();
+    await expect(
+      page.locator("[data-collapsible][data-collapsed]"),
+    ).toHaveCount(total);
+    await controls.locator("[data-expand-all]").click();
+    await expect(
+      page.locator("[data-collapsible][data-collapsed]"),
+    ).toHaveCount(0);
+  });
+
+  // A bulk run applies state to every region and corrects the viewport once,
+  // so per-region behaviour has to survive it untouched.
+  await test.step("a bulk run leaves geometry stable and toggles independent", async () => {
+    const result = await page.evaluate(() => {
+      const kill = document.createElement("style");
+      kill.textContent =
+        "*{transition:none !important;animation:none !important}";
+      document.head.appendChild(kill);
+      const blocks = () =>
+        Array.from(document.querySelectorAll("[data-collapsible]"));
+      const header = (block: Element) =>
+        block.querySelector(":scope > [data-collapse-header]") as HTMLElement;
+      const shown = (sel: string) =>
+        Array.from(document.querySelectorAll(sel)).find(
+          (node) => node.getBoundingClientRect().width > 0,
+        ) as HTMLElement;
+      const expandAll = shown("[data-expand-all]");
+      const collapseAll = shown("[data-collapse-all]");
+      // Only top-level regions stay visible in both states, so only they can
+      // be compared across a bulk run; nested ones report a zero rect.
+      const topLevel = () =>
+        blocks().filter(
+          (block) => block.parentElement?.closest("[data-collapsible]") == null,
+        );
+      expandAll.click();
+      const before = topLevel().map(
+        (block) => header(block).getBoundingClientRect().height,
+      );
+      collapseAll.click();
+      const during = topLevel().map(
+        (block) => header(block).getBoundingClientRect().height,
+      );
+      // Scroll anchoring across a bulk run is deliberately NOT asserted here.
+      // This fixture cannot express it: it has three top-level regions, the
+      // collapsed document barely exceeds one viewport, and scroll clamping
+      // dominates any correction - an assertion here was verified to pass even
+      // with the anchoring removed. It is measured directly on a large
+      // document instead; see the task regression checklist.
+      expandAll.click();
+      const after = topLevel().map(
+        (block) => header(block).getBoundingClientRect().height,
+      );
+      // Independence must survive the bulk run.
+      const vector = () =>
+        blocks().map((block) => (block.hasAttribute("data-collapsed") ? 1 : 0));
+      let collateral = 0;
+      const list = blocks();
+      for (let index = 0; index < list.length; index += 1) {
+        const target = list[index] as Element;
+        if (header(target).getBoundingClientRect().height === 0) continue;
+        const start = vector();
+        header(target).click();
+        const end = vector();
+        for (let other = 0; other < list.length; other += 1) {
+          if (other !== index && start[other] !== end[other]) collateral += 1;
+        }
+        header(target).click();
+      }
+      kill.remove();
+      return {
+        headerDrift: Math.max(
+          ...before.map((height, index) =>
+            Math.abs((during[index] ?? 0) - height),
+          ),
+          ...before.map((height, index) =>
+            Math.abs((after[index] ?? 0) - height),
+          ),
+        ),
+        collateral,
+      };
+    });
+    expect(result.headerDrift).toBeLessThan(0.5);
+    expect(result.collateral).toBe(0);
   });
 
   await test.step("collapsing a part tucks away every slide in the act", async () => {

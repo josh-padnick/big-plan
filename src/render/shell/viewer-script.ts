@@ -172,12 +172,9 @@ export const VIEWER_SCRIPT = `<script>
       ? null
       : header.querySelector(":scope > [data-collapse-toggle]");
   };
-  const setCollapsed = (block, collapsed) => {
-    // Header chrome is geometry-stable, so this normally measures zero drift.
-    // It still matters when the document shortens enough that the browser
-    // clamps scrollTop, which would otherwise slide the page under the reader.
-    const anchor = headerFor(block) || block;
-    const beforeTop = anchor.getBoundingClientRect().top;
+  // State only: attribute, control labels, persistence. No scroll handling, so
+  // a bulk run can apply it many times and correct the viewport once.
+  const applyCollapsed = (block, collapsed) => {
     if (collapsed) block.setAttribute("data-collapsed", "");
     else block.removeAttribute("data-collapsed");
     const button = toggleFor(block);
@@ -195,20 +192,57 @@ export const VIEWER_SCRIPT = `<script>
         localStorage.setItem(storageKey(id), collapsed ? "1" : "0");
       } catch (_) {}
     }
-    const stabilize = () => {
-      const afterTop = anchor.getBoundingClientRect().top;
-      const delta = afterTop - beforeTop;
-      if (Math.abs(delta) > 0.5) {
-        const se = document.scrollingElement;
-        if (se) se.scrollTop += delta;
-        else window.scrollBy(0, delta);
+  };
+  // Holds a chosen element still in the viewport across a layout change, then
+  // refreshes the scroll-spy. Header chrome is geometry-stable, so a single
+  // toggle normally measures zero drift; this still matters when the document
+  // shortens enough that the browser clamps scrollTop, which would otherwise
+  // slide the page under the reader.
+  const holdInPlace = (anchor, change) => {
+    const beforeTop = anchor === null ? 0 : anchor.getBoundingClientRect().top;
+    change();
+    const settle = () => {
+      if (anchor !== null) {
+        const delta = anchor.getBoundingClientRect().top - beforeTop;
+        if (Math.abs(delta) > 0.5) {
+          const se = document.scrollingElement;
+          if (se) se.scrollTop += delta;
+          else window.scrollBy(0, delta);
+        }
       }
       if (typeof window.__bigPlanRefreshScrollSpy === "function") {
         window.__bigPlanRefreshScrollSpy();
       }
     };
-    stabilize();
-    requestAnimationFrame(stabilize);
+    settle();
+    requestAnimationFrame(settle);
+  };
+  const setCollapsed = (block, collapsed) => {
+    holdInPlace(headerFor(block) || block, () =>
+      applyCollapsed(block, collapsed),
+    );
+  };
+  // Only a top-level region's header is guaranteed to stay visible in both
+  // states, so bulk operations anchor on the one the reader is inside.
+  const topLevel = blocks.filter(
+    (block) =>
+      block.parentElement === null ||
+      block.parentElement.closest("[data-collapsible]") === null,
+  );
+  const bulkAnchor = () => {
+    const readingLine = window.innerHeight * 0.25;
+    let found = null;
+    for (const block of topLevel) {
+      const header = headerFor(block);
+      if (header === null) continue;
+      if (header.getBoundingClientRect().top <= readingLine) found = header;
+    }
+    return found === null ? headerFor(topLevel[0] || blocks[0]) : found;
+  };
+  const setAllCollapsed = (collapsed) => {
+    holdInPlace(bulkAnchor(), () => {
+      for (const block of blocks) applyCollapsed(block, collapsed);
+    });
   };
   for (const block of blocks) {
     const id = block.getAttribute("data-collapse-id");
@@ -241,6 +275,26 @@ export const VIEWER_SCRIPT = `<script>
         return;
       event.preventDefault();
       toggle();
+    });
+  }
+  // Bulk controls ship hidden so a scripts-disabled document never offers a
+  // control it cannot honour; revealing them here is what makes them real.
+  for (const controls of document.querySelectorAll(
+    "[data-collapse-all-controls]",
+  )) {
+    controls.removeAttribute("hidden");
+    controls.setAttribute("data-shown", "");
+  }
+  for (const button of document.querySelectorAll("[data-expand-all]")) {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      setAllCollapsed(false);
+    });
+  }
+  for (const button of document.querySelectorAll("[data-collapse-all]")) {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      setAllCollapsed(true);
     });
   }
   const expandAncestors = (target) => {
