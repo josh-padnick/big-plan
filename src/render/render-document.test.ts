@@ -166,8 +166,9 @@ The lede.
     expect(html.match(/<style>/g)).toHaveLength(1);
     // The shell's viewer behavior is the single script; plan content can never
     // contribute another, and nothing external is referenced.
-    expect(html.match(/<script>/g)).toHaveLength(1);
+    expect(html.match(/<script>/g)).toHaveLength(2);
     expect(html).toContain("data-section-link");
+    expect(html).toContain("data-block-id");
     expect(html).not.toContain('src="http');
   });
 
