@@ -35,9 +35,11 @@ Because `<` and `{` begin MDX syntax, write them in code spans or fences when yo
 
 The rendered document reads as a deck: every h2 section becomes a slide frame headed by a numbered kicker, and `Part` markers group the slides into numbered acts that also group the sidebar navigation and the in-document `TableOfContents` overview.
 A section containing h3 headings renders as a parent header block over numbered sub-slides, one per h3 run, with the h3 itself becoming the sub-slide's kicker.
-Because that kicker is a label rather than a headline, give a sub-slide a title of its own as an h4 directly under the h3, and put it before any component, code block, image, or table.
-A slide or sub-slide whose first paragraph is entirely emphasized (`*like this*`) renders that paragraph as the context builder: one muted line under the kicker telling the reader what they are looking at.
-Keep that line only when it adds what the title does not already carry.
+Because that kicker is a label rather than a headline, a sub-slide that opens with a figure - a component, code block, image, or table - needs a title of its own as an h4 directly under the h3 and before the figure.
+A sub-slide that opens with prose or a context builder needs no h4; never put a figure first under a heading.
+An h4 title and a context builder are alternative ways to lead a sub-slide, never a sequence.
+A slide or sub-slide whose first block under the heading is an entirely emphasized paragraph (`*like this*`) renders that paragraph as the context builder: one muted line under the kicker telling the reader what they are looking at.
+Keep that line only when it adds what the title does not already carry, and never let a subtitle or figure label repeat or near-duplicate its slide title.
 
 ## Validate before rendering
 
