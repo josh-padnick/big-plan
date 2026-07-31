@@ -157,6 +157,7 @@ const LIST_ITEM_SCHEMA = {
   meta: { kind: "string", nonEmpty: true },
   value: { kind: "string", nonEmpty: true },
   selected: { kind: "booleanShorthand" },
+  navigateTo: { kind: "string", nonEmpty: true },
 } satisfies ComponentAttributeSchema;
 
 const MESSAGE_KINDS = ["customer", "agent", "internal"] as const;
@@ -645,9 +646,9 @@ const CATALOG = {
     acceptsChildren: false,
     allowedParents: ["List"],
     summary:
-      "One row: identity, context, and a trailing value. Mark selected on the active queue row.",
+      "One row: identity, context, and a trailing value. Mark selected on the active queue row; navigateTo makes the whole row open a screen.",
     example:
-      '<ListItem label="Checkout freeze" meta="Open · Maya" value="14m · #4821" selected />',
+      '<ListItem label="Checkout freeze" meta="Northwind · Priority" value="14m · #4821" navigateTo="ticket" />',
     compile: ({ attributes, position, diagnostics }) => {
       const validated = validateComponentAttributes({
         component: "ListItem",
@@ -662,6 +663,9 @@ const CATALOG = {
         ...(validated.meta === undefined ? {} : { meta: validated.meta }),
         ...(validated.value === undefined ? {} : { value: validated.value }),
         selected: validated.selected === true,
+        ...(validated.navigateTo === undefined
+          ? {}
+          : { navigateTo: validated.navigateTo }),
       };
     },
   },

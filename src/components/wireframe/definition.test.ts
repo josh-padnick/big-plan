@@ -777,6 +777,41 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain("Home");
   });
 
+  it("should let a list row open a screen when navigateTo is set", () => {
+    const { compiled, diagnostics } = compile({
+      attributes: { id: "wf", initialScreen: "home" },
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "List",
+              children: [
+                element({
+                  name: "ListItem",
+                  attributes: {
+                    label: "Checkout freeze",
+                    navigateTo: "ticket",
+                  },
+                }),
+              ],
+            }),
+          ],
+        }),
+        screen({
+          id: "ticket",
+          children: [
+            element({ name: "Text", attributes: { text: "Ticket" } }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-wireframe-navigate":"ticket"');
+    expect(rendered).toContain("wireframe-list-row");
+  });
+
   it("should mark a selected queue row and render timeline messages", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [
