@@ -18,7 +18,6 @@ import {
   MAXIMIZABLE_ATTRIBUTE,
 } from "../_model/figure-controls/figure-controls.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
-import { Fragment } from "react";
 import type {
   CompiledDataTable,
   CompiledDataTableColumn,
@@ -82,14 +81,11 @@ const HeaderCell = ({
     data-table-column={index}
     data-table-type={column.type}
     data-table-align={column.align}
-    {...(column.grouping === true ? { hidden: true } : {})}
     {...(column.fit === undefined ? {} : { "data-table-cell-fit": column.fit })}
+    aria-sort="none"
     {...(column.sort === undefined
-      ? { "aria-sort": "none" }
-      : {
-          "aria-sort": column.sort === "asc" ? "ascending" : "descending",
-          "data-table-sorted": column.sort,
-        })}
+      ? {}
+      : { "data-table-authored-sort": column.sort })}
   >
     {/* Disabled server-side: without the viewer script the header is a plain
         label, not a button that does nothing when pressed. */}
@@ -100,9 +96,7 @@ const HeaderCell = ({
       disabled
     >
       <span className="data-table-head-label">{column.label}</span>
-      <SortGlyphs
-        {...(column.sort === undefined ? {} : { sort: column.sort })}
-      />
+      <SortGlyphs />
     </button>
     {lucideIconToReact({ icon: GRIP_VERTICAL_ICON, hidden: false })}
   </th>
@@ -146,7 +140,7 @@ const ColumnsMenu = ({
           role="menuitemcheckbox"
           tabIndex={-1}
           data-table-column-toggle={index}
-          aria-checked={column.grouping === true ? "false" : "true"}
+          aria-checked="true"
           {...(index === 0 && column.grouping !== true
             ? { disabled: true }
             : {})}
@@ -278,7 +272,6 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "table" }}
     data-table-id={model.id}
     data-table-fit={model.fit}
-    {...(model.groups.length === 0 ? {} : { "data-table-grouped": "" })}
     data-table-group-column={model.groupColumn}
   >
     <figcaption className="data-table-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem]">
@@ -320,50 +313,25 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
         </thead>
         <tbody>
           {model.rows.map((row, rowIndex) => (
-            <Fragment key={rowIndex}>
-              {row.group === undefined ||
-              row.group === model.rows[rowIndex - 1]?.group ? null : (
-                <tr
-                  className="data-table-group-row"
-                  data-table-group-heading={row.group}
-                >
-                  <th
-                    scope="colgroup"
-                    colSpan={
-                      model.columns.filter((column) => column.grouping !== true)
-                        .length
-                    }
+            <tr key={rowIndex} data-table-row={rowIndex}>
+              {row.cells.map((cell, cellIndex) => {
+                const column = model.columns[cellIndex];
+                return (
+                  <td
+                    key={cellIndex}
+                    className="data-table-cell"
+                    data-table-column={cellIndex}
+                    data-table-align={column?.align ?? "left"}
+                    {...(column?.fit === undefined
+                      ? {}
+                      : { "data-table-cell-fit": column.fit })}
+                    title={cell.text}
                   >
-                    {row.group}
-                  </th>
-                </tr>
-              )}
-              <tr
-                data-table-row={rowIndex}
-                {...(row.group === undefined
-                  ? {}
-                  : { "data-table-group": row.group })}
-              >
-                {row.cells.map((cell, cellIndex) => {
-                  const column = model.columns[cellIndex];
-                  return (
-                    <td
-                      key={cellIndex}
-                      className="data-table-cell"
-                      data-table-column={cellIndex}
-                      data-table-align={column?.align ?? "left"}
-                      {...(column?.grouping === true ? { hidden: true } : {})}
-                      {...(column?.fit === undefined
-                        ? {}
-                        : { "data-table-cell-fit": column.fit })}
-                      title={cell.text}
-                    >
-                      <CellContent cell={cell} />
-                    </td>
-                  );
-                })}
-              </tr>
-            </Fragment>
+                    <CellContent cell={cell} />
+                  </td>
+                );
+              })}
+            </tr>
           ))}
         </tbody>
       </table>

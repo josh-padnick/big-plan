@@ -28,6 +28,10 @@
 // components/_model/figure-controls/figure-controls.ts. This file is a string
 // template and cannot import it, so a change to those attribute spellings
 // changes the strings here too.
+import { compareDataTableValues } from "../../components/data-table/sort-values.js";
+
+const COMPARE_DATA_TABLE_VALUES_SOURCE = compareDataTableValues.toString();
+
 export const VIEWER_SCRIPT = `<script>
 (() => {
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
@@ -377,6 +381,7 @@ export const VIEWER_SCRIPT = `<script>
       localStorage.setItem(key, JSON.stringify(value));
     } catch (_) {}
   };
+  const compareDataTableValues = ${COMPARE_DATA_TABLE_VALUES_SOURCE};
 
   for (const figure of tables) {
     const grid = figure.querySelector("table");
@@ -401,31 +406,36 @@ export const VIEWER_SCRIPT = `<script>
     const fitButton = figure.querySelector("[data-table-fit-button]");
     const fitList = figure.querySelector("[data-table-fit-list]");
     const resetButton = figure.querySelector("[data-table-reset]");
-    let groupRows = Array.from(
-      figure.querySelectorAll("[data-table-group-heading]"),
-    );
-    let groupColumn = Number(
+    let groupRows = [];
+    const authoredGroupColumn = Number(
       figure.getAttribute("data-table-group-column") || "-1",
     );
-    const authoredGroupColumn = groupColumn;
+    let groupColumn = Number.NaN;
     const menuButton = figure.querySelector("[data-table-menu-button]");
     const menuList = figure.querySelector("[data-table-menu-list]");
     // Sorting and filtering read a cell's complete text, never what the
     // current fit lets the reader see, so a clamped cell still compares and
     // still matches on everything the author wrote.
+    const cellOf = (row, column) =>
+      Array.from(row.children).find(
+        (cell) =>
+          Number(cell.getAttribute("data-table-column")) === column,
+      );
     const textOf = (row, column) => {
-      const cell = row.children[column];
+      const cell = cellOf(row, column);
       return cell === undefined ? "" : (cell.textContent || "").trim();
     };
-    let sortColumn = -1;
-    let sortDirection = 0;
-    for (let index = 0; index < columnCount; index += 1) {
-      const declared = heads[index].getAttribute("data-table-sorted");
+    let authoredSortColumn = -1;
+    let authoredSortDirection = 0;
+    for (const head of heads) {
+      const declared = head.getAttribute("data-table-authored-sort");
       if (declared !== null) {
-        sortColumn = index;
-        sortDirection = declared === "desc" ? -1 : 1;
+        authoredSortColumn = Number(head.getAttribute("data-table-column"));
+        authoredSortDirection = declared === "desc" ? -1 : 1;
       }
     }
+    let sortColumn = authoredSortColumn;
+    let sortDirection = authoredSortDirection;
 
     const currentOrder = () =>
       Array.from(headRow.children).map((head) =>
@@ -435,10 +445,8 @@ export const VIEWER_SCRIPT = `<script>
       Array.from(headRow.children)
         .filter((head) => head.hidden)
         .map((head) => Number(head.getAttribute("data-table-column")));
-    // The grouping column ships hidden because its band already says it, so
-    // "authored" for reset purposes is what the server rendered, not "all
-    // visible".
-    const authoredHidden = hiddenColumns();
+    const authoredHidden =
+      authoredGroupColumn < 0 ? [] : [authoredGroupColumn];
     const syncGroupSpans = () => {
       const visible = columnCount - hiddenColumns().length;
       for (const row of groupRows) {
@@ -498,6 +506,11 @@ export const VIEWER_SCRIPT = `<script>
       syncGroupSpans();
       if (save !== false) persist();
     };
+    const applyHiddenColumns = (hidden) => {
+      for (let column = 0; column < columnCount; column += 1) {
+        setColumnHidden(column, hidden.indexOf(column) !== -1, false);
+      }
+    };
 
     const moveColumn = (from, to, save) => {
       if (from === to || to < 0 || to >= columnCount) return;
@@ -527,21 +540,30 @@ export const VIEWER_SCRIPT = `<script>
         .toLowerCase();
       let shown = 0;
       for (const row of rows) {
+        row.removeAttribute("data-table-group-end");
         const match =
           query === "" ||
-          Array.from(row.children).some(
-            (cell) =>
+          currentOrder().some((column) => {
+            const cell = cellOf(row, column);
+            return (
+              cell !== undefined &&
               !cell.hidden &&
-              (cell.textContent || "").toLowerCase().indexOf(query) !== -1,
-          );
+              (cell.textContent || "").toLowerCase().indexOf(query) !== -1
+            );
+          });
         row.hidden = !match;
         if (match) shown += 1;
       }
       for (const heading of groupRows) {
         const label = heading.getAttribute("data-table-group-heading");
-        heading.hidden = !rows.some(
+        const visibleRows = rows.filter(
           (row) => !row.hidden && row.getAttribute("data-table-group") === label,
         );
+        heading.hidden = visibleRows.length === 0;
+        const lastVisible = visibleRows[visibleRows.length - 1];
+        if (lastVisible !== undefined) {
+          lastVisible.setAttribute("data-table-group-end", "");
+        }
       }
       if (countLabel !== null) {
         countLabel.textContent =
@@ -553,36 +575,6 @@ export const VIEWER_SCRIPT = `<script>
         empty.hidden = shown !== 0;
         if (shown === 0) empty.textContent = 'No rows match "' + query + '".';
       }
-    };
-
-    const compare = (a, b, column, type) => {
-      const left = textOf(a, column);
-      const right = textOf(b, column);
-      // An empty cell has nothing to say, so it sorts last whichever way the
-      // reader asked rather than crowding one end of the answer.
-      if (left === "" && right === "") return 0;
-      if (left === "") return 1;
-      if (right === "") return -1;
-      if (type === "number" || type === "date") {
-        const x =
-          type === "number"
-            ? Number(left.replace(/[^0-9.eE+-]/g, ""))
-            : Date.parse(left);
-        const y =
-          type === "number"
-            ? Number(right.replace(/[^0-9.eE+-]/g, ""))
-            : Date.parse(right);
-        const xBad = !isFinite(x) || isNaN(x);
-        const yBad = !isFinite(y) || isNaN(y);
-        if (xBad && yBad) return 0;
-        if (xBad) return 1;
-        if (yBad) return -1;
-        return x === y ? 0 : x < y ? -1 : 1;
-      }
-      return left.localeCompare(right, undefined, {
-        sensitivity: "base",
-        numeric: true,
-      });
     };
 
     const applySort = () => {
@@ -611,14 +603,22 @@ export const VIEWER_SCRIPT = `<script>
       }
       const ordered = rows.slice();
       if (sortDirection !== 0 && sortColumn >= 0) {
-        const type =
-          heads[sortColumn].getAttribute("data-table-type") || "text";
+        const activeHead = heads.find(
+          (head) =>
+            Number(head.getAttribute("data-table-column")) === sortColumn,
+        );
+        const type = activeHead?.getAttribute("data-table-type") || "text";
         // Sorting is stable, so a second sort keeps the previous answer as the
         // tiebreaker and two clicks build a two-key view.
         const positions = new Map();
         ordered.forEach((row, index) => positions.set(row, index));
         ordered.sort((a, b) => {
-          const verdict = compare(a, b, sortColumn, type) * sortDirection;
+          const verdict = compareDataTableValues({
+            left: textOf(a, sortColumn),
+            right: textOf(b, sortColumn),
+            type,
+            direction: sortDirection,
+          });
           return verdict === 0 ? positions.get(a) - positions.get(b) : verdict;
         });
         if (groupRows.length !== 0) {
@@ -717,17 +717,27 @@ export const VIEWER_SCRIPT = `<script>
     // Restore the reader's saved layout before wiring controls, so the first
     // paint after a reload already matches what they left.
     const saved = read(storageKey);
+    let restoredGroupColumn = authoredGroupColumn;
     if (saved !== null && typeof saved === "object") {
       if (Array.isArray(saved.order) && saved.order.length === columnCount) {
         applyOrder(saved.order);
       }
-      if (Array.isArray(saved.hidden)) {
-        for (const column of saved.hidden) setColumnHidden(column, true, false);
-      }
       if (typeof saved.fit === "string") setFit(saved.fit, false);
-      if (typeof saved.group === "number" && saved.group < columnCount) {
-        setGroupColumn(saved.group, false);
+      if (
+        typeof saved.group === "number" &&
+        saved.group >= -1 &&
+        saved.group < columnCount
+      ) {
+        restoredGroupColumn = saved.group;
       }
+    }
+    setGroupColumn(restoredGroupColumn, false);
+    if (
+      saved !== null &&
+      typeof saved === "object" &&
+      Array.isArray(saved.hidden)
+    ) {
+      applyHiddenColumns(saved.hidden);
     }
     // Every control ships dormant so a document read without scripts shows no
     // affordance that cannot act. Enabling them is the last thing this leg
@@ -811,13 +821,11 @@ export const VIEWER_SCRIPT = `<script>
     }
 
     const resetLayout = () => {
-      for (let column = 0; column < columnCount; column += 1) {
-        setColumnHidden(column, authoredHidden.indexOf(column) !== -1, false);
-      }
       applyOrder(Array.from({ length: columnCount }, (_, index) => index));
       setGroupColumn(authoredGroupColumn, false);
-      sortColumn = -1;
-      sortDirection = 0;
+      applyHiddenColumns(authoredHidden);
+      sortColumn = authoredSortColumn;
+      sortDirection = authoredSortDirection;
       applySort();
       setFit(authoredFit, false);
       persist();
@@ -834,19 +842,37 @@ export const VIEWER_SCRIPT = `<script>
       { button: menuButton, list: menuList },
       { button: fitButton, list: fitList },
     ].filter((entry) => entry.button !== null && entry.list !== null);
-    const closeMenus = () => {
+    const closeMenus = (restoreFocus) => {
+      let trigger = null;
       for (const entry of popovers) {
+        if (!entry.list.hidden) trigger = entry.button;
         entry.list.hidden = true;
         entry.button.setAttribute("aria-expanded", "false");
       }
+      if (restoreFocus === true && trigger !== null) trigger.focus();
+    };
+    const focusMenuItem = (entry, item) => {
+      const items = Array.from(
+        entry.list.querySelectorAll(
+          '[role="menuitemcheckbox"]:not(:disabled),[role="menuitemradio"]:not(:disabled)',
+        ),
+      );
+      if (items.length === 0) return;
+      const target = item || items.find(
+        (candidate) => candidate.getAttribute("aria-checked") === "true",
+      ) || items[0];
+      for (const candidate of items) candidate.tabIndex = -1;
+      target.tabIndex = 0;
+      target.focus();
     };
     for (const entry of popovers) {
       entry.button.addEventListener("click", (event) => {
         event.stopPropagation();
         const open = entry.list.hidden;
-        closeMenus();
+        closeMenus(false);
         entry.list.hidden = !open;
         entry.button.setAttribute("aria-expanded", open ? "true" : "false");
+        if (open) focusMenuItem(entry);
       });
       // A menu stays open across consecutive choices, because choosing
       // columns is a comparison rather than a single answer.
@@ -874,6 +900,43 @@ export const VIEWER_SCRIPT = `<script>
           setGroupColumn(Number(group.getAttribute("data-table-group-choice")));
         }
       });
+      entry.list.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          closeMenus(true);
+          return;
+        }
+        if (
+          event.key !== "ArrowDown" &&
+          event.key !== "ArrowUp" &&
+          event.key !== "Home" &&
+          event.key !== "End"
+        ) {
+          return;
+        }
+        event.preventDefault();
+        const items = Array.from(
+          entry.list.querySelectorAll(
+            '[role="menuitemcheckbox"]:not(:disabled),[role="menuitemradio"]:not(:disabled)',
+          ),
+        );
+        if (items.length === 0) return;
+        const current = items.indexOf(document.activeElement);
+        const index =
+          event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? items.length - 1
+              : event.key === "ArrowDown"
+                ? current < 0
+                  ? 0
+                  : (current + 1) % items.length
+                : current < 0
+                  ? items.length - 1
+                  : (current - 1 + items.length) % items.length;
+        focusMenuItem(entry, items[index]);
+      });
     }
     if (popovers.length !== 0) {
       document.addEventListener("click", (event) => {
@@ -883,10 +946,10 @@ export const VIEWER_SCRIPT = `<script>
           event.target instanceof Element &&
           figure.contains(event.target) &&
           event.target.closest("[data-table-menu]") !== null;
-        if (!inside) closeMenus();
+        if (!inside) closeMenus(false);
       });
       document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") closeMenus();
+        if (event.key === "Escape") closeMenus(true);
       });
     }
 

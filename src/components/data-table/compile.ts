@@ -241,23 +241,18 @@ export const compileDataTable = ({
     },
   );
 
-  // Rows come out in group order rather than authored order, because a
-  // subheading only means anything if its rows follow it.
+  // Rows stay in authored order. Grouping is activated only by the viewer
+  // enhancement so the inert document remains the complete authored grid.
   const groups: Array<string> = [];
   const rows: Array<CompiledDataTableRow> = [];
-  if (groupIndex === -1) {
-    for (const row of parsed.rows) rows.push({ cells: row });
-  } else {
-    const byGroup = new Map<string, Array<CompiledDataTableRow>>();
-    for (const row of parsed.rows) {
+  for (const row of parsed.rows) {
+    if (groupIndex === -1) {
+      rows.push({ cells: row });
+    } else {
       const label = row[groupIndex]?.text ?? "";
-      if (!byGroup.has(label)) {
-        byGroup.set(label, []);
-        groups.push(label);
-      }
-      byGroup.get(label)?.push({ group: label, cells: row });
+      if (!groups.includes(label)) groups.push(label);
+      rows.push({ group: label, cells: row });
     }
-    for (const label of groups) rows.push(...(byGroup.get(label) ?? []));
   }
 
   return {
