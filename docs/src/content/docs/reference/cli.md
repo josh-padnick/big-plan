@@ -91,7 +91,7 @@ It performs three checks:
 
 Lint is intentionally stricter than structural compilation.
 `render` applies the same linting rules after derivation and before writing, so a plan that fails lint never becomes a review document; `compile` continues to accept legal Markdown that a quality rule flags.
-See [Authoring plans](/for-agents/authoring-plans/) for the linting rules and their conservative matching boundaries.
+See [Linting rules](/reference/lint-rules/) for every rule and its conservative matching boundaries.
 Rendering the document in memory does not replace visual review: browser layout, readability, and whether the page matches author intent still require a human.
 
 ## Successful results

@@ -39,16 +39,13 @@ Fold "why X rather than Y" justifications into the surrounding story or a decisi
 
 ## 5. Lead with the title, and say it once
 
-An h2 is already the slide's headline, but an h3 renders only as a small kicker.
-When a sub-slide opens with a component, code block, image, or table, give it a title of its own as an h4 directly under the h3.
-A sub-slide that opens with prose or a context builder needs no h4.
-Write the title as the message rather than the topic: "Escape unwinds one level at a time" beats "Dismissal".
-Never let a component, code block, image, or table be the first thing under a heading; the reader has to know what they are looking at before they look at it.
+Every slide and sub-slide names its message before it shows anything; the reader has to know what they are looking at before they look at it.
+An h2 is already the slide's headline, but an h3 renders only as a small kicker, so a sub-slide that leads with a figure - a component, code block, image, or table - needs an h4 title of its own.
+Write that title as the message rather than the topic: "Escape unwinds one level at a time" beats "Dismissal".
 
-An h4 title and a context builder are alternative ways to lead a sub-slide, never a sequence.
-A fully emphasized paragraph (`*like this*`) renders as the context builder - one muted orienting line - only when it is the first block under the heading.
-Keep it only when it adds what the heading does not already carry, and never let a subtitle or figure label repeat or near-duplicate its slide title.
-When the slide carries a reader action - a decision, a question, something to verify - the context builder declares it ("We need to decide where the skill ships.").
+A fully emphasized paragraph (`*like this*`) renders as the context builder - one muted orienting line - but only as the first block under the heading, so a title and a context builder are alternatives, never a sequence.
+Keep it only when it adds what the heading does not already carry, and when the slide carries a reader action - a decision, a question, something to verify - let it declare that action ("We need to decide where the skill ships.").
+Never let a subtitle or a figure's own label restate the heading above it.
 
 ## 6. Open a novel idea with the problem it solves
 
@@ -124,11 +121,15 @@ Draw every illustration with a component, never with ASCII art: a box-drawing sk
 Where no component fits the picture, embed a real image and caption what to notice in it.
 A decision buried in prose is a decision the reviewer cannot easily accept or reject.
 Before using a component, run `big-plan guidance <Component>` (for example `big-plan guidance ComplexDecision`) for how to use it well.
+Every component's attributes and accepted shapes are at https://big-plan.ai/components/; look them up rather than guessing.
 
 ## 11. Validate, render, and reread
 
-Run `big-plan validate <plan.mdx>` and fix every diagnostic until it passes.
-Lint catches what is statically analyzable; it cannot judge writing.
+Run `big-plan validate <plan.mdx>` and fix every diagnostic until it passes; each one names its rule and its fix, which is why they are not repeated here.
+What the parser rejects is at https://big-plan.ai/for-agents/authoring-plans/, and every lint rule's exact boundaries are at https://big-plan.ai/reference/lint-rules/.
+
+Passing lint means the plan is renderable and statically clean; it says nothing about whether the plan reads well, and that is the only bar that matters.
 Render the plan, then reread the rendered document exactly as the human will, top to bottom.
-If any section reads awkwardly, or the opening does not orient you, revise before presenting it.
+Judge what no check can: whether the opening orients you, whether any section reads awkwardly, whether a wide table or a long figure is genuinely pleasant to read.
 Judge spacing with the CRAP principles above before you present.
+Revise before presenting it.

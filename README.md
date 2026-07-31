@@ -47,7 +47,8 @@ Enable the worker before stale reads.
 
 The full authoring contract lives in the documentation:
 
-- [Authoring plans](docs/src/content/docs/for-agents/authoring-plans.md) - the accepted plan format, linting rules, and hard-fail positional diagnostics.
+- [Authoring plans](docs/src/content/docs/for-agents/authoring-plans.md) - what a plan document is, how the guidance gate works, and where each kind of rule lives.
+- [Linting rules](docs/src/content/docs/reference/lint-rules.md) - every authoring rule and its conservative matching boundaries.
 - [Components](docs/src/content/docs/components/index.md) - the complete built-in component reference.
 - [Features](docs/src/content/docs/intro/features.md) - the reader-facing viewer capabilities.
 - [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `validate`, `render`, and `compile` in detail.
