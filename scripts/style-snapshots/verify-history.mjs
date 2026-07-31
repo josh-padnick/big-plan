@@ -415,29 +415,25 @@ export const verifyHistory = async ({
     if (parent === undefined) {
       continue;
     }
-    if (parents.length > 1) {
-      let pureMerge = false;
-      for (const mergedParent of parents.slice(1)) {
-        const mergeResolutionFiles = await run({
-          command: "git",
-          args: ["diff", "--name-only", mergedParent, commit],
-          cwd: repoRoot,
-        });
-        if (mergeResolutionFiles.length === 0) {
-          pureMerge = true;
-          break;
-        }
-      }
-      if (pureMerge) {
-        continue;
-      }
-    }
     const changedFiles = (
-      await run({
-        command: "git",
-        args: ["diff", "--name-only", parent, commit],
-        cwd: repoRoot,
-      })
+      parents.length > 1
+        ? await run({
+            command: "git",
+            args: [
+              "diff-tree",
+              "--cc",
+              "--name-only",
+              "--no-commit-id",
+              "-r",
+              commit,
+            ],
+            cwd: repoRoot,
+          })
+        : await run({
+            command: "git",
+            args: ["diff", "--name-only", parent, commit],
+            cwd: repoRoot,
+          })
     )
       .split("\n")
       .filter(Boolean);
