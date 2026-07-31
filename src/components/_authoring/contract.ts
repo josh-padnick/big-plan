@@ -55,6 +55,17 @@ export type ComponentIdAllocator = {
     readonly label: string;
     readonly fallbackId: string;
   }) => string;
+  /**
+   * The 1-based position of the component being compiled among the document's
+   * components of that name, in authored order.
+   *
+   * An element anchor addresses a figure by its position when the author gave
+   * it no name of its own, and only the document knows that position. It lives
+   * beside id allocation because both answer the same question - what is this
+   * component called within this document - and both need the one counter the
+   * renderer already creates per document.
+   */
+  readonly nextOrdinal: (input: { readonly component: string }) => number;
 };
 
 /** Creates one authored-order id namespace for a rendered document. */
@@ -65,7 +76,13 @@ export const createComponentIdAllocator = ({
 } = {}): ComponentIdAllocator => {
   const used = new Set(reservedIds);
   const nextSuffixes = new Map<string, number>();
+  const ordinals = new Map<string, number>();
   return {
+    nextOrdinal: ({ component }) => {
+      const ordinal = (ordinals.get(component) ?? 0) + 1;
+      ordinals.set(component, ordinal);
+      return ordinal;
+    },
     allocate: ({ prefix, label, fallbackId }) => {
       const slug = label
         .trim()

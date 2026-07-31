@@ -5,8 +5,8 @@
 // collapse toggles for deck parts, slides, and sub-slides, table-schema column
 // state, a document comment draft, DataTable sorting, filtering, text fit,
 // column layout and grouping, and one maximize behavior shared by every figure
-// family. Plan content never contributes script, and every affordance keeps a
-// no-JS fallback.
+// family, plus the diagram leg in ./diagram-script.ts. Plan content never
+// contributes script, and every affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
@@ -24,6 +24,7 @@
 // template and cannot import it, so a change to those attribute spellings
 // changes the strings here too.
 import { compareDataTableValues } from "../../components/data-table/sort-values.js";
+import { DIAGRAM_SCRIPT } from "./diagram-script.js";
 
 const COMPARE_DATA_TABLE_VALUES_SOURCE = compareDataTableValues.toString();
 
@@ -1411,4 +1412,5 @@ export const VIEWER_SCRIPT = `<script>
     );
   }
 })();
+${DIAGRAM_SCRIPT}
 </script>`;

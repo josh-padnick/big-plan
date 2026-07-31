@@ -5,7 +5,12 @@
 
 import type { Element, ElementContent } from "hast";
 import { describe, expect, it } from "vitest";
-import type { ScopedChild } from "../_authoring/contract.js";
+import {
+  createComponentIdAllocator,
+  type ComponentIdAllocator,
+  type ScopedChild,
+} from "../_authoring/contract.js";
+import { compileFlowDiagramComponent } from "./compile.js";
 import { createDiagnosticCollector } from "../_authoring/diagnostics.js";
 import type { CompiledComponent } from "../_registration/define-component.js";
 import { reactToHast } from "../../render/markdown/component-pipeline/react-hast-adapter.js";
@@ -49,9 +54,10 @@ const node = (
 const stage = (
   title: string,
   nodes: ReadonlyArray<ScopedChild>,
+  id?: string,
 ): ScopedChild => ({
   name: "Stage",
-  attributes: { title },
+  attributes: id === undefined ? { title } : { id, title },
   children: [],
   scopedChildren: nodes,
   position: CHILD_POSITION,
@@ -84,6 +90,29 @@ const render = ({
     }),
   );
   return { element, diagnostics: diagnostics.diagnostics };
+};
+
+// The compiled model on its own, for the identity contract the machine-readable
+// output carries and the view only reflects.
+const compile = ({
+  scopedChildren = [],
+  children = [],
+  ids,
+}: {
+  readonly scopedChildren?: ReadonlyArray<ScopedChild>;
+  readonly children?: ReadonlyArray<ElementContent>;
+  readonly ids?: ComponentIdAllocator;
+}) => {
+  const diagnostics = createDiagnosticCollector();
+  const model = compileFlowDiagramComponent({
+    attributes: {},
+    children,
+    scopedChildren,
+    position: POSITION,
+    diagnostics,
+    ...(ids === undefined ? {} : { ids }),
+  });
+  return { model, diagnostics: diagnostics.diagnostics };
 };
 
 // The two-stage dependency diagram: prerequisite unblocks this plan.
@@ -329,5 +358,86 @@ describe("FLOW_DIAGRAM_COMPONENT_DEFINITION", () => {
     // lane each so the branches meet their centers.
     expect(rendered).toContain("grid-row:2 / span 3");
     expect(rendered).toContain("grid-row:4");
+  });
+
+  it("should address every authored element from the figure's own anchor", () => {
+    const compiled = compile({
+      scopedChildren: dependencyChildren(),
+      children: [paragraph("Until #33 merges, branch from it.")],
+    });
+    expect(compiled.model.anchor).toBe("component/FlowDiagram#1");
+    expect(compiled.model.stages.map((stage) => stage.anchor)).toEqual([
+      "component/FlowDiagram#1/stage/prerequisite",
+      "component/FlowDiagram#1/stage/this-plan",
+    ]);
+    expect(compiled.model.stages[0]?.nodes[0]?.anchor).toBe(
+      "component/FlowDiagram#1/node/pr",
+    );
+    expect(compiled.model.edges[0]?.anchor).toBe(
+      "component/FlowDiagram#1/edge/pr-skill",
+    );
+    expect(compiled.model.footerAnchor).toBe("component/FlowDiagram#1/footer");
+  });
+
+  it("should keep a stage's anchor when its title changes but its id does not", () => {
+    const named = (title: string) =>
+      compile({
+        scopedChildren: [
+          stage(title, [node({ id: "pr", label: "Prerequisite PR" })], "gate"),
+          stage("This plan", [node({ id: "skill", label: "Skill PR" })]),
+          edge({ from: "pr", to: "skill" }),
+        ],
+      }).model.stages[0]?.anchor;
+    expect(named("Prerequisite")).toBe("component/FlowDiagram#1/stage/gate");
+    expect(named("Blocked on")).toBe("component/FlowDiagram#1/stage/gate");
+  });
+
+  it("should disambiguate two stages whose titles slug alike", () => {
+    const compiled = compile({
+      scopedChildren: [
+        stage("Review!", [node({ id: "a", label: "A" })]),
+        stage("Review", [node({ id: "b", label: "B" })]),
+        edge({ from: "a", to: "b" }),
+      ],
+    });
+    expect(compiled.model.stages.map((stage) => stage.id)).toEqual([
+      "review",
+      "review-2",
+    ]);
+  });
+
+  it("should emit the diagram in flow order with named elements", () => {
+    const { element, diagnostics } = render({
+      scopedChildren: pipelineChildren(),
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = JSON.stringify(element);
+    // Stage, then its nodes, then the edges leaving it: the order a screen
+    // reader follows and the order the picture already draws.
+    const order = ["Source of truth", "Author once", "feeds", "Generate"];
+    let cursor = -1;
+    for (const value of order) {
+      const next = rendered.indexOf('"value":"' + value + '"', cursor + 1);
+      expect(next).toBeGreaterThan(cursor);
+      cursor = next;
+    }
+    expect(rendered).toContain(
+      '"ariaLabel":"Author once, node in stage Source of truth, assets/skill/SKILL.md"',
+    );
+    expect(rendered).toContain('"ariaLabel":"Source of truth, stage 1 of 3"');
+    expect(rendered).toContain(
+      '"ariaLabel":"feeds, from Author once to Generate"',
+    );
+    // Drawn scenery stays out of the accessible output.
+    expect(rendered).toContain('"data-flow-diagram-fork-stub":"true"');
+    expect(rendered).toContain('"ariaHidden":"true"');
+  });
+
+  it("should number diagrams by their position in one document", () => {
+    const ids = createComponentIdAllocator();
+    const first = compile({ scopedChildren: dependencyChildren(), ids });
+    const second = compile({ scopedChildren: dependencyChildren(), ids });
+    expect(first.model.anchor).toBe("component/FlowDiagram#1");
+    expect(second.model.anchor).toBe("component/FlowDiagram#2");
   });
 });
