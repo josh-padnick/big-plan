@@ -25,13 +25,6 @@ marks and a plan diff never jitters.
     --wf-sketch-alt: 11px 5px 9px 4px / 4px 9px 5px 11px;
     margin: 1.75rem 0;
   }
-  /* The shell publishes the free page margin, and the section this drawing
-     sits in takes the half on its right so the drawing has desktop room.
-     Where there is no such section, the drawing takes it directly. Below the
-     wide breakpoint there is no free margin and this resolves to zero. */
-  :not([data-slide]) > .wireframe[data-wireframe-desktop] {
-    margin-right: calc(-1 * var(--reading-free-inline, 0px));
-  }
 
   /* Isolation from the reading column's element selectors. */
   .wireframe h3,

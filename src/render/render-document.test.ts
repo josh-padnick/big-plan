@@ -131,6 +131,39 @@ describe("renderDocument affordances", () => {
     }
   });
 
+  it("should never pull a wireframe outside the element that holds it", () => {
+    // A drawing used to borrow free page margin with a negative margin keyed
+    // on a marker attribute. Inside a collapsible slide the wrapper the deck
+    // transform inserts broke the selector that widened the card, so the
+    // drawing bled past its own border. The column is wide now and there is
+    // nothing to borrow; this fails if that mechanism ever comes back.
+    const deckWireframe = `# Deck
+
+The lede.
+
+<Part title="Context" />
+
+## A screen
+
+<Wireframe id="wf" initialScreen="one">
+  <Screen id="one" name="One" viewport="desktop" chrome="browser">
+    <Text text="Drawn inside a collapsible slide." />
+  </Screen>
+</Wireframe>
+`;
+    const { html: deckHtml } = renderDocument({
+      markdown: deckWireframe,
+      fallbackTitle: "Deck",
+    });
+    expect(deckHtml).toContain("data-collapsible");
+    expect(deckHtml).toContain("data-wireframe=");
+    expect(deckHtml).not.toContain("--reading-free-inline");
+    expect(deckHtml).not.toContain("data-wireframe-desktop");
+    // A desktop screen is capped instead, so it stays a screen rather than
+    // growing with the window.
+    expect(deckHtml).toContain("max-width:1100px");
+  });
+
   it("should inline one stylesheet and one viewer script when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
     // The shell's viewer behavior is the single script; plan content can never

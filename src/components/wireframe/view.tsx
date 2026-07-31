@@ -589,16 +589,7 @@ const Screen = ({
 };
 
 export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
-  <figure
-    className="wireframe"
-    data-wireframe={model.id}
-    // A prototype containing a desktop screen borrows the page's free right
-    // margin. A desktop product squeezed into a prose column is a mobile
-    // layout wearing a browser frame, which is the failure this avoids.
-    {...(model.screens.some((screen) => screen.viewport === "desktop")
-      ? { "data-wireframe-desktop": "" }
-      : {})}
-  >
+  <figure className="wireframe" data-wireframe={model.id}>
     {model.title === undefined ? null : (
       <figcaption className="wireframe-caption">{model.title}</figcaption>
     )}
