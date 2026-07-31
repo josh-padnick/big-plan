@@ -404,6 +404,12 @@ const WireframeElement = ({
           {node.label}
         </li>
       );
+    case "Rail":
+      return (
+        <aside className="wireframe-rail flex flex-col gap-4">
+          <WireframeElements nodes={node.children} />
+        </aside>
+      );
     case "Center":
       return (
         <div className="wireframe-center" data-wireframe-measure={node.measure}>

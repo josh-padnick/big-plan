@@ -238,7 +238,7 @@ Weekly rollup | Sam | 5 | Retired | [Archived]
           <Button label="Save step" emphasis="primary" navigateTo="canvas" />
         </PageHeader>
         <Row gap="lg" align="start">
-          <Center measure="prose">
+          <Stack gap="md">
             <Panel title="What this step does">
               <TextField
                 label="Step name"
@@ -248,8 +248,8 @@ Weekly rollup | Sam | 5 | Retired | [Archived]
               <Select label="Agent" value="Writer" />
               <TextArea
                 label="Prompt"
-                value="Summarize today's artifacts for the team, grouped by product."
-                hint="The agent also receives the org's context tree."
+                value="Summarize today's artifacts for the team, grouped by product. Mention anything that slipped."
+                hint="Write {artifacts} or {org} to drop in a value the step received."
               />
             </Panel>
             <Panel title="When it fails">
@@ -266,21 +266,31 @@ Weekly rollup | Sam | 5 | Retired | [Archived]
               <Switch label="Require approval before this step" />
               <Switch label="Record the tool-call trace" on />
             </Panel>
-          </Center>
-          <Panel eyebrow="Reference" title="Inputs" surface="filled">
-            <Table>
+          </Stack>
+          <Rail>
+            <Panel title="What this step receives" surface="filled">
+              <Text
+                text="Values earlier steps hand to this one. Write the name in braces to use it in the prompt."
+                role="helper"
+              />
+              <Table>
 
 ```
-Name | From | Type
-artifacts | Step 1 | Artifact[]
-org | Trigger | Org
-today | Trigger | Date
+Value | Comes from | Type
+{artifacts} | Step 1 | Artifact[]
+{org} | The trigger | Org
+{today} | The trigger | Date
 ```
 
-            </Table>
-            <Divider label="Downstream" />
-            <Text text="Step 3 waits on this step's output." role="helper" />
-          </Panel>
+              </Table>
+            </Panel>
+            <Panel title="What waits on it" surface="filled">
+              <Text
+                text="Step 3, Human approval, cannot start until this step finishes."
+                role="helper"
+              />
+            </Panel>
+          </Rail>
         </Row>
       </AppContent>
     </AppShell>

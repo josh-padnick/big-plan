@@ -406,6 +406,10 @@ export type WireframeNode =
       readonly label?: string;
     }
   | {
+      readonly element: "Rail";
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
       readonly element: "Center";
       readonly measure: WireframeMeasure;
       readonly children: ReadonlyArray<WireframeNode>;

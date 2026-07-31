@@ -937,6 +937,23 @@ const CATALOG = {
       };
     },
   },
+  Rail: {
+    category: "layout",
+    acceptsChildren: true,
+    summary:
+      "A details column beside the main content. It keeps a fixed rail width so the main content stays the dominant pane.",
+    example: "<Row><Stack>...</Stack><Rail>...</Rail></Row>",
+    compile: ({ attributes, children, position, diagnostics }) => {
+      validateComponentAttributes({
+        component: "Rail",
+        attributes,
+        position,
+        diagnostics,
+        schema: EMPTY_SCHEMA,
+      });
+      return { element: "Rail", children };
+    },
+  },
   Center: {
     category: "layout",
     acceptsChildren: true,
