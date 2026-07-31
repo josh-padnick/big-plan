@@ -1,6 +1,7 @@
 /* DataTable chrome and grid geometry: the header band, the three text-fit
    modes, sort and drag affordances on the header row, the menu surface, and
-   the full-screen overlay. Colocated with the component that emits them.
+   the grid's maximized-state edge. Colocated with the component that emits
+   them; the shared figure-controls stylesheet owns the maximized panel.
 
    FIT MODEL - the one idea the rest of this file serves.
    A grid too wide for the reading column must give something up. `wrap` keeps
@@ -291,7 +292,7 @@
   }
 
   /* The maximized panel itself is owned by _shared/figure-controls; the grid
-     only says how its own last child behaves inside one. */
+     only says how its bottom edge behaves inside one. */
   article [data-data-table][data-figure-maximized] .data-table-grid {
     border-bottom: 1px solid var(--edge-c);
   }
