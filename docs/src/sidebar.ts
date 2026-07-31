@@ -53,7 +53,10 @@ export const SIDEBAR: readonly SidebarGroup[] = [
   },
   {
     label: "Reference",
-    items: [{ label: "CLI", slug: "reference/cli" }],
+    items: [
+      { label: "CLI", slug: "reference/cli" },
+      { label: "Reviewing a plan", slug: "reference/reviewing" },
+    ],
   },
   {
     label: "For Agents",

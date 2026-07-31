@@ -36,6 +36,9 @@ This guide owns the durable implementation model contributors must preserve.
 - **Review document** is Big Plan's human-friendly presentation of the plan source.
 - **Plan review** is the conversation in which the human works to understand the proposed approach, gives feedback, and resolves concerns with the agent.
 - **Plan acceptance** is the human's explicit decision that the intended approach is understood well enough for the agent to begin execution. It is not acceptance of the finished deliverable, which happens later.
+- **Block** is one commentable unit of a review document - a heading, paragraph, list, table, code figure, or component - carrying an address the renderer mints so a comment can name it.
+- **Feedback package** is the one artifact a submit produces: every pending comment, with its targets, as data the agent considers while revising the plan source it names.
+- **Review runtime** is the local loopback process that renders and serves a plan for interactive review, holds the reviewer's drafts, and writes feedback packages.
 
 ### Plan-quality standards
 
@@ -56,6 +59,10 @@ The output commands compile the authoritative plan source independently, then pr
 The no-write validation command renders the plan in memory while collecting the machine-readable summary, then applies linting rules to the authored plan.
 Human delivery enforces the same linting rules before packaging, and a guidance command prints versioned plan-writing principles whose recent acknowledgment gates validation and human delivery.
 
+Compilation also mints an address for every commentable unit of the document.
+A **review runtime** command serves a plan it renders in-process on loopback, so a human can comment on those units and send one **feedback package** back to the agent.
+Loopback is not an authentication boundary: the runtime authorises every request on its own merits, and everything it keeps stays under a `.big-plan/` directory beside the plan.
+
 ## Architecture at a glance
 
 Big Plan uses one compilation path to produce either machine-readable JSON or a human-readable review document.
@@ -68,8 +75,13 @@ MDX plan source
   -> validate and translate built-in components
      -> machine output -> machine-readable JSON
      -> human output -> React view -> HAST -> document transforms
-        -> self-contained HTML review document
+        -> block identity -> self-contained HTML review document
   -> validate and human output -> linting rules on the authored plan
+
+review runtime (loopback)
+  -> renders the same document in-process, stamped with its session
+  -> holds drafts, resolves comment targets through the block map
+  -> writes a feedback package under .big-plan/ on submit
 ```
 
 Each component validates its authored attributes and content into plain data describing what it should show.
@@ -77,10 +89,12 @@ Machine delivery collects that data as JSON.
 Human delivery gives the same data to the component's React view, crosses one React-to-HAST boundary, applies document-wide transforms, and packages inert HTML.
 Validation renders the plan in memory while collecting the same component models in one pass.
 It discards the generated HTML, then applies its registered linting rules to the authored plan.
-React is a presentation-edge implementation tool; no React runtime ships in a rendered document, and the only browser script is the shell's small self-contained viewer script for navigation scroll-spy and hover popovers.
+Block identity runs last, over the finished deck, so every unit it addresses is one a reader can point at; it is the renderer's contract with both commenting and anything else that must name part of a plan.
+React is a presentation-edge implementation tool; no React runtime ships in a rendered document, and the only browser scripts are the shell's own self-contained viewer and commenting scripts.
 Plan content never contributes executable code, and a document stays fully readable with scripts disabled.
+Reviewer text, quoted plan text, and agent progress text are data everywhere they travel - page, package, and brief alike - never markup and never instructions.
 
-Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
+Dependencies follow ownership inward: the CLI owns public command I/O, the review runtime owns the local review loop, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
 The exact dependency allow-list and completeness guard live in `eslint.config.mjs`.
 
 ## Source ownership and placement
@@ -91,7 +105,8 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 | `src/components/`        | Built-in components as vertical slices. Put a new component in its own folder and follow the infrastructure boundaries in the [components local map](src/components/README.md).                                                                   |
 | `src/lint/`              | Framework-free, validate-only linting rules for statically analyzable aspects of an authored plan. Keep rules independent and register them in a deterministic order.                                                                             |
 | `src/render/`            | Pure document compilation and delivery orchestration. Put cross-document pipeline behavior here and follow the stage boundaries in the [renderer local map](src/render/README.md); keep component-specific behavior in its component slice.       |
-| `src/render/shell/`      | Viewer chrome, reading layout, branding, and responsive navigation. Do not put document packaging here.                                                                                                                                           |
+| `src/render/shell/`      | Viewer chrome, reading layout, branding, responsive navigation, and the commenting surface. Do not put document packaging here.                                                                                                                   |
+| `src/review/`            | The local review runtime: loopback transport, session identity, the reviewer's on-disk state, and the feedback package. Keep command I/O in the CLI and rendering in the renderer.                                                                |
 | `src/render/page.ts`     | Doctype, head, embedded delivery assets, favicons, and the final inert HTML envelope.                                                                                                                                                             |
 | `src/icons/`             | Framework-neutral Lucide icon data. Add one catalog-named file per glyph; adapt it to HAST or React only at the relevant rendering edge.                                                                                                          |
 | `scripts/` and `assets/` | Authored build-time inputs and the generators that embed CSS and branding. Generated modules are derived outputs.                                                                                                                                 |
@@ -105,7 +120,8 @@ Use these placement tests:
 - A built-in component belongs in `src/components/<component>/`; internal visual support that plan authors cannot use belongs in the appropriate underscore-prefixed support folder.
 - A validate-only authoring-quality check belongs in `src/lint/rules/`; structural acceptance remains in the renderer and component compilers.
 - Document-wide parsing, transformation, or delivery behavior belongs in `src/render/`; component-specific validation and presentation stay with the component.
-- Reading and navigation chrome belongs in the shell; doctype, head, and embedded packaging belong in the page envelope.
+- Reading, navigation, and commenting chrome belongs in the shell; doctype, head, and embedded packaging belong in the page envelope.
+- Transport, session, on-disk review state, and package shape belong in `src/review/`; how a reviewer points at something belongs in the renderer's block identity, and how a command is invoked belongs in the CLI.
 - A pure rule gets a colocated unit test; only a critical integrated reading journey gets a Playwright spec in `test/`.
 - A public authoring change updates its validated example and the appropriate human or agent-facing product documentation.
 
@@ -246,6 +262,7 @@ Generated files carry `.generated.` in their name and are committed beside the s
 
 - `src/render/global.css` and its imported styles are authored inputs to the generated embedded stylesheet.
 - Logos and favicons under `assets/` are authored inputs to the generated embedded branding module.
+- Browser scripts under `assets/` are authored inputs to their generated embedded script modules; write them as ordinary lintable JavaScript rather than as strings inside a template literal.
 
 The root README owns generation commands; CI detects drift.
 

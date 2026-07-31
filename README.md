@@ -25,6 +25,7 @@ npx big-plan guidance
 npx big-plan validate <file.mdx>
 npx big-plan render <file.mdx> [output.html]
 npx big-plan compile <file.mdx> [output.json]
+npx big-plan review <file.mdx>
 ```
 
 `guidance` prints the principles for writing a plan a human loves to review; reading it recently is required before `validate` and `render` will run.
@@ -32,7 +33,8 @@ Validation checks that the plan can be compiled and rendered, then applies linti
 Rendering applies the same linting rules, so a plan that fails lint never reaches a reviewer.
 Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.model.json`.
 Both sit next to the input, while the MDX file remains the canonical source and JSON is always derived output.
-The rendered HTML embeds all styling and branding assets, makes no external requests, and never executes plan-authored code; the only script is the shell's small embedded viewer script (TOC scroll-spy and hover popovers), and every affordance keeps a no-JS fallback.
+`review` serves the plan on loopback so a reviewer can comment on it and send one feedback package back to the agent; it keeps running until you stop it, and everything it writes stays under a `.big-plan/` directory beside the plan.
+The rendered HTML embeds all styling and branding assets, makes no external requests, and never executes plan-authored code; the only scripts are the shell's own embedded viewer and commenting scripts, and every affordance keeps a no-JS fallback.
 A responsive table of contents links to the document's level-two headings and highlights the section being read, and the light/dark theme follows the OS preference through CSS alone.
 
 Plans are prose plus validated components, like this callout:
@@ -50,7 +52,8 @@ The full authoring contract lives in the documentation:
 - [Authoring plans](docs/src/content/docs/for-agents/authoring-plans.md) - the accepted plan format, linting rules, and hard-fail positional diagnostics.
 - [Components](docs/src/content/docs/components/index.md) - the complete built-in component reference.
 - [Features](docs/src/content/docs/intro/features.md) - the reader-facing viewer capabilities.
-- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `validate`, `render`, and `compile` in detail.
+- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `validate`, `render`, `compile`, and `review` in detail.
+- [Reviewing a plan](docs/src/content/docs/reference/reviewing.md) - commenting, the Feedback tray, the feedback package, and the runtime's trust boundaries.
 
 To preview components locally, run `node bin/big-plan.mjs guidance` once, then render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`.
 To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.

@@ -3,7 +3,7 @@ title: CLI reference
 description: Reference the complete Big Plan command surface, defaults, results, and errors.
 ---
 
-Big Plan exposes four commands through the `big-plan` executable: `guidance` for the plan-writing principles, `validate` for a no-write authoring check, `render` for the human-facing HTML document, and `compile` for the machine-facing plan model.
+Big Plan exposes five commands through the `big-plan` executable: `guidance` for the plan-writing principles, `validate` for a no-write authoring check, `render` for the human-facing HTML document, `compile` for the machine-facing plan model, and `review` for the local runtime that serves a plan for commenting.
 The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors, and result serialization.
 
 ## Commands
@@ -13,11 +13,12 @@ big-plan guidance [component]
 big-plan validate <input.mdx>
 big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
+big-plan review <input.mdx>
 ```
 
 `guidance` optionally takes one component name.
 For the other commands `<input.mdx>` is required.
-`validate` accepts no output argument.
+`validate` and `review` accept no output argument.
 The output argument is optional for `render` and `compile`.
 
 The equivalent package runner forms are:
@@ -27,6 +28,7 @@ npx big-plan guidance
 npx big-plan validate <input.mdx>
 npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
+npx big-plan review <input.mdx>
 ```
 
 ## Guidance and the acknowledgment gate
@@ -120,6 +122,17 @@ On success, each command returns a structured result for `axi-sdk-js` to seriali
 
 It writes no output.
 
+`review` returns the address to open and keeps running:
+
+- `review`: the loopback URL the runtime serves, on an ephemeral port.
+- `plan`: the resolved plan path the runtime renders from.
+- `session`: the session id this run minted.
+- `feedback`: the directory each sent package is written to.
+- `help`: how to open the document, where feedback lands, and how to stop the runtime.
+
+Unlike the other commands, `review` does not exit after returning its result.
+It holds the port until the reviewer stops it with `Ctrl+C`, because the runtime is what makes submit and progress possible.
+
 `guidance` returns the guidance Markdown itself rather than a structured result.
 
 ## Errors
@@ -130,10 +143,11 @@ If the input argument is missing, any command raises a structured `VALIDATION_ER
 Usage: big-plan validate <input.mdx>
 Usage: big-plan render <input.mdx> [output.html]
 Usage: big-plan compile <input.mdx> [output.json]
+Usage: big-plan review <input.mdx>
 ```
 
 Any dash-prefixed token is rejected as an unknown option.
-`validate` rejects a second positional argument; `render` and `compile` reject a third.
+`validate` and `review` reject a second positional argument; `render` and `compile` reject a third.
 Both cases raise a structured `VALIDATION_ERROR`, include the command's usage line, and write no output.
 
 If the input cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
@@ -145,17 +159,17 @@ The input file is left unchanged.
 If parsing or component validation fails, the command raises a structured `VALIDATION_ERROR` with `Cannot validate document with invalid MDX`, `Cannot render document with invalid MDX`, or `Cannot compile document with invalid MDX`, according to the command.
 Its help entries contain every collected authoring diagnostic as `line:column message`, and no output file is written.
 
-If authoring lint fails, `validate` and `render` raise `VALIDATION_ERROR` with `Plan failed authoring lint`.
+If authoring lint fails, `validate`, `render`, and `review` raise `VALIDATION_ERROR` with `Plan failed authoring lint`.
 Each help entry is `line:column [rule-id] message`.
-`render` runs lint before writing, so a lint failure leaves no output file.
+`render` runs lint before writing, so a lint failure leaves no output file, and `review` runs it before opening a port, so a reviewer never meets a document that would not render.
 
-If guidance has not been acknowledged for the working directory, `validate` and `render` raise a structured `GUIDANCE_REQUIRED` error whose help entries name the `big-plan guidance` command and the acknowledgment window.
+If guidance has not been acknowledged for the working directory, `validate`, `render`, and `review` raise a structured `GUIDANCE_REQUIRED` error whose help entries name the `big-plan guidance` command and the acknowledgment window.
 
 `axi-sdk-js` maps `VALIDATION_ERROR` to exit status `2`.
 Successful validation exits `0`; operational or internal failures use `1`.
 
 ## Top-level help and version
 
-The CLI configures top-level help that lists all four commands and the derived-output defaults.
+The CLI configures top-level help that lists all five commands and the derived-output defaults.
 It also reads the package version for version output.
 If that version cannot be read from the package metadata, version reporting is left unconfigured instead of crashing the CLI.
