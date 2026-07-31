@@ -414,7 +414,7 @@ export const ComplexDecision = ({
 }) => (
   <figure
     id={model.id}
-    className="complex-decision mb-5 min-w-0 overflow-hidden rounded-md border border-edge bg-paper"
+    className="complex-decision min-w-0 overflow-hidden rounded-md border border-edge bg-paper"
     data-complex-decision=""
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "decision" }}
     data-decision-state={model.status}
