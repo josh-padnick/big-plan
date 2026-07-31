@@ -1,8 +1,8 @@
 # Skill Distribution Decision Plan
 
-The skill's delivery channel gets decided with the `Decision` component, read option by option.
+The skill's delivery channel gets decided with the `Decision` component, one option at a time.
 
-<Decision question="How does the skill reach the end user's agent?" status="open">
+<Decision question="How does the skill reach the end user's agent?">
 
 The authored skill file in the repository is canonical either way; this decision is only about the delivery channel.
 
@@ -33,6 +33,28 @@ The site always serves the latest text, which can disagree with an older install
 <Consideration title="Single source of truth" verdict="One file" tone="good" />
 
 <Consideration title="Works offline" verdict="No" tone="bad" />
+
+</Option>
+
+</Decision>
+
+## Settled earlier
+
+<Decision question="Where does the authored skill file live?" status="decided">
+
+<Option title="In this repository" chosen summary="The skill ships beside the code it teaches.">
+
+<Consideration title="Review path" verdict="Normal PR" tone="good" />
+
+<Consideration title="Drift risk" verdict="None" tone="good" />
+
+</Option>
+
+<Option title="In a separate skills repository" summary="A shared home for every published skill.">
+
+<Consideration title="Review path" verdict="Second repo" tone="mixed" />
+
+<Consideration title="Drift risk" verdict="Real" tone="bad" />
 
 </Option>
 

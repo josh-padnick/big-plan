@@ -1,16 +1,16 @@
 ---
 title: Decision
-description: The default decision card - each option carries its own verdict-lined considerations, read one option at a time.
+description: The default decision card - a compact radio-card selector whose comparison attributes line up across every option.
 ---
 
-`Decision` presents one tradeoff as stacked option cards.
-Each option lists its considerations inline as scannable title-verdict lines, so a reviewer reads one option in full instead of cross-referencing a matrix.
-Escalate to [ComplexDecision](/components/complex-decision/) when options need side-by-side scoring across shared criteria, and drop to [SimpleDecisionSet](/components/simple-decision-set/) for quick calls.
+`Decision` presents one tradeoff as a radio-card selector.
+Every option carries the same short comparison attributes, so their verdicts line up into columns a reviewer can scan down, and the reasoning behind each verdict collapses behind **View details**.
+Escalate to [ComplexDecision](/components/complex-decision/) when options need weighted side-by-side scoring, and drop to [SimpleDecisionSet](/components/simple-decision-set/) for quick calls.
 
 ## Authoring
 
 ```mdx
-<Decision question="How does the skill reach the end user's agent?" status="open">
+<Decision question="How does the skill reach the end user's agent?">
 
 Context the reviewer needs before the options.
 
@@ -24,13 +24,15 @@ The skill is compiled into the package, so it can never disagree with the instal
 
 <Consideration title="Works offline" verdict="Yes" tone="good" />
 
-Optional prose detail after the considerations.
+Optional prose detail, shown with the considerations under View details.
 
 </Option>
 
 <Option title="Docs-site download" summary="Setup fetches the skill from the docs site.">
 
 <Consideration title="Version fidelity" verdict="Drifts" tone="bad" />
+
+<Consideration title="Works offline" verdict="No" tone="bad" />
 
 </Option>
 
@@ -42,7 +44,20 @@ Optional prose detail after the considerations.
 - `question` is required; `status` is `open`, `decided`, or `deferred` (default `open`).
 - At least two `Option` children, at most one marked `recommended`.
 - Every `Option` needs at least one `Consideration` with a required `title` and `verdict`; `tone` is `good`, `bad`, `mixed`, or `neutral` (default `neutral`).
+- Every `Option` must list the same `Consideration` titles in the same order, so the options stay comparable.
+- A `verdict` is at most 24 characters: it is a value to compare, not a sentence to read.
+- `status="decided"` requires exactly one `Option` marked `chosen`, and a `chosen` Option requires `status="decided"`.
 - Consideration and option bodies are markdown without headings, footnotes, or typed components.
 
 Each violation fails `validate` and `render` with a positional diagnostic.
 Run `big-plan guidance Decision` for judgment-level usage guidance.
+
+## What the reader gets
+
+An open decision renders as a native radio group, so picking an option, moving between options with the arrow keys, and the selected look all work with scripts disabled.
+Recommendation, selection, and outcome stay three separate states: a recommendation is a neutral chip, a picked option takes the accent, and a settled one takes the decided colour.
+An open decision never announces that it is open - being asked is what makes it open.
+
+Every open decision also offers **Propose another approach** with a free-text box, so a reviewer is never limited to the options the agent thought of.
+Confirming an answer compresses the card to the chosen option and records the answer in the rendered document.
+Delivering that answer back to the agent arrives with review commenting; until then, tell the agent your answer in conversation.

@@ -5,8 +5,9 @@
 // collapse toggles for deck parts, slides, and sub-slides, table-schema column
 // state, a document comment draft, DataTable sorting, filtering, text fit,
 // column layout and grouping, and one maximize behavior shared by every figure
-// family, plus the diagram leg in ./diagram-script.ts. Plan content never
-// contributes script, and every affordance keeps a no-JS fallback.
+// family, the confirm step of a decision selector, plus the diagram leg in
+// ./diagram-script.ts. Plan content never contributes script, and every
+// affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
@@ -1454,6 +1455,106 @@ export const VIEWER_SCRIPT = `<script>
       },
       true,
     );
+  }
+})();
+(() => {
+  // Decision selectors. Native radios already own picking an option, the
+  // selected look, and arrow-key movement, so this leg adds only what markup
+  // cannot express: gating the confirm action, following the reader into the
+  // proposal textarea, and the answered state.
+  for (const decision of document.querySelectorAll(
+    "[data-decision-selector]",
+  )) {
+    const confirm = decision.querySelector("[data-decision-confirm]");
+    const change = decision.querySelector("[data-decision-change]");
+    const footer = decision.querySelector("[data-decision-footer]");
+    const answer = decision.querySelector("[data-decision-answer]");
+    const chooseLabel = decision.querySelector("[data-decision-choose-label]");
+    const answerTitle = decision.querySelector("[data-decision-answer-title]");
+    const answerLead = decision.querySelector("[data-decision-answer-lead]");
+    const proposalText = decision.querySelector("[data-decision-proposal-text]");
+    const question = decision.querySelector("[data-decision-question]");
+    if (confirm === null || change === null || answer === null) continue;
+    const cards = Array.from(decision.querySelectorAll("[data-decision-option]"));
+    const choices = Array.from(
+      decision.querySelectorAll("[data-decision-choice]"),
+    );
+    // Utilities out-rank a stylesheet display rule, so which regions are
+    // showing is carried by the hidden attribute instead.
+    const reveal = (node, shown) => {
+      if (node !== null) node.hidden = !shown;
+    };
+    const compress = (answered) => {
+      reveal(footer, !answered);
+      reveal(chooseLabel, !answered);
+      reveal(answer, answered);
+      for (const card of cards) {
+        const choice = card.querySelector("[data-decision-choice]");
+        const kept = choice !== null && choice.checked;
+        reveal(card, !answered || kept);
+        // Marking the surviving card chosen moves it from the accent (picked)
+        // onto the same settled treatment a decided plan renders server-side.
+        if (answered && kept) card.setAttribute("data-option-chosen", "");
+        else card.removeAttribute("data-option-chosen");
+      }
+    };
+    const picked = () => choices.find((choice) => choice.checked) || null;
+    const proposes = (choice) =>
+      choice instanceof Element &&
+      choice.hasAttribute("data-decision-proposal-choice");
+    const proposal = () =>
+      proposalText === null ? "" : proposalText.value.trim();
+    const sync = () => {
+      const choice = picked();
+      const proposing = proposes(choice);
+      confirm.textContent = proposing ? "Submit proposal" : "Confirm decision";
+      confirm.disabled = choice === null || (proposing && proposal() === "");
+    };
+    decision.addEventListener("change", (event) => {
+      sync();
+      if (proposes(event.target) && proposalText !== null) proposalText.focus();
+    });
+    if (proposalText !== null) proposalText.addEventListener("input", sync);
+    confirm.addEventListener("click", () => {
+      const choice = picked();
+      if (choice === null || confirm.disabled) return;
+      const proposing = proposes(choice);
+      if (answerLead !== null) {
+        answerLead.textContent = proposing
+          ? "Proposal recorded"
+          : "Answer recorded";
+      }
+      if (answerTitle !== null) {
+        answerTitle.textContent = ": " + (proposing ? proposal() : choice.value);
+      }
+      if (proposalText !== null) proposalText.readOnly = proposing;
+      decision.setAttribute("data-decision-answered", "");
+      compress(true);
+      // The transport carrying an answer back to the agent belongs to the
+      // review commenting runtime. Until it lands, the answer is announced on
+      // the document and queued where that runtime can drain it.
+      const answer = {
+        decision: decision.id,
+        question: question === null ? "" : question.textContent,
+        option: choice.value,
+        proposal: proposing ? proposal() : "",
+      };
+      window.bigPlanDecisionAnswers = window.bigPlanDecisionAnswers || [];
+      window.bigPlanDecisionAnswers.push(answer);
+      document.dispatchEvent(
+        new CustomEvent("bigplan:decision-answered", { detail: answer }),
+      );
+      change.focus();
+    });
+    change.addEventListener("click", () => {
+      decision.removeAttribute("data-decision-answered");
+      compress(false);
+      if (proposalText !== null) proposalText.readOnly = false;
+      sync();
+      const choice = picked();
+      if (choice !== null) choice.focus();
+    });
+    sync();
   }
 })();
 ${DIAGRAM_SCRIPT}

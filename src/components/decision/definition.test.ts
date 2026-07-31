@@ -1,5 +1,6 @@
 // Tests Decision's contract - option and consideration grammar, the
-// recommendation invariant - and its rendered option-card markup.
+// recommendation, selection, and comparability invariants - and the radio-card
+// markup its selector renders.
 
 import type { Element } from "hast";
 import { describe, expect, it } from "vitest";
@@ -28,14 +29,20 @@ const consideration = (
 const option = ({
   title,
   recommended = false,
+  chosen = false,
   considerations,
 }: {
   readonly title: string;
   readonly recommended?: boolean;
+  readonly chosen?: boolean;
   readonly considerations: ReadonlyArray<ScopedChild>;
 }): ScopedChild => ({
   name: "Option",
-  attributes: { title, ...(recommended ? { recommended: true } : {}) },
+  attributes: {
+    title,
+    ...(recommended ? { recommended: true } : {}),
+    ...(chosen ? { chosen: true } : {}),
+  },
   children: [],
   scopedChildren: considerations,
   position: POSITION,
@@ -49,10 +56,16 @@ const parseRenderedElement = (compiled: CompiledComponent): Element => {
   return parsed;
 };
 
-const render = (scopedChildren: ReadonlyArray<ScopedChild>) => {
+const render = (
+  scopedChildren: ReadonlyArray<ScopedChild>,
+  status?: string,
+) => {
   const diagnostics = createDiagnosticCollector();
   const compiled = DECISION_COMPONENT_DEFINITION.compile({
-    attributes: { question: "Which channel?" },
+    attributes: {
+      question: "Which channel?",
+      ...(status === undefined ? {} : { status }),
+    },
     children: [],
     scopedChildren,
     position: POSITION,
@@ -64,29 +77,64 @@ const render = (scopedChildren: ReadonlyArray<ScopedChild>) => {
   };
 };
 
+const twoOptions = ({
+  chosen = false,
+}: { readonly chosen?: boolean } = {}): ReadonlyArray<ScopedChild> => [
+  option({
+    title: "Embedded",
+    recommended: true,
+    considerations: [consideration("Version fidelity", "Exact", "good")],
+  }),
+  option({
+    title: "Download",
+    chosen,
+    considerations: [consideration("Version fidelity", "Drifts", "bad")],
+  }),
+];
+
 describe("DECISION_COMPONENT_DEFINITION", () => {
-  it("should render option cards with inline considerations", () => {
-    const { element, diagnostics } = render([
-      option({
-        title: "Embedded",
-        recommended: true,
-        considerations: [consideration("Version fidelity", "Exact", "good")],
-      }),
-      option({
-        title: "Download",
-        considerations: [consideration("Version fidelity", "Drifts", "bad")],
-      }),
-    ]);
+  it("should render an open decision as a radio group with comparison attributes", () => {
+    const { element, diagnostics } = render(twoOptions());
     expect(diagnostics).toEqual([]);
     const rendered = JSON.stringify(element);
-    expect(element.tagName).toBe("aside");
+    expect(element.tagName).toBe("figure");
     expect(rendered).toContain('"value":"Which channel?"');
     expect(rendered).toContain('"value":"Embedded"');
     expect(rendered).toContain('"value":"Recommended"');
-    expect(rendered).toContain('"value":"Version fidelity:"');
-    expect(rendered).toContain('"value":"Exact."');
+    expect(rendered).toContain('"value":"Version fidelity"');
+    expect(rendered).toContain('"value":"Exact"');
     expect(rendered).toContain("decision-verdict-good");
     expect(rendered).toContain("decision-verdict-bad");
+    expect(rendered).toContain('"type":"radio"');
+    expect(rendered).toContain("data-decision-selector");
+  });
+
+  it("should offer a proposal option and a disabled confirm action when open", () => {
+    const { element } = render(twoOptions());
+    const rendered = JSON.stringify(element);
+    expect(rendered).toContain('"value":"Propose another approach"');
+    expect(rendered).toContain("data-decision-proposal-text");
+    expect(rendered).toContain('"value":"Confirm decision"');
+    expect(rendered).toContain('"disabled":true');
+  });
+
+  it("should render a decided decision as a record without a selector", () => {
+    const { element, diagnostics } = render(
+      twoOptions({ chosen: true }),
+      "decided",
+    );
+    expect(diagnostics).toEqual([]);
+    const rendered = JSON.stringify(element);
+    expect(rendered).toContain('"value":"Decided"');
+    expect(rendered).toContain("data-option-chosen");
+    expect(rendered).not.toContain("data-decision-selector");
+    expect(rendered).not.toContain('"value":"Propose another approach"');
+    expect(rendered).not.toContain('"value":"Confirm decision"');
+  });
+
+  it("should never label an open decision with a status badge", () => {
+    const { element } = render(twoOptions());
+    expect(JSON.stringify(element)).not.toContain('"value":"Open"');
   });
 
   it("should require at least two options", () => {
@@ -137,6 +185,70 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
         line: 3,
         column: 1,
         message: "Decision cannot contain more than one recommended Option",
+      },
+    ]);
+  });
+
+  it("should reject options that do not compare the same considerations", () => {
+    const { diagnostics } = render([
+      option({
+        title: "A",
+        considerations: [consideration("Cost", "Low")],
+      }),
+      option({
+        title: "B",
+        considerations: [consideration("Effort", "High")],
+      }),
+    ]);
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message:
+          'Every Decision Option must list the same Considerations in the same order so options stay comparable; "B" does not match "A"',
+      },
+    ]);
+  });
+
+  it("should reject a verdict too long to compare at a glance", () => {
+    const { diagnostics } = render([
+      option({
+        title: "A",
+        considerations: [consideration("Cost", "Low once the cache warms up")],
+      }),
+      option({
+        title: "B",
+        considerations: [consideration("Cost", "High")],
+      }),
+    ]);
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message:
+          "A Consideration verdict must be at most 24 characters so options stay scannable; move the reasoning into the Consideration body",
+      },
+    ]);
+  });
+
+  it("should reject a chosen option outside a decided decision", () => {
+    const { diagnostics } = render(twoOptions({ chosen: true }));
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: 'A Decision with a chosen Option must set status="decided"',
+      },
+    ]);
+  });
+
+  it("should reject a decided decision with no chosen option", () => {
+    const { diagnostics } = render(twoOptions(), "decided");
+    expect(diagnostics).toEqual([
+      {
+        line: 3,
+        column: 1,
+        message: 'A Decision with status="decided" must mark one Option chosen',
       },
     ]);
   });

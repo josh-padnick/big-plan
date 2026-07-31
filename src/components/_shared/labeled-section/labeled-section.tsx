@@ -5,10 +5,19 @@ import type { ReactNode } from "react";
 import { hastContentToReact } from "../hast-content/hast-content.js";
 
 /** Renders the uppercase muted label naming one card section. */
-export const SectionLabel = ({ label }: { readonly label: string }) => (
+export const SectionLabel = ({
+  label,
+  dataProperties = {},
+}: {
+  readonly label: string;
+  readonly dataProperties?: Readonly<Record<string, string>>;
+}) => (
   // The label reads a step above muted so section names anchor scanning
   // without competing with content ink.
-  <div className="card-section-label text-[0.6875rem] leading-4 font-bold tracking-[0.08em] uppercase text-ink/70">
+  <div
+    className="card-section-label text-[0.6875rem] leading-4 font-bold tracking-[0.08em] uppercase text-ink/70"
+    {...dataProperties}
+  >
     {label}
   </div>
 );
