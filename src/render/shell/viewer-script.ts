@@ -1041,15 +1041,60 @@ export const VIEWER_SCRIPT = `<script>
     if (value === null) element.removeAttribute(name);
     else element.setAttribute(name, value);
   };
-  const focusableElements = (frame) =>
+  const isRendered = (element) =>
+    element.getClientRects().length !== 0 &&
+    getComputedStyle(element).visibility === "visible";
+  const isRenderedArea = (area) => {
+    const map = area.closest("map[name]");
+    const name = map?.getAttribute("name");
+    if (name === null || name === undefined || name === "") return false;
+    const useMap = "#" + name;
+    const owner = Array.from(
+      document.querySelectorAll("img[usemap],object[usemap]"),
+    ).find((candidate) => candidate.getAttribute("usemap") === useMap);
+    return owner !== undefined && isRendered(owner);
+  };
+  const isTabbable = (element) => {
+    if (
+      !(element instanceof HTMLElement || element instanceof SVGElement) ||
+      element.tabIndex < 0 ||
+      element.matches(":disabled") ||
+      element.closest("[hidden]") !== null ||
+      element.closest("[inert]") !== null
+    )
+      return false;
+    if (element.localName === "summary") {
+      const details = element.parentElement;
+      if (
+        !(details instanceof HTMLDetailsElement) ||
+        details.querySelector(":scope > summary") !== element
+      )
+        return false;
+    }
+    const closedDetails = element.closest("details:not([open])");
+    if (closedDetails !== null) {
+      const summary = closedDetails.querySelector(":scope > summary");
+      if (summary === null || !summary.contains(element)) return false;
+    }
+    return element instanceof HTMLAreaElement
+      ? isRenderedArea(element)
+      : isRendered(element);
+  };
+  const tabbableElements = (frame) =>
     Array.from(
       frame.querySelectorAll(
-        'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+        'details > summary,a[href],area[href],button,input,select,textarea,iframe,audio[controls],video[controls],[contenteditable]:not([contenteditable="false"]),[tabindex]:not([tabindex="-1"])',
       ),
-    ).filter(
-      (element) =>
-        element instanceof HTMLElement && element.getClientRects().length !== 0,
-    );
+    )
+      .filter(isTabbable)
+      .map((element, index) => ({ element, index, tabIndex: element.tabIndex }))
+      .sort((left, right) => {
+        if (left.tabIndex === right.tabIndex) return left.index - right.index;
+        if (left.tabIndex === 0) return 1;
+        if (right.tabIndex === 0) return -1;
+        return left.tabIndex - right.tabIndex;
+      })
+      .map((entry) => entry.element);
   const setMaximized = (frame, maximized) => {
     const trigger = frame.querySelector("[data-figure-maximize]");
     if (maximized) {
@@ -1110,17 +1155,18 @@ export const VIEWER_SCRIPT = `<script>
   }
   document.addEventListener("keydown", (event) => {
     if (event.key === "Tab" && open !== null) {
-      const focusable = focusableElements(open);
-      if (focusable.length !== 0) {
+      const tabbable = tabbableElements(open);
+      if (tabbable.length !== 0) {
         const current = document.activeElement;
-        const outside = current === null || !open.contains(current);
-        const atStart = current === focusable[0];
-        const atEnd = current === focusable[focusable.length - 1];
+        const currentIndex = tabbable.indexOf(current);
+        const outside = currentIndex === -1;
+        const atStart = currentIndex === 0;
+        const atEnd = currentIndex === tabbable.length - 1;
         if (outside || (event.shiftKey && atStart) || (!event.shiftKey && atEnd)) {
           event.preventDefault();
           const target = event.shiftKey
-            ? focusable[focusable.length - 1]
-            : focusable[0];
+            ? tabbable[tabbable.length - 1]
+            : tabbable[0];
           target.focus();
         }
       }
