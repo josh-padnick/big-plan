@@ -248,6 +248,11 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
       subject: "style: preserve blue on a feature branch [visual:empty]",
     });
     await git(repoRoot, ["checkout", "main"]);
+    await writeFile(join(repoRoot, "main-only.txt"), "advance main\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "chore: advance main without styling changes",
+    });
     await git(repoRoot, [
       "merge",
       "--no-ff",
