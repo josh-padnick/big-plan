@@ -1,4 +1,5 @@
 /*
+CSS escape hatch: shared visual primitive and pseudo-element selector relationship.
 Owns the fast hover hint shared by icon-only figure controls, keyed off the
 data-tooltip attribute. Browsers hold a native title tooltip back for roughly
 a second, long enough that an icon button reads as unresponsive; this hint

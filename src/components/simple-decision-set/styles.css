@@ -1,5 +1,5 @@
-/* SimpleDecisionSet question-number, option-marker, and recommended-tag
-   variants, colocated with the component that emits these selectors. */
+/* CSS escape hatch: selector relationships define selected option markers and
+   their generated dot; palette variants remain beside those relationships. */
 
 @layer components {
   article .simple-decision-number {

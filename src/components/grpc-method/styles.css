@@ -1,6 +1,5 @@
-/* GrpcMethod streaming-kind, stream-keyword, error-code, and deprecation
-   palette variants, colocated with the component that emits those stable
-   selector contracts. */
+/* CSS escape hatch: local readability keeps the finite streaming-kind,
+   error-code, and deprecation palette map together beside its selectors. */
 
 @layer components {
   article .grpc-method-kind-unary,
