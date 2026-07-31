@@ -166,7 +166,9 @@ export const VIEWER_SCRIPT = `<script>
       else open();
     });
     summary.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") close();
+      if (event.key !== "Escape") return;
+      event.bigPlanEscapeHandled = true;
+      close();
     });
     document.addEventListener(
       "scroll",
@@ -393,6 +395,11 @@ export const VIEWER_SCRIPT = `<script>
     // Group subheadings live in the same tbody but are chrome, not data: they
     // never count, never sort, and never match a filter on their own.
     const rows = Array.from(body.querySelectorAll("[data-table-row]"));
+    const authoredRows = rows.slice().sort(
+      (a, b) =>
+        Number(a.getAttribute("data-table-row")) -
+        Number(b.getAttribute("data-table-row")),
+    );
     const columnCount = heads.length;
     const authoredFit = figure.getAttribute("data-table-fit") || "wrap";
     const storageKey =
@@ -690,7 +697,7 @@ export const VIEWER_SCRIPT = `<script>
       }
       if (groupColumn >= 0) {
         const seen = [];
-        for (const row of rows) {
+        for (const row of authoredRows) {
           const label = row.getAttribute("data-table-group");
           if (seen.indexOf(label) === -1) seen.push(label);
         }
@@ -788,26 +795,31 @@ export const VIEWER_SCRIPT = `<script>
         );
         event.dataTransfer.effectAllowed = "move";
       });
+      let dropAfter = false;
       head.addEventListener("dragover", (event) => {
         event.preventDefault();
         const box = head.getBoundingClientRect();
-        const after = event.clientX > box.left + box.width / 2;
-        head.classList.toggle("data-table-head-drop-before", !after);
-        head.classList.toggle("data-table-head-drop-after", after);
+        dropAfter = event.clientX > box.left + box.width / 2;
+        head.classList.toggle("data-table-head-drop-before", !dropAfter);
+        head.classList.toggle("data-table-head-drop-after", dropAfter);
       });
       const clear = () => {
         head.classList.remove("data-table-head-drop-before");
         head.classList.remove("data-table-head-drop-after");
+        dropAfter = false;
       };
       head.addEventListener("dragleave", clear);
       head.addEventListener("dragend", clear);
       head.addEventListener("drop", (event) => {
         event.preventDefault();
+        const after = dropAfter;
         clear();
         const from = Number(event.dataTransfer.getData("text/plain"));
         const positions = Array.from(headRow.children);
         const to = positions.indexOf(head);
-        if (!isNaN(from)) moveColumn(from, to);
+        const boundary = to + (after ? 1 : 0);
+        const insertion = boundary - (from < boundary ? 1 : 0);
+        if (!isNaN(from)) moveColumn(from, insertion);
       });
     }
 
@@ -815,6 +827,7 @@ export const VIEWER_SCRIPT = `<script>
       filterInput.addEventListener("input", applyFilter);
       filterInput.addEventListener("keydown", (event) => {
         if (event.key !== "Escape") return;
+        event.bigPlanEscapeHandled = true;
         filterInput.value = "";
         applyFilter();
       });
@@ -822,11 +835,12 @@ export const VIEWER_SCRIPT = `<script>
 
     const resetLayout = () => {
       applyOrder(Array.from({ length: columnCount }, (_, index) => index));
-      setGroupColumn(authoredGroupColumn, false);
-      applyHiddenColumns(authoredHidden);
+      setGroupColumn(-1, false);
       sortColumn = authoredSortColumn;
       sortDirection = authoredSortDirection;
       applySort();
+      setGroupColumn(authoredGroupColumn, false);
+      applyHiddenColumns(authoredHidden);
       setFit(authoredFit, false);
       persist();
       applyFilter();
@@ -904,6 +918,7 @@ export const VIEWER_SCRIPT = `<script>
         if (event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
+          event.bigPlanEscapeHandled = true;
           closeMenus(true);
           return;
         }
@@ -949,7 +964,11 @@ export const VIEWER_SCRIPT = `<script>
         if (!inside) closeMenus(false);
       });
       document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") closeMenus(true);
+        if (event.key !== "Escape") return;
+        const openMenu = popovers.some((entry) => !entry.list.hidden);
+        if (!openMenu) return;
+        event.bigPlanEscapeHandled = true;
+        closeMenus(true);
       });
     }
 
@@ -1013,7 +1032,12 @@ export const VIEWER_SCRIPT = `<script>
     });
   }
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || open === null) return;
+    if (
+      event.key !== "Escape" ||
+      event.bigPlanEscapeHandled === true ||
+      open === null
+    )
+      return;
     const frame = open;
     const keyboard = openedByKeyboard;
     setMaximized(frame, false);
