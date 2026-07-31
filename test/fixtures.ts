@@ -43,6 +43,7 @@ type WorkerFixtures = {
   readonly componentsViewerUrl: string;
   readonly apiEndpointsViewerUrl: string;
   readonly complexDecisionViewerUrl: string;
+  readonly dataTableViewerUrl: string;
   readonly deckViewerUrl: string;
   readonly flowDiagramViewerUrl: string;
   readonly nestedDecisionViewerUrl: string;
@@ -186,6 +187,20 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const outputPath = join(outputDir, "complex-decision.html");
       await renderThroughCli({
         inputPath: join(repoRoot, "examples", "complex-decision.mdx"),
+        outputPath,
+        outputDir,
+      });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  dataTableViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-data-table-"));
+      const outputPath = join(outputDir, "data-table.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "data-table.mdx"),
         outputPath,
         outputDir,
       });
