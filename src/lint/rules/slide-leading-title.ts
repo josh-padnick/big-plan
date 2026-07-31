@@ -16,6 +16,18 @@ const isText = (node: Node): node is Text => node.type === "text";
 const isBlank = (node: Node): boolean =>
   isText(node) && node.value.trim() === "";
 
+const isImage = (node: Node): boolean =>
+  node.type === "image" || node.type === "imageReference";
+
+const containsOnlyImage = (node: Node): boolean => {
+  if (!isParent(node)) {
+    return false;
+  }
+  const meaningful = node.children.filter((child) => !isBlank(child));
+  const [only] = meaningful;
+  return meaningful.length === 1 && only !== undefined && isImage(only);
+};
+
 // An image standing alone in its paragraph is a figure; an image inside a
 // sentence is illustration the surrounding prose already introduces.
 const isImageParagraph = (node: Node): boolean => {
@@ -27,7 +39,9 @@ const isImageParagraph = (node: Node): boolean => {
   return (
     meaningful.length === 1 &&
     only !== undefined &&
-    (only.type === "image" || only.type === "imageReference")
+    (isImage(only) ||
+      ((only.type === "link" || only.type === "linkReference") &&
+        containsOnlyImage(only)))
   );
 };
 
