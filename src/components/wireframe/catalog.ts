@@ -4,23 +4,28 @@
 // placement, and the agent-facing description of every element live here and
 // nowhere else; the view consumes the nodes this catalog produces.
 
-import type { Root } from "hast";
+import type { ElementContent, Root } from "hast";
+import { singleAuthoredFence } from "./../_authoring/authored-body.js";
 import {
   validateComponentAttributes,
   type ComponentAttributeSchema,
   type ComponentAttributeValue,
 } from "../_authoring/contract.js";
 import type { DiagnosticCollector } from "../_authoring/diagnostics.js";
+import type { WireframeTableCell } from "./model.js";
 import {
   WIREFRAME_ALIGNMENTS,
   WIREFRAME_EMPHASES,
   WIREFRAME_HEADING_LEVELS,
   WIREFRAME_JUSTIFICATIONS,
+  WIREFRAME_MEASURES,
   WIREFRAME_DIRECTIONS,
   WIREFRAME_FIELD_KINDS,
   WIREFRAME_MEDIA_SHAPES,
   WIREFRAME_SPACES,
   WIREFRAME_STEP_STATES,
+  WIREFRAME_SURFACES,
+  WIREFRAME_TONES,
   WIREFRAME_TEXT_ROLES,
   type WireframeElementName,
   type WireframeNode,
@@ -42,6 +47,9 @@ export type WireframeCategory = "layout" | "surface" | "content";
 export type WireframeElementCompilerInput = {
   readonly attributes: Readonly<Record<string, ComponentAttributeValue>>;
   readonly children: ReadonlyArray<WireframeNode>;
+  // The element's authored body, given only to elements whose body policy is
+  // "fence"; every other element is drawn entirely from its attributes.
+  readonly body: ReadonlyArray<ElementContent>;
   readonly position: NodePosition;
   readonly diagnostics: DiagnosticCollector;
 };
@@ -57,6 +65,10 @@ export type WireframeElementDefinition = {
   // The elements this one belongs to, when it belongs to only some of them.
   // A row of navigation items means nothing outside its navigation.
   readonly allowedParents?: ReadonlyArray<string>;
+  // Whether this element reads an authored body. Only a fenced block is ever
+  // allowed, and only where rows of data are genuinely more readable written
+  // out than nested one element deep.
+  readonly body?: "fence";
   // One line an agent can act on, and one authored line proving the shape.
   readonly summary: string;
   readonly example: string;
@@ -77,6 +89,7 @@ const ROW_SCHEMA = {
 const PANEL_SCHEMA = {
   title: { kind: "string", nonEmpty: true },
   eyebrow: { kind: "string", nonEmpty: true },
+  surface: { kind: "enum", values: WIREFRAME_SURFACES },
 } satisfies ComponentAttributeSchema;
 
 const HEADING_SCHEMA = {
@@ -136,6 +149,7 @@ const PROGRESS_SCHEMA = {
 
 const BADGE_SCHEMA = {
   label: { kind: "string", required: true, nonEmpty: true },
+  tone: { kind: "enum", values: WIREFRAME_TONES },
 } satisfies ComponentAttributeSchema;
 
 const DIVIDER_SCHEMA = {
@@ -194,6 +208,58 @@ const STEP_SCHEMA = {
   state: { kind: "enum", values: WIREFRAME_STEP_STATES },
 } satisfies ComponentAttributeSchema;
 
+const CENTER_SCHEMA = {
+  measure: { kind: "enum", values: WIREFRAME_MEASURES },
+} satisfies ComponentAttributeSchema;
+
+const CRUMB_SCHEMA = {
+  label: { kind: "string", required: true, nonEmpty: true },
+  navigateTo: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
+// A figure reads as a figure: a cell right-aligns when every value under that
+// header is one, which is what lets a reader compare down a column.
+const NUMERIC_CELL = /^[+-]?[$£€]?\d[\d,.]*\s*[%a-z]*$/iu;
+
+const isNumericColumn = (values: ReadonlyArray<string>): boolean =>
+  values.length > 0 && values.every((value) => NUMERIC_CELL.test(value.trim()));
+
+// A cell written as [Failed] or [Failed:danger] reports state, so it is drawn
+// as a chip. The word is always there; the tone only reinforces it.
+const CHIP_CELL = /^\[([^\]:]+)(?::([a-z]+))?\]$/u;
+
+const parseCell = ({
+  raw,
+  position,
+  diagnostics,
+}: {
+  readonly raw: string;
+  readonly position: NodePosition;
+  readonly diagnostics: DiagnosticCollector;
+}): WireframeTableCell => {
+  const match = CHIP_CELL.exec(raw.trim());
+  if (match === null) {
+    return { text: raw.trim() };
+  }
+  const [, label = "", tone] = match;
+  if (tone === undefined) {
+    return { text: label.trim(), tone: "neutral" };
+  }
+  const known = WIREFRAME_TONES.find((value) => value === tone);
+  if (known === undefined) {
+    diagnostics.add({
+      message: `Unknown chip tone "${tone}" in a table cell; expected one of: ${WIREFRAME_TONES.join(", ")}`,
+      position,
+    });
+    return { text: label.trim(), tone: "neutral" };
+  }
+  return { text: label.trim(), tone: known };
+};
+
+const TABLE_SCHEMA = {
+  selected: { kind: "number", min: 1, max: 200, integer: true },
+} satisfies ComponentAttributeSchema;
+
 const CONNECTOR_SCHEMA = {
   direction: { kind: "enum", values: WIREFRAME_DIRECTIONS },
   label: { kind: "string", nonEmpty: true },
@@ -249,7 +315,8 @@ const CATALOG = {
   Panel: {
     category: "surface",
     acceptsChildren: true,
-    summary: "A bounded region of a screen, optionally titled.",
+    summary:
+      'A region of a screen. It draws no box by default; use surface="filled" for a workspace pane and surface="outlined" only where something behaves like a card.',
     example: '<Panel title="Recent activity">...</Panel>',
     compile: ({ attributes, children, position, diagnostics }) => {
       const validated = validateComponentAttributes({
@@ -265,6 +332,7 @@ const CATALOG = {
         ...(validated.eyebrow === undefined
           ? {}
           : { eyebrow: validated.eyebrow }),
+        surface: validated.surface ?? "plain",
         children,
       };
     },
@@ -531,8 +599,9 @@ const CATALOG = {
   Badge: {
     category: "content",
     acceptsChildren: false,
-    summary: "A short status beside the thing it describes.",
-    example: '<Badge label="Pending" />',
+    summary:
+      "A short status beside the thing it describes. The tone tints it; the word is what carries the meaning.",
+    example: '<Badge label="Failed" tone="danger" />',
     compile: ({ attributes, position, diagnostics }) => {
       const validated = validateComponentAttributes({
         component: "Badge",
@@ -541,7 +610,11 @@ const CATALOG = {
         diagnostics,
         schema: BADGE_SCHEMA,
       });
-      return { element: "Badge", label: validated.label ?? "" };
+      return {
+        element: "Badge",
+        label: validated.label ?? "",
+        tone: validated.tone ?? "neutral",
+      };
     },
   },
   Divider: {
@@ -791,6 +864,145 @@ const CATALOG = {
         element: "Connector",
         direction: validated.direction ?? "right",
         ...(validated.label === undefined ? {} : { label: validated.label }),
+      };
+    },
+  },
+  Center: {
+    category: "layout",
+    acceptsChildren: true,
+    summary:
+      "Holds its children to a readable measure and centers them in the space.",
+    example: '<Center measure="prose">...</Center>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Center",
+        attributes,
+        position,
+        diagnostics,
+        schema: CENTER_SCHEMA,
+      });
+      return {
+        element: "Center",
+        measure: validated.measure ?? "prose",
+        children,
+      };
+    },
+  },
+  Breadcrumbs: {
+    category: "layout",
+    acceptsChildren: true,
+    allowedChildren: ["Crumb"],
+    summary: "Where this screen sits in the product, above the page title.",
+    example: '<Breadcrumbs><Crumb label="Workflows" /></Breadcrumbs>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      validateComponentAttributes({
+        component: "Breadcrumbs",
+        attributes,
+        position,
+        diagnostics,
+        schema: EMPTY_SCHEMA,
+      });
+      return { element: "Breadcrumbs", children };
+    },
+  },
+  Crumb: {
+    category: "content",
+    acceptsChildren: false,
+    allowedParents: ["Breadcrumbs"],
+    summary: "One level of the trail; the last one is the current screen.",
+    example: '<Crumb label="Workflows" navigateTo="library" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Crumb",
+        attributes,
+        position,
+        diagnostics,
+        schema: CRUMB_SCHEMA,
+      });
+      return {
+        element: "Crumb",
+        label: validated.label ?? "",
+        ...(validated.navigateTo === undefined
+          ? {}
+          : { navigateTo: validated.navigateTo }),
+      };
+    },
+  },
+  Table: {
+    category: "surface",
+    acceptsChildren: false,
+    body: "fence",
+    summary:
+      "Rows of the same kind of record. Write a fenced block: the first line is the header, cells are separated by a pipe.",
+    example: "<Table> with a fenced block of pipe-separated rows",
+    compile: ({ attributes, body, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "Table",
+        attributes,
+        position,
+        diagnostics,
+        schema: TABLE_SCHEMA,
+      });
+      const fence = singleAuthoredFence({ children: body });
+      if (fence === undefined) {
+        diagnostics.add({
+          message:
+            "Table holds one fenced block: the first line names the columns, and every later line is a row of pipe-separated cells",
+          position,
+        });
+        return { element: "Table", headers: [], rows: [], numeric: [] };
+      }
+      const lines = fence.source
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== "");
+      const cells = lines.map((line) =>
+        line.split("|").map((cell) => cell.trim()),
+      );
+      const [headers = [], ...rawRows] = cells;
+      const rows = rawRows.map((row) =>
+        row.map((raw) =>
+          parseCell({ raw, position: fence.codePosition, diagnostics }),
+        ),
+      );
+      if (headers.length === 0) {
+        diagnostics.add({
+          message: "Table needs a first line naming its columns",
+          position: fence.codePosition,
+        });
+      }
+      // A row that does not match the header is a table whose columns mean
+      // different things on different lines, which is worse than no table.
+      const shaped = rows.filter((row, index) => {
+        if (row.length === headers.length) {
+          return true;
+        }
+        diagnostics.add({
+          message: `Table row ${index + 1} has ${row.length} cells but the header names ${headers.length}`,
+          position: fence.codePosition,
+        });
+        return false;
+      });
+      if (
+        validated.selected !== undefined &&
+        validated.selected > shaped.length
+      ) {
+        diagnostics.add({
+          message: `Table has no row ${validated.selected} to select; it holds ${shaped.length}`,
+          position,
+        });
+      }
+      return {
+        element: "Table",
+        headers,
+        rows: shaped,
+        numeric: headers.map((_header, column) =>
+          isNumericColumn(shaped.map((row) => row[column]?.text ?? "")),
+        ),
+        ...(validated.selected === undefined ||
+        validated.selected > shaped.length
+          ? {}
+          : { selected: validated.selected }),
       };
     },
   },

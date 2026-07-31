@@ -95,6 +95,52 @@ export const WIREFRAME_CHROMES: ReadonlyArray<WireframeChrome> = [
   "phone",
 ];
 
+// How wide a block of content is allowed to get. Prose stops being readable
+// somewhere past 80 characters, so a desktop screen constrains its reading
+// content rather than letting it run the full width of the window.
+export type WireframeMeasure = "narrow" | "prose" | "wide";
+
+export const WIREFRAME_MEASURES: ReadonlyArray<WireframeMeasure> = [
+  "narrow",
+  "prose",
+  "wide",
+];
+
+/**
+ * How much chrome a region draws around itself.
+ *
+ * Outlining every region makes controls, panels, and page structure compete
+ * equally, so nothing reads as more important than anything else. The default
+ * is no chrome at all: a heading and the space around it group content, and a
+ * box is spent only where something genuinely behaves like one.
+ */
+export type WireframeSurface = "plain" | "filled" | "outlined";
+
+export const WIREFRAME_SURFACES: ReadonlyArray<WireframeSurface> = [
+  "plain",
+  "filled",
+  "outlined",
+];
+
+// Status carries meaning, so it is never carried by color alone: a tone tints
+// a chip that is already saying the same thing in words.
+export type WireframeTone =
+  "neutral" | "info" | "success" | "warning" | "danger";
+
+export const WIREFRAME_TONES: ReadonlyArray<WireframeTone> = [
+  "neutral",
+  "info",
+  "success",
+  "warning",
+  "danger",
+];
+
+/** One cell of a table: its text, and a chip tone when it reports state. */
+export type WireframeTableCell = {
+  readonly text: string;
+  readonly tone?: WireframeTone;
+};
+
 export type WireframeTextRole = "body" | "helper" | "muted";
 
 export const WIREFRAME_TEXT_ROLES: ReadonlyArray<WireframeTextRole> = [
@@ -176,6 +222,7 @@ export type WireframeNode =
       readonly element: "Panel";
       readonly title?: string;
       readonly eyebrow?: string;
+      readonly surface: WireframeSurface;
       readonly children: ReadonlyArray<WireframeNode>;
     }
   | {
@@ -248,7 +295,11 @@ export type WireframeNode =
       readonly value: number;
       readonly detail?: string;
     }
-  | { readonly element: "Badge"; readonly label: string }
+  | {
+      readonly element: "Badge";
+      readonly label: string;
+      readonly tone: WireframeTone;
+    }
   | { readonly element: "Divider"; readonly label?: string }
   | {
       readonly element: "ImagePlaceholder";
@@ -313,6 +364,31 @@ export type WireframeNode =
       readonly element: "Connector";
       readonly direction: WireframeDirection;
       readonly label?: string;
+    }
+  | {
+      readonly element: "Center";
+      readonly measure: WireframeMeasure;
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
+      readonly element: "Breadcrumbs";
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
+      readonly element: "Crumb";
+      readonly label: string;
+      readonly navigateTo?: string;
+    }
+  | {
+      readonly element: "Table";
+      readonly headers: ReadonlyArray<string>;
+      readonly rows: ReadonlyArray<ReadonlyArray<WireframeTableCell>>;
+      // Which columns hold figures. Numbers line up on the right so a reader
+      // can compare them down the column; text lines up on the left.
+      readonly numeric: ReadonlyArray<boolean>;
+      // Which row the screen is showing the detail for, counting rows from
+      // one. A list beside a detail pane has to say which row it is showing.
+      readonly selected?: number;
     };
 
 export type WireframeElementName = WireframeNode["element"];

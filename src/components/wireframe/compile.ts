@@ -46,15 +46,22 @@ type ScreenReference = {
 };
 
 // Wireframe elements carry their copy in attributes, so any prose inside one
-// is content the reader would never see drawn.
+// is content the reader would never see drawn. The exception is an element
+// whose body policy declares it reads a fenced block, which owns its own
+// diagnostics for what that block must contain.
 const rejectProse = ({
   child,
+  definition,
   diagnostics,
 }: {
   readonly child: ScopedChild;
+  readonly definition: WireframeElementDefinition;
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  if (meaningfulChildren(child.children).length === 0) {
+  if (
+    definition.body === "fence" ||
+    meaningfulChildren(child.children).length === 0
+  ) {
     return;
   }
   diagnostics.add({
@@ -140,7 +147,7 @@ const compileNodes = ({
     if (rejectMisplacement({ child, definition, parent, diagnostics })) {
       return [];
     }
-    rejectProse({ child, diagnostics });
+    rejectProse({ child, definition, diagnostics });
     const nested = child.scopedChildren ?? [];
     if (!definition.acceptsChildren && nested.length > 0) {
       diagnostics.add({
@@ -150,6 +157,7 @@ const compileNodes = ({
     }
     const node = definition.compile({
       attributes: child.attributes,
+      body: definition.body === "fence" ? child.children : [],
       children: definition.acceptsChildren
         ? compileNodes({
             children: nested,
@@ -192,7 +200,13 @@ const compileScreen = ({
     diagnostics,
     schema: SCREEN_SCHEMA,
   });
-  rejectProse({ child, diagnostics });
+  if (meaningfulChildren(child.children).length > 0) {
+    diagnostics.add({
+      message:
+        'Screen carries no prose; screen copy is written as <Text text="..." />',
+      position: child.position,
+    });
+  }
   // An address only means something inside a browser frame; anywhere else it
   // would be drawn nowhere and quietly lost.
   if (validated.url !== undefined && validated.chrome !== "browser") {
