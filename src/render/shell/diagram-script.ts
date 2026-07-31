@@ -166,6 +166,22 @@ export const DIAGRAM_SCRIPT = `
   const removalOn = (node) =>
     drafts.find((d) => d.kind === "remove-element" && d.element === node);
 
+  // Undo is a stack of draft-list snapshots. The list is small and every
+  // entry is a plain object, so a shallow copy is a complete restore point -
+  // no command objects, no inverse operations to keep correct.
+  const history = [];
+  const pushHistory = () => {
+    history.push(drafts.slice());
+    if (history.length > 50) history.shift();
+  };
+  const undo = () => {
+    if (history.length === 0) return false;
+    drafts = history.pop();
+    announce("Undone");
+    paint();
+    return true;
+  };
+
   // --- The canvas ---------------------------------------------------------
   // One transform per diagram. Nothing scrolls; x, y and zoom are the whole
   // state, and every affordance is re-anchored from them.
@@ -217,6 +233,7 @@ export const DIAGRAM_SCRIPT = `
     c.zoom = z1;
     clampPan(diagram);
     applyTransform(diagram);
+    diagram.toggleAttribute("data-flow-zoomed", true);
   };
 
   const zoomCentered = (diagram, nextZoom) => {
@@ -239,6 +256,7 @@ export const DIAGRAM_SCRIPT = `
     c.x = (vw - aw * c.zoom) / 2;
     c.y = (vh - ah * c.zoom) / 2;
     c.userZoomed = false;
+    diagram.removeAttribute("data-flow-zoomed");
     applyTransform(diagram);
   };
 
@@ -440,7 +458,9 @@ export const DIAGRAM_SCRIPT = `
     const sel = getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
-    reanchor();
+    // The bar changes what it says while a field is open, because what the
+    // keyboard does has changed.
+    buildActionBar();
   };
 
   const stopEditing = (cancel) => {
@@ -449,6 +469,7 @@ export const DIAGRAM_SCRIPT = `
     editing = null;
     field.removeAttribute("contenteditable");
     field.removeAttribute("data-flow-editing");
+    setTimeout(buildActionBar, 0);
     const next = (field.textContent || "").trim();
     const original = originalText.get(field);
     const name = field.getAttribute("data-flow-field");
@@ -459,6 +480,7 @@ export const DIAGRAM_SCRIPT = `
     }
     // One edit per field: typing it back to what the agent wrote is not a
     // proposal, it is a change of mind, so the draft goes away entirely.
+    if (next !== before.trim()) pushHistory();
     drafts = drafts.filter(
       (d) => !(d.kind === "edit-text" && d.element === node && d.fieldName === name),
     );
@@ -475,6 +497,13 @@ export const DIAGRAM_SCRIPT = `
   };
 
   document.addEventListener("keydown", (event) => {
+    // Undo first: it must work whether or not something is selected, and
+    // whether or not the pointer is anywhere near the diagram.
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {
+      if (editing) return;
+      if (undo()) { event.preventDefault(); event.stopPropagation(); }
+      return;
+    }
     if (editing) {
       if (event.key === "Escape") { event.stopPropagation(); stopEditing(true); }
       else if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); stopEditing(false); }
@@ -495,6 +524,21 @@ export const DIAGRAM_SCRIPT = `
       const first = fieldsIn(selected)[0];
       if (first) { event.preventDefault(); startEditing(first); }
       return;
+    }
+    // Type to overwrite. A printable key on a selected element starts editing
+    // its first field with that character already typed - the behaviour every
+    // canvas and spreadsheet has, and the reason there is no Edit button.
+    if (
+      event.key.length === 1 &&
+      !event.metaKey && !event.ctrlKey && !event.altKey &&
+      !removalOn(selected)
+    ) {
+      const first = fieldsIn(selected)[0];
+      if (first) {
+        event.preventDefault();
+        startEditing(first);
+        document.execCommand("insertText", false, event.key);
+      }
     }
     if (event.key.indexOf("Arrow") === 0) {
       const diagram = selected.closest("[data-flow-diagram]") || selected;
@@ -517,6 +561,7 @@ export const DIAGRAM_SCRIPT = `
   });
 
   const toggleRemoval = (node) => {
+    pushHistory();
     const existing = removalOn(node);
     if (existing) {
       drafts = drafts.filter((d) => d !== existing);
@@ -603,7 +648,7 @@ export const DIAGRAM_SCRIPT = `
       for (const n of diagram.querySelectorAll("[data-flow-proposed]")) {
         n.removeAttribute("data-flow-proposed");
       }
-      for (const old of diagram.querySelectorAll(".flow-diagram-original, .flow-diagram-original-block")) old.remove();
+      for (const old of diagram.querySelectorAll("[data-flow-original]")) old.remove();
       for (const field of diagram.querySelectorAll("[data-flow-edited]")) {
         field.innerHTML = originalHtml.get(field);
         field.removeAttribute("data-flow-edited");
@@ -674,12 +719,16 @@ export const DIAGRAM_SCRIPT = `
       field.setAttribute("data-flow-edited", "");
       restateName(draft.element, ", edited from " + quote(draft.before));
       labelSpecs.push({ subject: draft.element, kind: "edited", text: "Edited" });
-      if (draft.fieldName === "body" || draft.fieldName === "footer") {
-        draft.element.appendChild(el("span", "flow-diagram-original-block", draft.before));
-      } else {
-        const struck = el("s", "flow-diagram-original", draft.before);
-        if (field.parentNode) field.parentNode.insertBefore(struck, field.nextSibling);
-      }
+      // The original is a clone of the field's own tag and classes, so it
+      // renders in the same face and size as the text it sits beside - a
+      // monospace identifier's original stays monospace. It is always shown,
+      // never revealed on hover: hover may highlight an element, it may never
+      // change what the element says or how tall it is.
+      const struck = document.createElement(field.tagName);
+      struck.className = field.className + " flow-diagram-original";
+      struck.setAttribute("data-flow-original", "");
+      struck.textContent = draft.before;
+      if (field.parentNode) field.parentNode.insertBefore(struck, field.nextSibling);
     }
     const counts = new Map();
     for (const draft of drafts) {
@@ -731,7 +780,9 @@ export const DIAGRAM_SCRIPT = `
     return w > 0 && h > 0 ? w * h : 0;
   };
 
-  const placeLabel = ({ label, subject, obstacles, bounds, textRects, allowBadge }) => {
+  const placeLabel = ({
+    label, subject, obstacles, bounds, textRects, allowBadge, anchorAbove,
+  }) => {
     const size = label.getBoundingClientRect();
     const w = size.width, h = size.height;
     const gap = 5;
@@ -784,8 +835,18 @@ export const DIAGRAM_SCRIPT = `
       }
     }
 
-    // Preferred placements, closest and least intrusive first.
-    const candidates = [
+    // Preferred placements, closest and least intrusive first. The action bar
+    // asks to sit just above and centred on its selection - that is where the
+    // captain expects it - and only travels when that would bury something.
+    const candidates = anchorAbove ? [
+      [cx - w / 2, subject.top - h - gap * 2],
+      [subject.left, subject.top - h - gap * 2],
+      [subject.right - w, subject.top - h - gap * 2],
+      [cx - w / 2, subject.bottom + gap * 2],
+      [subject.left, subject.bottom + gap * 2],
+      [subject.right + gap, cy - h / 2],
+      [subject.left - w - gap, cy - h / 2],
+    ] : [
       [subject.right - w, subject.top - h - gap],
       [cx - w / 2, subject.top - h - gap],
       [subject.left, subject.top - h - gap],
@@ -844,6 +905,17 @@ export const DIAGRAM_SCRIPT = `
     return made;
   };
 
+  // What an element actually occupies on screen. An edge's own rectangle is
+  // mostly the invisible padding that makes a two-pixel connector clickable,
+  // and treating that as a solid obstacle pushed the action bar and every
+  // label away from space they could perfectly well have used. Only its verb
+  // chip is really in the way.
+  const obstacleRectOf = (node) => {
+    if (kindOf(node) !== "edge") return node.getBoundingClientRect();
+    const label = node.querySelector("[data-flow-field]");
+    return label ? label.getBoundingClientRect() : null;
+  };
+
   const chromeRects = (diagram) => {
     const rects = [];
     if (!actionBar.hidden) rects.push(actionBar.getBoundingClientRect());
@@ -877,16 +949,15 @@ export const DIAGRAM_SCRIPT = `
       // as one that ducks behind a node.
       const obstacles = elementsIn(diagram)
         .filter((n) => n !== spec.subject && kindOf(n) !== "figure")
-        .map((n) => n.getBoundingClientRect())
-        .filter((r) => overlapArea(r, bounds) > 0)
+        .map(obstacleRectOf)
+        .filter((r) => r !== null && overlapArea(r, bounds) > 0)
         .concat(chromeRects(diagram))
         .concat(placed);
       // Every word the subject shows, so a badge can be put where they are
       // not - including the struck original a proposal just added, which is
       // not a field and would otherwise be invisible to the placement.
       const textRects = fieldsIn(spec.subject)
-        .concat(Array.from(spec.subject.querySelectorAll(
-          ".flow-diagram-original, .flow-diagram-original-block")))
+        .concat(Array.from(spec.subject.querySelectorAll("[data-flow-original]")))
         .map((f) => f.getBoundingClientRect());
       // Only a node draws a card, so only a node has a corner to badge. An
       // edge's rectangle is mostly the invisible padding that makes a
@@ -937,19 +1008,36 @@ export const DIAGRAM_SCRIPT = `
   const buildActionBar = () => {
     actionBar.textContent = "";
     if (!selected) { actionBar.hidden = true; return; }
-    const removal = removalOn(selected);
+    // Selection IS the edit mode. There is no Edit button and no Delete
+    // button, because clicking one made this feel like a mode you enter
+    // rather than a thing you have selected: with an element selected you
+    // type to overwrite it and press Delete to remove it. What stays is
+    // Comment, which is not direct manipulation and has nowhere else to live,
+    // and Revert, which only exists once there is something to revert.
     addAction("comment", ICON.comment, "Comment", () => openCompose(selected));
-    if (!removal && fieldsIn(selected).length > 0) {
-      addAction("edit", ICON.edit, "Edit", () => startEditing(fieldsIn(selected)[0]),
-        "Edit in place - or double-click the text");
+    const mine = drafts.filter((d) => d.element === selected);
+    if (mine.length > 0) {
+      addAction("revert", ICON.revert, "Revert", () => revertElement(selected),
+        "Revert every change on this element");
     }
-    if (kindOf(selected) !== "figure") {
-      actionBar.appendChild(el("span", "flow-diagram-actionbar-sep"));
-      if (removal) addAction("revert", ICON.revert, "Restore", () => toggleRemoval(selected));
-      else addAction("delete", ICON.del, "Delete", () => toggleRemoval(selected), "Delete - or press Delete");
+    if (editing) {
+      actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
+        "Enter to save \u00b7 Esc to cancel"));
+    } else if (kindOf(selected) !== "figure") {
+      const canType = fieldsIn(selected).length > 0 && !removalOn(selected);
+      actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
+        canType ? "Type to edit \u00b7 Delete to remove" : "Delete to restore"));
     }
     actionBar.hidden = false;
     reanchor();
+  };
+
+  const revertElement = (node) => {
+    if (!drafts.some((d) => d.element === node)) return;
+    pushHistory();
+    drafts = drafts.filter((d) => d.element !== node);
+    announce("Reverted every change on " + nameOf(node));
+    paint();
   };
 
   const positionActionBar = () => {
@@ -971,7 +1059,8 @@ export const DIAGRAM_SCRIPT = `
     // simply pinned above the selection.
     const obstacles = (c ? elementsIn(diagram) : [])
       .filter((n) => n !== selected && kindOf(n) !== "figure")
-      .map((n) => n.getBoundingClientRect());
+      .map(obstacleRectOf)
+      .filter((r) => r !== null);
     const room = {
       left: Math.max(bounds.left - 8, 8),
       top: Math.max(bounds.top - 44, 8),
@@ -980,10 +1069,34 @@ export const DIAGRAM_SCRIPT = `
     };
     const best = placeLabel({
       label: actionBar, subject, obstacles, bounds: room,
-      textRects: [], allowBadge: false,
+      textRects: [], allowBadge: false, anchorAbove: true,
     });
     actionBar.style.left = (best ? best.x : subject.left) + "px";
     actionBar.style.top = (best ? best.y : subject.top - size.height - 6) + "px";
+  };
+
+  // A diagram inside a collapsed slide is display:none. Its overlays are
+  // children of the body, so nothing takes them away with it - which is how a
+  // comment card ended up floating over the collapsed sections after the
+  // diagram it belonged to was gone. Visibility is checked on every reanchor,
+  // and a host that has left the screen takes its chrome with it.
+  const onScreen = (node) =>
+    node.isConnected && node.getClientRects().length > 0;
+
+  const dismissOrphanedChrome = () => {
+    if (selected && !onScreen(selected)) {
+      if (editing) stopEditing(true);
+      selected.removeAttribute("data-flow-selected");
+      selected = null;
+      actionBar.hidden = true;
+      actionBar.textContent = "";
+    }
+    if (composeSubject && !onScreen(composeSubject)) closeCompose();
+    for (const diagram of diagrams) {
+      if (onScreen(diagram)) continue;
+      // Its labels have nothing left to point at.
+      labelSpecs = labelSpecs.filter((spec) => spec.subject.closest("[data-flow-diagram]") !== diagram);
+    }
   };
 
   // Everything anchored to the artboard is re-placed together, because every
@@ -994,6 +1107,7 @@ export const DIAGRAM_SCRIPT = `
     reanchorScheduled = true;
     requestAnimationFrame(() => {
       reanchorScheduled = false;
+      dismissOrphanedChrome();
       positionActionBar();
       reanchorLabels();
       positionCompose();
@@ -1048,22 +1162,22 @@ export const DIAGRAM_SCRIPT = `
   const openCompose = (node) => {
     compose.textContent = "";
     composeSubject = node;
-    compose.appendChild(el("p", "flow-diagram-compose-title", "Comment"));
-    compose.appendChild(el("p", "flow-diagram-compose-target", "Flow: " + nameOf(node)));
-    const label = el("label", "", "Your note");
+    compose.appendChild(el("p", "flow-diagram-compose-target", "Comment on " + nameOf(node)));
     const textarea = document.createElement("textarea");
-    label.appendChild(textarea);
-    compose.appendChild(label);
+    textarea.placeholder = "Write a comment...";
+    compose.appendChild(textarea);
     const row = el("div", "flow-diagram-compose-row");
+    row.appendChild(el("span", "flow-diagram-compose-hint", "Esc to close"));
     const cancel = el("button", "flow-diagram-button", "Cancel");
     cancel.type = "button";
     cancel.addEventListener("click", closeCompose);
-    const save = el("button", "flow-diagram-button", "Save comment");
+    const save = el("button", "flow-diagram-button", "Comment");
     save.type = "button";
     save.setAttribute("data-variant", "primary");
     save.addEventListener("click", () => {
       const value = textarea.value.trim();
       if (!value) { textarea.focus(); return; }
+      pushHistory();
       drafts.push({
         id: nextId++, kind: "comment",
         diagram: node.closest("[data-flow-diagram]") || node,
@@ -1092,9 +1206,13 @@ export const DIAGRAM_SCRIPT = `
   // --- The feedback tray (a stand-in for commenting Phase 1) --------------
   const tray = el("aside", "flow-tray");
   tray.hidden = true;
-  tray.setAttribute("aria-label", "Feedback tray");
+  tray.setAttribute("aria-label", "Diagram feedback");
   const trayHeader = el("div", "flow-tray-header");
-  trayHeader.appendChild(el("span", "", "Feedback tray"));
+  const trayTitle = el("div", "");
+  trayTitle.appendChild(el("span", "", "Diagram feedback"));
+  const trayScope = el("span", "flow-tray-scope", "");
+  trayTitle.appendChild(trayScope);
+  trayHeader.appendChild(trayTitle);
   const trayCount = el("span", "flow-tray-count", "0");
   trayHeader.appendChild(trayCount);
   const trayClose = el("button", "flow-tray-close");
@@ -1103,15 +1221,21 @@ export const DIAGRAM_SCRIPT = `
   trayClose.innerHTML = ICON.close;
   trayHeader.appendChild(trayClose);
   const trayList = el("ul", "flow-tray-list");
+  const trayOther = el("p", "flow-tray-other");
+  trayOther.hidden = true;
   const trayFoot = el("div", "flow-tray-foot");
+  trayFoot.appendChild(trayOther);
   // Disabled and plain on purpose: a bright primary button that does nothing
   // would be the one dishonest pixel in the whole preview.
-  const traySend = el("button", "flow-diagram-button", "Send feedback to agent");
+  const traySend = el("button", "flow-diagram-button", "Add to document feedback");
   traySend.type = "button";
   traySend.disabled = true;
+  const trayHandoff = el("p", "flow-tray-handoff",
+    "This collector holds one diagram's feedback and hands the batch to the document's feedback collector.");
   const trayStub = el("p", "flow-tray-stub",
-    "Preview only: nothing is sent and nothing is written to the plan source. The real package ships with commenting Phase 1.");
+    "Preview only: the document-wide collector ships with commenting Phase 1, so nothing leaves this page and nothing is written to the plan source.");
   trayFoot.appendChild(traySend);
+  trayFoot.appendChild(trayHandoff);
   trayFoot.appendChild(trayStub);
   tray.appendChild(trayHeader);
   tray.appendChild(trayList);
@@ -1129,9 +1253,24 @@ export const DIAGRAM_SCRIPT = `
 
   const KIND_LABEL = { comment: "Comment", "edit-text": "Edit", "remove-element": "Delete" };
 
+  // Which diagram this collector is currently showing: the one the reviewer
+  // last touched. One collector per diagram is the model; showing every
+  // diagram's drafts in one list was what made it read as document-wide.
+  const activeDiagram = () => {
+    if (selected) return selected.closest("[data-flow-diagram]") || selected;
+    const last = drafts[drafts.length - 1];
+    return last ? last.diagram : null;
+  };
+
   const renderTray = () => {
     trayList.textContent = "";
-    for (const draft of drafts) {
+    const scope = activeDiagram();
+    const mine = drafts.filter((d) => d.diagram === scope);
+    if (scope) {
+      const label = scope.getAttribute("aria-label") || "this diagram";
+      trayScope.textContent = label.split(",")[0];
+    }
+    for (const draft of mine) {
       const item = el("li", "flow-tray-item");
       const head = el("div", "flow-tray-item-head");
       const target = el("button", "flow-tray-target", "Flow: " + nameOf(draft.element));
@@ -1159,6 +1298,7 @@ export const DIAGRAM_SCRIPT = `
       const revert = el("button", "flow-tray-revert", "Revert");
       revert.type = "button";
       revert.addEventListener("click", () => {
+        pushHistory();
         drafts = drafts.filter((d) => d !== draft);
         announce("Reverted " + KIND_LABEL[draft.kind].toLowerCase() + " on " + nameOf(draft.element));
         paint();
@@ -1166,9 +1306,19 @@ export const DIAGRAM_SCRIPT = `
       item.appendChild(revert);
       trayList.appendChild(item);
     }
-    trayCount.textContent = String(drafts.length);
-    tray.hidden = drafts.length === 0 || !trayOpen;
-    launcher.hidden = drafts.length === 0 || trayOpen;
+    // One collector per diagram means another diagram's notes are not in this
+    // list. Saying so is the difference between scoping and losing them.
+    const elsewhere = drafts.length - mine.length;
+    trayOther.hidden = elsewhere === 0;
+    trayOther.textContent = elsewhere === 1
+      ? "1 more note on another diagram"
+      : elsewhere + " more notes on other diagrams";
+    trayCount.textContent = String(mine.length);
+    traySend.textContent =
+      mine.length === 1 ? "Add 1 note to document feedback"
+                        : "Add " + mine.length + " notes to document feedback";
+    tray.hidden = mine.length === 0 || !trayOpen;
+    launcher.hidden = mine.length === 0 || trayOpen;
   };
 
   // --- Figure-level proposal chrome --------------------------------------
@@ -1189,6 +1339,7 @@ export const DIAGRAM_SCRIPT = `
       revertAll.addEventListener("click", (event) => {
         event.stopPropagation();
         const count = drafts.filter((d) => d.diagram === diagram && d.kind !== "comment").length;
+        pushHistory();
         drafts = drafts.filter((d) => !(d.diagram === diagram && d.kind !== "comment"));
         announce("Reverted " + count + " proposals in this diagram");
         paint();
@@ -1207,6 +1358,13 @@ export const DIAGRAM_SCRIPT = `
   for (const diagram of diagrams) {
     sizeRestingCanvas(diagram);
     fit(diagram);
+  }
+
+  // Collapsing a slide changes no attribute on the diagram itself, so the
+  // teardown is driven by what actually changed: the size of its host.
+  if (typeof ResizeObserver === "function") {
+    const sizes = new ResizeObserver(() => reanchor());
+    for (const diagram of diagrams) sizes.observe(diagram);
   }
 
   addEventListener("scroll", reanchor, { passive: true, capture: true });
