@@ -389,6 +389,9 @@ export const DIAGRAM_SCRIPT = `
       } else {
         sizeRestingCanvas(diagram);
       }
+      // The collector shows its list only when the diagram is maximized, so
+      // promoting or restoring changes what it should be showing.
+      renderCollector(diagram);
       requestAnimationFrame(() => fit(diagram));
     }).observe(diagram, { attributes: true, attributeFilter: ["data-figure-maximized"] });
 
@@ -492,7 +495,6 @@ export const DIAGRAM_SCRIPT = `
       });
       announce("Edited " + (FIELD_LABELS[name] || name).toLowerCase() + " of " + nameOf(node));
     }
-    trayOpen = true;
     paint();
   };
 
@@ -512,7 +514,7 @@ export const DIAGRAM_SCRIPT = `
     if (!compose.hidden) return;
     if (!selected) return;
     const active = document.activeElement;
-    if (active && active.closest && active.closest(".flow-diagram-compose, .flow-tray")) return;
+    if (active && active.closest && active.closest(".flow-diagram-compose, .flow-collector")) return;
     if (event.key === "Escape") { event.stopPropagation(); deselect(); return; }
     if (event.key === "Delete" || event.key === "Backspace") {
       if (kindOf(selected) === "figure") return;
@@ -584,7 +586,6 @@ export const DIAGRAM_SCRIPT = `
       });
       announce("Deleted " + nameOf(node));
     }
-    trayOpen = true;
     paint();
   };
 
@@ -674,21 +675,15 @@ export const DIAGRAM_SCRIPT = `
     }
   };
 
-  // Every label a proposal needs, described here and placed by the collision
-  // engine below rather than parented to the artwork it names.
-  let labelSpecs = [];
-
   const paint = () => {
     clearLayer();
     resetNames();
-    labelSpecs = [];
     for (const draft of drafts) {
       if (draft.kind !== "remove-element") continue;
       if (showingOriginal(draft.diagram)) continue;
       const node = draft.element;
       addProposedState(node, "removed");
       restateName(node, ", proposed for removal");
-      labelSpecs.push({ subject: node, kind: "removed", text: "Removed" });
       const diagram = node.closest("[data-flow-diagram]");
       const gone = removedNodeIdsFor(node);
       if (kindOf(node) !== "edge" && diagram) {
@@ -718,7 +713,6 @@ export const DIAGRAM_SCRIPT = `
       field.textContent = draft.after;
       field.setAttribute("data-flow-edited", "");
       restateName(draft.element, ", edited from " + quote(draft.before));
-      labelSpecs.push({ subject: draft.element, kind: "edited", text: "Edited" });
       // The original is a clone of the field's own tag and classes, so it
       // renders in the same face and size as the text it sits beside - a
       // monospace identifier's original stays monospace. It is always shown,
@@ -737,9 +731,6 @@ export const DIAGRAM_SCRIPT = `
     }
     for (const entry of counts) {
       restateName(entry[0], entry[1] === 1 ? ", 1 comment" : ", " + entry[1] + " comments");
-      if (kindOf(entry[0]) !== "figure") {
-        labelSpecs.push({ subject: entry[0], kind: "comment", text: String(entry[1]) });
-      }
     }
     for (const diagram of diagrams) {
       const mine = drafts.filter((d) => d.diagram === diagram);
@@ -756,10 +747,9 @@ export const DIAGRAM_SCRIPT = `
       if (zoomSep) zoomSep.hidden = mine.length === 0;
       const revertAll = diagram.querySelector("[data-flow-revert-all]");
       if (revertAll) revertAll.hidden = proposals.length < 2;
-      if (proposals.length === 0) {
+      if (proposals.length === 0 && diagram.hasAttribute("data-flow-original")) {
         diagram.removeAttribute("data-flow-original");
-        const showOriginal = diagram.querySelector("[data-flow-show-original]");
-        if (showOriginal) showOriginal.setAttribute("aria-pressed", "false");
+        diagram.dispatchEvent(new CustomEvent("flow-original-reset"));
       }
     }
     renderTray();
@@ -769,230 +759,80 @@ export const DIAGRAM_SCRIPT = `
   };
 
   // --- Collision-aware placement -----------------------------------------
-  // The problem this solves, in the captain's words: a proposal label hides
-  // behind other nodes, and it obscures the very thing that was deleted. So
-  // the subject's own rectangle is an obstacle too, not just its neighbours,
-  // and a label that cannot find clear air keeps a leader line back to what it
-  // names rather than sitting on top of it.
+  // The proposal labels this engine was written for are gone: the highlight
+  // and the strikethrough already say "edited" and "removed", and a pill
+  // restating it was noise competing with the diagram. What remains is the
+  // action bar, which still has to be placed somewhere it covers neither its
+  // own selection nor a neighbouring card.
   const overlapArea = (a, b) => {
     const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
     const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
     return w > 0 && h > 0 ? w * h : 0;
   };
 
-  const placeLabel = ({
-    label, subject, obstacles, bounds, textRects, allowBadge, anchorAbove,
-  }) => {
-    const size = label.getBoundingClientRect();
-    const w = size.width, h = size.height;
-    const gap = 5;
-    const cx = subject.left + subject.width / 2;
-    const cy = subject.top + subject.height / 2;
-    const fits = (x, y) => ({
-      left: x, top: y, right: x + w, bottom: y + h, width: w, height: h,
-    });
-    // Covering the subject is the failure the captain named first, so it is
-    // the most expensive thing a placement can do; covering a neighbour is the
-    // second. Distance from the subject is a tie-break, never a trade the
-    // engine makes against legibility.
-    const costOf = (rect) => {
-      let cost = overlapArea(rect, subject) * 6;
-      for (const obstacle of obstacles) cost += overlapArea(rect, obstacle) * 2;
-      return cost;
-    };
-    const clampedAt = (x, y) =>
-      fits(
-        clamp(x, bounds.left + 2, Math.max(bounds.left + 2, bounds.right - w - 2)),
-        clamp(y, bounds.top + 2, Math.max(bounds.top + 2, bounds.bottom - h - 2)),
-      );
-
-    // First choice for a subject big enough to carry it: a badge inside its own
-    // corner, the way any design tool badges an object. Inside is what makes it
-    // reliable - it belongs to its subject unmistakably and it cannot collide
-    // with a neighbour however tightly the diagram is packed.
-    //
-    // Which corner is decided by the subject's own words, not by a guess: the
-    // badge goes wherever it covers least of the text being proposed against,
-    // which is the second half of what the captain asked for.
-    if (allowBadge && subject.width > w + 10 && subject.height > h + 8) {
-      const inset = 3;
-      const corners = [
-        [subject.right - w - inset, subject.bottom - h - inset],
-        [subject.right - w - inset, subject.top + inset],
-      ];
-      let bestBadge = null;
-      for (const [x, y] of corners) {
-        const rect = fits(x, y);
-        let covered = 0;
-        for (const text of textRects) covered += overlapArea(rect, text);
-        for (const obstacle of obstacles) covered += overlapArea(rect, obstacle) * 4;
-        if (bestBadge === null || covered < bestBadge.covered) bestBadge = { rect, covered };
-      }
-      // A badge that would sit squarely on the words helps nobody; that case
-      // falls through to the placements outside.
-      if (bestBadge && bestBadge.covered < w * h * 0.35) {
-        return { x: bestBadge.rect.left, y: bestBadge.rect.top, rect: bestBadge.rect, badge: true };
-      }
-    }
-
-    // Preferred placements, closest and least intrusive first. The action bar
-    // asks to sit just above and centred on its selection - that is where the
-    // captain expects it - and only travels when that would bury something.
-    const candidates = anchorAbove ? [
-      [cx - w / 2, subject.top - h - gap * 2],
-      [subject.left, subject.top - h - gap * 2],
-      [subject.right - w, subject.top - h - gap * 2],
-      [cx - w / 2, subject.bottom + gap * 2],
-      [subject.left, subject.bottom + gap * 2],
-      [subject.right + gap, cy - h / 2],
-      [subject.left - w - gap, cy - h / 2],
-    ] : [
-      [subject.right - w, subject.top - h - gap],
-      [cx - w / 2, subject.top - h - gap],
-      [subject.left, subject.top - h - gap],
-      [subject.right + gap, cy - h / 2],
-      [subject.left - w - gap, cy - h / 2],
-      [cx - w / 2, subject.bottom + gap],
-      [subject.right - w, subject.bottom + gap],
-      [subject.right + gap, subject.top - h - gap],
-      [subject.left - w - gap, subject.top - h - gap],
-      [subject.right + gap, subject.bottom + gap],
-      [subject.left - w - gap, subject.bottom + gap],
-    ];
-    let best = null;
-    candidates.forEach(([x, y], order) => {
-      const rect = clampedAt(x, y);
-      const cost = costOf(rect) + order * 30;
-      if (best === null || cost < best.cost) best = { rect, cost };
-    });
-    if (best && best.cost === 0) return { x: best.rect.left, y: best.rect.top, rect: best.rect };
-
-    // Nothing adjacent is clear, so look further out: a ring search for the
-    // nearest spot that collides with nothing at all. A label that has to
-    // travel keeps a leader line home, which is still far better than one
-    // sitting on the node it describes.
-    for (let radius = 24; radius <= 220; radius += 16) {
-      let ringBest = null;
-      for (let angle = 0; angle < 360; angle += 15) {
-        const rad = (angle * Math.PI) / 180;
-        const rect = clampedAt(
-          cx - w / 2 + Math.cos(rad) * radius,
-          cy - h / 2 + Math.sin(rad) * radius,
-        );
-        const cost = costOf(rect);
-        if (cost === 0) {
-          // Prefer staying level with the subject: a label directly above or
-          // below reads as belonging to it more than one off a diagonal.
-          const bias = Math.abs(Math.sin(rad)) * 4;
-          if (ringBest === null || bias < ringBest.bias) ringBest = { rect, bias };
-        }
-      }
-      if (ringBest) return { x: ringBest.rect.left, y: ringBest.rect.top, rect: ringBest.rect };
-    }
-    return best ? { x: best.rect.left, y: best.rect.top, rect: best.rect } : null;
-  };
-
-  // One pool of label elements, reused across repaints so a repaint does not
-  // churn the DOM on every keystroke.
-  const labelPool = [];
-  const leaderPool = [];
-  const takeFrom = (pool, className) => {
-    for (const item of pool) if (item.hidden) return item;
-    const made = el("div", className);
-    made.hidden = true;
-    document.body.appendChild(made);
-    pool.push(made);
-    return made;
-  };
-
   // What an element actually occupies on screen. An edge's own rectangle is
   // mostly the invisible padding that makes a two-pixel connector clickable,
-  // and treating that as a solid obstacle pushed the action bar and every
-  // label away from space they could perfectly well have used. Only its verb
-  // chip is really in the way.
+  // and treating that as a solid obstacle pushed the bar away from space it
+  // could perfectly well have used.
   const obstacleRectOf = (node) => {
     if (kindOf(node) !== "edge") return node.getBoundingClientRect();
     const label = node.querySelector("[data-flow-field]");
     return label ? label.getBoundingClientRect() : null;
   };
 
-  const chromeRects = (diagram) => {
-    const rects = [];
-    if (!actionBar.hidden) rects.push(actionBar.getBoundingClientRect());
-    if (!compose.hidden) rects.push(compose.getBoundingClientRect());
-    if (!tray.hidden) rects.push(tray.getBoundingClientRect());
-    const toolbar = diagram.querySelector("[data-flow-controls]");
-    if (toolbar) rects.push(toolbar.getBoundingClientRect());
-    return rects;
-  };
-
-  const reanchorLabels = () => {
-    for (const item of labelPool) item.hidden = true;
-    for (const item of leaderPool) item.hidden = true;
-    const placed = [];
-    for (const spec of labelSpecs) {
-      const diagram = spec.subject.closest("[data-flow-diagram]");
-      const c = diagram ? canvas.get(diagram) : null;
-      if (!c) continue;
-      const subject = spec.subject.getBoundingClientRect();
-      const bounds = c.viewport.getBoundingClientRect();
-      // A subject scrolled out of the canvas gets no label; there is nothing
-      // for it to point at.
-      if (subject.right < bounds.left || subject.left > bounds.right ||
-          subject.bottom < bounds.top || subject.top > bounds.bottom) continue;
-      const label = takeFrom(labelPool, "flow-diagram-plabel");
-      label.setAttribute("data-kind", spec.kind);
-      label.textContent = spec.text;
-      label.hidden = false;
-      // Other elements, everything already placed this pass, and the viewer's
-      // own chrome. A label that ducks behind the action bar is just as hidden
-      // as one that ducks behind a node.
-      const obstacles = elementsIn(diagram)
-        .filter((n) => n !== spec.subject && kindOf(n) !== "figure")
-        .map(obstacleRectOf)
-        .filter((r) => r !== null && overlapArea(r, bounds) > 0)
-        .concat(chromeRects(diagram))
-        .concat(placed);
-      // Every word the subject shows, so a badge can be put where they are
-      // not - including the struck original a proposal just added, which is
-      // not a field and would otherwise be invisible to the placement.
-      const textRects = fieldsIn(spec.subject)
-        .concat(Array.from(spec.subject.querySelectorAll("[data-flow-original]")))
-        .map((f) => f.getBoundingClientRect());
-      // Only a node draws a card, so only a node has a corner to badge. An
-      // edge's rectangle is mostly the invisible padding that makes a
-      // two-pixel connector clickable, and a badge dropped inside it reads as
-      // sitting on whatever is next door.
-      const allowBadge = kindOf(spec.subject) === "node";
-      const best = placeLabel({ label, subject, obstacles, bounds, textRects, allowBadge });
-      if (!best) { label.hidden = true; continue; }
-      label.style.left = best.x + "px";
-      label.style.top = best.y + "px";
-      placed.push(best.rect);
-      // Draw a leader only when the placement had to travel: an adjacent label
-      // needs no line, and a distant one is unreadable without it.
-      const dx = Math.max(subject.left - best.rect.right, best.rect.left - subject.right, 0);
-      const dy = Math.max(subject.top - best.rect.bottom, best.rect.top - subject.bottom, 0);
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      if (!best.badge && distance > 12) {
-        const leader = takeFrom(leaderPool, "flow-diagram-leader");
-        const fromX = best.rect.left + best.rect.width / 2;
-        const fromY = best.rect.top + best.rect.height / 2;
-        const toX = clamp(fromX, subject.left, subject.right);
-        const toY = clamp(fromY, subject.top, subject.bottom);
-        const length = Math.sqrt((toX - fromX) ** 2 + (toY - fromY) ** 2);
-        leader.hidden = false;
-        leader.style.left = fromX + "px";
-        leader.style.top = fromY + "px";
-        leader.style.width = length + "px";
-        leader.style.transform = "rotate(" + Math.atan2(toY - fromY, toX - fromX) + "rad)";
-      }
-    }
+  const placeBar = ({ bar, subject, obstacles, bounds }) => {
+    const size = bar.getBoundingClientRect();
+    const w = size.width, h = size.height;
+    const gap = 10;
+    const cx = subject.left + subject.width / 2;
+    const clampedAt = (x, y) => {
+      const left = clamp(x, bounds.left + 2, Math.max(bounds.left + 2, bounds.right - w - 2));
+      const top = clamp(y, bounds.top + 2, Math.max(bounds.top + 2, bounds.bottom - h - 2));
+      return { left, top, right: left + w, bottom: top + h, width: w, height: h };
+    };
+    // Just above and centred is where the captain expects it; the rest are
+    // fallbacks for when that would bury a card.
+    const candidates = [
+      [cx - w / 2, subject.top - h - gap],
+      [subject.left, subject.top - h - gap],
+      [subject.right - w, subject.top - h - gap],
+      [cx - w / 2, subject.bottom + gap],
+      [subject.left, subject.bottom + gap],
+      [subject.right + gap, subject.top + (subject.height - h) / 2],
+      [subject.left - w - gap, subject.top + (subject.height - h) / 2],
+    ];
+    let best = null;
+    candidates.forEach(([x, y], order) => {
+      const rect = clampedAt(x, y);
+      let cost = overlapArea(rect, subject) * 6 + order * 30;
+      for (const obstacle of obstacles) cost += overlapArea(rect, obstacle) * 2;
+      if (best === null || cost < best.cost) best = { rect, cost };
+    });
+    return best ? { x: best.rect.left, y: best.rect.top } : null;
   };
 
   // --- The action bar a selection offers ----------------------------------
+  // WHY THIS LIVES INSIDE THE FIGURE AND NOT ON THE BODY
+  // The shared maximize leg isolates a promoted figure by walking up to the
+  // body and marking every sibling of that branch inert. Chrome parented to
+  // the body is therefore inert whenever any figure is maximized: still
+  // painted, still passing a screenshot, and completely unclickable. That is
+  // the bug the captain hit on Comment, and it silently covered the composer
+  // and the tray too. Overlays that belong to a diagram live inside that
+  // diagram, where isolation never reaches them.
   const actionBar = el("div", "flow-diagram-actionbar");
   actionBar.hidden = true;
+  // Re-parented to whichever diagram owns the current selection.
+  const hostFor = (node) => {
+    const diagram = node && node.closest ? node.closest("[data-flow-diagram]") : null;
+    return diagram || document.body;
+  };
+  const adopt = (element, node) => {
+    const host = hostFor(node);
+    if (element.parentElement !== host) host.appendChild(element);
+    // Isolation may have stamped it while it was still on the body.
+    if (element.inert) element.inert = false;
+  };
   document.body.appendChild(actionBar);
 
   const addAction = (action, icon, text, onClick, title) => {
@@ -1028,6 +868,7 @@ export const DIAGRAM_SCRIPT = `
       actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
         canType ? "Type to edit \u00b7 Delete to remove" : "Delete to restore"));
     }
+    adopt(actionBar, selected);
     actionBar.hidden = false;
     reanchor();
   };
@@ -1097,11 +938,6 @@ export const DIAGRAM_SCRIPT = `
       actionBar.textContent = "";
     }
     if (composeSubject && !onScreen(composeSubject)) closeCompose();
-    for (const diagram of diagrams) {
-      if (onScreen(diagram)) continue;
-      // Its labels have nothing left to point at.
-      labelSpecs = labelSpecs.filter((spec) => spec.subject.closest("[data-flow-diagram]") !== diagram);
-    }
   };
 
   // Everything anchored to the artboard is re-placed together, because every
@@ -1114,7 +950,6 @@ export const DIAGRAM_SCRIPT = `
       reanchorScheduled = false;
       dismissOrphanedChrome();
       positionActionBar();
-      reanchorLabels();
       positionCompose();
     });
   };
@@ -1170,16 +1005,8 @@ export const DIAGRAM_SCRIPT = `
     compose.appendChild(el("p", "flow-diagram-compose-target", "Comment on " + nameOf(node)));
     const textarea = document.createElement("textarea");
     textarea.placeholder = "Write a comment...";
-    compose.appendChild(textarea);
-    const row = el("div", "flow-diagram-compose-row");
-    row.appendChild(el("span", "flow-diagram-compose-hint", "Esc to close"));
-    const cancel = el("button", "flow-diagram-button", "Cancel");
-    cancel.type = "button";
-    cancel.addEventListener("click", closeCompose);
-    const save = el("button", "flow-diagram-button", "Comment");
-    save.type = "button";
-    save.setAttribute("data-variant", "primary");
-    save.addEventListener("click", () => {
+
+    const submit = () => {
       const value = textarea.value.trim();
       if (!value) { textarea.focus(); return; }
       pushHistory();
@@ -1190,12 +1017,34 @@ export const DIAGRAM_SCRIPT = `
       });
       announce("Comment saved on " + nameOf(node));
       closeCompose();
-      trayOpen = true;
       paint();
+    };
+
+    // Cmd+Enter on a Mac, Ctrl+Enter elsewhere. Plain Enter stays a newline,
+    // because a comment is prose and prose has paragraphs.
+    textarea.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      submit();
     });
+    compose.appendChild(textarea);
+
+    const row = el("div", "flow-diagram-compose-row");
+    const shortcut = navigator.platform.indexOf("Mac") === 0 ? "Cmd" : "Ctrl";
+    row.appendChild(el("span", "flow-diagram-compose-hint", shortcut + "+Enter to comment"));
+    const cancel = el("button", "flow-diagram-button", "Cancel");
+    cancel.type = "button";
+    cancel.addEventListener("click", closeCompose);
+    const save = el("button", "flow-diagram-button", "Comment");
+    save.type = "button";
+    save.setAttribute("data-variant", "primary");
+    save.addEventListener("click", submit);
     row.appendChild(cancel);
     row.appendChild(save);
     compose.appendChild(row);
+
+    adopt(compose, node);
     compose.hidden = false;
     positionCompose();
     textarea.focus();
@@ -1208,136 +1057,187 @@ export const DIAGRAM_SCRIPT = `
     if (selected) selected.focus({ preventScroll: true });
   }, true);
 
-  // --- The feedback tray (a stand-in for commenting Phase 1) --------------
-  const tray = el("aside", "flow-tray");
-  tray.hidden = true;
-  tray.setAttribute("aria-label", "Diagram feedback");
-  const trayHeader = el("div", "flow-tray-header");
-  const trayTitle = el("div", "");
-  trayTitle.appendChild(el("span", "", "Diagram feedback"));
-  const trayScope = el("span", "flow-tray-scope", "");
-  trayTitle.appendChild(trayScope);
-  trayHeader.appendChild(trayTitle);
-  const trayCount = el("span", "flow-tray-count", "0");
-  trayHeader.appendChild(trayCount);
-  const trayClose = el("button", "flow-tray-close");
-  trayClose.type = "button";
-  trayClose.setAttribute("aria-label", "Hide the feedback tray");
-  trayClose.innerHTML = ICON.close;
-  trayHeader.appendChild(trayClose);
-  const trayList = el("ul", "flow-tray-list");
-  const trayOther = el("p", "flow-tray-other");
-  trayOther.hidden = true;
-  const trayFoot = el("div", "flow-tray-foot");
-  trayFoot.appendChild(trayOther);
-  // Disabled and plain on purpose: a bright primary button that does nothing
-  // would be the one dishonest pixel in the whole preview.
-  const traySend = el("button", "flow-diagram-button", "Add to document feedback");
-  traySend.type = "button";
-  traySend.disabled = true;
-  const trayHandoff = el("p", "flow-tray-handoff",
-    "This collector holds one diagram's feedback and hands the batch to the document's feedback collector.");
-  const trayStub = el("p", "flow-tray-stub",
-    "Preview only: the document-wide collector ships with commenting Phase 1, so nothing leaves this page and nothing is written to the plan source.");
-  trayFoot.appendChild(traySend);
-  trayFoot.appendChild(trayHandoff);
-  trayFoot.appendChild(trayStub);
-  tray.appendChild(trayHeader);
-  tray.appendChild(trayList);
-  tray.appendChild(trayFoot);
-  document.body.appendChild(tray);
-
-  const launcher = el("button", "flow-tray-launcher");
-  launcher.type = "button";
-  launcher.hidden = true;
-  launcher.innerHTML = ICON.comment + "<span>Feedback tray</span>";
-  document.body.appendChild(launcher);
-  let trayOpen = true;
-  trayClose.addEventListener("click", () => { trayOpen = false; renderTray(); });
-  launcher.addEventListener("click", () => { trayOpen = true; renderTray(); });
-
+  // --- The diagram's own feedback collector -------------------------------
+  // TWO LEVELS THAT MUST NOT COLLAPSE
+  // A diagram holds the notes made on ITS elements. The page holds the one
+  // feedback package that goes to the agent. The diagram is a source feeding
+  // that package - never a second channel - so nothing here sends anything;
+  // the only outbound action hands this diagram's batch to the page-level
+  // collector, which owns the single Send.
+  //
+  // Each diagram gets its own collector, parented inside its own figure. That
+  // is what makes two diagrams on one page work: notes have an owner, and the
+  // chrome is never isolated by another figure being maximized.
   const KIND_LABEL = { comment: "Comment", "edit-text": "Edit", "remove-element": "Delete" };
+  const collectors = new Map();
 
-  // Which diagram this collector is currently showing: the one the reviewer
-  // last touched. One collector per diagram is the model; showing every
-  // diagram's drafts in one list was what made it read as document-wide.
-  const activeDiagram = () => {
-    if (selected) return selected.closest("[data-flow-diagram]") || selected;
-    const last = drafts[drafts.length - 1];
-    return last ? last.diagram : null;
+  // The seam the commenting work connects to. It is deliberately explicit and
+  // deliberately honest: if the page-level collector is not present, this says
+  // so and keeps the notes. It never reports success it did not have.
+  const pageCollector = () =>
+    (window.bigPlan && window.bigPlan.feedback) || null;
+
+  const buildCollector = (diagram) => {
+    const root = el("aside", "flow-collector");
+    root.hidden = true;
+    root.setAttribute("aria-label", "Feedback on this diagram");
+
+    const head = el("div", "flow-collector-head");
+    const title = el("div", "");
+    title.appendChild(el("span", "", "Feedback on this diagram"));
+    const scope = el("span", "flow-collector-scope",
+      diagram.getAttribute("data-flow-scope") || "This diagram");
+    title.appendChild(scope);
+    head.appendChild(title);
+    const count = el("span", "flow-collector-count", "0");
+    head.appendChild(count);
+    root.appendChild(head);
+
+    const list = el("ul", "flow-collector-list");
+    root.appendChild(list);
+
+    const foot = el("div", "flow-collector-foot");
+    const note = el("p", "flow-collector-note",
+      "These notes belong to this diagram. Adding them puts them in the plan's feedback package, which is sent once, from the page.");
+    foot.appendChild(note);
+    const status = el("p", "flow-collector-status");
+    status.hidden = true;
+    foot.appendChild(status);
+    root.appendChild(foot);
+
+    // The primary action, in both the inline and the maximized presentation.
+    const add = el("button", "flow-collector-add");
+    add.type = "button";
+    add.addEventListener("click", (event) => {
+      event.stopPropagation();
+      handOff(diagram, status);
+    });
+
+    diagram.appendChild(root);
+    diagram.appendChild(add);
+    collectors.set(diagram, { root, list, count, add, status, scope });
   };
 
-  const renderTray = () => {
-    trayList.textContent = "";
-    const scope = activeDiagram();
-    const mine = drafts.filter((d) => d.diagram === scope);
-    if (scope) {
-      trayScope.textContent =
-        scope.getAttribute("data-flow-scope") || "This diagram";
+  const handOff = (diagram, status) => {
+    const mine = drafts.filter((d) => d.diagram === diagram);
+    if (mine.length === 0) return;
+    const target = pageCollector();
+    status.hidden = false;
+    if (!target || typeof target.add !== "function") {
+      // Never pretend. The notes stay exactly where they are.
+      status.setAttribute("data-tone", "unavailable");
+      status.textContent =
+        "The plan's feedback package is not available in this preview, so nothing was added. Your " +
+        mine.length + " note" + (mine.length === 1 ? "" : "s") + " are still here.";
+      announce("The plan's feedback package is not available; nothing was added");
+      return;
     }
+    target.add({
+      source: "flow-diagram",
+      anchor: diagram.getAttribute("data-flow-anchor"),
+      items: mine.map((d) => ({
+        kind: d.kind, anchor: d.anchor, field: d.fieldName,
+        before: d.before, after: d.after, body: d.body,
+        reason: d.reason, consequence: d.consequence,
+      })),
+    });
+    drafts = drafts.filter((d) => d.diagram !== diagram);
+    status.setAttribute("data-tone", "added");
+    status.textContent = "Added " + mine.length + " note" + (mine.length === 1 ? "" : "s") +
+      " to the plan's feedback package.";
+    announce("Added " + mine.length + " notes to the plan feedback package");
+    paint();
+  };
+
+  const renderCollector = (diagram) => {
+    const c = collectors.get(diagram);
+    if (!c) return;
+    const mine = drafts.filter((d) => d.diagram === diagram);
+    const maximized = diagram.hasAttribute("data-figure-maximized");
+
+    c.list.textContent = "";
     for (const draft of mine) {
-      const item = el("li", "flow-tray-item");
-      const head = el("div", "flow-tray-item-head");
-      const target = el("button", "flow-tray-target", "Flow: " + nameOf(draft.element));
+      const item = el("li", "flow-collector-item");
+      const line = el("div", "flow-collector-item-head");
+      const target = el("button", "flow-collector-target", "Flow: " + nameOf(draft.element));
       target.type = "button";
-      target.addEventListener("click", () => { select(draft.element); bringIntoView(draft.element); });
-      head.appendChild(target);
-      const kind = el("span", "flow-tray-kind",
+      target.addEventListener("click", (event) => {
+        event.stopPropagation();
+        select(draft.element);
+        bringIntoView(draft.element);
+      });
+      line.appendChild(target);
+      const kind = el("span", "flow-collector-kind",
         draft.kind === "edit-text"
           ? KIND_LABEL[draft.kind] + " " + (FIELD_LABELS[draft.fieldName] || draft.fieldName).toLowerCase()
           : KIND_LABEL[draft.kind]);
       kind.setAttribute("data-kind", draft.kind);
-      head.appendChild(kind);
-      item.appendChild(head);
-      const where = whereOf(draft.element);
-      if (where) item.appendChild(el("div", "flow-tray-where", where));
+      line.appendChild(kind);
+      item.appendChild(line);
       if (draft.kind === "edit-text") {
-        const value = el("div", "flow-tray-value");
+        const value = el("div", "flow-collector-value");
         value.appendChild(el("s", "", draft.before));
         value.appendChild(document.createTextNode(" " + String.fromCharCode(8594) + " " + draft.after));
         item.appendChild(value);
       }
-      if (draft.body) item.appendChild(el("div", "flow-tray-value", draft.body));
-      if (draft.consequence) item.appendChild(el("div", "flow-tray-value", "Consequence: " + draft.consequence));
-      if (draft.note) item.appendChild(el("div", "flow-tray-note", draft.note));
-      const revert = el("button", "flow-tray-revert", "Revert");
+      if (draft.body) item.appendChild(el("div", "flow-collector-value", draft.body));
+      if (draft.consequence) item.appendChild(el("div", "flow-collector-value", "Consequence: " + draft.consequence));
+      if (draft.note) item.appendChild(el("div", "flow-collector-note-line", draft.note));
+      const revert = el("button", "flow-collector-revert", "Revert");
       revert.type = "button";
-      revert.addEventListener("click", () => {
+      revert.addEventListener("click", (event) => {
+        event.stopPropagation();
         pushHistory();
         drafts = drafts.filter((d) => d !== draft);
         announce("Reverted " + KIND_LABEL[draft.kind].toLowerCase() + " on " + nameOf(draft.element));
         paint();
       });
       item.appendChild(revert);
-      trayList.appendChild(item);
+      c.list.appendChild(item);
     }
-    // One collector per diagram means another diagram's notes are not in this
-    // list. Saying so is the difference between scoping and losing them.
-    const elsewhere = drafts.length - mine.length;
-    trayOther.hidden = elsewhere === 0;
-    trayOther.textContent = elsewhere === 1
-      ? "1 more note on another diagram"
-      : elsewhere + " more notes on other diagrams";
-    trayCount.textContent = String(mine.length);
-    traySend.textContent =
-      mine.length === 1 ? "Add 1 note to document feedback"
-                        : "Add " + mine.length + " notes to document feedback";
-    tray.hidden = mine.length === 0 || !trayOpen;
-    launcher.hidden = mine.length === 0 || trayOpen;
+
+    c.count.textContent = String(mine.length);
+    c.add.textContent = mine.length === 1
+      ? "Add 1 note to plan feedback"
+      : "Add " + mine.length + " notes to plan feedback";
+    // No note, no button. Inline shows only the button; the list is the
+    // maximized view's job, so the reading column never sprouts a tray.
+    c.add.hidden = mine.length === 0;
+    c.root.hidden = mine.length === 0 || !maximized;
+    if (mine.length === 0) { c.status.hidden = true; c.status.textContent = ""; }
+    if (c.add.inert) c.add.inert = false;
+    if (c.root.inert) c.root.inert = false;
+  };
+
+  const renderTray = () => {
+    for (const diagram of diagrams) renderCollector(diagram);
   };
 
   // --- Figure-level proposal chrome --------------------------------------
   for (const diagram of diagrams) {
     const showOriginal = diagram.querySelector("[data-flow-show-original]");
     if (showOriginal) {
+      // The label names what the click will do, and flips on every
+      // activation, so the reader can always tell which view they are in and
+      // how to get back. The accessible name says the same words.
+      const labelSpan = showOriginal.querySelector("span") || showOriginal;
+      const setToggleLabel = (on) => {
+        const text = on ? "Show changes" : "Show original";
+        labelSpan.textContent = text;
+        showOriginal.setAttribute("aria-label", text);
+        showOriginal.setAttribute("title", text);
+        showOriginal.setAttribute("aria-pressed", on ? "true" : "false");
+      };
+      setToggleLabel(false);
       showOriginal.addEventListener("click", (event) => {
         event.stopPropagation();
         const on = !showingOriginal(diagram);
         diagram.toggleAttribute("data-flow-original", on);
-        showOriginal.setAttribute("aria-pressed", on ? "true" : "false");
+        setToggleLabel(on);
         paint();
-        announce(on ? "Showing the original diagram" : "Showing proposals");
+        announce(on ? "Showing the original diagram" : "Showing your changes");
       });
+      diagram.addEventListener("flow-original-reset", () => setToggleLabel(false));
     }
     const revertAll = diagram.querySelector("[data-flow-revert-all]");
     if (revertAll) {
@@ -1353,13 +1253,16 @@ export const DIAGRAM_SCRIPT = `
   }
 
   document.addEventListener("pointerdown", (event) => {
-    if (compose.contains(event.target) || actionBar.contains(event.target) || tray.contains(event.target)) return;
+    if (compose.contains(event.target) || actionBar.contains(event.target)) return;
+    if (event.target.closest && event.target.closest(".flow-collector, .flow-collector-add")) return;
     if (event.target.closest("[data-flow-diagram]")) return;
     closeCompose();
     deselect();
   });
-  // First layout runs last: fitting the canvas re-anchors the action bar and
-  // the label layer, so both have to exist before anything is fitted.
+  for (const diagram of diagrams) buildCollector(diagram);
+
+  // First layout runs last: fitting the canvas re-anchors the action bar, so
+  // it has to exist before anything is fitted.
   for (const diagram of diagrams) {
     sizeRestingCanvas(diagram);
     fit(diagram);

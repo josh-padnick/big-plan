@@ -494,10 +494,8 @@ classes.
   .flow-diagram-action:focus-visible,
   .flow-diagram-button:focus-visible,
   .flow-diagram-actionbar-button:focus-visible,
-  .flow-tray-target:focus-visible,
-  .flow-tray-revert:focus-visible,
-  .flow-tray-close:focus-visible,
-  .flow-tray-launcher:focus-visible,
+  .flow-collector-target:focus-visible,
+  .flow-collector-revert:focus-visible,
   /* Deliberately not the textarea: the composer opens focused, fills the card,
      and shows a caret. A ring drawn round it only reinstates the boxed-in look
      the floating surface exists to avoid. */
@@ -649,48 +647,55 @@ classes.
     text-decoration: line-through;
     opacity: 0.85;
   }
-  /* --- The diagram's feedback collector ----------------------------------
-     A LOCAL accumulator, and the UI says so. It gathers everything a reviewer
-     marks up on ONE diagram and hands that batch to the document-wide
-     feedback collector, which lives elsewhere and is not this. Naming the
-     diagram it belongs to, and naming where the batch goes, is the whole
-     point: a bare notes count implied a relationship instead of stating one.
+  /* --- The diagram's own feedback collector -------------------------------
+     Two levels that must not collapse. This holds the notes made on ONE
+     diagram; the plan's feedback package holds everything and is sent once,
+     from the page. The diagram is a source feeding that package, never its own
+     channel to the agent, and the wording here says so.
 
-     It sits above the maximized panel deliberately: the overlay covers the
-     reading column, and a reviewer builds one batch in one place whether or
-     not a figure is promoted. */
+     It is parented inside its figure, not on the body. That is what makes two
+     diagrams on a page work - every note has an owner - and it is also what
+     keeps it clickable: the shared maximize leg marks body-level siblings
+     inert while a figure is promoted. */
 
-  .flow-tray {
-    position: fixed;
+  .flow-collector {
+    position: absolute;
     right: 1rem;
-    bottom: 1rem;
-    z-index: 80;
+    bottom: 3.25rem;
+    z-index: 78;
     display: flex;
     flex-direction: column;
-    width: min(22rem, calc(100vw - 2rem));
-    max-height: min(30rem, calc(100vh - 2rem));
-    border: 1px solid var(--edge-c);
-    border-radius: var(--radius-md);
+    width: min(21rem, calc(100% - 2rem));
+    max-height: min(24rem, 60%);
+    border: 1px solid color-mix(in srgb, var(--ink-c) 15%, transparent);
+    border-radius: 0.6rem;
     background: var(--bg);
-    box-shadow: 0 12px 40px rgb(0 0 0 / 0.3);
+    box-shadow:
+      0 16px 40px rgb(0 0 0 / 0.22),
+      0 3px 10px rgb(0 0 0 / 0.1);
     font-family: var(--font-sans);
   }
-  .flow-tray[hidden] {
+  .flow-collector[hidden] {
     display: none;
   }
-  .flow-tray-header {
+  .flow-collector-head {
     display: flex;
     align-items: baseline;
     gap: 0.4rem;
-    padding: 0.5rem 0.6rem;
-    border-bottom: 1px solid var(--edge-c);
-    background: var(--header-bg);
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    padding: 0.55rem 0.7rem 0.45rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--ink-c) 9%, transparent);
     color: var(--ink-c);
     font-size: 0.8125rem;
     font-weight: 700;
   }
-  .flow-tray-count {
+  .flow-collector-scope {
+    display: block;
+    margin-top: 0.1rem;
+    color: var(--muted-c);
+    font-size: 0.6875rem;
+    font-weight: 400;
+  }
+  .flow-collector-count {
     margin-left: auto;
     padding: 0 0.4rem;
     border-radius: 999px;
@@ -698,19 +703,7 @@ classes.
     color: var(--accent-c);
     font-size: 0.6875rem;
   }
-  .flow-tray-close {
-    border: 0;
-    background: transparent;
-    color: var(--muted-c);
-    cursor: pointer;
-    padding: 0 0.15rem;
-    line-height: 1;
-  }
-  .flow-tray-close svg {
-    width: 0.875rem;
-    height: 0.875rem;
-  }
-  .flow-tray-list {
+  .flow-collector-list {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
@@ -718,36 +711,35 @@ classes.
     padding: 0;
     list-style: none;
   }
-  .flow-tray-item {
+  .flow-collector-item {
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
-    padding: 0.5rem 0.6rem;
-    border-bottom: 1px solid var(--edge-c);
+    padding: 0.5rem 0.7rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--ink-c) 7%, transparent);
     font-size: 0.75rem;
   }
-  .flow-tray-item-head {
+  .flow-collector-item-head {
     display: flex;
     align-items: baseline;
     gap: 0.4rem;
   }
-  .flow-tray-target {
+  .flow-collector-target {
     flex: 1 1 auto;
-    color: var(--ink-c);
-    font-weight: 600;
-    background: none;
-    border: 0;
     padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ink-c);
+    font: inherit;
+    font-weight: 600;
     text-align: left;
     cursor: pointer;
-    font-family: inherit;
-    font-size: inherit;
   }
-  .flow-tray-target:hover {
+  .flow-collector-target:hover {
     color: var(--accent-c);
     text-decoration: underline;
   }
-  .flow-tray-kind {
+  .flow-collector-kind {
     flex: none;
     padding: 0 0.35rem;
     border-radius: 999px;
@@ -758,103 +750,101 @@ classes.
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
-  .flow-tray-kind[data-kind="remove-element"] {
+  .flow-collector-kind[data-kind="remove-element"] {
     background: var(--diff-remove-bg);
     color: var(--diff-remove-c);
   }
-  .flow-tray-kind[data-kind="edit-text"] {
+  .flow-collector-kind[data-kind="edit-text"] {
     background: color-mix(in srgb, var(--callout-warning-c) 16%, transparent);
     color: var(--flow-warn-ink);
   }
-  .flow-tray-where,
-  .flow-tray-value,
-  .flow-tray-note {
+  .flow-collector-value {
     color: var(--muted-c);
     line-height: 1.45;
   }
-  .flow-tray-value s {
+  .flow-collector-value s {
     color: var(--diff-remove-c);
   }
-  .flow-tray-note {
+  .flow-collector-note-line {
+    color: var(--muted-c);
     font-style: italic;
+    line-height: 1.45;
   }
-  .flow-tray-revert {
+  .flow-collector-revert {
     align-self: flex-start;
     margin-top: 0.15rem;
     padding: 0;
     border: 0;
     background: none;
     color: var(--muted-c);
-    font-family: inherit;
+    font: inherit;
     font-size: 0.6875rem;
     font-weight: 600;
-    cursor: pointer;
     text-decoration: underline;
+    cursor: pointer;
   }
-  .flow-tray-revert:hover {
+  .flow-collector-revert:hover {
     color: var(--ink-c);
   }
-  .flow-tray-foot {
+  .flow-collector-foot {
     flex: none;
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-    padding: 0.55rem 0.6rem;
-    border-top: 1px solid var(--edge-c);
-    background: var(--surface-c);
-    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    padding: 0.5rem 0.7rem 0.6rem;
+    border-top: 1px solid color-mix(in srgb, var(--ink-c) 9%, transparent);
+    background: color-mix(in srgb, var(--ink-c) 3%, transparent);
   }
-  .flow-tray-stub {
+  .flow-collector-note {
+    margin: 0;
     color: var(--muted-c);
     font-size: 0.6875rem;
     line-height: 1.4;
   }
-  /* Which diagram this batch belongs to, under the collector's own name. */
-  .flow-tray-scope {
-    display: block;
-    margin-top: 0.1rem;
-    color: var(--muted-c);
+  /* The handoff never claims success it did not have. */
+  .flow-collector-status {
+    margin: 0.4rem 0 0;
     font-size: 0.6875rem;
-    font-weight: 400;
+    line-height: 1.4;
   }
-  .flow-tray-other {
-    color: var(--muted-c);
-    font-size: 0.6875rem;
-    font-style: italic;
-  }
-  .flow-tray-other[hidden] {
+  .flow-collector-status[hidden] {
     display: none;
   }
-  .flow-tray-handoff {
-    color: var(--flow-warn-ink);
-    font-size: 0.6875rem;
-    line-height: 1.4;
+  .flow-collector-status[data-tone="added"] {
+    color: var(--accent-c);
   }
-  .flow-tray-launcher {
-    position: fixed;
+  .flow-collector-status[data-tone="unavailable"] {
+    color: var(--flow-warn-ink);
+  }
+
+  /* The primary action. Inline this is the only thing a marked-up diagram
+     shows - the reading column never sprouts a tray - and maximized it sits
+     under the diagram's own list. */
+  .flow-collector-add {
+    position: absolute;
     right: 1rem;
     bottom: 1rem;
-    z-index: 80;
+    z-index: 78;
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.4rem 0.7rem;
-    border: 1px solid var(--edge-c);
-    border-radius: 999px;
-    background: var(--bg);
-    color: var(--ink-c);
-    box-shadow: 0 6px 20px rgb(0 0 0 / 0.22);
+    padding: 0.45rem 0.85rem;
+    border: 1px solid var(--accent-c);
+    border-radius: 0.4rem;
+    background: var(--accent-c);
+    color: var(--bg);
+    box-shadow: 0 6px 18px rgb(0 0 0 / 0.24);
     font-family: var(--font-sans);
     font-size: 0.75rem;
     font-weight: 700;
     cursor: pointer;
   }
-  .flow-tray-launcher[hidden] {
+  .flow-collector-add[hidden] {
     display: none;
   }
-  .flow-tray-launcher svg {
-    width: 0.875rem;
-    height: 0.875rem;
+  .flow-collector-add:hover {
+    background: color-mix(in srgb, var(--accent-c) 85%, var(--ink-c));
+  }
+  .flow-collector-add:focus-visible {
+    outline: 2px solid var(--accent-c);
+    outline-offset: 2px;
   }
 
   /* --- Announcements ----------------------------------------------------- */
