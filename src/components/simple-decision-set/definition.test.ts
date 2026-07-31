@@ -77,8 +77,7 @@ describe("SimpleDecisionSet rendering", () => {
     );
     expect(html).toContain('data-option-description=""');
     expect(html).toContain("Keeps rollback one toggle away");
-    const recommendedCount =
-      html.split("simple-decision-recommended-pill").length - 1;
+    const recommendedCount = html.split("badge-pill-quiet").length - 1;
     expect(recommendedCount).toBe(2);
     const optionCount = html.split('data-option=""').length - 1;
     expect(optionCount).toBe(4);

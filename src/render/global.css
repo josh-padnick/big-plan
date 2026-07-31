@@ -14,6 +14,7 @@ Light and dark follow the reader's OS in inert exports.
 @import "./markdown/deck.css";
 @import "./markdown/syntax-highlighting.css";
 @import "../components/_shared/annotation-card/annotation-card.css";
+@import "../components/_shared/badge-pill/badge-pill.css";
 @import "../components/_shared/tooltip/tooltip.css";
 @import "../components/_shared/tree-hierarchy/tree-hierarchy.css";
 @import "../components/callout/styles.css";
