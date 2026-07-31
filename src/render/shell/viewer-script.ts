@@ -5,9 +5,9 @@
 // collapse toggles for deck parts, slides, and sub-slides, table-schema column
 // state, a document comment draft, DataTable sorting, filtering, text fit,
 // column layout and grouping, and one maximize behavior shared by every figure
-// family, the confirm step of a decision selector, plus the diagram leg in
-// ./diagram-script.ts. Plan content never contributes script, and every
-// affordance keeps a no-JS fallback.
+// family, a decision matrix's column highlight, rationale swap, and confirm
+// step, plus the diagram leg in ./diagram-script.ts. Plan content never
+// contributes script, and every affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
@@ -1458,10 +1458,10 @@ export const VIEWER_SCRIPT = `<script>
   }
 })();
 (() => {
-  // Decision selectors. Native radios already own picking an option, the
-  // selected look, and arrow-key movement, so this leg adds only what markup
-  // cannot express: gating the confirm action, following the reader into the
-  // proposal textarea, and the answered state.
+  // Decision matrices. Native radios already own picking an option and the
+  // selected column header, so this leg adds only what markup cannot express:
+  // highlighting the whole column, swapping the rationale panel without
+  // moving the page, gating the confirm action, and the answered state.
   for (const decision of document.querySelectorAll(
     "[data-decision-selector]",
   )) {
@@ -1469,52 +1469,107 @@ export const VIEWER_SCRIPT = `<script>
     const change = decision.querySelector("[data-decision-change]");
     const footer = decision.querySelector("[data-decision-footer]");
     const answer = decision.querySelector("[data-decision-answer]");
-    const chooseLabel = decision.querySelector("[data-decision-choose-label]");
     const answerTitle = decision.querySelector("[data-decision-answer-title]");
     const answerLead = decision.querySelector("[data-decision-answer-lead]");
+    const summary = decision.querySelector(
+      "[data-decision-selection-summary]",
+    );
+    const rationale = decision.querySelector("[data-decision-rationale]");
+    const proposal = decision.querySelector("[data-decision-proposal]");
     const proposalText = decision.querySelector("[data-decision-proposal-text]");
     const question = decision.querySelector("[data-decision-question]");
     if (confirm === null || change === null || answer === null) continue;
-    const cards = Array.from(decision.querySelectorAll("[data-decision-option]"));
     const choices = Array.from(
       decision.querySelectorAll("[data-decision-choice]"),
     );
-    // Utilities out-rank a stylesheet display rule, so which regions are
-    // showing is carried by the hidden attribute instead.
-    const reveal = (node, shown) => {
-      if (node !== null) node.hidden = !shown;
-    };
-    const compress = (answered) => {
-      reveal(footer, !answered);
-      reveal(chooseLabel, !answered);
-      reveal(answer, answered);
-      for (const card of cards) {
-        const choice = card.querySelector("[data-decision-choice]");
-        const kept = choice !== null && choice.checked;
-        reveal(card, !answered || kept);
-        // Marking the surviving card chosen moves it from the accent (picked)
-        // onto the same settled treatment a decided plan renders server-side.
-        if (answered && kept) card.setAttribute("data-option-chosen", "");
-        else card.removeAttribute("data-option-chosen");
-      }
-    };
+    const panels = Array.from(
+      decision.querySelectorAll("[data-rationale-panel]"),
+    );
+    const cells = Array.from(
+      decision.querySelectorAll("[data-decision-column]"),
+    );
+    const columnHeaders = Array.from(
+      decision.querySelectorAll(".decision-column"),
+    );
     const picked = () => choices.find((choice) => choice.checked) || null;
     const proposes = (choice) =>
       choice instanceof Element &&
       choice.hasAttribute("data-decision-proposal-choice");
-    const proposal = () =>
+    const proposalValue = () =>
       proposalText === null ? "" : proposalText.value.trim();
+
+    // Overlapping the panels freezes the region at the tallest one, so from
+    // here on swapping the visible panel cannot move anything below it.
+    if (rationale !== null) rationale.setAttribute("data-rationale-live", "");
+    const defaultIndex =
+      rationale === null ? "0" : rationale.getAttribute("data-default-index");
+
+    const showPanel = (index) => {
+      for (const panel of panels) {
+        const shown = panel.getAttribute("data-option-index") === index;
+        if (shown) panel.setAttribute("data-rationale-shown", "");
+        else panel.removeAttribute("data-rationale-shown");
+      }
+    };
+    const paintColumn = (index, settled) => {
+      for (const cell of cells) {
+        const on = index !== null && cell.getAttribute("data-decision-column") === index;
+        if (on) cell.setAttribute("data-column-selected", "");
+        else cell.removeAttribute("data-column-selected");
+        if (on && settled) cell.setAttribute("data-column-settled", "");
+        else cell.removeAttribute("data-column-settled");
+      }
+    };
     const sync = () => {
       const choice = picked();
       const proposing = proposes(choice);
-      confirm.textContent = proposing ? "Submit proposal" : "Confirm decision";
-      confirm.disabled = choice === null || (proposing && proposal() === "");
+      const index = choice === null ? null : choice.getAttribute("data-option-index");
+      showPanel(index === null ? defaultIndex : index);
+      paintColumn(index, false);
+      if (proposal !== null) proposal.hidden = !proposing;
+      confirm.textContent = proposing ? "Submit proposal" : "Confirm choice";
+      confirm.disabled =
+        choice === null || (proposing && proposalValue() === "");
+      if (summary !== null) {
+        summary.textContent =
+          choice === null
+            ? "Nothing selected yet."
+            : proposing
+              ? "Your own approach selected."
+              : choice.value + " selected.";
+      }
     };
     decision.addEventListener("change", (event) => {
       sync();
       if (proposes(event.target) && proposalText !== null) proposalText.focus();
     });
     if (proposalText !== null) proposalText.addEventListener("input", sync);
+
+    const propose = decision.querySelector("[data-option-proposal]");
+    const compress = (answered) => {
+      if (footer !== null) footer.hidden = answered;
+      // Once an answer is recorded, offering to propose something else only
+      // duplicates the change action beside it.
+      if (propose !== null) propose.hidden = answered;
+      answer.hidden = !answered;
+      const choice = picked();
+      const index = choice === null ? null : choice.getAttribute("data-option-index");
+      // Answering drops the columns the reader turned down, so the record
+      // reads as one option against the criteria rather than a live matrix.
+      for (const cell of cells) {
+        const kept = cell.getAttribute("data-decision-column") === index;
+        cell.hidden = answered && !kept;
+      }
+      for (const header of columnHeaders) {
+        if (answered && header.getAttribute("data-decision-column") === index) {
+          header.setAttribute("data-option-chosen", "");
+        } else if (answered) {
+          header.removeAttribute("data-option-chosen");
+        }
+      }
+      paintColumn(index, answered);
+    };
+
     confirm.addEventListener("click", () => {
       const choice = picked();
       if (choice === null || confirm.disabled) return;
@@ -1525,7 +1580,8 @@ export const VIEWER_SCRIPT = `<script>
           : "Answer recorded";
       }
       if (answerTitle !== null) {
-        answerTitle.textContent = ": " + (proposing ? proposal() : choice.value);
+        answerTitle.textContent =
+          ": " + (proposing ? proposalValue() : choice.value);
       }
       if (proposalText !== null) proposalText.readOnly = proposing;
       decision.setAttribute("data-decision-answered", "");
@@ -1533,21 +1589,24 @@ export const VIEWER_SCRIPT = `<script>
       // The transport carrying an answer back to the agent belongs to the
       // review commenting runtime. Until it lands, the answer is announced on
       // the document and queued where that runtime can drain it.
-      const answer = {
+      const record = {
         decision: decision.id,
         question: question === null ? "" : question.textContent,
         option: choice.value,
-        proposal: proposing ? proposal() : "",
+        proposal: proposing ? proposalValue() : "",
       };
       window.bigPlanDecisionAnswers = window.bigPlanDecisionAnswers || [];
-      window.bigPlanDecisionAnswers.push(answer);
+      window.bigPlanDecisionAnswers.push(record);
       document.dispatchEvent(
-        new CustomEvent("bigplan:decision-answered", { detail: answer }),
+        new CustomEvent("bigplan:decision-answered", { detail: record }),
       );
       change.focus();
     });
     change.addEventListener("click", () => {
       decision.removeAttribute("data-decision-answered");
+      for (const header of columnHeaders) {
+        header.removeAttribute("data-option-chosen");
+      }
       compress(false);
       if (proposalText !== null) proposalText.readOnly = false;
       sync();

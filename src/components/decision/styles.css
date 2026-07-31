@@ -1,12 +1,20 @@
-/* Decision's radio-card selector. Three states stay independent on purpose:
-   recommendation is a neutral chip, selection owns the accent, and a decided
-   outcome owns the pro colour. Everything except the confirm step works with
-   the viewer script disabled, so the selectors below key off :checked rather
-   than off script-written attributes wherever they can. */
+/* Decision's comparison matrix and its stable rationale panel.
+
+   Two invariants drive most of the rules below.
+
+   Layout stability: every rationale panel occupies the same grid cell, so the
+   panel region is as tall as the tallest option's reasoning and stays that
+   height forever. Swapping which panel is visible uses `visibility`, never
+   `display`, because a hidden-but-present box keeps sizing the grid.
+
+   State independence: recommendation is a neutral chip, a picked column owns
+   the accent, and a settled one owns the pro colour. Card surfaces and
+   borders are set here rather than with utilities, because a utility would
+   out-rank every variant rule. */
 
 @layer components {
-  /* Verdict tones sit on top of words that already carry the meaning, so a
-     reader who cannot separate the hues loses nothing. */
+  /* Verdict tones ride on top of a word and a glyph, so a reader who cannot
+     separate the hues loses nothing. */
   article .decision-verdict-good {
     color: var(--decision-pro-c);
   }
@@ -20,13 +28,6 @@
     color: var(--ink-c);
   }
 
-  /* Attribute columns are sized, not counted: options carry identical
-     considerations, so equal cards resolve to identical column runs and the
-     verdicts line up down the whole stack. */
-  article .decision-attributes {
-    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
-  }
-
   article .decision-status-pill {
     background: var(--surface-c);
     color: var(--muted-c);
@@ -36,67 +37,81 @@
     color: var(--decision-pro-c);
   }
 
-  /* The label covers the card so the whole surface answers a click, while
-     the disclosure and the proposal textarea sit above it and keep theirs. */
-  article .decision-option-label::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
+  /* The matrix. The prose stylesheet tints and borders markdown tables; this
+     one draws its own row rules and sits on the card surface. */
+  article .decision-matrix th,
+  article .decision-matrix td {
+    border-bottom: 0;
+    background: transparent;
+    vertical-align: top;
+  }
+  article .decision-matrix-row > th,
+  article .decision-matrix-row > td {
+    border-top: 1px solid var(--edge-c);
+  }
+  /* The 1px height lets each header cell's label stretch to the tallest
+     option in the row, so every column shares one baseline and the whole
+     header is clickable down to the matrix rule. */
+  article .decision-matrix thead th {
+    height: 1px;
+  }
+  article .decision-corner {
+    width: 1%;
+    white-space: nowrap;
+  }
+  article .decision-criterion {
+    width: 1%;
+    white-space: nowrap;
   }
 
-  /* Card states, ordered so the later rule wins each tie: rest, hover (only
-     while the group can still be answered), picked, settled. */
-  article .decision-option {
-    border-color: var(--edge-c);
+  /* Column states, ordered so the later rule wins each tie: rest, hover,
+     picked, settled. `data-column-selected` is written by the viewer script
+     across a whole column; without scripts the header alone carries the
+     selection, which the native radio already makes unambiguous. */
+  article .decision-column,
+  article .decision-cell {
     background: var(--bg);
   }
-  /* Light paper and light surface sit close together, so hover needs the
-     border to move as well as the fill to register as an invitation. */
-  article .decision-option:has(.decision-radio:enabled):hover {
-    border-color: color-mix(in srgb, var(--color-muted) 40%, var(--edge-c));
+  article .decision-column:has(.decision-radio:enabled):hover {
     background: var(--surface-c);
   }
-  article .decision-option:has(.decision-radio:checked) {
-    border-color: var(--color-accent);
+  article .decision-column:has(.decision-radio:checked),
+  article .decision-cell[data-column-selected] {
     background: color-mix(in srgb, var(--color-accent) 10%, var(--bg));
-    box-shadow: inset 0 0 0 1px var(--color-accent);
   }
-  article .decision-option[data-option-chosen]:has(.decision-radio:checked) {
-    border-color: var(--decision-pro-c);
+  article .decision-column:has(.decision-radio:checked) {
+    box-shadow: inset 0 2px 0 var(--color-accent);
+  }
+  article .decision-column[data-option-chosen]:has(.decision-radio:checked),
+  article .decision-cell[data-column-selected][data-column-settled] {
     background: var(--decision-pro-bg);
-    box-shadow: inset 0 0 0 1px var(--decision-pro-c);
   }
-  /* Keyboard focus lands on the card, not on a 16px circle inside it. */
-  article .decision-option:has(.decision-radio:focus-visible) {
+  article .decision-column[data-option-chosen]:has(.decision-radio:checked) {
+    box-shadow: inset 0 2px 0 var(--decision-pro-c);
+  }
+  /* Keyboard focus lands on the whole column header, not on the radio. */
+  article .decision-column:has(.decision-radio:focus-visible) {
     outline: 2px solid var(--color-accent);
-    outline-offset: 2px;
+    outline-offset: -2px;
   }
-  article .decision-option:has(.decision-radio:disabled),
-  article
-    .decision-option:has(.decision-radio:disabled)
-    .decision-option-label {
+  article .decision-column:has(.decision-radio:disabled) .decision-column-head {
     cursor: default;
   }
 
   /* A real radio, restyled rather than replaced, so the browser keeps
      selection, arrow-key movement, and the form semantics. */
   article .decision-radio {
-    /* Above the label's stretched hit area, so a click aimed at the control
-       itself lands on the control. */
-    position: relative;
-    z-index: 1;
     border-color: color-mix(in srgb, var(--color-muted) 55%, transparent);
     background: var(--bg);
   }
-  /* The inset ring cuts a paper-coloured gap between the rim and the dot, so
-     a checked radio reads as filled at 16px without a background image. */
+  /* The inset ring cuts a paper-coloured gap between rim and dot, so a
+     checked radio reads as filled at 16px without a background image. */
   article .decision-radio:checked {
     border-color: var(--color-accent);
     background: var(--color-accent);
     box-shadow: inset 0 0 0 2.5px var(--bg);
   }
-  article .decision-option[data-option-chosen] .decision-radio:checked {
+  article .decision-column[data-option-chosen] .decision-radio:checked {
     border-color: var(--decision-pro-c);
     background: var(--decision-pro-c);
   }
@@ -110,11 +125,61 @@
     outline: none;
   }
 
-  /* The proposal textarea is dead weight until its option is picked. */
+  /* The rationale region. Without scripts the panels stack and every one is
+     readable; the script turns the region into a single-cell grid so the
+     panels overlap, the height freezes at the tallest, and selecting an
+     option swaps the visible panel without moving anything below it. */
+  article .decision-rationale-panel + .decision-rationale-panel {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--edge-c);
+  }
+  article .decision-rationale[data-rationale-live] {
+    display: grid;
+  }
+  article .decision-rationale[data-rationale-live] > .decision-rationale-panel {
+    grid-area: 1 / 1;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+    visibility: hidden;
+  }
   article
-    .decision-option:not(:has(.decision-radio:checked))
-    .decision-proposal {
-    display: none;
+    .decision-rationale[data-rationale-live]
+    > .decision-rationale-panel[data-rationale-shown] {
+    visibility: visible;
+  }
+
+  /* The escape hatch reads as a quiet link, never as a fourth column. */
+  article .decision-propose-link {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: color-mix(
+      in srgb,
+      var(--color-muted) 45%,
+      transparent
+    );
+    text-underline-offset: 3px;
+  }
+  article .decision-propose-link:hover {
+    color: var(--ink-c);
+  }
+  article .decision-propose:has(.decision-radio:checked) .decision-propose-link,
+  article
+    .decision-propose:has([data-decision-proposal-choice]:checked)
+    .decision-propose-link {
+    color: var(--color-accent);
+    text-decoration-color: var(--color-accent);
+  }
+  article .decision-propose-link:has(:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 0.125rem;
   }
   article .decision-proposal-input {
     padding: 0.4375rem 0.625rem;
@@ -133,50 +198,10 @@
     border-color: var(--color-accent);
   }
 
-  article .decision-details-summary {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    list-style: none;
-    color: var(--color-muted);
-    text-decoration: underline;
-    text-decoration-color: color-mix(
-      in srgb,
-      var(--color-muted) 45%,
-      transparent
-    );
-    text-underline-offset: 3px;
-  }
-  article .decision-details-summary::-webkit-details-marker {
+  /* The scrolling hint belongs only to the reader whose viewport clips the
+     matrix; above the reading breakpoint it is noise. */
+  article .decision-scroll-note {
     display: none;
-  }
-  /* The caret is drawn from two borders rather than a glyph so it keeps its
-     weight at 11px; the nudge optically centres a rotated square on the
-     summary's x-height. */
-  article .decision-details-summary::before {
-    content: "";
-    flex: none;
-    width: 0.3125rem;
-    height: 0.3125rem;
-    margin-top: -1px;
-    border-right: 1.5px solid currentcolor;
-    border-bottom: 1.5px solid currentcolor;
-    transform: rotate(-45deg);
-    transition: transform 0.12s ease-out;
-  }
-  article .decision-details[open] > .decision-details-summary::before {
-    margin-top: -3px;
-    transform: rotate(45deg);
-  }
-  article .decision-details-summary:hover {
-    color: var(--ink-c);
-  }
-  article .decision-details[open] > .decision-details-summary {
-    color: var(--ink-c);
-  }
-  article .decision-details-summary:focus-visible {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 2px;
   }
 
   article .decision-confirm {
@@ -219,12 +244,9 @@
     background: var(--surface-c);
   }
 
-  /* Answering compresses the block: the options the reader turned down are
-     hidden and the confirm row is replaced by the recorded strip. The script
-     marks the surviving card chosen, so it switches from the accent (picked)
-     to the pro colour (settled) through the same rule a decided plan uses.
-     Which regions are showing is carried by the hidden attribute, because
-     that is the one display rule utilities cannot out-rank. */
+  /* Answering compresses the matrix to the column that won and replaces the
+     confirm row with the recorded strip. Which regions are showing is carried
+     by the hidden attribute, the one display rule utilities cannot out-rank. */
   article .decision-answer:not([hidden]) {
     display: flex;
     background: var(--decision-pro-bg);
@@ -232,5 +254,16 @@
   article .decision-answer-mark {
     background: var(--decision-pro-c);
     color: var(--bg);
+  }
+}
+
+/* The matrix earns its horizontal scroll below the reading breakpoint, where
+   three option columns cannot fit; the hint appears exactly there. */
+@media (width < 56rem) {
+  article .decision-scroll-note {
+    display: block;
+  }
+  article .decision-matrix {
+    min-width: 34rem;
   }
 }
