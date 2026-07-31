@@ -256,7 +256,7 @@ const FilterField = ({ id }: { readonly id: string }) => (
     </span>
     <input
       type="search"
-      className="data-table-filter-input h-6 w-32 rounded-md border border-edge bg-transparent py-0 pr-2 pl-[1.35rem] text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+      className="data-table-filter-input h-6 w-32 rounded-md border border-edge-strong bg-transparent py-0 pr-2 pl-[1.35rem] text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
       placeholder="Filter rows"
       aria-label="Filter rows"
       data-table-filter-input={id}
