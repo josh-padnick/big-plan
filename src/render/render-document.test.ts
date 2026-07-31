@@ -131,6 +131,39 @@ describe("renderDocument affordances", () => {
     }
   });
 
+  it("should never pull a wireframe outside the element that holds it", () => {
+    // A drawing used to borrow free page margin with a negative margin keyed
+    // on a marker attribute. Inside a collapsible slide the wrapper the deck
+    // transform inserts broke the selector that widened the card, so the
+    // drawing bled past its own border. The column is wide now and there is
+    // nothing to borrow; this fails if that mechanism ever comes back.
+    const deckWireframe = `# Deck
+
+The lede.
+
+<Part title="Context" />
+
+## A screen
+
+<Wireframe id="wf" initialScreen="one">
+  <Screen id="one" name="One" viewport="desktop" chrome="browser">
+    <Text text="Drawn inside a collapsible slide." />
+  </Screen>
+</Wireframe>
+`;
+    const { html: deckHtml } = renderDocument({
+      markdown: deckWireframe,
+      fallbackTitle: "Deck",
+    });
+    expect(deckHtml).toContain("data-collapsible");
+    expect(deckHtml).toContain("data-wireframe=");
+    expect(deckHtml).not.toContain("--reading-free-inline");
+    expect(deckHtml).not.toContain("data-wireframe-desktop");
+    // A desktop screen is capped instead, so it stays a screen rather than
+    // growing with the window.
+    expect(deckHtml).toContain("max-width:920px");
+  });
+
   it("should inline one stylesheet and only the scroll-spy script when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
     // The shell's scroll-spy is the single script; plan content can never
@@ -138,6 +171,29 @@ describe("renderDocument affordances", () => {
     expect(html.match(/<script>/g)).toHaveLength(1);
     expect(html).toContain("data-section-link");
     expect(html).not.toContain('src="http');
+  });
+
+  it("should name the plan quietly in the bar so a deep reader keeps its title", () => {
+    expect(html).toContain("data-plan-title");
+    expect(html).toMatch(/<p class="[^"]*truncate[^"]*"[^>]*data-plan-title/);
+    // The bar repeats the h1, so it is chrome for the eye only; a screen
+    // reader already has the title from the document and the page head.
+    expect(html).toMatch(/data-plan-title[^>]*aria-hidden="true"/);
+    // Truncation needs the full text reachable on hover.
+    expect(html).toMatch(/data-plan-title title="Plan title"/);
+  });
+
+  it("should escape a plan title before putting it in the bar", () => {
+    // The title lands in an attribute as well as in text, so a quote that
+    // survived would close the attribute early.
+    const { html: quoted } = renderDocument({
+      markdown: '# Ship "A & B" plans\n\nBody.\n',
+      fallbackTitle: "Fallback",
+    });
+    expect(quoted).toContain(
+      'data-plan-title title="Ship &quot;A &amp; B&quot; plans"',
+    );
+    expect(quoted).not.toContain('title="Ship "A');
   });
 
   it("should emit theme-aware favicon links as embedded data URIs when rendering", () => {
@@ -240,8 +296,9 @@ describe("renderDocument shell", () => {
     expect(html).toContain("</html>");
     expect(html).not.toContain("<nav");
     expect(html).not.toContain("<script>");
-    // The reading column keeps its ~74ch measure even without a sidebar.
-    expect(html).toContain("wide:grid-cols-[minmax(0,74ch)]");
+    // The content column keeps its width even without a sidebar; prose holds
+    // its own measure inside it rather than the column enforcing one.
+    expect(html).toContain("wide:grid-cols-[minmax(0,72rem)]");
   });
 
   it("should omit the TOC when the document has headings but no h2s", () => {

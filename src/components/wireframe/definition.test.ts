@@ -38,6 +38,20 @@ const element = ({
   position: CHILD_POSITION,
 });
 
+const fence = (source: string): ElementContent => ({
+  type: "element",
+  tagName: "pre",
+  properties: {},
+  children: [
+    {
+      type: "element",
+      tagName: "code",
+      properties: {},
+      children: [{ type: "text", value: source }],
+    },
+  ],
+});
+
 const screen = ({
   id,
   name = "A screen",
@@ -135,6 +149,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
               element: "Panel",
               title: "Balance",
               span: "fill",
+              surface: "plain",
               children: [
                 { element: "Text", text: "$42.50", role: "body" },
                 {
@@ -961,6 +976,188 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     const { compiled } = compile({ scopedChildren: [HOME] });
     expect(compiled.model).toMatchObject({ screens: [{ chrome: "none" }] });
     expect(html(render(compiled))).toContain('"data-wireframe-chrome":"none"');
+  });
+
+  it("should read a fenced table into columns and rows", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Table",
+              body: [fence("Run | Result | Cost\n#1042 | Failed | $1.86")],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"tagName":"table"');
+    expect(rendered).toContain('"tagName":"th"');
+    expect(rendered).toContain("#1042");
+    // A column whose every value is a figure lines up on the right.
+    expect(rendered).toContain('"data-wireframe-numeric":"true"');
+  });
+
+  it("should report a row that does not match the header", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Table",
+              body: [fence("Run | Result\n#1042 | Failed | extra")],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      "Table row 1 has 3 cells but the header names 2",
+    ]);
+  });
+
+  it("should draw a bracketed cell as a toned chip", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Table",
+              attributes: { selected: "1" },
+              body: [fence("Run | Result\n#1042 | [Failed:danger]")],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-wireframe-tone":"danger"');
+    // The word carries the meaning; the tone only reinforces it.
+    expect(rendered).toContain("Failed");
+    expect(rendered).toContain('"data-wireframe-selected"');
+  });
+
+  it("should report a chip tone that is not one of the tones", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Table",
+              body: [fence("Run | Result\n#1042 | [Failed:scary]")],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Unknown chip tone "scary" in a table cell; expected one of: neutral, info, success, warning, danger',
+    ]);
+  });
+
+  it("should report selecting a row the table does not have", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Table",
+              attributes: { selected: "4" },
+              body: [fence("Run | Result\n#1042 | Failed")],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message: "Table has no row 4 to select; it holds 1",
+      },
+    ]);
+  });
+
+  it("should draw no box around a region unless the author asks for one", () => {
+    const { compiled } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({ name: "Panel", attributes: { title: "Plain" } }),
+            element({
+              name: "Panel",
+              attributes: { title: "Pane", surface: "filled" },
+            }),
+            element({
+              name: "Panel",
+              attributes: { title: "Card", surface: "outlined" },
+            }),
+          ],
+        }),
+      ],
+    });
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-wireframe-surface":"plain"');
+    expect(rendered).toContain('"data-wireframe-surface":"filled"');
+    expect(rendered).toContain('"data-wireframe-surface":"outlined"');
+  });
+
+  it("should hold centered content to a measure", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Center",
+              attributes: { measure: "narrow" },
+              children: [
+                element({ name: "Text", attributes: { text: "Focused" } }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(html(render(compiled))).toContain(
+      '"data-wireframe-measure":"narrow"',
+    );
+  });
+
+  it("should draw the last crumb as the current screen rather than a link", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Breadcrumbs",
+              children: [
+                element({
+                  name: "Crumb",
+                  attributes: { label: "Runs", navigateTo: "home" },
+                }),
+                element({ name: "Crumb", attributes: { label: "#1042" } }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"ariaLabel":"Breadcrumb"');
+    expect(rendered).toContain('"ariaCurrent":"page"');
   });
 
   it("should mark only the initial screen current so an inert document shows every screen", () => {

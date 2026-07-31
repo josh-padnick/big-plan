@@ -8,6 +8,10 @@ A hand-drawn sketch of a product screen, drawn from a fixed vocabulary so a revi
 - All copy is written as attributes: `<Text text="..." />`, `<Metric label="..." value="..." />`, `<Button label="..." />`. A wireframe holds no prose, and the explanation belongs in the paragraphs around it.
 - Draw **product UI**, not a design review of the product UI. Keyboard cheatsheets, "sticky header", "remembered width", and process notes belong outside the artboard - never as on-screen helper copy a customer would not see.
 - Before drawing a desktop screen, name a real SaaS reference pattern (Linear, GitHub, Stripe, Front, Notion). Prefer that pattern over inventing a novel layout.
+- Draw as few boxes as you can. A region groups by its heading and the space around it, so `Panel` draws nothing by default: use `surface="filled"` for a workspace pane and `surface="outlined"` only where something behaves like a card. Outlining everything makes every part of the screen shout equally.
+- Keep three text levels and no more: the page title, the content, and its metadata. Anything else is a fourth level competing with the title.
+- Say state in words first. A `Badge`, or a table cell written `[Failed:danger]`, is a word that a tone only reinforces; a reviewer who cannot see the tint still reads the state.
+- Borrow a layout a real product already proved - a table with a toolbar, master-detail, a settings two-column, a focused centered form - rather than inventing one for a solved problem.
 - Pick the `viewport` the design is really for. The artboard reflows to the reader's width instead of shrinking the text, so the preset sets the shape rather than the final size.
 - Say what kind of product this is with `chrome`. A web product uses `chrome="browser"` and a `url`, which tells a reviewer the route before they read a label; a phone screen uses `chrome="phone"`. An unframed screen floats on the page and reads as a tablet app whatever is inside it, so frame every screen of a real product and keep the frame the same across the prototype.
 
@@ -107,6 +111,11 @@ Phone musts: `viewport="mobile-portrait"`, `chrome="phone"`, single column, `Bot
 - **Navigation** - `Nav` / `NavItem` for destinations; `BottomBar` for phone primary destinations. Walkable buttons use `navigateTo` without an external-link arrow glyph.
 - **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, `Switch` - every control needs a `label`.
 - **Flow** - `Stepper` / `Step`, `Connector`.
+- **Content** - `Metric`, `Progress`, `Table`, `List` / `ListItem` (use `selected` on the active queue row), `Message` for conversation timelines (`kind` customer|agent|internal), `Text`, `Heading`, `Badge`, `Divider`, and `ImagePlaceholder`.
+- **Hierarchy** - `Breadcrumbs` and `Crumb` say where a screen sits; `Center` holds reading content to a measure so a form never stretches the whole window.
+- **Navigation** - `Nav` / `NavItem` for destinations; `BottomBar` for phone primary destinations. Walkable buttons use `navigateTo` without an external-link arrow glyph.
+- **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, and `Switch` draw as real controls; every one needs a `label`.
+- **Flow** - `Stepper` / `Step` show multi-step progress; `Connector` draws a labeled transition on a canvas.
 
 ```mdx
 <Wireframe id="harbor-desktop" title="Harbor, desktop" initialScreen="ticket">

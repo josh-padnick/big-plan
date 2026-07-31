@@ -41,22 +41,30 @@ export type ShellResult = {
 const BODY_CLASSES =
   "bg-paper font-sans text-base leading-[1.65] text-ink antialiased";
 
-// Stacked reading layout below the wide breakpoint; sidebar plus one reading
-// column (~74ch) above it. The no-TOC variant is always a single column.
+// Stacked reading layout below the wide breakpoint; sidebar plus one content
+// column above it. The no-TOC variant is always a single column.
+//
+// The column is wider than a line of prose should ever be, because a plan
+// carries tables, diagrams, and drawings of desktop products that are all
+// unreadable squeezed to a text measure. Prose is held back to its own
+// measure inside the column by prose.css; everything else uses the room.
 const LAYOUT_CLASSES =
   "grid grid-cols-[minmax(0,1fr)] justify-center gap-8 px-5 pt-16 pb-16 wide:gap-14 wide:px-6 wide:pt-12 wide:pb-20";
-const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,74ch)]`;
-const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,74ch)]`;
+const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,72rem)]`;
+const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,72rem)]`;
 
 // Active links change color and border only, never weight, so highlighting
-// can never re-wrap a label. Entries grouped under a part header indent one
-// step so the header reads as their parent.
+// can never re-wrap a label. Entries grouped under a part header carry the
+// rule and the inset that make them read as its children.
 const TOC_LINK_CLASSES =
   "block border-l-2 border-edge px-3 py-[0.3rem] leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
 const TOC_GROUPED_LINK_CLASSES =
-  "block border-l-2 border-edge py-[0.3rem] pr-3 pl-5 leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
+  "block border-l-2 border-edge py-[0.3rem] pr-3 pl-3.5 leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
+// A part header is a heading over the entries beneath it, not one of them, so
+// it sits flush with the Contents label rather than sharing the rule and inset
+// its section links use.
 const TOC_PART_HEADER_CLASSES =
-  "mt-3 mb-1 block border-l-2 border-transparent px-3 text-[0.6875rem] font-bold tracking-[0.1em] uppercase text-accent hover:text-ink";
+  "mt-3 mb-1 block pr-3 text-[0.6875rem] font-bold tracking-[0.1em] uppercase text-accent hover:text-ink";
 const MOBILE_TOC_LINK_CLASSES =
   "block border-l-2 border-transparent px-5 py-2.5 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
 const MOBILE_TOC_GROUPED_LINK_CLASSES =
@@ -149,7 +157,7 @@ const renderDesktopToc = ({
     partHeaderClasses: TOC_PART_HEADER_CLASSES,
   });
   return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[5.75rem] wide:block wide:self-start" aria-label="Contents">
-<p class="mb-3 flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-[0.08em]"><a class="rounded-sm text-muted hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a>${renderBulkCollapseControls()}</p>
+<p class="mb-3 flex items-center justify-between gap-2 border-b border-edge pb-2 text-xs font-semibold uppercase tracking-[0.08em]"><a class="rounded-sm text-muted hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a>${renderBulkCollapseControls()}</p>
 <ol>
 ${items}
 </ol>
@@ -171,7 +179,7 @@ const renderMobileToc = ({
     partHeaderClasses: MOBILE_TOC_PART_HEADER_CLASSES,
   });
   return `<nav class="sticky top-11 z-10 h-11 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden" data-mobile-toc aria-label="Contents">
-<details class="group relative mx-auto h-full max-w-[74ch]">
+<details class="group relative mx-auto h-full max-w-[72rem]">
 <summary class="flex h-full cursor-pointer list-none items-center gap-3 px-5 py-2 [&amp;::-webkit-details-marker]:hidden">
 <span class="font-semibold text-ink">Sections</span>
 <span class="flex min-w-6 items-center justify-center rounded-full bg-surface px-2 py-0.5 text-xs font-medium tabular-nums text-muted">${nav.length}</span>
@@ -195,10 +203,14 @@ ${items}
  */
 export const renderShell = ({
   nav,
+  title,
   contentIds,
   contentHtml,
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
+  // The plan's own title, shown quietly in the bar so a reader deep in a long
+  // document can still see which plan they are in.
+  readonly title: string;
   readonly contentIds: ReadonlyArray<string>;
   readonly contentHtml: string;
 }): ShellResult => {
@@ -210,11 +222,13 @@ export const renderShell = ({
     contentHtml.includes("data-collapsible");
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
-<div class="flex h-full items-center px-5 wide:px-6">
+<div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-5 wide:px-6">
 <a class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
+<p class="truncate text-center text-sm leading-none text-muted" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</p>
+<span class="hidden w-27 wide:block" aria-hidden="true"></span>
 </div>
 </header>
 ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}

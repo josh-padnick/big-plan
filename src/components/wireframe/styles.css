@@ -37,16 +37,20 @@ marks and a plan diff never jitters.
     line-height: 1.3;
   }
   .wireframe h3 {
-    font-size: 1.3125rem;
+    font-size: 1.375rem;
   }
   .wireframe h4 {
-    font-size: 1.0625rem;
+    font-size: 1rem;
   }
   .wireframe h5 {
     font-size: 0.9375rem;
   }
   .wireframe p {
     margin: 0;
+  }
+  .wireframe table {
+    margin: 0;
+    display: table;
   }
   .wireframe ul,
   .wireframe li {
@@ -145,10 +149,15 @@ marks and a plan diff never jitters.
     max-width: 834px;
   }
   .wireframe-frame:has(> [data-wireframe-viewport="tablet-landscape"]) {
-    max-width: 1112px;
+    max-width: 960px;
   }
+  /* A drawing of a desktop product stops growing well before the window
+     does. Past this it stops reading as one screen a person looks at and
+     starts reading as a wall, and the labels drift apart from each other.
+     It also has to sit proportionate to the column it is drawn in rather
+     than filling it, which is what sets the number this low. */
   .wireframe-frame:has(> [data-wireframe-viewport="desktop"]) {
-    max-width: 1440px;
+    max-width: 920px;
   }
 
   .wireframe-frame[data-wireframe-chrome="browser"] {
@@ -281,16 +290,28 @@ marks and a plan diff never jitters.
     min-width: 9rem;
   }
 
+  /* Outlining every region makes controls, panels, and page structure all
+     compete, so nothing reads as more important than anything else. A region
+     draws nothing by default and is grouped by its heading and the space
+     around it; a fill marks a workspace pane; a box is spent only where
+     something genuinely behaves like a card. */
   .wireframe-panel {
     position: relative;
+  }
+  .wireframe-panel[data-wireframe-surface="filled"] {
     padding: 0.75rem 0.875rem;
+    border-radius: var(--wf-sketch);
+    background: var(--wf-fill);
+  }
+  .wireframe-panel[data-wireframe-surface="outlined"] {
+    padding: 0.6rem 0.75rem;
     border: 2px solid var(--wf-stroke);
     border-radius: var(--wf-sketch);
     background: var(--color-paper);
   }
   /* The second, offset stroke: the line a pen leaves when the hand repeats
-     a rectangle it has already drawn. */
-  .wireframe-panel::after {
+     a rectangle it has already drawn. Only a card earns it. */
+  .wireframe-panel[data-wireframe-surface="outlined"]::after {
     content: "";
     position: absolute;
     inset: 2px -2px -2px 2px;
@@ -300,6 +321,11 @@ marks and a plan diff never jitters.
   }
   .wireframe-panel-head {
     margin-bottom: 0.5rem;
+  }
+  /* Three text levels and no more: page title, content, metadata. A panel
+     title is content-level, so it never competes with the page title. */
+  .wireframe-panel-title {
+    font-size: 0.9375rem;
   }
   .wireframe-eyebrow {
     font-size: 0.6875rem;
@@ -326,6 +352,16 @@ marks and a plan diff never jitters.
     font-size: 0.875rem;
     font-weight: 600;
     cursor: pointer;
+  }
+  /* A control keeps its own size in a stretching column, but a container
+     that centers or end-aligns its children means that for the control too. */
+  .wireframe .items-center > .wireframe-button,
+  .wireframe .items-center > .wireframe-badge {
+    align-self: center;
+  }
+  .wireframe .items-end > .wireframe-button,
+  .wireframe .items-end > .wireframe-badge {
+    align-self: flex-end;
   }
   .wireframe-button:hover {
     background: var(--wf-fill);
@@ -398,6 +434,7 @@ marks and a plan diff never jitters.
     border: 0;
     border-bottom: 2px solid var(--wf-stroke);
   }
+  /* One divider between panes rather than an outline around each. */
   .wireframe-sidebar {
     padding: 0.625rem 0.65rem;
     border: 0;
@@ -411,9 +448,8 @@ marks and a plan diff never jitters.
     gap: 0.65rem;
   }
   .wireframe-top-bar {
-    padding: 0.5rem 0.75rem;
-    border: 2px solid var(--wf-stroke);
-    border-radius: var(--wf-sketch);
+    padding: 0.35rem 0 0.6rem;
+    border-bottom: 2px solid var(--wf-stroke-soft);
   }
 
   /* Desktop density: tighter than tablet so the drawing reads as a web app. */
@@ -750,8 +786,8 @@ marks and a plan diff never jitters.
     color: var(--color-muted);
   }
   .wireframe-metric-value {
-    font-size: 2rem;
-    line-height: 1.15;
+    font-size: 1.5rem;
+    line-height: 1.2;
   }
   .wireframe-metric-note {
     font-size: 0.8125rem;
@@ -850,6 +886,22 @@ marks and a plan diff never jitters.
   .wireframe-stack > .wireframe-badge,
   .wireframe-canvas > .wireframe-badge {
     align-self: flex-start;
+  }
+  .wireframe-badge[data-wireframe-tone="info"] {
+    border-color: var(--callout-note-c);
+    color: var(--callout-note-c);
+  }
+  .wireframe-badge[data-wireframe-tone="success"] {
+    border-color: var(--decision-pro-c);
+    color: var(--decision-pro-c);
+  }
+  .wireframe-badge[data-wireframe-tone="warning"] {
+    border-color: var(--callout-warning-c);
+    color: var(--callout-warning-c);
+  }
+  .wireframe-badge[data-wireframe-tone="danger"] {
+    border-color: var(--callout-danger-c);
+    color: var(--callout-danger-c);
   }
   .wireframe-badge {
     align-self: center;
@@ -1241,6 +1293,145 @@ marks and a plan diff never jitters.
   }
   .wireframe-connector-label {
     white-space: nowrap;
+  }
+
+  /* A details rail keeps a conventional width so the main content stays the
+     dominant pane; below a narrow container it wraps under instead of
+     squeezing both. */
+  .wireframe-rail {
+    flex: 0 1 17rem;
+    min-width: 12rem;
+  }
+
+  /* Prose stops being readable somewhere past 80 characters, so a screen
+     holds its reading content to a measure instead of letting it run the
+     whole window. */
+  .wireframe-center {
+    display: flex;
+    justify-content: center;
+  }
+  .wireframe-center-inner {
+    width: 100%;
+  }
+  .wireframe-center[data-wireframe-measure="narrow"] .wireframe-center-inner {
+    max-width: 26rem;
+  }
+  .wireframe-center[data-wireframe-measure="prose"] .wireframe-center-inner {
+    max-width: 38rem;
+  }
+  .wireframe-center[data-wireframe-measure="wide"] .wireframe-center-inner {
+    max-width: 54rem;
+  }
+
+  .wireframe-breadcrumbs {
+    gap: 0.15rem 0.35rem;
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+  }
+  .wireframe-crumb {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+  }
+  .wireframe-crumb-link {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+  }
+  .wireframe-crumb-link:hover {
+    color: var(--color-ink);
+  }
+  .wireframe-crumb-link:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  /* The separator is drawn rather than authored, so a trail can never be
+     written with the wrong one. */
+  .wireframe-crumb + .wireframe-crumb::before {
+    content: "/";
+    margin-right: 0.35rem;
+    color: var(--wf-stroke-soft);
+  }
+  .wireframe-crumb[aria-current="page"] {
+    color: var(--color-ink);
+  }
+
+  /* Rows of one kind of record. Figures line up on the right so a reader can
+     compare down a column; everything else lines up on the left. */
+  .wireframe-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+  }
+  .wireframe-table th,
+  .wireframe-table td {
+    padding: 0.35rem 0.5rem;
+    text-align: left;
+    vertical-align: baseline;
+  }
+  .wireframe-table th {
+    border-bottom: 1px solid var(--wf-stroke);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    white-space: nowrap;
+  }
+  .wireframe-table td {
+    border-bottom: 1px dashed var(--wf-stroke-soft);
+  }
+  .wireframe-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .wireframe-table th[data-wireframe-numeric="true"],
+  .wireframe-table td[data-wireframe-numeric="true"] {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  /* A state cell is a chip: quiet, but unmistakably a status rather than
+     more text in the row. */
+  .wireframe-chip {
+    display: inline-block;
+    padding: 0 0.4rem;
+    border: 1px solid var(--wf-stroke-soft);
+    border-radius: 999px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+  .wireframe-chip[data-wireframe-tone="info"] {
+    border-color: var(--callout-note-c);
+    color: var(--callout-note-c);
+  }
+  .wireframe-chip[data-wireframe-tone="success"] {
+    border-color: var(--decision-pro-c);
+    color: var(--decision-pro-c);
+  }
+  .wireframe-chip[data-wireframe-tone="warning"] {
+    border-color: var(--callout-warning-c);
+    color: var(--callout-warning-c);
+  }
+  .wireframe-chip[data-wireframe-tone="danger"] {
+    border-color: var(--callout-danger-c);
+    color: var(--callout-danger-c);
+  }
+
+  /* The first column names the record, so it carries the reader's eye. */
+  .wireframe-table td:first-child {
+    color: var(--color-ink);
+  }
+  .wireframe-table tbody tr:hover td {
+    background: var(--wf-fill);
+  }
+  /* The selected row is tinted and carries an accent edge, so a detail pane
+     beside the table always has a visible row it belongs to. */
+  .wireframe-table tbody tr[data-wireframe-selected] td {
+    background: var(--wf-fill);
+  }
+  .wireframe-table tbody tr[data-wireframe-selected] td:first-child {
+    box-shadow: inset 3px 0 0 0 var(--color-ink);
   }
 
   /* Paper beats interaction: printing a plan shows every screen. */
