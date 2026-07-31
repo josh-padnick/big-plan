@@ -10,7 +10,6 @@ import { ledePresenceRule } from "./rules/lede-presence.js";
 import { ledeStyleRule } from "./rules/lede-style.js";
 import { markdownTableFormatRule } from "./rules/markdown-table-format.js";
 import { quickSummarySingletonRule } from "./rules/quick-summary-singleton.js";
-import { sectionVocabularyRule } from "./rules/section-vocabulary.js";
 import { tableOfContentsMatchesSectionsRule } from "./rules/table-of-contents-matches-sections.js";
 import { titleLengthRule } from "./rules/title-length.js";
 import type { PlanLintDiagnostic, PlanLintRule } from "./types.js";
@@ -23,7 +22,6 @@ const RULES: ReadonlyArray<PlanLintRule> = [
   ledePresenceRule,
   ledeStyleRule,
   ledeLengthRule,
-  sectionVocabularyRule,
   quickSummarySingletonRule,
   tableOfContentsMatchesSectionsRule,
 ];

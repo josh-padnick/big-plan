@@ -52,7 +52,6 @@ diagnostic formatting in
 | `rules/lede-presence.ts`                      | Requires orientation prose between a plan's level-one title and its first section heading.                         |
 | `rules/lede-length.ts`                        | Keeps the lede within the word budget of a subtitle rather than an opening body paragraph.                         |
 | `rules/lede-style.ts`                         | Requires that lede to open declaratively rather than with a self-referential phrase like "This plan".              |
-| `rules/section-vocabulary.ts`                 | Keeps whole-heading section names in Big Plan's opinionated review vocabulary.                                     |
 | `rules/title-length.ts`                       | Keeps the leading level-one title a punchy noun phrase within word and character budgets.                          |
 | `lint-plan.test.ts`                           | Exercises the public interface, source positions, diagnostic order, and conservative near misses.                  |
 

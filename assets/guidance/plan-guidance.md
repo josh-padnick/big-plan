@@ -16,6 +16,7 @@ Lint holds both the title and the lede to their length and style budgets.
 
 Put a `QuickSummary` directly after the lede, before any section: the plan's key points, stated as concisely as possible.
 Its `Why`, `What`, and `How` sections tell a stopping reader the business value, the change, and the actions you will take.
+Run `big-plan guidance QuickSummary` before writing it: every component carries its own guidance, and the card's enforced shape and the altitude each facet speaks at are stated there rather than here.
 Everything after the quick summary is elaboration; nothing essential may appear for the first time in a later section.
 
 ## 3. Place every statement at a deliberate abstraction level
@@ -32,7 +33,8 @@ A rendered plan reads as a deck: every section is one slide carrying one thought
 If a section needs a second screen, it holds a second thought; split it into h3 sub-slides, each of which renders as its own numbered frame.
 Group the slides with `Part` markers into about three acts - Context, The proposal, and Shipping & your review - adapting the names when this plan demands it.
 Part 1 canonically holds "Status quo" and then "Success looks like": what is true today, and the outcome-level success a sponsor would repeat.
-Name the verification contract "Acceptance criteria", place it near the end, and make every criterion independently checkable.
+Place the verification contract near the end and make every criterion independently checkable; "Acceptance criteria" and "Definition of done" both name it well.
+"Desired outcome" is not that contract - it names the outcome-level result a sponsor would repeat, which is a higher rung and belongs earlier if the plan needs it.
 Put a `TableOfContents` directly after the `QuickSummary`: one row per section, so the reviewer sees the whole argument before reading any of it.
 Within an act, order slides by the reader's questions, keep orientation ahead of detail, and cut any slide that would make the reader ask "why am I reading this now?".
 Fold "why X rather than Y" justifications into the surrounding story or a decision component, never into free-floating essay sections.

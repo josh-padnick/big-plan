@@ -25,12 +25,13 @@ Run `big-plan guidance <Component>` for one component's usage guidance, which is
 
 Big Plan keeps one home per fact:
 
-| Kind of rule                           | Lives in                                | Why there                                                                      |
-| -------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------ |
-| Anything you have to judge             | `big-plan guidance`                     | It is gated, so every authoring session reads it                               |
-| Anything the compiler or lint enforces | The diagnostic itself                   | It reaches you at the moment of failure, with your file in hand                |
-| Exhaustive matching boundaries         | [Linting rules](/reference/lint-rules/) | Too long for a gated document, and needed only when a diagnostic surprises you |
-| Per-component attributes and shapes    | [Components](/components/)              | Reference you look up, not principles you internalize                          |
+| Kind of rule                           | Lives in                                | Why there                                                                           |
+| -------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------- |
+| Anything you have to judge             | `big-plan guidance`                     | It is gated, so every authoring session reads it                                    |
+| Judgment specific to one component     | `big-plan guidance <Component>`         | Authored beside that component, so it cannot drift from what the component enforces |
+| Anything the compiler or lint enforces | The diagnostic itself                   | It reaches you at the moment of failure, with your file in hand                     |
+| Exhaustive matching boundaries         | [Linting rules](/reference/lint-rules/) | Too long for a gated document, and needed only when a diagnostic surprises you      |
+| Per-component attributes and shapes    | [Components](/components/)              | Reference you look up, not principles you internalize                               |
 
 Guidance stays short on purpose.
 A gated document only works while it is short enough to actually be read, so it carries judgment plus a pointer, never a second copy of what a validator already says precisely and at the right moment.

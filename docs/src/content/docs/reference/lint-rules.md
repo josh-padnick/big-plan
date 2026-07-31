@@ -31,10 +31,6 @@ A lede opening with a self-referential phrase such as "I propose", "We will", "T
 `lede-length` keeps the lede a subtitle rather than an opening body paragraph: at most thirty words, counted across plain text, inline code, and emphasis.
 Big Plan renders the paragraph directly under the title as the document's subtitle, so supporting detail belongs in a following paragraph or section.
 
-`section-vocabulary` keeps section names in Big Plan's opinionated review vocabulary.
-A heading reading exactly "Desired outcome", "Desired outcomes", or "Definition of done" is flagged with the preferred heading "Acceptance criteria".
-Prose mentioning those phrases, and headings that merely contain them, are never flagged.
-
 `quick-summary-singleton` allows at most one `QuickSummary` per plan, so the reviewer always has exactly one place to start.
 
 `table-of-contents-matches-sections` requires a `TableOfContents`'s Entry section names to repeat the document's h2 titles exactly, in order, one to one.
