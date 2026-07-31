@@ -8,6 +8,20 @@ is styled by its owning module, not here.
 */
 
 @layer components {
+  /* The content column is wide so tables, diagrams, and product drawings have
+     room. Prose does not want that room, so text and prose-like components
+     keep one standard measure while layout figures use the wider column. */
+  article :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6, pre),
+  article .callout,
+  article [data-quick-summary] {
+    max-width: var(--measure);
+  }
+  article
+    :is(td, th, .wireframe)
+    :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6, pre) {
+    max-width: none;
+  }
+
   article h1,
   article h2,
   article h3,

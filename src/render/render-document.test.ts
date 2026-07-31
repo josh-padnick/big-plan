@@ -131,6 +131,46 @@ describe("renderDocument affordances", () => {
     }
   });
 
+  it("should cap a desktop wireframe without pulling it outside its holder", () => {
+    const deckWireframe = `# Deck
+
+The lede.
+
+<Part title="Context" />
+
+## A screen
+
+<Wireframe id="wf" initialScreen="one">
+  <Screen id="one" name="One" viewport="desktop" chrome="browser">
+    <Text text="Drawn inside a collapsible slide." />
+  </Screen>
+</Wireframe>
+`;
+    const { html: deckHtml } = renderDocument({
+      markdown: deckWireframe,
+      fallbackTitle: "Deck",
+    });
+    expect(deckHtml).toContain("data-collapsible");
+    expect(deckHtml).toContain("data-wireframe=");
+    expect(deckHtml).toContain("max-width:920px");
+    expect(deckHtml).not.toContain("--reading-free-inline");
+    expect(deckHtml).not.toContain("data-wireframe-desktop");
+    // The former showcase-only escape widened the figure from the viewport
+    // and bled it outside the slide that owned it.
+    expect(deckHtml).not.toContain("50vw + 17rem");
+    expect(deckHtml).not.toContain("margin-left:-5.5rem");
+  });
+
+  it("should embed aligned selection and phone navigation geometry", () => {
+    // These are primitive defaults, not authoring suggestions: a selected
+    // row cannot shift its text, and every phone destination remains a
+    // measured touch target inside a safe-area-aware bar.
+    expect(html).not.toContain("padding-left:.75rem");
+    expect(html).toContain("min-height:3.75rem");
+    expect(html).toContain("font-size:.875rem");
+    expect(html).toContain("env(safe-area-inset-bottom)");
+  });
+
   it("should inline one stylesheet and only the scroll-spy script when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
     // The shell's scroll-spy is the single script; plan content can never
@@ -240,8 +280,9 @@ describe("renderDocument shell", () => {
     expect(html).toContain("</html>");
     expect(html).not.toContain("<nav");
     expect(html).not.toContain("<script>");
-    // The reading column keeps its ~74ch measure even without a sidebar.
-    expect(html).toContain("wide:grid-cols-[minmax(0,74ch)]");
+    // The content column keeps its width even without a sidebar; prose holds
+    // its own measure inside it rather than the column enforcing one.
+    expect(html).toContain("wide:grid-cols-[minmax(0,72rem)]");
   });
 
   it("should omit the TOC when the document has headings but no h2s", () => {

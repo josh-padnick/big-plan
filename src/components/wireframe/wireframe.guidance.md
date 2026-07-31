@@ -49,13 +49,13 @@ Do not invent a novel shell for a solved workflow.
 Use the strongest rung that can carry a rule: **primitive default > compile diagnostic > plan lint > guidance/example**.
 Guidance names capabilities and judgment; it must not become the only owner of geometry or a structurally decidable rule.
 
-| Rule family                                                                                                                                                                      | Highest valid rung           | Current owner                                                                                                                       |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Desktop review width; semantic `list \| main \| rail` proportions; non-wrapping panes; two-line truncating rows; selection-edge inset                                            | Primitive default            | Renderer/view/CSS                                                                                                                   |
-| Phone 16px body + 13px metadata; bounded 44px tertiary actions; 56px tabs; full-width field + trailing action; grouped-settings hierarchy and destructive zone                   | Primitive default            | View/CSS; authors opt into the semantic `section` text role and group the destructive action with its warning                       |
-| Plain regions with outlined boxes reserved for card-like surfaces                                                                                                                | Primitive default candidate  | **Not encoded yet**: `Panel` still draws a box, so the border budget below is guidance until the primitive owns a plain default     |
-| Semantic desktop panes required for 3+ column workspaces; phone viewport/chrome/shell coherence; one primary action per screen; visible detail paired with a selected master row | Compile diagnostic candidate | **Not encoded yet**: treat the related rules below as requirements that belong in compilation, not as permanently prose-only advice |
-| Reference archetype, useful context, content priority, progressive disclosure, interruption/recovery behavior                                                                    | Guidance + pattern examples  | Author judgment; copy a proven skeleton, then adapt its product content                                                             |
+| Rule family                                                                                                                                                                        | Highest valid rung           | Current owner                                                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Desktop review width; semantic `list \| main \| rail` proportions; non-wrapping panes; two-line truncating rows; selection paint that preserves row alignment                      | Primitive default            | Renderer/view/CSS                                                                                                                   |
+| Phone 16px body + 13px metadata; bounded 44px tertiary actions; 60px tabs in a safe-area-aware bar; full-width field + trailing action; grouped-settings hierarchy and danger zone | Primitive default            | View/CSS; authors opt into the semantic `section` text role and group the destructive action with its warning                       |
+| Plain regions with outlined boxes reserved for card-like surfaces                                                                                                                  | Primitive default candidate  | **Not encoded yet**: `Panel` still draws a box, so the border budget below is guidance until the primitive owns a plain default     |
+| Semantic desktop panes required for 3+ column workspaces; phone viewport/chrome/shell coherence; one primary action per screen; visible detail paired with a selected master row   | Compile diagnostic candidate | **Not encoded yet**: treat the related rules below as requirements that belong in compilation, not as permanently prose-only advice |
+| Reference archetype, useful context, content priority, progressive disclosure, interruption/recovery behavior                                                                      | Guidance + pattern examples  | Author judgment; copy a proven skeleton, then adapt its product content                                                             |
 
 When a rendered review exposes a geometry or structural defect, push the fix to the rung named here and shorten the prose after the product carries it.
 
@@ -90,7 +90,9 @@ Every scanning `ListItem` follows one resilient row model:
 - Line 1: a single-line truncating identity on the left and an optional fixed trailing value (age, amount, id) on the right.
 - Line 2: muted, single-line truncating metadata.
 - Never allow a long label to wrap one word per line or overlap its metadata/value; the label and metadata yield with ellipsis, while the trailing value does not shrink.
-- A selected row's accent edge owns its own inset; never paint the edge beneath the first glyph.
+- A selected row's tint and inset accent are paint only: selected and unselected
+  labels keep the exact same x-coordinate. Give every row the shared content
+  inset needed to keep the accent clear of the first glyph.
 - Primitive default: on phone, `navigateTo` makes the whole 52-64px row the action; do not add an Open button inside or beside it.
 - Compile-diagnostic candidate: a desktop detail view must pair with a `selected` master row; the primitive supplies its tint, edge, and safe text inset.
 
@@ -132,7 +134,10 @@ Desktop shell and density specifics:
 Compile-diagnostic candidate: a phone composition uses `viewport="mobile-portrait"`, `chrome="phone"`, a single column, and `BottomBar` for primary destinations - never a desktop `AppShell` rail.
 Primitive default: in a push/dismiss `TopBar`, a navigable back or Cancel action stays at the leading edge, the record/page title centers, and overflow stays at the trailing edge.
 Compile-diagnostic candidate: keep exactly one originating bottom tab active on a pushed detail screen.
-Primitive defaults make bottom-bar destinations equal 56px targets with 13px labels, set phone body/field text to 16px and metadata to 13px, and render tertiary actions as bounded 44px controls rather than underlined prose.
+Primitive defaults make bottom-bar destinations equal 60px targets with 14px
+labels inside a roughly 64px safe-area-aware bar, set phone body/field text to
+16px and metadata to 13px, and render tertiary actions as bounded 44px controls
+rather than underlined prose.
 They also make the first field in a phone row fill the available width beside its trailing action.
 For grouped settings overviews, opt into `Text role="section"` for the primitive's quiet uppercase group label; row titles and metadata inherit the body/secondary tiers, and a final Stack containing a destructive action becomes a separated danger zone.
 Primitive default: a screen-level primary action immediately before `BottomBar` pins above the keyboard/safe-area position.
@@ -165,8 +170,8 @@ Use amber/red only for SLA, destructive, or breached states; pair color with tex
 1. Pattern: each screen names a proven reference archetype in surrounding prose.
 2. Desktop: stable global shell; non-wrapping `list | main | rail` where the job is triage-to-record; main visibly dominates; borders stay within budget.
 3. Tablet: intentional multi-column layout; do not regress it into dense desktop or stretched phone.
-4. Phone: conventional top/bottom chrome; 16px body / 13px metadata; bounded 44px actions; 56px tabs; single column; whole-row list actions; keyboard/safe-area behavior; recovery.
-5. Rows: long identity/context/value copy truncates predictably; selection edges reserve an inset; no overlap, clipping, or one-word-per-line wrapping.
+4. Phone: conventional top/bottom chrome; 16px body / 13px metadata; bounded 44px actions; 60px tabs in a roughly 64px safe-area-aware bar; single column; whole-row list actions; keyboard/safe-area behavior; recovery.
+5. Rows: long identity/context/value copy truncates predictably; selection paint preserves the common content edge; no overlap, clipping, or one-word-per-line wrapping.
 6. State/actions: one primary action; selected/active/disabled/unsaved states visible; destructive and internal-note modes unmistakable.
 7. Self-critique every screen at its declared viewport before presenting: inspect alignment, overflow, clipping, density, hierarchy, and dead space; fix the three strongest objections.
 

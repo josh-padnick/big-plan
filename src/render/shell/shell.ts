@@ -38,12 +38,16 @@ export type ShellResult = {
 const BODY_CLASSES =
   "bg-paper font-sans text-base leading-[1.65] text-ink antialiased";
 
-// Stacked reading layout below the wide breakpoint; sidebar plus one reading
-// column (~74ch) above it. The no-TOC variant is always a single column.
+// Stacked reading layout below the wide breakpoint; sidebar plus one content
+// column above it. The no-TOC variant is always a single column.
+//
+// The column is wider than a line of prose should ever be because a plan
+// carries tables, diagrams, and drawings of desktop products. Prose holds its
+// own measure inside the column through prose.css; figures use the room.
 const LAYOUT_CLASSES =
   "grid grid-cols-[minmax(0,1fr)] justify-center gap-8 px-5 pt-16 pb-16 wide:gap-14 wide:px-6 wide:pt-12 wide:pb-20";
-const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,74ch)]`;
-const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,74ch)]`;
+const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,72rem)]`;
+const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,72rem)]`;
 
 // Active links change color and border only, never weight, so highlighting
 // can never re-wrap a label. Entries grouped under a part header indent one
@@ -150,7 +154,7 @@ const renderMobileToc = ({
     partHeaderClasses: MOBILE_TOC_PART_HEADER_CLASSES,
   });
   return `<nav class="sticky top-11 z-10 h-11 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden" data-mobile-toc aria-label="Contents">
-<details class="group relative mx-auto h-full max-w-[74ch]">
+<details class="group relative mx-auto h-full max-w-[72rem]">
 <summary class="flex h-full cursor-pointer list-none items-center gap-3 px-5 py-2 [&amp;::-webkit-details-marker]:hidden">
 <span class="font-semibold text-ink">Sections</span>
 <span class="flex min-w-6 items-center justify-center rounded-full bg-surface px-2 py-0.5 text-xs font-medium tabular-nums text-muted">${nav.length}</span>

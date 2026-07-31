@@ -572,11 +572,11 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
 - **Chrome:** `‹ Inbox` back, overflow for resolve/status; **Inbox tab stays active** (came from inbox).
 - **No permanent** undo/draft process copy - snackbar only after send (not drawn as standing helper text).
 
-### Inbox / New / More
+### Inbox / New / Settings
 
-- Inbox titled **Inbox** with open count; views vs filters with counts; two-line rows; row is the action.
-- New ticket: sticky **Create ticket**, Cancel, draft on New tab, lightweight duplicate after subject, and normal Priority under Additional details.
-- More: overview model (rows open groups), not mixed switches.
+- Inbox titled **Inbox** with open count; saved views and the active filter share one control group; two-line rows; row is the action.
+- New ticket: sticky **Create ticket**, Cancel, draft on New tab, and separate form, attachment, possible-match, and additional-detail groups.
+- Settings: grouped overview with current values; blocked notifications open an actionable detail; account and workspace actions are distinct.
 
 <Wireframe
   id="harbor-phone"
@@ -631,9 +631,9 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
         <Button label="Send reply" emphasis="primary" />
       </Row>
       <BottomBar>
-        <Button label="⌂ Inbox" emphasis="primary" navigateTo="m-inbox" />
+        <Button label="▤ Inbox" emphasis="primary" navigateTo="m-inbox" />
         <Button label="＋ New" navigateTo="m-compose" />
-        <Button label="••• More" navigateTo="m-settings" />
+        <Button label="⚙ Settings" navigateTo="m-settings" />
       </BottomBar>
     </Stack>
   </Screen>
@@ -657,15 +657,18 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
         />
         <Button label="Filter" emphasis="tertiary" />
       </Row>
-      <SegmentedControl>
-        <Button label="All 12" emphasis="primary" />
-        <Button label="Mine 4" />
-        <Button label="Unassigned 3" />
-      </SegmentedControl>
-      <Row gap="xs">
-        <Text text="Filters" role="helper" />
-        <Button label="SLA risk 2" emphasis="tertiary" />
-      </Row>
+      <Stack gap="xs">
+        <Text text="Saved views" role="section" />
+        <SegmentedControl>
+          <Button label="All 12" emphasis="primary" />
+          <Button label="Mine 4" />
+          <Button label="Unassigned 3" />
+        </SegmentedControl>
+        <Row gap="xs" justify="between">
+          <Text text="Active filter" role="helper" />
+          <Button label="SLA risk · 2 ×" emphasis="tertiary" />
+        </Row>
+      </Stack>
       <List>
         <ListItem
           label="Cannot complete checkout"
@@ -711,9 +714,9 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
         />
       </List>
       <BottomBar>
-        <Button label="⌂ Inbox" emphasis="primary" />
+        <Button label="▤ Inbox" emphasis="primary" />
         <Button label="＋ New" navigateTo="m-compose" />
-        <Button label="••• More" navigateTo="m-settings" />
+        <Button label="⚙ Settings" navigateTo="m-settings" />
       </BottomBar>
     </Stack>
   </Screen>
@@ -724,98 +727,172 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
     viewport="mobile-portrait"
     chrome="phone"
   >
-    <Stack gap="sm">
+    <Stack gap="xs">
       <TopBar title="New ticket">
         <Button label="Cancel" emphasis="tertiary" navigateTo="m-inbox" />
       </TopBar>
-      <TextField
-        label="Subject"
-        value="Cannot complete checkout"
-        placeholder="What is this about?"
-      />
-      <Select label="Customer" value="Northwind Labs" />
-      <TextArea
-        label="Description"
-        placeholder="What happened?"
-      />
-      <Row gap="sm">
-        <Button label="Attach" emphasis="tertiary" />
-        <Button label="Camera" emphasis="tertiary" />
-      </Row>
-      <Stack gap="xs">
-        <Text text="Possible match" role="helper" />
-        <List>
-          <ListItem
-            label="Prior checkout freeze"
-            meta="#4410"
-            value="Close"
-          />
-        </List>
-        <Row gap="sm">
-          <Button label="View" emphasis="tertiary" />
-          <Button label="Link" emphasis="tertiary" />
-          <Button label="Dismiss" emphasis="tertiary" />
-        </Row>
-      </Stack>
-      <List>
-        <ListItem
-          label="Additional details"
-          meta="Priority · Normal"
-          value="›"
+      <Stack gap="md">
+        <TextField
+          label="Subject"
+          value="Cannot complete checkout"
+          placeholder="What is this about?"
         />
-      </List>
+        <Select label="Customer" value="Northwind Labs" />
+        <TextArea
+          label="Description"
+          placeholder="What happened?"
+        />
+      </Stack>
+      <Stack gap="md">
+        <Stack gap="xs">
+          <Text text="Attachments" role="section" />
+          <Row gap="sm">
+            <Button label="Attach file" emphasis="tertiary" />
+            <Button label="Use camera" emphasis="tertiary" />
+          </Row>
+        </Stack>
+        <Panel title="Possible match">
+          <List>
+            <ListItem
+              label="Prior checkout freeze"
+              meta="#4410"
+              value="Closed"
+            />
+          </List>
+          <Row gap="sm">
+            <Button label="View" emphasis="tertiary" />
+            <Button label="Link" emphasis="tertiary" />
+            <Button label="Dismiss" emphasis="tertiary" />
+          </Row>
+        </Panel>
+        <Stack gap="xs">
+          <Text text="Additional details" role="section" />
+          <List>
+            <ListItem label="Priority" meta="Normal" value="›" />
+          </List>
+        </Stack>
+      </Stack>
       <Button
         label="Create ticket"
         emphasis="primary"
         navigateTo="m-ticket"
       />
       <BottomBar>
-        <Button label="⌂ Inbox" navigateTo="m-inbox" />
+        <Button label="▤ Inbox" navigateTo="m-inbox" />
         <Button label="＋ New · draft" emphasis="primary" />
-        <Button label="••• More" navigateTo="m-settings" />
+        <Button label="⚙ Settings" navigateTo="m-settings" />
       </BottomBar>
     </Stack>
   </Screen>
 
   <Screen
     id="m-settings"
-    name="Phone · More"
+    name="Phone · Settings"
     viewport="mobile-portrait"
     chrome="phone"
   >
-    <Stack gap="sm">
-      <TopBar title="More" />
+    <Stack gap="xs">
+      <TopBar title="Settings" />
       <Text text="Account" role="section" />
       <List>
-        <ListItem label="Alex Rivera" meta="Agent" value="›" />
-        <ListItem label="Acme Support" meta="Workspace" value="›" />
+        <ListItem label="Alex Rivera" meta="alex@acme.com" value="›" />
+        <ListItem
+          label="Switch workspace"
+          meta="Acme Support"
+          value="›"
+        />
       </List>
-      <Text text="Preferences" role="section" />
+      <Text text="Notifications" role="section" />
+      <Stack gap="xs">
+        <List>
+          <ListItem
+            label="Notifications"
+            meta="Blocked"
+            value="›"
+            navigateTo="m-notifications"
+          />
+        </List>
+        <Text
+          text="Enabled in Harbor; disabled in system Settings."
+          role="helper"
+        />
+      </Stack>
       <List>
-        <ListItem label="Notifications" meta="On" value="›" />
         <ListItem label="Quiet hours" meta="Off" value="›" />
-        <ListItem label="Appearance" value="›" />
       </List>
-      <Text
-        text="Push permission denied at OS level - enable in system Settings to get SLA alerts."
-        role="helper"
-      />
+      <Text text="Personalization" role="section" />
+      <List>
+        <ListItem label="Appearance" meta="System" value="›" />
+      </List>
       <Text text="Support" role="section" />
       <List>
         <ListItem label="Help and feedback" value="›" />
-        <ListItem label="About Harbor" value="›" />
+      </List>
+      <Text text="About" role="section" />
+      <List>
+        <ListItem
+          label="About Harbor"
+          meta="Version 1.4.0"
+          value="›"
+        />
       </List>
       <Stack gap="sm">
-        <Button label="Sign out" emphasis="destructive" />
+        <Button label="Sign out of Alex Rivera" emphasis="destructive" />
         <Text
-          text="Unsent drafts stay on this device until you sign back in."
+          text="2 unsent drafts will remain securely on this device."
           role="helper"
         />
       </Stack>
       <BottomBar>
-        <Button label="⌂ Inbox" navigateTo="m-inbox" />
+        <Button label="▤ Inbox" navigateTo="m-inbox" />
         <Button label="＋ New" navigateTo="m-compose" />
-        <Button label="••• More" emphasis="primary" />
+        <Button label="⚙ Settings" emphasis="primary" />
+      </BottomBar>
+    </Stack>
+  </Screen>
+
+  <Screen
+    id="m-notifications"
+    name="Phone · Notifications"
+    viewport="mobile-portrait"
+    chrome="phone"
+  >
+    <Stack gap="md">
+      <TopBar title="Notifications">
+        <Button
+          label="‹ Settings"
+          emphasis="tertiary"
+          navigateTo="m-settings"
+        />
+      </TopBar>
+      <Stack gap="xs">
+        <Text text="Delivery status" role="section" />
+        <List>
+          <ListItem
+            label="Push notifications"
+            meta="Blocked by system Settings"
+          />
+        </List>
+        <Text
+          text="Enabled in Harbor; disabled in system Settings. SLA alerts cannot arrive on this phone."
+          role="helper"
+        />
+        <Button label="Open system settings" emphasis="primary" />
+      </Stack>
+      <Stack gap="xs">
+        <Text text="Schedule" role="section" />
+        <List>
+          <ListItem label="Quiet hours" meta="Off" value="›" />
+        </List>
+      </Stack>
+      <BottomBar>
+        <Button label="▤ Inbox" navigateTo="m-inbox" />
+        <Button label="＋ New" navigateTo="m-compose" />
+        <Button
+          label="⚙ Settings"
+          emphasis="primary"
+          navigateTo="m-settings"
+        />
       </BottomBar>
     </Stack>
   </Screen>

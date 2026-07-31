@@ -25,16 +25,6 @@ marks and a plan diff never jitters.
     --wf-sketch-alt: 11px 5px 9px 4px / 4px 9px 5px 11px;
     margin: 1.75rem 0;
   }
-  /* Desktop screens need enough review canvas to preserve their pane model.
-     On a wide review page, borrow the gap after the contents rail plus the
-     otherwise unused right side instead of compressing a desktop workspace
-     into the prose measure. Tablet and phone figures keep the reading column. */
-  @media (width >= 69rem) {
-    .wireframe:has(.wireframe-artboard[data-wireframe-viewport="desktop"]) {
-      width: min(90rem, max(calc(100% + 5.5rem), calc(50vw + 17rem)));
-      margin-left: -5.5rem;
-    }
-  }
 
   /* Isolation from the reading column's element selectors. */
   .wireframe h3,
@@ -157,8 +147,13 @@ marks and a plan diff never jitters.
   .wireframe-frame:has(> [data-wireframe-viewport="tablet-landscape"]) {
     max-width: 1112px;
   }
+  /* A drawing of a desktop product stops growing well before the window
+     does. Past this it stops reading as one screen a person looks at and
+     starts reading as a wall, and the labels drift apart from each other.
+     It also has to sit proportionate to the column it is drawn in rather
+     than filling it, which is what sets the number this low. */
   .wireframe-frame:has(> [data-wireframe-viewport="desktop"]) {
-    max-width: 1440px;
+    max-width: 920px;
   }
 
   .wireframe-frame[data-wireframe-chrome="browser"] {
@@ -526,6 +521,15 @@ marks and a plan diff never jitters.
   .wireframe-artboard[data-wireframe-viewport="desktop"]
     .wireframe-app-content
     > .wireframe-row:has([data-wireframe-span])
+    .wireframe-list-item {
+    /* Desktop queues trade vertical padding for useful density; the shared
+       inline inset remains, so selection alignment and accent clearance do
+       not depend on the compact rhythm. */
+    padding-block: 0;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span])
     > .wireframe-panel::after {
     display: none;
   }
@@ -617,13 +621,16 @@ marks and a plan diff never jitters.
     margin-inline: auto;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"] {
-    min-height: 48rem;
+    /* 812px of device viewport plus the 32px phone frame yields the declared
+       390x844 portrait preset. Content may grow only when a screen genuinely
+       needs more room; ordinary screens therefore compare at one height. */
+    min-height: 50.75rem;
     padding: 0.45rem 0.5rem 0.35rem;
     font-size: 1rem;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     > .wireframe-canvas {
-    min-height: 46.5rem;
+    min-height: 49.5rem;
     gap: 0.45rem;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
@@ -757,8 +764,30 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-text[data-wireframe-role="section"] {
+    margin-top: 0.125rem;
     font-size: 0.75rem;
     letter-spacing: 0.1em;
+  }
+  /* Saved views and their active filter form one control region. The quiet
+     surface and tight internal rhythm keep the filter state attached to the
+     segments above it, while the space after the group separates it from the
+     results list. */
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-stack:has(
+      > .wireframe-text[data-wireframe-role="section"]
+        + .wireframe-segmented-control
+    ) {
+    padding: 0.45rem 0.5rem 0.55rem;
+    border-radius: 10px;
+    background: var(--wf-fill);
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-stack:has(
+      > .wireframe-text[data-wireframe-role="section"]
+        + .wireframe-segmented-control
+    )
+    + .wireframe-list {
+    margin-top: 0.25rem;
   }
   /* Grouped mobile settings end in a distinct destructive zone. A Stack
      keeps its warning copy with the action while this separator makes the
@@ -805,7 +834,8 @@ marks and a plan diff never jitters.
     margin-top: auto;
     flex-wrap: nowrap;
     gap: 0.35rem;
-    padding: 0.4rem 0.25rem 0.5rem;
+    min-height: 4rem;
+    padding: 0.125rem 0.25rem max(0.125rem, env(safe-area-inset-bottom));
     border-top: 1px solid var(--wf-stroke-soft);
     background: color-mix(in srgb, var(--color-paper) 88%, var(--wf-fill));
   }
@@ -816,12 +846,14 @@ marks and a plan diff never jitters.
     justify-content: center;
     text-align: center;
     min-width: 0;
-    min-height: 3.5rem;
+    min-height: 3.75rem;
     padding: 0.5rem 0.25rem;
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     font-weight: 600;
     box-shadow: none;
-    border: 0;
+    /* Every destination reserves the same border box. The center action can
+       reveal its border without silently gaining two pixels of width. */
+    border: 1px solid transparent;
     border-radius: 8px;
     background: transparent;
     color: var(--color-muted);
@@ -830,7 +862,19 @@ marks and a plan diff never jitters.
     .wireframe-bottom-bar
     .wireframe-button[data-wireframe-emphasis="primary"] {
     color: var(--color-ink);
-    background: color-mix(in srgb, var(--color-ink) 8%, transparent);
+    box-shadow: inset 0 -3px 0 var(--color-ink);
+    background: transparent;
+  }
+  /* The center destination is the phone's primary creation action. Its
+     restrained pill stays subordinate to an in-screen primary button while
+     remaining easier to find than ordinary destinations. */
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-bottom-bar
+    > .wireframe-button:nth-child(2) {
+    border-color: var(--wf-stroke-soft);
+    border-radius: 999px;
+    background: var(--color-paper);
+    color: var(--color-ink);
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-bottom-bar
@@ -843,11 +887,11 @@ marks and a plan diff never jitters.
       .wireframe-bottom-bar
     )
     > .wireframe-canvas {
-    min-height: 46.5rem;
+    min-height: 49.5rem;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-stack:has(> .wireframe-bottom-bar) {
-    min-height: 45.5rem;
+    min-height: 49.5rem;
   }
   /* A screen-level primary action immediately before the tab strip is the
      keyboard/safe-area action: full width and pinned above primary nav. */
@@ -856,7 +900,7 @@ marks and a plan diff never jitters.
     > .wireframe-button:has(+ .wireframe-bottom-bar) {
     position: sticky;
     z-index: 1;
-    bottom: 4.5rem;
+    bottom: calc(4rem + env(safe-area-inset-bottom));
     align-self: stretch;
     width: 100%;
     margin-top: auto;
@@ -1068,7 +1112,10 @@ marks and a plan diff never jitters.
     padding: 0;
     min-width: 0;
   }
-  .wireframe-list-item {
+  /* This needs the root qualifier to outrank the sketch reset's
+     `.wireframe li`. Every row owns the same content inset; selection may
+     paint inside that inset but must never move the row's text. */
+  .wireframe .wireframe-list-item {
     min-width: 0;
     padding: 0.45rem 0.35rem;
     border-bottom: 1px solid var(--wf-stroke-soft);
@@ -1077,11 +1124,12 @@ marks and a plan diff never jitters.
   .wireframe-list-item:last-child {
     border-bottom: 0;
   }
-  /* Selected queue row: tint + accent edge (color is never the only cue). */
+  /* Selected queue row: tint + an inset accent edge (color is never the only
+     cue). It deliberately leaves padding untouched, so selected and
+     unselected content share one left edge. */
   .wireframe-list-item[data-wireframe-selected] {
     background: var(--wf-fill);
     box-shadow: inset 3px 0 0 var(--color-ink);
-    padding-left: 0.75rem;
   }
   .wireframe-list-row-primary {
     min-width: 0;
@@ -1134,10 +1182,6 @@ marks and a plan diff never jitters.
   .wireframe-list-item:has(> .wireframe-list-row) {
     padding: 0;
   }
-  .wireframe-list-item[data-wireframe-selected] > .wireframe-list-row {
-    padding-left: 0.75rem;
-  }
-
   /* Conversation timeline messages (not table rows). */
   .wireframe-message {
     padding: 0.45rem 0.5rem;
