@@ -202,10 +202,13 @@ is styled by its owning module, not here.
     top: 0.4em;
   }
 
+  /* A table is as wide as its columns need and no wider. Stretching a narrow
+     one to fill the column spreads three cells across the page and makes them
+     harder to compare, not easier. A table wider than the space still runs to
+     its natural width and scrolls inside its container. */
   article table {
     border-collapse: collapse;
     width: max-content;
-    min-width: 100%;
     font-size: 0.9375rem;
   }
   article th,
