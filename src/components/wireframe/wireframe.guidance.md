@@ -7,7 +7,10 @@ A hand-drawn sketch of a product screen, drawn from a fixed vocabulary so a revi
 - Every screen needs `id` and `name`. Add a second `Screen` and a `Button` with `navigateTo` to turn a sketch into a walkable prototype, and keep prototypes short: two or three screens along one path.
 - All copy is written as attributes: `<Text text="..." />`, `<Metric label="..." value="..." />`, `<Button label="..." />`. A wireframe holds no prose, and the explanation belongs in the paragraphs around it.
 - Draw **product UI**, not a design review of the product UI. Keyboard cheatsheets, "sticky header", "remembered width", and process notes belong outside the artboard - never as on-screen helper copy a customer would not see.
-- Before drawing a desktop screen, name a real SaaS reference pattern (Linear, GitHub, Stripe, Front, Notion). Prefer that pattern over inventing a novel layout.
+- Draw as few boxes as you can. A region groups by its heading and the space around it, so `Panel` draws nothing by default: use `surface="filled"` for a workspace pane and `surface="outlined"` only where something behaves like a card. Outlining everything makes every part of the screen shout equally.
+- Keep three text levels and no more: the page title, the content, and its metadata. Anything else is a fourth level competing with the title.
+- Say state in words first. A `Badge`, or a table cell written `[Failed:danger]`, is a word that a tone only reinforces; a reviewer who cannot see the tint still reads the state.
+- Before drawing a desktop screen, name a real SaaS reference pattern (Linear, GitHub, Stripe, Front, Notion). Borrow a layout it already proved - a table with a toolbar, master-detail, settings two-column, or focused centered form - rather than inventing one for a solved problem.
 - Pick the `viewport` the design is really for. The artboard reflows to the reader's width instead of shrinking the text, so the preset sets the shape rather than the final size.
 - Say what kind of product this is with `chrome`. A web product uses `chrome="browser"` and a `url`, which tells a reviewer the route before they read a label; a phone screen uses `chrome="phone"`. An unframed screen floats on the page and reads as a tablet app whatever is inside it, so frame every screen of a real product and keep the frame the same across the prototype.
 
@@ -102,9 +105,10 @@ Phone musts: `viewport="mobile-portrait"`, `chrome="phone"`, single column, `Bot
 
 - **Frame** - `AppShell` holds `Sidebar`, an optional `TopBar`, and `AppContent`. On desktop the shell is flush-left and **stable** (same global nav every screen). Phone screens skip `AppShell` and use `TopBar` + `BottomBar`.
 - **Layout** - `Stack` runs down, `Row` runs across. In a `Row`, `span="fill"` shares width; `span="list"` is a master queue; `span="main"` is the primary surface; `span="rail"` is secondary properties or settings sub-nav.
-- **Regions** - `Panel` bounds a region, `PageHeader` says what the page is once at the top.
-- **Content** - `Metric`, `Progress`, `List` / `ListItem` (use `selected` on the active queue row), `Message` for conversation timelines (`kind` customer|agent|internal), `Text`, `Heading`, `Badge`, `Divider`, `ImagePlaceholder`.
-- **Navigation** - `Nav` / `NavItem` for destinations; `BottomBar` for phone primary destinations. Walkable buttons use `navigateTo` without an external-link arrow glyph.
+- **Regions** - `Panel` groups by title and space by default; use `surface="filled"` for a workspace pane and `surface="outlined"` only for card-like behavior. `PageHeader` says what the page is once at the top.
+- **Content** - `Metric` for the number a screen exists to show, `Progress` for completion, `Table` for records, `List` / `ListItem` for simpler rows (use `selected` on the active queue row), `Message` for conversation timelines (`kind` customer|agent|internal), `Text`, `Heading`, `Badge`, `Divider`, and `ImagePlaceholder`.
+- **Hierarchy** - `Breadcrumbs` / `Crumb` say where a screen sits; `Center` holds reading content to a useful measure.
+- **Navigation** - `Nav` / `NavItem` for destinations, with `active` on the current destination; `BottomBar` for phone primary destinations. Walkable items use `navigateTo` without an external-link arrow glyph.
 - **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, `Switch` - every control needs a `label`.
 - **Flow** - `Stepper` / `Step`, `Connector`.
 

@@ -210,6 +210,46 @@ Light and dark follow the reader's OS in inert exports.
   }
 }
 
+/* How much page margin sits free either side of the reading column.
+
+   The reading column is centered on the page, so whatever the window has
+   spare is split evenly left and right. Prose keeps its measure and never
+   uses this, but a drawing of a desktop product is unreadable squeezed into
+   a prose column, so it may borrow the free space on its right.
+
+   Measured against the layout element rather than the viewport, so a
+   scrollbar can never turn the borrowed space into page overflow. The half
+   rem taken off the end is the margin of safety against `ch` resolving a
+   hair wider here than in the grid track it is mirroring. */
+[data-reading-layout] {
+  container-type: inline-size;
+}
+article {
+  --reading-free-inline: 0px;
+}
+@container (width >= 53rem) {
+  [data-reading-layout="with-toc"] article {
+    --reading-free-inline: max(
+      0px,
+      (100cqw - 15rem - 3.5rem - 74ch) / 2 - 0.5rem
+    );
+  }
+  [data-reading-layout="without-toc"] article {
+    --reading-free-inline: max(0px, (100cqw - 74ch) / 2 - 0.5rem);
+  }
+}
+
+/* A figure that borrows the free margin would otherwise run out of the card
+   its section is drawn in, which reads as an overflow rather than a choice.
+   The card widens with it, and everything else in that card keeps the
+   reading measure it had. */
+[data-slide]:has(> [data-wireframe-desktop]) {
+  margin-right: calc(-1 * var(--reading-free-inline, 0px));
+}
+[data-slide]:has(> [data-wireframe-desktop]) > *:not([data-wireframe-desktop]) {
+  max-width: 74ch;
+}
+
 @layer components {
   /* Section navigation glides instead of jumping; readers who ask the OS for
      reduced motion keep instant jumps. */

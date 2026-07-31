@@ -45,6 +45,9 @@ const BODY_CLASSES =
 
 // Stacked reading layout below the wide breakpoint; sidebar plus one reading
 // column (~74ch) above it. The no-TOC variant is always a single column.
+// The layout marks which variant it is so the stylesheet can publish how much
+// free page margin sits either side of the reading column; a block that
+// genuinely needs desktop width borrows it rather than guessing the geometry.
 const LAYOUT_CLASSES =
   "grid grid-cols-[minmax(0,1fr)] justify-center gap-8 px-5 pt-16 pb-16 wide:gap-14 wide:px-6 wide:pt-12 wide:pb-20";
 const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,74ch)]`;
@@ -236,7 +239,7 @@ ${renderCommentDraftControl()}
 </div>
 </header>
 ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
-<div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}">
+<div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
 ${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
 <main class="min-w-0" id="${overviewId}">
 <article>

@@ -75,7 +75,11 @@ const WireframeElement = ({
       );
     case "Panel":
       return (
-        <section className="wireframe-panel" data-wireframe-span={node.span}>
+        <section
+          className="wireframe-panel"
+          data-wireframe-span={node.span}
+          data-wireframe-surface={node.surface}
+        >
           {node.eyebrow === undefined && node.title === undefined ? null : (
             <header className="wireframe-panel-head">
               {node.eyebrow === undefined ? null : (
@@ -161,16 +165,22 @@ const WireframeElement = ({
       return (
         <header className="wireframe-page-header flex flex-wrap items-center gap-3">
           <div className="wireframe-page-header-text flex flex-col gap-1">
-            <h3 className="wireframe-heading">{node.title}</h3>
+            {/* State belongs beside what it describes. In the action group it
+                reads as one more button. */}
+            <div className="wireframe-page-header-title flex flex-wrap items-center gap-2">
+              <h3 className="wireframe-heading">{node.title}</h3>
+              {node.badge === undefined ? null : (
+                <span className="wireframe-badge" data-wireframe-tone="neutral">
+                  {node.badge}
+                </span>
+              )}
+            </div>
             {node.description === undefined ? null : (
               <p className="wireframe-text" data-wireframe-role="helper">
                 {node.description}
               </p>
             )}
           </div>
-          {node.badge === undefined ? null : (
-            <span className="wireframe-badge">{node.badge}</span>
-          )}
           <div className="wireframe-page-header-actions flex flex-wrap gap-2">
             <WireframeElements nodes={node.children} />
           </div>
@@ -229,7 +239,11 @@ const WireframeElement = ({
         </div>
       );
     case "Badge":
-      return <span className="wireframe-badge">{node.label}</span>;
+      return (
+        <span className="wireframe-badge" data-wireframe-tone={node.tone}>
+          {node.label}
+        </span>
+      );
     case "Divider":
       return node.label === undefined ? (
         <hr className="wireframe-divider" />
@@ -390,6 +404,85 @@ const WireframeElement = ({
           {node.label}
         </li>
       );
+    case "Center":
+      return (
+        <div className="wireframe-center" data-wireframe-measure={node.measure}>
+          <div className="wireframe-center-inner flex flex-col gap-4">
+            <WireframeElements nodes={node.children} />
+          </div>
+        </div>
+      );
+    case "Breadcrumbs":
+      return (
+        <nav
+          className="wireframe-breadcrumbs flex flex-wrap items-center"
+          aria-label="Breadcrumb"
+        >
+          <WireframeElements nodes={node.children} />
+        </nav>
+      );
+    case "Crumb":
+      return node.navigateTo === undefined ? (
+        <span className="wireframe-crumb" aria-current="page">
+          {node.label}
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="wireframe-crumb wireframe-crumb-link"
+          data-wireframe-navigate={node.navigateTo}
+        >
+          {node.label}
+        </button>
+      );
+    case "Table":
+      return (
+        <table className="wireframe-table">
+          <thead>
+            <tr>
+              {node.headers.map((header, column) => (
+                <th
+                  key={column}
+                  scope="col"
+                  data-wireframe-numeric={String(node.numeric[column] ?? false)}
+                >
+                  {header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {node.rows.map((row, index) => (
+              <tr
+                key={index}
+                {...(node.selected === index + 1
+                  ? { "data-wireframe-selected": "" }
+                  : {})}
+              >
+                {row.map((cell, column) => (
+                  <td
+                    key={column}
+                    data-wireframe-numeric={String(
+                      node.numeric[column] ?? false,
+                    )}
+                  >
+                    {cell.tone === undefined ? (
+                      cell.text
+                    ) : (
+                      <span
+                        className="wireframe-chip"
+                        data-wireframe-tone={cell.tone}
+                      >
+                        {cell.text}
+                      </span>
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
     case "Connector":
       // The arrow is decoration; the condition beside it is the meaning, so
       // the glyph is hidden and any label stays readable text.
@@ -490,7 +583,16 @@ const Screen = ({
 };
 
 export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
-  <figure className="wireframe" data-wireframe={model.id}>
+  <figure
+    className="wireframe"
+    data-wireframe={model.id}
+    // A prototype containing a desktop screen borrows the page's free right
+    // margin. A desktop product squeezed into a prose column is a mobile
+    // layout wearing a browser frame, which is the failure this avoids.
+    {...(model.screens.some((screen) => screen.viewport === "desktop")
+      ? { "data-wireframe-desktop": "" }
+      : {})}
+  >
     {model.title === undefined ? null : (
       <figcaption className="wireframe-caption">{model.title}</figcaption>
     )}
