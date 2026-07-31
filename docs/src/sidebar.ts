@@ -34,6 +34,7 @@ export const SIDEBAR: readonly SidebarGroup[] = [
       { label: "Callout", slug: "components/callout" },
       { label: "CodeDiff", slug: "components/code-diff" },
       { label: "CodeSnippet", slug: "components/code-snippet" },
+      { label: "DataTable", slug: "components/data-table" },
       {
         label: "DatabaseTableSchema",
         slug: "components/database-table-schema",

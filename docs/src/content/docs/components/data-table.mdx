@@ -1,0 +1,106 @@
+---
+title: DataTable
+description: A component for a dataset the reviewer queries in place - sortable columns, optional search, chooseable columns, group-by, and a text-fit choice instead of a horizontal scrollbar.
+---
+
+`DataTable` renders tabular data a reviewer needs to work with rather than read through: it sorts by any column, narrows to matching rows, hides columns that are not part of the current question, bands rows under a grouping column, and lets the reader choose how cells meet the available width - so a reference grid stays useful instead of becoming a wall the reviewer scrolls past.
+
+## Anatomy
+
+The figure opens with a header band carrying the table name, a live row count, and the reader's controls: an optional search box, the columns menu, a text-fit menu, reset, and maximize.
+Below it sits the complete grid, every authored row and column present in the served markup.
+
+Column headers are the sort controls. Clicking one cycles ascending, descending, and back to the order the author wrote, because authored order is information and a table that cannot return to it loses that on the first click.
+
+A table sizes to its contents. Three narrow columns stay narrow; nothing stretches to fill the reading column.
+
+## When to use it
+
+Use `DataTable` when the grid is a **dataset the reviewer will query** rather than a paragraph laid out in columns:
+
+- it runs past roughly ten rows, or carries more than four columns
+- the reviewer's likely question is "which row" rather than "what does this say"
+- it is a reference they will return to after the plan is approved
+- its cells are long enough that a markdown table would scroll sideways
+
+### When not to use it
+
+- A short comparison read top to bottom once, where every row matters to the argument - use a plain markdown table; most tables in most plans are this
+- A database table's shape - use [`DatabaseTableSchema`](/components/database-table-schema/), which understands keys, indexes, and DDL
+- Options scored against shared criteria - use [`ComplexDecision`](/components/complex-decision/), which is a decision surface rather than a dataset
+- Anything needing a sentence of explanation per cell - that belongs in the prose around the table
+
+## Authoring
+
+The body is one fenced block with language `table` holding an ordinary GFM pipe grid, so a markdown table that outgrew itself is wrapped rather than rewritten. The delimiter row's colons still set alignment.
+
+```mdx
+<DataTable title="Queue depth by processor" filter groupBy="Tier">
+
+<Column name="Attempts" type="number" align="right" sort="desc" />
+<Column name="Processor" fit="truncate" />
+
+...one fenced `table` block here...
+
+</DataTable>
+```
+
+With no `Column` children every column is text, sortable, left-aligned, wrapping, and shown in authored order.
+
+### Attributes
+
+| Attribute | Values | What it does |
+| --- | --- | --- |
+| `title` | text | Names the table in its header and derives its persistence identity. |
+| `filter` | bare boolean | Renders the search box. Add it only when the table is long enough that a reviewer will hunt a row. |
+| `fit` | `wrap`, `truncate`, `scroll` | How cells meet the available width. Defaults to `wrap`. |
+| `groupBy` | a column name | Bands rows under that column's values. |
+
+### `Column`
+
+`Column` refines one header by name; declare it only to override a default.
+
+| Attribute | Values | What it does |
+| --- | --- | --- |
+| `name` | a header in the grid | Which column this refines. Required. |
+| `type` | `text`, `number`, `date` | Picks the comparator. Empty and unreadable cells always sort last. |
+| `align` | `left`, `center`, `right` | Cell alignment, overriding the delimiter row. |
+| `sort` | `asc`, `desc` | The table's opening order. At most one column may declare it. |
+| `fit` | `wrap`, `truncate`, `scroll` | Overrides the table's fit for this column alone. |
+
+## Text fit
+
+Too much content for the available width has exactly three answers, and `DataTable` makes the choice explicit instead of always picking the same one:
+
+- **Wrap** (the default) keeps every character and spends vertical space.
+- **Truncate** clamps each cell to one line. Reach for it when cells are long identifiers - paths, URLs, ids - that wrap into unreadable stacks.
+- **Scroll** keeps one line and moves sideways. Reach for it only when horizontal adjacency is itself the information.
+
+Wrapping is the default because content that has scrolled off-axis does not announce that it exists: the reviewer cannot tell they are not reading it. Below the narrow breakpoint the table wraps whatever anyone chose, because a horizontal scrollbar nested inside a vertically scrolling phone document is a trap.
+
+Sorting and filtering always read a cell's complete text, never the clamped text, so a truncated cell still sorts correctly and still matches a search for a word the reader cannot currently see.
+
+## Grouping
+
+`groupBy` names a column whose values become subheading bands. The column stays a **real column** - listed in the columns menu, sortable, revealable - and only hides while it supplies the bands, because grouping is a setting over the data rather than a different shape of data.
+
+You choose the default; the reader can regroup by any column or turn grouping off entirely. Sorting then reorders rows **within** a group and never across one: the groups are the structure you chose, and a sort is the reader's question about the rows inside it.
+
+Use one level. A second level is an outline, and an outline is a different component.
+
+## What the reader controls
+
+Everything below is the reader's, not the author's, and none of it changes the plan on disk:
+
+- **Sort** by clicking a header; three states, ending back at authored order.
+- **Search** to narrow rows, with a live count and a named empty state.
+- **Choose columns** from the columns menu. The first column cannot be hidden, because hiding the row identity makes every remaining cell unreadable.
+- **Group by** any column, or not at all.
+- **Text fit** between wrap, truncate, and scroll.
+- **Reorder columns** by dragging a header, or with <kbd>Alt</kbd> and an arrow key from a focused header.
+- **Reset table layout** restores everything you authored in one action.
+- **Maximize** promotes the table to the viewport; <kbd>Esc</kbd> restores it.
+
+Column order, visibility, grouping, and fit persist per document so a reader who returns finds the table as they left it. Persistence is best-effort: a document opened where storage is blocked behaves exactly like a first visit.
+
+Every control ships dormant and is revealed by the viewer script, so a document read with scripts disabled shows every row and column in authored order and no control that cannot act.

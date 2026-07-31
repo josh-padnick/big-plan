@@ -1,0 +1,379 @@
+// Renders DataTable: the complete grid plus the chrome the viewer script
+// activates. Every row and column is server-rendered in authored order, so a
+// document with scripts disabled loses no content and shows no dead control.
+
+import { ARROW_DOWN_ICON } from "../../icons/lucide/arrow-down.js";
+import { ARROW_UP_ICON } from "../../icons/lucide/arrow-up.js";
+import { CHECK_ICON } from "../../icons/lucide/check.js";
+import { CHEVRONS_UP_DOWN_ICON } from "../../icons/lucide/chevrons-up-down.js";
+import { COLUMNS_3_COG_ICON } from "../../icons/lucide/columns-3-cog.js";
+import { GRIP_VERTICAL_ICON } from "../../icons/lucide/grip-vertical.js";
+import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
+import { SEARCH_ICON } from "../../icons/lucide/search.js";
+import { TABLE_ICON } from "../../icons/lucide/table.js";
+import { WRAP_TEXT_ICON } from "../../icons/lucide/wrap-text.js";
+import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
+import {
+  BODY_ATTRIBUTE,
+  MAXIMIZABLE_ATTRIBUTE,
+} from "../_model/figure-controls/figure-controls.js";
+import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
+import { Fragment } from "react";
+import type {
+  CompiledDataTable,
+  CompiledDataTableColumn,
+  DataTableFit,
+} from "./compile.js";
+import type { TableCell } from "./parse-table-grid.js";
+
+// The chrome rests quiet and reveals itself on hover and focus, matching the
+// figure-header button family the schema and diff captions already use.
+const BUTTON_CLASSES =
+  "data-table-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+
+const MENU_LIST_CLASSES =
+  "data-table-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-40 rounded-[0.375rem] border border-edge p-1";
+
+const MENU_LABEL_CLASSES =
+  "data-table-menu-label px-2 pt-1 pb-[0.2rem] text-[0.625rem] font-semibold tracking-wider text-muted uppercase";
+
+const MENU_ITEM_CLASSES =
+  "data-table-menu-item flex w-full cursor-pointer items-center gap-[0.45rem] whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-[0.3rem] text-left text-xs text-ink hover:bg-edge [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted";
+
+const FIT_LABELS: Readonly<Record<DataTableFit, string>> = {
+  wrap: "Wrap text",
+  truncate: "Truncate text",
+  scroll: "Scroll sideways",
+};
+
+const CellContent = ({ cell }: { readonly cell: TableCell }) => (
+  <>
+    {cell.segments.map((segment, index) =>
+      segment.kind === "code" ? (
+        <code key={index}>{segment.value}</code>
+      ) : (
+        <span key={index}>{segment.value}</span>
+      ),
+    )}
+  </>
+);
+
+const SortGlyphs = ({ sort }: { readonly sort?: "asc" | "desc" }) => (
+  <span className="data-table-sort-glyph inline-flex shrink-0" aria-hidden>
+    {lucideIconToReact({
+      icon: CHEVRONS_UP_DOWN_ICON,
+      hidden: sort !== undefined,
+    })}
+    {lucideIconToReact({ icon: ARROW_UP_ICON, hidden: sort !== "asc" })}
+    {lucideIconToReact({ icon: ARROW_DOWN_ICON, hidden: sort !== "desc" })}
+  </span>
+);
+
+const HeaderCell = ({
+  column,
+  index,
+}: {
+  readonly column: CompiledDataTableColumn;
+  readonly index: number;
+}) => (
+  <th
+    scope="col"
+    className="data-table-head"
+    data-table-column={index}
+    data-table-type={column.type}
+    data-table-align={column.align}
+    {...(column.grouping === true ? { hidden: true } : {})}
+    {...(column.fit === undefined ? {} : { "data-table-cell-fit": column.fit })}
+    {...(column.sort === undefined
+      ? { "aria-sort": "none" }
+      : {
+          "aria-sort": column.sort === "asc" ? "ascending" : "descending",
+          "data-table-sorted": column.sort,
+        })}
+  >
+    {/* Disabled server-side: without the viewer script the header is a plain
+        label, not a button that does nothing when pressed. */}
+    <button
+      type="button"
+      className="data-table-sort"
+      data-table-sort={index}
+      disabled
+    >
+      <span className="data-table-head-label">{column.label}</span>
+      <SortGlyphs
+        {...(column.sort === undefined ? {} : { sort: column.sort })}
+      />
+    </button>
+    {lucideIconToReact({ icon: GRIP_VERTICAL_ICON, hidden: false })}
+  </th>
+);
+
+// The columns menu now owns exactly one question - which columns are shown -
+// because text fit and reset each earned their own control in the chrome.
+const ColumnsMenu = ({
+  columns,
+  groupColumn,
+}: {
+  readonly columns: ReadonlyArray<CompiledDataTableColumn>;
+  readonly groupColumn: number;
+}) => (
+  <span className="data-table-menu relative inline-flex" data-table-menu>
+    <button
+      type="button"
+      className={BUTTON_CLASSES}
+      aria-label="Choose columns"
+      aria-haspopup="menu"
+      aria-expanded="false"
+      data-tooltip="Choose columns"
+      hidden
+      data-table-menu-button
+    >
+      {lucideIconToReact({ icon: COLUMNS_3_COG_ICON, hidden: false })}
+    </button>
+    <div
+      className={MENU_LIST_CLASSES}
+      role="menu"
+      aria-label="Visible columns"
+      hidden
+      data-table-menu-list
+    >
+      <p className={MENU_LABEL_CLASSES}>Visible columns</p>
+      {columns.map((column, index) => (
+        <button
+          key={column.label}
+          type="button"
+          className={MENU_ITEM_CLASSES}
+          role="menuitemcheckbox"
+          tabIndex={-1}
+          data-table-column-toggle={index}
+          aria-checked={column.grouping === true ? "false" : "true"}
+          {...(index === 0 && column.grouping !== true
+            ? { disabled: true }
+            : {})}
+        >
+          {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
+          {column.label}
+        </button>
+      ))}
+      <div
+        className="data-table-menu-separator -mx-1 my-1 h-px"
+        role="separator"
+        aria-orientation="horizontal"
+      />
+      {/* Grouping is a setting over the data, so the reader can change which
+          column supplies the bands; the author only chooses the default. */}
+      <p className={MENU_LABEL_CLASSES}>Group by</p>
+      <button
+        type="button"
+        className={MENU_ITEM_CLASSES}
+        role="menuitemradio"
+        aria-checked={groupColumn === -1 ? "true" : "false"}
+        tabIndex={-1}
+        data-table-group-choice="-1"
+      >
+        {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
+        No grouping
+      </button>
+      {columns.map((column, index) => (
+        <button
+          key={`group-${column.label}`}
+          type="button"
+          className={MENU_ITEM_CLASSES}
+          role="menuitemradio"
+          aria-checked={groupColumn === index ? "true" : "false"}
+          tabIndex={-1}
+          data-table-group-choice={index}
+        >
+          {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
+          {column.label}
+        </button>
+      ))}
+    </div>
+  </span>
+);
+
+// Three modes are a choice, not a switch, so the control is a menu of radio
+// items rather than a button whose meaning changes each press.
+const FitMenu = ({ fit }: { readonly fit: DataTableFit }) => (
+  <span className="data-table-menu relative inline-flex" data-table-menu>
+    <button
+      type="button"
+      className={BUTTON_CLASSES}
+      aria-label="Text fit"
+      aria-haspopup="menu"
+      aria-expanded="false"
+      data-tooltip="Text fit"
+      hidden
+      data-table-fit-button
+    >
+      {lucideIconToReact({ icon: WRAP_TEXT_ICON, hidden: false })}
+    </button>
+    <div
+      className={MENU_LIST_CLASSES}
+      role="menu"
+      aria-label="Text fit"
+      hidden
+      data-table-fit-list
+    >
+      {(["wrap", "truncate", "scroll"] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          className={MENU_ITEM_CLASSES}
+          role="menuitemradio"
+          aria-checked={mode === fit ? "true" : "false"}
+          tabIndex={-1}
+          data-table-fit-choice={mode}
+        >
+          {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
+          {FIT_LABELS[mode]}
+        </button>
+      ))}
+    </div>
+  </span>
+);
+
+// Reset undoes sort, column order, column visibility, and fit at once, so it
+// stands beside the two controls that create that state rather than inside
+// one of them.
+const ResetButton = () => (
+  <button
+    type="button"
+    className={BUTTON_CLASSES}
+    aria-label="Reset table layout"
+    data-tooltip="Reset table layout"
+    hidden
+    data-table-reset
+  >
+    {lucideIconToReact({ icon: ROTATE_CCW_ICON, hidden: false })}
+  </button>
+);
+
+// The whole field hides server-side: a search box that cannot search is a
+// worse promise than no search box at all.
+const FilterField = ({ id }: { readonly id: string }) => (
+  <span
+    className="data-table-filter relative inline-flex items-center"
+    hidden
+    data-table-filter
+  >
+    <span className="data-table-filter-icon pointer-events-none absolute left-[0.4rem] inline-flex text-muted [&_svg]:size-3">
+      {lucideIconToReact({ icon: SEARCH_ICON, hidden: false })}
+    </span>
+    <input
+      type="search"
+      className="data-table-filter-input h-6 w-32 rounded-md border border-edge bg-transparent py-0 pr-2 pl-[1.35rem] text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+      placeholder="Filter rows"
+      aria-label="Filter rows"
+      data-table-filter-input={id}
+    />
+  </span>
+);
+
+/** Renders one DataTable as a figure: caption chrome over the complete grid. */
+export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
+  <figure
+    className="data-table mb-5 w-fit max-w-full rounded-md border border-edge"
+    data-data-table
+    {...{ [MAXIMIZABLE_ATTRIBUTE]: "table" }}
+    data-table-id={model.id}
+    data-table-fit={model.fit}
+    {...(model.groups.length === 0 ? {} : { "data-table-grouped": "" })}
+    data-table-group-column={model.groupColumn}
+  >
+    <figcaption className="data-table-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem]">
+      <span className="data-table-identity flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted">
+        {lucideIconToReact({ icon: TABLE_ICON, hidden: false })}
+        <span className="data-table-title min-w-0 truncate font-semibold text-ink">
+          {model.title ?? "Table"}
+        </span>
+        <span
+          className="data-table-count shrink-0 text-xs text-muted"
+          data-table-count
+        >
+          {`${model.rows.length} rows`}
+        </span>
+      </span>
+      <span className="data-table-controls flex shrink-0 items-center gap-1">
+        {model.filter ? <FilterField id={model.id} /> : null}
+        <ColumnsMenu columns={model.columns} groupColumn={model.groupColumn} />
+        <FitMenu fit={model.fit} />
+        <ResetButton />
+        <MaximizeButton subject="table" />
+      </span>
+    </figcaption>
+    {/* The document-wide table transform leaves a table alone when its parent
+        already declares itself a scroll container, so the figure keeps one
+        box instead of gaining a second bordered wrapper inside itself. */}
+    <div
+      className="data-table-scroll"
+      data-table-scroll-container=""
+      {...{ [BODY_ATTRIBUTE]: "" }}
+    >
+      <table className="data-table-grid w-full">
+        <thead>
+          <tr>
+            {model.columns.map((column, index) => (
+              <HeaderCell key={column.label} column={column} index={index} />
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {model.rows.map((row, rowIndex) => (
+            <Fragment key={rowIndex}>
+              {row.group === undefined ||
+              row.group === model.rows[rowIndex - 1]?.group ? null : (
+                <tr
+                  className="data-table-group-row"
+                  data-table-group-heading={row.group}
+                >
+                  <th
+                    scope="colgroup"
+                    colSpan={
+                      model.columns.filter((column) => column.grouping !== true)
+                        .length
+                    }
+                  >
+                    {row.group}
+                  </th>
+                </tr>
+              )}
+              <tr
+                data-table-row={rowIndex}
+                {...(row.group === undefined
+                  ? {}
+                  : { "data-table-group": row.group })}
+              >
+                {row.cells.map((cell, cellIndex) => {
+                  const column = model.columns[cellIndex];
+                  return (
+                    <td
+                      key={cellIndex}
+                      className="data-table-cell"
+                      data-table-column={cellIndex}
+                      data-table-align={column?.align ?? "left"}
+                      {...(column?.grouping === true ? { hidden: true } : {})}
+                      {...(column?.fit === undefined
+                        ? {}
+                        : { "data-table-cell-fit": column.fit })}
+                      title={cell.text}
+                    >
+                      <CellContent cell={cell} />
+                    </td>
+                  );
+                })}
+              </tr>
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <p
+      className="data-table-empty px-3 py-2 text-xs text-muted"
+      hidden
+      data-table-empty
+    >
+      No rows match this filter.
+    </p>
+  </figure>
+);
