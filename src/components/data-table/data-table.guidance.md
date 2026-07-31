@@ -1,6 +1,6 @@
 # Using DataTable well
 
-A dataset the reviewer queries - sortable columns, an optional filter, chooseable columns, and text that wraps instead of scrolling off the page.
+A dataset the reviewer queries - sortable columns, an optional filter, selectable columns, and text that wraps instead of scrolling off the page.
 
 - Default to a plain markdown table. Reach for `DataTable` when the grid runs past roughly ten rows, carries more than four columns, would scroll sideways as prose, or is a reference the reviewer returns to. A prose table cannot wrap, sort, or filter; that is the whole difference.
 - The body is one fenced block with language `table` holding an ordinary GFM pipe grid, so a markdown table that outgrew itself is wrapped, not rewritten. The delimiter row's colons still set alignment.
