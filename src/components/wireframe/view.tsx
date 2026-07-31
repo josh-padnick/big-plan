@@ -50,6 +50,15 @@ const HEADING_TAGS: Readonly<
   "3": "h5",
 };
 
+// A workspace row is a stable pane system, not a card grid. Its list, main,
+// and rail children must stay beside one another; ordinary fill rows may wrap.
+const keepsWorkspacePanes = (children: ReadonlyArray<WireframeNode>): boolean =>
+  children.some(
+    (child) =>
+      (child.element === "Panel" || child.element === "Stack") &&
+      child.span !== "fill",
+  );
+
 const WireframeElement = ({
   node,
 }: {
@@ -68,7 +77,7 @@ const WireframeElement = ({
     case "Row":
       return (
         <div
-          className={`wireframe-row flex flex-wrap ${GAP_CLASSES[node.gap]} ${ALIGN_CLASSES[node.align]} ${JUSTIFY_CLASSES[node.justify]}`}
+          className={`wireframe-row flex ${keepsWorkspacePanes(node.children) ? "flex-nowrap" : "flex-wrap"} ${GAP_CLASSES[node.gap]} ${ALIGN_CLASSES[node.align]} ${JUSTIFY_CLASSES[node.justify]}`}
         >
           <WireframeElements nodes={node.children} />
         </div>
@@ -118,6 +127,15 @@ const WireframeElement = ({
           {node.label}
         </button>
       );
+    case "SegmentedControl":
+      return (
+        <div
+          className="wireframe-segmented-control flex flex-nowrap"
+          role="group"
+        >
+          <WireframeElements nodes={node.children} />
+        </div>
+      );
     case "AppShell":
       return (
         <div className="wireframe-app-shell">
@@ -154,7 +172,7 @@ const WireframeElement = ({
     case "BottomBar":
       return (
         <div
-          className="wireframe-bottom-bar flex flex-wrap items-center justify-between gap-2"
+          className="wireframe-bottom-bar flex flex-nowrap items-center justify-between gap-2"
           role="navigation"
           aria-label="Primary destinations"
         >
@@ -346,6 +364,7 @@ const WireframeElement = ({
               ? {}
               : { placeholder: node.placeholder })}
             {...(node.value === undefined ? {} : { defaultValue: node.value })}
+            disabled={node.disabled}
           />
         </Field>
       );
@@ -359,6 +378,7 @@ const WireframeElement = ({
               ? {}
               : { placeholder: node.placeholder })}
             {...(node.value === undefined ? {} : { defaultValue: node.value })}
+            disabled={node.disabled}
           />
         </Field>
       );
@@ -366,7 +386,10 @@ const WireframeElement = ({
       return (
         <Field label={node.label} hint={node.hint}>
           {/* A wireframe shows the chosen option, not the whole menu. */}
-          <select className="wireframe-input wireframe-select">
+          <select
+            className="wireframe-input wireframe-select"
+            disabled={node.disabled}
+          >
             <option>{node.value}</option>
           </select>
         </Field>

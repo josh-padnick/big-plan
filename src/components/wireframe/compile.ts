@@ -438,12 +438,16 @@ const checkOneFilledAction = ({
       (node) => node.element === "Button" && node.emphasis === "primary",
     ),
   );
-  // BottomBar uses emphasis="primary" to mark the current destination. Its
-  // buttons are navigation state, not filled actions in the screen's work.
-  all
-    .filter((node) => node.element === "BottomBar")
+  // BottomBar and SegmentedControl use emphasis="primary" to mark current
+  // navigation or mode state. Those buttons are not filled work actions.
+  const stateButtons = all
+    .filter(
+      (node) =>
+        node.element === "BottomBar" || node.element === "SegmentedControl",
+    )
     .flatMap((node) => flatten(node.children))
-    .forEach((node) => filled.delete(node));
+    .filter((node) => node.element === "Button");
+  stateButtons.forEach((node) => filled.delete(node));
   const markComposerSends = (nodes: ReadonlyArray<WireframeNode>): void => {
     for (const node of nodes) {
       const children = childNodes(node);
@@ -464,6 +468,7 @@ const checkOneFilledAction = ({
     }
   };
   markComposerSends(screen.children);
+  stateButtons.forEach((node) => filled.delete(node));
   if (filled.size > 1) {
     const labels = [...filled].flatMap((node) =>
       node.element === "Button" ? [node.label] : [],

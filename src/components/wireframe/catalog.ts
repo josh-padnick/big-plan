@@ -192,6 +192,7 @@ const TEXT_FIELD_SCHEMA = {
   placeholder: { kind: "string", nonEmpty: true },
   value: { kind: "string", nonEmpty: true },
   hint: { kind: "string", nonEmpty: true },
+  disabled: { kind: "booleanShorthand" },
 } satisfies ComponentAttributeSchema;
 
 const TEXT_AREA_SCHEMA = {
@@ -199,12 +200,14 @@ const TEXT_AREA_SCHEMA = {
   placeholder: { kind: "string", nonEmpty: true },
   value: { kind: "string", nonEmpty: true },
   hint: { kind: "string", nonEmpty: true },
+  disabled: { kind: "booleanShorthand" },
 } satisfies ComponentAttributeSchema;
 
 const SELECT_SCHEMA = {
   label: { kind: "string", required: true, nonEmpty: true },
   value: { kind: "string", required: true, nonEmpty: true },
   hint: { kind: "string", nonEmpty: true },
+  disabled: { kind: "booleanShorthand" },
 } satisfies ComponentAttributeSchema;
 
 const CHECKBOX_SCHEMA = {
@@ -379,7 +382,8 @@ const CATALOG = {
   Text: {
     category: "content",
     acceptsChildren: false,
-    summary: "One line of screen copy: body, helper, or muted.",
+    summary:
+      "One line of screen copy: body, helper, muted, or a quiet uppercase section label.",
     example: '<Text text="You have four tasks left today." />',
     compile: ({ attributes, position, diagnostics }) => {
       const validated = validateComponentAttributes({
@@ -418,6 +422,25 @@ const CATALOG = {
           ? {}
           : { navigateTo: validated.navigateTo }),
       };
+    },
+  },
+  SegmentedControl: {
+    category: "layout",
+    acceptsChildren: true,
+    allowedChildren: ["Button"],
+    summary:
+      "A compact set of mutually exclusive modes. Mark the selected Button primary and keep the alternatives secondary.",
+    example:
+      '<SegmentedControl><Button label="Reply" emphasis="primary" /><Button label="Internal note" /></SegmentedControl>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      validateComponentAttributes({
+        component: "SegmentedControl",
+        attributes,
+        position,
+        diagnostics,
+        schema: EMPTY_SCHEMA,
+      });
+      return { element: "SegmentedControl", children };
     },
   },
   AppShell: {
@@ -787,6 +810,7 @@ const CATALOG = {
           : { placeholder: validated.placeholder }),
         ...(validated.value === undefined ? {} : { value: validated.value }),
         ...(validated.hint === undefined ? {} : { hint: validated.hint }),
+        disabled: validated.disabled === true,
       };
     },
   },
@@ -811,6 +835,7 @@ const CATALOG = {
           : { placeholder: validated.placeholder }),
         ...(validated.value === undefined ? {} : { value: validated.value }),
         ...(validated.hint === undefined ? {} : { hint: validated.hint }),
+        disabled: validated.disabled === true,
       };
     },
   },
@@ -832,6 +857,7 @@ const CATALOG = {
         label: validated.label ?? "",
         value: validated.value ?? "",
         ...(validated.hint === undefined ? {} : { hint: validated.hint }),
+        disabled: validated.disabled === true,
       };
     },
   },

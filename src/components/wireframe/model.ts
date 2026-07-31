@@ -143,12 +143,13 @@ export type WireframeTableCell = {
   readonly tone?: WireframeTone;
 };
 
-export type WireframeTextRole = "body" | "helper" | "muted";
+export type WireframeTextRole = "body" | "helper" | "muted" | "section";
 
 export const WIREFRAME_TEXT_ROLES: ReadonlyArray<WireframeTextRole> = [
   "body",
   "helper",
   "muted",
+  "section",
 ];
 
 // A heading's rank inside one screen. It never joins the review document's
@@ -260,6 +261,12 @@ export type WireframeNode =
       readonly navigateTo?: string;
     }
   | {
+      // Mutually exclusive modes presented as one control. Children stay
+      // buttons so the selected mode remains explicit in the authored model.
+      readonly element: "SegmentedControl";
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
       readonly element: "AppShell";
       readonly children: ReadonlyArray<WireframeNode>;
     }
@@ -357,6 +364,7 @@ export type WireframeNode =
       readonly placeholder?: string;
       readonly value?: string;
       readonly hint?: string;
+      readonly disabled: boolean;
     }
   | {
       readonly element: "TextArea";
@@ -364,6 +372,7 @@ export type WireframeNode =
       readonly placeholder?: string;
       readonly value?: string;
       readonly hint?: string;
+      readonly disabled: boolean;
     }
   | {
       readonly element: "Select";
@@ -372,6 +381,7 @@ export type WireframeNode =
       // option, not the whole menu.
       readonly value: string;
       readonly hint?: string;
+      readonly disabled: boolean;
     }
   | {
       readonly element: "Checkbox";

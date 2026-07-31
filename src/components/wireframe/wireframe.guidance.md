@@ -76,7 +76,7 @@ Desktop shell and density specifics:
 11. Follow mobile navigation conventions (back, dismiss, bottom tabs, list → detail push).
 12. Design for interruption and recovery (drafts, preserve list position, retry, undo) - sketch the affordance even at low fidelity.
 
-Phone musts: `device="phone"`, single column, `BottomBar` for primary destinations, no desktop `AppShell` rail.
+Phone musts: `device="phone"`, single column, `BottomBar` for primary destinations, no desktop `AppShell` rail. Keep body copy at 16px and metadata at 13px; make ordinary controls at least 44px tall, list rows 52-64px tall, and each bottom tab 60px tall inside an approximately 64px safe-area-aware bar. The artboard height still follows content: never stretch a short screen to a device-height rectangle just to meet these targets.
 
 ### Lists, forms, actions, state
 
@@ -108,10 +108,10 @@ Phone musts: `device="phone"`, single column, `BottomBar` for primary destinatio
 - **Frame** - `AppShell` holds `Sidebar`, an optional `TopBar`, and `AppContent`. On desktop the shell is flush-left and **stable** (same global nav every screen). Phone screens skip `AppShell` and use `TopBar` + `BottomBar`.
 - **Layout** - `Stack` runs down, `Row` runs across. In a `Row`, `span="fill"` shares width; `span="list"` is a master queue; `span="main"` is the primary surface; `span="rail"` is secondary properties or settings sub-nav.
 - **Regions** - `Panel` draws a plain region by default; `Rail` owns a secondary details width; `PageHeader` says what the page is once at the top.
-- **Content** - `Metric`, `Progress`, `Table`, `List` / `ListItem` (use `selected` on the active queue row), `Message` for conversation timelines (`kind` customer|agent|internal), `Text`, `Heading`, `Badge`, `Divider`, and `ImagePlaceholder`.
+- **Content** - `Metric`, `Progress`, `Table`, `List` / `ListItem` (use `selected` on the active queue row), `Message` for conversation timelines (`kind` customer|agent|internal), `Text` (`role="section"` for grouped phone settings), `Heading`, `Badge`, `Divider`, and `ImagePlaceholder`.
 - **Hierarchy** - `Breadcrumbs` and `Crumb` say where a screen sits; `Center` holds reading content to a measure so a form never stretches the whole window.
 - **Navigation** - `Nav` / `NavItem` for destinations; `BottomBar` for phone primary destinations. Walkable buttons use `navigateTo` without an external-link arrow glyph.
-- **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, and `Switch` draw as real controls; every one needs a `label`.
+- **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, and `Switch` draw as real controls; every one needs a `label`, and the first three accept `disabled` when a dependency makes them unavailable. `SegmentedControl` groups mutually exclusive view or composer modes; its active button is state, not the screen's filled action.
 - **Flow** - `Stepper` / `Step` show multi-step progress; `Connector` draws a labeled transition on a canvas.
 
 ```mdx
