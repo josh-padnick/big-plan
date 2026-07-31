@@ -2,7 +2,7 @@
 // around the pure renderer, supplying only HTML-specific derivation,
 // serialization, and result facts to the shared safe output workflow.
 
-import { renderDocument } from "../../render/render-document.js";
+import { derivePlanId, renderDocument } from "../../render/render-document.js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { runDerivedOutputCommand } from "../_shared/derived-output-command.js";
 import { requireGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
