@@ -45,19 +45,43 @@ Within an act, order slides by the reader's questions, keep orientation ahead of
 Fold "why X rather than Y" justifications into the surrounding story or a decision component, never into free-floating essay sections.
 Present delivery logistics, such as PR sequencing, as supporting decisions rather than headlines.
 
-## 5. Be terse
+## 5. Visual layout: Proximity, Alignment, Repetition, Contrast (CRAP)
+
+Robin Williams's four basic principles (The Non-Designer's Design Book) govern how the rendered deck is read.
+Apply them when authoring and when judging spacing after you render.
+
+**Proximity.**
+Related items sit close; unrelated items sit farther apart so groups form without boxes of explanation.
+Title and lede form one unit; slide title and context builder (the fully emphasized first line) sit tight as one unit; sub-slides pack under their parent; leave more space before the next peer slide (for example after 2.1.6 before 2.2); keep related bullets together.
+
+**Alignment.**
+Every element has a clear visual connection to something else.
+Favor a strong left edge in the reading column; kickers, titles, and body share one vertical rhythm; avoid arbitrary mid-column placement.
+
+**Repetition.**
+Repeat visual conventions so the deck feels one product: numbered kickers, Part bands, slide frames, sub-slide chrome, type scale, and muted context builders.
+Consistency is unity.
+
+**Contrast.**
+Make different things clearly different so hierarchy is obvious at a glance.
+Parts stand apart from slides; slides stand apart from sub-slides; titles stand apart from body; accent kickers stand apart from muted supporting lines.
+Weak contrast is why a plan feels flat or confusing.
+
+These principles apply to both the authored MDX structure and the product chrome Big Plan applies when it renders the deck.
+
+## 6. Be terse
 
 Write as tersely as the content allows.
 Prefer one precise sentence over three cautious ones, and cut anything that restates another section, narrates your process, or exists to look thorough.
 Keep paragraphs short; a reviewer should never lose the argument inside a wall of text.
 
-## 6. Say "Acceptance criteria"
+## 7. Say "Acceptance criteria"
 
 Name the verification contract "Acceptance criteria".
 Avoid vaguer labels such as "Desired outcome" or "Definition of done".
 Place it near the end, after the reader understands the approach, and make every criterion independently checkable.
 
-## 7. Use components where they beat prose
+## 8. Use components where they beat prose
 
 Big Plan ships components that present specific kinds of information better than paragraphs can:
 
@@ -74,9 +98,10 @@ Big Plan ships components that present specific kinds of information better than
 A decision buried in prose is a decision the reviewer cannot easily accept or reject.
 Before using a component, run `big-plan guidance <Component>` (for example `big-plan guidance ComplexDecision`) for how to use it well.
 
-## 8. Validate, render, and reread
+## 9. Validate, render, and reread
 
 Run `big-plan validate <plan.mdx>` and fix every diagnostic until it passes.
 Lint catches what is statically analyzable; it cannot judge writing.
 Render the plan, then reread the rendered document exactly as the human will, top to bottom.
 If any section reads awkwardly, or the opening does not orient you, revise before presenting it.
+Judge spacing with the CRAP principles above before you present.

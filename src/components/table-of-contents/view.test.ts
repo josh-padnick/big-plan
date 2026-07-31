@@ -53,6 +53,17 @@ const MODEL: CompiledTableOfContents = {
 };
 
 describe("TableOfContents", () => {
+  it("should title the overview at slide-title h2 scale", () => {
+    const html = render(MODEL, OUTLINE);
+    expect(html).toMatch(
+      /<h2 class="table-of-contents-title[^"]*">The plan in one look<\/h2>/,
+    );
+    expect(html).toContain("text-[1.6rem]");
+    expect(html).not.toMatch(
+      /<p class="mb-2 text-\[1\.0625rem\][^"]*">The plan in one look<\/p>/,
+    );
+  });
+
   it("should link every row to its outline section in document order", () => {
     const html = render(MODEL, OUTLINE);
     expect(html).toMatch(

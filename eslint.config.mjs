@@ -128,8 +128,10 @@ export default tseslint.config(
         // concern has its own dependency contract.
         imports: ["**/markdown/*.js"],
         // Deliberately not escapeHtml: markdown escapes through
-        // rehype-stringify, never by hand.
-        mayImport: ["components", "model"],
+        // rehype-stringify, never by hand. Icons are granted because the deck
+        // transform builds collapse chrome, and a glyph it draws itself would
+        // be locally defined icon data - the same grant the shell already has.
+        mayImport: ["components", "icons", "model"],
       },
       shell: {
         files: ["src/render/shell/**/*.ts"],

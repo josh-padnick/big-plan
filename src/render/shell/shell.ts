@@ -7,9 +7,12 @@
 // element-scoped styles from markdown/prose.css) comes from the generated
 // GLOBAL_CSS module.
 
+import { CHEVRONS_DOWN_UP_ICON } from "../../icons/lucide/chevrons-down-up.js";
+import { CHEVRONS_UP_DOWN_ICON } from "../../icons/lucide/chevrons-up-down.js";
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
+import { lucideIconToHtml } from "./lucide-icon-html.js";
 import { VIEWER_SCRIPT } from "./viewer-script.js";
 
 // The shell's own navigation contract: plain text in, so the shell owes
@@ -112,6 +115,24 @@ const renderTocItems = ({
   return items.join("\n");
 };
 
+// Bulk collapse controls live beside the Contents label rather than over the
+// reading column: they act on the whole document, which is exactly what the
+// table of contents already represents, and the sidebar is sticky so they
+// stay reachable while reading without adding chrome to the slides.
+//
+// They are script-only affordances, so they ship hidden and the viewer script
+// reveals them; a scripts-disabled document shows no control it cannot honour.
+const COLLAPSE_ALL_BUTTON_CLASSES =
+  "inline-flex size-[1.35rem] cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted opacity-55 transition-opacity transition-colors hover:text-ink hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+
+// Carries no display utility: the hidden attribute (zero-specificity preflight)
+// must win until the script sets data-shown, which then supplies the display.
+const renderBulkCollapseControls = (layoutClasses = ""): string =>
+  `<span class="data-[shown]:inline-flex items-center gap-1.5 ${layoutClasses}" data-collapse-all-controls hidden>
+<button class="${COLLAPSE_ALL_BUTTON_CLASSES}" type="button" data-expand-all aria-label="Expand all sections" title="Expand all">${lucideIconToHtml({ icon: CHEVRONS_UP_DOWN_ICON, className: "size-4" })}</button>
+<button class="${COLLAPSE_ALL_BUTTON_CLASSES}" type="button" data-collapse-all aria-label="Collapse all sections" title="Collapse all">${lucideIconToHtml({ icon: CHEVRONS_DOWN_UP_ICON, className: "size-4" })}</button>
+</span>`;
+
 // Builds the desktop sidebar navigation; its "Contents" label doubles as the
 // way back to the very top of the document.
 const renderDesktopToc = ({
@@ -128,7 +149,7 @@ const renderDesktopToc = ({
     partHeaderClasses: TOC_PART_HEADER_CLASSES,
   });
   return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[5.75rem] wide:block wide:self-start" aria-label="Contents">
-<p class="mb-3 text-xs font-semibold uppercase tracking-[0.08em]"><a class="rounded-sm text-muted hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a></p>
+<p class="mb-3 flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-[0.08em]"><a class="rounded-sm text-muted hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a>${renderBulkCollapseControls()}</p>
 <ol>
 ${items}
 </ol>
@@ -157,6 +178,7 @@ const renderMobileToc = ({
 <svg class="size-4 shrink-0 text-muted transition-transform group-open:rotate-90" aria-hidden="true" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 4.96a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 1 1-1.06-1.06L11.18 10 7.21 6.02a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
 </summary>
 <div class="absolute inset-x-0 top-full max-h-[min(70vh,24rem)] overflow-y-auto overscroll-contain border-y border-edge bg-paper py-2 shadow-lg">
+${renderBulkCollapseControls("float-right mr-5 mb-1")}
 <ol>
 <li><a class="${MOBILE_TOC_LINK_CLASSES}" data-overview-link href="#${encodeURIComponent(overviewId)}">Overview</a></li>
 ${items}
@@ -182,7 +204,10 @@ export const renderShell = ({
 }): ShellResult => {
   const hasToc = nav.length > 0;
   // The viewer script ships only when an affordance in this document uses it.
-  const needsViewerScript = hasToc || contentHtml.includes("data-info-popover");
+  const needsViewerScript =
+    hasToc ||
+    contentHtml.includes("data-info-popover") ||
+    contentHtml.includes("data-collapsible");
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="flex h-full items-center px-5 wide:px-6">

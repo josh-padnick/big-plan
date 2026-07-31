@@ -5,6 +5,15 @@
    because a rule here would lose to the title's own color utility. */
 
 @layer components {
+  /* Chrome heading at slide-title scale; not an authored section. */
+  article .table-of-contents-title {
+    margin: 0 0 0.75rem;
+    border-bottom: none;
+    padding: 0;
+    font-size: 1.6rem;
+    font-weight: 600;
+    line-height: 1.25;
+  }
   article .table-of-contents-row:hover {
     background: color-mix(in srgb, var(--ink-c) 4%, transparent);
   }

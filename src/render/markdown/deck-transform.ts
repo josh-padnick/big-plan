@@ -7,6 +7,10 @@
 // outline-aware components, and computes the document outline - parts and
 // sections numbered in document order - that those components' views consume
 // once the placeholders are presented. It knows no component's markup.
+//
+// Every collapsible level is built through deck-collapse.ts so the header /
+// body split obeys one contract; this file decides only which chrome is
+// header and which content is body, never the collapse shape itself.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 import type {
@@ -17,6 +21,7 @@ import {
   OUTLINE_PART_TITLE_ATTRIBUTE,
   OUTLINE_PLACEHOLDER_ATTRIBUTE,
 } from "./component-pipeline/outline-placeholder.js";
+import { appendCollapseBody, createCollapsible } from "./deck-collapse.js";
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
   node.type === "element";
@@ -44,26 +49,30 @@ const textOf = (node: Element): string => {
 };
 
 // The GFM footnotes block is an appendix, not an authored section, so it
-// never joins the last slide.
+// never joins the last slide or a Part collapse group.
 const isFootnotesSection = (node: RootContent): boolean =>
   isElement(node) &&
   node.tagName === "section" &&
   Array.isArray(node.properties.className) &&
   node.properties.className.includes("footnotes");
 
+// Document-level outline placeholders that are not Parts (for example the
+// TableOfContents) must stay outside Part collapse bodies.
+const isNonPartOutlinePlaceholder = (node: RootContent): boolean =>
+  isElement(node) &&
+  node.properties[OUTLINE_PLACEHOLDER_ATTRIBUTE] !== undefined &&
+  node.properties[OUTLINE_PART_TITLE_ATTRIBUTE] === undefined;
+
 // Tailwind utilities remain private styling implementation; the data
 // attributes are the stable behavior-bearing interfaces used by tests.
-const SLIDE_CLASSES = [
-  "plan-slide",
-  "mb-6",
-  "rounded-xl",
-  "border",
-  "border-edge",
-  "px-5",
-  "py-5",
-  "wide:px-[2.1rem]",
-  "wide:py-[1.9rem]",
-] as const;
+//
+// Card box geometry (border, radius, padding) and every vertical gap are
+// deliberately NOT utilities here: deck.css owns them behind custom
+// properties so one number drives the frame padding and the toggle's escape
+// into the gutter at once. Splitting them between utilities and stylesheet
+// overrides is what previously let "uniform chips" and "centered chevrons"
+// drift apart. These constants carry level identity only.
+const SLIDE_CLASSES = ["plan-slide", "plan-card"] as const;
 
 const KICKER_CLASSES = [
   "plan-slide-kicker",
@@ -75,23 +84,50 @@ const KICKER_CLASSES = [
   "text-accent",
 ] as const;
 
-// The parent header block a sectioned-into-sub-slides section keeps: its
-// kicker and h2 stand above the numbered sub-slide frames.
-const SUBPART_CLASSES = ["plan-subpart", "mt-12", "mb-4"] as const;
+// A section split into sub-slides is the same slide-level card as any other;
+// it differs only in what its body holds (context builder plus nested
+// sub-slide cards), so it reuses the slide card and adds a marker class the
+// stylesheet uses to space that nested list.
+const SLIDE_GROUP_CLASSES = [
+  "plan-slide",
+  "plan-card",
+  "plan-slide-group",
+] as const;
 
 // A sub-slide's kicker is its heading: the h3 keeps its anchor and outline
 // role while rendering as the numbered small-caps line.
-const SUBSLIDE_KICKER_CLASSES = ["mt-0", ...KICKER_CLASSES] as const;
+const SUBSLIDE_KICKER_CLASSES = [
+  "mt-0",
+  "mb-0",
+  "text-[0.6875rem]",
+  "font-semibold",
+  "uppercase",
+  "tracking-[0.14em]",
+  "text-accent",
+] as const;
+
+// The sub-slide card: one level tighter than a slide card (Contrast), and
+// uniform among sub-slides because every one shares this constant.
+const SUBSLIDE_FRAME_CLASSES = [
+  "plan-slide",
+  "plan-card",
+  "plan-subslide-frame",
+] as const;
 
 // The context builder: one muted line telling the reader what they are
 // looking at, restyled from the slide's leading emphasized paragraph.
+// No top margin: --deck-gap-title-body is the sole owner of the distance to
+// the title above, so the two cannot drift out of agreement.
 const CONTEXT_CLASSES = [
   "plan-slide-context",
-  "-mt-[0.2rem]",
   "mb-[0.9rem]",
   "text-[0.9375rem]",
   "text-muted",
 ] as const;
+
+// A Part is a collapsible band rather than a card: no border or padding of
+// its own, since the Part view already draws the band it wraps.
+const PART_GROUP_CLASSES = ["plan-part-group"] as const;
 
 /** The outline holder the transform fills in document order. */
 export type MutableDocumentOutline = {
@@ -154,10 +190,10 @@ const applyContextBuilder = (body: ReadonlyArray<ElementContent>): void => {
   first.properties.className = [...CONTEXT_CLASSES];
 };
 
-// Splits a section body that contains h3 headings into the parent header
-// block plus one numbered sub-slide frame per h3 run, so a long section
-// reads as its own small deck. The h3 becomes the sub-slide's kicker,
-// keeping its anchor and outline role.
+// Splits a section body that contains h3 headings into one collapsible slide
+// group: the parent header stays visible when collapsed, and each h3 run is
+// its own nested collapsible sub-slide. Expanded layout keeps the original
+// subpart + sub-slide structure without a flex title row.
 const buildSubSlides = ({
   heading,
   body,
@@ -168,20 +204,18 @@ const buildSubSlides = ({
   readonly body: ReadonlyArray<ElementContent>;
   readonly label: string;
   readonly kicker: Element;
-}): ReadonlyArray<ElementContent> => {
+}): Element => {
   const firstH3 = body.findIndex(
     (node) => isElement(node) && node.tagName === "h3",
   );
-  const parent: Element = {
-    type: "element",
-    tagName: "div",
-    properties: {
-      "data-subpart": "",
-      className: [...SUBPART_CLASSES],
-    },
-    children: [kicker, heading, ...body.slice(0, firstH3)],
-  };
-  const result: Array<ElementContent> = [parent];
+  const intro = body.slice(0, firstH3);
+  const collapseId =
+    typeof heading.properties.id === "string" ? heading.properties.id : label;
+  // A section split into sub-slides opens with a context builder just like
+  // any other slide (Repetition); without this its leading emphasized line
+  // stayed raw italic prose while every peer slide rendered a muted line.
+  applyContextBuilder(intro);
+  const groupBody: Array<ElementContent> = [...intro];
   let index = firstH3;
   let subIndex = 0;
   while (index < body.length) {
@@ -205,6 +239,8 @@ const buildSubSlides = ({
     }
     subIndex += 1;
     const subLabel = `${label}.${subIndex}`;
+    const subId =
+      typeof h3.properties.id === "string" ? h3.properties.id : subLabel;
     const subKicker: Element = {
       type: "element",
       tagName: "h3",
@@ -218,25 +254,39 @@ const buildSubSlides = ({
       children: [{ type: "text", value: `${subLabel} / ${textOf(h3)}` }],
     };
     applyContextBuilder(run);
-    result.push({
-      type: "element",
-      tagName: "section",
-      properties: {
-        "data-slide": "",
-        "data-subslide": "",
-        className: [...SLIDE_CLASSES],
-      },
-      children: [subKicker, ...run],
-    });
+    // Chrome is the kicker alone; the h3 run becomes the body.
+    groupBody.push(
+      createCollapsible({
+        kind: "subslide",
+        collapseId: subId,
+        tagName: "section",
+        properties: { "data-slide": "", "data-subslide": "" },
+        className: SUBSLIDE_FRAME_CLASSES,
+        chrome: [subKicker],
+        body: run,
+      }),
+    );
     index = end;
   }
-  return result;
+  // The group is a slide card whose body holds the context builder and the
+  // nested sub-slide cards. Keeping them in the body - never in the header -
+  // is what keeps a sub-slide click from toggling this group.
+  return createCollapsible({
+    kind: "slide",
+    collapseId,
+    tagName: "section",
+    properties: { "data-slide": "", "data-subpart": "" },
+    className: SLIDE_GROUP_CLASSES,
+    chrome: [kicker, heading],
+    body: groupBody,
+  });
 };
 
 // Wraps each top-level h2 plus its following siblings - up to the next h2,
 // outline placeholder (a Part divider or overview), or footnotes appendix -
-// in a slide frame headed by a numbered kicker. Returns the slide sections
-// in document order so the outline can carry them.
+// in a collapsible slide frame headed by a numbered kicker. Groups each Part
+// divider with the slides that follow it so an act can collapse as a unit.
+// Returns the slide sections in document order so the outline can carry them.
 const wrapSlides = (
   tree: Root,
   parts: Map<Element, DocumentOutlinePart>,
@@ -245,6 +295,35 @@ const wrapSlides = (
   const rewritten: Array<RootContent> = [];
   let currentPart: DocumentOutlinePart | undefined;
   let indexInPart = 0;
+  let openPartGroup: Element | undefined;
+  let openPartBody: Array<ElementContent> = [];
+
+  const flushPartGroup = (): void => {
+    if (openPartGroup === undefined) {
+      return;
+    }
+    // The act's slides are known only now; append them as the body sibling.
+    appendCollapseBody({ host: openPartGroup, children: openPartBody });
+    rewritten.push(openPartGroup);
+    openPartGroup = undefined;
+    openPartBody = [];
+  };
+
+  const pushNode = (node: RootContent | ElementContent): void => {
+    if (openPartGroup !== undefined) {
+      openPartBody.push(node as ElementContent);
+      return;
+    }
+    rewritten.push(node as RootContent);
+  };
+
+  // Global document boundaries leave the open act so collapsing a Part never
+  // hides footnotes or overview placeholders that belong to the whole plan.
+  const pushDocumentBoundary = (node: RootContent): void => {
+    flushPartGroup();
+    rewritten.push(node);
+  };
+
   let index = 0;
   while (index < tree.children.length) {
     const child = tree.children[index];
@@ -252,15 +331,34 @@ const wrapSlides = (
       index += 1;
       continue;
     }
+    if (isFootnotesSection(child) || isNonPartOutlinePlaceholder(child)) {
+      pushDocumentBoundary(child);
+      index += 1;
+      continue;
+    }
     if (isElement(child) && parts.has(child)) {
+      flushPartGroup();
       currentPart = parts.get(child);
       indexInPart = 0;
-      rewritten.push(child);
+      const partId =
+        typeof child.properties.id === "string"
+          ? child.properties.id
+          : `part-${currentPart?.number ?? indexInPart + 1}`;
+      // Part placeholder is the header chrome; outline completion replaces it
+      // in place. Body slides are appended on flush.
+      openPartGroup = createCollapsible({
+        kind: "part",
+        collapseId: partId,
+        tagName: "div",
+        className: PART_GROUP_CLASSES,
+        chrome: [child],
+      });
+      openPartBody = [];
       index += 1;
       continue;
     }
     if (!isElement(child) || child.tagName !== "h2") {
-      rewritten.push(child);
+      pushNode(child);
       index += 1;
       continue;
     }
@@ -307,8 +405,8 @@ const wrapSlides = (
       (node) => isElement(node) && node.tagName === "h3",
     );
     if (hasSubSlides) {
-      rewritten.push(
-        ...buildSubSlides({
+      pushNode(
+        buildSubSlides({
           heading: child,
           body: sectionBody,
           label,
@@ -319,18 +417,22 @@ const wrapSlides = (
       continue;
     }
     applyContextBuilder(sectionBody);
-    const slide: Element = {
-      type: "element",
-      tagName: "section",
-      properties: {
-        "data-slide": "",
-        className: [...SLIDE_CLASSES],
-      },
-      children: [kicker, ...body],
-    };
-    rewritten.push(slide);
+    const collapseId = typeof id === "string" ? id : label;
+    // Kicker + h2 are the chrome; the section body is the collapse region.
+    pushNode(
+      createCollapsible({
+        kind: "slide",
+        collapseId,
+        tagName: "section",
+        properties: { "data-slide": "" },
+        className: SLIDE_CLASSES,
+        chrome: [kicker, child],
+        body: sectionBody,
+      }),
+    );
     index = end;
   }
+  flushPartGroup();
   tree.children = rewritten;
   return sections;
 };
