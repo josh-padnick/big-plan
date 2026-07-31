@@ -34,6 +34,8 @@
 // Collapsing sets display:none on the body and changes nothing else.
 
 import type { Element, ElementContent, Properties } from "hast";
+import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
+import { lucideIconToHast } from "./lucide-icon-hast.js";
 
 /** Marks a collapsible region and names which deck level it is. */
 export const COLLAPSIBLE_ATTRIBUTE = "data-collapsible";
@@ -75,7 +77,11 @@ const TOGGLE_CLASSES = [
 ] as const;
 
 // Builds the inert collapse control; the viewer script wires behavior and the
-// document stays fully readable when scripts are disabled.
+// document stays fully readable when scripts are disabled. The chevron is the
+// catalog Lucide glyph so that pointing it right (collapsed) or down
+// (expanded) is a pure rotation of centered ink, leaving the icon's apparent
+// position identical in both states - a chevron drawn from box borders puts
+// its ink off-center, so it visibly shifts when a region toggles.
 const createCollapseToggle = (): Element => ({
   type: "element",
   tagName: "button",
@@ -86,7 +92,7 @@ const createCollapseToggle = (): Element => ({
     "aria-label": "Collapse",
     className: [...TOGGLE_CLASSES],
   },
-  children: [],
+  children: [lucideIconToHast({ icon: CHEVRON_RIGHT_ICON })],
 });
 
 // The hit target: the toggle beside the chrome block that stacks kicker and

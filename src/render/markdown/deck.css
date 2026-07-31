@@ -27,6 +27,8 @@ stability follow from the layout instead of from hand-tuned insets.
     /* Chrome */
     --deck-toggle-size: 1.35rem;
     --deck-toggle-gap: 0.25rem;
+    /* The glyph inside the toggle's hit area; keeps the chevron quiet. */
+    --deck-chevron-size: 0.95rem;
 
     /* Designed gaps. Slide-level and sub-slide-level sit at a 2:1 ratio so a
        sub-slide reads as belonging to its parent (Proximity/Contrast). */
@@ -126,19 +128,22 @@ stability follow from the layout instead of from hand-tuned insets.
     color: var(--muted-c);
   }
 
-  /* Quiet chevron - transform only. */
-  article .plan-collapse-toggle::before {
-    content: "";
-    display: block;
-    width: 0.32rem;
-    height: 0.32rem;
-    border-right: 1.35px solid currentColor;
-    border-bottom: 1.35px solid currentColor;
-    transform: rotate(45deg);
+  /*
+    Quiet chevron: the catalog Lucide glyph, centered in its own viewBox.
+    Expanded rotates it a quarter turn to point down. Because the ink is
+    already centered on the rotation origin, both states render the glyph at
+    exactly the same apparent position - collapsed chips and expanded headers
+    in the same list keep one chevron column. Never re-point it by nudging
+    margins or swapping a drawn shape; that is what made states misalign.
+  */
+  article .plan-collapse-toggle > svg {
+    width: var(--deck-chevron-size);
+    height: var(--deck-chevron-size);
+    transform: rotate(90deg);
     transition: transform 0.15s ease;
   }
-  article .plan-collapse-toggle[aria-expanded="false"]::before {
-    transform: rotate(-45deg);
+  article .plan-collapse-toggle[aria-expanded="false"] > svg {
+    transform: rotate(0deg);
   }
 
   /*
