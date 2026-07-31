@@ -60,6 +60,7 @@ const WireframeElement = ({
       return (
         <div
           className={`wireframe-stack flex flex-col ${GAP_CLASSES[node.gap]} ${ALIGN_CLASSES[node.align]}`}
+          data-wireframe-span={node.span}
         >
           <WireframeElements nodes={node.children} />
         </div>
@@ -74,7 +75,7 @@ const WireframeElement = ({
       );
     case "Panel":
       return (
-        <section className="wireframe-panel">
+        <section className="wireframe-panel" data-wireframe-span={node.span}>
           {node.eyebrow === undefined && node.title === undefined ? null : (
             <header className="wireframe-panel-head">
               {node.eyebrow === undefined ? null : (

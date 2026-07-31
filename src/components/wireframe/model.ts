@@ -33,6 +33,22 @@ export const WIREFRAME_JUSTIFICATIONS: ReadonlyArray<WireframeJustify> = [
   "between",
 ];
 
+/**
+ * How a region claims width inside a Row.
+ *
+ * Equal flex is the default and is correct for tablet master/detail cards.
+ * Desktop detail screens need the primary surface to dominate and secondary
+ * metadata to sit in a narrow rail - equal thirds read as iPad layout in a
+ * browser frame.
+ */
+export type WireframeSpan = "fill" | "main" | "rail";
+
+export const WIREFRAME_SPANS: ReadonlyArray<WireframeSpan> = [
+  "fill",
+  "main",
+  "rail",
+];
+
 export type WireframeEmphasis =
   "primary" | "secondary" | "tertiary" | "destructive";
 
@@ -163,6 +179,8 @@ export type WireframeNode =
       readonly element: "Stack";
       readonly gap: WireframeSpace;
       readonly align: WireframeAlign;
+      // Width claim inside a Row. Omitted means fill - share space equally.
+      readonly span: WireframeSpan;
       readonly children: ReadonlyArray<WireframeNode>;
     }
   | {
@@ -176,6 +194,8 @@ export type WireframeNode =
       readonly element: "Panel";
       readonly title?: string;
       readonly eyebrow?: string;
+      // Width claim inside a Row. Use main + rail on desktop detail screens.
+      readonly span: WireframeSpan;
       readonly children: ReadonlyArray<WireframeNode>;
     }
   | {
