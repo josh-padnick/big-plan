@@ -360,6 +360,8 @@ export const DIAGRAM_SCRIPT = `
     }
     const zoomControls = diagram.querySelector("[data-flow-zoom-controls]");
     if (zoomControls) zoomControls.hidden = false;
+    const zoomSep = diagram.querySelector("[data-flow-zoom-sep]");
+    if (zoomSep) zoomSep.hidden = true;
 
     // The shared leg owns promoting the frame; this one only reacts, so the
     // two can never disagree about who is maximized.
@@ -701,6 +703,8 @@ export const DIAGRAM_SCRIPT = `
       }
       const group = diagram.querySelector("[data-flow-proposal-group]");
       if (group) group.hidden = proposals.length === 0;
+      const zoomSep = diagram.querySelector("[data-flow-zoom-sep]");
+      if (zoomSep) zoomSep.hidden = mine.length === 0;
       const revertAll = diagram.querySelector("[data-flow-revert-all]");
       if (revertAll) revertAll.hidden = proposals.length < 2;
       if (proposals.length === 0) {

@@ -190,8 +190,12 @@ const branchPosition = ({
 
 // A hairline between control groups, so "2 notes Show original Revert all
 // minus 100% plus Fit Maximize" reads as four units instead of one run-on.
-const ToolbarSeparator = () => (
-  <span className="flow-diagram-toolbar-sep" aria-hidden />
+const ToolbarSeparator = ({ id }: { readonly id?: string }) => (
+  <span
+    className="flow-diagram-toolbar-sep"
+    aria-hidden
+    {...(id === undefined ? {} : { [id]: "" })}
+  />
 );
 
 const CONTROL_CLASSES =
@@ -483,7 +487,9 @@ export const FlowDiagram = ({
             never shows a rule with nothing on one side of it. */}
         <ProposalControls />
         <span className="flow-diagram-zoom-group inline-flex items-center gap-0.5">
-          <ToolbarSeparator />
+          {/* Hidden until something sits to its left: a rule with nothing on
+              one side of it separates nothing. */}
+          <ToolbarSeparator id="data-flow-zoom-sep" />
           <ZoomControls />
         </span>
         <ToolbarSeparator />
