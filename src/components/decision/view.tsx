@@ -78,12 +78,12 @@ const ColumnHeader = ({
     {...(option.chosen ? { "data-option-chosen": "" } : {})}
   >
     <label
-      className="decision-column-head flex h-full cursor-pointer flex-col items-start gap-1.5 px-3 py-2.5"
+      className="decision-column-head flex h-full cursor-pointer flex-col items-start gap-2 px-4 py-3.5"
       htmlFor={option.id}
     >
       <span className="flex items-start gap-2">
         <input
-          className="decision-radio mt-0.5 size-4 shrink-0 appearance-none rounded-full border"
+          className="decision-radio mt-0.5 size-5 shrink-0 appearance-none rounded-full border"
           type="radio"
           id={option.id}
           name={groupName}
@@ -95,7 +95,7 @@ const ColumnHeader = ({
         />
         <span
           id={option.titleId}
-          className="text-sm leading-5 font-semibold text-ink"
+          className="text-base leading-6 font-semibold text-ink"
           data-option-title=""
         >
           {option.title}
@@ -116,12 +116,12 @@ const VerdictCell = ({
   readonly index: number;
 }) => (
   <td
-    className="decision-cell px-3 py-2"
+    className="decision-cell px-4 py-3"
     data-decision-column={index}
     data-verdict-tone={consideration.tone}
   >
     <span
-      className={`decision-verdict ${matrixToneClass(consideration.tone)} flex items-start gap-1.5 text-sm leading-5 font-semibold [&>svg]:mt-[calc((1.25rem-0.875rem)/2)] [&>svg]:size-3.5 [&>svg]:shrink-0`}
+      className={`decision-verdict ${matrixToneClass(consideration.tone)} flex items-start gap-2 text-base leading-6 font-semibold [&>svg]:mt-[calc((1.5rem-1rem)/2)] [&>svg]:size-4 [&>svg]:shrink-0`}
     >
       {lucideIconToReact({
         icon: MATRIX_TONE_ICONS[consideration.tone],
@@ -147,7 +147,7 @@ const Matrix = ({
     <ComparisonMatrix className="decision-matrix">
       <thead>
         <tr>
-          <th className="decision-corner px-3 py-2.5 text-left" scope="col">
+          <th className="decision-corner px-4 py-3.5 text-left" scope="col">
             <span className="sr-only">{"Criterion"}</span>
           </th>
           {model.options.map((option, index) => (
@@ -165,7 +165,7 @@ const Matrix = ({
         {criteria.map((criterion, row) => (
           <tr key={row} className="comparison-matrix-row">
             <th
-              className="decision-criterion px-3 py-2 text-left text-sm leading-5 font-medium text-muted"
+              className="decision-criterion px-4 py-3 text-left text-base leading-6 font-medium text-muted"
               scope="row"
             >
               {criterion.title}
@@ -175,7 +175,7 @@ const Matrix = ({
               return consideration === undefined ? (
                 <td
                   key={option.id}
-                  className="decision-cell px-3 py-2"
+                  className="decision-cell px-4 py-3"
                   data-decision-column={index}
                 >
                   {"-"}
@@ -216,18 +216,18 @@ const RationalePanel = ({
       data-option-index={index}
       {...(isDefault ? { "data-rationale-default": "" } : {})}
     >
-      <p className="m-0 text-sm font-semibold text-ink">{option.title}</p>
+      <p className="m-0 text-base font-semibold text-ink">{option.title}</p>
       {option.summary === undefined ? null : (
-        <p className="mt-1 mb-0 text-sm text-muted">{option.summary}</p>
+        <p className="mt-1 mb-0 text-base text-muted">{option.summary}</p>
       )}
       {explained.length === 0 ? null : (
         <dl className="mt-2.5 mb-0 grid gap-2">
           {explained.map((consideration, row) => (
             <div key={row}>
-              <dt className="text-xs font-semibold text-ink">
+              <dt className="text-sm font-semibold text-ink">
                 {`${consideration.title}: ${consideration.verdict}`}
               </dt>
-              <dd className="m-0 text-sm text-muted [&>:last-child]:mb-0">
+              <dd className="m-0 text-base text-muted [&>:last-child]:mb-0">
                 {hastContentToReact(consideration.detail)}
               </dd>
             </div>
@@ -250,7 +250,7 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecision }) => {
   const inputId = `${model.id}-proposal-choice`;
   const textId = `${model.id}-proposal-text`;
   return (
-    <div className="decision-propose mt-3.5" data-option-proposal="">
+    <div className="decision-propose mt-4" data-option-proposal="">
       <label className="decision-propose-link" htmlFor={inputId}>
         <input
           className="sr-only"
@@ -293,11 +293,11 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecision }) => {
 const AnswerControls = () => (
   <>
     <div
-      className="decision-footer flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-edge px-4 py-3"
+      className="decision-footer flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-edge px-5 py-4"
       data-decision-footer=""
     >
       <p
-        className="m-0 mr-auto text-xs text-muted"
+        className="m-0 mr-auto text-sm text-muted"
         data-decision-selection-summary=""
       >
         {"Nothing selected yet."}
@@ -312,7 +312,7 @@ const AnswerControls = () => (
       </button>
     </div>
     <div
-      className="decision-answer gap-2.5 border-t border-edge px-4 py-3"
+      className="decision-answer gap-3 border-t border-edge px-5 py-4"
       data-decision-answer=""
       role="status"
       hidden
@@ -324,7 +324,7 @@ const AnswerControls = () => (
         {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="m-0 text-sm font-semibold text-ink">
+        <p className="m-0 text-base font-semibold text-ink">
           <span data-decision-answer-lead="">{"Answer recorded"}</span>
           <span className="sr-only" data-decision-answer-title="" />
         </p>
@@ -356,7 +356,7 @@ export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
       data-decision-status={model.status}
       {...(answerable ? { "data-decision-selector": "" } : {})}
     >
-      <figcaption className="bg-header px-4 py-3">
+      <figcaption className="decision-zone-question bg-header px-5 py-4">
         {answerable ? null : (
           <BadgePill
             label={STATUS_LABELS[model.status]}
@@ -368,20 +368,20 @@ export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
         )}
         <p
           id={model.questionId}
-          className="mt-2 mb-0 text-base font-semibold text-ink first:mt-0"
+          className="mt-2 mb-0 text-lg leading-7 font-semibold text-ink first:mt-0"
           data-decision-question=""
         >
           {model.question}
         </p>
       </figcaption>
       {model.context.length === 0 ? null : (
-        <div className="border-b border-edge px-4 py-3.5 text-sm [&>:last-child]:mb-0">
+        <div className="decision-zone-question bg-header px-5 pb-4 text-base [&>:last-child]:mb-0">
           {hastContentToReact(model.context)}
         </div>
       )}
       <fieldset className="decision-fieldset m-0 min-w-0 border-0 p-0">
         <legend className="sr-only">{model.question}</legend>
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 px-4 pt-3.5 pb-2">
+        <div className="decision-zone-matrix flex flex-wrap items-baseline justify-between gap-x-3 border-t border-edge px-5 pt-4 pb-2.5">
           <SectionLabel
             label={answerable ? "Choose one" : "Options"}
             dataProperties={{ "data-decision-choose-label": "" }}
@@ -393,8 +393,10 @@ export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
             {"Scroll sideways to compare every option."}
           </p>
         </div>
-        <Matrix model={model} answerable={answerable} />
-        <div className="decision-rationale-section border-t border-edge px-4 pt-3.5 pb-4">
+        <div className="decision-zone-matrix border-b border-edge pb-2">
+          <Matrix model={model} answerable={answerable} />
+        </div>
+        <div className="decision-zone-rationale px-5 pt-4 pb-5">
           <SectionLabel label="Why this option" />
           <div
             className="decision-rationale mt-2"

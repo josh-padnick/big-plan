@@ -44,13 +44,25 @@
     white-space: nowrap;
   }
 
+  /* Three zones, three surfaces. The card asks a question (header surface),
+     compares options (paper, the brightest and the focal surface), then
+     explains one (a recessed surface). The surface change is the boundary and
+     a hairline marks each transition; reading the three as one continuous
+     field was the round-3 complaint. Header and surface sit too close in this
+     palette to be adjacent, which is why paper separates them. */
+  article .decision-zone-rationale {
+    background: var(--surface-c);
+  }
+
   /* Column states, ordered so the later rule wins each tie: rest, hover,
-     picked, settled. `data-column-selected` is written by the viewer script
-     across a whole column; without scripts the header alone carries the
-     selection, which the native radio already makes unambiguous. */
+     picked, settled. Cells are transparent at rest so the matrix zone's paper
+     shows through and a picked column reads as tinted against it.
+     `data-column-selected` is written by the viewer script across a whole
+     column; without scripts the header alone carries the selection, which the
+     native radio already makes unambiguous. */
   article .decision-column,
   article .decision-cell {
-    background: var(--bg);
+    background: transparent;
   }
   article .decision-column:has(.decision-radio:enabled):hover {
     background: var(--surface-c);
