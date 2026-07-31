@@ -38,6 +38,12 @@ Light and dark follow the reader's OS in inert exports.
 @source "../";
 
 :root {
+  /* The standard width: what a passage of prose, and anything that reads
+     like one, is held to. Fixed rather than measured in characters so every
+     block shares one right edge whatever size its type is. */
+  --measure: 34rem;
+  /* A card hugging standard-width content: the measure plus its own padding. */
+  --card-measure: calc(var(--measure) + 2.5rem);
   --bg: #f7f5f0;
   --ink-c: #211e1a;
   --muted-c: #6f695c;
@@ -193,6 +199,23 @@ Light and dark follow the reader's OS in inert exports.
   border-radius: 0.375rem;
   background: var(--bg);
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.14);
+}
+
+/* EXPERIMENT - per-slide width. Delete this block to revert.
+
+   A card much wider than its own contents reads as an empty frame around a
+   narrow column. So a slide hugs the standard width, and only a slide that
+   actually holds something wide - a table, or a drawing - takes the room.
+   The test is on the content, so a slide earns its width rather than being
+   given it. A parent slide matches when any slide inside it does, which is
+   what keeps a wide child from overflowing its own ancestor. */
+[data-slide] {
+  max-width: var(--card-measure);
+}
+[data-slide]:has(table),
+[data-slide]:has(.wireframe),
+[data-slide]:has([data-table-scroll-container]) {
+  max-width: none;
 }
 
 /* Section navigation glides instead of jumping; readers who ask the OS for
