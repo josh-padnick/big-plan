@@ -182,7 +182,10 @@ export const renderShell = ({
 }): ShellResult => {
   const hasToc = nav.length > 0;
   // The viewer script ships only when an affordance in this document uses it.
-  const needsViewerScript = hasToc || contentHtml.includes("data-info-popover");
+  const needsViewerScript =
+    hasToc ||
+    contentHtml.includes("data-info-popover") ||
+    contentHtml.includes("data-decision-selector");
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="flex h-full items-center px-5 wide:px-6">
