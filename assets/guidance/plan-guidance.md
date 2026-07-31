@@ -22,7 +22,7 @@ Everything after the quick summary is elaboration; nothing essential may appear 
 ## 3. Place every statement at a deliberate abstraction level
 
 A plan spans one abstraction chain, from product goal down to mechanism; climb it by asking "why does this matter?" and descend by asking "how?".
-Each part of the plan owns a rung: the title and lede state the mission, `Why` the product goal, `What` the capability, `How` the actions, sections the design and mechanisms, and acceptance criteria the verification.
+Each part of the plan owns a rung: the title and lede state the mission, `Why` the product goal, `What` the capability, `How` the actions, and sections the design and mechanisms; the verification contract states how success will be checked.
 Place each fact on its rung on purpose: a sentence naming files, commands, or flags is mechanism-level and belongs in a design section, never in the lede or summary.
 A principle is not a how: "keep the skill version-locked" states a virtue; "embed the skill text in the CLI" states an action.
 The frame most worth the reviewer's attention is usually in the middle of the chain - a lifecycle, ownership, or policy question - not the loftiest goal and not the lowest mechanism.
