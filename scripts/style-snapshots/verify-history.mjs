@@ -5,7 +5,6 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   copyFile,
-  cp,
   mkdir,
   mkdtemp,
   readFile,
@@ -372,9 +371,9 @@ const validateManifest = async ({
 };
 
 /**
- * Verifies every relevant commit in the merge-base-to-HEAD range. Fixtures
- * and capture configuration always come from harnessRoot (the final branch
- * head), so the first fixture commit can be replayed against its parent.
+ * Verifies every relevant commit in the merge-base-to-HEAD range. Capture
+ * configuration comes from the final harness, while fixture content stays at
+ * each revision so a parent never has to parse syntax introduced by its child.
  */
 export const verifyHistory = async ({
   repoRoot,
@@ -384,6 +383,11 @@ export const verifyHistory = async ({
 }) => {
   const config = await readConfig(configPath);
   const harnessRoot = dirname(dirname(configPath));
+  const head = await run({
+    command: "git",
+    args: ["rev-parse", "HEAD"],
+    cwd: repoRoot,
+  });
   const patterns = config.stylingFilePatterns.map(
     (pattern) => new RegExp(pattern),
   );
@@ -401,11 +405,33 @@ export const verifyHistory = async ({
   const relevant = [];
 
   for (const commit of commits) {
-    const parent = await run({
+    const parentLine = await run({
       command: "git",
-      args: ["rev-parse", `${commit}^`],
+      args: ["rev-list", "--parents", "-n", "1", commit],
       cwd: repoRoot,
     });
+    const [, ...parents] = parentLine.split(" ");
+    const parent = parents[0];
+    if (parent === undefined) {
+      continue;
+    }
+    if (parents.length > 1) {
+      let pureMerge = false;
+      for (const mergedParent of parents.slice(1)) {
+        const mergeResolutionFiles = await run({
+          command: "git",
+          args: ["diff", "--name-only", mergedParent, commit],
+          cwd: repoRoot,
+        });
+        if (mergeResolutionFiles.length === 0) {
+          pureMerge = true;
+          break;
+        }
+      }
+      if (pureMerge) {
+        continue;
+      }
+    }
     const changedFiles = (
       await run({
         command: "git",
@@ -458,12 +484,6 @@ export const verifyHistory = async ({
       cwd: repoRoot,
     });
     try {
-      for (const fixturePath of config.fixturePaths) {
-        const source = join(harnessRoot, fixturePath);
-        const destination = join(worktree, fixturePath);
-        await mkdir(dirname(destination), { recursive: true });
-        await cp(source, destination, { recursive: true, force: true });
-      }
       await mkdir(outputDirectory, { recursive: true });
       const command = config.captureCommand.map((part) =>
         part.replaceAll("{harnessRoot}", harnessRoot),
@@ -480,6 +500,26 @@ export const verifyHistory = async ({
           STYLE_SNAPSHOT_HARNESS_ROOT: harnessRoot,
         },
       });
+      if (commit === head && Array.isArray(config.documents)) {
+        const expectedCaptureCount = config.documents.reduce(
+          (documentTotal, document) =>
+            documentTotal +
+            document.captures.reduce(
+              (captureTotal, capture) =>
+                captureTotal + capture.themes.length * capture.viewports.length,
+              0,
+            ),
+          0,
+        );
+        const actualCaptureCount = (await listFiles(outputDirectory)).filter(
+          (path) => path.endsWith(".png"),
+        ).length;
+        if (actualCaptureCount !== expectedCaptureCount) {
+          throw new Error(
+            `Final style fixture produced ${actualCaptureCount} of ${expectedCaptureCount} configured captures.`,
+          );
+        }
+      }
     } finally {
       await run({
         command: "git",

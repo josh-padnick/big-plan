@@ -22,6 +22,25 @@ const CONCRETE_REASONS = [
   /local readability/i,
 ];
 
+/** Allows CSS only where the repository assigns visual presentation ownership. */
+const ownsVisualPresentation = (relativePath) => {
+  const segments = relativePath.split("/");
+  if (segments[0] !== "src") {
+    return false;
+  }
+  if (segments[1] === "render") {
+    return true;
+  }
+  if (segments[1] !== "components") {
+    return false;
+  }
+  const owner = segments[2];
+  if (owner === "_shared") {
+    return segments.length >= 5 && !segments[3].startsWith("_");
+  }
+  return owner !== undefined && !owner.startsWith("_");
+};
+
 /** Finds every authored stylesheet below the supplied source root. */
 const findStylesheets = async (sourceRoot) => {
   const stylesheets = [];
@@ -39,12 +58,80 @@ const findStylesheets = async (sourceRoot) => {
   return stylesheets.sort();
 };
 
+/** Consumes one balanced attribute or functional-pseudo segment. */
+const consumeBalanced = ({ selector, start, open, close }) => {
+  let depth = 0;
+  let quote;
+  for (let index = start; index < selector.length; index += 1) {
+    const character = selector[index];
+    if (quote !== undefined) {
+      if (character === quote && selector[index - 1] !== "\\") {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === open) {
+      depth += 1;
+    } else if (character === close) {
+      depth -= 1;
+      if (depth === 0) {
+        return index + 1;
+      }
+    }
+  }
+  return -1;
+};
+
+/** Accepts only :root itself plus attributes and pseudo-classes on that root. */
+const isRootCompoundSelector = (selector) => {
+  const value = selector.trim();
+  if (!value.startsWith(":root")) {
+    return false;
+  }
+  let index = ":root".length;
+  while (index < value.length) {
+    if (value[index] === "[") {
+      index = consumeBalanced({
+        selector: value,
+        start: index,
+        open: "[",
+        close: "]",
+      });
+    } else if (value[index] === ":") {
+      index += 1;
+      const nameStart = index;
+      while (/[a-zA-Z0-9_-]/.test(value[index] ?? "")) {
+        index += 1;
+      }
+      if (index === nameStart) {
+        return false;
+      }
+      if (value[index] === "(") {
+        index = consumeBalanced({
+          selector: value,
+          start: index,
+          open: "(",
+          close: ")",
+        });
+      }
+    } else {
+      return false;
+    }
+    if (index === -1) {
+      return false;
+    }
+  }
+  return true;
+};
+
 /** Returns true only for root-scoped primitive declarations, never styling. */
 const isRootPrimitiveRule = (rule) => {
   const selectors = rule.selectors;
   if (
     selectors.length === 0 ||
-    selectors.some((selector) => !selector.trim().startsWith(":root"))
+    selectors.some((selector) => !isRootCompoundSelector(selector))
   ) {
     return false;
   }
@@ -92,6 +179,11 @@ export const checkStylesheetContract = async ({ sourceRoot }) => {
     const root = postcss.parse(await readFile(stylesheet, "utf8"), {
       from: stylesheet,
     });
+    if (!ownsVisualPresentation(relativePath)) {
+      failures.push(
+        `${relativePath}:1: stylesheet is outside a visual owner; use an authorable component folder, _shared/<visual-primitive>, or src/render.`,
+      );
+    }
     const firstNode = root.first;
     const header = firstNode?.type === "comment" ? firstNode.text : "";
     if (
@@ -115,15 +207,32 @@ export const checkStylesheetContract = async ({ sourceRoot }) => {
             }),
           );
         }
-      } else if (!ALLOWED_BLOCK_LAYERS.has(layer.params)) {
-        failures.push(
-          diagnostic({
-            relativePath,
-            node: layer,
-            message:
-              'authored presentation blocks may use only "@layer components" or "@layer bp-state".',
-          }),
-        );
+      } else {
+        if (!ALLOWED_BLOCK_LAYERS.has(layer.params)) {
+          failures.push(
+            diagnostic({
+              relativePath,
+              node: layer,
+              message:
+                'authored presentation blocks may use only "@layer components" or "@layer bp-state".',
+            }),
+          );
+        }
+        if (
+          ancestorsOf(layer).some(
+            (ancestor) =>
+              ancestor.type === "atrule" && ancestor.name === "layer",
+          )
+        ) {
+          failures.push(
+            diagnostic({
+              relativePath,
+              node: layer,
+              message:
+                "nested layer blocks obscure the effective cascade owner; use one top-level layer block.",
+            }),
+          );
+        }
       }
     });
 
@@ -139,8 +248,8 @@ export const checkStylesheetContract = async ({ sourceRoot }) => {
       ) {
         return;
       }
-      const layer = ancestors.find((node) => node.name === "layer");
-      if (layer === undefined) {
+      const layers = ancestors.filter((node) => node.name === "layer");
+      if (layers.length === 0) {
         if (!isRootPrimitiveRule(rule)) {
           failures.push(
             diagnostic({
@@ -153,7 +262,7 @@ export const checkStylesheetContract = async ({ sourceRoot }) => {
         }
         return;
       }
-      if (layer.params === "bp-state") {
+      if (layers.some((layer) => layer.params === "bp-state")) {
         const previous = rule.prev();
         if (
           previous?.type !== "comment" ||

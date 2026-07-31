@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "fixturePaths": ["examples/sample.mdx"],
+  "fixturePaths": ["examples/mdx-components.mdx", "examples/deck.mdx"],
   "stylingFilePatterns": [
     "^\\.style-snapshots/config\\.json$",
     "^src/.*\\.css$",
@@ -16,8 +16,8 @@
   ],
   "documents": [
     {
-      "name": "sample",
-      "source": "examples/sample.mdx",
+      "name": "components",
+      "source": "examples/mdx-components.mdx",
       "captures": [
         {
           "name": "document",
@@ -36,6 +36,150 @@
             }
           ],
           "actions": []
+        },
+        {
+          "name": "shell-header",
+          "selector": "body > header",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            },
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": []
+        },
+        {
+          "name": "desktop-navigation",
+          "selector": "nav[aria-label=\"Contents\"]:not([data-mobile-toc])",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            }
+          ],
+          "actions": []
+        },
+        {
+          "name": "mobile-navigation",
+          "selector": "[data-mobile-toc]",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": []
+        },
+        {
+          "name": "maximized-code",
+          "selector": "[data-code-snippet][data-figure-maximized]",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            }
+          ],
+          "actions": [
+            {
+              "type": "click",
+              "selector": "[data-code-snippet] [data-figure-maximize]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "deck",
+      "source": "examples/deck.mdx",
+      "captures": [
+        {
+          "name": "document",
+          "selector": "article",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            },
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": []
+        },
+        {
+          "name": "collapsed-desktop",
+          "selector": "article",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            }
+          ],
+          "actions": [
+            {
+              "type": "click",
+              "selector": "nav[aria-label=\"Contents\"]:not([data-mobile-toc]) [data-collapse-all]"
+            }
+          ]
+        },
+        {
+          "name": "collapsed-phone",
+          "selector": "article",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": [
+            {
+              "type": "click",
+              "selector": "[data-mobile-toc] summary"
+            },
+            {
+              "type": "click",
+              "selector": "[data-mobile-toc] [data-collapse-all]"
+            }
+          ]
+        },
+        {
+          "name": "mobile-navigation-open",
+          "selector": "[data-mobile-toc] details[open] > div",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": [
+            {
+              "type": "click",
+              "selector": "[data-mobile-toc] summary"
+            }
+          ]
         }
       ]
     }
