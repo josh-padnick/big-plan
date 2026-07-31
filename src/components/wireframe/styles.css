@@ -335,6 +335,16 @@ marks and a plan diff never jitters.
     font-weight: 600;
     cursor: pointer;
   }
+  /* A control keeps its own size in a stretching column, but a container
+     that centers or end-aligns its children means that for the control too. */
+  .wireframe .items-center > .wireframe-button,
+  .wireframe .items-center > .wireframe-badge {
+    align-self: center;
+  }
+  .wireframe .items-end > .wireframe-button,
+  .wireframe .items-end > .wireframe-badge {
+    align-self: flex-end;
+  }
   .wireframe-button:hover {
     background: var(--wf-fill);
   }
