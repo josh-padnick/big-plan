@@ -38,11 +38,12 @@ Everything on this page is shipped and works today.
 - `GraphqlOperation` components for queries, mutations, and subscriptions with literal argument types, one-level input and payload fields, and grouped executable examples with repeatable labeled responses.
 - `GrpcMethod` components for streaming-aware proto signatures, message-typed request and response fields, gRPC status codes, grouped examples, and proto source.
 - `SimpleDecisionSet` components for compact numbered lists of briefly explained options, with recommendations marked inline.
+- `Wireframe` components for true-width, content-height product screens with coherent device frames, walkable prototypes, opt-in common layout patterns, and an open vocabulary for custom layouts.
 
 ## Output
 
 - One self-contained HTML file with styling and branding embedded.
-- One small embedded viewer script (TOC scroll-spy, hover popovers, deck collapse); content stays fully readable with scripts disabled.
+- One small embedded viewer script (TOC scroll-spy, hover popovers, deck collapse, wireframe navigation and scaling); content stays fully readable with scripts disabled.
 - No external requests, ever.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 

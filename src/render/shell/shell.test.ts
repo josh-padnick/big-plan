@@ -8,6 +8,7 @@ import { renderShell } from "./shell.js";
 const shellFor = (contentHtml: string) =>
   renderShell({
     nav: [{ id: "one", label: "One" }],
+    title: "Test plan",
     contentIds: ["one"],
     contentHtml,
   }).html;

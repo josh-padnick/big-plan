@@ -49,6 +49,8 @@ type WorkerFixtures = {
   readonly simpleDecisionSetViewerUrl: string;
   readonly sampleViewerUrl: string;
   readonly tableSchemaViewerUrl: string;
+  readonly wireframeFormFactorsViewerUrl: string;
+  readonly wireframeShortContentViewerUrl: string;
   readonly wireframeViewerUrl: string;
 };
 
@@ -106,6 +108,17 @@ The outer context introduces a complete decision.
 </Option>
 
 </ComplexDecision>
+`;
+
+const WIREFRAME_SHORT_CONTENT_MDX = `# Short wireframe
+
+<Wireframe id="short-content" title="Content-sized screen">
+  <Screen id="ready" name="Ready" device="desktop">
+    <Panel title="Ready">
+      <Text text="The short state is complete." />
+    </Panel>
+  </Screen>
+</Wireframe>
 `;
 
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
@@ -280,6 +293,36 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         outputPath,
         outputDir,
       });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  wireframeFormFactorsViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-wireframe-form-factors-"),
+      );
+      const outputPath = join(outputDir, "wireframe-form-factors.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "wireframe-form-factors.mdx"),
+        outputPath,
+        outputDir,
+      });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  wireframeShortContentViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-wireframe-short-content-"),
+      );
+      const inputPath = join(outputDir, "wireframe-short-content.mdx");
+      const outputPath = join(outputDir, "wireframe-short-content.html");
+      await writeFile(inputPath, WIREFRAME_SHORT_CONTENT_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },

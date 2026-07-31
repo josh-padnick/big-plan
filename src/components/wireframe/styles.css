@@ -25,6 +25,9 @@ marks and a plan diff never jitters.
     --wf-sketch-alt: 11px 5px 9px 4px / 4px 9px 5px 11px;
     margin: 1.75rem 0;
   }
+  :not([data-slide]) > .wireframe[data-wireframe-desktop] {
+    margin-right: calc(-1 * var(--reading-free-inline, 0px));
+  }
 
   /* Isolation from the reading column's element selectors. */
   .wireframe h3,
@@ -124,44 +127,48 @@ marks and a plan diff never jitters.
     letter-spacing: 0.02em;
   }
 
-  /* The artboard is the device being designed for. Its preset sets the widest
-     the drawing will ever be; inside the review column it fills the width it
-     is given and reflows, so labels stay at reading size from a narrow phone
-     to a wide desktop.
-
-     Height follows the drawing rather than the device. Holding a screen to
-     its device proportions leaves a half-empty rectangle in the middle of a
-     plan, and a reviewer reads that emptiness as unfinished work rather than
-     as room the design has left over. */
-  /* The frame is what says which kind of product this is. A drawing that
-     floats on the page reads as a tablet app whatever is inside it, so a web
-     product gets a browser window and a phone gets a phone. */
-  .wireframe-frame {
+  /* Lay out at the device's true width, then scale the whole drawing to fit.
+     The layout never reflows into the review column. Height remains intrinsic:
+     a short screen is short instead of inheriting a mostly empty device box. */
+  .wireframe-screen {
+    container-type: inline-size;
+    width: 100%;
     margin-inline: auto;
+    overflow-x: auto;
   }
-  .wireframe-frame:has(> [data-wireframe-viewport="mobile-portrait"]) {
-    max-width: 390px;
-  }
-  .wireframe-frame:has(> [data-wireframe-viewport="mobile-landscape"]) {
-    max-width: 844px;
-  }
-  .wireframe-frame:has(> [data-wireframe-viewport="tablet-portrait"]) {
-    max-width: 834px;
-  }
-  .wireframe-frame:has(> [data-wireframe-viewport="tablet-landscape"]) {
-    max-width: 960px;
-  }
-  /* A drawing of a desktop product stops growing well before the window
-     does. Past this it stops reading as one screen a person looks at and
-     starts reading as a wall, and the labels drift apart from each other.
-     It also has to sit proportionate to the column it is drawn in rather
-     than filling it, which is what sets the number this low. */
-  .wireframe-frame:has(> [data-wireframe-viewport="desktop"]) {
+  .wireframe-screen[data-wireframe-device="desktop"] {
+    --wf-width: 1440px;
     max-width: 920px;
   }
+  .wireframe-screen[data-wireframe-device="tablet"] {
+    --wf-width: 1112px;
+    max-width: 960px;
+  }
+  .wireframe-screen[data-wireframe-device="tablet-portrait"] {
+    --wf-width: 834px;
+    max-width: 834px;
+  }
+  .wireframe-screen[data-wireframe-device="phone"] {
+    --wf-width: 390px;
+    max-width: calc(390px + 12px + 0.8rem);
+  }
+  .wireframe-frame {
+    --wf-bezel: 2px;
+    --wf-inline-padding: 0px;
+    --wf-outer: calc(
+      var(--wf-width) + 2 * var(--wf-bezel) + 2 * var(--wf-inline-padding)
+    );
+    box-sizing: border-box;
+    width: var(--wf-outer);
+    /* The viewer sets an exact numeric zoom from live geometry. Without
+       scripts the true-width frame remains fully readable by horizontal
+       scrolling instead of reflowing into a false device width. */
+    zoom: 1;
+    overflow: hidden;
+  }
 
-  .wireframe-frame[data-wireframe-chrome="browser"] {
-    border: 2px solid var(--wf-stroke);
+  .wireframe-frame:not([data-wireframe-device="phone"]) {
+    border: var(--wf-bezel) solid var(--wf-stroke);
     border-radius: var(--wf-sketch);
     background: var(--wf-fill);
   }
@@ -200,9 +207,11 @@ marks and a plan diff never jitters.
     text-overflow: ellipsis;
   }
 
-  .wireframe-frame[data-wireframe-chrome="phone"] {
-    padding: 0.5rem 0.4rem;
-    border: 2px solid var(--wf-stroke);
+  .wireframe-frame[data-wireframe-device="phone"] {
+    --wf-bezel: 6px;
+    --wf-inline-padding: 0.4rem;
+    padding: 0.5rem var(--wf-inline-padding);
+    border: var(--wf-bezel) solid var(--wf-stroke);
     border-radius: 1.75rem 1.6rem 1.75rem 1.6rem / 1.6rem 1.75rem 1.6rem 1.75rem;
   }
   .wireframe-phone-notch {
@@ -213,21 +222,22 @@ marks and a plan diff never jitters.
     border-radius: 999px;
     background: var(--wf-stroke-soft);
   }
-  /* Inside a frame the artboard is the viewport, so the frame draws the
-     outer edge and the artboard stops drawing its own. */
-  .wireframe-frame:not([data-wireframe-chrome="none"]) > .wireframe-artboard {
+  /* The frame draws the outer edge, so the artboard does not repeat it. */
+  .wireframe-frame > .wireframe-artboard {
     border-radius: 6px 3px 7px 4px / 4px 7px 3px 6px;
   }
-  .wireframe-frame[data-wireframe-chrome="browser"] > .wireframe-artboard {
+  .wireframe-frame:not([data-wireframe-device="phone"]) > .wireframe-artboard {
     border-width: 2px 0 0;
     border-radius: 0;
   }
 
   .wireframe-artboard {
     display: flex;
+    box-sizing: border-box;
+    width: var(--wf-width);
     /* Letterforms carry the sketch; the strokes only frame it. The font stops
        at the artboard's edge: the caption, the screen switcher, and the
-       viewport note are Big Plan speaking about the drawing, not part of it.
+       device note are Big Plan speaking about the drawing, not part of it.
 
        The bundled face has one weight, and a browser's synthetic bold
        thickens its strokes until they stop looking hand-drawn - worst
@@ -235,8 +245,8 @@ marks and a plan diff never jitters.
        case, and ink, and never from a weight the hand does not have. */
     font-family: "Patrick Hand", var(--font-sans);
     font-synthesis-weight: none;
-    /* The drawing responds to the artboard, not to the browser window, so a
-       narrow review column collapses a shell exactly like a narrow device. */
+    /* Container queries respond to the real device width, never the scaled
+       painted width in the review document. */
     container-type: inline-size;
     min-height: 9rem;
     padding: 0.75rem;
@@ -407,12 +417,10 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard:has(.wireframe-app-shell) > .wireframe-canvas {
     gap: 0;
-    min-height: 22rem;
   }
   .wireframe-app-shell {
     display: grid;
     flex: 1;
-    min-height: 22rem;
     /* Narrow nav rail: labels only, not a third of the canvas. */
     grid-template-columns: minmax(7rem, 9.5rem) 1fr;
     gap: 0;
@@ -453,34 +461,32 @@ marks and a plan diff never jitters.
   }
 
   /* Desktop density: tighter than tablet so the drawing reads as a web app. */
-  .wireframe-artboard[data-wireframe-viewport="desktop"] .wireframe-app-content {
+  .wireframe-artboard[data-wireframe-device="desktop"] .wireframe-app-content {
     gap: 0.55rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
-    .wireframe-page-header {
+  .wireframe-artboard[data-wireframe-device="desktop"] .wireframe-page-header {
     padding-bottom: 0.35rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-page-header
     .wireframe-heading {
     font-size: 1.35rem;
   }
   /* Consistent pane system: only workspace body rows that carry span panes
-     get multi-pane chrome and min-height. Toolbar rows (search, filters) stay
-     compact - otherwise each inherits 18rem and leaves empty bands. */
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+     get multi-pane chrome. Their height still follows their content, so a
+     compact screen never leaves a dead band under the work. */
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     > .wireframe-row:has([data-wireframe-span]) {
     flex-wrap: nowrap;
     align-items: stretch;
     gap: 0;
-    min-height: 18rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     > .wireframe-row:has([data-wireframe-span])
     > .wireframe-panel,
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     > .wireframe-row:has([data-wireframe-span])
     > .wireframe-stack {
@@ -490,9 +496,8 @@ marks and a plan diff never jitters.
     border-radius: 0;
     background: transparent;
     padding: 0.35rem 0.7rem;
-    min-height: 100%;
   }
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     > .wireframe-row:has([data-wireframe-span])
     > .wireframe-panel
@@ -501,13 +506,13 @@ marks and a plan diff never jitters.
     min-width: 0;
   }
   /* Queue column: force two-line rows and clip long subjects. */
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     > .wireframe-row
     > [data-wireframe-span="list"] {
     overflow: hidden;
   }
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     > .wireframe-row
     > [data-wireframe-span="list"]
@@ -516,44 +521,44 @@ marks and a plan diff never jitters.
     flex-direction: column;
     gap: 0.15rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     > .wireframe-row:has([data-wireframe-span])
     > .wireframe-panel::after {
     display: none;
   }
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     > .wireframe-row:has([data-wireframe-span])
-    > * + * {
+    > *
+    + * {
     border-left: 1px solid var(--wf-stroke-soft);
   }
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     .wireframe-panel-body {
     gap: 0.45rem;
     min-height: 0;
   }
   /* Conversation column: timeline grows, composer pins to the foot. */
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     .wireframe-panel-body:has([data-wireframe-message]) {
     display: flex;
     flex-direction: column;
-    min-height: 16rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     .wireframe-panel-body:has([data-wireframe-message])
     > .wireframe-divider,
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     .wireframe-panel-body:has([data-wireframe-message])
     > .wireframe-divider-labeled {
     margin-top: auto;
   }
   /* Settings form stays a readable measure, not full bleed. */
-  .wireframe-artboard[data-wireframe-viewport="desktop"]
+  .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     > .wireframe-row
     > [data-wireframe-span="main"].wireframe-stack {
@@ -562,40 +567,36 @@ marks and a plan diff never jitters.
 
   /* Tablet shells keep breathing room and a card-like rail: intentional for
      the device, not the default desktop treatment. */
-  .wireframe-artboard[data-wireframe-viewport="tablet-portrait"]:has(
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]:has(
       .wireframe-app-shell
     ),
-  .wireframe-artboard[data-wireframe-viewport="tablet-landscape"]:has(
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
       .wireframe-app-shell
     ) {
     padding: 0.625rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="tablet-portrait"]
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
     .wireframe-app-shell,
-  .wireframe-artboard[data-wireframe-viewport="tablet-landscape"]
-    .wireframe-app-shell {
+  .wireframe-artboard[data-wireframe-device="tablet"] .wireframe-app-shell {
     gap: 0.75rem;
-    min-height: 18rem;
     grid-template-columns: minmax(7.5rem, 11rem) 1fr;
   }
-  .wireframe-artboard[data-wireframe-viewport="tablet-portrait"]
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
     .wireframe-sidebar,
-  .wireframe-artboard[data-wireframe-viewport="tablet-landscape"]
-    .wireframe-sidebar {
+  .wireframe-artboard[data-wireframe-device="tablet"] .wireframe-sidebar {
     border: 2px solid var(--wf-stroke);
     border-radius: var(--wf-sketch-alt);
   }
-  .wireframe-artboard[data-wireframe-viewport="tablet-portrait"]
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
     .wireframe-app-content,
-  .wireframe-artboard[data-wireframe-viewport="tablet-landscape"]
-    .wireframe-app-content {
+  .wireframe-artboard[data-wireframe-device="tablet"] .wireframe-app-content {
     padding: 0.25rem 0.125rem 0.125rem;
     gap: 0.75rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="tablet-portrait"]
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
     .wireframe-app-shell
     > .wireframe-top-bar,
-  .wireframe-artboard[data-wireframe-viewport="tablet-landscape"]
+  .wireframe-artboard[data-wireframe-device="tablet"]
     .wireframe-app-shell
     > .wireframe-top-bar {
     border: 2px solid var(--wf-stroke);
@@ -604,90 +605,65 @@ marks and a plan diff never jitters.
 
   /* Phone: true mobile language - tall narrow device, single column, tab bar
      at the foot. Never a desktop AppShell rail stacked in a tall artboard. */
-  .wireframe-frame[data-wireframe-chrome="phone"] {
-    max-width: 390px;
-    margin-inline: auto;
-  }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"] {
-    min-height: 32rem;
+  .wireframe-artboard[data-wireframe-device="phone"] {
     padding: 0.45rem 0.5rem 0.35rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    > .wireframe-canvas {
-    min-height: 30rem;
+  .wireframe-artboard[data-wireframe-device="phone"] > .wireframe-canvas {
     gap: 0.45rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-app-shell,
-  .wireframe-artboard[data-wireframe-viewport="mobile-landscape"]
-    .wireframe-app-shell {
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-app-shell {
     grid-template-columns: 1fr;
-    min-height: 16rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-sidebar,
-  .wireframe-artboard[data-wireframe-viewport="mobile-landscape"]
-    .wireframe-sidebar {
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-sidebar {
     border: 0;
     border-bottom: 2px solid var(--wf-stroke);
   }
   /* Phone surfaces: list rows and messages, not tablet cards. */
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-panel {
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-panel {
     padding: 0.45rem 0.5rem;
     border-width: 1px;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-panel::after {
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-panel::after {
     display: none;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-panel-body {
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-panel-body {
     gap: 0.35rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-top-bar {
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-top-bar {
     padding: 0.45rem 0.15rem 0.55rem;
     border: 0;
     border-bottom: 1px solid var(--wf-stroke-soft);
     border-radius: 0;
     background: transparent;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-brand {
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-brand {
     font-size: 1.125rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-page-header {
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-page-header {
     padding-bottom: 0.3rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-heading {
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-heading {
     font-size: 1.15rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-list-item {
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-list-item {
     min-height: 3.25rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-button {
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-button {
     min-height: 2.75rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-composer {
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-composer {
     margin-top: auto;
     padding-top: 0.5rem;
     border-top: 1px solid var(--wf-stroke-soft);
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+  .wireframe-artboard[data-wireframe-device="phone"]
     .wireframe-stack:has(> .wireframe-message) {
     flex: 1;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-message {
+  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-message {
     margin-bottom: 0.35rem;
   }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+  .wireframe-artboard[data-wireframe-device="phone"]
     .wireframe-message[data-wireframe-message="internal"] {
     /* Persistent tint so internal notes cannot be mistaken for public reply. */
     background: color-mix(
@@ -727,18 +703,6 @@ marks and a plan diff never jitters.
   }
   .wireframe-bottom-bar .wireframe-button[data-wireframe-navigate]::after {
     content: none;
-  }
-  /* Phone artboards with a bottom bar fill the device height so the strip
-     sits at the foot of the drawing rather than under a short column. */
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]:has(
-      .wireframe-bottom-bar
-    )
-    > .wireframe-canvas {
-    min-height: 30rem;
-  }
-  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
-    .wireframe-stack:has(> .wireframe-bottom-bar) {
-    min-height: 29rem;
   }
   .wireframe-brand {
     font-size: 1.0625rem;

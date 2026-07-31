@@ -4,7 +4,7 @@ A hand-drawn sketch of a product screen, drawn from a fixed vocabulary so a revi
 
 - Reach for a wireframe when the reviewer must picture a screen to judge the plan; describe anything they can already picture in prose.
 - Deliberately low fidelity is the point. Draw the regions, the copy that carries meaning, and the actions - not the polish.
-- Every screen needs `id` and `name`. Add a second `Screen` and a `Button` with `navigateTo` to turn a sketch into a walkable prototype, and keep prototypes short: two or three screens along one path.
+- Every screen needs `id`, `name`, and `device`. Add a second `Screen` and a `Button` with `navigateTo` to turn a sketch into a walkable prototype, and keep prototypes short: two or three screens along one path.
 - All copy is written as attributes: `<Text text="..." />`, `<Metric label="..." value="..." />`, `<Button label="..." />`. A wireframe holds no prose, and the explanation belongs in the paragraphs around it.
 - Draw **product UI**, not a design review of the product UI. Keyboard cheatsheets, "sticky header", "remembered width", and process notes belong outside the artboard - never as on-screen helper copy a customer would not see.
 - Before drawing a desktop screen, name a real SaaS reference pattern (Linear, GitHub, Stripe, Front, Notion). Prefer that pattern over inventing a novel layout.
@@ -12,8 +12,9 @@ A hand-drawn sketch of a product screen, drawn from a fixed vocabulary so a revi
 - Keep three text levels and no more: the page title, the content, and its metadata. Anything else is a fourth level competing with the title.
 - Say state in words first. A `Badge`, or a table cell written `[Failed:danger]`, is a word that a tone only reinforces; a reviewer who cannot see the tint still reads the state.
 - Borrow a layout a real product already proved - a table with a toolbar, master-detail, a settings two-column, a focused centered form - rather than inventing one for a solved problem.
-- Pick the `viewport` the design is really for. The artboard reflows to the reader's width instead of shrinking the text, so the preset sets the shape rather than the final size.
-- Say what kind of product this is with `chrome`. A web product uses `chrome="browser"` and a `url`, which tells a reviewer the route before they read a label; a phone screen uses `chrome="phone"`. An unframed screen floats on the page and reads as a tablet app whatever is inside it, so frame every screen of a real product and keep the frame the same across the prototype.
+- Give every screen one `device`: `desktop`, `tablet`, `tablet-portrait`, or `phone`. It chooses both the true layout width and the matching browser or phone frame, so contradictory combinations are impossible. Add `url` to a non-phone screen when the route matters.
+- The artboard lays out at that true width and scales as one unit to fit the plan; it never reflows into the reading column. Height follows the content, so do not pad a short screen merely to imitate a device rectangle.
+- Use `pattern="list-detail|triage|create|settings"` only when one of those proven layouts fits. `triage` consumes three direct `Panel` slots; the others consume two, and the compiler expands them into ordinary `Row`, `Panel`, and `Rail` nodes at the right widths. Omit `pattern` and use the full vocabulary for dashboards, canvas + inspector, wizards, onboarding, and every other layout.
 
 For how slides, headings, and components sit on the **plan page** (Contrast, Repetition, Alignment, Proximity), follow plan-writing guidance CRAP via `big-plan guidance` section "Lay out slides with CRAP".
 Wireframe guidance owns **product UI** form factors inside the artboard, not deck layout.
@@ -24,14 +25,14 @@ A prototype that claims three devices must actually be designed three times.
 Do not scale one layout and change the caption.
 Each form factor is a **native layout language**, not a stretched or shrunken version of another.
 
-| Form factor | `viewport` | `chrome` | Shell |
-| --- | --- | --- | --- |
-| Desktop web SaaS | `desktop` | `browser` + `url` | Stable `AppShell` + flush-left `Sidebar` + `AppContent`. Workspace density. |
-| Tablet | `tablet-landscape` or `tablet-portrait` | `browser` when it is a web app | Master/detail, wider gutters, card surfaces OK. |
-| Phone | `mobile-portrait` | `phone` | Single column. `TopBar` + `BottomBar`. No left rail. |
+| Form factor      | `device`                      | Shell                                                                       |
+| ---------------- | ----------------------------- | --------------------------------------------------------------------------- |
+| Desktop web SaaS | `desktop`                     | Stable `AppShell` + flush-left `Sidebar` + `AppContent`. Workspace density. |
+| Tablet           | `tablet` or `tablet-portrait` | Master/detail, wider gutters, card surfaces OK.                             |
+| Phone            | `phone`                       | Single column. `TopBar` + `BottomBar`. No `AppShell` or left rail.          |
 
 When the same product must be reviewed on more than one form factor, author parallel prototypes (separate `Wireframe` blocks or clearly labeled sections), each with its own screens and navigation path.
-Do not mix phone chrome with a desktop sidebar on one screen.
+The compiler rejects a desktop `AppShell` or `Sidebar` on a phone screen.
 
 ## Central product principle
 
@@ -75,7 +76,7 @@ Desktop shell and density specifics:
 11. Follow mobile navigation conventions (back, dismiss, bottom tabs, list → detail push).
 12. Design for interruption and recovery (drafts, preserve list position, retry, undo) - sketch the affordance even at low fidelity.
 
-Phone musts: `viewport="mobile-portrait"`, `chrome="phone"`, single column, `BottomBar` for primary destinations, no desktop `AppShell` rail.
+Phone musts: `device="phone"`, single column, `BottomBar` for primary destinations, no desktop `AppShell` rail.
 
 ### Lists, forms, actions, state
 
@@ -106,11 +107,7 @@ Phone musts: `viewport="mobile-portrait"`, `chrome="phone"`, single column, `Bot
 
 - **Frame** - `AppShell` holds `Sidebar`, an optional `TopBar`, and `AppContent`. On desktop the shell is flush-left and **stable** (same global nav every screen). Phone screens skip `AppShell` and use `TopBar` + `BottomBar`.
 - **Layout** - `Stack` runs down, `Row` runs across. In a `Row`, `span="fill"` shares width; `span="list"` is a master queue; `span="main"` is the primary surface; `span="rail"` is secondary properties or settings sub-nav.
-- **Regions** - `Panel` bounds a region, `PageHeader` says what the page is once at the top.
-- **Content** - `Metric`, `Progress`, `List` / `ListItem` (use `selected` on the active queue row), `Message` for conversation timelines (`kind` customer|agent|internal), `Text`, `Heading`, `Badge`, `Divider`, `ImagePlaceholder`.
-- **Navigation** - `Nav` / `NavItem` for destinations; `BottomBar` for phone primary destinations. Walkable buttons use `navigateTo` without an external-link arrow glyph.
-- **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, `Switch` - every control needs a `label`.
-- **Flow** - `Stepper` / `Step`, `Connector`.
+- **Regions** - `Panel` draws a plain region by default; `Rail` owns a secondary details width; `PageHeader` says what the page is once at the top.
 - **Content** - `Metric`, `Progress`, `Table`, `List` / `ListItem` (use `selected` on the active queue row), `Message` for conversation timelines (`kind` customer|agent|internal), `Text`, `Heading`, `Badge`, `Divider`, and `ImagePlaceholder`.
 - **Hierarchy** - `Breadcrumbs` and `Crumb` say where a screen sits; `Center` holds reading content to a measure so a form never stretches the whole window.
 - **Navigation** - `Nav` / `NavItem` for destinations; `BottomBar` for phone primary destinations. Walkable buttons use `navigateTo` without an external-link arrow glyph.
@@ -122,8 +119,7 @@ Phone musts: `viewport="mobile-portrait"`, `chrome="phone"`, single column, `Bot
   <Screen
     id="ticket"
     name="Ticket"
-    viewport="desktop"
-    chrome="browser"
+    device="desktop"
     url="app.harbor.team/inbox?ticket=4821"
   >
     <AppShell>
@@ -142,13 +138,22 @@ Phone musts: `viewport="mobile-portrait"`, `chrome="phone"`, single column, `Bot
         <Row gap="sm">
           <Panel title="Queue" span="list">
             <List>
-              <ListItem label="Checkout freeze" meta="Selected · 14m" value="#4821" />
+              <ListItem
+                label="Checkout freeze"
+                meta="Selected · 14m"
+                value="#4821"
+                selected
+              />
               <ListItem label="SSO timeout" meta="Waiting · 2h" value="#4818" />
             </List>
           </Panel>
           <Panel title="Conversation" span="main">
             <List>
-              <ListItem label="Maya · Customer" meta="14m" value="Form freezes" />
+              <ListItem
+                label="Maya · Customer"
+                meta="14m"
+                value="Form freezes"
+              />
             </List>
             <Text text="Mode: Reply · Internal note" role="helper" />
             <TextArea label="Composer" placeholder="Cmd+Enter to send" />

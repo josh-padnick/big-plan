@@ -203,6 +203,33 @@ Light and dark follow the reader's OS in inert exports.
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.14);
 }
 
+/* Publish the free margin beside the centered reading column. Desktop
+   drawings borrow the right half without guessing at viewport or scrollbar
+   geometry; prose keeps its normal measure. */
+[data-reading-layout] {
+  container-type: inline-size;
+}
+article {
+  --reading-free-inline: 0px;
+}
+@container (width >= 53rem) {
+  [data-reading-layout="with-toc"] article {
+    --reading-free-inline: max(
+      0px,
+      (100cqw - 15rem - 3.5rem - 74ch) / 2 - 0.5rem
+    );
+  }
+  [data-reading-layout="without-toc"] article {
+    --reading-free-inline: max(0px, (100cqw - 74ch) / 2 - 0.5rem);
+  }
+}
+[data-slide]:has(> [data-wireframe-desktop]) {
+  margin-right: calc(-1 * var(--reading-free-inline, 0px));
+}
+[data-slide]:has(> [data-wireframe-desktop]) > *:not([data-wireframe-desktop]) {
+  max-width: 74ch;
+}
+
 /* EXPERIMENT - per-slide width. Delete this block to revert.
 
    A card much wider than its own contents reads as an empty frame around a
