@@ -561,52 +561,27 @@ Master/detail with intentional card surfaces and breathing room.
 
 ## Phone
 
-Essential mobile jobs: triage, open, quick reply, capture.
-Bottom tabs, list → detail, drafts and recovery affordances.
-Rare admin lives under More.
+Triage, reply, and capture - not a compressed desktop.
+Whole-row opens, vertical message timeline, light tab bar with active states, and recovery without permanent explanatory chrome.
+
+### Ticket - design rationale (priority 1)
+
+- **Timeline:** stacked `Message` blocks (customer / agent / internal), body under sender+time.
+- **Composer:** Reply | Internal note segment; **Send reply** / sticky above safe area; attachment affordance; internal mode stays tinted.
+- **Chrome:** `‹ Inbox` back, overflow for resolve/status; **Inbox tab stays active** (came from inbox).
+- **No permanent** undo/draft process copy - snackbar only after send (not drawn as standing helper text).
+
+### Inbox / New / More
+
+- Inbox titled **Inbox** with open count; views vs filters with counts; two-line rows; row is the action.
+- New ticket: sticky **Create ticket**, Cancel, draft on New tab, lightweight duplicate after subject.
+- More: overview model (rows open groups), not mixed switches.
 
 <Wireframe
   id="harbor-phone"
   title="Harbor on phone"
-  initialScreen="m-inbox"
+  initialScreen="m-ticket"
 >
-  <Screen
-    id="m-inbox"
-    name="Phone · Inbox"
-    viewport="mobile-portrait"
-    chrome="phone"
-  >
-    <Stack gap="sm">
-      <TopBar title="Harbor">
-        <Badge label="12" />
-      </TopBar>
-      <TextField
-        label="Search"
-        kind="search"
-        placeholder="Search tickets"
-      />
-      <Row gap="xs">
-        <Button label="All" emphasis="primary" />
-        <Button label="Mine" emphasis="tertiary" />
-        <Button label="SLA" emphasis="tertiary" />
-      </Row>
-      <List>
-        <ListItem label="Checkout freeze" meta="14m · P1" value="#4821" />
-        <ListItem label="SSO timeout" meta="2h · Wait" value="#4818" />
-        <ListItem label="Invoice PDF" meta="1d · Mine" value="#4802" />
-        <ListItem label="Webhook retries" meta="3d" value="#4790" />
-        <ListItem label="CSV export truncates" meta="4d" value="#4788" />
-      </List>
-      <Button label="Open #4821" emphasis="primary" navigateTo="m-ticket" />
-      <Text text="Scroll position preserved on return" role="helper" />
-      <BottomBar>
-        <Button label="Inbox" emphasis="primary" />
-        <Button label="New" navigateTo="m-compose" />
-        <Button label="More" navigateTo="m-settings" />
-      </BottomBar>
-    </Stack>
-  </Screen>
-
   <Screen
     id="m-ticket"
     name="Phone · Ticket"
@@ -616,23 +591,111 @@ Rare admin lives under More.
     <Stack gap="sm">
       <TopBar title="#4821">
         <Button label="‹ Inbox" emphasis="tertiary" navigateTo="m-inbox" />
+        <Button label="•••" emphasis="tertiary" />
       </TopBar>
       <Heading text="Cannot complete checkout" level="2" />
-      <Text text="Maya Chen · Northwind · Priority" role="helper" />
+      <Text text="Northwind · Priority · Open" role="helper" />
+      <Message
+        author="Maya"
+        time="14m"
+        kind="customer"
+        text="Card form freezes when I submit the checkout page."
+      />
+      <Message
+        author="Alex"
+        time="8m"
+        kind="agent"
+        text="Could you send the cart ID and browser version?"
+      />
+      <Message
+        author="Maya"
+        time="2m"
+        kind="customer"
+        text="cart_9f2a · Chrome 128"
+      />
+      <Message
+        author="Alex"
+        time="1m"
+        kind="internal"
+        text="Linked prior freeze #4410. Do not promise an ETA."
+      />
       <Divider />
-      <List>
-        <ListItem label="Maya · Customer" meta="14m" value="Freezes on submit" />
-        <ListItem label="Alex · Reply" meta="8m" value="Need cart id" />
-        <ListItem label="Maya · Customer" meta="2m" value="cart_9f2a" />
-      </List>
-      <TextArea label="Reply" placeholder="Reply… draft autosaved" />
-      <Row gap="sm" justify="between">
-        <Button label="Internal" emphasis="tertiary" />
-        <Button label="Send" emphasis="primary" />
+      <Row gap="sm">
+        <Button label="Reply" emphasis="primary" />
+        <Button label="Internal note" emphasis="tertiary" />
       </Row>
-      <Text text="Composer above home indicator · undo send 5s" role="helper" />
+      <TextArea label="Message" placeholder="Write a reply…" />
+      <Row gap="sm" justify="between">
+        <Button label="Attach" emphasis="tertiary" />
+        <Button label="Send reply" emphasis="primary" />
+      </Row>
       <BottomBar>
-        <Button label="Inbox" navigateTo="m-inbox" />
+        <Button label="Inbox" emphasis="primary" navigateTo="m-inbox" />
+        <Button label="New" navigateTo="m-compose" />
+        <Button label="More" navigateTo="m-settings" />
+      </BottomBar>
+    </Stack>
+  </Screen>
+
+  <Screen
+    id="m-inbox"
+    name="Phone · Inbox"
+    viewport="mobile-portrait"
+    chrome="phone"
+  >
+    <Stack gap="sm">
+      <TopBar title="Inbox">
+        <Text text="12 open" role="helper" />
+        <Button label="Avatar" emphasis="tertiary" />
+      </TopBar>
+      <Row gap="sm">
+        <TextField
+          label="Search"
+          kind="search"
+          placeholder="Search tickets"
+        />
+        <Button label="Filter" emphasis="tertiary" />
+      </Row>
+      <Row gap="xs">
+        <Button label="All 12" emphasis="primary" />
+        <Button label="Mine 4" emphasis="tertiary" />
+        <Button label="Unassigned 3" emphasis="tertiary" />
+        <Button label="SLA 2" emphasis="tertiary" />
+      </Row>
+      <List>
+        <ListItem
+          label="Cannot complete checkout"
+          meta="Northwind · Priority"
+          value="14m · #4821"
+          navigateTo="m-ticket"
+        />
+        <ListItem
+          label="SSO session expires early"
+          meta="Waiting · Lee"
+          value="2h · #4818"
+          navigateTo="m-ticket"
+        />
+        <ListItem
+          label="Invoice PDF missing line items"
+          meta="Mine · Alex"
+          value="1d · #4802"
+          navigateTo="m-ticket"
+        />
+        <ListItem
+          label="Webhook retries exhausting"
+          meta="Unassigned"
+          value="3d · #4790"
+          navigateTo="m-ticket"
+        />
+        <ListItem
+          label="Export CSV truncates rows"
+          meta="Mine · Alex"
+          value="4d · #4788"
+          navigateTo="m-ticket"
+        />
+      </List>
+      <BottomBar>
+        <Button label="Inbox" emphasis="primary" />
         <Button label="New" navigateTo="m-compose" />
         <Button label="More" navigateTo="m-settings" />
       </BottomBar>
@@ -647,17 +710,45 @@ Rare admin lives under More.
   >
     <Stack gap="sm">
       <TopBar title="New ticket">
-        <Button label="✕" emphasis="tertiary" navigateTo="m-inbox" />
+        <Button label="Cancel" emphasis="tertiary" navigateTo="m-inbox" />
       </TopBar>
-      <Text text="Draft autosaved · resume after interruption" role="helper" />
-      <TextField label="Subject" placeholder="Summary" />
+      <TextField
+        label="Subject"
+        value="Cannot complete checkout"
+        placeholder="What is this about?"
+      />
       <Select label="Customer" value="Northwind Labs" />
-      <Select label="Priority" value="Normal" />
-      <TextArea label="Description" placeholder="What happened?" />
-      <Button label="Create" emphasis="primary" navigateTo="m-ticket" />
+      <TextArea
+        label="Description"
+        placeholder="What happened?"
+      />
+      <Row gap="sm">
+        <Button label="Attach" emphasis="tertiary" />
+        <Button label="Camera" emphasis="tertiary" />
+      </Row>
+      <Stack gap="xs">
+        <Text text="Possible match" role="helper" />
+        <List>
+          <ListItem
+            label="Prior checkout freeze"
+            meta="#4410"
+            value="Close"
+          />
+        </List>
+        <Row gap="sm">
+          <Button label="View" emphasis="tertiary" />
+          <Button label="Link" emphasis="tertiary" />
+          <Button label="Dismiss" emphasis="tertiary" />
+        </Row>
+      </Stack>
+      <Button
+        label="Create ticket"
+        emphasis="primary"
+        navigateTo="m-ticket"
+      />
       <BottomBar>
         <Button label="Inbox" navigateTo="m-inbox" />
-        <Button label="New" emphasis="primary" />
+        <Button label="New · draft" emphasis="primary" />
         <Button label="More" navigateTo="m-settings" />
       </BottomBar>
     </Stack>
@@ -671,15 +762,33 @@ Rare admin lives under More.
   >
     <Stack gap="sm">
       <TopBar title="More" />
-      <Text text="Rare admin and account - not daily triage" role="helper" />
+      <Text text="Account" role="helper" />
       <List>
-        <ListItem label="Notifications" meta="On" />
-        <ListItem label="Quiet hours" meta="Off" />
-        <ListItem label="Account" meta="Alex Rivera" />
+        <ListItem label="Alex Rivera" meta="Agent" value="›" />
+        <ListItem label="Acme Support" meta="Workspace" value="›" />
       </List>
-      <Switch label="Email on assignment" on />
-      <Switch label="Push for SLA risk" on />
-      <Button label="Sign out" emphasis="destructive" />
+      <Text text="Preferences" role="helper" />
+      <List>
+        <ListItem label="Notifications" meta="On" value="›" />
+        <ListItem label="Quiet hours" meta="Off" value="›" />
+        <ListItem label="Appearance" value="›" />
+      </List>
+      <Text
+        text="Push permission denied at OS level - enable in system Settings to get SLA alerts."
+        role="helper"
+      />
+      <Text text="Support" role="helper" />
+      <List>
+        <ListItem label="Help and feedback" value="›" />
+        <ListItem label="About Harbor" value="›" />
+      </List>
+      <Stack gap="sm">
+        <Button label="Sign out" emphasis="destructive" />
+        <Text
+          text="Unsent drafts stay on this device until you sign back in."
+          role="helper"
+        />
+      </Stack>
       <BottomBar>
         <Button label="Inbox" navigateTo="m-inbox" />
         <Button label="New" navigateTo="m-compose" />

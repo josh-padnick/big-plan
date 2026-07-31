@@ -167,7 +167,10 @@ const compileNodes = ({
       diagnostics,
     });
     if (
-      (node.element === "Button" || node.element === "NavItem") &&
+      (node.element === "Button" ||
+        node.element === "NavItem" ||
+        node.element === "ListItem") &&
+      "navigateTo" in node &&
       node.navigateTo !== undefined
     ) {
       references.push({ to: node.navigateTo, position: child.position });

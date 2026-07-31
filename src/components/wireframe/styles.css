@@ -578,10 +578,11 @@ marks and a plan diff never jitters.
     border: 0;
     border-bottom: 2px solid var(--wf-stroke);
   }
-  /* Phone surfaces are list rows, not tablet cards with double strokes. */
+  /* Phone surfaces: list rows and messages, not tablet cards. */
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-panel {
     padding: 0.45rem 0.5rem;
+    border-width: 1px;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-panel::after {
@@ -593,8 +594,15 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-top-bar {
-    padding: 0.35rem 0.4rem;
-    border-radius: 8px 4px 8px 4px / 4px 8px 4px 8px;
+    padding: 0.45rem 0.15rem 0.55rem;
+    border: 0;
+    border-bottom: 1px solid var(--wf-stroke-soft);
+    border-radius: 0;
+    background: transparent;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-brand {
+    font-size: 1.125rem;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-page-header {
@@ -602,22 +610,67 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-heading {
-    font-size: 1.05rem;
+    font-size: 1.15rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-list-item {
+    min-height: 3.25rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-button {
+    min-height: 2.75rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-composer {
+    margin-top: auto;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--wf-stroke-soft);
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-stack:has(> .wireframe-message) {
+    flex: 1;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-message {
+    margin-bottom: 0.35rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-message[data-wireframe-message="internal"] {
+    /* Persistent tint so internal notes cannot be mistaken for public reply. */
+    background: color-mix(
+      in srgb,
+      var(--callout-warning-bg) 70%,
+      var(--color-paper)
+    );
+  }
+  .wireframe-destructive-block {
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--wf-stroke-soft);
   }
   .wireframe-bottom-bar {
     margin-top: auto;
-    padding: 0.35rem 0.25rem 0.2rem;
-    border-top: 2px solid var(--wf-stroke);
-    background: var(--wf-fill);
+    padding: 0.35rem 0.25rem 0.45rem;
+    border-top: 1px solid var(--wf-stroke-soft);
+    background: color-mix(in srgb, var(--color-paper) 88%, var(--wf-fill));
   }
   .wireframe-bottom-bar .wireframe-button {
     flex: 1 1 0;
     justify-content: center;
     text-align: center;
-    padding: 0.4rem 0.2rem;
-    font-size: 0.75rem;
+    min-height: 2.75rem;
+    padding: 0.35rem 0.2rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
     box-shadow: none;
-    border-radius: 6px 3px 7px 4px / 4px 7px 3px 6px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-muted);
+  }
+  .wireframe-bottom-bar .wireframe-button[data-wireframe-emphasis="primary"] {
+    color: var(--color-ink);
+    background: color-mix(in srgb, var(--color-ink) 8%, transparent);
   }
   .wireframe-bottom-bar .wireframe-button[data-wireframe-navigate]::after {
     content: none;
@@ -869,6 +922,29 @@ marks and a plan diff never jitters.
     font-variant-numeric: tabular-nums;
     color: var(--color-muted);
     white-space: nowrap;
+  }
+  /* Whole-row tappable list entries (mobile inbox). */
+  .wireframe-list-row {
+    min-height: 3.25rem;
+    margin: 0;
+    padding: 0.55rem 0.25rem;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  .wireframe-list-row:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  .wireframe-list-item:has(> .wireframe-list-row) {
+    padding: 0;
+  }
+  .wireframe-list-row .wireframe-list-meta {
+    display: block;
+    width: 100%;
   }
 
   /* Conversation timeline messages (not table rows). */

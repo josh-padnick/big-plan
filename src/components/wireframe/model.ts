@@ -294,6 +294,8 @@ export type WireframeNode =
       readonly value?: string;
       // Selected row in a master queue. Wireframe language only - not interactive.
       readonly selected: boolean;
+      // Whole-row navigation (mobile lists open a record without a separate CTA).
+      readonly navigateTo?: string;
     }
   | {
       // One message in a conversation timeline (not a table row).

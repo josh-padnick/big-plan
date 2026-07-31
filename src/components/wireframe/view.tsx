@@ -255,12 +255,11 @@ const WireframeElement = ({
           <WireframeElements nodes={node.children} />
         </ul>
       );
-    case "ListItem":
-      return (
-        <li
-          className="wireframe-list-item flex flex-nowrap items-baseline gap-2"
-          {...(node.selected ? { "data-wireframe-selected": "" } : {})}
-        >
+    case "ListItem": {
+      // Mobile lists open a record by tapping the whole row; desktop queues may
+      // only mark selection. Both share the same row chrome.
+      const rowBody = (
+        <>
           <span className="wireframe-list-label grow">{node.label}</span>
           {node.meta === undefined ? null : (
             <span className="wireframe-list-meta">{node.meta}</span>
@@ -268,8 +267,41 @@ const WireframeElement = ({
           {node.value === undefined ? null : (
             <span className="wireframe-list-value">{node.value}</span>
           )}
+        </>
+      );
+      if (node.navigateTo !== undefined) {
+        return (
+          <li
+            className="wireframe-list-item"
+            {...(node.selected ? { "data-wireframe-selected": "" } : {})}
+          >
+            <button
+              type="button"
+              className="wireframe-list-row flex w-full flex-col gap-0.5"
+              data-wireframe-navigate={node.navigateTo}
+            >
+              <span className="wireframe-list-row-primary flex w-full flex-nowrap items-baseline gap-2">
+                <span className="wireframe-list-label grow">{node.label}</span>
+                {node.value === undefined ? null : (
+                  <span className="wireframe-list-value">{node.value}</span>
+                )}
+              </span>
+              {node.meta === undefined ? null : (
+                <span className="wireframe-list-meta">{node.meta}</span>
+              )}
+            </button>
+          </li>
+        );
+      }
+      return (
+        <li
+          className="wireframe-list-item flex flex-nowrap items-baseline gap-2"
+          {...(node.selected ? { "data-wireframe-selected": "" } : {})}
+        >
+          {rowBody}
         </li>
       );
+    }
     case "Message":
       return (
         <div
