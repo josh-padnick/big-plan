@@ -170,6 +170,8 @@ Apply these review conventions by judgment:
 - Use Lucide for icons and keep framework-neutral glyph data in `src/icons/lucide/`; components never define icon paths locally.
 - Author component markup with Tailwind utilities where practical.
   Reserve stylesheets for variants, state, pseudo-elements, live-application-created elements, and plain generated markup that cannot carry utility classes.
+  Utilities out-rank component stylesheets, so a property a state rule changes must not also carry a utility: set its resting value in the stylesheet too.
+  The one exception is the `hidden` attribute, whose preflight rule is `!important` and therefore the reliable way to script a region's visibility.
 - Keep logic in pure modules and unit-test it there.
   Reserve Playwright for critical user journeys.
 - Write focused, user-oriented tests with `should ... when ...` descriptions and coverage of degenerate and boundary cases.
