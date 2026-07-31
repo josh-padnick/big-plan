@@ -306,15 +306,6 @@ const buildSubSlides = ({
   const intro = body.slice(0, firstH3);
   const collapseId =
     typeof heading.properties.id === "string" ? heading.properties.id : label;
-  const parent: Element = {
-    type: "element",
-    tagName: "div",
-    properties: {
-      "data-subpart": "",
-      className: [...SUBPART_CLASSES],
-    },
-    children: [kicker, heading],
-  };
   const groupBody: Array<ElementContent> = [...intro];
   let index = firstH3;
   let subIndex = 0;
@@ -376,12 +367,23 @@ const buildSubSlides = ({
     );
     index = end;
   }
+  // Context builder + sub-slides live inside the subpart chip so the title
+  // and first line stay one unit, and expand/collapse only toggles body
+  // visibility without restyling the header chrome.
+  const parent: Element = {
+    type: "element",
+    tagName: "div",
+    properties: {
+      "data-subpart": "",
+      className: [...SUBPART_CLASSES],
+    },
+    children: [kicker, heading, createCollapseBody(groupBody)],
+  };
   return createCollapseHost({
     kind: "slide",
     collapseId,
     className: SLIDE_GROUP_CLASSES,
     header: parent,
-    body: createCollapseBody(groupBody),
   });
 };
 

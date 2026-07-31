@@ -22,15 +22,11 @@ body visibility - never header margins, padding, border, or toggle insets.
   /* The parent header block of a section split into sub-slides: kicker and
      h2 stand as one unit above the numbered frames. */
   article .plan-subpart > h2 {
-    margin: 0;
+    /* Match plan-slide h2 so collapsed chip heights stay identical. */
+    margin: 0 0 0.2rem;
     border-bottom: none;
     padding-bottom: 0;
     font-size: 1.6rem;
-  }
-  /* Proximity: title + first line (context builder) read as one unit. */
-  article .plan-subpart > h2 ~ * {
-    margin-top: 0.15rem;
-    margin-bottom: 0;
   }
 
   /*
@@ -45,13 +41,29 @@ body visibility - never header margins, padding, border, or toggle insets.
     margin-top: 0;
     margin-bottom: 0.5rem;
   }
-  /* Body follows the slide-group header tightly so the context builder sits
-     just under the h2 (Proximity); spacing is constant for geometry-stable
-     collapse because only body visibility toggles. */
-  article .plan-slide-group > [data-collapse-body] {
+
+  /*
+     Always-on slide-group chrome (both states): same chip border/pad as a
+     plan-slide frame so collapsed peers under a Part form one list. Body
+     (context builder + sub-slides) lives inside this chip; expand only
+     toggles its visibility.
+  */
+  article .plan-slide-group > .plan-collapse-row > .plan-subpart {
+    box-sizing: border-box;
+    margin: 0;
+    border: 1px solid var(--edge-c);
+    border-radius: 0.75rem;
+    background: transparent;
+    padding: 1.25rem 1.25rem;
+  }
+  article .plan-slide-group > .plan-collapse-row > .plan-subpart > [data-slide-kicker] {
+    margin-bottom: 0.45rem;
+  }
+  /* Proximity: context builder / first body line sits tight under the h2. */
+  article .plan-subpart > h2 + [data-collapse-body] {
     margin-top: 0.15rem;
   }
-  article .plan-slide > [data-collapse-body] {
+  article .plan-slide > h2 + [data-collapse-body] {
     margin-top: 0.15rem;
   }
 
@@ -105,8 +117,9 @@ body visibility - never header margins, padding, border, or toggle insets.
       opacity 0.12s ease,
       color 0.12s ease;
   }
+  /* Match always-on subpart chip top pad (same expanded and collapsed). */
   article .plan-slide-group > .plan-collapse-row > .plan-collapse-toggle {
-    margin-top: 0.15rem;
+    margin-top: 1.15rem;
   }
   article .plan-part-group > .plan-collapse-row > .plan-collapse-toggle {
     margin-top: 0;
@@ -168,6 +181,27 @@ body visibility - never header margins, padding, border, or toggle insets.
 article [data-collapsible][data-collapsed] > [data-collapse-body],
 article [data-collapsible][data-collapsed] [data-collapse-body] {
   display: none;
+}
+
+/*
+   Beat plan-slide utilities so simple slides and slide-group chips share one
+   height formula (padding + kicker + title) in both states. Host owns gaps.
+*/
+article
+  [data-collapsible="slide"]
+  > .plan-collapse-row
+  > .plan-slide {
+  margin-bottom: 0;
+  padding-top: 1.25rem;
+  padding-bottom: 1.25rem;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+article .plan-slide-group > .plan-collapse-row > .plan-subpart {
+  padding-top: 1.25rem;
+  padding-bottom: 1.25rem;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
 }
 
 article .plan-slide > h2,
