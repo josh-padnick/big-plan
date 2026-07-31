@@ -811,10 +811,16 @@ export const DIAGRAM_SCRIPT = `
         surface.viewport.scrollLeft = panning.left - dx;
         surface.viewport.scrollTop = panning.top - dy;
       });
+      // Drop the grabbing cursor before releasing capture, and only release a
+      // capture the viewport actually holds: a pointer that ended outside the
+      // window leaves no capture to release, and a throw here would strand the
+      // surface looking like it is still being dragged.
       const endPan = () => {
         if (!panning) return;
-        if (panning.moved) surface.viewport.releasePointerCapture(panning.id);
         surface.viewport.removeAttribute("data-flow-panning");
+        if (surface.viewport.hasPointerCapture(panning.id)) {
+          surface.viewport.releasePointerCapture(panning.id);
+        }
         panning = null;
       };
       surface.viewport.addEventListener("pointerup", endPan);
