@@ -138,7 +138,9 @@ export default tseslint.config(
       shell: {
         files: ["src/render/shell/**/*.ts"],
         imports: ["**/shell/**"],
-        mayImport: ["escapeHtml", "icons", "components"],
+        // Script delivery reads the same figure-control vocabulary components
+        // emit, so the shell consumes its model owner instead of copying it.
+        mayImport: ["escapeHtml", "icons", "components", "model"],
       },
       page: {
         files: ["src/render/page.ts"],

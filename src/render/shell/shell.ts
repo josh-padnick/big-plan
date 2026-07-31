@@ -7,6 +7,7 @@
 // element-scoped styles from markdown/prose.css) comes from the generated
 // GLOBAL_CSS module.
 
+import { MAXIMIZABLE_ATTRIBUTE } from "../../components/_model/figure-controls/figure-controls.js";
 import { CHEVRONS_DOWN_UP_ICON } from "../../icons/lucide/chevrons-down-up.js";
 import { CHEVRONS_UP_DOWN_ICON } from "../../icons/lucide/chevrons-up-down.js";
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
@@ -208,7 +209,7 @@ export const renderShell = ({
     hasToc ||
     contentHtml.includes("data-info-popover") ||
     contentHtml.includes("data-collapsible") ||
-    contentHtml.includes("data-figure-maximizable");
+    contentHtml.includes(MAXIMIZABLE_ATTRIBUTE);
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="flex h-full items-center px-5 wide:px-6">
