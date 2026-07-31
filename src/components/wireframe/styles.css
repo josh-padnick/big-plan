@@ -1,0 +1,1256 @@
+/*
+Wireframe's hand-drawn visual language.
+
+Two jobs live here. First, isolation: the reading column styles headings,
+paragraphs, and controls with element selectors, and a wireframe is a drawing
+rather than prose, so every one of those is neutralized inside the root.
+Second, the sketch itself: uneven strokes, a second offset line, and paper
+grid, all authored as static CSS so the same source always renders the same
+marks and a plan diff never jitters.
+*/
+
+@layer components {
+  /* One rounded rectangle, drawn twice, reads as a pen stroke.
+
+     The radii are unequal corner to corner so no edge is machine-true, but
+     only slightly: a box that visibly leans stops reading as a rectangle
+     somebody drew and starts reading as a mistake, and it pulls attention
+     away from the design it is meant to show. Every element reuses the same
+     two sets so the whole drawing looks like one hand. */
+  .wireframe {
+    --wf-stroke: color-mix(in srgb, var(--color-ink) 55%, transparent);
+    --wf-stroke-soft: color-mix(in srgb, var(--color-ink) 22%, transparent);
+    --wf-fill: color-mix(in srgb, var(--color-ink) 6%, transparent);
+    --wf-sketch: 9px 4px 11px 5px / 5px 11px 4px 9px;
+    --wf-sketch-alt: 11px 5px 9px 4px / 4px 9px 5px 11px;
+    margin: 1.75rem 0;
+  }
+
+  /* Isolation from the reading column's element selectors. */
+  .wireframe h3,
+  .wireframe h4,
+  .wireframe h5 {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .wireframe h3 {
+    font-size: 1.3125rem;
+  }
+  .wireframe h4 {
+    font-size: 1.0625rem;
+  }
+  .wireframe h5 {
+    font-size: 0.9375rem;
+  }
+  .wireframe p {
+    margin: 0;
+  }
+  .wireframe ul,
+  .wireframe li {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .wireframe hr {
+    margin: 0;
+  }
+  .wireframe button {
+    font: inherit;
+    color: inherit;
+  }
+
+  .wireframe-caption {
+    margin-bottom: 0.5rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+
+  /* The switcher only means something once a script can act on it, so it
+     stays hidden in an inert document where every screen is already shown. */
+  .wireframe-switcher {
+    display: none;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-bottom: 0.75rem;
+  }
+  [data-wireframe-interactive] .wireframe-switcher {
+    display: flex;
+  }
+  .wireframe-switch {
+    padding: 0.2rem 0.6rem;
+    border: 2px solid transparent;
+    border-radius: var(--wf-sketch);
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+    cursor: pointer;
+  }
+  .wireframe-switch:hover {
+    background: var(--wf-fill);
+  }
+  .wireframe-switch[aria-current="true"] {
+    border-color: var(--wf-stroke);
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+
+  .wireframe-screens {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  [data-wireframe-interactive] .wireframe-screen:not([data-wireframe-current]) {
+    display: none;
+  }
+
+  .wireframe-screen-caption {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--color-muted);
+  }
+  .wireframe-screen-name {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  /* The artboard is the device being designed for. Its preset sets the widest
+     the drawing will ever be; inside the review column it fills the width it
+     is given and reflows, so labels stay at reading size from a narrow phone
+     to a wide desktop.
+
+     Height follows the drawing rather than the device. Holding a screen to
+     its device proportions leaves a half-empty rectangle in the middle of a
+     plan, and a reviewer reads that emptiness as unfinished work rather than
+     as room the design has left over. */
+  /* The frame is what says which kind of product this is. A drawing that
+     floats on the page reads as a tablet app whatever is inside it, so a web
+     product gets a browser window and a phone gets a phone. */
+  .wireframe-frame {
+    margin-inline: auto;
+  }
+  .wireframe-frame:has(> [data-wireframe-viewport="mobile-portrait"]) {
+    max-width: 390px;
+  }
+  .wireframe-frame:has(> [data-wireframe-viewport="mobile-landscape"]) {
+    max-width: 844px;
+  }
+  .wireframe-frame:has(> [data-wireframe-viewport="tablet-portrait"]) {
+    max-width: 834px;
+  }
+  .wireframe-frame:has(> [data-wireframe-viewport="tablet-landscape"]) {
+    max-width: 1112px;
+  }
+  .wireframe-frame:has(> [data-wireframe-viewport="desktop"]) {
+    max-width: 1440px;
+  }
+
+  .wireframe-frame[data-wireframe-chrome="browser"] {
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch);
+    background: var(--wf-fill);
+  }
+  .wireframe-browser-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.6rem;
+  }
+  /* Three dots drawn as one element: the window controls every desktop
+     browser puts in the same corner. */
+  .wireframe-browser-dots {
+    flex: none;
+    width: 2.1rem;
+    height: 0.5rem;
+    background-image: radial-gradient(
+      circle at center,
+      var(--wf-stroke) 0 0.25rem,
+      transparent 0.25rem
+    );
+    background-size: 0.7rem 0.5rem;
+    background-repeat: repeat-x;
+  }
+  .wireframe-browser-address {
+    flex: 1;
+    min-width: 0;
+    padding: 0.05rem 0.6rem;
+    border: 2px solid var(--wf-stroke-soft);
+    border-radius: 999px;
+    background: var(--color-paper);
+    font-family: "Patrick Hand", var(--font-sans);
+    font-size: 0.75rem;
+    color: var(--color-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .wireframe-frame[data-wireframe-chrome="phone"] {
+    padding: 0.5rem 0.4rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: 1.75rem 1.6rem 1.75rem 1.6rem / 1.6rem 1.75rem 1.6rem 1.75rem;
+  }
+  .wireframe-phone-notch {
+    display: block;
+    width: 3.5rem;
+    height: 0.35rem;
+    margin: 0 auto 0.4rem;
+    border-radius: 999px;
+    background: var(--wf-stroke-soft);
+  }
+  /* Inside a frame the artboard is the viewport, so the frame draws the
+     outer edge and the artboard stops drawing its own. */
+  .wireframe-frame:not([data-wireframe-chrome="none"]) > .wireframe-artboard {
+    border-radius: 6px 3px 7px 4px / 4px 7px 3px 6px;
+  }
+  .wireframe-frame[data-wireframe-chrome="browser"] > .wireframe-artboard {
+    border-width: 2px 0 0;
+    border-radius: 0;
+  }
+
+  .wireframe-artboard {
+    display: flex;
+    /* Letterforms carry the sketch; the strokes only frame it. The font stops
+       at the artboard's edge: the caption, the screen switcher, and the
+       viewport note are Big Plan speaking about the drawing, not part of it.
+
+       The bundled face has one weight, and a browser's synthetic bold
+       thickens its strokes until they stop looking hand-drawn - worst
+       exactly where the type is largest. Emphasis therefore comes from size,
+       case, and ink, and never from a weight the hand does not have. */
+    font-family: "Patrick Hand", var(--font-sans);
+    font-synthesis-weight: none;
+    /* The drawing responds to the artboard, not to the browser window, so a
+       narrow review column collapses a shell exactly like a narrow device. */
+    container-type: inline-size;
+    min-height: 9rem;
+    padding: 0.75rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch);
+    background-color: var(--color-paper);
+    background-image:
+      repeating-linear-gradient(
+        to right,
+        var(--wf-fill) 0 1px,
+        transparent 1px 24px
+      ),
+      repeating-linear-gradient(
+        to bottom,
+        var(--wf-fill) 0 1px,
+        transparent 1px 24px
+      );
+    font-size: 0.875rem;
+    line-height: 1.45;
+  }
+  .wireframe-canvas {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Regions share a row; controls and copy keep their own size.
+     span=fill (default) shares width equally - fine for tablet cards.
+     span=main claims most of the row; span=rail is a narrow secondary column
+     so desktop detail screens do not read as equal thirds. */
+  .wireframe-row > .wireframe-panel,
+  .wireframe-row > .wireframe-stack,
+  .wireframe-row > .wireframe-row {
+    flex: 1 1 0;
+    min-width: 8rem;
+  }
+  .wireframe-row > [data-wireframe-span="main"] {
+    /* Claim remaining width after fixed list/rail columns - not equal thirds. */
+    flex: 1 1 0;
+    min-width: 10rem;
+  }
+  /* Compact ticket queue: wide enough for a truncating title + meta line. */
+  .wireframe-row > [data-wireframe-span="list"] {
+    flex: 0 0 13rem;
+    max-width: 15rem;
+    min-width: 11rem;
+  }
+  /* Details / settings sub-nav (~280-320px class at full artboard). */
+  .wireframe-row > [data-wireframe-span="rail"] {
+    flex: 0 0 11rem;
+    max-width: 12.5rem;
+    min-width: 9rem;
+  }
+
+  .wireframe-panel {
+    position: relative;
+    padding: 0.75rem 0.875rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch);
+    background: var(--color-paper);
+  }
+  /* The second, offset stroke: the line a pen leaves when the hand repeats
+     a rectangle it has already drawn. */
+  .wireframe-panel::after {
+    content: "";
+    position: absolute;
+    inset: 2px -2px -2px 2px;
+    border: 1px solid var(--wf-stroke-soft);
+    border-radius: var(--wf-sketch-alt);
+    pointer-events: none;
+  }
+  .wireframe-panel-head {
+    margin-bottom: 0.5rem;
+  }
+  .wireframe-eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .wireframe-text[data-wireframe-role="helper"] {
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+  }
+  .wireframe-text[data-wireframe-role="muted"] {
+    color: var(--color-muted);
+  }
+
+  .wireframe-button {
+    align-self: flex-start;
+    padding: 0.3rem 0.85rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch);
+    box-shadow: 2px 3px 0 -1px var(--wf-stroke-soft);
+    background: transparent;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .wireframe-button:hover {
+    background: var(--wf-fill);
+  }
+  .wireframe-button:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  .wireframe-button[data-wireframe-emphasis="primary"] {
+    border-color: var(--color-ink);
+    background: color-mix(in srgb, var(--color-ink) 86%, transparent);
+    color: var(--color-paper);
+  }
+  .wireframe-button[data-wireframe-emphasis="primary"]:hover {
+    background: var(--color-ink);
+  }
+  .wireframe-button[data-wireframe-emphasis="tertiary"] {
+    padding-inline: 0.25rem;
+    border-color: transparent;
+    box-shadow: none;
+    text-decoration: underline;
+    text-decoration-style: wavy;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  .wireframe-button[data-wireframe-emphasis="destructive"] {
+    border-color: var(--callout-danger-c);
+    color: var(--callout-danger-c);
+  }
+  /* Prototype navigation is data-only. A diagonal arrow reads as "external
+     link" in product UI reviews, so walkable buttons do not draw one. */
+  .wireframe-button[data-wireframe-navigate]::after {
+    content: none;
+  }
+
+  /* The product frame defaults to a desktop-native flush shell: sidebar hard
+     against the artboard edge, full height, main canvas filling the rest.
+     A gap and a rounded rail read as a floating iPad card, which is wrong for
+     browser SaaS. Tablet viewports deliberately relax into master/detail with
+     gutters so that form factor stays intentional rather than a shrunken desk. */
+  .wireframe-artboard:has(.wireframe-app-shell) {
+    padding: 0;
+  }
+  .wireframe-artboard:has(.wireframe-app-shell) > .wireframe-canvas {
+    gap: 0;
+    min-height: 22rem;
+  }
+  .wireframe-app-shell {
+    display: grid;
+    flex: 1;
+    min-height: 22rem;
+    /* Narrow nav rail: labels only, not a third of the canvas. */
+    grid-template-columns: minmax(7rem, 9.5rem) 1fr;
+    gap: 0;
+    /* The nav runs the full height of the app, the way a desktop product's
+       does, rather than stopping where its own links end. */
+    align-items: stretch;
+  }
+  @container (width < 26rem) {
+    .wireframe-app-shell {
+      grid-template-columns: 1fr;
+    }
+  }
+  .wireframe-app-shell:has(> .wireframe-top-bar) {
+    grid-template-areas: "bar bar" "side main";
+  }
+  .wireframe-app-shell > .wireframe-top-bar {
+    grid-area: bar;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 2px solid var(--wf-stroke);
+  }
+  .wireframe-sidebar {
+    padding: 0.625rem 0.65rem;
+    border: 0;
+    border-right: 2px solid var(--wf-stroke);
+    border-radius: 0;
+    background: var(--wf-fill);
+  }
+  .wireframe-app-content {
+    min-width: 0;
+    padding: 0.65rem 0.85rem 0.85rem;
+    gap: 0.65rem;
+  }
+  .wireframe-top-bar {
+    padding: 0.5rem 0.75rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch);
+  }
+
+  /* Desktop density: tighter than tablet so the drawing reads as a web app. */
+  .wireframe-artboard[data-wireframe-viewport="desktop"] .wireframe-app-content {
+    gap: 0.55rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-page-header {
+    padding-bottom: 0.35rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-page-header
+    .wireframe-heading {
+    font-size: 1.35rem;
+  }
+  /* Consistent pane system: only workspace body rows that carry span panes
+     get multi-pane chrome and min-height. Toolbar rows (search, filters) stay
+     compact - otherwise each inherits 18rem and leaves empty bands. */
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span]) {
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 0;
+    min-height: 18rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span])
+    > .wireframe-panel,
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span])
+    > .wireframe-stack {
+    display: flex;
+    flex-direction: column;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 0.35rem 0.7rem;
+    min-height: 100%;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span])
+    > .wireframe-panel
+    > .wireframe-panel-body {
+    flex: 1;
+    min-width: 0;
+  }
+  /* Queue column: force two-line rows and clip long subjects. */
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row
+    > [data-wireframe-span="list"] {
+    overflow: hidden;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row
+    > [data-wireframe-span="list"]
+    .wireframe-list-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span])
+    > .wireframe-panel::after {
+    display: none;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span])
+    > * + * {
+    border-left: 1px solid var(--wf-stroke-soft);
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    .wireframe-panel-body {
+    gap: 0.45rem;
+    min-height: 0;
+  }
+  /* Conversation column: timeline grows, composer pins to the foot. */
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    .wireframe-panel-body:has([data-wireframe-message]) {
+    display: flex;
+    flex-direction: column;
+    min-height: 16rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    .wireframe-panel-body:has([data-wireframe-message])
+    > .wireframe-divider,
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    .wireframe-panel-body:has([data-wireframe-message])
+    > .wireframe-divider-labeled {
+    margin-top: auto;
+  }
+  /* Settings form stays a readable measure, not full bleed. */
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content
+    > .wireframe-row
+    > [data-wireframe-span="main"].wireframe-stack {
+    max-width: 28rem;
+  }
+
+  /* Tablet shells keep breathing room and a card-like rail: intentional for
+     the device, not the default desktop treatment. */
+  .wireframe-artboard[data-wireframe-viewport="tablet-portrait"]:has(
+      .wireframe-app-shell
+    ),
+  .wireframe-artboard[data-wireframe-viewport="tablet-landscape"]:has(
+      .wireframe-app-shell
+    ) {
+    padding: 0.625rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="tablet-portrait"]
+    .wireframe-app-shell,
+  .wireframe-artboard[data-wireframe-viewport="tablet-landscape"]
+    .wireframe-app-shell {
+    gap: 0.75rem;
+    min-height: 18rem;
+    grid-template-columns: minmax(7.5rem, 11rem) 1fr;
+  }
+  .wireframe-artboard[data-wireframe-viewport="tablet-portrait"]
+    .wireframe-sidebar,
+  .wireframe-artboard[data-wireframe-viewport="tablet-landscape"]
+    .wireframe-sidebar {
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch-alt);
+  }
+  .wireframe-artboard[data-wireframe-viewport="tablet-portrait"]
+    .wireframe-app-content,
+  .wireframe-artboard[data-wireframe-viewport="tablet-landscape"]
+    .wireframe-app-content {
+    padding: 0.25rem 0.125rem 0.125rem;
+    gap: 0.75rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="tablet-portrait"]
+    .wireframe-app-shell
+    > .wireframe-top-bar,
+  .wireframe-artboard[data-wireframe-viewport="tablet-landscape"]
+    .wireframe-app-shell
+    > .wireframe-top-bar {
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch);
+  }
+
+  /* Phone: true mobile language - tall narrow device, single column, tab bar
+     at the foot. Never a desktop AppShell rail stacked in a tall artboard. */
+  .wireframe-frame[data-wireframe-chrome="phone"] {
+    max-width: 390px;
+    margin-inline: auto;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"] {
+    min-height: 32rem;
+    padding: 0.45rem 0.5rem 0.35rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    > .wireframe-canvas {
+    min-height: 30rem;
+    gap: 0.45rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-app-shell,
+  .wireframe-artboard[data-wireframe-viewport="mobile-landscape"]
+    .wireframe-app-shell {
+    grid-template-columns: 1fr;
+    min-height: 16rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-sidebar,
+  .wireframe-artboard[data-wireframe-viewport="mobile-landscape"]
+    .wireframe-sidebar {
+    border: 0;
+    border-bottom: 2px solid var(--wf-stroke);
+  }
+  /* Phone surfaces: list rows and messages, not tablet cards. */
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-panel {
+    padding: 0.45rem 0.5rem;
+    border-width: 1px;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-panel::after {
+    display: none;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-panel-body {
+    gap: 0.35rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-top-bar {
+    padding: 0.45rem 0.15rem 0.55rem;
+    border: 0;
+    border-bottom: 1px solid var(--wf-stroke-soft);
+    border-radius: 0;
+    background: transparent;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-brand {
+    font-size: 1.125rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-page-header {
+    padding-bottom: 0.3rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-heading {
+    font-size: 1.15rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-list-item {
+    min-height: 3.25rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-button {
+    min-height: 2.75rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-composer {
+    margin-top: auto;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--wf-stroke-soft);
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-stack:has(> .wireframe-message) {
+    flex: 1;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-message {
+    margin-bottom: 0.35rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-message[data-wireframe-message="internal"] {
+    /* Persistent tint so internal notes cannot be mistaken for public reply. */
+    background: color-mix(
+      in srgb,
+      var(--callout-warning-bg) 70%,
+      var(--color-paper)
+    );
+  }
+  .wireframe-destructive-block {
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--wf-stroke-soft);
+  }
+  .wireframe-bottom-bar {
+    margin-top: auto;
+    padding: 0.35rem 0.25rem 0.45rem;
+    border-top: 1px solid var(--wf-stroke-soft);
+    background: color-mix(in srgb, var(--color-paper) 88%, var(--wf-fill));
+  }
+  .wireframe-bottom-bar .wireframe-button {
+    flex: 1 1 0;
+    justify-content: center;
+    text-align: center;
+    min-height: 2.75rem;
+    padding: 0.35rem 0.2rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    box-shadow: none;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-muted);
+  }
+  .wireframe-bottom-bar .wireframe-button[data-wireframe-emphasis="primary"] {
+    color: var(--color-ink);
+    background: color-mix(in srgb, var(--color-ink) 8%, transparent);
+  }
+  .wireframe-bottom-bar .wireframe-button[data-wireframe-navigate]::after {
+    content: none;
+  }
+  /* Phone artboards with a bottom bar fill the device height so the strip
+     sits at the foot of the drawing rather than under a short column. */
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]:has(
+      .wireframe-bottom-bar
+    )
+    > .wireframe-canvas {
+    min-height: 30rem;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-stack:has(> .wireframe-bottom-bar) {
+    min-height: 29rem;
+  }
+  .wireframe-brand {
+    font-size: 1.0625rem;
+  }
+
+  .wireframe-page-header {
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--wf-stroke-soft);
+  }
+  .wireframe-page-header-text {
+    flex: 1 1 12rem;
+    min-width: 0;
+  }
+  .wireframe-page-header-actions:empty {
+    display: none;
+  }
+
+  .wireframe-nav-item {
+    padding: 0.25rem 0.5rem;
+    border: 2px solid transparent;
+    border-radius: var(--wf-sketch);
+    text-align: left;
+    font-size: 0.875rem;
+    color: var(--color-muted);
+    cursor: pointer;
+  }
+  .wireframe-nav-item:hover {
+    background: var(--wf-fill);
+  }
+  .wireframe-nav-item:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  .wireframe-nav-item[aria-current="page"] {
+    border-color: var(--wf-stroke);
+    color: var(--color-ink);
+    font-weight: 600;
+    background: var(--color-paper);
+  }
+
+  .wireframe-metric-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .wireframe-metric-value {
+    font-size: 2rem;
+    line-height: 1.15;
+  }
+  .wireframe-metric-note {
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+  }
+
+  .wireframe-progress-line {
+    font-size: 0.8125rem;
+  }
+  .wireframe-progress-value {
+    font-weight: 600;
+  }
+  .wireframe-progress-track {
+    height: 0.75rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch);
+    overflow: hidden;
+  }
+  /* The fill is drawn in fixed steps rather than from an authored length, so
+     no plan-supplied value ever reaches a style attribute. */
+  .wireframe-progress-fill {
+    height: 100%;
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--wf-stroke) 0 3px,
+      transparent 3px 6px
+    );
+  }
+  .wireframe-progress-fill[data-wireframe-progress="0"] {
+    width: 0;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="5"] {
+    width: 5%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="10"] {
+    width: 10%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="15"] {
+    width: 15%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="20"] {
+    width: 20%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="25"] {
+    width: 25%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="30"] {
+    width: 30%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="35"] {
+    width: 35%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="40"] {
+    width: 40%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="45"] {
+    width: 45%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="50"] {
+    width: 50%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="55"] {
+    width: 55%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="60"] {
+    width: 60%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="65"] {
+    width: 65%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="70"] {
+    width: 70%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="75"] {
+    width: 75%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="80"] {
+    width: 80%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="85"] {
+    width: 85%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="90"] {
+    width: 90%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="95"] {
+    width: 95%;
+  }
+  .wireframe-progress-fill[data-wireframe-progress="100"] {
+    width: 100%;
+  }
+
+  /* A badge sits beside its subject in a row, but a badge inside a stacked
+     body belongs at the start of the line rather than floating mid-panel. */
+  .wireframe-panel-body > .wireframe-badge,
+  .wireframe-stack > .wireframe-badge,
+  .wireframe-canvas > .wireframe-badge {
+    align-self: flex-start;
+  }
+  .wireframe-badge {
+    align-self: center;
+    padding: 0.05rem 0.5rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .wireframe-divider {
+    border: 0;
+    border-top: 2px dashed var(--wf-stroke-soft);
+    margin: 0;
+  }
+
+  /* The crossed rectangle every wireframe uses for art nobody has drawn yet. */
+  .wireframe-image {
+    min-height: 4.5rem;
+    padding: 0.5rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch);
+    background-image:
+      linear-gradient(
+        to bottom right,
+        transparent calc(50% - 1px),
+        var(--wf-stroke-soft) calc(50% - 1px) calc(50% + 1px),
+        transparent calc(50% + 1px)
+      ),
+      linear-gradient(
+        to bottom left,
+        transparent calc(50% - 1px),
+        var(--wf-stroke-soft) calc(50% - 1px) calc(50% + 1px),
+        transparent calc(50% + 1px)
+      );
+  }
+  .wireframe-image[data-wireframe-shape="square"] {
+    aspect-ratio: 1 / 1;
+  }
+  .wireframe-image[data-wireframe-shape="wide"] {
+    aspect-ratio: 16 / 9;
+  }
+  .wireframe-image[data-wireframe-shape="tall"] {
+    aspect-ratio: 3 / 4;
+  }
+  .wireframe-image-label {
+    padding: 0.1rem 0.4rem;
+    background: var(--color-paper);
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+    text-align: center;
+  }
+
+  .wireframe-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+  }
+  .wireframe-list-item {
+    min-width: 0;
+    padding: 0.45rem 0.35rem;
+    border-bottom: 1px solid var(--wf-stroke-soft);
+    font-size: 0.875rem;
+  }
+  .wireframe-list-item:last-child {
+    border-bottom: 0;
+  }
+  /* Selected queue row: tint + accent edge (color is never the only cue). */
+  .wireframe-list-item[data-wireframe-selected] {
+    background: var(--wf-fill);
+    box-shadow: inset 3px 0 0 var(--color-ink);
+  }
+  .wireframe-list-row-primary {
+    min-width: 0;
+  }
+  /* Single-line truncating title - never word-per-line wrap in a narrow rail. */
+  .wireframe-list-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .wireframe-list-meta {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.75rem;
+    color: var(--color-muted);
+  }
+  .wireframe-list-value {
+    flex: none;
+    max-width: 40%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+    font-weight: 600;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-muted);
+  }
+  /* Whole-row tappable list entries (mobile inbox). */
+  .wireframe-list-row {
+    min-width: 0;
+    min-height: 3.25rem;
+    margin: 0;
+    padding: 0.55rem 0.25rem;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  .wireframe-list-row:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  .wireframe-list-item:has(> .wireframe-list-row) {
+    padding: 0;
+  }
+
+  /* Conversation timeline messages (not table rows). */
+  .wireframe-message {
+    padding: 0.45rem 0.5rem;
+    border-left: 2px solid var(--wf-stroke-soft);
+    background: color-mix(in srgb, var(--color-paper) 70%, var(--wf-fill));
+  }
+  .wireframe-message[data-wireframe-message="customer"] {
+    border-left-color: var(--wf-stroke);
+  }
+  .wireframe-message[data-wireframe-message="agent"] {
+    border-left-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-paper));
+  }
+  .wireframe-message[data-wireframe-message="internal"] {
+    border-left-style: dashed;
+    border-left-color: var(--callout-warning-c);
+    background: color-mix(
+      in srgb,
+      var(--callout-warning-bg) 55%,
+      var(--color-paper)
+    );
+  }
+  .wireframe-message-meta {
+    font-size: 0.75rem;
+    color: var(--color-muted);
+  }
+  .wireframe-composer {
+    margin-top: auto;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--wf-stroke-soft);
+  }
+  .wireframe-unsaved-bar {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--wf-stroke);
+    background: var(--wf-fill);
+  }
+
+  /* Controls are the real elements, so they arrive carrying the browser's own
+     chrome. Stripping it back to the sketch's strokes is what keeps a form
+     looking drawn rather than half-built. */
+  .wireframe-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .wireframe-field[data-wireframe-inline="true"] {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .wireframe-field-label {
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+  }
+  .wireframe-field[data-wireframe-inline="true"] .wireframe-field-label {
+    color: var(--color-ink);
+    font-size: 0.875rem;
+  }
+  .wireframe-field-hint {
+    font-size: 0.75rem;
+    color: var(--color-muted);
+  }
+  .wireframe-field[data-wireframe-inline="true"] .wireframe-field-hint {
+    flex-basis: 100%;
+  }
+  .wireframe-input {
+    width: 100%;
+    padding: 0.3rem 0.6rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: var(--wf-sketch);
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font: inherit;
+    font-size: 0.875rem;
+  }
+  .wireframe-input::placeholder {
+    color: var(--color-muted);
+    opacity: 1;
+  }
+  .wireframe-input:focus-visible,
+  .wireframe-tick:focus-visible,
+  .wireframe-switch-control:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  .wireframe-textarea {
+    resize: vertical;
+    line-height: 1.4;
+  }
+  .wireframe-select {
+    appearance: none;
+    padding-right: 1.75rem;
+    /* The caret is drawn, not supplied by the platform, so the control looks
+       the same on every operating system a reviewer opens the plan on. */
+    background-image:
+      linear-gradient(
+        45deg,
+        transparent 50%,
+        var(--wf-stroke) 50% calc(50% + 2px),
+        transparent calc(50% + 2px)
+      ),
+      linear-gradient(
+        -45deg,
+        transparent 50%,
+        var(--wf-stroke) 50% calc(50% + 2px),
+        transparent calc(50% + 2px)
+      );
+    background-position:
+      right 1.05rem top 55%,
+      right 0.6rem top 55%;
+    background-size: 0.45rem 0.45rem;
+    background-repeat: no-repeat;
+  }
+  .wireframe-tick,
+  .wireframe-switch-control {
+    appearance: none;
+    flex: none;
+    margin: 0;
+    border: 2px solid var(--wf-stroke);
+    background: var(--color-paper);
+    cursor: pointer;
+  }
+  .wireframe-tick {
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: 5px 2px 6px 3px / 3px 6px 2px 5px;
+  }
+  .wireframe-tick:checked {
+    /* A drawn cross rather than the platform's checkmark. */
+    background-image:
+      linear-gradient(
+        to bottom right,
+        transparent calc(50% - 1.5px),
+        var(--color-ink) calc(50% - 1.5px) calc(50% + 1.5px),
+        transparent calc(50% + 1.5px)
+      ),
+      linear-gradient(
+        to bottom left,
+        transparent calc(50% - 1.5px),
+        var(--color-ink) calc(50% - 1.5px) calc(50% + 1.5px),
+        transparent calc(50% + 1.5px)
+      );
+  }
+  .wireframe-switch-control {
+    position: relative;
+    width: 2.1rem;
+    height: 1.15rem;
+    border-radius: 999px;
+  }
+  .wireframe-switch-control::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 0.75rem;
+    height: 0.75rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: 999px;
+    background: var(--color-paper);
+  }
+  .wireframe-switch-control:checked {
+    background: var(--wf-fill);
+  }
+  .wireframe-switch-control:checked::after {
+    left: auto;
+    right: 1px;
+    background: var(--color-ink);
+    border-color: var(--color-ink);
+  }
+
+  /* Where the user is in a multi-step flow. The numbers are drawn by a
+     counter so an author never has to keep them in sync by hand. */
+  .wireframe-stepper {
+    counter-reset: wireframe-step;
+    gap: 0.5rem 0.75rem;
+  }
+  .wireframe-step {
+    counter-increment: wireframe-step;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.875rem;
+    color: var(--color-muted);
+  }
+  .wireframe-step::before {
+    content: counter(wireframe-step);
+    display: grid;
+    place-items: center;
+    width: 1.4rem;
+    height: 1.4rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: 999px;
+    font-size: 0.75rem;
+  }
+  .wireframe-step + .wireframe-step::after {
+    content: "";
+  }
+  .wireframe-step[data-wireframe-step="done"]::before {
+    background: var(--wf-fill);
+  }
+  .wireframe-step[data-wireframe-step="current"] {
+    color: var(--color-ink);
+  }
+  .wireframe-step[data-wireframe-step="current"]::before {
+    border-color: var(--color-ink);
+    background: var(--color-ink);
+    color: var(--color-paper);
+  }
+
+  /* The arrow between two steps of a flow. */
+  .wireframe-connector {
+    flex: none;
+    gap: 0.3rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+  .wireframe-connector-line {
+    display: block;
+    background: var(--wf-stroke);
+  }
+  .wireframe-connector[data-wireframe-direction="right"] {
+    flex-direction: column;
+    min-width: 3rem;
+    padding-inline: 0.25rem;
+  }
+  .wireframe-connector[data-wireframe-direction="right"]
+    .wireframe-connector-line {
+    position: relative;
+    width: 100%;
+    height: 2px;
+  }
+  .wireframe-connector[data-wireframe-direction="right"]
+    .wireframe-connector-line::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: -1px;
+    translate: 0 -50%;
+    border-left: 7px solid var(--wf-stroke);
+    border-block: 5px solid transparent;
+  }
+  .wireframe-connector[data-wireframe-direction="down"] {
+    flex-direction: row;
+    min-height: 2rem;
+    padding-block: 0.25rem;
+  }
+  .wireframe-connector[data-wireframe-direction="down"]
+    .wireframe-connector-line {
+    position: relative;
+    width: 2px;
+    height: 2rem;
+  }
+  .wireframe-connector[data-wireframe-direction="down"]
+    .wireframe-connector-line::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -1px;
+    translate: -50% 0;
+    border-top: 7px solid var(--wf-stroke);
+    border-inline: 5px solid transparent;
+  }
+  .wireframe-connector-label {
+    white-space: nowrap;
+  }
+
+  /* Paper beats interaction: printing a plan shows every screen. */
+  @media print {
+    [data-wireframe-interactive]
+      .wireframe-screen:not([data-wireframe-current]) {
+      display: block;
+    }
+    [data-wireframe-interactive] .wireframe-switcher {
+      display: none;
+    }
+  }
+}

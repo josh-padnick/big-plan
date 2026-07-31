@@ -8,6 +8,8 @@ type NodePosition = Root["position"];
 
 export type ComponentAttributeValue = string | boolean;
 
+export type ValidatedAttributeResult = ComponentAttributeValue | number;
+
 export type ComponentAttributeSchemaEntry =
   | {
       readonly kind: "enum";
@@ -18,6 +20,15 @@ export type ComponentAttributeSchemaEntry =
       readonly kind: "string";
       readonly required?: boolean;
       readonly nonEmpty?: boolean;
+    }
+  | {
+      readonly kind: "number";
+      // A bounded range is mandatory: an unbounded number is an arbitrary
+      // value, and the point of an attribute schema is that it is not.
+      readonly min: number;
+      readonly max: number;
+      readonly integer?: boolean;
+      readonly required?: boolean;
     }
   | { readonly kind: "booleanShorthand" };
 
@@ -33,7 +44,9 @@ type ValidatedAttributeValue<Entry extends ComponentAttributeSchemaEntry> =
     ? Value | undefined
     : Entry extends { readonly kind: "string" }
       ? string | undefined
-      : true | undefined;
+      : Entry extends { readonly kind: "number" }
+        ? number | undefined
+        : true | undefined;
 
 export type ValidatedComponentAttributes<
   Schema extends ComponentAttributeSchema,
@@ -118,6 +131,48 @@ export type ScopedChildDefinition = {
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
 };
 
+// Reads a bounded number written as an attribute string. A value outside the
+// declared range is reported rather than clamped, so an author never silently
+// gets a drawing they did not ask for.
+const validateNumberAttribute = ({
+  name,
+  value,
+  entry,
+  position,
+  diagnostics,
+}: {
+  readonly name: string;
+  readonly value: ComponentAttributeValue | undefined;
+  readonly entry: Extract<ComponentAttributeSchemaEntry, { kind: "number" }>;
+  readonly position: NodePosition;
+  readonly diagnostics: DiagnosticCollector;
+}): number | undefined => {
+  const expectation = `a ${entry.integer === true ? "whole " : ""}number between ${entry.min} and ${entry.max}`;
+  if (value === undefined) {
+    if (entry.required) {
+      diagnostics.add({
+        message: `Missing required attribute "${name}"; expected ${expectation}`,
+        position,
+      });
+    }
+    return undefined;
+  }
+  const parsed = typeof value === "string" ? Number(value.trim()) : Number.NaN;
+  if (
+    !Number.isFinite(parsed) ||
+    parsed < entry.min ||
+    parsed > entry.max ||
+    (entry.integer === true && !Number.isInteger(parsed))
+  ) {
+    diagnostics.add({
+      message: `Attribute "${name}" must be ${expectation}`,
+      position,
+    });
+    return undefined;
+  }
+  return parsed;
+};
+
 // Validates shared static attribute shapes in schema order, then reports every
 // attribute outside that schema in authored order.
 export function validateComponentAttributes<
@@ -141,9 +196,9 @@ export function validateComponentAttributes({
   readonly position: NodePosition;
   readonly diagnostics: DiagnosticCollector;
   readonly schema: ComponentAttributeSchema;
-}): Readonly<Record<string, ComponentAttributeValue | undefined>> {
+}): Readonly<Record<string, ValidatedAttributeResult | undefined>> {
   const validated: Array<
-    readonly [string, ComponentAttributeValue | undefined]
+    readonly [string, ValidatedAttributeResult | undefined]
   > = [];
   for (const [name, entry] of Object.entries(schema)) {
     const value = attributes[name];
@@ -182,6 +237,19 @@ export function validateComponentAttributes({
       validated.push([
         name,
         entry.nonEmpty && validValue?.trim() === "" ? undefined : validValue,
+      ]);
+      continue;
+    }
+    if (entry.kind === "number") {
+      validated.push([
+        name,
+        validateNumberAttribute({
+          name,
+          value,
+          entry,
+          position,
+          diagnostics,
+        }),
       ]);
       continue;
     }
