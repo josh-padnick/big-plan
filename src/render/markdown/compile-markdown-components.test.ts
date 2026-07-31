@@ -48,7 +48,8 @@ describe("compileMarkdown CodeDiff components", () => {
     const bodyHtml = compileAndSerialize(
       '<CodeDiff file="src/retry.ts" showLineNumbers showLineCounts>\n```diff\n@@ -1 +1,2 @@\n-old\n+new\n+audit\n```\n\n<Annotation lines="1-2">\nUse the `retry` metric prefix.\n</Annotation>\n\n</CodeDiff>\n',
     );
-    expect(bodyHtml).toContain('data-code-diff="" data-diff-view="unified"');
+    expect(bodyHtml).toContain('data-code-diff=""');
+    expect(bodyHtml).toContain('data-diff-view="unified"');
     expect(bodyHtml).toContain('data-diff-content="unified"');
     expect(bodyHtml).toContain('data-diff-content="split"');
     expect(bodyHtml).toContain('data-diff-number="old"');

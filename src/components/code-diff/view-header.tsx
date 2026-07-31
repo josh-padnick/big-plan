@@ -1,15 +1,15 @@
 // Renders CodeDiff's caption: file identity, line-count summary, and hidden
-// controls reserved for the live review application.
+// the shared maximize control, and the action menu still reserved for the
+// live review application.
 
 import { COLUMNS_2_ICON } from "../../icons/lucide/columns-2.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { ELLIPSIS_ICON } from "../../icons/lucide/ellipsis.js";
-import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
-import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
 import { ROWS_2_ICON } from "../../icons/lucide/rows-2.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { FileIdentity } from "../_shared/file-identity/file-identity.js";
+import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
 // Shared by the view toggles, the actions button, and the full-screen
 // control. Hover and pressed colors are utilities rather than stylesheet
@@ -139,22 +139,6 @@ const ViewToggleButton = ({
 
 // The live review application can reveal this control and move the figure
 // into its full-screen dialog without cloning it.
-const ExpandControlButton = () => (
-  <button
-    type="button"
-    className={BUTTON_CLASSES}
-    aria-label="View diff full screen"
-    data-tooltip="View diff full screen"
-    hidden
-    data-diff-expand=""
-    data-size="xs"
-    data-slot="button"
-    data-variant="ghost"
-  >
-    {lucideIconToReact({ icon: MAXIMIZE_2_ICON, hidden: false })}
-    {lucideIconToReact({ icon: MINIMIZE_2_ICON, hidden: true })}
-  </button>
-);
 
 const ViewToggleGroup = () => (
   <span
@@ -201,7 +185,7 @@ export const CodeDiffHeader = ({
       <ActionsMenu />
       {/* Far right so entering and leaving full screen live in the same
           corner of the component. */}
-      <ExpandControlButton />
+      <MaximizeButton subject="diff" />
     </span>
   </figcaption>
 );

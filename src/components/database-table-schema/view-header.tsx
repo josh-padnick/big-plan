@@ -1,17 +1,17 @@
 // Renders DatabaseTableSchema's caption: table identity, table note, and
-// hidden controls reserved for the live review application.
+// the shared maximize control, and the column and action menus still
+// reserved for the live review application.
 
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { COLUMNS_3_COG_ICON } from "../../icons/lucide/columns-3-cog.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { DATABASE_ICON } from "../../icons/lucide/database.js";
 import { ELLIPSIS_ICON } from "../../icons/lucide/ellipsis.js";
-import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
-import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { CopyFeedback } from "../_shared/copy-feedback/copy-feedback.js";
+import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
 // A transparent resting state keeps the overflow control quieter than the
 // schema it acts on; hover and focus still reveal the full affordance.
@@ -177,22 +177,6 @@ const ColumnsMenu = () => (
 
 // Both full-screen icons ship server-side so the live application only
 // toggles visibility.
-const ExpandButton = () => (
-  <button
-    type="button"
-    className={BUTTON_CLASSES}
-    aria-label="View table schema full screen"
-    data-tooltip="View table schema full screen"
-    hidden
-    data-schema-expand=""
-    data-size="xs"
-    data-slot="button"
-    data-variant="ghost"
-  >
-    {lucideIconToReact({ icon: MAXIMIZE_2_ICON, hidden: false })}
-    {lucideIconToReact({ icon: MINIMIZE_2_ICON, hidden: true })}
-  </button>
-);
 
 /** Renders the caption: identity and controls, plus the table note beneath
  * them in the same band so the header stays one bordered region. */
@@ -215,7 +199,7 @@ export const TableSchemaHeader = ({
         <CopyFeedback dataAttribute="data-schema-copy-message" />
         <ColumnsMenu />
         <ActionsMenu />
-        <ExpandButton />
+        <MaximizeButton subject="schema" />
       </span>
     </span>
     {note === undefined ? null : (
