@@ -100,6 +100,84 @@ test("should scale a true-size drawing inside a narrow review viewport", async (
   });
 });
 
+test("should keep each painted desktop screen inside its card", async ({
+  page,
+  wireframeFormFactorsViewerUrl,
+}) => {
+  const viewportWidths = [1280, 1440, 1600, 1920];
+  const themes = ["light", "dark"];
+
+  for (const viewportWidth of viewportWidths) {
+    for (const theme of themes) {
+      await test.step(`${viewportWidth}px in ${theme} mode`, async () => {
+        await page.setViewportSize({ width: viewportWidth, height: 1000 });
+        await page.goto(wireframeFormFactorsViewerUrl);
+        await page.evaluate(
+          ({ selectedTheme }) => {
+            document.documentElement.dataset.theme = selectedTheme;
+          },
+          { selectedTheme: theme },
+        );
+
+        const desktopWireframe = page.locator(
+          '[data-wireframe="harbor-desktop"]',
+        );
+        const screenSwitches = desktopWireframe
+          .getByRole("navigation", { name: "Prototype screens" })
+          .getByRole("button");
+
+        for (
+          let index = 0;
+          index < (await screenSwitches.count());
+          index += 1
+        ) {
+          const screenSwitch = screenSwitches.nth(index);
+          await screenSwitch.click();
+          await expect(screenSwitch).toHaveAttribute("aria-current", "true");
+
+          const overflows = await desktopWireframe
+            .locator(
+              '.wireframe-screen[data-wireframe-device="desktop"]:visible',
+            )
+            .evaluateAll((screens) =>
+              screens.flatMap((screen) => {
+                const frame = screen.querySelector(".wireframe-frame");
+                const card = screen.closest(".plan-card");
+                if (frame === null || card === null) {
+                  return ["desktop screen is missing its frame or card"];
+                }
+
+                const frameBox = frame.getBoundingClientRect();
+                const cardBox = card.getBoundingClientRect();
+                const cardStyle = getComputedStyle(card);
+                const innerLeft =
+                  cardBox.left +
+                  Number.parseFloat(cardStyle.borderLeftWidth) +
+                  Number.parseFloat(cardStyle.paddingLeft);
+                const innerRight =
+                  cardBox.right -
+                  Number.parseFloat(cardStyle.borderRightWidth) -
+                  Number.parseFloat(cardStyle.paddingRight);
+                const tolerance = 1;
+
+                return frameBox.left < innerLeft - tolerance ||
+                  frameBox.right > innerRight + tolerance
+                  ? [
+                      `${screen.getAttribute("data-wireframe-screen")}: ` +
+                        `${frameBox.width.toFixed(2)}px painted inside ` +
+                        `${(innerRight - innerLeft).toFixed(2)}px`,
+                    ]
+                  : [];
+              }),
+            );
+
+          expect(overflows).toEqual([]);
+        }
+      });
+    }
+  }
+});
+
 test("should preserve the captain's desktop and phone measurements", async ({
   page,
   wireframeFormFactorsViewerUrl,
@@ -107,14 +185,14 @@ test("should preserve the captain's desktop and phone measurements", async ({
   await page.setViewportSize({ width: 2000, height: 1400 });
   await page.goto(wireframeFormFactorsViewerUrl);
 
-  await test.step("desktop drawings borrow width but stop at the shared cap", async () => {
+  await test.step("desktop drawings use the shared 768px review width", async () => {
     const desktop = page.locator('[data-wireframe-screen="d-ticket"]');
     const artboard = desktop.locator(".wireframe-artboard");
     const frame = desktop.locator(".wireframe-frame");
     await expect
       .poll(() => artboard.evaluate((node) => node.clientWidth))
       .toBe(1440);
-    expect((await boxOf(frame)).width).toBeCloseTo(920, 1);
+    expect((await boxOf(frame)).width).toBeCloseTo(768, 1);
   });
 
   await test.step("selection does not indent Ticket or Inbox queue rows", async () => {

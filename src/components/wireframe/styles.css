@@ -25,10 +25,6 @@ marks and a plan diff never jitters.
     --wf-sketch-alt: 11px 5px 9px 4px / 4px 9px 5px 11px;
     margin: 1.75rem 0;
   }
-  .wireframe[data-wireframe-desktop]:not([data-slide] *) {
-    margin-right: calc(-1 * var(--reading-free-inline, 0px));
-  }
-
   /* Isolation from the reading column's element selectors. */
   .wireframe h3,
   .wireframe h4,
@@ -138,7 +134,11 @@ marks and a plan diff never jitters.
   }
   .wireframe-screen[data-wireframe-device="desktop"] {
     --wf-width: 1440px;
-    max-width: 920px;
+    /* One review width for every desktop prototype. At 48rem the 1440px
+       canvas retains enough scale for Harbor-style list/main/rail panes,
+       while the deepest supported deck nesting plus card chrome still fits
+       inside a 1280px viewer with page margin left over. */
+    max-width: 48rem;
   }
   .wireframe-screen[data-wireframe-device="tablet"] {
     --wf-width: 1112px;
