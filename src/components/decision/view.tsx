@@ -17,23 +17,20 @@ import type {
   DecisionTone,
 } from "./compile.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
-import { MINUS_ICON } from "../../icons/lucide/minus.js";
-import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
-import { X_ICON } from "../../icons/lucide/x.js";
+import {
+  ComparisonMatrix,
+  MATRIX_TONE_ICONS,
+  matrixToneClass,
+  type MatrixTone,
+} from "../_shared/comparison-matrix/comparison-matrix.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { BadgePill } from "../_shared/badge-pill/badge-pill.js";
 import { SectionLabel } from "../_shared/labeled-section/labeled-section.js";
 
-// Tone reaches the reader three ways - the verdict word, the glyph, and the
-// colour - so no reader depends on hue alone. The icons match ComplexDecision
-// so one tone means one thing across the family.
-const TONE_ICONS = {
-  good: CHECK_ICON,
-  bad: X_ICON,
-  mixed: TRIANGLE_ALERT_ICON,
-  neutral: MINUS_ICON,
-} satisfies Record<DecisionTone, typeof CHECK_ICON>;
+// Decision's tones are the shared matrix vocabulary; the alias fails the
+// build if the two ever diverge.
+const _TONE_PARITY: DecisionTone = "good" satisfies MatrixTone;
 
 const TONE_WORDS = {
   good: "Favourable",
@@ -124,10 +121,10 @@ const VerdictCell = ({
     data-verdict-tone={consideration.tone}
   >
     <span
-      className={`decision-verdict decision-verdict-${consideration.tone} flex items-start gap-1.5 text-sm leading-5 font-semibold [&>svg]:mt-[calc((1.25rem-0.875rem)/2)] [&>svg]:size-3.5 [&>svg]:shrink-0`}
+      className={`decision-verdict ${matrixToneClass(consideration.tone)} flex items-start gap-1.5 text-sm leading-5 font-semibold [&>svg]:mt-[calc((1.25rem-0.875rem)/2)] [&>svg]:size-3.5 [&>svg]:shrink-0`}
     >
       {lucideIconToReact({
-        icon: TONE_ICONS[consideration.tone],
+        icon: MATRIX_TONE_ICONS[consideration.tone],
         hidden: false,
       })}
       <span className="min-w-0">{consideration.verdict}</span>
@@ -147,59 +144,54 @@ const Matrix = ({
 }) => {
   const criteria = model.options[0]?.considerations ?? [];
   return (
-    <div
-      className="decision-matrix-scroll relative overflow-x-auto"
-      data-table-scroll-container=""
-    >
-      <table className="decision-matrix w-full border-collapse">
-        <thead>
-          <tr>
-            <th className="decision-corner px-3 py-2.5 text-left" scope="col">
-              <span className="sr-only">{"Criterion"}</span>
-            </th>
-            {model.options.map((option, index) => (
-              <ColumnHeader
-                key={option.id}
-                option={option}
-                index={index}
-                groupName={model.id}
-                answerable={answerable}
-              />
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {criteria.map((criterion, row) => (
-            <tr key={row} className="decision-matrix-row">
-              <th
-                className="decision-criterion px-3 py-2 text-left text-sm leading-5 font-medium text-muted"
-                scope="row"
-              >
-                {criterion.title}
-              </th>
-              {model.options.map((option, index) => {
-                const consideration = option.considerations[row];
-                return consideration === undefined ? (
-                  <td
-                    key={option.id}
-                    className="decision-cell px-3 py-2"
-                    data-decision-column={index}
-                  >
-                    {"-"}
-                  </td>
-                ) : (
-                  <VerdictCell
-                    key={option.id}
-                    consideration={consideration}
-                    index={index}
-                  />
-                );
-              })}
-            </tr>
+    <ComparisonMatrix className="decision-matrix">
+      <thead>
+        <tr>
+          <th className="decision-corner px-3 py-2.5 text-left" scope="col">
+            <span className="sr-only">{"Criterion"}</span>
+          </th>
+          {model.options.map((option, index) => (
+            <ColumnHeader
+              key={option.id}
+              option={option}
+              index={index}
+              groupName={model.id}
+              answerable={answerable}
+            />
           ))}
-        </tbody>
-      </table>
-    </div>
+        </tr>
+      </thead>
+      <tbody>
+        {criteria.map((criterion, row) => (
+          <tr key={row} className="comparison-matrix-row">
+            <th
+              className="decision-criterion px-3 py-2 text-left text-sm leading-5 font-medium text-muted"
+              scope="row"
+            >
+              {criterion.title}
+            </th>
+            {model.options.map((option, index) => {
+              const consideration = option.considerations[row];
+              return consideration === undefined ? (
+                <td
+                  key={option.id}
+                  className="decision-cell px-3 py-2"
+                  data-decision-column={index}
+                >
+                  {"-"}
+                </td>
+              ) : (
+                <VerdictCell
+                  key={option.id}
+                  consideration={consideration}
+                  index={index}
+                />
+              );
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </ComparisonMatrix>
   );
 };
 

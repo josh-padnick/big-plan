@@ -36,33 +36,12 @@
     border-color: var(--decision-pro-c);
     background: var(--decision-pro-c);
   }
-  /* The 1px height lets each header cell's card stretch to the tallest
-     option in the row, so columns share one baseline. */
-  article .complex-decision-matrix thead th {
-    height: 1px;
-  }
-  /* The prose stylesheet tints and borders markdown-table cells; the matrix
-     draws its own row lines and keeps cells on the card background. */
-  article .complex-decision-matrix th,
-  article .complex-decision-matrix td {
-    border-bottom: 0;
-    background: transparent;
-  }
-  article .complex-decision-matrix-row > th,
-  article .complex-decision-matrix-row > td {
-    border-top: 1px solid var(--edge-c);
-  }
-  article .complex-decision-tone-good > svg {
-    color: var(--decision-pro-c);
-  }
-  article .complex-decision-tone-bad > svg {
-    color: var(--decision-con-c);
-  }
-  article .complex-decision-tone-mixed > svg {
-    color: var(--callout-warning-c);
-  }
-  article .complex-decision-tone-neutral > svg {
-    color: var(--color-muted);
+  /* The matrix skeleton and row rules come from the shared comparison matrix.
+     This one spends the shared tone colour on the glyph alone: its cells are
+     denser and carry their own disclosures, so colouring every verdict would
+     turn the matrix into a paint chart. */
+  article .complex-decision-score > svg {
+    color: var(--matrix-tone);
   }
   article .complex-decision-reversibility-easy > svg {
     color: var(--decision-pro-c);
