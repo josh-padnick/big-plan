@@ -98,8 +98,8 @@ line:column [rule-id] message
 3. Register the rule in `RULES` in `lint-plan.ts`.
 4. Add focused tests through `lintPlan()` for findings, positions, document
    order, and realistic near misses that must remain accepted.
-5. Document user-visible behavior in the authoring guide when it changes the
-   contract agents need to follow.
+5. Document the rule and its matching boundaries in the
+   [linting rules reference](../../docs/src/content/docs/reference/lint-rules.md).
 
 Authoring lint should be conservative.
 A rule needs a clear, statically testable contract because a false positive
