@@ -5,6 +5,8 @@ Each decision carries enough tradeoff context to be judged on its own.
 
 ## Persistence layer
 
+*We need to pick the store before the comment model is written against it.*
+
 <ComplexDecision question="Which persistence layer should back review comments?" status="open">
 
 Comments need durable identities, ordered replies, and range anchors that survive a renderer restart.
@@ -87,6 +89,8 @@ The repository layer isolates SQL, so swapping engines later costs a data migrat
 
 ## Artifact delivery
 
+*This one is already decided; read it to confirm the default output location.*
+
 <ComplexDecision question="Where should rendered plan artifacts live by default?" status="decided">
 
 The output should be easy to find after a CLI render and remain explicit when automation needs a different destination.
@@ -124,6 +128,8 @@ A flag flip changes the default; no stored data moves.
 </ComplexDecision>
 
 ## Reviewer reminders
+
+*Nothing is settled here; this records why the call waits for a session model.*
 
 <ComplexDecision question="How should reviewers receive decision reminders?" status="deferred">
 
