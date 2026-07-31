@@ -20,14 +20,29 @@ A prototype that claims three devices must actually be designed three times.
 Do not scale one layout and change the caption.
 Each form factor is a **native layout language**, not a stretched or shrunken version of another.
 
-| Form factor | `viewport` | `chrome` | Shell |
-| --- | --- | --- | --- |
-| Desktop web SaaS | `desktop` | `browser` + `url` | Stable `AppShell` + flush-left `Sidebar` + `AppContent`. Workspace density. |
-| Tablet | `tablet-landscape` or `tablet-portrait` | `browser` when it is a web app | Master/detail, wider gutters, card surfaces OK. |
-| Phone | `mobile-portrait` | `phone` | Single column. `TopBar` + `BottomBar`. No left rail. |
+| Form factor      | `viewport`                              | `chrome`                       | Shell                                                                       |
+| ---------------- | --------------------------------------- | ------------------------------ | --------------------------------------------------------------------------- |
+| Desktop web SaaS | `desktop`                               | `browser` + `url`              | Stable `AppShell` + flush-left `Sidebar` + `AppContent`. Workspace density. |
+| Tablet           | `tablet-landscape` or `tablet-portrait` | `browser` when it is a web app | Master/detail, wider gutters, card surfaces OK.                             |
+| Phone            | `mobile-portrait`                       | `phone`                        | Single column. `TopBar` + `BottomBar`. No left rail.                        |
 
 When the same product must be reviewed on more than one form factor, author parallel prototypes (separate `Wireframe` blocks or clearly labeled sections), each with its own screens and navigation path.
 Do not mix phone chrome with a desktop sidebar on one screen.
+
+## Reference patterns by screen archetype
+
+Name the reference pattern in plan prose before drawing.
+Keep the rationale outside the artboard; the artboard contains only product UI.
+
+| Archetype                       | Desktop web SaaS                                                                                                     | Tablet                                                                                  | Phone                                                                                                    |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Inbox, queue, or search results | Front / Intercom **list + inspector**: saved views and filters above stable scanning columns; selected row + preview | iPadOS **master/detail**: touch-friendly list and persistent preview                    | iOS **list → detail push**: full-width, whole-row targets; no separate Open action                       |
+| Record or conversation detail   | Front / Zendesk **three-pane workspace**: compact queue \| dominant conversation \| properties rail                  | iPadOS **split view**: master and detail, with secondary properties disclosed as needed | iOS **push detail**: back affordance, vertical timeline, overflow for secondary actions                  |
+| Create or edit                  | Linear / GitHub **full-page form + intelligence rail**: primary form with duplicate/routing context beside it        | Focused form or true sheet sized to the task                                            | Single-column keyboard-first form with a sticky action above keyboard and safe area                      |
+| Settings or administration      | Linear / Stripe **settings nav + dense form column**: named sections, visible dependencies, one save model           | Navigation + detail, or grouped settings when scope is small                            | iOS **grouped overview → detail**: rows open dedicated screens; do not mix navigation rows with switches |
+
+If the screen does not match one of these archetypes, name another proven product pattern and explain why it fits.
+Do not invent a novel shell for a solved workflow.
 
 ## Central product principle
 
@@ -35,6 +50,33 @@ Do not mix phone chrome with a desktop sidebar on one screen.
 
 Design each interface around the user's primary job.
 Make the next action obvious, preserve context, minimize interruption.
+
+## Density, hierarchy, and geometry
+
+Use the form factor's native density rather than stretching one composition.
+
+| Rule             | Desktop                                                                                | Tablet                                                           | Phone                                                |
+| ---------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------- |
+| Density          | Tight 8px rhythm; 20-24px pane padding; multiple useful regions visible                | More breathing room and card-like surfaces are acceptable        | 16px page margins; fewer controls and fields at once |
+| Type hierarchy   | 22-24px page title; 14-16px primary content; 12-13px muted metadata                    | Preserve clear title/content/metadata levels with looser spacing | 20-24px title; 16px body; 13px metadata              |
+| Interaction size | Dense controls may be compact, but targets remain clear                                | Touch-sized controls                                             | 44px minimum controls; 52-64px list rows             |
+| Content measure  | Keep prose and forms near 60-80 characters; do not full-bleed fields across the canvas | Let master/detail surfaces use the device width                  | Single column; progressive disclosure                |
+
+Desktop workspace rows carrying `span="list"`, `span="main"`, or `span="rail"` are one non-wrapping pane system.
+They must remain side by side: the list and rail may shrink to their safe minimums, while `main` claims the rest.
+Never let a properties rail silently drop below the primary pane.
+In the real product, collapse secondary panes into drawers at a narrower application breakpoint rather than squeezing them into unreadable columns.
+
+Use one divider between major desktop panes, subtle surface changes for hierarchy, and outlined boxes mainly for inputs or genuinely interactive controls.
+Do not outline every content group.
+
+Every scanning `ListItem` follows one resilient row model:
+
+- Line 1: a single-line truncating identity on the left and an optional fixed trailing value (age, amount, id) on the right.
+- Line 2: muted, single-line truncating metadata.
+- Never allow a long label to wrap one word per line or overlap its metadata/value; the label and metadata yield with ellipsis, while the trailing value does not shrink.
+- On phone, `navigateTo` makes the whole 52-64px row the action; do not add an Open button inside or beside it.
+- In a desktop master list, use `selected` so the visible detail has an unmistakable corresponding row (tint + accent edge, never color alone).
 
 ## Responsive product design guidelines
 
@@ -53,7 +95,7 @@ Skip any "momentum / enjoyment" framing - clarity and speed are enough.
 
 6. Treat desktop as a **workspace**: master-detail, panes, independent scroll regions, sticky headers/composers/save bars, remembered selection and pane sizes.
 7. Favor **useful density**: tables and decision columns, sticky headers, full-height lists; borders mark hierarchy, not decorative card stacks.
-8. Support **keyboard-speed** workflows: search / Cmd+K, list J/K, Enter to open, Cmd+Enter to send or create, multi-select, visible focus and selection.
+8. Support **keyboard-speed** workflows: search, list movement, open, send/create, multi-select, visible focus and selection. Show shortcut labels only in conventional discoverability surfaces; never add a persistent keyboard cheatsheet to the artboard.
 
 Desktop shell and density specifics:
 
@@ -72,6 +114,9 @@ Desktop shell and density specifics:
 12. Design for interruption and recovery (drafts, preserve list position, retry, undo) - sketch the affordance even at low fidelity.
 
 Phone musts: `viewport="mobile-portrait"`, `chrome="phone"`, single column, `BottomBar` for primary destinations, no desktop `AppShell` rail.
+In a push/dismiss `TopBar`, place back or Cancel at the leading edge, center the record/page title, and put overflow at the trailing edge.
+Keep the originating bottom tab active on a pushed detail screen.
+For keyboard-heavy screens, keep the focused field visible, move the composer or primary create action above the keyboard/safe area, hide nonessential chrome while typing, and preserve both draft content and cursor position across interruption.
 
 ### Lists, forms, actions, state
 
@@ -81,6 +126,10 @@ Phone musts: `viewport="mobile-portrait"`, `chrome="phone"`, single column, `Bot
 16. Model dependencies visibly (this setting enables that control).
 17. Clear action hierarchy (one primary; separate destructive).
 18. Visible system state (selected, disabled, empty, unsaved, loading) as labels or badges the sketch can show without polish.
+
+Use `SegmentedControl` for mutually exclusive local modes such as Reply / Internal note.
+Use a persistent warning tint for internal-note mode and change the submit label to match the mode (`Send reply` or `Add internal note`).
+Use amber/red only for SLA, destructive, or breached states; pair color with text or an icon.
 
 ### Anti-patterns
 
@@ -93,19 +142,23 @@ Phone musts: `viewport="mobile-portrait"`, `chrome="phone"`, single column, `Bot
 
 ### Authoring checklist
 
-1. Desktop: stable global shell on every screen; master-detail where the job is triage-to-record; `span="list"|"main"|"rail"` proportions; keyboard hints where they matter.
-2. Tablet: multi-column intentional; do not regress.
-3. Phone: essential jobs only; bottom nav; list → detail; recovery affordances sketched.
-4. No "enjoyable momentum" theater - only clarity, context, and next action.
+1. Pattern: each screen names a proven reference archetype in surrounding prose.
+2. Desktop: stable global shell; non-wrapping `list | main | rail` where the job is triage-to-record; main visibly dominates; borders stay within budget.
+3. Tablet: intentional multi-column layout; do not regress it into dense desktop or stretched phone.
+4. Phone: conventional top/bottom chrome; single column; whole-row list actions; touch targets; keyboard/safe-area behavior; recovery.
+5. Rows: long identity/context/value copy truncates predictably; no overlap, clipping, or one-word-per-line wrapping.
+6. State/actions: one primary action; selected/active/disabled/unsaved states visible; destructive and internal-note modes unmistakable.
+7. Self-critique every screen at its declared viewport before presenting: inspect alignment, overflow, clipping, density, hierarchy, and dead space; fix the three strongest objections.
 
 ## Vocabulary
 
 - **Frame** - `AppShell` holds `Sidebar`, an optional `TopBar`, and `AppContent`. On desktop the shell is flush-left and **stable** (same global nav every screen). Phone screens skip `AppShell` and use `TopBar` + `BottomBar`.
-- **Layout** - `Stack` runs down, `Row` runs across. In a `Row`, `span="fill"` shares width; `span="list"` is a master queue; `span="main"` is the primary surface; `span="rail"` is secondary properties or settings sub-nav.
+- **Layout** - `Stack` runs down, `Row` runs across. In a `Row`, `span="fill"` shares width and may wrap; a row with `span="list"|"main"|"rail"` is a non-wrapping desktop workspace.
 - **Regions** - `Panel` bounds a region, `PageHeader` says what the page is once at the top.
 - **Content** - `Metric`, `Progress`, `List` / `ListItem` (use `selected` on the active queue row), `Message` for conversation timelines (`kind` customer|agent|internal), `Text`, `Heading`, `Badge`, `Divider`, `ImagePlaceholder`.
-- **Navigation** - `Nav` / `NavItem` for destinations; `BottomBar` for phone primary destinations. Walkable buttons use `navigateTo` without an external-link arrow glyph.
-- **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, `Switch` - every control needs a `label`.
+- **Navigation** - `Nav` / `NavItem` for destinations; `TopBar` + `BottomBar` for conventional phone chrome. Walkable buttons use `navigateTo` without an external-link arrow glyph.
+- **Modes** - `SegmentedControl` holds `Button` children for mutually exclusive modes; make the selected button primary.
+- **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, `Switch` - every control needs a `label`; use `disabled` on text/select controls when a visible dependency makes them unavailable.
 - **Flow** - `Stepper` / `Step`, `Connector`.
 
 ```mdx
@@ -127,23 +180,43 @@ Phone musts: `viewport="mobile-portrait"`, `chrome="phone"`, single column, `Bot
         </Nav>
       </Sidebar>
       <AppContent>
-        <PageHeader title="Inbox" description="12 open">
-          <Text text="Cmd+K search · J/K move · Enter open" role="helper" />
+        <PageHeader
+          title="Cannot complete checkout"
+          description="#4821 · Maya Chen"
+        >
+          <Button label="Resolve" emphasis="primary" />
         </PageHeader>
         <Row gap="sm">
-          <Panel title="Queue" span="list">
+          <Panel span="list">
             <List>
-              <ListItem label="Checkout freeze" meta="Selected · 14m" value="#4821" />
+              <ListItem
+                label="Cannot complete checkout"
+                meta="Priority · Maya"
+                value="14m · #4821"
+                selected
+              />
               <ListItem label="SSO timeout" meta="Waiting · 2h" value="#4818" />
             </List>
           </Panel>
-          <Panel title="Conversation" span="main">
-            <List>
-              <ListItem label="Maya · Customer" meta="14m" value="Form freezes" />
-            </List>
-            <Text text="Mode: Reply · Internal note" role="helper" />
-            <TextArea label="Composer" placeholder="Cmd+Enter to send" />
-            <Button label="Send" emphasis="primary" />
+          <Panel span="main">
+            <Message
+              author="Maya"
+              time="14m"
+              kind="customer"
+              text="Card form freezes on submit."
+            />
+            <Message
+              author="Alex"
+              time="8m"
+              kind="agent"
+              text="Could you share the cart id?"
+            />
+            <SegmentedControl>
+              <Button label="Reply" emphasis="primary" />
+              <Button label="Internal note" />
+            </SegmentedControl>
+            <TextArea label="Message" placeholder="Write a reply…" />
+            <Button label="Send reply" emphasis="primary" />
           </Panel>
           <Panel title="Properties" span="rail">
             <Select label="Status" value="Open" />

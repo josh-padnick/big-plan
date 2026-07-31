@@ -443,7 +443,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
             element({ name: "TextArea", attributes: { label: "Prompt" } }),
             element({
               name: "Select",
-              attributes: { label: "Agent", value: "Writer" },
+              attributes: { label: "Agent", value: "Writer", disabled: true },
             }),
             element({
               name: "Checkbox",
@@ -464,6 +464,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"tagName":"select"');
     expect(rendered).toContain('"type":"search"');
     expect(rendered).toContain('"role":"switch"');
+    expect(rendered).toContain('"disabled":true');
     // Every control is wrapped by its label, so association needs no id and
     // two copies of the same wireframe can never collide.
     expect(rendered.match(/"tagName":"label"/gu)).toHaveLength(5);
@@ -800,9 +801,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
         }),
         screen({
           id: "ticket",
-          children: [
-            element({ name: "Text", attributes: { text: "Ticket" } }),
-          ],
+          children: [element({ name: "Text", attributes: { text: "Ticket" } })],
         }),
       ],
     });
@@ -856,6 +855,42 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     const rendered = html(render(compiled));
     expect(rendered).toContain("data-wireframe-selected");
     expect(rendered).toContain('"data-wireframe-message":"customer"');
+  });
+
+  it("should group mutually exclusive modes as one segmented control", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "ticket",
+          children: [
+            element({
+              name: "SegmentedControl",
+              children: [
+                element({
+                  name: "Button",
+                  attributes: { label: "Reply", emphasis: "primary" },
+                }),
+                element({
+                  name: "Button",
+                  attributes: { label: "Internal note" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(compiled.model.screens[0]?.children[0]).toMatchObject({
+      element: "SegmentedControl",
+      children: [
+        { element: "Button", label: "Reply", emphasis: "primary" },
+        { element: "Button", label: "Internal note", emphasis: "secondary" },
+      ],
+    });
+    const rendered = html(render(compiled));
+    expect(rendered).toContain("wireframe-segmented-control");
+    expect(rendered).toContain('"role":"group"');
   });
 
   it("should let a desktop row claim list, main, and rail widths", () => {
@@ -932,6 +967,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"data-wireframe-span":"list"');
     expect(rendered).toContain('"data-wireframe-span":"main"');
     expect(rendered).toContain('"data-wireframe-span":"rail"');
+    expect(rendered).toContain("flex-nowrap");
   });
 
   it("should report an address on a screen that has no address bar to draw it in", () => {

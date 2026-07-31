@@ -25,6 +25,16 @@ marks and a plan diff never jitters.
     --wf-sketch-alt: 11px 5px 9px 4px / 4px 9px 5px 11px;
     margin: 1.75rem 0;
   }
+  /* Desktop screens need enough review canvas to preserve their pane model.
+     On a wide review page, borrow the gap after the contents rail plus the
+     otherwise unused right side instead of compressing a desktop workspace
+     into the prose measure. Tablet and phone figures keep the reading column. */
+  @media (width >= 69rem) {
+    .wireframe:has(.wireframe-artboard[data-wireframe-viewport="desktop"]) {
+      width: min(90rem, max(calc(100% + 5.5rem), calc(50vw + 17rem)));
+      margin-left: -5.5rem;
+    }
+  }
 
   /* Isolation from the reading column's element selectors. */
   .wireframe h3,
@@ -125,10 +135,10 @@ marks and a plan diff never jitters.
      is given and reflows, so labels stay at reading size from a narrow phone
      to a wide desktop.
 
-     Height follows the drawing rather than the device. Holding a screen to
-     its device proportions leaves a half-empty rectangle in the middle of a
-     plan, and a reviewer reads that emptiness as unfinished work rather than
-     as room the design has left over. */
+     Browser and tablet height follows the drawing so a short workflow does
+     not become an empty poster. Phone portrait keeps a tall device minimum:
+     bottom navigation, safe-area actions, and keyboard-aware composition only
+     read honestly when the screen has realistic vertical room. */
   /* The frame is what says which kind of product this is. A drawing that
      floats on the page reads as a tablet app whatever is inside it, so a web
      product gets a browser window and a phone gets a phone. */
@@ -270,14 +280,14 @@ marks and a plan diff never jitters.
   }
   /* Compact ticket queue: wide enough for a truncating title + meta line. */
   .wireframe-row > [data-wireframe-span="list"] {
-    flex: 0 0 13rem;
-    max-width: 15rem;
-    min-width: 11rem;
+    flex: 0 1 clamp(11.5rem, 18cqw, 18rem);
+    max-width: 18rem;
+    min-width: 10rem;
   }
   /* Details / settings sub-nav (~280-320px class at full artboard). */
   .wireframe-row > [data-wireframe-span="rail"] {
-    flex: 0 0 11rem;
-    max-width: 12.5rem;
+    flex: 0 1 clamp(10rem, 16cqw, 18rem);
+    max-width: 18rem;
     min-width: 9rem;
   }
 
@@ -360,6 +370,31 @@ marks and a plan diff never jitters.
   .wireframe-button[data-wireframe-navigate]::after {
     content: none;
   }
+  .wireframe-segmented-control {
+    align-self: flex-start;
+    overflow: hidden;
+    border: 1px solid var(--wf-stroke-soft);
+    border-radius: 8px;
+  }
+  .wireframe-segmented-control .wireframe-button {
+    min-height: 2rem;
+    padding: 0.25rem 0.65rem;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    color: var(--color-muted);
+    text-decoration: none;
+  }
+  .wireframe-segmented-control .wireframe-button + .wireframe-button {
+    border-left: 1px solid var(--wf-stroke-soft);
+  }
+  .wireframe-segmented-control
+    .wireframe-button[data-wireframe-emphasis="primary"] {
+    box-shadow: inset 0 -2px 0 var(--color-ink);
+    background: color-mix(in srgb, var(--color-ink) 11%, transparent);
+    color: var(--color-ink);
+  }
 
   /* The product frame defaults to a desktop-native flush shell: sidebar hard
      against the artboard edge, full height, main canvas filling the rest.
@@ -417,7 +452,8 @@ marks and a plan diff never jitters.
   }
 
   /* Desktop density: tighter than tablet so the drawing reads as a web app. */
-  .wireframe-artboard[data-wireframe-viewport="desktop"] .wireframe-app-content {
+  .wireframe-artboard[data-wireframe-viewport="desktop"]
+    .wireframe-app-content {
     gap: 0.55rem;
   }
   .wireframe-artboard[data-wireframe-viewport="desktop"]
@@ -429,9 +465,10 @@ marks and a plan diff never jitters.
     .wireframe-heading {
     font-size: 1.35rem;
   }
-  /* Consistent pane system: only workspace body rows that carry span panes
-     get multi-pane chrome and min-height. Toolbar rows (search, filters) stay
-     compact - otherwise each inherits 18rem and leaves empty bands. */
+  /* Consistent pane system: the view emits flex-nowrap for rows carrying
+     list/main/rail spans so the utility layer cannot wrap a workspace rail
+     below its primary pane. Only those body rows get pane chrome and
+     min-height; toolbar rows stay compact. */
   .wireframe-artboard[data-wireframe-viewport="desktop"]
     .wireframe-app-content
     > .wireframe-row:has([data-wireframe-span]) {
@@ -489,7 +526,8 @@ marks and a plan diff never jitters.
   .wireframe-artboard[data-wireframe-viewport="desktop"]
     .wireframe-app-content
     > .wireframe-row:has([data-wireframe-span])
-    > * + * {
+    > *
+    + * {
     border-left: 1px solid var(--wf-stroke-soft);
   }
   .wireframe-artboard[data-wireframe-viewport="desktop"]
@@ -573,12 +611,12 @@ marks and a plan diff never jitters.
     margin-inline: auto;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"] {
-    min-height: 32rem;
+    min-height: 48rem;
     padding: 0.45rem 0.5rem 0.35rem;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     > .wireframe-canvas {
-    min-height: 30rem;
+    min-height: 46.5rem;
     gap: 0.45rem;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
@@ -611,11 +649,40 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-top-bar {
+    flex-wrap: nowrap;
     padding: 0.45rem 0.15rem 0.55rem;
     border: 0;
     border-bottom: 1px solid var(--wf-stroke-soft);
     border-radius: 0;
     background: transparent;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-top-bar
+    > :last-child:not(.wireframe-brand) {
+    margin-left: auto;
+  }
+  /* A bar with a navigable leading action is a push/dismiss header:
+     back or cancel on the left, title centered, overflow on the right. */
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-top-bar:has(> .wireframe-button[data-wireframe-navigate])
+    > .wireframe-brand {
+    order: 2;
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-top-bar:has(> .wireframe-button[data-wireframe-navigate])
+    > .wireframe-button[data-wireframe-navigate] {
+    order: 1;
+    margin-left: 0;
+  }
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-top-bar:has(> .wireframe-button[data-wireframe-navigate])
+    > :last-child:not(.wireframe-brand):not(
+      .wireframe-button[data-wireframe-navigate]
+    ) {
+    order: 3;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-brand {
@@ -698,11 +765,24 @@ marks and a plan diff never jitters.
       .wireframe-bottom-bar
     )
     > .wireframe-canvas {
-    min-height: 30rem;
+    min-height: 46.5rem;
   }
   .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
     .wireframe-stack:has(> .wireframe-bottom-bar) {
-    min-height: 29rem;
+    min-height: 45.5rem;
+  }
+  /* A screen-level primary action immediately before the tab strip is the
+     keyboard/safe-area action: full width and pinned above primary nav. */
+  .wireframe-artboard[data-wireframe-viewport="mobile-portrait"]
+    .wireframe-stack
+    > .wireframe-button:has(+ .wireframe-bottom-bar) {
+    position: sticky;
+    z-index: 1;
+    bottom: 3.5rem;
+    align-self: stretch;
+    width: 100%;
+    margin-top: auto;
+    text-align: center;
   }
   .wireframe-brand {
     font-size: 1.0625rem;
@@ -1061,6 +1141,11 @@ marks and a plan diff never jitters.
   .wireframe-switch-control:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
+  }
+  .wireframe-input:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+    background: var(--wf-fill);
   }
   .wireframe-textarea {
     resize: vertical;

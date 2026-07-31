@@ -126,10 +126,10 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
               text="Linked prior freeze #4410. Do not promise an ETA."
             />
             <Divider />
-            <Row gap="sm">
+            <SegmentedControl>
               <Button label="Reply" emphasis="primary" />
-              <Button label="Internal note" emphasis="tertiary" />
-            </Row>
+              <Button label="Internal note" />
+            </SegmentedControl>
             <TextArea label="Message" placeholder="Write a reply…" />
             <Button label="Send reply" emphasis="primary" />
           </Panel>
@@ -196,11 +196,11 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
           <Select label="Sort" value="Newest activity" />
         </Row>
         <Row gap="sm" justify="between">
-          <Row gap="sm">
+          <SegmentedControl>
             <Button label="All 12" emphasis="primary" />
-            <Button label="Mine 4" emphasis="tertiary" />
-            <Button label="Unassigned 3" emphasis="tertiary" />
-          </Row>
+            <Button label="Mine 4" />
+            <Button label="Unassigned 3" />
+          </SegmentedControl>
           <Row gap="sm">
             <Text text="Filters" role="helper" />
             <Button label="Waiting 3" emphasis="tertiary" />
@@ -328,11 +328,11 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
                   value="#4410"
                 />
               </List>
-              <Row gap="sm">
+              <Stack gap="xs">
                 <Button label="Open" emphasis="tertiary" />
                 <Button label="Link" emphasis="tertiary" />
                 <Button label="Dismiss" emphasis="tertiary" />
-              </Row>
+              </Stack>
             </Stack>
             <Stack gap="sm">
               <Heading text="Routing" level="3" />
@@ -410,6 +410,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
               label="Digest hour"
               value="—"
               hint="Enable morning digest to set a time."
+              disabled
             />
           </Stack>
         </Row>
@@ -574,7 +575,7 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
 ### Inbox / New / More
 
 - Inbox titled **Inbox** with open count; views vs filters with counts; two-line rows; row is the action.
-- New ticket: sticky **Create ticket**, Cancel, draft on New tab, lightweight duplicate after subject.
+- New ticket: sticky **Create ticket**, Cancel, draft on New tab, lightweight duplicate after subject, and normal Priority under Additional details.
 - More: overview model (rows open groups), not mixed switches.
 
 <Wireframe
@@ -620,19 +621,19 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
         text="Linked prior freeze #4410. Do not promise an ETA."
       />
       <Divider />
-      <Row gap="sm">
+      <SegmentedControl>
         <Button label="Reply" emphasis="primary" />
-        <Button label="Internal note" emphasis="tertiary" />
-      </Row>
+        <Button label="Internal note" />
+      </SegmentedControl>
       <TextArea label="Message" placeholder="Write a reply…" />
       <Row gap="sm" justify="between">
         <Button label="Attach" emphasis="tertiary" />
         <Button label="Send reply" emphasis="primary" />
       </Row>
       <BottomBar>
-        <Button label="Inbox" emphasis="primary" navigateTo="m-inbox" />
-        <Button label="New" navigateTo="m-compose" />
-        <Button label="More" navigateTo="m-settings" />
+        <Button label="⌂ Inbox" emphasis="primary" navigateTo="m-inbox" />
+        <Button label="＋ New" navigateTo="m-compose" />
+        <Button label="••• More" navigateTo="m-settings" />
       </BottomBar>
     </Stack>
   </Screen>
@@ -656,11 +657,14 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
         />
         <Button label="Filter" emphasis="tertiary" />
       </Row>
-      <Row gap="xs">
+      <SegmentedControl>
         <Button label="All 12" emphasis="primary" />
-        <Button label="Mine 4" emphasis="tertiary" />
-        <Button label="Unassigned 3" emphasis="tertiary" />
-        <Button label="SLA 2" emphasis="tertiary" />
+        <Button label="Mine 4" />
+        <Button label="Unassigned 3" />
+      </SegmentedControl>
+      <Row gap="xs">
+        <Text text="Filters" role="helper" />
+        <Button label="SLA risk 2" emphasis="tertiary" />
       </Row>
       <List>
         <ListItem
@@ -693,11 +697,29 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
           value="4d · #4788"
           navigateTo="m-ticket"
         />
+        <ListItem
+          label="Refund double-charged"
+          meta="Priority · Sam"
+          value="5d · #4771"
+          navigateTo="m-ticket"
+        />
+        <ListItem
+          label="API key rotation failed"
+          meta="Waiting"
+          value="6d · #4760"
+          navigateTo="m-ticket"
+        />
+        <ListItem
+          label="Seat limit block"
+          meta="Unassigned"
+          value="1w · #4755"
+          navigateTo="m-ticket"
+        />
       </List>
       <BottomBar>
-        <Button label="Inbox" emphasis="primary" />
-        <Button label="New" navigateTo="m-compose" />
-        <Button label="More" navigateTo="m-settings" />
+        <Button label="⌂ Inbox" emphasis="primary" />
+        <Button label="＋ New" navigateTo="m-compose" />
+        <Button label="••• More" navigateTo="m-settings" />
       </BottomBar>
     </Stack>
   </Screen>
@@ -741,15 +763,22 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
           <Button label="Dismiss" emphasis="tertiary" />
         </Row>
       </Stack>
+      <List>
+        <ListItem
+          label="Additional details"
+          meta="Priority · Normal"
+          value="›"
+        />
+      </List>
       <Button
         label="Create ticket"
         emphasis="primary"
         navigateTo="m-ticket"
       />
       <BottomBar>
-        <Button label="Inbox" navigateTo="m-inbox" />
-        <Button label="New · draft" emphasis="primary" />
-        <Button label="More" navigateTo="m-settings" />
+        <Button label="⌂ Inbox" navigateTo="m-inbox" />
+        <Button label="＋ New · draft" emphasis="primary" />
+        <Button label="••• More" navigateTo="m-settings" />
       </BottomBar>
     </Stack>
   </Screen>
@@ -790,9 +819,9 @@ Whole-row opens, vertical message timeline, light tab bar with active states, an
         />
       </Stack>
       <BottomBar>
-        <Button label="Inbox" navigateTo="m-inbox" />
-        <Button label="New" navigateTo="m-compose" />
-        <Button label="More" emphasis="primary" />
+        <Button label="⌂ Inbox" navigateTo="m-inbox" />
+        <Button label="＋ New" navigateTo="m-compose" />
+        <Button label="••• More" emphasis="primary" />
       </BottomBar>
     </Stack>
   </Screen>
