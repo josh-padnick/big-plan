@@ -998,9 +998,8 @@ export const VIEWER_SCRIPT = `<script>
   }
 })();
 (() => {
-  // One maximize behavior for every figure family: tables, code snippets,
-  // diffs, and the plain fenced blocks the code-figure transform wrapped.
-  // The vocabulary is owned by components/_model/figure-controls.ts; this leg
+  // One maximize behavior for every supported figure family. The vocabulary
+  // is owned by components/_model/figure-controls/figure-controls.ts; this leg
   // is a string template and cannot import it, so any change there changes
   // these three attribute names too.
   const frames = Array.from(
