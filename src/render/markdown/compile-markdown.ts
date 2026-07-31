@@ -15,6 +15,7 @@ import {
   diagnosticFromParseError,
 } from "../../components/_authoring/diagnostics.js";
 import type { ComponentDiagnostic } from "../../components/_authoring/diagnostics.js";
+import { rehypeCodeFigures } from "./code-figure.js";
 import { rehypeRenderComponents } from "./component-pipeline/deliver.js";
 import type { CollectedComponentModel } from "./component-pipeline/deliver.js";
 export type { CollectedComponentModel } from "./component-pipeline/deliver.js";
@@ -300,6 +301,7 @@ const compileMarkdownTree = ({
     // unknown languages remain readable without guessed tokenization.
     .use(rehypeHighlight)
     .use(rehypeWrapTables)
+    .use(rehypeCodeFigures)
     .use(rehypeDeckTransform, { outline })
     .use(() => (tree: Root) => {
       completeOutlinePlaceholders({

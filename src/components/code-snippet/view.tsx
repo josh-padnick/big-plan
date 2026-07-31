@@ -13,6 +13,11 @@ import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { AnnotationCard } from "../_shared/annotation-card/annotation-card.js";
 import { CopyFeedback } from "../_shared/copy-feedback/copy-feedback.js";
 import { FileIdentity } from "../_shared/file-identity/file-identity.js";
+import {
+  BODY_ATTRIBUTE,
+  MAXIMIZABLE_ATTRIBUTE,
+} from "../_model/figure-controls/figure-controls.js";
+import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
 const MenuItemButton = ({
   action,
@@ -79,6 +84,7 @@ const SnippetHeader = ({ filePath }: { readonly filePath?: string }) => (
     <span className="code-snippet-controls flex shrink-0 items-center gap-1">
       <CopyFeedback dataAttribute="data-snippet-copy-message" />
       <ActionsMenu {...(filePath === undefined ? {} : { filePath })} />
+      <MaximizeButton subject="code" />
     </span>
   </figcaption>
 );
@@ -189,6 +195,7 @@ export const CodeSnippet = ({
   <figure
     className="code-snippet mb-5 min-w-0 rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]"
     data-code-snippet=""
+    {...{ [MAXIMIZABLE_ATTRIBUTE]: "code" }}
     {...(model.filePath === undefined
       ? {}
       : { "data-snippet-path": model.filePath })}
@@ -197,7 +204,10 @@ export const CodeSnippet = ({
     <SnippetHeader
       {...(model.filePath === undefined ? {} : { filePath: model.filePath })}
     />
-    <div className="code-snippet-body min-w-0 overflow-x-auto">
+    <div
+      className="code-snippet-body min-w-0 overflow-x-auto"
+      {...{ [BODY_ATTRIBUTE]: "" }}
+    >
       <SnippetRows
         highlightedLines={model.highlightedLines}
         startLine={model.startLine}

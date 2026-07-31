@@ -51,7 +51,7 @@ test("should review a standalone decision matrix in an inert export", async ({
     await expect(reversibility).toContainText(/reverse/i);
   });
 
-  await test.step("script-only controls never appear", async () => {
-    await expect(decision.locator("[data-decision-expand]")).toBeHidden();
+  await test.step("script-only controls appear when JavaScript runs", async () => {
+    await expect(decision.locator("[data-figure-maximize]")).toBeVisible();
   });
 });

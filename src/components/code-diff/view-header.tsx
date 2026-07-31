@@ -1,23 +1,23 @@
-// Renders CodeDiff's caption: file identity, line-count summary, and hidden
-// controls reserved for the live review application.
+// Renders CodeDiff's caption: file identity, line-count summary, the shared
+// maximize control, and view and action controls reserved for the live review
+// application.
 
 import { COLUMNS_2_ICON } from "../../icons/lucide/columns-2.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { ELLIPSIS_ICON } from "../../icons/lucide/ellipsis.js";
-import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
-import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
 import { ROWS_2_ICON } from "../../icons/lucide/rows-2.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { FileIdentity } from "../_shared/file-identity/file-identity.js";
+import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
-// Shared by the view toggles, the actions button, and the full-screen
-// control. Hover and pressed colors are utilities rather than stylesheet
-// rules because a components-layer rule loses to the resting bg-surface
-// utility, which left these controls with no background feedback at all.
+// Shared by the view toggles and actions button. Hover and pressed colors are
+// utilities rather than stylesheet rules because a components-layer rule
+// loses to the resting bg-surface utility, which left these controls with no
+// background feedback at all.
 const BUTTON_BASE_CLASSES =
   "code-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-surface p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
-// The actions button and the full-screen control stand on their own.
+// The actions button stands on its own.
 const BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} rounded-md`;
 // Segmented buttons sit flush and round only where they meet the group's
 // outer corners, so the group needs no overflow clipping and the buttons'
@@ -137,25 +137,8 @@ const ViewToggleButton = ({
   </button>
 );
 
-// The live review application can reveal this control and move the figure
-// into its full-screen dialog without cloning it.
-const ExpandControlButton = () => (
-  <button
-    type="button"
-    className={BUTTON_CLASSES}
-    aria-label="View diff full screen"
-    data-tooltip="View diff full screen"
-    hidden
-    data-diff-expand=""
-    data-size="xs"
-    data-slot="button"
-    data-variant="ghost"
-  >
-    {lucideIconToReact({ icon: MAXIMIZE_2_ICON, hidden: false })}
-    {lucideIconToReact({ icon: MINIMIZE_2_ICON, hidden: true })}
-  </button>
-);
-
+// The live review application can reveal this group and switch between the
+// server-rendered unified and split views.
 const ViewToggleGroup = () => (
   <span
     className="code-diff-toggle-group inline-flex rounded-[0.375rem] border border-edge"
@@ -179,7 +162,7 @@ const ViewToggleGroup = () => (
   </span>
 );
 
-/** Renders the CodeDiff caption and controls reserved for the live application. */
+/** Renders the CodeDiff caption and its active and reserved controls. */
 export const CodeDiffHeader = ({
   filePath,
   addedCount,
@@ -199,9 +182,8 @@ export const CodeDiffHeader = ({
       ) : null}
       <ViewToggleGroup />
       <ActionsMenu />
-      {/* Far right so entering and leaving full screen live in the same
-          corner of the component. */}
-      <ExpandControlButton />
+      {/* Far right so maximizing and restoring live in the same corner. */}
+      <MaximizeButton subject="diff" />
     </span>
   </figcaption>
 );

@@ -4,6 +4,10 @@
 import type { CompiledDatabaseTableSchema } from "./compile.js";
 import { TableSchemaHeader } from "./view-header.js";
 import { TableSchemaGrid, TableSchemaSections } from "./view-layouts.js";
+import {
+  BODY_ATTRIBUTE,
+  MAXIMIZABLE_ATTRIBUTE,
+} from "../_model/figure-controls/figure-controls.js";
 
 export const DatabaseTableSchema = ({
   model,
@@ -13,6 +17,7 @@ export const DatabaseTableSchema = ({
   <figure
     className="table-schema mb-5 min-w-0 rounded-md border border-edge"
     data-database-table-schema=""
+    {...{ [MAXIMIZABLE_ATTRIBUTE]: "schema" }}
     data-schema-table-name={`${model.schemaName ?? ""}${model.tableName}`}
   >
     <TableSchemaHeader
@@ -22,7 +27,7 @@ export const DatabaseTableSchema = ({
         : { schemaName: model.schemaName })}
       {...(model.schema.note === undefined ? {} : { note: model.schema.note })}
     />
-    <div className="table-schema-body min-h-0">
+    <div className="table-schema-body min-h-0" {...{ [BODY_ATTRIBUTE]: "" }}>
       <TableSchemaGrid schema={model.schema} />
       <TableSchemaSections
         schema={model.schema}

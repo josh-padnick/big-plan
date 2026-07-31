@@ -108,7 +108,10 @@ describe("ComplexDecision rendering", () => {
     expect(html).toContain("Needs a server");
     expect(html).toContain('data-lucide="x"');
     expect(html).toContain('data-lucide="undo-2"');
-    expect(html).toContain('data-decision-expand=""');
+    // The maximize control comes from the shared figure-controls primitive,
+    // so the card carries that contract rather than a decision-local one.
+    expect(html).toContain('data-figure-maximizable="decision"');
+    expect(html).toContain('data-figure-maximize=""');
     expect(html).toContain('data-lucide="maximize-2"');
     expect(html).toContain("<strong>writers</strong>");
     expect(html).toContain("complex-decision-info");

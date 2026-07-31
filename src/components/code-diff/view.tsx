@@ -4,11 +4,13 @@
 import type { CompiledCodeDiff } from "./compile.js";
 import { CodeDiffHeader } from "./view-header.js";
 import { CodeDiffViews } from "./view-layouts.js";
+import { MAXIMIZABLE_ATTRIBUTE } from "../_model/figure-controls/figure-controls.js";
 
 export const CodeDiff = ({ model }: { readonly model: CompiledCodeDiff }) => (
   <figure
     className="code-diff mb-5 min-w-0 rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]"
     data-code-diff=""
+    {...{ [MAXIMIZABLE_ATTRIBUTE]: "diff" }}
     data-diff-view="unified"
     data-diff-path={model.filePath}
     {...(model.showLineNumbers ? { "data-line-numbers": "" } : {})}

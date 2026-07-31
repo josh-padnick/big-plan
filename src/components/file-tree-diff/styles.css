@@ -10,12 +10,6 @@
   article .file-tree-header {
     background: var(--diff-header-bg);
   }
-  article
-    .file-tree-diff-header[data-tree-header-without-title]:has(
-      [data-tree-toggle-group][hidden]
-    ) {
-    display: none;
-  }
   article .file-tree-diff-button[hidden] {
     display: none;
   }

@@ -1,5 +1,5 @@
 // Renders FileTreeDiff's combined change tree plus the derived before/after
-// hierarchy panes reserved for the live review application.
+// hierarchy panes, plus the shared maximize control.
 
 import type { CompiledFileTreeDiff } from "./compile.js";
 import {
@@ -8,8 +8,6 @@ import {
 } from "../_model/tree-text/derive-tree-view.js";
 import type { TreeEntry } from "../_model/tree-text/parse-tree-text.js";
 import { COLUMNS_2_ICON } from "../../icons/lucide/columns-2.js";
-import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
-import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
 import { ROWS_2_ICON } from "../../icons/lucide/rows-2.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
@@ -18,14 +16,15 @@ import {
   TreeHierarchy,
   treeChangeCountsToReact,
 } from "../_shared/tree-hierarchy/tree-hierarchy.js";
+import { MAXIMIZABLE_ATTRIBUTE } from "../_model/figure-controls/figure-controls.js";
+import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
-// Shared by the view toggles and the full-screen control. Hover and pressed
+// Shared by the view toggles. Hover and pressed
 // colors are utilities rather than stylesheet rules because a components-layer
 // rule loses to the resting bg-surface utility, which left these controls with
 // no background feedback at all.
 const BUTTON_BASE_CLASSES =
   "file-tree-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-surface p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
-const BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} rounded-md`;
 // Segmented buttons sit flush and round only where they meet the group's
 // outer corners, so the group needs no overflow clipping and the buttons'
 // hover hints stay visible. The end radius is the group's less its border.
@@ -82,25 +81,6 @@ const ViewToggleGroup = () => (
   </span>
 );
 
-// Full screen stays reserved for the live review application, like the view
-// toggle; the server-rendered combined tree needs neither.
-const ExpandButton = () => (
-  <button
-    type="button"
-    className={BUTTON_CLASSES}
-    aria-label="View file tree full screen"
-    data-tooltip="View file tree full screen"
-    hidden
-    data-tree-expand=""
-    data-size="xs"
-    data-slot="button"
-    data-variant="ghost"
-  >
-    {lucideIconToReact({ icon: MAXIMIZE_2_ICON, hidden: false })}
-    {lucideIconToReact({ icon: MINIMIZE_2_ICON, hidden: true })}
-  </button>
-);
-
 // A glance-level answer to "how big is this change?" before reading rows.
 const ChangeSummary = ({
   entries,
@@ -121,10 +101,7 @@ const DiffHeader = ({
   readonly title: string | undefined;
   readonly entries: ReadonlyArray<TreeEntry>;
 }) => (
-  <figcaption
-    className="file-tree-header file-tree-diff-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.65rem] py-[0.4rem] font-sans text-sm font-semibold text-ink"
-    {...(title === undefined ? { "data-tree-header-without-title": "" } : {})}
-  >
+  <figcaption className="file-tree-header file-tree-diff-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.65rem] py-[0.4rem] font-sans text-sm font-semibold text-ink">
     {title === undefined ? null : (
       <span className="file-tree-diff-title truncate">{title}</span>
     )}
@@ -132,7 +109,7 @@ const DiffHeader = ({
     <span className="file-tree-diff-controls flex shrink-0 items-center gap-1">
       <TreeFoldControls tone="standard" />
       <ViewToggleGroup />
-      <ExpandButton />
+      <MaximizeButton subject="tree" />
     </span>
   </figcaption>
 );
@@ -292,6 +269,7 @@ export const FileTreeDiff = ({
   <figure
     className="file-tree file-tree-diff mb-5 min-w-0 overflow-hidden rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]"
     data-file-tree-diff=""
+    {...{ [MAXIMIZABLE_ATTRIBUTE]: "tree" }}
     data-tree-view="combined"
     data-tree-changes={model.hideDiff ? "hidden" : "shown"}
   >
