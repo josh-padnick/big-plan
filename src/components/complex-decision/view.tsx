@@ -191,10 +191,7 @@ const OptionColumn = ({
         data-option-decorators=""
       >
         {option.recommended ? (
-          <BadgePill
-            label="Recommended"
-            classNames={["complex-decision-recommended-pill"]}
-          />
+          <BadgePill label="Recommended" classNames={["badge-pill-quiet"]} />
         ) : null}
       </div>
     ) : null}

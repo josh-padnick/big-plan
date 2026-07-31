@@ -40,10 +40,7 @@ const OptionRow = ({
           {option.title}
         </span>
         {option.recommended ? (
-          <BadgePill
-            label="Recommended"
-            classNames={["simple-decision-recommended-pill"]}
-          />
+          <BadgePill label="Recommended" classNames={["badge-pill-quiet"]} />
         ) : null}
       </div>
       {option.detail.length === 0 ? null : (

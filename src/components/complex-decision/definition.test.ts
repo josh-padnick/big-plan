@@ -166,8 +166,7 @@ describe("ComplexDecision rendering", () => {
 
   it("should render the recommended pill exactly once per decision", () => {
     const html = render(OPEN_DECISION);
-    const pillCount =
-      html.split("complex-decision-recommended-pill").length - 1;
+    const pillCount = html.split("badge-pill-quiet").length - 1;
     expect(pillCount).toBe(1);
   });
 });

@@ -1,0 +1,16 @@
+/* Shared badge-pill variants. A palette variant belongs to whichever card
+   uses it, except this one: every decision card marks its recommendation the
+   same way, and that way has to be the same everywhere or the family teaches
+   two different meanings for one word. */
+
+@layer components {
+  /* The quiet chip states a suggestion without competing with a selection.
+     Big Plan's accent is a green, so a tinted "Recommended" chip reads as
+     "already chosen"; recommendation stays neutral and selection owns the
+     accent. The 1px border keeps its height equal to bordered neighbours. */
+  article .badge-pill-quiet {
+    border: 1px solid var(--edge-c);
+    background: var(--surface-c);
+    color: var(--ink-c);
+  }
+}
