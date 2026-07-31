@@ -211,7 +211,7 @@ const CATALOG = {
     category: "layout",
     acceptsChildren: true,
     summary:
-      "Stacks its children vertically with one spacing token. In a Row, span=main or span=rail sets desktop proportions.",
+      "Stacks its children vertically with one spacing token. In a Row, span=list|main|rail sets desktop workspace proportions.",
     example: '<Stack gap="md" span="main">...</Stack>',
     compile: ({ attributes, children, position, diagnostics }) => {
       const validated = validateComponentAttributes({
@@ -257,7 +257,7 @@ const CATALOG = {
     category: "surface",
     acceptsChildren: true,
     summary:
-      "A bounded region of a screen, optionally titled. In a Row, span=main makes it dominate; span=rail keeps a narrow secondary column.",
+      "A bounded region of a screen, optionally titled. In a Row, span=list is a master queue, span=main the primary surface, span=rail secondary properties.",
     example: '<Panel title="Conversation" span="main">...</Panel>',
     compile: ({ attributes, children, position, diagnostics }) => {
       const validated = validateComponentAttributes({
