@@ -74,7 +74,19 @@ Big Plan ships components that present specific kinds of information better than
 A decision buried in prose is a decision the reviewer cannot easily accept or reject.
 Before using a component, run `big-plan guidance <Component>` (for example `big-plan guidance ComplexDecision`) for how to use it well.
 
-## 8. Validate, render, and reread
+## 8. Lay out slides with CRAP (visual design of the deck)
+
+Robin Williams's CRAP principles govern the **plan document as a deck** - how slides, headings, and components sit on the page so the reviewer scans without thrash.
+They are not product-UI form-factor rules; those live in `big-plan guidance Wireframe`.
+
+- **Contrast** - one element leads on a slide (heading, decision, diagram). Do not give every bullet equal visual weight.
+- **Repetition** - same heading hierarchy, list style, and component rhythm across slides so the reader learns the pattern once.
+- **Alignment** - left edges, columns, and decision options line up; stray center-aligned fragments look unfinished.
+- **Proximity** - related lines and controls sit together; separate thoughts get space (including between a section title and the next peer section).
+
+When a slide feels noisy, fix CRAP before adding more words.
+
+## 9. Validate, render, and reread
 
 Run `big-plan validate <plan.mdx>` and fix every diagnostic until it passes.
 Lint catches what is statically analyzable; it cannot judge writing.
