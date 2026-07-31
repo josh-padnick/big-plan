@@ -1,5 +1,5 @@
-/* ComplexDecision status, outcome, option-state, matrix, verdict-tone, and info
-   disclosure variants, colocated with the component. */
+/* CSS escape hatch: selector relationships across matrix, option, and
+   disclosure state keep the ComplexDecision treatment locally readable. */
 
 @layer components {
   article .complex-decision-status-open {

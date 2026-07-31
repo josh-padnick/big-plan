@@ -1,5 +1,5 @@
-/* Decision option cards: verdict tones and the recommended and status pills
-   reuse the decision palette tokens shared with the complex matrix. */
+/* CSS escape hatch: local readability keeps the finite verdict-tone map
+   together. Decision cards and pills reuse the palette shared with the matrix. */
 
 @layer components {
   article .decision-verdict-good {

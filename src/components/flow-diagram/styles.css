@@ -1,4 +1,5 @@
 /*
+CSS escape hatch: selector relationships and pseudo-elements define connector geometry.
 FlowDiagram diagram drawing: card tones, badge tints, and the connector geometry -
 lines, arrowheads, and the one-to-many fork - that utility classes cannot
 express because they live in pseudo-elements and data-attribute variants.

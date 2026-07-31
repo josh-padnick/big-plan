@@ -1,4 +1,5 @@
 /*
+CSS escape hatch: externally owned markup and token definitions.
 The syntax-highlighting palette and highlight.js token styles emitted by
 rehype-highlight. Palette variables follow the viewer's OS preference or its
 explicit theme override while staying independent of the surrounding shell.

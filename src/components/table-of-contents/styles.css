@@ -1,4 +1,5 @@
-/* TableOfContents row hover: a subtle ink wash under the row. The ink-mix adapts across
+/* CSS escape hatch: selector relationships and local readability keep the
+   adaptive row treatment together. TableOfContents hover uses a subtle ink wash under the row. The ink-mix adapts across
    light and dark themes and deliberately never shares a fill with the
    surface-colored Part band - surface means structure, the tint means
    interactive. The title's accent lives in the view as a group variant,

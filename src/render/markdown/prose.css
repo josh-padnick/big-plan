@@ -1,4 +1,5 @@
 /*
+CSS escape hatch: generated markup.
 Element-scoped styles for the plain markdown elements the transform emits.
 Markdown-generated markup carries no class attributes for utilities to
 target, so the reading column is styled with element selectors scoped to

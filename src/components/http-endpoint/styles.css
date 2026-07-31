@@ -1,5 +1,5 @@
-/* HttpEndpoint method, status, placeholder, and deprecation palette variants,
-   colocated with the component that emits those stable selector contracts. */
+/* CSS escape hatch: local readability keeps the finite method, status,
+   placeholder, and deprecation palette map together beside its selectors. */
 
 @layer components {
   article .http-endpoint-method-get {

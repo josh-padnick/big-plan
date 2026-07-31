@@ -1,5 +1,6 @@
-/* DatabaseTableSchema palette-dependent chrome: header band, dense
-   equal-height grid overrides of the prose table rules, plain in-figure code,
+/* CSS escape hatch: selector relationships define the dense equal-height grid
+   and override generated prose-table markup. DatabaseTableSchema chrome:
+   header band, equal-height grid overrides, plain in-figure code,
    badge tints, Indexes and DDL bands, tabs, column controls, index jumps, and
    menu styles, colocated with the component that owns them. */
 

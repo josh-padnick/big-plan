@@ -1,4 +1,5 @@
-/* CodeDiff line, annotation, state, and pseudo-element styles, colocated with
+/* CSS escape hatch: selector relationships across diff states and generated
+   line-marker pseudo-elements. CodeDiff styles are colocated with
    the component that owns the stable selectors. */
 @layer components {
   article [data-code-diff] {
