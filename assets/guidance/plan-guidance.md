@@ -40,7 +40,7 @@ Fold "why X rather than Y" justifications into the surrounding story or a decisi
 ## 5. Lead with the title, and say it once
 
 Every slide and sub-slide names its message before it shows anything; the reader has to know what they are looking at before they look at it.
-An h2 is already the slide's headline, but an h3 renders only as a small kicker, so a sub-slide that leads with a figure - a component, code block, image, or table - needs an h4 title of its own.
+An h2 is already the slide's headline, but an h3 renders only as a small kicker, so a sub-slide that leads with a figure needs an h4 title of its own.
 Write that title as the message rather than the topic: "Escape unwinds one level at a time" beats "Dismissal".
 
 A fully emphasized paragraph (`*like this*`) renders as the context builder - one muted orienting line - but only as the first block under the heading, so a title and a context builder are alternatives, never a sequence.
