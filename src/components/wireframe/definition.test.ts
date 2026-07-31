@@ -134,6 +134,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
             {
               element: "Panel",
               title: "Balance",
+              span: "fill",
               children: [
                 { element: "Text", text: "$42.50", role: "body" },
                 {
@@ -774,6 +775,65 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     const rendered = html(render(compiled));
     expect(rendered).toContain("wireframe-bottom-bar");
     expect(rendered).toContain("Home");
+  });
+
+  it("should let a desktop row claim main and rail widths", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "ticket",
+          attributes: {
+            viewport: "desktop",
+            chrome: "browser",
+            url: "app.harbor.team/tickets/1",
+          },
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Panel",
+                  attributes: { title: "Conversation", span: "main" },
+                  children: [
+                    element({
+                      name: "Text",
+                      attributes: { text: "Thread body" },
+                    }),
+                  ],
+                }),
+                element({
+                  name: "Stack",
+                  attributes: { span: "rail", gap: "sm" },
+                  children: [
+                    element({
+                      name: "Panel",
+                      attributes: { title: "Properties" },
+                      children: [
+                        element({
+                          name: "Select",
+                          attributes: { label: "Status", value: "Open" },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(compiled.model.screens[0]?.children[0]).toMatchObject({
+      element: "Row",
+      children: [
+        { element: "Panel", span: "main", title: "Conversation" },
+        { element: "Stack", span: "rail" },
+      ],
+    });
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-wireframe-span":"main"');
+    expect(rendered).toContain('"data-wireframe-span":"rail"');
   });
 
   it("should report an address on a screen that has no address bar to draw it in", () => {
