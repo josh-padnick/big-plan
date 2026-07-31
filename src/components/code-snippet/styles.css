@@ -2,12 +2,6 @@
    styles, colocated with the component that owns these selector contracts. */
 
 @layer components {
-  /* The figure's resting margin is a stylesheet rule rather than a utility so
-     the maximized panel can zero it; a utility wins from a later layer and
-     leaves the promoted panel one margin short of its bottom inset. */
-  article [data-code-snippet] {
-    margin-bottom: 1.25rem;
-  }
   article [data-code-snippet] {
     background: var(--diff-content-bg);
   }
