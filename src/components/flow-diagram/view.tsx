@@ -390,6 +390,10 @@ const StageHeader = ({
   <p
     data-flow-diagram-stage
     data-flow-stage={stage.id}
+    // A stage's neighborhood is its position in the flow; the tray reads it
+    // from here rather than from the accessible name, which a proposal
+    // rewrites.
+    data-flow-where={`stage ${stageIndex + 1} of ${stageCount}`}
     className="m-0 mb-2 self-end text-[0.6875rem] font-semibold tracking-[0.09em] uppercase text-muted"
     style={style}
     {...targetProps({

@@ -136,10 +136,7 @@ export const DIAGRAM_SCRIPT = `
       const text = field ? originalText.get(field) : "";
       return text ? "labelled " + quote(text) : "";
     }
-    if (kind === "stage") {
-      return node.getAttribute("aria-label") || "";
-    }
-    return "";
+    return node.getAttribute("data-flow-where") || "";
   };
 
   // --- The draft store (in memory; nothing is persisted or sent) ---------
@@ -229,7 +226,8 @@ export const DIAGRAM_SCRIPT = `
     const sentences = [];
     if (kindOf(node) === "stage" && gone.length > 0) {
       sentences.push(
-        gone.length + (gone.length === 1 ? " node loses" : " nodes lose") + " its stage",
+        gone.length +
+          (gone.length === 1 ? " node loses its stage" : " nodes lose their stage"),
       );
     }
     const orphans = [];
