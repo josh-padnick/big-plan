@@ -255,12 +255,20 @@ export const DIAGRAM_SCRIPT = `
     return sentences.join("; ");
   };
 
+  // Show original is a paint-time state, not a coat of CSS: the proposal layer
+  // rewrites text, and no stylesheet can put the agent's words back. The
+  // figure carries data-flow-original; the control carries
+  // data-flow-show-original, so the two never read as one selector.
+  const showingOriginal = (diagram) =>
+    diagram.hasAttribute("data-flow-original");
+
   const paint = () => {
     clearLayer();
     resetNames();
     // Removals first, so an edit withdrawn by a removal never paints.
     for (const draft of drafts) {
       if (draft.kind !== "remove-element") continue;
+      if (showingOriginal(draft.diagram)) continue;
       const node = draft.element;
       addProposedState(node, "removed");
       addMark(node, "removed", "Removed");
@@ -288,6 +296,7 @@ export const DIAGRAM_SCRIPT = `
     }
     for (const draft of drafts) {
       if (draft.kind !== "edit-text") continue;
+      if (showingOriginal(draft.diagram)) continue;
       const field = draft.field;
       if (!field) continue;
       field.textContent = draft.after;
@@ -327,7 +336,7 @@ export const DIAGRAM_SCRIPT = `
       const revertAll = diagram.querySelector("[data-flow-revert-all]");
       if (revertAll) revertAll.hidden = proposals.length < 2;
       if (proposals.length === 0) {
-        diagram.removeAttribute("data-flow-show-original");
+        diagram.removeAttribute("data-flow-original");
         if (showOriginal) showOriginal.setAttribute("aria-pressed", "false");
       }
     }
@@ -820,9 +829,10 @@ export const DIAGRAM_SCRIPT = `
     if (showOriginal) {
       showOriginal.addEventListener("click", (event) => {
         event.stopPropagation();
-        const on = !diagram.hasAttribute("data-flow-show-original");
-        diagram.toggleAttribute("data-flow-show-original", on);
+        const on = !showingOriginal(diagram);
+        diagram.toggleAttribute("data-flow-original", on);
         showOriginal.setAttribute("aria-pressed", on ? "true" : "false");
+        paint();
         announce(on ? "Showing the original diagram" : "Showing proposals");
       });
     }
