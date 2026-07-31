@@ -173,6 +173,29 @@ The lede.
     expect(html).not.toContain('src="http');
   });
 
+  it("should name the plan quietly in the bar so a deep reader keeps its title", () => {
+    expect(html).toContain("data-plan-title");
+    expect(html).toMatch(/<p class="[^"]*truncate[^"]*"[^>]*data-plan-title/);
+    // The bar repeats the h1, so it is chrome for the eye only; a screen
+    // reader already has the title from the document and the page head.
+    expect(html).toMatch(/data-plan-title[^>]*aria-hidden="true"/);
+    // Truncation needs the full text reachable on hover.
+    expect(html).toMatch(/data-plan-title title="Plan title"/);
+  });
+
+  it("should escape a plan title before putting it in the bar", () => {
+    // The title lands in an attribute as well as in text, so a quote that
+    // survived would close the attribute early.
+    const { html: quoted } = renderDocument({
+      markdown: '# Ship "A & B" plans\n\nBody.\n',
+      fallbackTitle: "Fallback",
+    });
+    expect(quoted).toContain(
+      'data-plan-title title="Ship &quot;A &amp; B&quot; plans"',
+    );
+    expect(quoted).not.toContain('title="Ship "A');
+  });
+
   it("should emit theme-aware favicon links as embedded data URIs when rendering", () => {
     expect(html).toMatch(
       /<link rel="icon" type="image\/x-icon" href="data:image\/x-icon;base64,[^"]+">/,
