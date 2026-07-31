@@ -3,6 +3,57 @@
 
 import { expect, test } from "./fixtures";
 
+test("should outline the filter against table chrome in every palette", async ({
+  page,
+  dataTableViewerUrl,
+}) => {
+  await page.goto(dataTableViewerUrl);
+  const table = page.locator("[data-data-table]").filter({
+    hasText: "Queue depth by processor",
+  });
+  const filter = table.getByRole("searchbox", { name: "Filter rows" });
+  const header = table.locator(".data-table-header");
+  const paletteCases = [
+    {
+      name: "default light",
+      theme: undefined,
+      colorScheme: "light" as const,
+      border: "rgb(201, 193, 174)",
+      chrome: "rgb(236, 231, 219)",
+    },
+    {
+      name: "system dark",
+      theme: undefined,
+      colorScheme: "dark" as const,
+      border: "rgb(79, 74, 63)",
+      chrome: "rgb(51, 46, 36)",
+    },
+    {
+      name: "explicit dark",
+      theme: "dark",
+      colorScheme: "light" as const,
+      border: "rgb(79, 74, 63)",
+      chrome: "rgb(51, 46, 36)",
+    },
+  ];
+
+  for (const paletteCase of paletteCases) {
+    await test.step(paletteCase.name, async () => {
+      await page.emulateMedia({ colorScheme: paletteCase.colorScheme });
+      await page.evaluate((theme) => {
+        if (theme === undefined) {
+          document.documentElement.removeAttribute("data-theme");
+          return;
+        }
+        document.documentElement.dataset["theme"] = theme;
+      }, paletteCase.theme);
+
+      await expect(filter).toHaveCSS("border-top-color", paletteCase.border);
+      await expect(header).toHaveCSS("background-color", paletteCase.chrome);
+    });
+  }
+});
+
 test("should restore authored group order when resetting a regrouped table", async ({
   page,
   dataTableViewerUrl,
