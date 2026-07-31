@@ -1,0 +1,171 @@
+---
+title: Wireframe
+description: True-size, content-height product screens composed from an open drawing vocabulary and connected into a short walkable prototype.
+---
+
+`Wireframe` draws low-fidelity product UI inside a device-appropriate frame.
+Each screen lays out at its device's true width and scales as one unit to fit the review document; its height follows its content rather than stretching to a fixed device height.
+Multiple screens can link to one another without adding executable plan-authored code, while the complete storyboard remains readable when scripts are disabled.
+
+## When to use it
+
+Use a wireframe when a reviewer must picture a screen or interaction path to judge the plan.
+Keep explanations and design rationale in the surrounding prose, and put only customer-visible product UI inside the artboard.
+
+Run `big-plan guidance Wireframe` before authoring one.
+That component guidance owns the judgment calls for product layout, form-factor honesty, action hierarchy, and choosing among primitives; this page is the syntax reference.
+
+## Authoring
+
+```mdx
+<Wireframe id="harbor-phone" title="Harbor inbox" initialScreen="inbox">
+  <Screen id="inbox" name="Inbox" device="phone">
+    <Stack gap="sm">
+      <TopBar title="Inbox" />
+      <List>
+        <ListItem
+          label="Checkout freeze"
+          meta="Northwind · Priority"
+          value="14m"
+          selected
+          navigateTo="ticket"
+        />
+      </List>
+      <BottomBar>
+        <Button label="Inbox" emphasis="primary" />
+        <Button label="Settings" />
+      </BottomBar>
+    </Stack>
+  </Screen>
+
+  <Screen id="ticket" name="Ticket" device="phone">
+    <Stack gap="sm">
+      <TopBar title="Checkout freeze" />
+      <Message
+        author="Maya"
+        time="14m"
+        kind="customer"
+        text="The checkout form freezes after I submit it."
+      />
+      <TextArea label="Reply" placeholder="Write a reply" />
+      <Button label="Send" emphasis="primary" />
+      <Button label="Back to inbox" navigateTo="inbox" />
+    </Stack>
+  </Screen>
+</Wireframe>
+```
+
+All screen copy lives in attributes; loose prose inside `Wireframe`, `Screen`, or a drawing element is rejected.
+`Table` is the sole exception and takes one fenced block as documented below.
+
+## Wireframe and Screen
+
+`Wireframe` requires a non-empty `id` and at least one direct `Screen` child.
+Its optional `title` labels the figure, and `initialScreen` names which child opens first; without it, the first authored screen opens first.
+
+Every `Screen` requires a unique `id`, a non-empty `name`, and one `device`:
+
+| `device`          | Logical width | Frame                 |
+| ----------------- | ------------: | --------------------- |
+| `desktop`         |       1440 px | Desktop browser       |
+| `tablet`          |       1112 px | Landscape tablet      |
+| `tablet-portrait` |        834 px | Portrait tablet       |
+| `phone`           |        390 px | Phone, no browser bar |
+
+A non-phone screen may add `url` for the browser bar.
+Phone screens reject `url`, `AppShell`, and `Sidebar`; use `TopBar`, a single content column, and `BottomBar` instead.
+
+`navigateTo` on `Button`, `NavItem`, `ListItem`, or `Crumb` must name another screen in the same wireframe.
+The compiler also diagnoses ambiguous record-detail selection and more than one filled work action per screen.
+A composer's Send button counts as a filled action even when it omits `emphasis="primary"`; selected buttons inside `SegmentedControl` and `BottomBar` are mode or navigation state and do not count as filled work actions.
+
+## Optional screen patterns
+
+`pattern` is opt-in convenience syntax on `Screen`; omitting it leaves the complete vocabulary available for any layout.
+Each preset expands to the same ordinary `Row`, `Panel`, and `Rail` nodes an author can write directly:
+
+| `pattern`     | Direct `Panel` slots | Expansion                              |
+| ------------- | -------------------: | -------------------------------------- |
+| `list-detail` |                    2 | List pane + main pane                  |
+| `triage`      |                    3 | List pane + main pane + secondary rail |
+| `create`      |                    2 | Main form + secondary rail             |
+| `settings`    |                    2 | Settings list + main settings pane     |
+
+When a screen has an `AppShell`, place those direct `Panel` slots inside its `AppContent`; otherwise place them directly in `Screen`.
+If a preset does not fit, remove `pattern` and compose the screen directly.
+
+## Open drawing vocabulary
+
+The vocabulary is compositional rather than a closed set of page regions.
+Container elements accept nested drawing elements unless a narrower child rule is stated; leaf elements are self-closing.
+
+### Layout and product frame
+
+| Element            | Attributes and placement                                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `Stack`            | `gap="none|xs|sm|md|lg|xl"`, `align="start|center|end|stretch"`, and `span="fill|list|main|rail"`.                                     |
+| `Row`              | `gap`, `align`, and `justify="start|center|end|between"`.                                                                                |
+| `Panel`            | Optional `title`, `eyebrow`, `span`, and `surface="plain|filled|outlined"`; defaults to a plain, unboxed region.                         |
+| `Rail`             | Fixed-width secondary details column.                                                                                                     |
+| `Center`           | `measure="narrow|prose|wide"` for centered, bounded content.                                                                            |
+| `AppShell`         | Holds only `Sidebar`, optional `TopBar`, and `AppContent`; unavailable on phone.                                                           |
+| `Sidebar`          | Optional `brand` and `mode`; valid only directly in `AppShell`.                                                                           |
+| `AppContent`       | Main product region; valid only directly in `AppShell`.                                                                                   |
+| `TopBar`           | Optional `title`; valid in `AppShell`, `Screen`, or `Stack`.                                                                               |
+| `BottomBar`        | Phone tab strip; valid in `Screen` or `Stack`.                                                                                            |
+| `PageHeader`       | Required `title`, optional `description` and `badge`.                                                                                      |
+| `SegmentedControl` | Holds only `Button` children; mark its selected mode with `emphasis="primary"`.                                                          |
+| `Breadcrumbs`      | Holds only `Crumb` children.                                                                                                              |
+| `Crumb`            | Required `label`, optional `navigateTo`; valid only in `Breadcrumbs`.                                                                      |
+
+### Content, status, and navigation
+
+| Element            | Attributes and placement                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `Heading`          | Required `text`; optional `level="1|2|3"`.                                                                        |
+| `Text`             | Required `text`; optional `role="body|helper|muted|section"`.                                                      |
+| `Button`           | Required `label`; optional `emphasis="primary|secondary|tertiary|destructive"` and `navigateTo`.                  |
+| `Nav`              | Optional `label`; holds only `NavItem`.                                                                             |
+| `NavItem`          | Required `label`; optional `active` and `navigateTo`; valid only in `Nav`.                                           |
+| `Metric`           | Required `label` and `value`; optional `note`.                                                                      |
+| `Progress`         | Required `value` from `0` through `100`; optional `label` and `detail`.                                              |
+| `Badge`            | Required `label`; optional `tone="neutral|info|success|warning|danger"`.                                           |
+| `Divider`          | Optional `label`.                                                                                                   |
+| `ImagePlaceholder` | Required `label`; optional `shape="square|wide|tall"`.                                                            |
+| `List`             | Holds only `ListItem`.                                                                                              |
+| `ListItem`         | Required `label`; optional `meta`, `value`, `selected`, and `navigateTo`; valid only in `List`.                      |
+| `Message`          | Required `author`, `time`, and `text`; optional `kind="customer|agent|internal"`.                                  |
+
+### Forms and flows
+
+| Element     | Attributes and placement                                                                                                    |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `TextField` | Required `label`; optional `kind="text|search|email|password|number|date"`, `placeholder`, `value`, `hint`, and `disabled`. |
+| `TextArea`  | Required `label`; optional `placeholder`, `value`, `hint`, and `disabled`.                                                   |
+| `Select`    | Required `label` and `value`; optional `hint` and `disabled`.                                                                |
+| `Checkbox`  | Required `label`; optional `checked` and `hint`.                                                                             |
+| `Switch`    | Required `label`; optional `on` and `hint`.                                                                                  |
+| `Stepper`   | Holds only `Step`.                                                                                                           |
+| `Step`      | Required `label`; optional `state="done|current|todo"`; valid only in `Stepper`.                                            |
+| `Connector` | Optional `direction="right|down"` and `label`.                                                                             |
+
+### Tables
+
+`Table` takes one fenced block whose first non-empty line names the columns and whose remaining lines are pipe-separated rows with the same number of cells.
+Use optional `selected="N"` to select a one-based row from 1 through 200.
+Columns containing only numeric-looking values align numerically.
+A cell written `[Failed]` renders a neutral status chip; `[Failed:danger]` may use `neutral`, `info`, `success`, `warning`, or `danger`.
+
+````mdx
+<Table selected="1">
+
+```text
+Ticket | Customer | State
+#4821 | Northwind | [Failed:danger]
+#4818 | Acme | [Waiting:warning]
+```
+
+</Table>
+````
+
+Each contract violation fails `validate` and `render` with a positional diagnostic.

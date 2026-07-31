@@ -158,7 +158,7 @@ The lede.
     expect(deckHtml).toContain("--reading-free-inline");
     expect(deckHtml).toContain("data-wireframe-desktop");
     expect(deckHtml).toContain(
-      "[data-slide]:has(>[data-collapse-body] [data-wireframe-desktop]):not([data-slide] [data-slide])",
+      "[data-slide]:has(>[data-collapse-body] [data-wireframe-desktop])",
     );
     expect(deckHtml).toContain(
       ".wireframe[data-wireframe-desktop]:not([data-slide] *)",
