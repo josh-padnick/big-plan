@@ -178,6 +178,67 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     await expect(statusHost).not.toHaveAttribute("data-collapsed", "");
   });
 
+  // Regression: within one parent, a collapsed chip and an expanded header
+  // must share a left edge and a chevron column. The chevron used to be two
+  // borders of a rotated square, whose ink sits off-center, so each state
+  // painted it somewhere different while every box still measured identical.
+  await test.step("collapsed and expanded siblings share one chevron column", async () => {
+    const drift = await page.evaluate(() => {
+      // Transform animates for 150ms, so geometry read straight after a click
+      // samples the old state and any comparison passes vacuously.
+      const kill = document.createElement("style");
+      kill.textContent =
+        "*{transition:none !important;animation:none !important}";
+      document.head.appendChild(kill);
+      const header = (block: Element) =>
+        block.querySelector(":scope > [data-collapse-header]") as HTMLElement;
+      const inkCenter = (block: Element) => {
+        const path = header(block).querySelector(
+          "[data-collapse-toggle] svg path",
+        ) as Element;
+        const rect = path.getBoundingClientRect();
+        const base = header(block).getBoundingClientRect();
+        return {
+          x: rect.left + rect.width / 2 - base.left,
+          y: rect.top + rect.height / 2 - base.top,
+        };
+      };
+      const worst = { chevronX: 0, chevronY: 0, headerLeft: 0 };
+      for (const body of document.querySelectorAll("[data-collapse-body]")) {
+        const kids = Array.from(body.children).filter((child) =>
+          child.hasAttribute("data-collapsible"),
+        );
+        if (kids.length < 2) continue;
+        // Alternate the siblings so the parent holds a mixed state.
+        kids.forEach((kid, index) => index % 2 === 0 && header(kid).click());
+        const rows = kids.map((kid) => ({
+          ink: inkCenter(kid),
+          left: header(kid).getBoundingClientRect().left,
+        }));
+        const spread = (values: ReadonlyArray<number>) =>
+          Math.max(...values) - Math.min(...values);
+        worst.chevronX = Math.max(
+          worst.chevronX,
+          spread(rows.map((r) => r.ink.x)),
+        );
+        worst.chevronY = Math.max(
+          worst.chevronY,
+          spread(rows.map((r) => r.ink.y)),
+        );
+        worst.headerLeft = Math.max(
+          worst.headerLeft,
+          spread(rows.map((r) => r.left)),
+        );
+        kids.forEach((kid, index) => index % 2 === 0 && header(kid).click());
+      }
+      kill.remove();
+      return worst;
+    });
+    expect(drift.chevronX).toBeLessThan(0.5);
+    expect(drift.chevronY).toBeLessThan(0.5);
+    expect(drift.headerLeft).toBeLessThan(0.5);
+  });
+
   await test.step("collapsing a part tucks away every slide in the act", async () => {
     const proposal = page.locator(
       '[data-collapsible="part"][data-collapse-id="part-the-proposal"]',
