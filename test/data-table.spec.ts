@@ -36,7 +36,7 @@ test("should restore authored group order when resetting a regrouped table", asy
   ]);
 });
 
-test("should consume filter Escape before restoring a maximized table", async ({
+test("should restore a maximized table when filter Escape has no work", async ({
   page,
   dataTableViewerUrl,
 }) => {
@@ -55,6 +55,41 @@ test("should consume filter Escape before restoring a maximized table", async ({
   await expect(filter).toHaveValue("");
   await expect(table.locator("[data-table-count]")).toHaveText("4 rows");
   await expect(table).toHaveAttribute("data-figure-maximized", "");
+
+  await filter.press("Escape");
+
+  await expect(table).not.toHaveAttribute("data-figure-maximized");
+  await expect(
+    table.getByRole("button", { name: "Maximize table" }),
+  ).toBeFocused();
+});
+
+test("should keep the filter header inside a 320px viewport", async ({
+  page,
+  dataTableViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto(dataTableViewerUrl);
+  const table = page.locator("[data-data-table]").filter({
+    hasText: "Queue depth by processor",
+  });
+  const header = table.locator(".data-table-header");
+  const readOverflow = () =>
+    header.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return Math.max(
+        0,
+        element.scrollWidth - element.clientWidth,
+        -rect.left,
+        rect.right - innerWidth,
+      );
+    });
+
+  await expect.poll(readOverflow).toBe(0);
+
+  await table.getByRole("button", { name: "Maximize table" }).click();
+
+  await expect.poll(readOverflow).toBe(0);
 });
 
 test("should ignore a drop without an internal column drag", async ({
