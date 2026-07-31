@@ -267,7 +267,7 @@ export const FileTreeDiff = ({
   readonly model: CompiledFileTreeDiff;
 }) => (
   <figure
-    className="file-tree file-tree-diff min-w-0 overflow-hidden rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]"
+    className="file-tree file-tree-diff min-w-0 rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]"
     data-file-tree-diff=""
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "tree" }}
     data-tree-view="combined"

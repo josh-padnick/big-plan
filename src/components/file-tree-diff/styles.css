@@ -9,6 +9,7 @@
      leaves the promoted panel one margin short of its bottom inset. */
   article [data-file-tree-diff] {
     margin-bottom: 1.25rem;
+    overflow: hidden;
   }
   article [data-file-tree-diff] {
     background: var(--diff-content-bg);
