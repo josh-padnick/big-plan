@@ -384,6 +384,7 @@ export const VIEWER_SCRIPT = `<script>
     } catch (_) {}
   };
   const compareDataTableValues = ${COMPARE_DATA_TABLE_VALUES_SOURCE};
+  let activeColumnDrag = null;
 
   for (const figure of tables) {
     const grid = figure.querySelector("table");
@@ -789,37 +790,57 @@ export const VIEWER_SCRIPT = `<script>
       }
       head.addEventListener("dragstart", (event) => {
         const positions = Array.from(headRow.children);
-        event.dataTransfer.setData(
-          "text/plain",
-          String(positions.indexOf(head)),
-        );
+        const from = positions.indexOf(head);
+        activeColumnDrag = { figure, from };
         event.dataTransfer.effectAllowed = "move";
       });
       let dropAfter = false;
+      const clear = () => {
+        head.classList.remove("data-table-head-drop-before");
+        head.classList.remove("data-table-head-drop-after");
+        dropAfter = false;
+      };
       head.addEventListener("dragover", (event) => {
+        const from = activeColumnDrag?.from;
+        if (
+          activeColumnDrag?.figure !== figure ||
+          !Number.isInteger(from) ||
+          from < 0 ||
+          from >= columnCount
+        ) {
+          clear();
+          return;
+        }
         event.preventDefault();
         const box = head.getBoundingClientRect();
         dropAfter = event.clientX > box.left + box.width / 2;
         head.classList.toggle("data-table-head-drop-before", !dropAfter);
         head.classList.toggle("data-table-head-drop-after", dropAfter);
       });
-      const clear = () => {
-        head.classList.remove("data-table-head-drop-before");
-        head.classList.remove("data-table-head-drop-after");
-        dropAfter = false;
-      };
       head.addEventListener("dragleave", clear);
-      head.addEventListener("dragend", clear);
+      head.addEventListener("dragend", () => {
+        clear();
+        if (activeColumnDrag?.figure === figure) activeColumnDrag = null;
+      });
       head.addEventListener("drop", (event) => {
-        event.preventDefault();
+        const drag = activeColumnDrag;
         const after = dropAfter;
         clear();
-        const from = Number(event.dataTransfer.getData("text/plain"));
+        if (
+          drag?.figure !== figure ||
+          !Number.isInteger(drag.from) ||
+          drag.from < 0 ||
+          drag.from >= columnCount
+        )
+          return;
+        event.preventDefault();
+        activeColumnDrag = null;
+        const from = drag.from;
         const positions = Array.from(headRow.children);
         const to = positions.indexOf(head);
         const boundary = to + (after ? 1 : 0);
         const insertion = boundary - (from < boundary ? 1 : 0);
-        if (!isNaN(from)) moveColumn(from, insertion);
+        moveColumn(from, insertion);
       });
     }
 

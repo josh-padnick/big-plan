@@ -56,3 +56,32 @@ test("should consume filter Escape before restoring a maximized table", async ({
   await expect(table.locator("[data-table-count]")).toHaveText("4 rows");
   await expect(table).toHaveAttribute("data-figure-maximized", "");
 });
+
+test("should ignore a drop without an internal column drag", async ({
+  page,
+  dataTableViewerUrl,
+}) => {
+  await page.goto(dataTableViewerUrl);
+  const table = page.locator("[data-data-table]").filter({
+    hasText: "Queue depth by processor",
+  });
+  const headers = table.locator(".data-table-head-label");
+  const noteHeader = table.locator("th[data-table-column='3']");
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+
+  await expect(headers).toHaveText([
+    "Processor",
+    "Attempts",
+    "Last seen",
+    "Note",
+  ]);
+
+  await noteHeader.dispatchEvent("drop", { dataTransfer });
+
+  await expect(headers).toHaveText([
+    "Processor",
+    "Attempts",
+    "Last seen",
+    "Note",
+  ]);
+});
