@@ -113,7 +113,7 @@ const CodeLine = ({
         {String(lineNumber)}
       </span>
     ) : null}
-    <span className="code-snippet-line-content inline-block min-w-full px-[0.75rem]">
+    <span className="code-snippet-line-content inline-block min-w-full px-[1rem]">
       {hastContentToReact(line)}
     </span>
   </div>
