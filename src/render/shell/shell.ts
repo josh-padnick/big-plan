@@ -225,21 +225,26 @@ ${items}
  */
 export const renderShell = ({
   nav,
+  title,
   contentIds,
   contentHtml,
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
+  // The plan's own title, shown quietly in the bar so a reader deep in a long
+  // document can still see which plan they are in.
+  readonly title: string;
   readonly contentIds: ReadonlyArray<string>;
   readonly contentHtml: string;
 }): ShellResult => {
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
-<div class="flex h-full items-center px-5 wide:px-6">
+<div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-5 wide:px-6">
 <a class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
+<p class="truncate text-center text-sm leading-none text-muted" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</p>
 ${renderCommentDraftControl()}
 </div>
 </header>
