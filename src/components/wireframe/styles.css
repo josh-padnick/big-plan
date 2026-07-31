@@ -156,10 +156,13 @@ marks and a plan diff never jitters.
     max-width: 834px;
   }
   .wireframe-frame:has(> [data-wireframe-viewport="tablet-landscape"]) {
-    max-width: 1112px;
+    max-width: 960px;
   }
+  /* A drawing of a desktop product stops growing well before the window
+     does. Past this it stops reading as one screen a person looks at and
+     starts reading as a wall, and the labels drift apart from each other. */
   .wireframe-frame:has(> [data-wireframe-viewport="desktop"]) {
-    max-width: 1440px;
+    max-width: 1100px;
   }
 
   .wireframe-frame[data-wireframe-chrome="browser"] {

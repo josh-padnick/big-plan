@@ -240,8 +240,9 @@ describe("renderDocument shell", () => {
     expect(html).toContain("</html>");
     expect(html).not.toContain("<nav");
     expect(html).not.toContain("<script>");
-    // The reading column keeps its ~74ch measure even without a sidebar.
-    expect(html).toContain("wide:grid-cols-[minmax(0,74ch)]");
+    // The content column keeps its width even without a sidebar; prose holds
+    // its own measure inside it rather than the column enforcing one.
+    expect(html).toContain("wide:grid-cols-[minmax(0,72rem)]");
   });
 
   it("should omit the TOC when the document has headings but no h2s", () => {
