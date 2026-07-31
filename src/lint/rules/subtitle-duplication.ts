@@ -56,7 +56,7 @@ const textOf = (node: Node): string => {
 const normalize = (value: string): ReadonlyArray<string> => {
   const words = value
     .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
     .split(" ")
     .filter((word) => word !== "");

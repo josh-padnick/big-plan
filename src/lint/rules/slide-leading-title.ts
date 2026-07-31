@@ -24,7 +24,11 @@ const isImageParagraph = (node: Node): boolean => {
   }
   const meaningful = node.children.filter((child) => !isBlank(child));
   const [only] = meaningful;
-  return meaningful.length === 1 && only !== undefined && only.type === "image";
+  return (
+    meaningful.length === 1 &&
+    only !== undefined &&
+    (only.type === "image" || only.type === "imageReference")
+  );
 };
 
 // The block kinds that arrive as a picture rather than a claim. None of them
