@@ -223,11 +223,19 @@ classes.
   [data-flow-element] {
     outline-offset: 2px;
   }
-  [data-flow-targeted] {
+  /* Focus and hover draw the same ring: the script targets a focused element,
+     so a second user-agent ring on top would say the same thing in a colour
+     the document never uses. */
+  [data-flow-targeted],
+  [data-flow-element]:focus-visible {
     outline: 2px solid var(--accent-c);
   }
-  [data-flow-element="edge"][data-flow-targeted] {
+  [data-flow-element="edge"][data-flow-targeted],
+  [data-flow-element="edge"]:focus-visible {
     outline: none;
+  }
+  [data-flow-element="edge"]:focus-visible > .flow-diagram-hit {
+    outline: 2px solid var(--accent-c);
   }
   [data-flow-element="edge"][data-flow-targeted] > .flow-diagram-hit {
     outline: 2px solid var(--accent-c);
