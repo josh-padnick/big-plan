@@ -678,6 +678,248 @@ marks and a plan diff never jitters.
     margin-top: auto;
   }
 
+  /* A sparse child dashboard still composes the full landscape canvas. The
+     existing balance, activity, loan, lesson, and navigation regions grow in
+     scale and distribute their own contents; no filler copy is invented just
+     to occupy the device silhouette. Metric + progress uniquely identifies
+     this focal-dashboard shape among the tablet showcase screens. */
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content {
+    padding: 1rem 1.125rem 1.25rem;
+    gap: 1.25rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-page-header {
+    padding-bottom: 0.875rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-page-header
+    .wireframe-heading {
+    font-size: 2rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-sidebar {
+    padding: 1.25rem 1rem;
+    gap: 1.25rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-sidebar
+    .wireframe-brand {
+    font-size: 1.5rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-sidebar
+    > .wireframe-eyebrow {
+    font-size: 0.875rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-sidebar
+    .wireframe-nav {
+    flex: 1;
+    justify-content: space-evenly;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-sidebar
+    .wireframe-nav-item {
+    min-height: 3.25rem;
+    padding: 0.75rem 0.875rem;
+    font-size: 1.0625rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row {
+    gap: 1rem;
+    align-items: stretch;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel {
+    display: flex;
+    flex-direction: column;
+    padding: 1.25rem 1.4rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel
+    .wireframe-panel-head {
+    margin-bottom: 1rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    .wireframe-panel-title {
+    font-size: 1.25rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel:has(.wireframe-list) {
+    flex-basis: 14rem;
+    max-width: 14rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel
+    > .wireframe-panel-body {
+    flex: 1;
+    justify-content: space-evenly;
+    gap: 1.5rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel:has(.wireframe-progress)
+    > .wireframe-panel-body {
+    justify-content: center;
+    gap: 5rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel:has(.wireframe-progress)
+    .wireframe-metric-label {
+    font-size: 1rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel:has(.wireframe-progress)
+    .wireframe-metric-value {
+    font-size: 5rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel:has(.wireframe-progress)
+    .wireframe-metric-note,
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel:has(.wireframe-progress)
+    .wireframe-progress-line {
+    font-size: 1.125rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel:has(.wireframe-progress)
+    .wireframe-progress-track {
+    height: 1.25rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel:has(.wireframe-list)
+    .wireframe-list {
+    flex: 1;
+    justify-content: space-evenly;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel:has(.wireframe-list)
+    .wireframe-list-item {
+    padding: 0.85rem 0.35rem;
+    font-size: 1rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-stack {
+    justify-content: space-between;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-stack
+    > .wireframe-panel {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    padding: 1.2rem 1.1rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-stack
+    > .wireframe-panel
+    > .wireframe-panel-body {
+    flex: 1;
+    justify-content: center;
+    gap: 1rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-stack
+    .wireframe-metric-value {
+    font-size: 2.75rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    .wireframe-button {
+    padding: 0.55rem 1rem;
+    font-size: 1rem;
+  }
+
   /* Phone: true mobile language - tall narrow device, single column, tab bar
      at the foot. Never a desktop AppShell rail stacked in a tall artboard. */
   .wireframe-artboard[data-wireframe-device="phone"] {
