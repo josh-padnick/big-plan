@@ -42,12 +42,12 @@ diagnostic formatting in
 
 ## Directory responsibilities
 
-| File or folder      | Responsibility                                                                                                  |
-| ------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `lint-plan.ts`      | Public deep-module interface. It parses the source once, runs the ordered rule registry, and attaches rule IDs. |
-| `types.ts`          | Private rule and finding contracts plus the public diagnostic shape.                                            |
-| `rules/`            | One focused module per authoring rule.                                                                          |
-| `lint-plan.test.ts` | Exercises the public interface, source positions, diagnostic order, and conservative near misses.               |
+| File or folder    | Responsibility                                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `lint-plan.ts`    | Public deep-module interface. It parses the source once, runs the ordered rule registry, and attaches rule IDs.  |
+| `types.ts`        | Private rule and finding contracts plus the public diagnostic shape.                                             |
+| `rules/`          | One focused module per authoring rule.                                                                           |
+| `rules/*.test.ts` | Colocated tests exercise the public interface, source positions, diagnostic order, and conservative near misses. |
 
 `src/lint` is an independent bottom-tier layer in `eslint.config.mjs`.
 It must stay framework-free and may not import the renderer, components, or
