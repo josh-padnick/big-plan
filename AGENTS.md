@@ -245,6 +245,7 @@ Use this loop to make durable product improvements and prove them with a clean g
 
 1. Backport every durable improvement from the refined reference plan into the **Big Plan product** wherever that behavior is owned.
    Owners may include authoring guidance, lint rules, components, examples, install or setup docs, agent-facing prompts, and related surfaces under the [documentation map](#documentation-map) and [source ownership](#source-ownership-and-placement).
+   Push each fix down to the strongest product layer that can own it: prefer a primitive default, then a compile diagnostic, then lint, and leave only irreducible judgment in guidance.
 2. Run **context-free plan generation again** with the updated tool: a clean agent, the same scenario intent, and no carrying over of the hand-refined plan text.
 3. Compare the newly generated plan against the refined reference and the plan-quality standards (pleasant to read, and understandable), using the latest acceptance criteria for the scenario.
 4. If the new plan still falls short, either refine the reference further (return to Part A as needed) or continue product changes.

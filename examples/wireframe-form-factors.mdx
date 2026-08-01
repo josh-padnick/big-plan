@@ -70,7 +70,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
           <Button label="Resolve" emphasis="secondary" />
         </PageHeader>
         <Row gap="none">
-          <Panel span="list">
+          <Panel>
             <List>
               <ListItem
                 label="Cannot complete checkout"
@@ -100,7 +100,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
               />
             </List>
           </Panel>
-          <Panel span="main">
+          <Panel>
             <Message
               author="Maya"
               time="14m"
@@ -133,7 +133,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
             <TextArea label="Message" placeholder="Write a reply…" />
             <Button label="Send reply" emphasis="primary" />
           </Panel>
-          <Stack gap="md" span="rail">
+          <Rail>
             <Stack gap="sm">
               <Heading text="Properties" level="3" />
               <Select label="Status" value="Open" />
@@ -157,7 +157,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
                 />
               </List>
             </Stack>
-          </Stack>
+          </Rail>
         </Row>
       </AppContent>
     </AppShell>
@@ -208,7 +208,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
           </Row>
         </Row>
         <Row gap="none">
-          <Panel span="main">
+          <Panel>
             <List>
               <ListItem
                 label="Cannot complete checkout"
@@ -253,18 +253,20 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
               />
             </List>
           </Panel>
-          <Panel span="rail">
-            <Badge label="#4821 · Priority" />
-            <Heading text="Cannot complete checkout" level="2" />
-            <Text text="Maya Chen · Northwind" role="helper" />
-            <Text text="Card form freezes on submit in Chrome." />
-            <Metric label="First response" value="11m" note="Target 15m" />
-            <Button
-              label="View ticket"
-              emphasis="secondary"
-              navigateTo="d-ticket"
-            />
-          </Panel>
+          <Rail>
+            <Panel>
+              <Badge label="#4821 · Priority" />
+              <Heading text="Cannot complete checkout" level="2" />
+              <Text text="Maya Chen · Northwind" role="helper" />
+              <Text text="Card form freezes on submit in Chrome." />
+              <Metric label="First response" value="11m" note="Target 15m" />
+              <Button
+                label="View ticket"
+                emphasis="secondary"
+                navigateTo="d-ticket"
+              />
+            </Panel>
+          </Rail>
         </Row>
       </AppContent>
     </AppShell>
@@ -296,7 +298,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
           />
         </PageHeader>
         <Row gap="none">
-          <Panel span="main">
+          <Panel>
             <Select label="Customer" value="Northwind Labs" />
             <TextField
               label="Subject"
@@ -314,7 +316,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
               hint="To maya@northwind.example"
             />
           </Panel>
-          <Stack gap="md" span="rail">
+          <Rail>
             <Stack gap="sm">
               <Heading text="Possible duplicates" level="3" />
               <Text
@@ -344,7 +346,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
               <Select label="Assignee" value="Unassigned" />
               <Switch label="Watch this ticket" on />
             </Stack>
-          </Stack>
+          </Rail>
         </Row>
       </AppContent>
     </AppShell>
@@ -374,15 +376,17 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
           <Button label="Save" emphasis="primary" />
         </Row>
         <Row gap="none">
-          <Panel span="rail">
-            <Nav label="Settings">
-              <NavItem label="Notifications" active />
-              <NavItem label="Business hours" />
-              <NavItem label="Integrations" />
-              <NavItem label="Members" />
-            </Nav>
-          </Panel>
-          <Stack gap="md" span="main">
+          <Rail>
+            <Panel>
+              <Nav label="Settings">
+                <NavItem label="Notifications" active />
+                <NavItem label="Business hours" />
+                <NavItem label="Integrations" />
+                <NavItem label="Members" />
+              </Nav>
+            </Panel>
+          </Rail>
+          <Stack gap="md">
             <Heading text="Notifications" level="2" />
             <Switch
               label="Email on assignment"
@@ -433,8 +437,6 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
     id="t-inbox"
     name="Tablet · Inbox"
     device="tablet"
-
-    url="app.harbor.team/inbox"
   >
     <AppShell>
       <Sidebar brand="Harbor" mode="Acme">
@@ -453,7 +455,7 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
           />
         </PageHeader>
         <Row gap="md">
-          <Panel title="Open" span="list" surface="filled">
+          <Panel title="Open" surface="filled">
             <List>
               <ListItem
                 label="Checkout freeze"
@@ -484,7 +486,7 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
               />
             </List>
           </Panel>
-          <Panel title="Selected ticket" span="main">
+          <Panel title="Selected ticket">
             <Badge label="Priority · 14m" tone="warning" />
             <Heading text="Cannot complete checkout" level="2" />
             <Text text="Maya Chen · Northwind" role="helper" />
@@ -518,8 +520,6 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
     id="t-ticket"
     name="Tablet · Ticket"
     device="tablet"
-
-    url="app.harbor.team/tickets/4821"
   >
     <AppShell>
       <Sidebar brand="Harbor" mode="Acme">
@@ -539,7 +539,7 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
           <Button label="Resolve" emphasis="secondary" />
         </PageHeader>
         <Row gap="md">
-          <Panel title="Conversation" span="main" surface="filled">
+          <Panel title="Conversation" surface="filled">
             <Message
               author="Maya"
               time="14m"
@@ -566,7 +566,7 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
             <TextArea label="Message" placeholder="Write a reply…" />
             <Button label="Send reply" emphasis="primary" />
           </Panel>
-          <Stack gap="lg" span="rail">
+          <Rail>
             <Panel title="Ticket details" surface="outlined">
               <Select label="Status" value="Open" />
               <Select label="Assignee" value="Alex Rivera" />
@@ -581,7 +581,7 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
                 />
               </List>
             </Panel>
-          </Stack>
+          </Rail>
         </Row>
       </AppContent>
     </AppShell>
@@ -591,8 +591,6 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
     id="t-compose"
     name="Tablet · New ticket"
     device="tablet"
-
-    url="app.harbor.team/tickets/new"
   >
     <AppShell>
       <Sidebar brand="Harbor" mode="Acme">
@@ -614,7 +612,7 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
           />
         </PageHeader>
         <Row gap="lg">
-          <Panel title="Ticket details" span="main">
+          <Panel title="Ticket details">
             <Select label="Customer" value="Northwind Labs" />
             <TextField
               label="Subject"
@@ -636,7 +634,7 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
               navigateTo="t-ticket"
             />
           </Panel>
-          <Stack gap="lg" span="rail">
+          <Rail>
             <Panel title="Possible match" surface="filled">
               <List>
                 <ListItem
@@ -658,7 +656,7 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
               <Select label="Team" value="Payments" />
               <Select label="Assignee" value="Unassigned" />
             </Panel>
-          </Stack>
+          </Rail>
         </Row>
       </AppContent>
     </AppShell>
@@ -668,8 +666,6 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
     id="t-settings"
     name="Tablet · Settings"
     device="tablet"
-
-    url="app.harbor.team/settings"
   >
     <AppShell>
       <Sidebar brand="Harbor" mode="Acme">
@@ -686,7 +682,7 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
           <Button label="Save changes" emphasis="primary" navigateTo="t-inbox" />
         </PageHeader>
         <Row gap="lg">
-          <Panel title="Settings" span="list" surface="filled">
+          <Panel title="Settings" surface="filled">
             <Nav label="Settings sections">
               <NavItem label="Notifications" active />
               <NavItem label="Business hours" />
@@ -694,7 +690,7 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
               <NavItem label="Members" />
             </Nav>
           </Panel>
-          <Stack gap="lg" span="main">
+          <Stack gap="lg">
             <Panel title="Alerts" surface="outlined">
               <Switch label="Email when a ticket is assigned to me" on />
               <Switch label="Slack when an SLA is at risk" on />

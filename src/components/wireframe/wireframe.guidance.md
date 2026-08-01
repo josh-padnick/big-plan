@@ -1,207 +1,137 @@
 # Using Wireframe well
 
-A hand-drawn sketch of a product screen, drawn from a fixed vocabulary so a reviewer argues about the design rather than about the pixels.
+Draw product UI only when a reviewer must see a screen to judge the plan. Keep rationale outside the artboard, copy in attributes, fidelity rough, and prototypes to one two-or-three-screen path. `device` owns true width and frame: `desktop` may show `url`; `tablet` and `tablet-portrait` use native device frames; `phone` is one column with `TopBar` and `BottomBar`.
 
-- Reach for a wireframe when the reviewer must picture a screen to judge the plan; describe anything they can already picture in prose.
-- Deliberately low fidelity is the point. Draw the regions, the copy that carries meaning, and the actions - not the polish.
-- Every screen needs `id`, `name`, and `device`. Add a second `Screen` and a `Button` with `navigateTo` to turn a sketch into a walkable prototype, and keep prototypes short: two or three screens along one path.
-- All copy is written as attributes: `<Text text="..." />`, `<Metric label="..." value="..." />`, `<Button label="..." />`. A wireframe holds no prose, and the explanation belongs in the paragraphs around it.
-- Draw **product UI**, not a design review of the product UI. Keyboard cheatsheets, "sticky header", "remembered width", and process notes belong outside the artboard - never as on-screen helper copy a customer would not see.
-- Draw as few boxes as you can. A region groups by its heading and the space around it, so `Panel` draws nothing by default: use `surface="filled"` for a workspace pane and `surface="outlined"` only where something behaves like a card. Outlining everything makes every part of the screen shout equally.
-- Keep three text levels and no more: the page title, the content, and its metadata. Anything else is a fourth level competing with the title.
-- Say state in words first. A `Badge`, or a table cell written `[Failed:danger]`, is a word that a tone only reinforces; a reviewer who cannot see the tint still reads the state.
-- Before drawing a desktop screen, name a real SaaS reference pattern (Linear, GitHub, Stripe, Front, Notion). Borrow a layout it already proved - a table with a toolbar, master-detail, settings two-column, or focused centered form - rather than inventing one for a solved problem.
-- Give every screen one `device`: `desktop`, `tablet`, `tablet-portrait`, or `phone`. It chooses both the true layout width and the matching browser or phone frame, so contradictory combinations are impossible. Add `url` to a non-phone screen when the route matters.
-- The artboard lays out at that true width and scales as one unit to fit the plan; it never reflows into the reading column. Desktop and tablet frames keep a realistic minimum proportion and grow with content; phone height stays content-driven. Never clip content to preserve a ratio or pad a short phone state into an empty handset.
-- Use `pattern="list-detail|triage|create|settings"` only when one of those proven layouts fits. `triage` consumes three direct `Panel` slots; the others consume two, and the compiler expands them into ordinary `Row`, `Panel`, and `Rail` nodes at the right widths. Omit `pattern` and use the full vocabulary for dashboards, canvas + inspector, wizards, onboarding, and every other layout.
+## LOOP: make the design
 
-For how slides, headings, and components sit on the **plan page** (Contrast, Repetition, Alignment, Proximity), follow plan-writing guidance CRAP via `big-plan guidance` section "Lay out slides with CRAP".
-Wireframe guidance owns **product UI** form factors inside the artboard, not deck layout.
+1. **Look it up.** Name a proven pattern from Linear, GitHub, Notion, Stripe, Figma, iPadOS, or iOS before drawing.
+2. **Open the render.** Inspect every screen at its declared device size, light and dark, including hover, focus, active, empty, disabled, and error states.
+3. **Object three times.** Name three things a picky reviewer would flag on each screen, fix them, then present.
+4. **Push the fix down.** When a defect is possible because of a primitive or default, fix that layer rather than one example.
 
-## Form-factor honesty
+## STAMP: judge the screen
 
-A prototype that claims three devices must actually be designed three times.
-Do not scale one layout and change the caption.
-Each form factor is a **native layout language**, not a stretched or shrunken version of another.
+- **Space:** primary work dominates. `Rail` is the only secondary-width primitive and wraps instead of squeezing. Authors never set pane widths.
+- **Tiers:** page title, content, metadata; one primary work action. Navigation and mode selection are state, not extra actions.
+- **Align:** one spacing rhythm, numeric columns right-aligned, two-line list rows, content-driven pane height.
+- **Minimal boxes:** `Panel` is plain by default; use `filled` for a pane and `outlined` only for a card.
+- **Plain state:** say state in words, reinforce it with tone, and mark selection with tint plus an inset edge.
 
-| Form factor      | `device`                      | Shell                                                                       |
-| ---------------- | ----------------------------- | --------------------------------------------------------------------------- |
-| Desktop web SaaS | `desktop`                     | Stable `AppShell` + flush-left `Sidebar` + `AppContent`. Workspace density. |
-| Tablet           | `tablet` or `tablet-portrait` | Master/detail, wider gutters, card surfaces OK.                             |
-| Phone            | `phone`                       | Single column. `TopBar` + `BottomBar`. No `AppShell` or left rail.          |
+## Pass by device
 
-When the same product must be reviewed on more than one form factor, author parallel prototypes (separate `Wireframe` blocks or clearly labeled sections), each with its own screens and navigation path.
-The compiler rejects a desktop `AppShell` or `Sidebar` on a phone screen.
+| Device  | Pass when                                                                                                                                                                                                                                                | Reject                                                                                         |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Desktop | Professional dense B2B workspace: flush full-height `Sidebar`, stable global nav, main canvas owns most width, primary surface about 60–75%, `Rail` about 300px. Settings use sub-nav plus one dense field column; create/edit is a route or real modal. | Equal thirds; floating tablet sidebar; two large settings cards; inflated chrome.              |
+| Tablet  | Intentional iPad multi-column or master/detail at 4:3 or 3:4, with touch spacing and card-like grouping only where useful.                                                                                                                               | Browser `url`; compressed desktop density; very wide short strips; forced phone single-column. |
+| Phone   | Tall narrow native flow: compact `TopBar`, one column, 44px controls, 52–64px rows, bottom tabs, list → detail push, progressive disclosure.                                                                                                             | `AppShell`/`Sidebar`; side-by-side properties; vertical iPad; desktop copy squeezed narrow.    |
 
-## Central product principle
+## Establish hierarchy
 
-**Use desktop width to keep relevant context visible, not to make containers and controls larger.**
+1. One focal point. 2. Deliberate reading order. 3. Proximity shows relationships. 4. Groups map to user concepts. 5. The next action is obvious and outcome-named. 6. Language is tangible (`$27.50 to go`, not `61%`). 7. Terms match the user’s mental model. 8. Effects and relationships are explicit. 9. Weak signals recede. 10. Names and states stay consistent. 11. A five-second scan reveals purpose. 12. Decoration reinforces meaning. 13. The screen supports the intended feeling. 14. Fidelity stays as rough as the decision permits.
 
-Design each interface around the user's primary job.
-Make the next action obvious, preserve context, minimize interruption.
+Before delivery ask: what lands first, what job is primary, what happens next, what belongs together, what is accidentally connected, what is too loud, what can sound more human, and can the screen be understood in five seconds?
 
-## Establish hierarchy before adding detail
+## Six paste-ready patterns
 
-Every screen should quickly communicate what matters, what belongs together, and what the user can do next.
-Carry these principles into every wireframe:
-
-1. Create one clear focal point. Use size, position, spacing, or contrast to make the screen's starting place obvious.
-2. Design a deliberate reading order from primary information, through supporting context, to the next action. Do not give unrelated regions equal weight and make the user invent a path.
-3. Use proximity to communicate relationships. Put related information close together and use space to separate unrelated information before reaching for another border or label.
-4. Group content around meaningful user concepts, not merely around the fields available in the data. Each group should communicate one coherent idea.
-5. Make the next action obvious. Important sections should answer "What can I do here?", and action labels should describe the outcome.
-6. Prefer tangible language that helps the user decide or feel progress. Prefer `$27.50 to go` over `61%`; when appropriate, `You're more than halfway there` is even more human.
-7. Match language to the user's mental model. Avoid internal, technical, or adult-oriented terms when the intended user would not naturally say them.
-8. Make relationships explicit. Adjacency implies a connection: separate unrelated sections, and directly show when one action affects another area.
-9. Reduce competing signals. Borders, buttons, badges, typography, and navigation all consume attention; reserve the strongest treatment for the most important content and action.
-10. Use one name for each destination or concept. Describe locked, read-only, complete, or unavailable states in language meaningful to the intended user.
-11. Optimize for scanning before reading. A five-second glance at headings, amounts, shapes, and actions should reveal the screen's purpose.
-12. Use decoration to reinforce meaning. An icon, illustration, color, or progress treatment should identify content or communicate state rather than fill empty space.
-13. Design for the intended feeling: capable, safe, motivated, informed, or in control. Let that emotional goal shape which information leads and how actions are framed.
-14. Match fidelity to the decisions being made. Keep early designs rough, grayscale, and easy to change while testing hierarchy and interaction; add polish only after the structure works.
-
-### Quick review before delivery
-
-For every screen, answer these questions from the rendered result:
-
-- What will the user notice first?
-- What is the screen primarily helping them understand or accomplish?
-- What should they do next?
-- Which elements belong together?
-- Are any unrelated elements accidentally appearing connected?
-- Is anything visually louder than its importance warrants?
-- Can any label be made more concrete or human?
-- Can the screen be understood in five seconds?
-- Does it support the feeling the user should have?
-- Is the design polishing structure that is still uncertain?
-
-If any answer is unclear, revise the hierarchy, spacing, grouping, or language before adding more detail.
-
-## Responsive product design guidelines
-
-Accepted bar for wireframe product mockups.
-Skip any "momentum / enjoyment" framing - clarity and speed are enough.
-
-### Core
-
-1. Design for the form factor (desktop is not scaled mobile; mobile is not shrunken desktop).
-2. Use space to expose useful context (master-detail, previews, rails, filters) - not to inflate chrome.
-3. Keep the product shell stable across screens.
-4. Distinguish navigation from actions (global destinations vs in-page work vs primary buttons).
-5. Make direct interaction the default (whole row clickable; clear selected / active / disabled states).
-
-### Desktop workspace
-
-6. Treat desktop as a **workspace**: master-detail, panes, independent scroll regions, sticky headers/composers/save bars, remembered selection and pane sizes.
-7. Favor **useful density**: tables and decision columns, sticky headers, full-height lists; borders mark hierarchy, not decorative card stacks.
-8. Support **keyboard-speed** workflows: search / Cmd+K, list J/K, Enter to open, Cmd+Enter to send or create, multi-select, visible focus and selection.
-
-Desktop shell and density specifics:
-
-- Flush-left global nav rail, identical destinations on every screen (for example Inbox, Customers, Reports, Settings).
-- Keep **global destinations** separate from **contextual views** (Mine, Unassigned, SLA risk) - views live with the inbox content, not mixed into global nav as peers of Settings.
-- Master-detail for record work: do **not** replace the queue when opening a ticket. Prefer narrow global nav | list (`span="list"`) | flexible primary (`span="main"`) | properties (`span="rail"`).
-- Secondary panes are rails, not equal thirds with the primary surface.
-- Settings: Linear-style sub-nav + one dense field column; label/control rows; sticky save; show unsaved / disabled save when idle.
-- Create/edit: full-page routes or true modals; main form for input; right rail for intelligence (duplicates, related, routing rationale) - not prototype meta copy inside the UI.
-
-### Mobile
-
-9. Optimize for essential mobile jobs (triage, quick respond, capture, alerts) - bury rare admin behind More / overflow.
-10. Design for thumb and interruption (compact top bar, composer near the bottom of the scroll, bottom primary nav, progressive disclosure).
-11. Follow mobile navigation conventions (back, dismiss, bottom tabs, list → detail push).
-12. Design for interruption and recovery (drafts, preserve list position, retry, undo) - sketch the affordance even at low fidelity.
-
-Phone musts: `device="phone"`, single column, `BottomBar` for primary destinations, no desktop `AppShell` rail. Keep body copy at 16px and metadata at 13px; make ordinary controls at least 44px tall, list rows 52-64px tall, and each bottom tab 60px tall inside an approximately 64px safe-area-aware bar. Phone artboard height still follows content: never stretch a short screen to a device-height rectangle just to meet these targets.
-
-### Lists, forms, actions, state
-
-13. Easy-to-scan rows: identity, key context, state, recency; selection and urgency unmistakable (not color alone; explicit counts).
-14. Focused forms; progressive disclosure; drafts; desktop label/control alignment.
-15. Secondary space for intelligence (duplicates, related, routing, impact) - not empty decorative panels.
-16. Model dependencies visibly (this setting enables that control).
-17. Clear action hierarchy (one primary; separate destructive).
-18. Visible system state (selected, disabled, empty, unsaved, loading) as labels or badges the sketch can show without polish.
-
-### Anti-patterns
-
-- Equal-width columns for global chrome + primary + properties.
-- Ticket detail that **drops** the queue (full-page only) when the product is a triage workspace.
-- Settings as two large side-by-side cards.
-- Floating card sidebar with outer margin on desktop.
-- Phone as a vertical iPad (AppShell rail, multi-pane, tablet card stack).
-- Inflating padding and card chrome to "use" desktop width.
-
-### Authoring checklist
-
-1. Desktop: stable global shell on every screen; master-detail where the job is triage-to-record; `span="list"|"main"|"rail"` proportions; keyboard hints where they matter.
-2. Tablet: multi-column intentional; do not regress.
-3. Phone: essential jobs only; bottom nav; list → detail; recovery affordances sketched.
-4. No "enjoyable momentum" theater - only clarity, context, and next action.
-
-## Vocabulary
-
-- **Frame** - `AppShell` holds `Sidebar`, an optional `TopBar`, and `AppContent`. On desktop the shell is flush-left and **stable** (same global nav every screen). Phone screens skip `AppShell` and use `TopBar` + `BottomBar`.
-- **Layout** - `Stack` runs down, `Row` runs across. In a `Row`, `span="fill"` shares width; `span="list"` is a master queue; `span="main"` is the primary surface; `span="rail"` is secondary properties or settings sub-nav.
-- **Regions** - `Panel` draws a plain region by default; `Rail` owns a secondary details width; `PageHeader` says what the page is once at the top.
-- **Content** - `Metric`, `Progress`, `Table`, `List` / `ListItem` (use `selected` on the active queue row), `Message` for conversation timelines (`kind` customer|agent|internal), `Text` (`role="section"` for grouped phone settings), `Heading`, `Badge`, `Divider`, and `ImagePlaceholder`.
-- **Hierarchy** - `Breadcrumbs` and `Crumb` say where a screen sits; `Center` holds reading content to a measure so a form never stretches the whole window.
-- **Navigation** - `Nav` / `NavItem` for destinations; `BottomBar` for phone primary destinations. Walkable buttons use `navigateTo` without an external-link arrow glyph.
-- **Forms** - `TextField`, `TextArea`, `Select`, `Checkbox`, and `Switch` draw as real controls; every one needs a `label`, and the first three accept `disabled` when a dependency makes them unavailable. `SegmentedControl` groups mutually exclusive view or composer modes; its active button is state, not the screen's filled action.
-- **Flow** - `Stepper` / `Step` show multi-step progress; `Connector` draws a labeled transition on a canvas.
+Master-detail:
 
 ```mdx
-<Wireframe id="harbor-desktop" title="Harbor, desktop" initialScreen="ticket">
-  <Screen
-    id="ticket"
-    name="Ticket"
-    device="desktop"
-    url="app.harbor.team/inbox?ticket=4821"
-  >
-    <AppShell>
-      <Sidebar brand="Harbor" mode="Acme Support">
-        <Nav label="Global">
-          <NavItem label="Inbox" active />
-          <NavItem label="Customers" />
-          <NavItem label="Reports" />
-          <NavItem label="Settings" navigateTo="settings" />
-        </Nav>
-      </Sidebar>
-      <AppContent>
-        <PageHeader title="Inbox" description="12 open">
-          <Text text="Cmd+K search · J/K move · Enter open" role="helper" />
-        </PageHeader>
-        <Row gap="sm">
-          <Panel title="Queue" span="list">
-            <List>
-              <ListItem
-                label="Checkout freeze"
-                meta="Selected · 14m"
-                value="#4821"
-                selected
-              />
-              <ListItem label="SSO timeout" meta="Waiting · 2h" value="#4818" />
-            </List>
-          </Panel>
-          <Panel title="Conversation" span="main">
-            <List>
-              <ListItem
-                label="Maya · Customer"
-                meta="14m"
-                value="Form freezes"
-              />
-            </List>
-            <Text text="Mode: Reply · Internal note" role="helper" />
-            <TextArea label="Composer" placeholder="Cmd+Enter to send" />
-            <Button label="Send" emphasis="primary" />
-          </Panel>
-          <Panel title="Properties" span="rail">
-            <Select label="Status" value="Open" />
-            <Select label="Assignee" value="Alex" />
-          </Panel>
-        </Row>
-      </AppContent>
-    </AppShell>
-  </Screen>
-</Wireframe>
+<Screen id="record" name="Record" device="desktop" pattern="list-detail">
+  <Panel title="Records">
+    <List>
+      <ListItem label="Selected record" selected />
+    </List>
+  </Panel>
+  <Panel title="Detail">
+    <Text text="Primary work" />
+  </Panel>
+</Screen>
+```
+
+Table + inspector:
+
+````mdx
+<Screen id="runs" name="Runs" device="desktop" pattern="list-detail">
+  <Panel><Table selected="1">
+
+```text
+Run | State
+#1042 | [Failed:danger]
+```
+
+  </Table></Panel>
+  <Panel title="Inspector"><Text text="Failure details" /></Panel>
+</Screen>
+````
+
+Settings:
+
+```mdx
+<Screen id="settings" name="Settings" device="desktop" pattern="settings">
+  <Panel>
+    <Nav>
+      <NavItem label="Notifications" active />
+    </Nav>
+  </Panel>
+  <Panel title="Notifications">
+    <Switch label="Email alerts" on />
+  </Panel>
+</Screen>
+```
+
+Focused form:
+
+```mdx
+<Screen id="create" name="Create" device="tablet-portrait">
+  <Center measure="prose">
+    <Stack>
+      <TextField label="Name" />
+      <Button label="Create" emphasis="primary" />
+    </Stack>
+  </Center>
+</Screen>
+```
+
+Canvas + inspector:
+
+```mdx
+<Screen id="canvas" name="Canvas" device="desktop">
+  <Row>
+    <Panel title="Canvas">
+      <Text text="Primary workspace" />
+    </Panel>
+    <Rail>
+      <Panel title="Inspector">
+        <Select label="State" value="Ready" />
+      </Panel>
+    </Rail>
+  </Row>
+</Screen>
+```
+
+Phone list → detail:
+
+```mdx
+<Screen id="inbox" name="Inbox" device="phone">
+  <Stack>
+    <TopBar title="Inbox" />
+    <List>
+      <ListItem label="Checkout freeze" navigateTo="ticket" />
+    </List>
+    <BottomBar>
+      <Button label="Inbox" emphasis="primary" />
+    </BottomBar>
+  </Stack>
+</Screen>
+<Screen id="ticket" name="Ticket" device="phone">
+  <Stack>
+    <TopBar title="Ticket">
+      <Button label="‹ Inbox" navigateTo="inbox" />
+    </TopBar>
+    <Text text="Checkout freeze" />
+    <BottomBar>
+      <Button label="Inbox" emphasis="primary" navigateTo="inbox" />
+    </BottomBar>
+  </Stack>
+</Screen>
 ```

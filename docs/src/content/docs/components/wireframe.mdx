@@ -6,6 +6,7 @@ description: True-size product screens with honest device proportions, safe cont
 `Wireframe` draws low-fidelity product UI inside a device-appropriate frame.
 Each screen lays out at its device's true width and scales as one unit to fit the review document; desktop screens preserve their 1440 px logical layout within a shared 768 px painted cap.
 Desktop and tablet frames use realistic minimum proportions, then grow when content needs more room instead of clipping or scrolling inside a false fixed viewport.
+Only desktop uses browser chrome; tablet renders as a native device.
 Phone height remains content-driven so a compact state does not become a mostly empty handset.
 Multiple screens can link to one another without adding executable plan-authored code, while the complete storyboard remains readable when scripts are disabled.
 
@@ -72,13 +73,14 @@ Every `Screen` requires a unique `id`, a non-empty `name`, and one `device`:
 | `desktop`         | 1440 × 900 px minimum             | Desktop browser       |
 | `tablet`          | 1112 × 834 px minimum (about 4:3) | Landscape tablet      |
 | `tablet-portrait` | 834 × 1112 px minimum (about 3:4) | Portrait tablet       |
-| `phone`           | 390 px wide, content height       | Phone, no browser bar |
+| `phone`           | 390 × 720 px minimum              | Phone, no browser bar |
 
-A non-phone screen may add `url` for the browser bar.
+Only a desktop screen may add `url` for its browser bar.
+Tablet screens reject `url`.
 Phone screens reject `url`, `AppShell`, and `Sidebar`; use `TopBar`, a single content column, and `BottomBar` instead.
 
 `navigateTo` on `Button`, `NavItem`, `ListItem`, or `Crumb` must name another screen in the same wireframe.
-The compiler also diagnoses ambiguous record-detail selection and more than one filled work action per screen.
+The compiler blocks equal flexible thirds on desktop, ambiguous record-detail selection, four or more outlined sibling panels, phone desktop-shell primitives, and more than one filled work action per screen.
 A composer's Send button counts as a filled action even when it omits `emphasis="primary"`; selected buttons inside `SegmentedControl` and `BottomBar` are mode or navigation state and do not count as filled work actions.
 
 ## Optional screen patterns
@@ -88,10 +90,10 @@ Each preset expands to the same ordinary `Row`, `Panel`, and `Rail` nodes an aut
 
 | `pattern`     | Direct `Panel` slots | Expansion                              |
 | ------------- | -------------------: | -------------------------------------- |
-| `list-detail` |                    2 | List pane + main pane                  |
-| `triage`      |                    3 | List pane + main pane + secondary rail |
-| `create`      |                    2 | Main form + secondary rail             |
-| `settings`    |                    2 | Settings list + main settings pane     |
+| `list-detail` |                    2 | Derived master pane + dominant detail      |
+| `triage`      |                    3 | Derived master + dominant detail + `Rail`  |
+| `create`      |                    2 | Main form + `Rail`                         |
+| `settings`    |                    2 | `Rail` settings navigation + dense content |
 
 When a screen has an `AppShell`, place those direct `Panel` slots inside its `AppContent`; otherwise place them directly in `Screen`.
 If a preset does not fit, remove `pattern` and compose the screen directly.
@@ -105,10 +107,10 @@ Container elements accept nested drawing elements unless a narrower child rule i
 
 | Element            | Attributes and placement                                                                                                                  |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `Stack`            | `gap="none|xs|sm|md|lg|xl"`, `align="start|center|end|stretch"`, and `span="fill|list|main|rail"`.                                     |
-| `Row`              | `gap`, `align`, and `justify="start|center|end|between"`.                                                                                |
-| `Panel`            | Optional `title`, `eyebrow`, `span`, and `surface="plain|filled|outlined"`; defaults to a plain, unboxed region.                         |
-| `Rail`             | Fixed-width secondary details column.                                                                                                     |
+| `Stack`            | `gap="none|xs|sm|md|lg|xl"` and `align="start|center|end|stretch"`.                                                                       |
+| `Row`              | `gap`, `align`, and `justify="start|center|end|between"`; a direct record collection derives a master pane while remaining content dominates. |
+| `Panel`            | Optional `title`, `eyebrow`, and `surface="plain|filled|outlined"`; defaults to a plain, unboxed region.                                    |
+| `Rail`             | The only secondary-width primitive; owns a readable fixed width and wraps rather than squeezing the primary pane.                            |
 | `Center`           | `measure="narrow|prose|wide"` for centered, bounded content.                                                                            |
 | `AppShell`         | Holds only `Sidebar`, optional `TopBar`, and `AppContent`; unavailable on phone.                                                           |
 | `Sidebar`          | Optional `brand` and `mode`; valid only directly in `AppShell`.                                                                           |

@@ -35,6 +35,8 @@ jobs:
             exit 1
           fi
       - run: bun run test
+      - run: bunx playwright install chromium
+      - run: bun run test:e2e
 
   style-history:
     # Historical commits execute only in this disposable GitHub-hosted job,

@@ -32,7 +32,7 @@ Everything else on the screen is secondary, so balance and goal own the widest r
           />
         </PageHeader>
         <Row gap="md">
-          <Panel title="Balance & goal" span="main" surface="outlined">
+          <Panel title="Balance & goal" surface="outlined">
             <Metric
               label="You have"
               value="$42.50"
@@ -45,15 +45,15 @@ Everything else on the screen is secondary, so balance and goal own the widest r
               detail="$42.50 of $70"
             />
           </Panel>
-          <Panel title="Recent activity" span="rail" surface="outlined">
-            <List>
-              <ListItem label="+ $5.00  Weekly allowance" meta="Today" />
-              <ListItem label="− $8.50  Book fair" meta="Friday" />
-              <ListItem label="− $2.00  Headphones goal" meta="Friday" />
-            </List>
-            <Button label="See all" navigateTo="activity" />
-          </Panel>
-          <Stack gap="lg" span="rail">
+          <Rail>
+            <Panel title="Recent activity" surface="outlined">
+              <List>
+                <ListItem label="+ $5.00  Weekly allowance" meta="Today" />
+                <ListItem label="− $8.50  Book fair" meta="Friday" />
+                <ListItem label="− $2.00  Headphones goal" meta="Friday" />
+              </List>
+              <Button label="See all" navigateTo="activity" />
+            </Panel>
             <Panel title="My loan" surface="outlined">
               <Metric
                 label="Left to repay"
@@ -61,7 +61,6 @@ Everything else on the screen is secondary, so balance and goal own the widest r
                 note="Two Friday payments left"
               />
             </Panel>
-            <Divider />
             <Panel title="Next lesson" surface="filled">
               <Text text="Learn how borrowing works →" role="helper" />
               <Heading text="Borrow now, repay later" level="3" />
@@ -71,7 +70,7 @@ Everything else on the screen is secondary, so balance and goal own the widest r
                 navigateTo="loan-lesson"
               />
             </Panel>
-          </Stack>
+          </Rail>
         </Row>
       </AppContent>
     </AppShell>
@@ -120,7 +119,7 @@ Everything else on the screen is secondary, so balance and goal own the widest r
           />
         </PageHeader>
         <Row gap="lg">
-          <Panel title="This week" span="main">
+          <Panel title="This week">
             <List>
               <ListItem label="+ $5.00  Weekly allowance" meta="Today" />
               <ListItem label="− $8.50  Book fair" meta="Friday" />
@@ -131,7 +130,7 @@ Everything else on the screen is secondary, so balance and goal own the widest r
             <Divider label="Earlier" />
             <Text text="Nothing else this month." role="muted" />
           </Panel>
-          <Stack gap="md" span="rail">
+          <Rail>
             <Panel title="Headphones goal" surface="filled">
               <Progress
                 label="$42.50 of $70"
@@ -140,7 +139,7 @@ Everything else on the screen is secondary, so balance and goal own the widest r
                 detail="You're more than halfway there"
               />
             </Panel>
-          </Stack>
+          </Rail>
         </Row>
       </AppContent>
     </AppShell>

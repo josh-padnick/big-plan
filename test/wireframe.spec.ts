@@ -299,7 +299,7 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
   });
 });
 
-test("should keep a short phone artboard content-driven", async ({
+test("should keep a short phone artboard native and content-safe", async ({
   page,
   wireframeShortContentViewerUrl,
 }) => {
@@ -307,8 +307,6 @@ test("should keep a short phone artboard content-driven", async ({
   await page.goto(wireframeShortContentViewerUrl);
   const artboard = page.locator(".wireframe-artboard");
 
-  expect(await artboard.evaluate((node) => node.clientHeight)).toBeLessThan(
-    400,
-  );
-  expect(await artboard.evaluate((node) => node.clientWidth)).toBe(390);
+  expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(720);
+  expect(await artboard.evaluate((node) => node.offsetWidth)).toBe(390);
 });

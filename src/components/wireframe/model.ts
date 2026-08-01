@@ -33,23 +33,6 @@ export const WIREFRAME_JUSTIFICATIONS: ReadonlyArray<WireframeJustify> = [
   "between",
 ];
 
-/**
- * How a region claims width inside a Row.
- *
- * Equal flex is the default and is correct for tablet master/detail cards.
- * Desktop workspaces use list for a stable queue column, main for the primary
- * surface, and rail for secondary properties - never equal thirds that read as
- * an iPad layout in a browser frame.
- */
-export type WireframeSpan = "fill" | "main" | "rail" | "list";
-
-export const WIREFRAME_SPANS: ReadonlyArray<WireframeSpan> = [
-  "fill",
-  "main",
-  "rail",
-  "list",
-];
-
 export type WireframeEmphasis =
   "primary" | "secondary" | "tertiary" | "destructive";
 
@@ -194,10 +177,9 @@ export const WIREFRAME_PATTERNS: ReadonlyArray<WireframePattern> = [
  * One device preset's logical width and reader-facing name.
  *
  * The artboard lays out at this true size and scales as one unit to fit the
- * review surface. Desktop and tablet sizes are minimums rather than clipping
- * heights: compact screens keep a believable device silhouette, while longer
- * content grows the paper instead of overflowing it. Phone remains intrinsic
- * because forcing short mobile states into a tall handset created dead space.
+ * review surface. Device heights are minimums rather than clipping heights:
+ * compact screens keep a believable silhouette, while longer content grows
+ * the paper instead of overflowing it.
  */
 export type WireframeDevicePreset = {
   readonly label: string;
@@ -211,7 +193,7 @@ export const WIREFRAME_DEVICE_PRESETS: Readonly<
   desktop: { label: "Desktop", width: 1440, minimumHeight: 900 },
   tablet: { label: "Tablet, landscape", width: 1112, minimumHeight: 834 },
   "tablet-portrait": { label: "Tablet", width: 834, minimumHeight: 1112 },
-  phone: { label: "Phone", width: 390 },
+  phone: { label: "Phone", width: 390, minimumHeight: 720 },
 };
 
 /**
@@ -224,8 +206,6 @@ export type WireframeNode =
       readonly element: "Stack";
       readonly gap: WireframeSpace;
       readonly align: WireframeAlign;
-      // Width claim inside a Row. Omitted means fill - share space equally.
-      readonly span: WireframeSpan;
       readonly children: ReadonlyArray<WireframeNode>;
     }
   | {
@@ -239,8 +219,6 @@ export type WireframeNode =
       readonly element: "Panel";
       readonly title?: string;
       readonly eyebrow?: string;
-      // Width claim inside a Row. Use main + rail on desktop detail screens.
-      readonly span: WireframeSpan;
       readonly surface: WireframeSurface;
       readonly children: ReadonlyArray<WireframeNode>;
     }

@@ -1,0 +1,154 @@
+# Wireframe reference patterns
+
+Six proven layouts provide copyable starting points for common product screens without exposing pane-width decisions.
+
+## Master-detail
+
+*Keep the selected record visible beside its dominant work surface.*
+
+<Wireframe id="pattern-master-detail">
+  <Screen
+    id="record"
+    name="Record"
+    device="desktop"
+    pattern="list-detail"
+  >
+    <Panel title="Records">
+      <List>
+        <ListItem label="Selected record" meta="Open" selected />
+        <ListItem label="Another record" meta="Waiting" />
+      </List>
+    </Panel>
+    <Panel title="Detail">
+      <Text text="Primary work" />
+    </Panel>
+  </Screen>
+</Wireframe>
+
+## Table with inspector
+
+*Keep a scannable table visible while one record explains itself.*
+
+<Wireframe id="pattern-table-inspector">
+  <Screen id="runs" name="Runs" device="desktop" pattern="list-detail">
+    <Panel>
+      <Table selected="1">
+
+```text
+Run | State | Cost
+#1042 | [Failed:danger] | $1.86
+#1041 | [Passed:success] | $1.22
+```
+
+      </Table>
+    </Panel>
+    <Panel title="Inspector">
+      <Text text="Failure details" />
+    </Panel>
+  </Screen>
+</Wireframe>
+
+## Settings navigation and form
+
+*Keep local navigation narrow and fields in one readable column.*
+
+<Wireframe id="pattern-settings">
+  <Screen
+    id="settings"
+    name="Settings"
+    device="desktop"
+    pattern="settings"
+  >
+    <Panel>
+      <Nav label="Settings">
+        <NavItem label="Notifications" active />
+        <NavItem label="Integrations" />
+      </Nav>
+    </Panel>
+    <Panel title="Notifications">
+      <Switch label="Email alerts" on />
+      <Select label="Digest time" value="9:00 AM" />
+    </Panel>
+  </Screen>
+</Wireframe>
+
+## Focused centered form
+
+*Remove workspace chrome when one short task needs complete attention.*
+
+<Wireframe id="pattern-focused-form">
+  <Screen id="create" name="Create" device="tablet-portrait">
+    <Center measure="prose">
+      <Stack gap="md">
+        <Heading text="Create workspace" />
+        <TextField label="Name" placeholder="Acme Support" />
+        <Select label="Region" value="US West" />
+        <Button label="Create workspace" emphasis="primary" />
+      </Stack>
+    </Center>
+  </Screen>
+</Wireframe>
+
+## Canvas with inspector
+
+*Let the canvas dominate while the selected object keeps a narrow Rail.*
+
+<Wireframe id="pattern-canvas-inspector">
+  <Screen id="canvas" name="Canvas" device="desktop">
+    <Row gap="md">
+      <Panel title="Canvas" surface="filled">
+        <ImagePlaceholder label="Workflow nodes" shape="wide" />
+      </Panel>
+      <Rail>
+        <Panel title="Inspector">
+          <TextField label="Step name" value="Charge card" />
+          <Select label="State" value="Ready" />
+        </Panel>
+      </Rail>
+    </Row>
+  </Screen>
+</Wireframe>
+
+## Phone list-to-detail push
+
+*Move from a full-width list into one focused mobile detail screen.*
+
+<Wireframe
+  id="pattern-phone-push"
+  initialScreen="inbox"
+>
+  <Screen id="inbox" name="Inbox" device="phone">
+    <Stack gap="sm">
+      <TopBar title="Inbox" />
+      <List>
+        <ListItem
+          label="Checkout freeze"
+          meta="Northwind · 14m"
+          navigateTo="ticket"
+        />
+      </List>
+      <BottomBar>
+        <Button label="Inbox" emphasis="primary" />
+        <Button label="Settings" />
+      </BottomBar>
+    </Stack>
+  </Screen>
+  <Screen id="ticket" name="Ticket" device="phone">
+    <Stack gap="sm">
+      <TopBar title="Ticket">
+        <Button label="‹ Inbox" navigateTo="inbox" />
+      </TopBar>
+      <Heading text="Checkout freeze" level="2" />
+      <Message
+        author="Maya"
+        time="14m"
+        kind="customer"
+        text="The checkout form freezes after submit."
+      />
+      <BottomBar>
+        <Button label="Inbox" emphasis="primary" navigateTo="inbox" />
+        <Button label="Settings" />
+      </BottomBar>
+    </Stack>
+  </Screen>
+</Wireframe>

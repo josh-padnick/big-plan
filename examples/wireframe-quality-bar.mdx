@@ -1,0 +1,246 @@
+# Fresh-agent wireframe quality proof
+
+Three small product sketches use only Wireframe guidance and defaults to demonstrate native desktop, tablet, and phone layouts.
+
+## Desktop support workspace
+
+The selected queue record remains visible while the conversation dominates and properties recede into a Rail.
+
+<Wireframe id="quality-desktop" title="Harbor ticket proportions">
+  <Screen
+    id="quality-desk-ticket"
+    name="Desktop · Ticket"
+    device="desktop"
+    pattern="triage"
+    url="app.harbor.team/inbox/4821"
+  >
+    <AppShell>
+      <Sidebar brand="Harbor" mode="Acme Support">
+        <Nav label="Global">
+          <NavItem label="Inbox" active />
+          <NavItem label="Customers" />
+          <NavItem label="Reports" />
+          <NavItem label="Settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="Cannot complete checkout"
+          description="#4821 · Northwind · Open"
+        >
+          <Button label="Resolve" emphasis="secondary" />
+        </PageHeader>
+        <Panel title="Queue">
+          <List>
+            <ListItem
+              label="Cannot complete checkout"
+              meta="Priority · Maya"
+              value="14m"
+              selected
+            />
+            <ListItem
+              label="SSO session expires early"
+              meta="Waiting · Lee"
+              value="2h"
+            />
+            <ListItem
+              label="Invoice PDF missing items"
+              meta="Mine · Alex"
+              value="1d"
+            />
+            <ListItem
+              label="Webhook retries exhausted"
+              meta="Unassigned"
+              value="3d"
+            />
+          </List>
+        </Panel>
+        <Panel title="Conversation">
+          <Message
+            author="Maya"
+            time="14m"
+            kind="customer"
+            text="The checkout form freezes after I submit it."
+          />
+          <Message
+            author="Alex"
+            time="8m"
+            kind="agent"
+            text="Please send the cart ID and browser version."
+          />
+          <Message
+            author="Maya"
+            time="2m"
+            kind="customer"
+            text="cart_9f2a · Chrome 128"
+          />
+          <Message
+            author="Alex"
+            time="1m"
+            kind="agent"
+            text="I reproduced it. Payments is rolling back the form update."
+          />
+          <Message
+            author="Maya"
+            time="Now"
+            kind="customer"
+            text="Thanks—I'll retry as soon as the rollback finishes."
+          />
+          <Divider />
+          <SegmentedControl>
+            <Button label="Reply" emphasis="primary" />
+            <Button label="Internal note" />
+          </SegmentedControl>
+          <TextArea label="Message" placeholder="Write a reply…" />
+          <Button label="Send reply" emphasis="primary" />
+        </Panel>
+        <Panel title="Properties">
+          <Select label="Status" value="Open" />
+          <Select label="Assignee" value="Alex Rivera" />
+          <Select label="Team" value="Payments" />
+          <Text text="Changes save automatically." role="helper" />
+        </Panel>
+      </AppContent>
+    </AppShell>
+  </Screen>
+</Wireframe>
+
+## Tablet project hub
+
+The native iPad layout pairs a generous project canvas with one touch-friendly context Rail and no browser chrome.
+
+<Wireframe id="quality-tablet" title="Atlas launch readiness">
+  <Screen id="quality-tablet-project" name="Tablet · Project" device="tablet">
+    <Stack gap="lg">
+      <TopBar title="Atlas launch">
+        <Button label="Projects" emphasis="tertiary" />
+        <Button label="Add update" emphasis="primary" />
+      </TopBar>
+      <PageHeader
+        title="Launch readiness"
+        description="6 of 8 milestones complete"
+      />
+      <Row gap="lg">
+        <Panel title="This week" surface="filled">
+          <Progress
+            label="Launch checklist"
+            value="75"
+            valueLabel="2 milestones to go"
+            detail="Research and rollout remain"
+          />
+          <ImagePlaceholder label="Release timeline" shape="wide" />
+          <List>
+            <ListItem
+              label="Pricing approved"
+              meta="Complete · Yesterday"
+              value="✓"
+            />
+            <ListItem
+              label="Migration rehearsal"
+              meta="In progress · Today"
+              value="3 of 5"
+            />
+          </List>
+        </Panel>
+        <Rail>
+          <Panel title="Project health" surface="outlined">
+            <Metric label="Confidence" value="High" note="No blocked work" />
+            <Badge label="On track" tone="success" />
+          </Panel>
+          <Panel title="Next decision">
+            <Text text="Choose the rollout window." />
+            <Button label="Review options" emphasis="secondary" />
+          </Panel>
+        </Rail>
+      </Row>
+    </Stack>
+  </Screen>
+</Wireframe>
+
+## Phone support flow
+
+The phone uses a one-column list-to-detail push with compact navigation, comfortable rows, and bottom destinations.
+
+<Wireframe
+  id="quality-phone"
+  title="Harbor inbox to reply"
+  initialScreen="quality-phone-inbox"
+>
+  <Screen id="quality-phone-inbox" name="Phone · Inbox" device="phone">
+    <Stack gap="sm">
+      <TopBar title="Inbox">
+        <Text text="12 open" role="helper" />
+        <Button label="Filters" emphasis="tertiary" />
+      </TopBar>
+      <List>
+        <ListItem
+          label="Cannot complete checkout"
+          meta="Northwind · Priority"
+          value="14m"
+          navigateTo="quality-phone-ticket"
+        />
+        <ListItem
+          label="SSO session expires early"
+          meta="Waiting · Lee"
+          value="2h"
+          navigateTo="quality-phone-ticket"
+        />
+        <ListItem
+          label="Invoice PDF missing items"
+          meta="Mine · Alex"
+          value="1d"
+          navigateTo="quality-phone-ticket"
+        />
+        <ListItem
+          label="Webhook retries exhausted"
+          meta="Unassigned"
+          value="3d"
+          navigateTo="quality-phone-ticket"
+        />
+      </List>
+      <BottomBar>
+        <Button label="▤ Inbox" emphasis="primary" />
+        <Button label="＋ New" />
+        <Button label="⚙ Settings" />
+      </BottomBar>
+    </Stack>
+  </Screen>
+
+  <Screen id="quality-phone-ticket" name="Phone · Ticket" device="phone">
+    <Stack gap="sm">
+      <TopBar title="#4821">
+        <Button
+          label="‹ Inbox"
+          emphasis="tertiary"
+          navigateTo="quality-phone-inbox"
+        />
+        <Button label="•••" emphasis="tertiary" />
+      </TopBar>
+      <Heading text="Cannot complete checkout" level="2" />
+      <Text text="Northwind · Priority · Open" role="helper" />
+      <Message
+        author="Maya"
+        time="14m"
+        kind="customer"
+        text="The checkout form freezes after I submit it."
+      />
+      <Message
+        author="Alex"
+        time="8m"
+        kind="agent"
+        text="Please send the cart ID and browser version."
+      />
+      <TextArea label="Reply" placeholder="Write a reply…" />
+      <Button label="Send reply" emphasis="primary" />
+      <BottomBar>
+        <Button
+          label="▤ Inbox"
+          emphasis="primary"
+          navigateTo="quality-phone-inbox"
+        />
+        <Button label="＋ New" />
+        <Button label="⚙ Settings" />
+      </BottomBar>
+    </Stack>
+  </Screen>
+</Wireframe>

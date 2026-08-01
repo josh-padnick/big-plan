@@ -50,14 +50,17 @@ const HEADING_TAGS: Readonly<
   "3": "h5",
 };
 
-// A workspace row is a stable pane system, not a card grid. Its list, main,
-// and rail children must stay beside one another; ordinary fill rows may wrap.
-const keepsWorkspacePanes = (children: ReadonlyArray<WireframeNode>): boolean =>
-  children.some(
-    (child) =>
-      (child.element === "Panel" || child.element === "Stack") &&
-      child.span !== "fill",
+// A direct record collection makes its Panel the master pane. Rail is the only
+// authored width primitive; the Row owns every other workspace proportion.
+const isMasterPane = (node: WireframeNode): boolean =>
+  node.element === "Panel" &&
+  node.children.some(
+    (child) => child.element === "List" || child.element === "Table",
   );
+
+const isWorkspaceRow = (children: ReadonlyArray<WireframeNode>): boolean =>
+  children.some((child) => child.element === "Rail") ||
+  (children.length > 1 && children.some(isMasterPane));
 
 const WireframeElement = ({
   node,
@@ -69,7 +72,6 @@ const WireframeElement = ({
       return (
         <div
           className={`wireframe-stack flex flex-col ${GAP_CLASSES[node.gap]} ${ALIGN_CLASSES[node.align]}`}
-          data-wireframe-span={node.span}
         >
           <WireframeElements nodes={node.children} />
         </div>
@@ -77,7 +79,10 @@ const WireframeElement = ({
     case "Row":
       return (
         <div
-          className={`wireframe-row flex ${keepsWorkspacePanes(node.children) ? "flex-nowrap" : "flex-wrap"} ${GAP_CLASSES[node.gap]} ${ALIGN_CLASSES[node.align]} ${JUSTIFY_CLASSES[node.justify]}`}
+          className={`wireframe-row flex flex-wrap ${GAP_CLASSES[node.gap]} ${ALIGN_CLASSES[node.align]} ${JUSTIFY_CLASSES[node.justify]}`}
+          {...(isWorkspaceRow(node.children)
+            ? { "data-wireframe-workspace": "" }
+            : {})}
         >
           <WireframeElements nodes={node.children} />
         </div>
@@ -86,8 +91,8 @@ const WireframeElement = ({
       return (
         <section
           className="wireframe-panel"
-          data-wireframe-span={node.span}
           data-wireframe-surface={node.surface}
+          {...(isMasterPane(node) ? { "data-wireframe-master": "" } : {})}
         >
           {node.eyebrow === undefined && node.title === undefined ? null : (
             <header className="wireframe-panel-head">
@@ -580,6 +585,7 @@ const Screen = ({
   readonly named: boolean;
 }) => {
   const preset = WIREFRAME_DEVICE_PRESETS[screen.device];
+  const desktop = screen.device === "desktop";
   const phone = screen.device === "phone";
   return (
     <section
@@ -603,14 +609,17 @@ const Screen = ({
         </span>
       </div>
       <div className="wireframe-frame" data-wireframe-device={screen.device}>
-        {phone ? null : (
+        {desktop ? (
           <div className="wireframe-browser-bar">
             <span className="wireframe-browser-dots" aria-hidden="true" />
             <span className="wireframe-browser-address">
               {screen.url ?? " "}
             </span>
           </div>
-        )}
+        ) : null}
+        {!desktop && !phone ? (
+          <span className="wireframe-tablet-handle" aria-hidden="true" />
+        ) : null}
         {phone ? (
           <span className="wireframe-phone-notch" aria-hidden="true" />
         ) : null}

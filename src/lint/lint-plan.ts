@@ -15,6 +15,7 @@ import { slideLeadingTitleRule } from "./rules/slide-leading-title.js";
 import { subtitleDuplicationRule } from "./rules/subtitle-duplication.js";
 import { tableOfContentsMatchesSectionsRule } from "./rules/table-of-contents-matches-sections.js";
 import { titleLengthRule } from "./rules/title-length.js";
+import { wireframeProductCopyRule } from "./rules/wireframe-product-copy.js";
 import type { PlanLintDiagnostic, PlanLintRule } from "./types.js";
 
 export type { PlanLintDiagnostic } from "./types.js";
@@ -27,6 +28,7 @@ const RULES: ReadonlyArray<PlanLintRule> = [
   ledeLengthRule,
   quickSummarySingletonRule,
   tableOfContentsMatchesSectionsRule,
+  wireframeProductCopyRule,
   slideLeadingTitleRule,
   subtitleDuplicationRule,
   collectionGroupingRule,

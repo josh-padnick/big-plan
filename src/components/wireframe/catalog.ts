@@ -23,7 +23,6 @@ import {
   WIREFRAME_FIELD_KINDS,
   WIREFRAME_MEDIA_SHAPES,
   WIREFRAME_SPACES,
-  WIREFRAME_SPANS,
   WIREFRAME_STEP_STATES,
   WIREFRAME_SURFACES,
   WIREFRAME_TONES,
@@ -79,8 +78,6 @@ export type WireframeElementDefinition = {
 const STACK_SCHEMA = {
   gap: { kind: "enum", values: WIREFRAME_SPACES },
   align: { kind: "enum", values: WIREFRAME_ALIGNMENTS },
-  // main dominates a Row; rail is a narrow secondary column (desktop density).
-  span: { kind: "enum", values: WIREFRAME_SPANS },
 } satisfies ComponentAttributeSchema;
 
 const ROW_SCHEMA = {
@@ -92,8 +89,6 @@ const ROW_SCHEMA = {
 const PANEL_SCHEMA = {
   title: { kind: "string", nonEmpty: true },
   eyebrow: { kind: "string", nonEmpty: true },
-  // main dominates a Row; rail is a narrow secondary column (desktop density).
-  span: { kind: "enum", values: WIREFRAME_SPANS },
   surface: { kind: "enum", values: WIREFRAME_SURFACES },
 } satisfies ComponentAttributeSchema;
 
@@ -291,9 +286,8 @@ const CATALOG = {
   Stack: {
     category: "layout",
     acceptsChildren: true,
-    summary:
-      "Stacks its children vertically with one spacing token. In a Row, span=list|main|rail sets desktop workspace proportions.",
-    example: '<Stack gap="md" span="main">...</Stack>',
+    summary: "Stacks its children vertically with one spacing token.",
+    example: '<Stack gap="md">...</Stack>',
     compile: ({ attributes, children, position, diagnostics }) => {
       const validated = validateComponentAttributes({
         component: "Stack",
@@ -306,7 +300,6 @@ const CATALOG = {
         element: "Stack",
         gap: validated.gap ?? "md",
         align: validated.align ?? "stretch",
-        span: validated.span ?? "fill",
         children,
       };
     },
@@ -338,9 +331,8 @@ const CATALOG = {
     category: "surface",
     acceptsChildren: true,
     summary:
-      'A region whose span controls row width and whose surface controls visual treatment. It draws no box by default; reserve surface="outlined" for card-like behavior.',
-    example:
-      '<Panel title="Conversation" span="main" surface="filled">...</Panel>',
+      'A region that draws no box by default. A direct List or Table makes it the Row\'s master pane; surface="filled" marks a pane and surface="outlined" is for a card.',
+    example: '<Panel title="Conversation">...</Panel>',
     compile: ({ attributes, children, position, diagnostics }) => {
       const validated = validateComponentAttributes({
         component: "Panel",
@@ -355,7 +347,6 @@ const CATALOG = {
         ...(validated.eyebrow === undefined
           ? {}
           : { eyebrow: validated.eyebrow }),
-        span: validated.span ?? "fill",
         surface: validated.surface ?? "plain",
         children,
       };

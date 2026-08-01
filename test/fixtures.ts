@@ -62,6 +62,7 @@ type WorkerFixtures = {
   readonly tableSchemaViewerUrl: string;
   readonly weightedAuditDecisionAnalysisViewerUrl: string;
   readonly wireframeFormFactorsViewerUrl: string;
+  readonly wireframeQualityViewerUrl: string;
   readonly wireframeShortContentViewerUrl: string;
   readonly wireframeViewerUrl: string;
 };
@@ -565,6 +566,22 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const outputPath = join(outputDir, "wireframe-form-factors.html");
       await renderThroughCli({
         inputPath: join(repoRoot, "examples", "wireframe-form-factors.mdx"),
+        outputPath,
+        outputDir,
+      });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  wireframeQualityViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-wireframe-quality-"),
+      );
+      const outputPath = join(outputDir, "wireframe-quality.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "wireframe-quality-bar.mdx"),
         outputPath,
         outputDir,
       });

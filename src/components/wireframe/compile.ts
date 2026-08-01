@@ -201,14 +201,6 @@ const flatten = (
     "children" in node ? [node, ...flatten(node.children)] : [node],
   );
 
-const panelWithSpan = ({
-  panel,
-  span,
-}: {
-  readonly panel: Extract<WireframeNode, { readonly element: "Panel" }>;
-  readonly span: "fill" | "list" | "main";
-}): WireframeNode => ({ ...panel, span });
-
 // A pattern is a convenience expansion into the same open vocabulary authors
 // can write by hand. It never introduces a closed region model.
 const patternedRow = ({
@@ -223,7 +215,6 @@ const patternedRow = ({
   const [first, second, third] = panels;
   const fallback: Extract<WireframeNode, { readonly element: "Panel" }> = {
     element: "Panel",
-    span: "fill",
     surface: "plain",
     children: [],
   };
@@ -233,25 +224,30 @@ const patternedRow = ({
   const children: ReadonlyArray<WireframeNode> =
     pattern === "triage"
       ? [
-          panelWithSpan({ panel: lead, span: "list" }),
-          panelWithSpan({ panel: main, span: "main" }),
+          lead,
+          main,
           {
             element: "Rail",
-            children: [panelWithSpan({ panel: assist, span: "fill" })],
+            children: [assist],
           },
         ]
       : pattern === "create"
         ? [
-            panelWithSpan({ panel: lead, span: "main" }),
+            lead,
             {
               element: "Rail",
-              children: [panelWithSpan({ panel: main, span: "fill" })],
+              children: [main],
             },
           ]
-        : [
-            panelWithSpan({ panel: lead, span: "list" }),
-            panelWithSpan({ panel: main, span: "main" }),
-          ];
+        : pattern === "settings"
+          ? [
+              {
+                element: "Rail",
+                children: [lead],
+              },
+              main,
+            ]
+          : [lead, main];
   return {
     element: "Row",
     gap: "none",
@@ -340,8 +336,12 @@ const expandPattern = ({
 const childNodes = (node: WireframeNode): ReadonlyArray<WireframeNode> =>
   "children" in node ? node.children : [];
 
-const spanOf = (node: WireframeNode): string | undefined =>
-  node.element === "Panel" || node.element === "Stack" ? node.span : undefined;
+const containsRecordCollection = (node: WireframeNode): boolean =>
+  node.element === "Panel" &&
+  node.children.some(
+    (candidate) =>
+      candidate.element === "List" || candidate.element === "Table",
+  );
 
 /** A detail pane that shows content must name the selected record beside it. */
 const checkSelection = ({
@@ -356,25 +356,12 @@ const checkSelection = ({
   const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
     for (const node of nodes) {
       if (node.element === "Row") {
-        const rail = node.children.find((child) => child.element === "Rail");
-        const dependent =
-          node.children.find((child) => spanOf(child) === "main") ?? rail;
-        const authoredSource = node.children.find(
-          (child) => spanOf(child) === "list",
-        );
-        const inferredSource =
-          dependent === rail
-            ? node.children.find(
-                (child) =>
-                  child !== dependent &&
-                  flatten([child]).some(
-                    (candidate) =>
-                      candidate.element === "List" ||
-                      candidate.element === "Table",
-                  ),
-              )
-            : undefined;
-        const source = authoredSource ?? inferredSource;
+        const source = node.children.find(containsRecordCollection);
+        const sourceIndex =
+          source === undefined ? -1 : node.children.indexOf(source);
+        const dependent = node.children
+          .slice(sourceIndex + 1)
+          .find((child) => child.element !== "Rail");
         if (
           source !== undefined &&
           dependent !== undefined &&
@@ -404,6 +391,71 @@ const checkSelection = ({
       }
       visit(childNodes(node));
     }
+  };
+  visit(screen.children);
+};
+
+const FLEXIBLE_PANES: ReadonlySet<WireframeNode["element"]> = new Set([
+  "Panel",
+  "Stack",
+  "Center",
+  "Row",
+]);
+
+/** Three flexible desktop panes create equal thirds; a Rail owns secondary width. */
+const checkEqualThirds = ({
+  screen,
+  position,
+  diagnostics,
+}: {
+  readonly screen: WireframeScreen;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  if (screen.device !== "desktop") {
+    return;
+  }
+  const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
+    for (const node of nodes) {
+      if (node.element === "Row") {
+        const flexible = node.children.filter((child) =>
+          FLEXIBLE_PANES.has(child.element),
+        );
+        const hasRail = node.children.some((child) => child.element === "Rail");
+        if (flexible.length >= 3 && !hasRail) {
+          diagnostics.add({
+            message: `Desktop Screen "${screen.id}" draws ${flexible.length} flexible panes in one Row; keep the primary surface dominant and wrap secondary content in Rail`,
+            position,
+          });
+        }
+      }
+      visit(childNodes(node));
+    }
+  };
+  visit(screen.children);
+};
+
+/** A screen spends boxes on cards, never on an entire group of sibling regions. */
+const checkOutlinedSiblingBudget = ({
+  screen,
+  position,
+  diagnostics,
+}: {
+  readonly screen: WireframeScreen;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
+    const outlined = nodes.filter(
+      (node) => node.element === "Panel" && node.surface === "outlined",
+    );
+    if (outlined.length >= 4) {
+      diagnostics.add({
+        message: `Screen "${screen.id}" outlines ${outlined.length} sibling Panels; keep regions plain and spend boxes only on elements that behave like cards`,
+        position,
+      });
+    }
+    nodes.forEach((node) => visit(childNodes(node)));
   };
   visit(screen.children);
 };
@@ -514,10 +566,11 @@ const compileScreen = ({
       position: child.position,
     });
   }
-  // A phone frame has no browser address bar.
-  if (validated.url !== undefined && validated.device === "phone") {
+  // Browser chrome belongs to desktop web SaaS. Tablet owns a native device
+  // frame, and phone owns its compact handset frame.
+  if (validated.url !== undefined && validated.device !== "desktop") {
     diagnostics.add({
-      message: 'Attribute "url" is unavailable on device="phone"',
+      message: `Attribute "url" is unavailable on device="${validated.device ?? "desktop"}"; browser chrome belongs only to device="desktop"`,
       position: child.position,
     });
   }
@@ -554,6 +607,12 @@ const compileScreen = ({
     children,
   };
   checkSelection({ screen, position: child.position, diagnostics });
+  checkEqualThirds({ screen, position: child.position, diagnostics });
+  checkOutlinedSiblingBudget({
+    screen,
+    position: child.position,
+    diagnostics,
+  });
   checkPhoneShell({ screen, position: child.position, diagnostics });
   checkOneFilledAction({ screen, position: child.position, diagnostics });
   return screen;

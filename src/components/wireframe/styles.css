@@ -154,7 +154,9 @@ marks and a plan diff never jitters.
   }
   .wireframe-screen[data-wireframe-device="phone"] {
     --wf-width: 390px;
-    --wf-min-height: 9rem;
+    /* An iPhone-SE-class floor reads unmistakably as a handset. The artboard
+       can still grow for long settings or form screens. */
+    --wf-min-height: 720px;
     max-width: calc(390px + 12px + 0.8rem);
   }
   .wireframe-frame {
@@ -227,6 +229,14 @@ marks and a plan diff never jitters.
     border-radius: 999px;
     background: var(--wf-stroke-soft);
   }
+  .wireframe-tablet-handle {
+    display: block;
+    width: 2.75rem;
+    height: 0.3rem;
+    margin: 0.35rem auto;
+    border-radius: 999px;
+    background: var(--wf-stroke-soft);
+  }
   /* The frame draws the outer edge, so the artboard does not repeat it. */
   .wireframe-frame > .wireframe-artboard {
     border-radius: 6px 3px 7px 4px / 4px 7px 3px 6px;
@@ -277,32 +287,15 @@ marks and a plan diff never jitters.
     min-width: 0;
   }
 
-  /* Regions share a row; controls and copy keep their own size.
-     span=fill (default) shares width equally - fine for tablet cards.
-     span=main claims most of the row; span=rail is a narrow secondary column
-     so desktop detail screens do not read as equal thirds. */
+  /* Regions share a row; controls and copy keep their own size. Authors never
+     choose width tokens. A direct record collection becomes the master pane,
+     Rail owns secondary width, and the remaining pane becomes primary. */
   .wireframe-row > .wireframe-panel,
   .wireframe-row > .wireframe-stack,
-  .wireframe-row > .wireframe-row {
+  .wireframe-row > .wireframe-row,
+  .wireframe-row > .wireframe-center {
     flex: 1 1 0;
     min-width: 8rem;
-  }
-  .wireframe-row > [data-wireframe-span="main"] {
-    /* Claim remaining width after fixed list/rail columns - not equal thirds. */
-    flex: 1 1 0;
-    min-width: 10rem;
-  }
-  /* Compact ticket queue: wide enough for a truncating title + meta line. */
-  .wireframe-row > [data-wireframe-span="list"] {
-    flex: 0 0 13rem;
-    max-width: 15rem;
-    min-width: 11rem;
-  }
-  /* Details / settings sub-nav (~280-320px class at full artboard). */
-  .wireframe-row > [data-wireframe-span="rail"] {
-    flex: 0 0 11rem;
-    max-width: 12.5rem;
-    min-width: 9rem;
   }
 
   /* Outlining every region makes controls, panels, and page structure all
@@ -508,35 +501,51 @@ marks and a plan diff never jitters.
     .wireframe-heading {
     font-size: 1.35rem;
   }
-  /* Consistent pane system: only workspace body rows that carry span panes
-     get multi-pane chrome. Their height still follows their content, so a
-     compact screen never leaves a dead band under the work. */
+  /* Consistent pane system: record collections and Rail opt a Row into
+     workspace chrome. Width floors keep every desktop pane readable, and
+     wrapping wins over squeezing if a future device cannot hold those floors.
+     Pane height stays content-driven: no workspace minimum or fill height. */
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
-    > .wireframe-row:has([data-wireframe-span]) {
-    flex: 1;
-    flex-wrap: nowrap;
+    > .wireframe-row[data-wireframe-workspace] {
     align-items: stretch;
     gap: 0;
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
-    > .wireframe-row:has([data-wireframe-span])
+    > .wireframe-row[data-wireframe-workspace]
     > .wireframe-panel,
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
-    > .wireframe-row:has([data-wireframe-span])
-    > .wireframe-stack {
+    > .wireframe-row[data-wireframe-workspace]
+    > .wireframe-stack,
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    .wireframe-app-content
+    > .wireframe-row[data-wireframe-workspace]
+    > .wireframe-center {
     display: flex;
+    flex: 1 1 30rem;
     flex-direction: column;
+    min-width: 18.75rem;
     border: 0;
     border-radius: 0;
     background: transparent;
     padding: 0.35rem 0.7rem;
   }
+  /* A queue/list is a stable master pane. The primary sibling receives the
+     remaining width, which keeps conversation, document, or canvas dominant. */
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
-    > .wireframe-row:has([data-wireframe-span])
+    > .wireframe-row[data-wireframe-workspace]
+    > [data-wireframe-master] {
+    flex: 0 0 22rem;
+    min-width: 20rem;
+    max-width: 24rem;
+    overflow: hidden;
+  }
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    .wireframe-app-content
+    > .wireframe-row[data-wireframe-workspace]
     > .wireframe-panel
     > .wireframe-panel-body {
     flex: 1;
@@ -546,13 +555,7 @@ marks and a plan diff never jitters.
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     > .wireframe-row
-    > [data-wireframe-span="list"] {
-    overflow: hidden;
-  }
-  .wireframe-artboard[data-wireframe-device="desktop"]
-    .wireframe-app-content
-    > .wireframe-row
-    > [data-wireframe-span="list"]
+    > [data-wireframe-master]
     .wireframe-list-item {
     display: flex;
     flex-direction: column;
@@ -560,13 +563,13 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
-    > .wireframe-row:has([data-wireframe-span])
+    > .wireframe-row[data-wireframe-workspace]
     > .wireframe-panel::after {
     display: none;
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
-    > .wireframe-row:has([data-wireframe-span])
+    > .wireframe-row[data-wireframe-workspace]
     > *
     + * {
     border-left: 1px solid var(--wf-stroke-soft);
@@ -594,12 +597,12 @@ marks and a plan diff never jitters.
     > .wireframe-divider-labeled {
     margin-top: auto;
   }
-  /* Settings form stays a readable measure, not full bleed. */
+  /* A settings form beside a Rail stays a readable measure, not full bleed. */
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
-    > .wireframe-row
-    > [data-wireframe-span="main"].wireframe-stack {
-    max-width: 28rem;
+    > .wireframe-row[data-wireframe-workspace]
+    > .wireframe-stack:not(.wireframe-rail) {
+    max-width: 38rem;
   }
 
   /* Tablet shells keep breathing room and a card-like rail: intentional for
@@ -620,12 +623,11 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-device="tablet-portrait"]
     .wireframe-app-content
-    > .wireframe-row:has([data-wireframe-span]),
+    > .wireframe-row[data-wireframe-workspace],
   .wireframe-artboard[data-wireframe-device="tablet"]
     .wireframe-app-content
-    > .wireframe-row:has([data-wireframe-span]) {
-    flex: 1;
-    flex-wrap: nowrap;
+    > .wireframe-row[data-wireframe-workspace] {
+    align-items: stretch;
   }
   .wireframe-artboard[data-wireframe-device="tablet-portrait"]
     .wireframe-sidebar,
@@ -940,6 +942,20 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-device="phone"] > .wireframe-canvas {
     gap: 0.45rem;
+  }
+  /* A short phone state still gets native chrome: content starts at the top
+     and the primary destinations own the safe-area edge. Long content grows
+     the device instead of clipping behind the bar. */
+  .wireframe-artboard[data-wireframe-device="phone"]
+    > .wireframe-canvas
+    > .wireframe-stack:only-child {
+    flex: 1;
+  }
+  .wireframe-artboard[data-wireframe-device="phone"]
+    > .wireframe-canvas
+    > .wireframe-stack:only-child
+    > .wireframe-bottom-bar:last-child {
+    margin-top: auto;
   }
   .wireframe-artboard[data-wireframe-device="phone"] .wireframe-app-shell {
     grid-template-columns: 1fr;
@@ -1737,8 +1753,9 @@ marks and a plan diff never jitters.
      dominant pane; below a narrow container it wraps under instead of
      squeezing both. */
   .wireframe-rail {
-    flex: 0 1 17rem;
-    min-width: 12rem;
+    flex: 0 0 19rem;
+    min-width: 18.75rem;
+    max-width: 20rem;
   }
 
   /* Prose stops being readable somewhere past 80 characters, so a screen

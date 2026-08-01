@@ -148,7 +148,6 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
             {
               element: "Panel",
               title: "Balance",
-              span: "fill",
               surface: "plain",
               children: [
                 { element: "Text", text: "$42.50", role: "body" },
@@ -710,7 +709,6 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
           name: "Tablet inbox",
           attributes: {
             device: "tablet",
-            url: "app.harbor.team/inbox",
           },
           children: [
             element({
@@ -812,6 +810,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain("wireframe-app-shell");
     expect(rendered).toContain("wireframe-sidebar");
     expect(rendered).toContain("wireframe-bottom-bar");
+    expect(rendered).toContain("wireframe-tablet-handle");
     expect(rendered).toContain("Primary destinations");
   });
 
@@ -991,7 +990,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"data-wireframe-message":"customer"');
   });
 
-  it("should let a desktop row claim list, main, and rail widths", () => {
+  it("should make Rail own secondary width beside a derived master pane", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [
         screen({
@@ -1007,7 +1006,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
               children: [
                 element({
                   name: "Panel",
-                  attributes: { title: "Queue", span: "list" },
+                  attributes: { title: "Queue" },
                   children: [
                     element({
                       name: "List",
@@ -1022,7 +1021,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
                 }),
                 element({
                   name: "Panel",
-                  attributes: { title: "Conversation", span: "main" },
+                  attributes: { title: "Conversation" },
                   children: [
                     element({
                       name: "Text",
@@ -1031,8 +1030,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
                   ],
                 }),
                 element({
-                  name: "Stack",
-                  attributes: { span: "rail", gap: "sm" },
+                  name: "Rail",
                   children: [
                     element({
                       name: "Panel",
@@ -1056,18 +1054,67 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(compiled.model.screens[0]?.children[0]).toMatchObject({
       element: "Row",
       children: [
-        { element: "Panel", span: "list", title: "Queue" },
-        { element: "Panel", span: "main", title: "Conversation" },
-        { element: "Stack", span: "rail" },
+        { element: "Panel", title: "Queue" },
+        { element: "Panel", title: "Conversation" },
+        { element: "Rail" },
       ],
     });
     const rendered = html(render(compiled));
-    expect(rendered).toContain('"data-wireframe-span":"list"');
-    expect(rendered).toContain('"data-wireframe-span":"main"');
-    expect(rendered).toContain('"data-wireframe-span":"rail"');
+    expect(rendered).toContain('"data-wireframe-workspace":""');
+    expect(rendered).toContain('"data-wireframe-master":""');
+    expect(rendered).toContain("wireframe-rail");
   });
 
-  it("should report an address on a screen that has no address bar to draw it in", () => {
+  it("should reject equal flexible thirds on desktop", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "ticket",
+          attributes: { device: "desktop" },
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({ name: "Panel", attributes: { title: "Queue" } }),
+                element({
+                  name: "Panel",
+                  attributes: { title: "Conversation" },
+                }),
+                element({
+                  name: "Panel",
+                  attributes: { title: "Properties" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Desktop Screen "ticket" draws 3 flexible panes in one Row; keep the primary surface dominant and wrap secondary content in Rail',
+    ]);
+  });
+
+  it("should reject author-owned pane widths now that Rail owns the invariant", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "ticket",
+          children: [
+            element({
+              name: "Panel",
+              attributes: { title: "Conversation", span: "main" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Unknown attribute "span" on Panel',
+    ]);
+  });
+
+  it("should report an address on a phone that has no address bar to draw it in", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [
         screen({
@@ -1081,12 +1128,34 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
       {
         line: 5,
         column: 1,
-        message: 'Attribute "url" is unavailable on device="phone"',
+        message:
+          'Attribute "url" is unavailable on device="phone"; browser chrome belongs only to device="desktop"',
       },
     ]);
     // The address is dropped rather than drawn somewhere it does not belong.
     expect(compiled.model).toMatchObject({ screens: [{ device: "phone" }] });
     expect(html(render(compiled))).not.toContain("app.example.dev");
+  });
+
+  it("should reject browser chrome on tablet while keeping a native tablet frame", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "tablet",
+          attributes: {
+            device: "tablet",
+            url: "app.example.dev/workflows",
+          },
+          children: [element({ name: "Text", attributes: { text: "Hi" } })],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Attribute "url" is unavailable on device="tablet"; browser chrome belongs only to device="desktop"',
+    ]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain("wireframe-tablet-handle");
+    expect(rendered).not.toContain("wireframe-browser-bar");
   });
 
   it("should derive the frame from the screen device", () => {
@@ -1160,8 +1229,8 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
             {
               element: "Row",
               children: [
-                { element: "Panel", span: "list", title: "Queue" },
-                { element: "Panel", span: "main", title: "Conversation" },
+                { element: "Panel", title: "Queue" },
+                { element: "Panel", title: "Conversation" },
                 {
                   element: "Rail",
                   children: [{ element: "Panel", title: "Properties" }],
@@ -1205,7 +1274,6 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
               children: [
                 element({
                   name: "Panel",
-                  attributes: { span: "list" },
                   children: [
                     element({
                       name: "List",
@@ -1220,7 +1288,6 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
                 }),
                 element({
                   name: "Panel",
-                  attributes: { span: "main" },
                   children: [
                     element({ name: "Text", attributes: { text: "Detail" } }),
                   ],
@@ -1262,6 +1329,54 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(diagnostics.map((entry) => entry.message)).toEqual([
       'Phone Screen "phone" cannot contain AppShell or Sidebar; use TopBar, one content column, and BottomBar',
     ]);
+  });
+
+  it("should reject four outlined sibling regions", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "dashboard",
+          attributes: { device: "tablet" },
+          children: [
+            element({
+              name: "Row",
+              children: ["Balance", "Activity", "Loan", "Lesson"].map((title) =>
+                element({
+                  name: "Panel",
+                  attributes: { title, surface: "outlined" },
+                }),
+              ),
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "dashboard" outlines 4 sibling Panels; keep regions plain and spend boxes only on elements that behave like cards',
+    ]);
+  });
+
+  it("should keep three card-like siblings inside the border budget", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "choices",
+          attributes: { device: "tablet" },
+          children: [
+            element({
+              name: "Row",
+              children: ["Starter", "Team", "Business"].map((title) =>
+                element({
+                  name: "Panel",
+                  attributes: { title, surface: "outlined" },
+                }),
+              ),
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
   });
 
   it("should count a composer send button as the screen's filled action", () => {
