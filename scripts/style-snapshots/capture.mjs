@@ -109,7 +109,12 @@ const captureName = ({ document, capture, viewport, theme }) =>
 const temporaryDirectory = await mkdtemp(
   join(tmpdir(), "big-plan-style-captures-"),
 );
-const browser = await chromium.launch({ channel: "chrome", headless: true });
+// Exact RGBA evidence requires one stable rasterizer and color space in CI.
+const browser = await chromium.launch({
+  channel: "chrome",
+  headless: true,
+  args: ["--disable-gpu", "--force-color-profile=srgb"],
+});
 
 try {
   await mkdir(outputDirectory, { recursive: true });
