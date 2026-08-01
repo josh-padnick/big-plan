@@ -48,6 +48,7 @@ type WorkerFixtures = {
   readonly flowDiagramViewerUrl: string;
   readonly nestedDecisionViewerUrl: string;
   readonly planIdCollisionViewerUrls: {
+    readonly empty: string;
     readonly first: string;
     readonly second: string;
     readonly unidentified: string;
@@ -122,6 +123,26 @@ The first delivery approach keeps its review state isolated.
 ## Shared section
 
 The first plan has its own review state.
+
+<DatabaseTableSchema name="shared.review_items">
+
+\`\`\`dbml
+id      bigint [pk]
+status  text   [not null, default: 'open']
+comment text   [note: 'Reviewer context.']
+\`\`\`
+
+</DatabaseTableSchema>
+
+<DataTable title="Shared review items">
+
+\`\`\`table
+| Item | Owner | Note |
+| --- | --- | --- |
+| Retry policy | Platform | First plan context |
+\`\`\`
+
+</DataTable>
 `;
 
 const PLAN_ID_COLLISION_SECOND_MDX = `# Shared title
@@ -133,6 +154,26 @@ The second delivery approach keeps its review state isolated.
 ## Shared section
 
 The second plan must not inherit review state.
+
+<DatabaseTableSchema name="shared.review_items">
+
+\`\`\`dbml
+id      bigint [pk]
+status  text   [not null, default: 'open']
+comment text   [note: 'Reviewer context.']
+\`\`\`
+
+</DatabaseTableSchema>
+
+<DataTable title="Shared review items">
+
+\`\`\`table
+| Item | Owner | Note |
+| --- | --- | --- |
+| Retry policy | Platform | Second plan context |
+\`\`\`
+
+</DataTable>
 `;
 
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
@@ -289,6 +330,7 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const secondInputPath = join(outputDir, "second.mdx");
       const firstOutputPath = join(outputDir, "first.html");
       const secondOutputPath = join(outputDir, "second.html");
+      const emptyOutputPath = join(outputDir, "empty.html");
       const unidentifiedOutputPath = join(outputDir, "unidentified.html");
       await writeFile(firstInputPath, PLAN_ID_COLLISION_FIRST_MDX, "utf8");
       await writeFile(secondInputPath, PLAN_ID_COLLISION_SECOND_MDX, "utf8");
@@ -304,11 +346,17 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       });
       const firstHtml = await readFile(firstOutputPath, "utf8");
       await writeFile(
+        emptyOutputPath,
+        firstHtml.replace(/ data-plan-id="[^"]+"/, ' data-plan-id=""'),
+        "utf8",
+      );
+      await writeFile(
         unidentifiedOutputPath,
         firstHtml.replace(/ data-plan-id="[^"]+"/, ""),
         "utf8",
       );
       await use({
+        empty: pathToFileURL(emptyOutputPath).href,
         first: pathToFileURL(firstOutputPath).href,
         second: pathToFileURL(secondOutputPath).href,
         unidentified: pathToFileURL(unidentifiedOutputPath).href,

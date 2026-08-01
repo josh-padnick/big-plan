@@ -122,9 +122,9 @@ describe("renderDocument affordances", () => {
     expect(html).not.toContain("@import");
   });
 
-  it("should inline one stylesheet and only the scroll-spy script when rendering", () => {
+  it("should inline one stylesheet and one viewer script when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
-    // The shell's scroll-spy is the single script; plan content can never
+    // The shell's viewer behavior is the single script; plan content can never
     // contribute another, and nothing external is referenced.
     expect(html.match(/<script>/g)).toHaveLength(1);
     expect(html).toContain("data-section-link");
@@ -253,7 +253,8 @@ describe("renderDocument shell", () => {
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("</html>");
     expect(html).not.toContain("<nav");
-    expect(html).not.toContain("<script>");
+    expect(html).toMatch(/data-comment-draft-control hidden/);
+    expect(html).toContain("<script>");
     // The reading column keeps its ~74ch measure even without a sidebar.
     expect(html).toContain("wide:grid-cols-[minmax(0,74ch)]");
   });
