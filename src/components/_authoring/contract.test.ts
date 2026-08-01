@@ -49,6 +49,17 @@ describe("validateComponentAttributes", () => {
     expect(values["value"]).toBe(61);
   });
 
+  it.each(["", "   "])("should reject an empty bounded number", (value) => {
+    const { values, messages } = validate(
+      { value: { kind: "number", min: 0, max: 100 } },
+      { value },
+    );
+    expect(messages).toEqual([
+      'Attribute "value" must be a number between 0 and 100',
+    ]);
+    expect(values["value"]).toBeUndefined();
+  });
+
   it("should report a number outside its declared range rather than clamping it", () => {
     const { values, messages } = validate(
       { value: { kind: "number", min: 0, max: 100 } },

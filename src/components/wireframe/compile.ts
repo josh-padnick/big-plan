@@ -40,8 +40,9 @@ const SCREEN_SCHEMA = {
 } satisfies ComponentAttributeSchema;
 
 // One authored navigateTo, kept with its source position so a broken target
-// reports on the button that wrote it rather than on the whole wireframe.
+// reports on the control that wrote it rather than on the whole wireframe.
 type ScreenReference = {
+  readonly from: string;
   readonly to: string;
   readonly position: ScopedChild["position"];
 };
@@ -119,6 +120,7 @@ const compileNodes = ({
   parent,
   diagnostics,
   references,
+  sourceScreenId,
 }: {
   readonly children: ReadonlyArray<ScopedChild>;
   readonly parent: {
@@ -127,6 +129,7 @@ const compileNodes = ({
   };
   readonly diagnostics: DiagnosticCollector;
   readonly references: Array<ScreenReference>;
+  readonly sourceScreenId: string | undefined;
 }): ReadonlyArray<WireframeNode> =>
   children.flatMap((child) => {
     if (child.name === SCREEN_ELEMENT) {
@@ -170,19 +173,22 @@ const compileNodes = ({
             },
             diagnostics,
             references,
+            sourceScreenId,
           })
         : [],
       position: child.position,
       diagnostics,
     });
     if (
-      (node.element === "Button" ||
-        node.element === "NavItem" ||
-        node.element === "ListItem") &&
+      sourceScreenId !== undefined &&
       "navigateTo" in node &&
       node.navigateTo !== undefined
     ) {
-      references.push({ to: node.navigateTo, position: child.position });
+      references.push({
+        from: sourceScreenId,
+        to: node.navigateTo,
+        position: child.position,
+      });
     }
     return [node];
   });
@@ -304,6 +310,10 @@ const expandPattern = ({
   const shell = nodes.find((node) => node.element === "AppShell");
   if (shell === undefined || shell.element !== "AppShell") {
     return expandPanelSlots({ nodes, pattern, position, diagnostics });
+  }
+  if (!shell.children.some((child) => child.element === "AppContent")) {
+    expandPanelSlots({ nodes: [], pattern, position, diagnostics });
+    return nodes;
   }
   return nodes.map((node) =>
     node.element !== "AppShell"
@@ -516,6 +526,7 @@ const compileScreen = ({
     parent: { name: SCREEN_ELEMENT },
     diagnostics,
     references,
+    sourceScreenId: validated.id,
   });
   const children = expandPattern({
     nodes: authoredChildren,
@@ -626,6 +637,11 @@ export const compileWireframe = ({
     if (!screenIds.has(reference.to)) {
       diagnostics.add({
         message: `navigateTo "${reference.to}" names no screen in this wireframe; available screens: ${available}`,
+        position: reference.position,
+      });
+    } else if (reference.to === reference.from) {
+      diagnostics.add({
+        message: `navigateTo "${reference.to}" names its own screen; choose another screen in this wireframe`,
         position: reference.position,
       });
     }

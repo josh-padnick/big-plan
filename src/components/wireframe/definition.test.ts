@@ -193,6 +193,49 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     ]);
   });
 
+  it("should resolve navigation on every element that can carry it", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Breadcrumbs",
+              children: [
+                element({
+                  name: "Crumb",
+                  attributes: { label: "Missing", navigateTo: "missing" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'navigateTo "missing" names no screen in this wireframe; available screens: home',
+    ]);
+  });
+
+  it("should reject navigation to the source screen", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          children: [
+            element({
+              name: "Button",
+              attributes: { label: "Stay here", navigateTo: "home" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'navigateTo "home" names its own screen; choose another screen in this wireframe',
+    ]);
+  });
+
   it("should report an initialScreen that names no screen", () => {
     const { compiled, diagnostics } = compile({
       attributes: { id: "wf", initialScreen: "settings" },
@@ -1126,6 +1169,26 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     });
   });
 
+  it("should report pattern slots when an app shell has no content region", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "ticket",
+          attributes: { pattern: "triage" },
+          children: [
+            element({
+              name: "AppShell",
+              children: [element({ name: "Sidebar" })],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen pattern="triage" needs 3 direct Panel slots; it found 0. Remove pattern to lay the screen out by hand.',
+    ]);
+  });
+
   it("should report detail with no selected record", () => {
     const { diagnostics } = compile({
       scopedChildren: [
@@ -1422,11 +1485,17 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
               children: [
                 element({
                   name: "Crumb",
-                  attributes: { label: "Runs", navigateTo: "home" },
+                  attributes: { label: "Runs", navigateTo: "runs" },
                 }),
                 element({ name: "Crumb", attributes: { label: "#1042" } }),
               ],
             }),
+          ],
+        }),
+        screen({
+          id: "runs",
+          children: [
+            element({ name: "Text", attributes: { text: "All runs" } }),
           ],
         }),
       ],

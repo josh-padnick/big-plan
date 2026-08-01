@@ -178,7 +178,8 @@ const validateNumberAttribute = ({
     }
     return undefined;
   }
-  const parsed = typeof value === "string" ? Number(value.trim()) : Number.NaN;
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  const parsed = trimmed.length > 0 ? Number(trimmed) : Number.NaN;
   if (
     !Number.isFinite(parsed) ||
     parsed < entry.min ||
