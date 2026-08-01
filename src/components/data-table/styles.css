@@ -230,7 +230,11 @@
      visible row, never padding inside the band, so adding air never fattens
      the tinted strip or leaves a trailing gap after the final group. */
   article .data-table-grid tbody tr[data-table-group-end] td {
+    border-bottom: 1px solid var(--edge-c);
     padding-bottom: 2.5rem;
+  }
+  article .data-table-grid tbody tr[data-table-group-last] td {
+    border-bottom: 0;
   }
   article .data-table-group-row > th {
     background: var(--surface-c);

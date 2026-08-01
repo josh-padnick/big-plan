@@ -547,6 +547,7 @@ export const VIEWER_SCRIPT = `<script>
       let shown = 0;
       for (const row of rows) {
         row.removeAttribute("data-table-group-end");
+        row.removeAttribute("data-table-group-last");
         const match =
           query === "" ||
           currentOrder().some((column) => {
@@ -576,6 +577,13 @@ export const VIEWER_SCRIPT = `<script>
       for (const visibleRows of visibleGroups.slice(0, -1)) {
         visibleRows[visibleRows.length - 1].setAttribute(
           "data-table-group-end",
+          "",
+        );
+      }
+      const lastVisibleGroup = visibleGroups[visibleGroups.length - 1];
+      if (lastVisibleGroup !== undefined) {
+        lastVisibleGroup[lastVisibleGroup.length - 1].setAttribute(
+          "data-table-group-last",
           "",
         );
       }

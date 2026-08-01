@@ -161,6 +161,9 @@ test("should preserve generous separation before visible group bands when sortin
   dataTableViewerUrl,
 }) => {
   await page.goto(dataTableViewerUrl);
+  await page.evaluate(() => {
+    document.documentElement.dataset["theme"] = "light";
+  });
   const table = page.locator("[data-data-table]").filter({
     hasText: "Retry policy by tier",
   });
@@ -183,6 +186,10 @@ test("should preserve generous separation before visible group bands when sortin
     "padding-bottom",
     "40px",
   );
+  await expect(groupEnds.locator("td").first()).toHaveCSS(
+    "border-bottom",
+    "1px solid rgb(226, 221, 209)",
+  );
   await expect
     .poll(groupEndRows)
     .toEqual([{ group: "Enterprise", failure: "Processor timeout" }]);
@@ -195,6 +202,9 @@ test("should preserve generous separation before visible group bands when sortin
     .toEqual([{ group: "Enterprise", failure: "Processor timeout" }]);
 
   const filter = table.getByRole("searchbox", { name: "Filter rows" });
+  await page.evaluate(() => {
+    document.documentElement.dataset["theme"] = "dark";
+  });
   await filter.fill("processor");
 
   await expect(table.locator("[data-table-group-heading]:visible")).toHaveText([
@@ -206,6 +216,10 @@ test("should preserve generous separation before visible group bands when sortin
     "padding-bottom",
     "40px",
   );
+  await expect(groupEnds.locator("td").first()).toHaveCSS(
+    "border-bottom",
+    "1px solid rgb(53, 49, 42)",
+  );
 
   await filter.fill("network");
 
@@ -213,6 +227,13 @@ test("should preserve generous separation before visible group bands when sortin
     "Standard",
   ]);
   await expect(groupEnds).toHaveCount(0);
+  await expect(
+    table
+      .locator("tbody:not([hidden]) > tr[data-table-row]:visible")
+      .last()
+      .locator("td:not([hidden])")
+      .first(),
+  ).toHaveCSS("border-bottom-width", "0px");
 });
 
 test("should restore a maximized table when filter Escape has no work", async ({
