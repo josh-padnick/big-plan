@@ -894,14 +894,10 @@ export const DIAGRAM_SCRIPT = `
       return;
     }
     actionBar.style.visibility = "visible";
-    // The bar goes through the same placement engine as a proposal label, for
-    // the same reason: it must not cover the element it acts on, and it must
-    // not bury a neighbour either - which is exactly what it did when it was
-    // simply pinned above the selection.
     // The bar dodges the cards and the verb chips, not the small-caps stage
     // headers. It is transient chrome the reviewer summoned deliberately, and
     // treating an 11-pixel heading as something worth being pushed below the
-    // selection for is how it ended up below when the captain asked for
+    // selection for is how it once ended up below when the captain asked for
     // above.
     const obstacles = (c ? elementsIn(diagram) : [])
       .filter((n) => n !== selected && (kindOf(n) === "node" || kindOf(n) === "edge"))
@@ -913,10 +909,7 @@ export const DIAGRAM_SCRIPT = `
       right: Math.min(bounds.right + 8, innerWidth - 8),
       bottom: Math.min(bounds.bottom + 44, innerHeight - 8),
     };
-    const best = placeLabel({
-      label: actionBar, subject, obstacles, bounds: room,
-      textRects: [], allowBadge: false, anchorAbove: true,
-    });
+    const best = placeBar({ bar: actionBar, subject, obstacles, bounds: room });
     actionBar.style.left = (best ? best.x : subject.left) + "px";
     actionBar.style.top = (best ? best.y : subject.top - size.height - 6) + "px";
   };
