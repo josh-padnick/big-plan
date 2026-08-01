@@ -87,6 +87,65 @@ test("should restore authored group order when resetting a regrouped table", asy
   ]);
 });
 
+test("should preserve generous separation before visible group bands when sorting and filtering", async ({
+  page,
+  dataTableViewerUrl,
+}) => {
+  await page.goto(dataTableViewerUrl);
+  const table = page.locator("[data-data-table]").filter({
+    hasText: "Retry policy by tier",
+  });
+  const groupEnds = table.locator("tr[data-table-group-end]");
+  const separatedBands = table.locator(
+    "tr[data-table-group-end] + tr.data-table-group-row:not([hidden])",
+  );
+  const groupEndRows = () =>
+    groupEnds.evaluateAll((rows) =>
+      rows.map((row) => ({
+        group: row.getAttribute("data-table-group"),
+        failure:
+          row.querySelector('[data-table-column="1"]')?.textContent?.trim() ??
+          "",
+      })),
+    );
+
+  await expect(separatedBands).toHaveCount(1);
+  await expect(groupEnds.locator("td").first()).toHaveCSS(
+    "padding-bottom",
+    "40px",
+  );
+  await expect
+    .poll(groupEndRows)
+    .toEqual([{ group: "Enterprise", failure: "Processor timeout" }]);
+
+  await table.getByRole("button", { name: "Failure" }).click();
+
+  await expect(separatedBands).toHaveCount(1);
+  await expect
+    .poll(groupEndRows)
+    .toEqual([{ group: "Enterprise", failure: "Processor timeout" }]);
+
+  const filter = table.getByRole("searchbox", { name: "Filter rows" });
+  await filter.fill("processor");
+
+  await expect(table.locator("[data-table-group-heading]:visible")).toHaveText([
+    "Enterprise",
+    "Standard",
+  ]);
+  await expect(separatedBands).toHaveCount(1);
+  await expect(groupEnds.locator("td").first()).toHaveCSS(
+    "padding-bottom",
+    "40px",
+  );
+
+  await filter.fill("network");
+
+  await expect(table.locator("[data-table-group-heading]:visible")).toHaveText([
+    "Standard",
+  ]);
+  await expect(groupEnds).toHaveCount(0);
+});
+
 test("should restore a maximized table when filter Escape has no work", async ({
   page,
   dataTableViewerUrl,

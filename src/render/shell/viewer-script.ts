@@ -562,16 +562,24 @@ export const VIEWER_SCRIPT = `<script>
         row.hidden = !match;
         if (match) shown += 1;
       }
+      const visibleGroups = [];
       for (const heading of groupRows) {
         const label = heading.getAttribute("data-table-group-heading");
         const visibleRows = rows.filter(
           (row) => !row.hidden && row.getAttribute("data-table-group") === label,
         );
         heading.hidden = visibleRows.length === 0;
-        const lastVisible = visibleRows[visibleRows.length - 1];
-        if (lastVisible !== undefined) {
-          lastVisible.setAttribute("data-table-group-end", "");
-        }
+        if (visibleRows.length !== 0) visibleGroups.push(visibleRows);
+      }
+      // Only groups with another visible band after them earn the separator.
+      // Filtering may hide a whole group or leave just one, so marking every
+      // group's last row would turn inter-group breathing room into dead space
+      // at the bottom of the table.
+      for (const visibleRows of visibleGroups.slice(0, -1)) {
+        visibleRows[visibleRows.length - 1].setAttribute(
+          "data-table-group-end",
+          "",
+        );
       }
       if (countLabel !== null) {
         countLabel.textContent =
