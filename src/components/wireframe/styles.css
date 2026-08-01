@@ -124,8 +124,9 @@ marks and a plan diff never jitters.
   }
 
   /* Lay out at the device's true width, then scale the whole drawing to fit.
-     The layout never reflows into the review column. Height remains intrinsic:
-     a short screen is short instead of inheriting a mostly empty device box. */
+     The layout never reflows into the review column. Desktop and tablet use a
+     realistic minimum silhouette and may grow; phone stays content-driven so
+     a short mobile state never inherits a mostly empty handset box. */
   .wireframe-screen {
     container-type: inline-size;
     width: 100%;
@@ -134,6 +135,7 @@ marks and a plan diff never jitters.
   }
   .wireframe-screen[data-wireframe-device="desktop"] {
     --wf-width: 1440px;
+    --wf-min-height: 900px;
     /* One review width for every desktop prototype. At 48rem the 1440px
        canvas retains enough scale for Harbor-style list/main/rail panes,
        while the deepest supported deck nesting plus card chrome still fits
@@ -142,14 +144,17 @@ marks and a plan diff never jitters.
   }
   .wireframe-screen[data-wireframe-device="tablet"] {
     --wf-width: 1112px;
+    --wf-min-height: 834px;
     max-width: 960px;
   }
   .wireframe-screen[data-wireframe-device="tablet-portrait"] {
     --wf-width: 834px;
+    --wf-min-height: 1112px;
     max-width: 834px;
   }
   .wireframe-screen[data-wireframe-device="phone"] {
     --wf-width: 390px;
+    --wf-min-height: 9rem;
     max-width: calc(390px + 12px + 0.8rem);
   }
   .wireframe-frame {
@@ -248,7 +253,7 @@ marks and a plan diff never jitters.
     /* Container queries respond to the real device width, never the scaled
        painted width in the review document. */
     container-type: inline-size;
-    min-height: 9rem;
+    min-height: var(--wf-min-height);
     padding: 0.75rem;
     border: 2px solid var(--wf-stroke);
     border-radius: var(--wf-sketch);
@@ -459,6 +464,9 @@ marks and a plan diff never jitters.
        does, rather than stopping where its own links end. */
     align-items: stretch;
   }
+  .wireframe-artboard:has(.wireframe-app-shell) .wireframe-app-shell {
+    min-height: 100%;
+  }
   @container (width < 26rem) {
     .wireframe-app-shell {
       grid-template-columns: 1fr;
@@ -506,6 +514,7 @@ marks and a plan diff never jitters.
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     > .wireframe-row:has([data-wireframe-span]) {
+    flex: 1;
     flex-wrap: nowrap;
     align-items: stretch;
     gap: 0;
@@ -610,9 +619,18 @@ marks and a plan diff never jitters.
     grid-template-columns: minmax(7.5rem, 11rem) 1fr;
   }
   .wireframe-artboard[data-wireframe-device="tablet-portrait"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span]),
+  .wireframe-artboard[data-wireframe-device="tablet"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span]) {
+    flex: 1;
+    flex-wrap: nowrap;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
     .wireframe-sidebar,
   .wireframe-artboard[data-wireframe-device="tablet"] .wireframe-sidebar {
-    border: 2px solid var(--wf-stroke);
+    border: 1px dashed var(--wf-stroke-soft);
     border-radius: var(--wf-sketch-alt);
   }
   .wireframe-artboard[data-wireframe-device="tablet-portrait"]
@@ -629,6 +647,35 @@ marks and a plan diff never jitters.
     > .wireframe-top-bar {
     border: 2px solid var(--wf-stroke);
     border-radius: var(--wf-sketch);
+  }
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
+    .wireframe-app-content:has(.wireframe-progress)
+    .wireframe-page-header-actions
+    .wireframe-button[data-wireframe-emphasis="tertiary"],
+  .wireframe-artboard[data-wireframe-device="tablet"]
+    .wireframe-app-content:has(.wireframe-progress)
+    .wireframe-page-header-actions
+    .wireframe-button[data-wireframe-emphasis="tertiary"] {
+    min-height: 2.75rem;
+    padding: 0.45rem 0.75rem;
+    border: 1px dashed var(--wf-stroke-soft);
+    text-decoration: none;
+  }
+  /* A tablet conversation keeps messages near one another and the next action
+     at the foot, rather than scattering thread metadata across the canvas. */
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
+    .wireframe-panel-body:has([data-wireframe-message]),
+  .wireframe-artboard[data-wireframe-device="tablet"]
+    .wireframe-panel-body:has([data-wireframe-message]) {
+    height: 100%;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
+    .wireframe-panel-body:has([data-wireframe-message])
+    > .wireframe-divider,
+  .wireframe-artboard[data-wireframe-device="tablet"]
+    .wireframe-panel-body:has([data-wireframe-message])
+    > .wireframe-divider {
+    margin-top: auto;
   }
 
   /* Phone: true mobile language - tall narrow device, single column, tab bar
@@ -903,10 +950,9 @@ marks and a plan diff never jitters.
     outline-offset: 2px;
   }
   .wireframe-nav-item[aria-current="page"] {
-    border-color: var(--wf-stroke);
+    border-color: var(--wf-stroke-soft);
     color: var(--color-ink);
-    font-weight: 600;
-    background: var(--color-paper);
+    background: var(--wf-fill);
   }
 
   .wireframe-metric-label {
@@ -918,6 +964,9 @@ marks and a plan diff never jitters.
   .wireframe-metric-value {
     font-size: 1.5rem;
     line-height: 1.2;
+  }
+  .wireframe-panel:has(.wireframe-progress) .wireframe-metric-value {
+    font-size: 2.75rem;
   }
   .wireframe-metric-note {
     font-size: 0.8125rem;
@@ -1456,6 +1505,12 @@ marks and a plan diff never jitters.
   }
   .wireframe-center[data-wireframe-measure="wide"] .wireframe-center-inner {
     max-width: 54rem;
+  }
+  /* A single focused lesson or form uses the whole device canvas to center its
+     decision, instead of leaving a compact card stranded against the top. */
+  .wireframe-artboard > .wireframe-canvas > .wireframe-center:only-child {
+    flex: 1;
+    align-items: center;
   }
 
   .wireframe-breadcrumbs {

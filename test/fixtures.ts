@@ -216,7 +216,7 @@ comment text   [note: 'Reviewer context.']
 const WIREFRAME_SHORT_CONTENT_MDX = `# Short wireframe
 
 <Wireframe id="short-content" title="Content-sized screen">
-  <Screen id="ready" name="Ready" device="desktop">
+  <Screen id="ready" name="Ready" device="phone">
     <Panel title="Ready">
       <Text text="The short state is complete." />
     </Panel>

@@ -1,10 +1,12 @@
 ---
 title: Wireframe
-description: True-size, content-height product screens composed from an open drawing vocabulary and connected into a short walkable prototype.
+description: True-size product screens with honest device proportions, safe content growth, an open drawing vocabulary, and short walkable prototypes.
 ---
 
 `Wireframe` draws low-fidelity product UI inside a device-appropriate frame.
-Each screen lays out at its device's true width and scales as one unit to fit the review document; desktop screens preserve their 1440 px logical layout within a shared 768 px painted cap, and every screen's height follows its content rather than stretching to a fixed device height.
+Each screen lays out at its device's true width and scales as one unit to fit the review document; desktop screens preserve their 1440 px logical layout within a shared 768 px painted cap.
+Desktop and tablet frames use realistic minimum proportions, then grow when content needs more room instead of clipping or scrolling inside a false fixed viewport.
+Phone height remains content-driven so a compact state does not become a mostly empty handset.
 Multiple screens can link to one another without adding executable plan-authored code, while the complete storyboard remains readable when scripts are disabled.
 
 ## When to use it
@@ -65,12 +67,12 @@ Its optional `title` labels the figure, and `initialScreen` names which child op
 
 Every `Screen` requires a unique `id`, a non-empty `name`, and one `device`:
 
-| `device`          | Logical width | Frame                 |
-| ----------------- | ------------: | --------------------- |
-| `desktop`         |       1440 px | Desktop browser       |
-| `tablet`          |       1112 px | Landscape tablet      |
-| `tablet-portrait` |        834 px | Portrait tablet       |
-| `phone`           |        390 px | Phone, no browser bar |
+| `device`          | Logical size                      | Frame                 |
+| ----------------- | --------------------------------- | --------------------- |
+| `desktop`         | 1440 × 900 px minimum             | Desktop browser       |
+| `tablet`          | 1112 × 834 px minimum (about 4:3) | Landscape tablet      |
+| `tablet-portrait` | 834 × 1112 px minimum (about 3:4) | Portrait tablet       |
+| `phone`           | 390 px wide, content height       | Phone, no browser bar |
 
 A non-phone screen may add `url` for the browser bar.
 Phone screens reject `url`, `AppShell`, and `Sidebar`; use `TopBar`, a single content column, and `BottomBar` instead.
@@ -128,7 +130,7 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `Nav`              | Optional `label`; holds only `NavItem`.                                                                             |
 | `NavItem`          | Required `label`; optional `active` and `navigateTo`; valid only in `Nav`.                                           |
 | `Metric`           | Required `label` and `value`; optional `note`.                                                                      |
-| `Progress`         | Required `value` from `0` through `100`; optional `label` and `detail`.                                              |
+| `Progress`         | Required `value` from `0` through `100`; optional `label`, tangible `valueLabel`, and `detail`.                     |
 | `Badge`            | Required `label`; optional `tone="neutral|info|success|warning|danger"`.                                           |
 | `Divider`          | Optional `label`.                                                                                                   |
 | `ImagePlaceholder` | Required `label`; optional `shape="square|wide|tall"`.                                                            |

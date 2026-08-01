@@ -12,7 +12,7 @@ A hand-drawn sketch of a product screen, drawn from a fixed vocabulary so a revi
 - Say state in words first. A `Badge`, or a table cell written `[Failed:danger]`, is a word that a tone only reinforces; a reviewer who cannot see the tint still reads the state.
 - Before drawing a desktop screen, name a real SaaS reference pattern (Linear, GitHub, Stripe, Front, Notion). Borrow a layout it already proved - a table with a toolbar, master-detail, settings two-column, or focused centered form - rather than inventing one for a solved problem.
 - Give every screen one `device`: `desktop`, `tablet`, `tablet-portrait`, or `phone`. It chooses both the true layout width and the matching browser or phone frame, so contradictory combinations are impossible. Add `url` to a non-phone screen when the route matters.
-- The artboard lays out at that true width and scales as one unit to fit the plan; it never reflows into the reading column. Height follows the content, so do not pad a short screen merely to imitate a device rectangle.
+- The artboard lays out at that true width and scales as one unit to fit the plan; it never reflows into the reading column. Desktop and tablet frames keep a realistic minimum proportion and grow with content; phone height stays content-driven. Never clip content to preserve a ratio or pad a short phone state into an empty handset.
 - Use `pattern="list-detail|triage|create|settings"` only when one of those proven layouts fits. `triage` consumes three direct `Panel` slots; the others consume two, and the compiler expands them into ordinary `Row`, `Panel`, and `Rail` nodes at the right widths. Omit `pattern` and use the full vocabulary for dashboards, canvas + inspector, wizards, onboarding, and every other layout.
 
 For how slides, headings, and components sit on the **plan page** (Contrast, Repetition, Alignment, Proximity), follow plan-writing guidance CRAP via `big-plan guidance` section "Lay out slides with CRAP".
@@ -39,6 +39,43 @@ The compiler rejects a desktop `AppShell` or `Sidebar` on a phone screen.
 
 Design each interface around the user's primary job.
 Make the next action obvious, preserve context, minimize interruption.
+
+## Establish hierarchy before adding detail
+
+Every screen should quickly communicate what matters, what belongs together, and what the user can do next.
+Carry these principles into every wireframe:
+
+1. Create one clear focal point. Use size, position, spacing, or contrast to make the screen's starting place obvious.
+2. Design a deliberate reading order from primary information, through supporting context, to the next action. Do not give unrelated regions equal weight and make the user invent a path.
+3. Use proximity to communicate relationships. Put related information close together and use space to separate unrelated information before reaching for another border or label.
+4. Group content around meaningful user concepts, not merely around the fields available in the data. Each group should communicate one coherent idea.
+5. Make the next action obvious. Important sections should answer "What can I do here?", and action labels should describe the outcome.
+6. Prefer tangible language that helps the user decide or feel progress. Prefer `$27.50 to go` over `61%`; when appropriate, `You're more than halfway there` is even more human.
+7. Match language to the user's mental model. Avoid internal, technical, or adult-oriented terms when the intended user would not naturally say them.
+8. Make relationships explicit. Adjacency implies a connection: separate unrelated sections, and directly show when one action affects another area.
+9. Reduce competing signals. Borders, buttons, badges, typography, and navigation all consume attention; reserve the strongest treatment for the most important content and action.
+10. Use one name for each destination or concept. Describe locked, read-only, complete, or unavailable states in language meaningful to the intended user.
+11. Optimize for scanning before reading. A five-second glance at headings, amounts, shapes, and actions should reveal the screen's purpose.
+12. Use decoration to reinforce meaning. An icon, illustration, color, or progress treatment should identify content or communicate state rather than fill empty space.
+13. Design for the intended feeling: capable, safe, motivated, informed, or in control. Let that emotional goal shape which information leads and how actions are framed.
+14. Match fidelity to the decisions being made. Keep early designs rough, grayscale, and easy to change while testing hierarchy and interaction; add polish only after the structure works.
+
+### Quick review before delivery
+
+For every screen, answer these questions from the rendered result:
+
+- What will the user notice first?
+- What is the screen primarily helping them understand or accomplish?
+- What should they do next?
+- Which elements belong together?
+- Are any unrelated elements accidentally appearing connected?
+- Is anything visually louder than its importance warrants?
+- Can any label be made more concrete or human?
+- Can the screen be understood in five seconds?
+- Does it support the feeling the user should have?
+- Is the design polishing structure that is still uncertain?
+
+If any answer is unclear, revise the hierarchy, spacing, grouping, or language before adding more detail.
 
 ## Responsive product design guidelines
 
@@ -75,7 +112,7 @@ Desktop shell and density specifics:
 11. Follow mobile navigation conventions (back, dismiss, bottom tabs, list → detail push).
 12. Design for interruption and recovery (drafts, preserve list position, retry, undo) - sketch the affordance even at low fidelity.
 
-Phone musts: `device="phone"`, single column, `BottomBar` for primary destinations, no desktop `AppShell` rail. Keep body copy at 16px and metadata at 13px; make ordinary controls at least 44px tall, list rows 52-64px tall, and each bottom tab 60px tall inside an approximately 64px safe-area-aware bar. The artboard height still follows content: never stretch a short screen to a device-height rectangle just to meet these targets.
+Phone musts: `device="phone"`, single column, `BottomBar` for primary destinations, no desktop `AppShell` rail. Keep body copy at 16px and metadata at 13px; make ordinary controls at least 44px tall, list rows 52-64px tall, and each bottom tab 60px tall inside an approximately 64px safe-area-aware bar. Phone artboard height still follows content: never stretch a short screen to a device-height rectangle just to meet these targets.
 
 ### Lists, forms, actions, state
 

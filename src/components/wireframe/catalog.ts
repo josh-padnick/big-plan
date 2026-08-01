@@ -149,6 +149,7 @@ const METRIC_SCHEMA = {
 const PROGRESS_SCHEMA = {
   label: { kind: "string", nonEmpty: true },
   value: { kind: "number", min: 0, max: 100, required: true },
+  valueLabel: { kind: "string", nonEmpty: true },
   detail: { kind: "string", nonEmpty: true },
 } satisfies ComponentAttributeSchema;
 
@@ -641,9 +642,10 @@ const CATALOG = {
   Progress: {
     category: "content",
     acceptsChildren: false,
-    summary: "How far along something is, from 0 to 100.",
+    summary:
+      "How far along something is, with an optional tangible label in place of a percentage.",
     example:
-      '<Progress label="Headphones goal" value="61" detail="$42.50 of $70" />',
+      '<Progress label="Headphones goal" value="61" valueLabel="Only $27.50 to go" detail="$42.50 of $70" />',
     compile: ({ attributes, position, diagnostics }) => {
       const validated = validateComponentAttributes({
         component: "Progress",
@@ -656,6 +658,9 @@ const CATALOG = {
         element: "Progress",
         ...(validated.label === undefined ? {} : { label: validated.label }),
         value: validated.value ?? 0,
+        ...(validated.valueLabel === undefined
+          ? {}
+          : { valueLabel: validated.valueLabel }),
         ...(validated.detail === undefined ? {} : { detail: validated.detail }),
       };
     },

@@ -193,21 +193,24 @@ export const WIREFRAME_PATTERNS: ReadonlyArray<WireframePattern> = [
 /**
  * One device preset's logical width and reader-facing name.
  *
- * The artboard lays out at this true width and scales as one unit to fit the
- * review surface. Height deliberately follows content: a fixed device height
- * would turn short screens into half-empty rectangles.
+ * The artboard lays out at this true size and scales as one unit to fit the
+ * review surface. Desktop and tablet sizes are minimums rather than clipping
+ * heights: compact screens keep a believable device silhouette, while longer
+ * content grows the paper instead of overflowing it. Phone remains intrinsic
+ * because forcing short mobile states into a tall handset created dead space.
  */
 export type WireframeDevicePreset = {
   readonly label: string;
   readonly width: number;
+  readonly minimumHeight?: number;
 };
 
 export const WIREFRAME_DEVICE_PRESETS: Readonly<
   Record<WireframeDevice, WireframeDevicePreset>
 > = {
-  desktop: { label: "Desktop", width: 1440 },
-  tablet: { label: "Tablet, landscape", width: 1112 },
-  "tablet-portrait": { label: "Tablet", width: 834 },
+  desktop: { label: "Desktop", width: 1440, minimumHeight: 900 },
+  tablet: { label: "Tablet, landscape", width: 1112, minimumHeight: 834 },
+  "tablet-portrait": { label: "Tablet", width: 834, minimumHeight: 1112 },
   phone: { label: "Phone", width: 390 },
 };
 
@@ -319,9 +322,10 @@ export type WireframeNode =
   | {
       readonly element: "Progress";
       readonly label?: string;
-      // Percent complete. A wireframe draws the bar and always writes the
-      // number beside it, so the state survives without the drawing.
+      // Percent complete. The bar always has a readable value beside it, but
+      // an author may replace the abstract percentage with a tangible phrase.
       readonly value: number;
+      readonly valueLabel?: string;
       readonly detail?: string;
     }
   | {
