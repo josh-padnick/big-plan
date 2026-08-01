@@ -14,6 +14,8 @@ import type {
   WireframeSpace,
 } from "./model.js";
 import { WIREFRAME_DEVICE_PRESETS } from "./model.js";
+import { MAXIMIZABLE_ATTRIBUTE } from "../_model/figure-controls/figure-controls.js";
+import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
 // Token-to-utility maps are written as literals so the stylesheet generator
 // sees every class this view can emit.
@@ -581,6 +583,9 @@ const Screen = ({
 }) => {
   const preset = WIREFRAME_DEVICE_PRESETS[screen.device];
   const phone = screen.device === "phone";
+  const desktop = screen.device === "desktop";
+  const tablet =
+    screen.device === "tablet" || screen.device === "tablet-portrait";
   return (
     <section
       className="wireframe-screen"
@@ -603,14 +608,17 @@ const Screen = ({
         </span>
       </div>
       <div className="wireframe-frame" data-wireframe-device={screen.device}>
-        {phone ? null : (
+        {desktop ? (
           <div className="wireframe-browser-bar">
             <span className="wireframe-browser-dots" aria-hidden="true" />
             <span className="wireframe-browser-address">
               {screen.url ?? " "}
             </span>
           </div>
-        )}
+        ) : null}
+        {tablet ? (
+          <span className="wireframe-tablet-camera" aria-hidden="true" />
+        ) : null}
         {phone ? (
           <span className="wireframe-phone-notch" aria-hidden="true" />
         ) : null}
@@ -625,6 +633,12 @@ const Screen = ({
             <WireframeElements nodes={screen.children} />
           </div>
         </div>
+        {tablet ? (
+          <span
+            className="wireframe-tablet-home-indicator"
+            aria-hidden="true"
+          />
+        ) : null}
       </div>
     </section>
   );
@@ -634,13 +648,19 @@ export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
   <figure
     className="wireframe"
     data-wireframe={model.id}
+    {...{ [MAXIMIZABLE_ATTRIBUTE]: "wireframe" }}
     {...(model.screens.some((screen) => screen.device === "desktop")
       ? { "data-wireframe-desktop": "" }
       : {})}
   >
-    {model.title === undefined ? null : (
-      <figcaption className="wireframe-caption">{model.title}</figcaption>
-    )}
+    <figcaption className="wireframe-caption">
+      {model.title === undefined ? null : (
+        <span className="wireframe-caption-label">{model.title}</span>
+      )}
+      {/* Figure controls are also the natural future hook for review comments.
+          This component only opts into the shared maximize behavior today. */}
+      <MaximizeButton subject="wireframe" />
+    </figcaption>
     {model.screens.length < 2 ? null : (
       <nav className="wireframe-switcher" aria-label="Prototype screens">
         {model.screens.map((screen) => (

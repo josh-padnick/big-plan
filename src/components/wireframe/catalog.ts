@@ -449,7 +449,7 @@ const CATALOG = {
     acceptsChildren: true,
     allowedChildren: ["Sidebar", "TopBar", "AppContent"],
     summary:
-      "The product frame: a flush-left sidebar on desktop, optional top bar, and content region. Tablet devices relax the gutters; phone screens use TopBar and BottomBar instead.",
+      "The product frame: a flush-left sidebar on desktop, or a native tablet top bar over intentional master/detail content. Phone screens use TopBar and BottomBar instead.",
     example:
       "<AppShell><Sidebar>...</Sidebar><AppContent>...</AppContent></AppShell>",
     compile: ({ attributes, children, position, diagnostics }) => {
@@ -467,7 +467,8 @@ const CATALOG = {
     category: "layout",
     acceptsChildren: true,
     allowedParents: ["AppShell"],
-    summary: "The app shell's identity and navigation column.",
+    summary:
+      "The app shell's navigation column: a flush rail on desktop, or a card-like master pane when a tablet genuinely needs persistent navigation.",
     example: '<Sidebar brand="Eddy\'s Wallet" mode="Child mode">...</Sidebar>',
     compile: ({ attributes, children, position, diagnostics }) => {
       const validated = validateComponentAttributes({

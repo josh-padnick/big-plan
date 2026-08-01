@@ -194,10 +194,10 @@ export const WIREFRAME_PATTERNS: ReadonlyArray<WireframePattern> = [
  * One device preset's logical width and reader-facing name.
  *
  * The artboard lays out at this true size and scales as one unit to fit the
- * review surface. Desktop and tablet sizes are minimums rather than clipping
- * heights: compact screens keep a believable device silhouette, while longer
- * content grows the paper instead of overflowing it. Phone remains intrinsic
- * because forcing short mobile states into a tall handset created dead space.
+ * review surface. Every preset supplies a believable minimum device
+ * silhouette while longer content grows the paper instead of overflowing it.
+ * Native layouts pin their own persistent chrome (such as a phone tab bar) so
+ * minimum height creates useful composition rather than an arbitrary dead box.
  */
 export type WireframeDevicePreset = {
   readonly label: string;
@@ -211,7 +211,7 @@ export const WIREFRAME_DEVICE_PRESETS: Readonly<
   desktop: { label: "Desktop", width: 1440, minimumHeight: 900 },
   tablet: { label: "Tablet, landscape", width: 1112, minimumHeight: 834 },
   "tablet-portrait": { label: "Tablet", width: 834, minimumHeight: 1112 },
-  phone: { label: "Phone", width: 390 },
+  phone: { label: "Phone", width: 390, minimumHeight: 844 },
 };
 
 /**
@@ -451,8 +451,8 @@ export type WireframeScreen = {
   readonly name: string;
   readonly device: WireframeDevice;
   readonly pattern?: WireframePattern;
-  // The address shown in the browser frame. It says which route of the
-  // product this screen is, which a reviewer otherwise has to infer.
+  // The address shown in a desktop browser frame. Native tablet and phone
+  // screens have device chrome instead and reject this attribute.
   readonly url?: string;
   readonly children: ReadonlyArray<WireframeNode>;
 };

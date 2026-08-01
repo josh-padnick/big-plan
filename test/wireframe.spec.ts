@@ -80,7 +80,7 @@ test("should scale a true-size drawing inside a narrow review viewport", async (
 
   await test.step("the artboard keeps device geometry without widening the page", async () => {
     await expect
-      .poll(() => artboard.evaluate((node) => node.clientWidth))
+      .poll(() => artboard.evaluate((node) => node.offsetWidth))
       .toBe(1112);
     const box = await boxOf(artboard);
     expect(box.width).toBeLessThanOrEqual(320);
@@ -185,22 +185,28 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
   await page.setViewportSize({ width: 2000, height: 1400 });
   await page.goto(wireframeFormFactorsViewerUrl);
 
-  await test.step("desktop drawings use the shared 768px review width", async () => {
+  await test.step("desktop drawings use available width up to the 920px cap", async () => {
     const desktop = page.locator('[data-wireframe-screen="d-ticket"]');
+    const wireframe = page.locator('[data-wireframe="harbor-desktop"]');
     const artboard = desktop.locator(".wireframe-artboard");
     const frame = desktop.locator(".wireframe-frame");
     await expect
       .poll(() => artboard.evaluate((node) => node.clientWidth))
       .toBe(1440);
     expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(900);
-    expect((await boxOf(frame)).width).toBeCloseTo(768, 1);
+    expect(
+      Math.abs(
+        (await boxOf(frame)).width -
+          Math.min(920, (await boxOf(wireframe)).width),
+      ),
+    ).toBeLessThanOrEqual(1);
   });
 
   await test.step("landscape tablet drawings keep a four-by-three minimum", async () => {
     const tablet = page.locator('[data-wireframe-screen="t-inbox"]');
     const artboard = tablet.locator(".wireframe-artboard");
     await expect
-      .poll(() => artboard.evaluate((node) => node.clientWidth))
+      .poll(() => artboard.evaluate((node) => node.offsetWidth))
       .toBe(1112);
     expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(834);
   });
@@ -219,6 +225,12 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
         (await boxOf(following)).x,
         1,
       );
+      const clearance = await selected.evaluate((label) => {
+        const item = label.closest(".wireframe-list-item");
+        if (item === null) return 0;
+        return Number.parseFloat(getComputedStyle(item).paddingLeft);
+      });
+      expect(clearance).toBeGreaterThanOrEqual(10);
     };
 
     await assertAlignedSelection("d-ticket");
@@ -254,6 +266,13 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
       65,
     );
     await expect(phone.locator(".wireframe-app-shell")).toHaveCount(0);
+  });
+
+  await test.step("tablet screens use native iPad chrome and no desktop rail", async () => {
+    const tablet = page.locator('[data-wireframe-screen="t-inbox"]');
+    await expect(tablet.locator(".wireframe-tablet-camera")).toHaveCount(1);
+    await expect(tablet.locator(".wireframe-browser-bar")).toHaveCount(0);
+    await expect(tablet.locator(".wireframe-sidebar")).toHaveCount(0);
   });
 
   await test.step("the rebuilt phone inbox, form, and settings remain intact", async () => {
@@ -299,7 +318,7 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
   });
 });
 
-test("should keep a short phone artboard content-driven", async ({
+test("should keep a short phone state inside a realistic tall silhouette", async ({
   page,
   wireframeShortContentViewerUrl,
 }) => {
@@ -307,8 +326,39 @@ test("should keep a short phone artboard content-driven", async ({
   await page.goto(wireframeShortContentViewerUrl);
   const artboard = page.locator(".wireframe-artboard");
 
-  expect(await artboard.evaluate((node) => node.clientHeight)).toBeLessThan(
-    400,
-  );
-  expect(await artboard.evaluate((node) => node.clientWidth)).toBe(390);
+  expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(844);
+  expect(await artboard.evaluate((node) => node.offsetWidth)).toBe(390);
+});
+
+test("should maximize and restore a wireframe in both themes", async ({
+  page,
+  wireframeViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(wireframeViewerUrl);
+
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value;
+    }, theme);
+    const wireframe = page.locator("[data-wireframe]").first();
+    const trigger = wireframe.locator("[data-figure-maximize]");
+    await expect(trigger).toBeVisible();
+    await expect(trigger).toHaveAccessibleName("Maximize wireframe");
+    const before = await boxOf(wireframe.locator(".wireframe-frame:visible"));
+
+    await trigger.click();
+    await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
+    await expect(trigger).toHaveAccessibleName("Restore wireframe size");
+    await expect
+      .poll(
+        async () =>
+          (await boxOf(wireframe.locator(".wireframe-frame:visible"))).width,
+      )
+      .toBeGreaterThan(before.width);
+
+    await page.keyboard.press("Escape");
+    await expect(wireframe).not.toHaveAttribute("data-figure-maximized");
+    await expect(trigger).toHaveAccessibleName("Maximize wireframe");
+  }
 });

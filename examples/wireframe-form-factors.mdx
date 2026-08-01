@@ -433,17 +433,12 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
     id="t-inbox"
     name="Tablet · Inbox"
     device="tablet"
-
-    url="app.harbor.team/inbox"
   >
     <AppShell>
-      <Sidebar brand="Harbor" mode="Acme">
-        <Nav label="Global">
-          <NavItem label="Inbox" active />
-          <NavItem label="Compose" navigateTo="t-compose" />
-          <NavItem label="Settings" navigateTo="t-settings" />
-        </Nav>
-      </Sidebar>
+      <TopBar title="Harbor">
+        <Text text="Acme Support" role="helper" />
+        <Button label="Settings" emphasis="tertiary" navigateTo="t-settings" />
+      </TopBar>
       <AppContent>
         <PageHeader title="Inbox" description="12 open tickets">
           <Button
@@ -518,69 +513,78 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
     id="t-ticket"
     name="Tablet · Ticket"
     device="tablet"
-
-    url="app.harbor.team/tickets/4821"
   >
     <AppShell>
-      <Sidebar brand="Harbor" mode="Acme">
-        <Nav label="Global">
-          <NavItem label="Inbox" navigateTo="t-inbox" />
-          <NavItem label="Compose" navigateTo="t-compose" />
-          <NavItem label="Settings" navigateTo="t-settings" />
-        </Nav>
-      </Sidebar>
+      <TopBar title="Harbor">
+        <Button label="‹ Inbox" emphasis="tertiary" navigateTo="t-inbox" />
+        <Text text="Acme Support" role="helper" />
+      </TopBar>
       <AppContent>
-        <PageHeader
-          title="Cannot complete checkout"
-          description="#4821 · Maya Chen · Northwind"
-          badge="Priority"
-        >
-          <Button label="Back to inbox" emphasis="tertiary" navigateTo="t-inbox" />
-          <Button label="Resolve" emphasis="secondary" />
-        </PageHeader>
         <Row gap="md">
-          <Panel title="Conversation" span="main" surface="filled">
-            <Message
-              author="Maya"
-              time="14m"
-              kind="customer"
-              text="Card form freezes when I submit the checkout page."
-            />
-            <Message
-              author="Alex"
-              time="8m"
-              kind="agent"
-              text="Could you share the cart ID and browser version?"
-            />
-            <Message
-              author="Maya"
-              time="2m"
-              kind="customer"
-              text="cart_9f2a · Chrome 128"
-            />
-            <Divider />
-            <SegmentedControl>
-              <Button label="Reply" emphasis="primary" />
-              <Button label="Internal note" />
-            </SegmentedControl>
-            <TextArea label="Message" placeholder="Write a reply…" />
-            <Button label="Send reply" emphasis="primary" />
+          <Panel title="Open tickets" span="list" surface="filled">
+            <List>
+              <ListItem
+                label="Checkout freeze"
+                meta="Priority · Maya"
+                value="14m"
+                selected
+              />
+              <ListItem label="SSO timeout" meta="Waiting · Lee" value="2h" />
+              <ListItem label="Invoice PDF" meta="Open · Alex" value="1d" />
+              <ListItem label="Webhook retries" meta="Unassigned" value="3d" />
+            </List>
           </Panel>
-          <Stack gap="lg" span="rail">
-            <Panel title="Ticket details" surface="outlined">
-              <Select label="Status" value="Open" />
-              <Select label="Assignee" value="Alex Rivera" />
-              <Select label="Team" value="Payments" />
+          <Stack gap="md" span="main">
+            <PageHeader
+              title="Cannot complete checkout"
+              description="#4821 · Maya Chen · Northwind"
+              badge="Priority"
+            >
+              <Button label="Resolve" emphasis="secondary" />
+            </PageHeader>
+            <Panel title="Conversation" surface="outlined">
+              <Message
+                author="Maya"
+                time="14m"
+                kind="customer"
+                text="Card form freezes when I submit the checkout page."
+              />
+              <Message
+                author="Alex"
+                time="8m"
+                kind="agent"
+                text="Could you share the cart ID and browser version?"
+              />
+              <Message
+                author="Maya"
+                time="2m"
+                kind="customer"
+                text="cart_9f2a · Chrome 128"
+              />
+              <Divider />
+              <SegmentedControl>
+                <Button label="Reply" emphasis="primary" />
+                <Button label="Internal note" />
+              </SegmentedControl>
+              <TextArea label="Message" placeholder="Write a reply…" />
+              <Button label="Send reply" emphasis="primary" />
             </Panel>
-            <Panel title="Related" surface="filled">
-              <List>
-                <ListItem
-                  label="Prior checkout freeze"
-                  meta="Resolved"
-                  value="#4410"
-                />
-              </List>
-            </Panel>
+            <Row gap="md">
+              <Panel title="Ticket details" surface="filled">
+                <Select label="Status" value="Open" />
+                <Select label="Assignee" value="Alex Rivera" />
+                <Select label="Team" value="Payments" />
+              </Panel>
+              <Panel title="Related" surface="filled">
+                <List>
+                  <ListItem
+                    label="Prior checkout freeze"
+                    meta="Resolved"
+                    value="#4410"
+                  />
+                </List>
+              </Panel>
+            </Row>
           </Stack>
         </Row>
       </AppContent>
@@ -591,28 +595,17 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
     id="t-compose"
     name="Tablet · New ticket"
     device="tablet"
-
-    url="app.harbor.team/tickets/new"
   >
     <AppShell>
-      <Sidebar brand="Harbor" mode="Acme">
-        <Nav label="Global">
-          <NavItem label="Inbox" navigateTo="t-inbox" />
-          <NavItem label="Compose" active />
-          <NavItem label="Settings" navigateTo="t-settings" />
-        </Nav>
-      </Sidebar>
+      <TopBar title="Harbor">
+        <Button label="Cancel" emphasis="tertiary" navigateTo="t-inbox" />
+        <Text text="Acme Support" role="helper" />
+      </TopBar>
       <AppContent>
         <PageHeader
           title="New ticket"
           description="Capture the issue, then route it."
-        >
-          <Button
-            label="Cancel"
-            emphasis="tertiary"
-            navigateTo="t-inbox"
-          />
-        </PageHeader>
+        />
         <Row gap="lg">
           <Panel title="Ticket details" span="main">
             <Select label="Customer" value="Northwind Labs" />
@@ -668,16 +661,12 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
     id="t-settings"
     name="Tablet · Settings"
     device="tablet"
-
-    url="app.harbor.team/settings"
   >
     <AppShell>
-      <Sidebar brand="Harbor" mode="Acme">
-        <Nav label="Global">
-          <NavItem label="Inbox" navigateTo="t-inbox" />
-          <NavItem label="Settings" active />
-        </Nav>
-      </Sidebar>
+      <TopBar title="Harbor">
+        <Button label="‹ Inbox" emphasis="tertiary" navigateTo="t-inbox" />
+        <Text text="Acme Support" role="helper" />
+      </TopBar>
       <AppContent>
         <PageHeader
           title="Notification settings"

@@ -514,10 +514,12 @@ const compileScreen = ({
       position: child.position,
     });
   }
-  // A phone frame has no browser address bar.
-  if (validated.url !== undefined && validated.device === "phone") {
+  // Only desktop web is drawn in a browser. Tablet and phone frames are
+  // native devices, so accepting a route there would advertise chrome the
+  // rendered product deliberately does not own.
+  if (validated.url !== undefined && validated.device !== "desktop") {
     diagnostics.add({
-      message: 'Attribute "url" is unavailable on device="phone"',
+      message: `Attribute "url" is unavailable on device="${validated.device}"`,
       position: child.position,
     });
   }
@@ -548,7 +550,7 @@ const compileScreen = ({
     name: validated.name,
     device: validated.device ?? "desktop",
     ...(validated.pattern === undefined ? {} : { pattern: validated.pattern }),
-    ...(validated.url === undefined || validated.device === "phone"
+    ...(validated.url === undefined || validated.device !== "desktop"
       ? {}
       : { url: validated.url }),
     children,

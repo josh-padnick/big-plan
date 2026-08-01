@@ -15,23 +15,20 @@ Everything else on the screen is secondary, so balance and goal own the widest r
 >
   <Screen id="child-home" name="My wallet" device="tablet">
     <AppShell>
-      <Sidebar brand="Eddy's Wallet" mode="Child mode">
-        <Nav label="Main">
-          <NavItem label="My wallet" active />
-          <NavItem label="Activity" navigateTo="activity" />
-          <NavItem label="My loan" />
-          <NavItem label="Learn" navigateTo="loan-lesson" />
-        </Nav>
-      </Sidebar>
+      <TopBar title="Eddy's Wallet">
+        <Text text="Child mode" role="helper" />
+        <Button
+          label="✋ Ask a grown-up"
+          emphasis="tertiary"
+          navigateTo="grown-up-help"
+        />
+      </TopBar>
       <AppContent>
-        <PageHeader title="Hi, Eddy!">
-          <Button
-            label="✋ Ask a grown-up"
-            emphasis="tertiary"
-            navigateTo="grown-up-help"
-          />
-        </PageHeader>
-        <Row gap="md">
+        <PageHeader
+          title="Hi, Eddy!"
+          description="Your money, goal, and next steps."
+        />
+        <Row gap="lg">
           <Panel title="Balance & goal" span="main" surface="outlined">
             <Metric
               label="You have"
@@ -45,32 +42,33 @@ Everything else on the screen is secondary, so balance and goal own the widest r
               detail="$42.50 of $70"
             />
           </Panel>
-          <Panel title="Recent activity" span="rail" surface="outlined">
-            <List>
-              <ListItem label="+ $5.00  Weekly allowance" meta="Today" />
-              <ListItem label="− $8.50  Book fair" meta="Friday" />
-              <ListItem label="− $2.00  Headphones goal" meta="Friday" />
-            </List>
-            <Button label="See all" navigateTo="activity" />
-          </Panel>
-          <Stack gap="lg" span="rail">
-            <Panel title="My loan" surface="outlined">
-              <Metric
-                label="Left to repay"
-                value="$12"
-                note="Two Friday payments left"
-              />
+          <Stack gap="md">
+            <Panel title="Recent activity" surface="filled">
+              <List>
+                <ListItem label="+ $5.00  Weekly allowance" meta="Today" />
+                <ListItem label="− $8.50  Book fair" meta="Friday" />
+                <ListItem label="− $2.00  Headphones goal" meta="Friday" />
+              </List>
+              <Button label="See all" navigateTo="activity" />
             </Panel>
-            <Divider />
-            <Panel title="Next lesson" surface="filled">
-              <Text text="Learn how borrowing works →" role="helper" />
-              <Heading text="Borrow now, repay later" level="3" />
-              <Button
-                label="Start lesson"
-                emphasis="primary"
-                navigateTo="loan-lesson"
-              />
-            </Panel>
+            <Row gap="md">
+              <Panel title="My loan" surface="outlined">
+                <Metric
+                  label="Left to repay"
+                  value="$12"
+                  note="Two Friday payments left"
+                />
+              </Panel>
+              <Panel title="Next lesson" surface="filled">
+                <Text text="Learn how borrowing works" role="helper" />
+                <Heading text="Borrow now, repay later" level="3" />
+                <Button
+                  label="Start lesson"
+                  emphasis="primary"
+                  navigateTo="loan-lesson"
+                />
+              </Panel>
+            </Row>
           </Stack>
         </Row>
       </AppContent>
@@ -78,49 +76,63 @@ Everything else on the screen is secondary, so balance and goal own the widest r
   </Screen>
 
   <Screen id="grown-up-help" name="Ask a grown-up" device="tablet">
-    <Center measure="narrow">
-      <Stack gap="lg" align="center">
-        <Heading text="Let's ask a grown-up" />
-        <Text
-          text="They can help with a purchase, your loan, or anything that feels confusing."
+    <AppShell>
+      <TopBar title="Eddy's Wallet">
+        <Button
+          label="‹ My wallet"
+          emphasis="tertiary"
+          navigateTo="child-home"
         />
-        <Panel title="Show them this screen" surface="outlined">
+      </TopBar>
+      <AppContent>
+        <PageHeader
+          title="Let's ask a grown-up"
+          description="Choose what you need help with, then show them the summary."
+        />
+        <Row gap="lg">
+          <Panel title="What do you need help with?" span="list" surface="filled">
+            <List>
+              <ListItem
+                label="Buying something"
+                meta="Ask before money moves"
+                selected
+              />
+              <ListItem label="My loan" meta="$12 left to repay" />
+              <ListItem label="Something feels confusing" meta="Talk it through" />
+            </List>
+          </Panel>
+          <Panel title="Show your grown-up" span="main" surface="outlined">
+            <Heading text="Eddy's wallet summary" level="2" />
           <Text text="Eddy has $42.50 available." />
           <Text text="$12 is left to repay on the current loan." />
           <Text text="No money moves until a grown-up approves it." />
-        </Panel>
-        <Button
-          label="Back to my wallet"
-          emphasis="primary"
-          navigateTo="child-home"
-        />
-      </Stack>
-    </Center>
+            <Button
+              label="Done — back to my wallet"
+              emphasis="primary"
+              navigateTo="child-home"
+            />
+          </Panel>
+        </Row>
+      </AppContent>
+    </AppShell>
   </Screen>
 
   <Screen id="activity" name="Activity" device="tablet">
     <AppShell>
-      <Sidebar brand="Eddy's Wallet" mode="Child mode">
-        <Nav label="Main">
-          <NavItem label="My wallet" navigateTo="child-home" />
-          <NavItem label="Activity" active />
-          <NavItem label="My loan" />
-          <NavItem label="Learn" navigateTo="loan-lesson" />
-        </Nav>
-      </Sidebar>
+      <TopBar title="Eddy's Wallet">
+        <Button
+          label="‹ My wallet"
+          emphasis="tertiary"
+          navigateTo="child-home"
+        />
+      </TopBar>
       <AppContent>
         <PageHeader
           title="Activity"
           description="What came in, what went out, and what you saved."
-        >
-          <Button
-            label="Back to my wallet"
-            emphasis="tertiary"
-            navigateTo="child-home"
-          />
-        </PageHeader>
+        />
         <Row gap="lg">
-          <Panel title="This week" span="main">
+          <Panel title="This week" span="main" surface="outlined">
             <List>
               <ListItem label="+ $5.00  Weekly allowance" meta="Today" />
               <ListItem label="− $8.50  Book fair" meta="Friday" />
@@ -131,7 +143,7 @@ Everything else on the screen is secondary, so balance and goal own the widest r
             <Divider label="Earlier" />
             <Text text="Nothing else this month." role="muted" />
           </Panel>
-          <Stack gap="md" span="rail">
+          <Stack gap="md" span="list">
             <Panel title="Headphones goal" surface="filled">
               <Progress
                 label="$42.50 of $70"
@@ -140,6 +152,13 @@ Everything else on the screen is secondary, so balance and goal own the widest r
                 detail="You're more than halfway there"
               />
             </Panel>
+            <Panel title="This month" surface="outlined">
+              <Text text="Money in · $10" />
+              <Text text="Two allowances" role="helper" />
+              <Divider />
+              <Text text="Money out · $16.50" />
+              <Text text="Book fair + loan" role="helper" />
+            </Panel>
           </Stack>
         </Row>
       </AppContent>
@@ -147,34 +166,52 @@ Everything else on the screen is secondary, so balance and goal own the widest r
   </Screen>
 
   <Screen id="loan-lesson" name="Loan lesson" device="tablet">
-    <Center measure="narrow">
-      <Stack gap="md">
-        <Stepper>
-          <Step label="Meet loans" state="done" />
-          <Step label="Borrow & repay" state="current" />
-          <Step label="Try it" />
-        </Stepper>
-        <Text text="Lesson 3 of 6" role="helper" />
-        <Heading text="Borrow now, repay later" />
-        <Panel title="What a loan is" surface="outlined">
-          <ImagePlaceholder
-            label="Doodle: two kids and a skateboard"
-            shape="wide"
-          />
-          <Text text="Someone helps you buy something now." />
-          <Text text="You pay them back a little at a time." />
-          <Text text="Your $12 loan takes two more Fridays to repay." />
-        </Panel>
-        <Row gap="sm" justify="between">
-          <Button label="Back to my wallet" emphasis="tertiary" navigateTo="child-home" />
-          <Button
-            label="I understand"
-            emphasis="primary"
-            navigateTo="child-home"
-          />
+    <AppShell>
+      <TopBar title="Money lessons">
+        <Button
+          label="‹ My wallet"
+          emphasis="tertiary"
+          navigateTo="child-home"
+        />
+      </TopBar>
+      <AppContent>
+        <PageHeader
+          title="Borrow now, repay later"
+          description="Lesson 3 of 6"
+        />
+        <Row gap="lg">
+          <Panel title="Lesson steps" span="list" surface="filled">
+            <List>
+              <ListItem label="Meet loans" meta="Done" />
+              <ListItem label="Borrow & repay" meta="Now" selected />
+              <ListItem label="Try it" meta="Next" />
+            </List>
+          </Panel>
+          <Panel title="What a loan is" span="main" surface="outlined">
+            <ImagePlaceholder
+              label="Doodle: two kids and a skateboard"
+              shape="wide"
+            />
+            <Heading text="Get help now, pay it back over time" level="2" />
+            <Text text="Someone helps you buy something now." />
+            <Text text="You pay them back a little at a time." />
+            <Text text="Your $12 loan takes two more Fridays to repay." />
+            <Row gap="sm" justify="between">
+              <Button
+                label="Back to my wallet"
+                emphasis="tertiary"
+                navigateTo="child-home"
+              />
+              <Button
+                label="I understand"
+                emphasis="primary"
+                navigateTo="child-home"
+              />
+            </Row>
+          </Panel>
         </Row>
-      </Stack>
-    </Center>
+      </AppContent>
+    </AppShell>
   </Screen>
 </Wireframe>
 

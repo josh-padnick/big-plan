@@ -68,10 +68,24 @@ marks and a plan diff never jitters.
   }
 
   .wireframe-caption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
     margin-bottom: 0.5rem;
     font-size: 0.9375rem;
     font-weight: 600;
     color: var(--color-ink);
+  }
+  .wireframe-caption > .figure-control {
+    margin-left: auto;
+  }
+  /* With no authored caption, the dormant control leaves no empty band in an
+     inert document. The shared viewer reveals it when maximize can act. */
+  .wireframe-caption:not(:has(.wireframe-caption-label)):has(
+      > .figure-control[hidden]
+    ) {
+    display: none;
   }
 
   /* The switcher only means something once a script can act on it, so it
@@ -138,11 +152,10 @@ marks and a plan diff never jitters.
   .wireframe-screen[data-wireframe-device="desktop"] {
     --wf-width: 1440px;
     --wf-min-height: 900px;
-    /* One review width for every desktop prototype. At 48rem the 1440px
-       canvas retains enough scale for Harbor-style list/main/rail panes,
-       while the deepest supported deck nesting plus card chrome still fits
-       inside a 1280px viewer with page margin left over. */
-    max-width: 48rem;
+    /* Use all review width available, stopping at the earlier 920px cap.
+       The frame still scales down inside narrower nested cards, so its painted
+       edge never escapes the box that owns it. */
+    max-width: 920px;
   }
   .wireframe-screen[data-wireframe-device="tablet"] {
     --wf-width: 1112px;
@@ -156,8 +169,11 @@ marks and a plan diff never jitters.
   }
   .wireframe-screen[data-wireframe-device="phone"] {
     --wf-width: 390px;
-    --wf-min-height: 9rem;
+    --wf-min-height: 844px;
     max-width: calc(390px + 12px + 0.8rem);
+  }
+  .wireframe[data-figure-maximized] .wireframe-screen {
+    max-width: none;
   }
   .wireframe-frame {
     --wf-bezel: 2px;
@@ -174,7 +190,7 @@ marks and a plan diff never jitters.
     overflow: hidden;
   }
 
-  .wireframe-frame:not([data-wireframe-device="phone"]) {
+  .wireframe-frame[data-wireframe-device="desktop"] {
     border: var(--wf-bezel) solid var(--wf-stroke);
     border-radius: var(--wf-sketch);
     background: var(--wf-fill);
@@ -214,6 +230,42 @@ marks and a plan diff never jitters.
     text-overflow: ellipsis;
   }
 
+  /* Tablet is a native iPad canvas, never a browser window with a route bar.
+     The camera and home indicator live in the bezel and do not steal layout
+     height from the authored screen. */
+  .wireframe-frame[data-wireframe-device="tablet"],
+  .wireframe-frame[data-wireframe-device="tablet-portrait"] {
+    --wf-bezel: 6px;
+    --wf-inline-padding: 0.65rem;
+    position: relative;
+    padding: var(--wf-inline-padding);
+    border: var(--wf-bezel) solid var(--wf-stroke);
+    border-radius: 1.5rem 1.35rem 1.55rem 1.4rem / 1.4rem 1.55rem 1.35rem 1.5rem;
+    background: color-mix(in srgb, var(--color-paper) 90%, var(--wf-fill));
+  }
+  .wireframe-tablet-camera {
+    position: absolute;
+    top: 0.2rem;
+    left: 50%;
+    z-index: 1;
+    width: 0.3rem;
+    height: 0.3rem;
+    translate: -50% 0;
+    border-radius: 999px;
+    background: var(--wf-stroke);
+  }
+  .wireframe-tablet-home-indicator {
+    position: absolute;
+    bottom: 0.2rem;
+    left: 50%;
+    z-index: 1;
+    width: 5.5rem;
+    height: 0.22rem;
+    translate: -50% 0;
+    border-radius: 999px;
+    background: var(--wf-stroke);
+  }
+
   .wireframe-frame[data-wireframe-device="phone"] {
     --wf-bezel: 6px;
     --wf-inline-padding: 0.4rem;
@@ -233,9 +285,17 @@ marks and a plan diff never jitters.
   .wireframe-frame > .wireframe-artboard {
     border-radius: 6px 3px 7px 4px / 4px 7px 3px 6px;
   }
-  .wireframe-frame:not([data-wireframe-device="phone"]) > .wireframe-artboard {
+  .wireframe-frame[data-wireframe-device="desktop"] > .wireframe-artboard {
     border-width: 2px 0 0;
     border-radius: 0;
+  }
+  .wireframe-frame:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    > .wireframe-artboard {
+    border-width: 1px;
+    border-radius: 0.7rem;
   }
 
   .wireframe-artboard {
@@ -617,11 +677,86 @@ marks and a plan diff never jitters.
     ) {
     padding: 0.625rem;
   }
+  .wireframe-artboard:is(
+    [data-wireframe-device="tablet"],
+    [data-wireframe-device="tablet-portrait"]
+  ) {
+    font-size: 1rem;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-heading {
+    font-size: 1.625rem;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-panel:is(
+      [data-wireframe-surface="filled"],
+      [data-wireframe-surface="outlined"]
+    ) {
+    padding: 1rem 1.1rem;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-panel-title {
+    font-size: 1.125rem;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-list-item {
+    min-height: 3.25rem;
+    font-size: 1rem;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-button {
+    min-height: 2.75rem;
+    font-size: 1rem;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-input {
+    min-height: 2.75rem;
+    font-size: 1rem;
+  }
   .wireframe-artboard[data-wireframe-device="tablet-portrait"]
     .wireframe-app-shell,
   .wireframe-artboard[data-wireframe-device="tablet"] .wireframe-app-shell {
     gap: 0.75rem;
     grid-template-columns: minmax(7.5rem, 11rem) 1fr;
+  }
+  /* A native iPad screen may use the shell's top/content grouping without a
+     desktop navigation rail. The navigation bar stays above an intentional
+     master/detail canvas instead of leaving a blank sidebar track. */
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
+    .wireframe-app-shell:not(:has(> .wireframe-sidebar)),
+  .wireframe-artboard[data-wireframe-device="tablet"]
+    .wireframe-app-shell:not(:has(> .wireframe-sidebar)) {
+    grid-template-areas: "bar" "main";
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
+    .wireframe-app-shell:not(:has(> .wireframe-sidebar))
+    > .wireframe-app-content,
+  .wireframe-artboard[data-wireframe-device="tablet"]
+    .wireframe-app-shell:not(:has(> .wireframe-sidebar))
+    > .wireframe-app-content {
+    grid-area: main;
+    min-height: 0;
   }
   .wireframe-artboard[data-wireframe-device="tablet-portrait"]
     .wireframe-app-content
@@ -631,6 +766,7 @@ marks and a plan diff never jitters.
     > .wireframe-row:has([data-wireframe-span]) {
     flex: 1;
     flex-wrap: nowrap;
+    align-items: stretch;
   }
   .wireframe-artboard[data-wireframe-device="tablet-portrait"]
     .wireframe-sidebar,
@@ -650,8 +786,33 @@ marks and a plan diff never jitters.
   .wireframe-artboard[data-wireframe-device="tablet"]
     .wireframe-app-shell
     > .wireframe-top-bar {
-    border: 2px solid var(--wf-stroke);
-    border-radius: var(--wf-sketch);
+    flex-wrap: nowrap;
+    min-height: 3.5rem;
+    padding: 0.65rem 0.9rem;
+    border: 0;
+    border-bottom: 1px solid var(--wf-stroke-soft);
+    border-radius: 0;
+    background: color-mix(in srgb, var(--color-paper) 86%, var(--wf-fill));
+  }
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
+    .wireframe-app-shell
+    > .wireframe-top-bar
+    > :last-child:not(.wireframe-brand),
+  .wireframe-artboard[data-wireframe-device="tablet"]
+    .wireframe-app-shell
+    > .wireframe-top-bar
+    > :last-child:not(.wireframe-brand) {
+    margin-left: auto;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span])
+    > :is(.wireframe-panel, .wireframe-stack),
+  .wireframe-artboard[data-wireframe-device="tablet"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span])
+    > :is(.wireframe-panel, .wireframe-stack) {
+    min-height: 0;
   }
   .wireframe-artboard[data-wireframe-device="tablet-portrait"]
     .wireframe-app-content:has(.wireframe-progress)
@@ -892,7 +1053,10 @@ marks and a plan diff never jitters.
     .wireframe-app-content
     > .wireframe-row
     > .wireframe-stack {
-    justify-content: space-between;
+    flex: 0 0 29rem;
+    max-width: 29rem;
+    min-width: 26rem;
+    justify-content: flex-start;
   }
   .wireframe-artboard[data-wireframe-device="tablet"]:has(
       .wireframe-progress
@@ -924,6 +1088,40 @@ marks and a plan diff never jitters.
     .wireframe-app-content
     > .wireframe-row
     > .wireframe-stack
+    > .wireframe-panel:has(.wireframe-list)
+    > .wireframe-panel-body
+    > .wireframe-button {
+    margin-top: auto;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-stack
+    > .wireframe-row {
+    flex: none;
+    align-items: stretch;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-stack
+    > .wireframe-row
+    > .wireframe-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 11rem;
+    padding: 1rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-stack
     .wireframe-metric-value {
     font-size: 2.75rem;
   }
@@ -944,7 +1142,13 @@ marks and a plan diff never jitters.
     font-size: 1rem;
   }
   .wireframe-artboard[data-wireframe-device="phone"] > .wireframe-canvas {
+    flex: 1;
     gap: 0.45rem;
+  }
+  .wireframe-artboard[data-wireframe-device="phone"]
+    > .wireframe-canvas
+    > .wireframe-stack:only-child {
+    flex: 1;
   }
   .wireframe-artboard[data-wireframe-device="phone"] .wireframe-app-shell {
     grid-template-columns: 1fr;
@@ -1400,16 +1604,23 @@ marks and a plan diff never jitters.
     padding: 0;
     min-width: 0;
   }
-  .wireframe-list-item {
+  /* The root qualifier outranks the sketch reset's `.wireframe li`. Without
+     it the declared padding loses in the cascade and the selected accent is
+     painted directly beneath the first glyph. */
+  .wireframe .wireframe-list-item {
     min-width: 0;
-    padding: 0.45rem 0.35rem;
+    /* Every row reserves the same inset for selection paint. The active row
+       stays aligned with its neighbors while its accent edge never touches
+       or clips the label. */
+    padding: 0.45rem 0.35rem 0.45rem 0.75rem;
     border-bottom: 1px solid var(--wf-stroke-soft);
     font-size: 0.875rem;
   }
   .wireframe-list-item:last-child {
     border-bottom: 0;
   }
-  /* Selected queue row: tint + accent edge (color is never the only cue). */
+  /* Selected queue row: tint + accent edge (color is never the only cue).
+     The shared row inset above, not selected-only padding, clears the paint. */
   .wireframe-list-item[data-wireframe-selected] {
     background: var(--wf-fill);
     box-shadow: inset 3px 0 0 var(--color-ink);
@@ -1450,7 +1661,7 @@ marks and a plan diff never jitters.
     min-width: 0;
     min-height: 3.25rem;
     margin: 0;
-    padding: 0.55rem 0.25rem;
+    padding: 0.55rem 0.25rem 0.55rem 0.75rem;
     border: 0;
     background: transparent;
     text-align: left;

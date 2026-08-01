@@ -400,6 +400,15 @@ export const VIEWER_SCRIPT = `<script>
     // interactive then narrows it to one screen; without this script the
     // complete storyboard remains readable, with true-width frames scrolling.
     for (const screen of screens) fit(screen);
+    // Figure maximize changes the review column without resizing the window.
+    // Observe the screen itself so a promoted wireframe immediately refits to
+    // the newly available width and restores cleanly afterward.
+    if ("ResizeObserver" in window) {
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) fit(entry.target);
+      });
+      for (const screen of screens) observer.observe(screen);
+    }
     root.setAttribute("data-wireframe-interactive", "");
     const show = (id) => {
       let current = null;
@@ -1924,39 +1933,4 @@ export const VIEWER_SCRIPT = `<script>
   }
 })();
 ${DIAGRAM_SCRIPT}
-(() => {
-  for (const root of document.querySelectorAll("[data-wireframe]")) {
-    const screens = Array.from(
-      root.querySelectorAll("[data-wireframe-screen]"),
-    );
-    if (screens.length === 0) continue;
-    // Marking the root interactive is what narrows the drawing to one screen.
-    // An inert document keeps every screen on the page, so the storyboard
-    // stays readable without this script.
-    root.setAttribute("data-wireframe-interactive", "");
-    const show = (id) => {
-      for (const screen of screens) {
-        screen.toggleAttribute(
-          "data-wireframe-current",
-          screen.getAttribute("data-wireframe-screen") === id,
-        );
-      }
-      for (const tab of root.querySelectorAll("[data-wireframe-switch]")) {
-        if (tab.getAttribute("data-wireframe-navigate") === id)
-          tab.setAttribute("aria-current", "true");
-        else tab.removeAttribute("aria-current");
-      }
-    };
-    root.addEventListener("click", (event) => {
-      const trigger =
-        event.target instanceof Element
-          ? event.target.closest("[data-wireframe-navigate]")
-          : null;
-      if (trigger === null || !root.contains(trigger)) return;
-      const id = trigger.getAttribute("data-wireframe-navigate");
-      if (screens.some((s) => s.getAttribute("data-wireframe-screen") === id))
-        show(id);
-    });
-  }
-})();
 </script>`;

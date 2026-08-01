@@ -155,10 +155,10 @@ The lede.
     expect(deckHtml).toContain("data-collapsible");
     expect(deckHtml).toContain("data-wireframe=");
     expect(deckHtml).toContain("data-wireframe-desktop");
-    expect(deckHtml).toContain("--card-figure:54.5rem");
+    expect(deckHtml).toContain("--card-figure:calc(920px + 2.5rem)");
     expect(deckHtml).toContain("[data-slide]:has(.wireframe)");
-    // The true 1440px layout scales into the shared desktop review cap.
-    expect(deckHtml).toContain("max-width:48rem");
+    // The true 1440px layout uses the available review width up to its cap.
+    expect(deckHtml).toContain("max-width:920px");
     expect(deckHtml).not.toContain("--reading-free-inline");
   });
 

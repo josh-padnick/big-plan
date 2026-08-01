@@ -662,7 +662,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain("app.example.dev/workflows");
   });
 
-  it("should compile a flush desktop shell beside tablet and phone form factors", () => {
+  it("should compile native desktop, tablet, and phone form factors", () => {
     const { compiled, diagnostics } = compile({
       attributes: { id: "form-factors", initialScreen: "desk-home" },
       scopedChildren: [
@@ -710,7 +710,6 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
           name: "Tablet inbox",
           attributes: {
             device: "tablet",
-            url: "app.harbor.team/inbox",
           },
           children: [
             element({
@@ -809,6 +808,9 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"data-wireframe-device":"desktop"');
     expect(rendered).toContain('"data-wireframe-device":"tablet"');
     expect(rendered).toContain('"data-wireframe-device":"phone"');
+    expect(rendered.match(/wireframe-browser-bar/gu)).toHaveLength(1);
+    expect(rendered).toContain("wireframe-tablet-camera");
+    expect(rendered).toContain("wireframe-tablet-home-indicator");
     expect(rendered).toContain("wireframe-app-shell");
     expect(rendered).toContain("wireframe-sidebar");
     expect(rendered).toContain("wireframe-bottom-bar");
@@ -1067,7 +1069,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"data-wireframe-span":"rail"');
   });
 
-  it("should report an address on a screen that has no address bar to draw it in", () => {
+  it("should report an address on a native screen that has no address bar", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [
         screen({
@@ -1089,12 +1091,41 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(html(render(compiled))).not.toContain("app.example.dev");
   });
 
+  it("should reject browser routes on a native tablet frame", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "home",
+          attributes: {
+            device: "tablet",
+            url: "app.example.dev/workflows",
+          },
+          children: [element({ name: "Text", attributes: { text: "Hi" } })],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([
+      {
+        line: 5,
+        column: 1,
+        message: 'Attribute "url" is unavailable on device="tablet"',
+      },
+    ]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain("wireframe-tablet-camera");
+    expect(rendered).not.toContain("wireframe-browser-bar");
+    expect(rendered).not.toContain("app.example.dev");
+  });
+
   it("should derive the frame from the screen device", () => {
     const { compiled } = compile({ scopedChildren: [HOME] });
     expect(compiled.model).toMatchObject({
       screens: [{ device: "desktop" }],
     });
-    expect(html(render(compiled))).toContain("wireframe-browser-bar");
+    const rendered = html(render(compiled));
+    expect(rendered).toContain("wireframe-browser-bar");
+    expect(rendered).toContain('"data-figure-maximizable":"wireframe"');
+    expect(rendered).toContain('"data-figure-maximize":""');
   });
 
   it("should reject the split viewport and chrome attributes", () => {

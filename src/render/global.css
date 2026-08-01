@@ -51,10 +51,10 @@ Light and dark follow the reader's OS in inert exports.
   --measure: 45.5rem;
   /* A card hugging standard-width content: the measure plus its own padding. */
   --card-measure: calc(var(--measure) + 2.5rem);
-  /* A card that can contain the standard 48rem desktop wireframe through
-     one nested sub-slide. The extra 6.5rem covers both cards' inline padding
-     and borders, so the drawing never has to escape either border. */
-  --card-figure: 54.5rem;
+  /* A figure card follows the wireframe's large-by-default 920px cap plus
+     its own padding. Nested cards still ask the viewer to scale the painted
+     frame to their actual inner width. */
+  --card-figure: calc(920px + 2.5rem);
   --bg: #f7f5f0;
   --ink-c: #211e1a;
   --muted-c: #6f695c;
@@ -232,8 +232,8 @@ Light and dark follow the reader's OS in inert exports.
   [data-slide] {
     max-width: var(--card-measure);
   }
-  /* A drawing gets the exact room needed for the standard desktop screen and
-     the deepest card nesting a deck can add around it. */
+  /* A drawing uses as much of the review column as is available, up to the
+     figure cap. Its own scaling keeps the painted frame inside narrower cards. */
   [data-slide]:has(.wireframe) {
     max-width: var(--card-figure);
   }

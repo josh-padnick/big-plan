@@ -12,8 +12,8 @@ A hand-drawn sketch of a product screen, drawn from a fixed vocabulary so a revi
 - Keep three text levels and no more: the page title, the content, and its metadata. Anything else is a fourth level competing with the title.
 - Say state in words first. A `Badge`, or a table cell written `[Failed:danger]`, is a word that a tone only reinforces; a reviewer who cannot see the tint still reads the state.
 - Borrow a layout a real product already proved - a table with a toolbar, master-detail, a settings two-column, a focused centered form - rather than inventing one for a solved problem.
-- Give every screen one `device`: `desktop`, `tablet`, `tablet-portrait`, or `phone`. It chooses both the true layout width and the matching browser or phone frame, so contradictory combinations are impossible. Add `url` to a non-phone screen when the route matters.
-- The artboard lays out at that true width and scales as one unit to fit the plan; it never reflows into the reading column. Desktop and tablet frames keep a realistic minimum proportion and grow with content; phone height stays content-driven. Never clip content to preserve a ratio or pad a short phone state into an empty handset.
+- Give every screen one `device`: `desktop`, `tablet`, `tablet-portrait`, or `phone`. It chooses both the true layout width and the matching desktop browser, native iPad, or phone frame, so contradictory combinations are impossible. Add `url` only to `device="desktop"` when the web route matters.
+- The artboard lays out at that true width and scales as one unit to fit the plan; it never reflows into the reading column. Every device keeps a realistic minimum silhouette and grows with content. Persistent native chrome should anchor short states (for example a phone tab bar at the foot), so extra height has structure rather than becoming a dead box. Never clip content to preserve a ratio.
 - Use `pattern="list-detail|triage|create|settings"` only when one of those proven layouts fits. `triage` consumes three direct `Panel` slots; the others consume two, and the compiler expands them into ordinary `Row`, `Panel`, and `Rail` nodes at the right widths. Omit `pattern` and use the full vocabulary for dashboards, canvas + inspector, wizards, onboarding, and every other layout.
 
 For how slides, headings, and components sit on the **plan page** (Contrast, Repetition, Alignment, Proximity), follow plan-writing guidance CRAP via `big-plan guidance` section "Lay out slides with CRAP".
@@ -25,14 +25,14 @@ A prototype that claims three devices must actually be designed three times.
 Do not scale one layout and change the caption.
 Each form factor is a **native layout language**, not a stretched or shrunken version of another.
 
-| Form factor      | `device`                      | Shell                                                                       |
-| ---------------- | ----------------------------- | --------------------------------------------------------------------------- |
-| Desktop web SaaS | `desktop`                     | Stable `AppShell` + flush-left `Sidebar` + `AppContent`. Workspace density. |
-| Tablet           | `tablet` or `tablet-portrait` | Master/detail, wider gutters, card surfaces OK.                             |
-| Phone            | `phone`                       | Single column. `TopBar` + `BottomBar`. No `AppShell` or left rail.          |
+| Form factor      | `device`                      | Shell                                                                                                                          |
+| ---------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Desktop web SaaS | `desktop`                     | Stable `AppShell` + flush-left `Sidebar` + `AppContent`. Workspace density.                                                    |
+| Tablet           | `tablet` or `tablet-portrait` | Native iPad frame and navigation bar; intentional master/detail with card-like surfaces. No browser route bar or desktop rail. |
+| Phone            | `phone`                       | Single column. `TopBar` + `BottomBar`. No `AppShell` or left rail.                                                             |
 
 When the same product must be reviewed on more than one form factor, author parallel prototypes (separate `Wireframe` blocks or clearly labeled sections), each with its own screens and navigation path.
-The compiler rejects a desktop `AppShell` or `Sidebar` on a phone screen.
+The compiler rejects a desktop `AppShell` or `Sidebar` on a phone screen and rejects browser `url` chrome on tablet and phone.
 
 ## Central product principle
 
@@ -113,7 +113,20 @@ Desktop shell and density specifics:
 11. Follow mobile navigation conventions (back, dismiss, bottom tabs, list → detail push).
 12. Design for interruption and recovery (drafts, preserve list position, retry, undo) - sketch the affordance even at low fidelity.
 
-Phone musts: `device="phone"`, single column, `BottomBar` for primary destinations, no desktop `AppShell` rail. Keep body copy at 16px and metadata at 13px; make ordinary controls at least 44px tall, list rows 52-64px tall, and each bottom tab 60px tall inside an approximately 64px safe-area-aware bar. Phone artboard height still follows content: never stretch a short screen to a device-height rectangle just to meet these targets.
+Phone musts: `device="phone"`, a realistic tall silhouette, single column, `BottomBar` for primary destinations, and no desktop `AppShell` rail. Keep body copy at 16px and metadata at 13px; make ordinary controls at least 44px tall, list rows 52-64px tall, and each bottom tab 60px tall inside an approximately 64px safe-area-aware bar. Let content grow beyond the minimum rather than clipping it; pin persistent chrome so a short state still composes the device deliberately.
+
+### Tablet / iPad
+
+Tablet is its own native layout language, not desktop squeezed into a smaller browser.
+
+- Use the native iPad device frame: no traffic-light dots, URL field, or web-browser route.
+- Prefer a compact top navigation bar above deliberate master/detail. A master list, lesson outline, or settings section list may remain visible beside the selected detail.
+- Spend width on nearby context and touch-friendly card-like surfaces. Use wider gutters and a calmer density than desktop.
+- If persistent navigation is necessary, make it an iPad sidebar that participates in master/detail. Do not reuse a full-height desktop global rail merely because `AppShell` can draw one.
+- Compose the full canvas. A centered reading measure is appropriate for prose inside a dominant detail pane, not as a tiny island floating alone in a 4:3 artboard.
+- Keep related rows and messages compact within each surface. Let unused room follow the group or support another useful pane; never distribute it between a header and its content.
+
+Tablet anti-patterns: browser chrome around a declared iPad, a desktop sidebar plus squeezed workspace panes, a full-width desktop list with inflated spacing, or a lone narrow card surrounded by unused canvas.
 
 ### Lists, forms, actions, state
 
@@ -131,18 +144,19 @@ Phone musts: `device="phone"`, single column, `BottomBar` for primary destinatio
 - Settings as two large side-by-side cards.
 - Floating card sidebar with outer margin on desktop.
 - Phone as a vertical iPad (AppShell rail, multi-pane, tablet card stack).
+- Tablet as compressed desktop (browser chrome, global rail, desktop density) or a tiny centered island.
 - Inflating padding and card chrome to "use" desktop width.
 
 ### Authoring checklist
 
 1. Desktop: stable global shell on every screen; master-detail where the job is triage-to-record; `span="list"|"main"|"rail"` proportions; keyboard hints where they matter.
-2. Tablet: multi-column intentional; do not regress.
+2. Tablet: native iPad frame; compact top navigation; intentional master/detail; no browser chrome or desktop rail.
 3. Phone: essential jobs only; bottom nav; list → detail; recovery affordances sketched.
 4. No "enjoyable momentum" theater - only clarity, context, and next action.
 
 ## Vocabulary
 
-- **Frame** - `AppShell` holds `Sidebar`, an optional `TopBar`, and `AppContent`. On desktop the shell is flush-left and **stable** (same global nav every screen). Phone screens skip `AppShell` and use `TopBar` + `BottomBar`.
+- **Frame** - `AppShell` holds `Sidebar`, an optional `TopBar`, and `AppContent`. On desktop the shell is flush-left and **stable** (same global nav every screen). A native tablet often uses `AppShell` with `TopBar` + `AppContent` and no `Sidebar`; add a card-like sidebar only when it is the master pane. Phone screens skip `AppShell` and use `TopBar` + `BottomBar`.
 - **Layout** - `Stack` runs down, `Row` runs across. In a `Row`, `span="fill"` shares width; `span="list"` is a master queue; `span="main"` is the primary surface; `span="rail"` is secondary properties or settings sub-nav.
 - **Regions** - `Panel` draws a plain region by default; `Rail` owns a secondary details width; `PageHeader` says what the page is once at the top.
 - **Content** - `Metric`, `Progress`, `Table`, `List` / `ListItem` (use `selected` on the active queue row), `Message` for conversation timelines (`kind` customer|agent|internal), `Text` (`role="section"` for grouped phone settings), `Heading`, `Badge`, `Divider`, and `ImagePlaceholder`.
