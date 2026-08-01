@@ -1119,9 +1119,11 @@ export const DIAGRAM_SCRIPT = `
     if (!target || typeof target.add !== "function") {
       // Never pretend. The notes stay exactly where they are.
       status.setAttribute("data-tone", "unavailable");
+      collectors.get(diagram).statusFor = mine.length;
       status.textContent =
-        "The plan's feedback package is not available in this preview, so nothing was added. Your " +
-        mine.length + " note" + (mine.length === 1 ? "" : "s") + " are still here.";
+        "The plan's feedback package is not available in this preview, so nothing was added. " +
+        (mine.length === 1 ? "Your note is" : "Your " + mine.length + " notes are") +
+        " still here.";
       announce("The plan's feedback package is not available; nothing was added");
       return;
     }
@@ -1136,6 +1138,7 @@ export const DIAGRAM_SCRIPT = `
     });
     drafts = drafts.filter((d) => d.diagram !== diagram);
     status.setAttribute("data-tone", "added");
+    collectors.get(diagram).statusFor = 0;
     status.textContent = "Added " + mine.length + " note" + (mine.length === 1 ? "" : "s") +
       " to the plan's feedback package.";
     announce("Added " + mine.length + " notes to the plan feedback package");
@@ -1197,7 +1200,13 @@ export const DIAGRAM_SCRIPT = `
     // maximized view's job, so the reading column never sprouts a tray.
     c.add.hidden = mine.length === 0;
     c.root.hidden = mine.length === 0 || !maximized;
-    if (mine.length === 0) { c.status.hidden = true; c.status.textContent = ""; }
+    // The status describes one attempt at one batch. Once the batch changes it
+    // is describing something that no longer exists, so it goes.
+    if (c.statusFor !== mine.length) {
+      c.status.hidden = true;
+      c.status.textContent = "";
+      c.status.removeAttribute("data-tone");
+    }
     if (c.add.inert) c.add.inert = false;
     if (c.root.inert) c.root.inert = false;
   };
