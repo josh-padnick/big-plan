@@ -103,8 +103,6 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"value":"Recommended"');
     expect(rendered).toContain('"value":"Version fidelity"');
     expect(rendered).toContain('"value":"Exact"');
-    expect(rendered).toContain("matrix-tone-good");
-    expect(rendered).toContain("matrix-tone-bad");
     expect(rendered).toContain("comparison-matrix");
     expect(rendered).toContain('"type":"radio"');
     expect(rendered).toContain("data-decision-selector");
@@ -112,13 +110,41 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain("data-decision-column");
   });
 
-  it("should give every verdict a word and a glyph, never colour alone", () => {
+  it("should carry a verdict as one signal, not a word and a glyph and a hue", () => {
     const { element } = render(twoOptions());
     const rendered = JSON.stringify(element);
-    expect(rendered).toContain('"data-lucide":"check"');
-    expect(rendered).toContain('"data-lucide":"x"');
-    expect(rendered).toContain('"value":" (Favourable)"');
-    expect(rendered).toContain('"value":" (Unfavourable)"');
+    // The word is the signal that survives: it is the only one that is
+    // meaningful without colour vision and readable without a legend.
+    expect(rendered).toContain('"value":"Exact"');
+    expect(rendered).toContain('"value":"Drifts"');
+    // The comparison carries no glyphs and no tone hues at all; the single
+    // remaining icon is the answered-record checkmark, which is not a verdict.
+    const comparison = rendered.slice(
+      rendered.indexOf("comparison-matrix"),
+      rendered.indexOf("decision-zone-propose"),
+    );
+    expect(comparison).not.toContain("data-lucide");
+    expect(rendered).not.toContain("matrix-tone-");
+  });
+
+  it("should drop a criterion every option scores the same", () => {
+    const shared = (verdict: string): ScopedChild =>
+      consideration("Works offline", verdict, "good");
+    const { element, diagnostics } = render([
+      option({
+        title: "Embedded",
+        considerations: [consideration("Cost", "Low", "good"), shared("Yes")],
+      }),
+      option({
+        title: "Download",
+        considerations: [consideration("Cost", "High", "bad"), shared("Yes")],
+      }),
+    ]);
+    expect(diagnostics).toEqual([]);
+    const rendered = JSON.stringify(element);
+    // Cost separates the options; "Works offline" cannot inform the choice.
+    expect(rendered).toContain('"value":"Cost"');
+    expect(rendered).not.toContain('"value":"Works offline"');
   });
 
   it("should default the rationale panel to the recommended option", () => {

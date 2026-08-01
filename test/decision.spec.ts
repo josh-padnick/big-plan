@@ -19,9 +19,11 @@ test("should compare, answer, and confirm an open decision", async ({
       "How does the skill reach the end user's agent?",
     );
     await expect(decision).not.toContainText("Open");
-    await expect(
-      decision.locator("[data-decision-choose-label]"),
-    ).toContainText("Choose one");
+    // The "Choose one" label is gone on purpose: a radio group already says
+    // choose one, and round 4 counted every such label as weight.
+    await expect(decision.locator("[data-decision-choose-label]")).toHaveCount(
+      0,
+    );
   });
 
   await test.step("the comparison is a matrix of options over criteria", async () => {
@@ -29,19 +31,21 @@ test("should compare, answer, and confirm an open decision", async ({
     const criteria = await decision
       .locator("th.decision-criterion")
       .allInnerTexts();
-    expect(criteria).toEqual([
-      "Version fidelity",
-      "Single source of truth",
-      "Works offline",
-    ]);
-    // Each criterion row carries one cell per option, so the grid is complete.
-    await expect(decision.locator("td.decision-cell")).toHaveCount(6);
+    // "Single source of truth" is authored, but both options score it "One
+    // file", so it cannot inform the choice and never renders.
+    expect(criteria).toEqual(["Version fidelity", "Works offline"]);
+    // Each rendered criterion carries one cell per option, so the grid is
+    // complete over exactly the criteria that discriminate.
+    await expect(decision.locator("td.decision-cell")).toHaveCount(4);
   });
 
-  await test.step("every verdict carries a word and a glyph, not colour alone", async () => {
+  await test.step("a verdict is one signal, the word", async () => {
     const firstCell = decision.locator("td.decision-cell").first();
     await expect(firstCell).toContainText("Exact");
-    await expect(firstCell.locator("svg[data-lucide]")).toHaveCount(1);
+    // A glyph and a hue alongside the word were two more marks to process and
+    // nothing more to learn, so neither survives.
+    await expect(firstCell.locator("svg[data-lucide]")).toHaveCount(0);
+    await expect(firstCell.locator("[class*=matrix-tone]")).toHaveCount(0);
   });
 
   await test.step("confirming is refused until a column is picked", async () => {
