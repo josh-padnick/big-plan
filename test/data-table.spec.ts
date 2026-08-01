@@ -3,7 +3,7 @@
 
 import { expect, test } from "./fixtures";
 
-test("should outline the filter against table chrome in every palette", async ({
+test("should keep every table-chrome focus state subtle in every palette", async ({
   page,
   dataTableViewerUrl,
 }) => {
@@ -20,6 +20,7 @@ test("should outline the filter against table chrome in every palette", async ({
       colorScheme: "light" as const,
       border: "rgb(201, 193, 174)",
       chrome: "rgb(236, 231, 219)",
+      accent: "rgb(22, 101, 52)",
     },
     {
       name: "system dark",
@@ -27,6 +28,7 @@ test("should outline the filter against table chrome in every palette", async ({
       colorScheme: "dark" as const,
       border: "rgb(79, 74, 63)",
       chrome: "rgb(51, 46, 36)",
+      accent: "rgb(130, 201, 154)",
     },
     {
       name: "explicit dark",
@@ -34,8 +36,28 @@ test("should outline the filter against table chrome in every palette", async ({
       colorScheme: "light" as const,
       border: "rgb(79, 74, 63)",
       chrome: "rgb(51, 46, 36)",
+      accent: "rgb(130, 201, 154)",
     },
   ];
+  const tabTo = async (target: typeof filter) => {
+    for (let index = 0; index < 20; index += 1) {
+      if (
+        await target.evaluate((element) => document.activeElement === element)
+      ) {
+        return;
+      }
+      await page.keyboard.press("Tab");
+    }
+    throw new Error("Tab order did not reach the expected DataTable control");
+  };
+  const expectSoftHalo = async (target: typeof filter) => {
+    await expect(target).toHaveCSS("outline-style", "none");
+    await expect
+      .poll(() =>
+        target.evaluate((element) => getComputedStyle(element).boxShadow),
+      )
+      .not.toBe("none");
+  };
 
   for (const paletteCase of paletteCases) {
     await test.step(paletteCase.name, async () => {
@@ -48,8 +70,47 @@ test("should outline the filter against table chrome in every palette", async ({
         document.documentElement.dataset["theme"] = theme;
       }, paletteCase.theme);
 
+      await header.click({ position: { x: 2, y: 2 } });
       await expect(filter).toHaveCSS("border-top-color", paletteCase.border);
       await expect(header).toHaveCSS("background-color", paletteCase.chrome);
+
+      await filter.click();
+      await expect(filter).toBeFocused();
+      await expect(filter).toHaveCSS("border-top-color", paletteCase.accent);
+      await expectSoftHalo(filter);
+
+      await page.keyboard.press("Shift+Tab");
+      await page.keyboard.press("Tab");
+      await expect(filter).toBeFocused();
+      await expect(filter).toHaveCSS("border-top-color", paletteCase.accent);
+      await expectSoftHalo(filter);
+
+      const focusTargets = [
+        table.getByRole("button", { name: "Choose columns" }),
+        table.getByRole("button", { name: "Text fit" }),
+        table.getByRole("button", { name: "Reset table layout" }),
+        table.getByRole("button", { name: "Maximize table" }),
+        table.getByRole("button", { name: "Processor" }),
+      ];
+      for (const target of focusTargets) {
+        await tabTo(target);
+        await expect(target).toBeFocused();
+        await expectSoftHalo(target);
+      }
+
+      await filter.click();
+      await page.keyboard.press("Tab");
+      const columnsButton = table.getByRole("button", {
+        name: "Choose columns",
+      });
+      await expect(columnsButton).toBeFocused();
+      await page.keyboard.press("Enter");
+      const menuItem = table.getByRole("menuitemcheckbox", {
+        name: "Attempts",
+      });
+      await expect(menuItem).toBeFocused();
+      await expectSoftHalo(menuItem);
+      await page.keyboard.press("Escape");
     });
   }
 });

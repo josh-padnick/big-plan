@@ -100,11 +100,6 @@
   article .data-table-sort:hover {
     color: var(--color-ink);
   }
-  article .data-table-sort:focus-visible {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 2px;
-    border-radius: 0.2rem;
-  }
   /* The button ships disabled, so without the viewer script the header reads
      and behaves as a plain label: no pointer, no hover shift, no glyph. */
   article .data-table-sort:disabled,
@@ -304,5 +299,31 @@
     tr:last-child
     td {
     border-bottom: 0;
+  }
+}
+
+/* Focus must outrank resting Tailwind utilities such as `border-edge-strong`
+   and `bg-transparent`. A dedicated late layer settles that cascade once
+   instead of escalating selectors or adding `!important`. */
+@layer control-focus {
+  /* Chrome focus uses one quiet visual language. Text input focus is visible
+     after either a pointer click or Tab because the caret is active; buttons
+     and menu items reserve the halo for keyboard focus. A low-opacity outer
+     halo avoids the thick double-ring effect of a strong border plus outline. */
+  article .data-table-filter-input:focus {
+    border-color: var(--accent-c);
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
+  }
+  article .data-table-button:focus-visible,
+  article .data-table-menu-item:focus-visible,
+  article .data-table-sort:focus-visible {
+    outline: none;
+    background: var(--edge-c);
+    color: var(--color-ink);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
+  }
+  article .data-table-sort:focus-visible {
+    border-radius: 0.2rem;
   }
 }

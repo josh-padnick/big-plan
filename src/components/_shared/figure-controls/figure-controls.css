@@ -21,17 +21,6 @@
   article .figure-control[hidden] {
     display: none;
   }
-  /* A pointer reader who never saw a focus ring should not be handed one when
-     Escape returns focus to the trigger. Focus still lands, so the next Tab
-     continues from here; only the visible treatment is withheld, and the
-     tooltip keys off :focus-visible so it goes quiet with it. */
-  article [data-figure-focus-quiet]:focus-visible {
-    outline: none;
-  }
-  article [data-figure-focus-quiet]:focus-visible::after {
-    content: none;
-  }
-
   /* A plain fenced code block has no caption of its own, so it gets the
      smallest possible one: a control bar that is invisible until the reader
      reaches the block. */
@@ -65,6 +54,30 @@
     article .code-figure > .figure-control-bar {
       transition: opacity 0.15s ease;
     }
+  }
+}
+
+/* This late layer outranks the resting Tailwind utilities on the shared
+   button. See the DataTable focus rules for the same chrome vocabulary. */
+@layer control-focus {
+  article .figure-control:focus-visible {
+    outline: none;
+    background: var(--edge-c);
+    color: var(--ink-c);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
+  }
+  /* A pointer reader who never saw a focus ring should not be handed one when
+     Escape returns focus to the trigger. Focus still lands, so the next Tab
+     continues from here; only the visible treatment is withheld, and the
+     tooltip keys off :focus-visible so it goes quiet with it. */
+  article [data-figure-focus-quiet]:focus-visible {
+    outline: none;
+    background: transparent;
+    color: var(--muted-c);
+    box-shadow: none;
+  }
+  article [data-figure-focus-quiet]:focus-visible::after {
+    content: none;
   }
 }
 

@@ -28,7 +28,7 @@ import type { TableCell } from "./parse-table-grid.js";
 // The chrome rests quiet and reveals itself on hover and focus, matching the
 // figure-header button family the schema and diff captions already use.
 const BUTTON_CLASSES =
-  "data-table-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+  "data-table-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-edge hover:text-ink [&_svg]:size-3.5";
 
 const MENU_LIST_CLASSES =
   "data-table-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-40 rounded-[0.375rem] border border-edge p-1";
@@ -256,7 +256,7 @@ const FilterField = ({ id }: { readonly id: string }) => (
     </span>
     <input
       type="search"
-      className="data-table-filter-input h-6 w-32 rounded-md border border-edge-strong bg-transparent py-0 pr-2 pl-[1.35rem] text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent max-[55.999rem]:w-full"
+      className="data-table-filter-input h-6 w-32 rounded-md border border-edge-strong bg-transparent py-0 pr-2 pl-[1.35rem] text-xs text-ink max-[55.999rem]:w-full"
       placeholder="Filter rows"
       aria-label="Filter rows"
       data-table-filter-input={id}
