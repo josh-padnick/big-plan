@@ -1109,7 +1109,7 @@ export const DIAGRAM_SCRIPT = `
 
     const foot = el("div", "flow-collector-foot");
     const note = el("p", "flow-collector-note",
-      "These notes belong to this diagram. Adding them puts them in the plan's feedback package, which is sent once, from the page.");
+      "Add these notes to the plan's feedback package; the plan sends once, from the page.");
     foot.appendChild(note);
     const status = el("p", "flow-collector-status");
     status.hidden = true;
@@ -1194,7 +1194,9 @@ export const DIAGRAM_SCRIPT = `
       if (draft.kind === "edit-text") {
         const value = el("div", "flow-collector-value");
         value.appendChild(el("s", "", draft.before));
-        value.appendChild(document.createTextNode(" " + String.fromCharCode(8594) + " " + draft.after));
+        value.appendChild(document.createTextNode(
+          " " + String.fromCharCode(8594) + " " + (draft.after || "cleared"),
+        ));
         item.appendChild(value);
       }
       if (draft.body) item.appendChild(el("div", "flow-collector-value", draft.body));

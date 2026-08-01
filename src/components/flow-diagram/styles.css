@@ -653,12 +653,12 @@ classes.
      on the element itself, in both the reading canvas and maximized canvas. */
   .flow-diagram-comment-marker {
     position: absolute;
-    top: -0.45rem;
-    right: -0.45rem;
+    top: -0.52rem;
+    right: -0.52rem;
     z-index: 4;
     display: inline-flex;
-    min-width: 1.1rem;
-    height: 1.1rem;
+    min-width: 1.25rem;
+    height: 1.25rem;
     align-items: center;
     justify-content: center;
     gap: 0.12rem;
@@ -675,8 +675,8 @@ classes.
     pointer-events: none;
   }
   .flow-diagram-comment-marker svg {
-    width: 0.65rem;
-    height: 0.65rem;
+    width: 0.75rem;
+    height: 0.75rem;
     flex: none;
   }
   /* --- The diagram's own feedback collector -------------------------------
@@ -952,5 +952,16 @@ classes.
     background: var(--flow-edit-bg);
     box-shadow: inset 0 -1px 0 var(--flow-edit-edge);
     color: var(--ink-c);
+  }
+  /* Clearing a field has no replacement glyph to highlight. Leave only the
+     struck authored text: an empty tinted stub looks like a rendering error,
+     and spacing reserved for a missing replacement makes it look detached. */
+  [data-flow-field][data-flow-edited]:empty {
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  [data-flow-field][data-flow-edited]:empty + .flow-diagram-original {
+    margin-left: 0;
   }
 }
