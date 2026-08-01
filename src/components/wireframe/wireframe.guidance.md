@@ -14,6 +14,7 @@ A hand-drawn sketch of a product screen, drawn from a fixed vocabulary so a revi
 - Borrow a layout a real product already proved - a table with a toolbar, master-detail, a settings two-column, a focused centered form - rather than inventing one for a solved problem.
 - Give every screen one `device`: `desktop`, `tablet`, `tablet-portrait`, or `phone`. It chooses both the true layout width and the matching desktop browser, native iPad, or phone frame, so contradictory combinations are impossible. Add `url` only to `device="desktop"` when the web route matters.
 - The artboard lays out at that true width and scales as one unit to fit the plan; it never reflows into the reading column. Every device keeps a realistic minimum silhouette and grows with content. Persistent native chrome should anchor short states (for example a phone tab bar at the foot), so extra height has structure rather than becoming a dead box. Never clip content to preserve a ratio.
+- The frame-level `Open larger + zoom` control is part of the review surface, not product UI. Use it to inspect hierarchy at a larger scale, then zoom the artboard itself rather than using browser page zoom as a substitute; frame and type continue to scale together when the page viewport changes.
 - Use `pattern="list-detail|triage|create|settings"` only when one of those proven layouts fits. `triage` consumes three direct `Panel` slots; the others consume two, and the compiler expands them into ordinary `Row`, `Panel`, and `Rail` nodes at the right widths. Omit `pattern` and use the full vocabulary for dashboards, canvas + inspector, wizards, onboarding, and every other layout.
 
 For how slides, headings, and components sit on the **plan page** (Contrast, Repetition, Alignment, Proximity), follow plan-writing guidance CRAP via `big-plan guidance` section "Lay out slides with CRAP".
@@ -99,6 +100,7 @@ Skip any "momentum / enjoyment" framing - clarity and speed are enough.
 
 Desktop shell and density specifics:
 
+- Let the desktop device type scale do its job. Its 28px authored body, 22px supporting copy, 32px section titles, and 42px page titles compensate for the true 1440px workspace being fitted into the review column; at the ordinary fit they paint like roughly 15px body, 12px metadata, 17px section headings, and a 22px page title. Do not shrink controls or labels to create artificial density. Simplify the workspace or let content use more of its realistic canvas.
 - Flush-left global nav rail, identical destinations on every screen (for example Inbox, Customers, Reports, Settings).
 - Keep **global destinations** separate from **contextual views** (Mine, Unassigned, SLA risk) - views live with the inbox content, not mixed into global nav as peers of Settings.
 - Master-detail for record work: do **not** replace the queue when opening a ticket. Prefer narrow global nav | list (`span="list"`) | flexible primary (`span="main"`) | properties (`span="rail"`).
@@ -120,6 +122,7 @@ Phone musts: `device="phone"`, a realistic tall silhouette, single column, `Bott
 Tablet is its own native layout language, not desktop squeezed into a smaller browser.
 
 - Use the native iPad device frame: no traffic-light dots, URL field, or web-browser route.
+- Let the tablet device type scale do its job. Its 26px authored body, 20px supporting copy, 30px section titles, and 44px page titles are deliberately larger than nominal iPadOS points because the true-width artboard is reduced into the review column; at the ordinary fit, body copy paints at roughly 17-19px. Do not shrink individual labels to make more content fit. A children's experience should keep this generous default and use the upper levels decisively.
 - Prefer a compact top navigation bar above deliberate master/detail. A master list, lesson outline, or settings section list may remain visible beside the selected detail.
 - Spend width on nearby context and touch-friendly card-like surfaces. Use wider gutters and a calmer density than desktop.
 - If persistent navigation is necessary, make it an iPad sidebar that participates in master/detail. Do not reuse a full-height desktop global rail merely because `AppShell` can draw one.

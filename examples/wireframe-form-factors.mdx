@@ -571,9 +571,11 @@ Master/detail keeps the queue and ticket context nearby without stretching eithe
             </Panel>
             <Row gap="md">
               <Panel title="Ticket details" surface="filled">
-                <Select label="Status" value="Open" />
-                <Select label="Assignee" value="Alex Rivera" />
-                <Select label="Team" value="Payments" />
+                <Row gap="sm">
+                  <Select label="Status" value="Open" />
+                  <Select label="Assignee" value="Alex Rivera" />
+                  <Select label="Team" value="Payments" />
+                </Row>
               </Panel>
               <Panel title="Related" surface="filled">
                 <List>

@@ -380,79 +380,6 @@ export const VIEWER_SCRIPT = `<script>
   });
 })();
 (() => {
-  const roots = Array.from(document.querySelectorAll("[data-wireframe]"));
-  const fit = (screen) => {
-    const frame = screen.querySelector(":scope > .wireframe-frame");
-    if (frame === null || screen.clientWidth === 0) return;
-    // offsetWidth stays in the frame's unscaled coordinate space. Writing a
-    // numeric zoom avoids relying on unsupported length division in CSS.
-    frame.style.zoom = "1";
-    frame.style.zoom = String(
-      Math.min(1, screen.clientWidth / frame.offsetWidth),
-    );
-  };
-  for (const root of roots) {
-    const screens = Array.from(
-      root.querySelectorAll("[data-wireframe-screen]"),
-    );
-    if (screens.length === 0) continue;
-    // Fit while every screen still participates in layout. Marking the root
-    // interactive then narrows it to one screen; without this script the
-    // complete storyboard remains readable, with true-width frames scrolling.
-    for (const screen of screens) fit(screen);
-    // Figure maximize changes the review column without resizing the window.
-    // Observe the screen itself so a promoted wireframe immediately refits to
-    // the newly available width and restores cleanly afterward.
-    if ("ResizeObserver" in window) {
-      const observer = new ResizeObserver((entries) => {
-        for (const entry of entries) fit(entry.target);
-      });
-      for (const screen of screens) observer.observe(screen);
-    }
-    root.setAttribute("data-wireframe-interactive", "");
-    const show = (id) => {
-      let current = null;
-      for (const screen of screens) {
-        const active = screen.getAttribute("data-wireframe-screen") === id;
-        screen.toggleAttribute("data-wireframe-current", active);
-        if (active) current = screen;
-      }
-      for (const tab of root.querySelectorAll("[data-wireframe-switch]")) {
-        if (tab.getAttribute("data-wireframe-navigate") === id)
-          tab.setAttribute("aria-current", "true");
-        else tab.removeAttribute("aria-current");
-      }
-      if (current !== null) requestAnimationFrame(() => fit(current));
-    };
-    root.addEventListener("click", (event) => {
-      const trigger =
-        event.target instanceof Element
-          ? event.target.closest("[data-wireframe-navigate]")
-          : null;
-      if (trigger === null || !root.contains(trigger)) return;
-      const id = trigger.getAttribute("data-wireframe-navigate");
-      if (
-        screens.some(
-          (screen) => screen.getAttribute("data-wireframe-screen") === id,
-        )
-      )
-        show(id);
-    });
-  }
-  addEventListener(
-    "resize",
-    () => {
-      for (const root of roots) {
-        const current = root.querySelector(
-          "[data-wireframe-screen][data-wireframe-current]",
-        );
-        if (current !== null) fit(current);
-      }
-    },
-    { passive: true },
-  );
-})();
-(() => {
   const blocks = Array.from(document.querySelectorAll("[data-collapsible]"));
   if (blocks.length === 0) return;
   const planId = document.documentElement.getAttribute("data-plan-id");
@@ -1309,6 +1236,7 @@ export const VIEWER_SCRIPT = `<script>
   );
   if (frames.length === 0) return;
   let open = null;
+  let activeTrigger = null;
   // How the open panel was activated. Restoring focus is required either way -
   // a keyboard reader must land back on the control they pressed - but the
   // ring and its tooltip should only reappear for the reader who needs them.
@@ -1402,7 +1330,9 @@ export const VIEWER_SCRIPT = `<script>
       })
       .map((entry) => entry.element);
   const setMaximized = (frame, maximized) => {
-    const trigger = frame.querySelector("[data-figure-maximize]");
+    const triggers = Array.from(
+      frame.querySelectorAll("[data-figure-maximize]"),
+    );
     if (maximized) {
       dialogAttributes = {
         frame,
@@ -1431,23 +1361,43 @@ export const VIEWER_SCRIPT = `<script>
       "data-figure-maximized-open",
       open !== null,
     );
-    if (trigger === null) return;
-    const grow = trigger.querySelector("[data-lucide=maximize-2]");
-    const shrink = trigger.querySelector("[data-lucide=minimize-2]");
-    // SVGElement does not reflect a hidden property into markup the way an
-    // HTMLElement does, so toggle the actual attribute both glyphs ship with.
-    if (grow !== null) grow.toggleAttribute("hidden", maximized);
-    if (shrink !== null) shrink.toggleAttribute("hidden", !maximized);
     const label = maximized
       ? "Restore " + subjectOf(frame) + " size"
       : "Maximize " + subjectOf(frame);
-    trigger.setAttribute("aria-label", label);
-    trigger.setAttribute("data-tooltip", label);
+    for (const trigger of triggers) {
+      const grow = trigger.querySelector("[data-lucide=maximize-2]");
+      const shrink = trigger.querySelector("[data-lucide=minimize-2]");
+      const visibleLabel = trigger.querySelector(
+        "[data-figure-maximize-label]",
+      );
+      // SVGElement does not reflect a hidden property into markup the way an
+      // HTMLElement does, so toggle the actual attribute both glyphs ship with.
+      if (grow !== null) grow.toggleAttribute("hidden", maximized);
+      if (shrink !== null) shrink.toggleAttribute("hidden", !maximized);
+      if (visibleLabel !== null)
+        visibleLabel.textContent = maximized
+          ? "Close large view"
+          : "Open larger + zoom";
+      trigger.setAttribute("aria-label", label);
+      trigger.setAttribute("data-tooltip", label);
+    }
+    for (const controls of frame.querySelectorAll(
+      "[data-wireframe-zoom-controls]",
+    ))
+      controls.hidden = !maximized;
+    frame.dispatchEvent(
+      new CustomEvent("figuremaximizechange", {
+        detail: { maximized },
+      }),
+    );
   };
   const finishRestore = (frame, keyboard, returnFocus) => {
     setMaximized(frame, false);
     if (returnFocus) {
-      const trigger = frame.querySelector("[data-figure-maximize]");
+      const trigger =
+        activeTrigger !== null && frame.contains(activeTrigger)
+          ? activeTrigger
+          : frame.querySelector("[data-figure-maximize]");
       if (trigger !== null) {
         // A diagram is already its own keyboard entry point. Returning there
         // keeps Escape from highlighting a toolbar action the reader did not
@@ -1471,29 +1421,34 @@ export const VIEWER_SCRIPT = `<script>
     frame.dispatchEvent(new CustomEvent("figure-restored"));
   };
   for (const frame of frames) {
-    const trigger = frame.querySelector("[data-figure-maximize]");
-    if (trigger === null) continue;
-    trigger.hidden = false;
-    trigger.addEventListener("click", (event) => {
-      // A click synthesised by Enter or Space carries detail 0; a pointer
-      // click carries a click count. That is the activation modality, and it
-      // decides whether the restored focus is visible.
-      openedByKeyboard = event.detail === 0;
-      const maximized = frame.hasAttribute("data-figure-maximized");
-      if (maximized) {
-        if (!requestRestore(frame)) return;
-        finishRestore(frame, openedByKeyboard, false);
-        return;
-      }
-      // Only one figure occupies the viewport at a time; promoting a second
-      // one restores the first rather than stacking two fixed panels. That is
-      // still an exit attempt, so component-owned unsaved state may block it.
-      if (open !== null && open !== frame) {
-        if (!requestRestore(open)) return;
-        finishRestore(open, false, false);
-      }
-      setMaximized(frame, true);
-    });
+    const triggers = Array.from(
+      frame.querySelectorAll("[data-figure-maximize]"),
+    );
+    for (const trigger of triggers) {
+      trigger.hidden = false;
+      trigger.addEventListener("click", (event) => {
+        // A click synthesised by Enter or Space carries detail 0; a pointer
+        // click carries a click count. That is the activation modality, and it
+        // decides whether the restored focus is visible.
+        openedByKeyboard = event.detail === 0;
+        activeTrigger = trigger;
+        const maximized = frame.hasAttribute("data-figure-maximized");
+        if (maximized) {
+          if (!requestRestore(frame)) return;
+          finishRestore(frame, openedByKeyboard, false);
+          return;
+        }
+        // Only one figure occupies the viewport at a time; promoting a second
+        // one restores the first rather than stacking two fixed panels. That
+        // is still an exit attempt, so component-owned unsaved state may block
+        // it.
+        if (open !== null && open !== frame) {
+          if (!requestRestore(open)) return;
+          finishRestore(open, false, false);
+        }
+        setMaximized(frame, true);
+      });
+    }
     frame.addEventListener("figure-restore-confirmed", () => {
       if (!frame.hasAttribute("data-figure-maximized")) return;
       finishRestore(frame, openedByKeyboard, true);
@@ -1933,4 +1888,144 @@ export const VIEWER_SCRIPT = `<script>
   }
 })();
 ${DIAGRAM_SCRIPT}
+(() => {
+  const roots = Array.from(document.querySelectorAll("[data-wireframe]"));
+  const zoomSteps = [1, 1.25, 1.5, 2];
+  const zoomOf = (screen) => {
+    const authored = Number(screen.getAttribute("data-wireframe-user-zoom"));
+    return zoomSteps.includes(authored) ? authored : 1;
+  };
+  const updateZoomControls = (screen, multiplier) => {
+    const controls = screen.querySelector("[data-wireframe-zoom-controls]");
+    if (controls === null) return;
+    const label = controls.querySelector(".wireframe-zoom-label");
+    const zoomOut = controls.querySelector("[data-wireframe-zoom-out]");
+    const zoomIn = controls.querySelector("[data-wireframe-zoom-in]");
+    if (label !== null)
+      label.textContent =
+        multiplier === 1 ? "Fit" : Math.round(multiplier * 100) + "%";
+    if (zoomOut !== null) zoomOut.disabled = multiplier === zoomSteps[0];
+    if (zoomIn !== null)
+      zoomIn.disabled = multiplier === zoomSteps[zoomSteps.length - 1];
+  };
+  const fit = (screen) => {
+    const frame = screen.querySelector(":scope > .wireframe-frame");
+    if (frame === null || screen.clientWidth === 0) return;
+    // offsetWidth stays in the frame's unscaled coordinate space. Writing a
+    // numeric zoom avoids relying on unsupported length division in CSS.
+    frame.style.zoom = "1";
+    const fitScale = Math.min(1, screen.clientWidth / frame.offsetWidth);
+    const multiplier = zoomOf(screen);
+    frame.style.zoom = String(fitScale * multiplier);
+    screen.setAttribute("data-wireframe-fit-scale", String(fitScale));
+    updateZoomControls(screen, multiplier);
+  };
+  for (const root of roots) {
+    const screens = Array.from(
+      root.querySelectorAll("[data-wireframe-screen]"),
+    );
+    if (screens.length === 0) continue;
+    const fitAll = () => {
+      requestAnimationFrame(() => {
+        for (const screen of screens) fit(screen);
+      });
+    };
+    // Fit while every screen still participates in layout. Marking the root
+    // interactive then narrows it to one screen; without this script the
+    // complete storyboard remains readable, with true-width frames scrolling.
+    for (const screen of screens) fit(screen);
+    // Figure maximize changes the review column without resizing the window.
+    // Observe the screen itself so a promoted wireframe immediately refits to
+    // the newly available width and restores cleanly afterward.
+    if ("ResizeObserver" in window) {
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) fit(entry.target);
+      });
+      for (const screen of screens) observer.observe(screen);
+    }
+    // Browser page zoom and pinch zoom can change the visual viewport without
+    // producing the same element-resize sequence on every engine. Refit from
+    // both signals so the artboard and its type keep scaling as one object
+    // rather than leaving a fixed-width drawing under growing page text.
+    addEventListener("resize", fitAll, { passive: true });
+    if (window.visualViewport !== null)
+      window.visualViewport.addEventListener("resize", fitAll, {
+        passive: true,
+      });
+    for (const controls of root.querySelectorAll(
+      "[data-wireframe-zoom-controls]",
+    )) {
+      const screen = controls.closest("[data-wireframe-screen]");
+      if (screen === null) continue;
+      const changeZoom = (direction) => {
+        const current = zoomSteps.indexOf(zoomOf(screen));
+        const next = Math.max(
+          0,
+          Math.min(zoomSteps.length - 1, current + direction),
+        );
+        screen.setAttribute(
+          "data-wireframe-user-zoom",
+          String(zoomSteps[next]),
+        );
+        fit(screen);
+      };
+      const zoomOut = controls.querySelector("[data-wireframe-zoom-out]");
+      const zoomIn = controls.querySelector("[data-wireframe-zoom-in]");
+      if (zoomOut !== null)
+        zoomOut.addEventListener("click", () => changeZoom(-1));
+      if (zoomIn !== null)
+        zoomIn.addEventListener("click", () => changeZoom(1));
+    }
+    root.addEventListener("figuremaximizechange", (event) => {
+      if (event.detail.maximized) {
+        fitAll();
+        return;
+      }
+      for (const screen of screens)
+        screen.setAttribute("data-wireframe-user-zoom", "1");
+      fitAll();
+    });
+    root.setAttribute("data-wireframe-interactive", "");
+    const show = (id) => {
+      let current = null;
+      for (const screen of screens) {
+        const active = screen.getAttribute("data-wireframe-screen") === id;
+        screen.toggleAttribute("data-wireframe-current", active);
+        if (active) current = screen;
+      }
+      for (const tab of root.querySelectorAll("[data-wireframe-switch]")) {
+        if (tab.getAttribute("data-wireframe-navigate") === id)
+          tab.setAttribute("aria-current", "true");
+        else tab.removeAttribute("aria-current");
+      }
+      if (current !== null) requestAnimationFrame(() => fit(current));
+    };
+    root.addEventListener("click", (event) => {
+      const trigger =
+        event.target instanceof Element
+          ? event.target.closest("[data-wireframe-navigate]")
+          : null;
+      if (trigger === null || !root.contains(trigger)) return;
+      const id = trigger.getAttribute("data-wireframe-navigate");
+      if (
+        screens.some(
+          (screen) => screen.getAttribute("data-wireframe-screen") === id,
+        )
+      )
+        show(id);
+    });
+  }
+  addEventListener(
+    "resize",
+    () => {
+      for (const root of roots) {
+        const current = root.querySelector(
+          "[data-wireframe-screen][data-wireframe-current]",
+        );
+        if (current !== null) fit(current);
+      }
+    },
+    { passive: true },
+  );
+})();
 </script>`;

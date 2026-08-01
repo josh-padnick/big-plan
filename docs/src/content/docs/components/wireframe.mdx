@@ -4,7 +4,7 @@ description: True-size product screens with honest device proportions, safe cont
 ---
 
 `Wireframe` draws low-fidelity product UI inside a device-appropriate frame.
-Each screen lays out at its device's true width and scales as one unit to fit the review document; wireframes use all available review width up to a 920 px desktop cap, and the shared maximize control promotes them for close inspection.
+Each screen lays out at its device's true width and scales as one unit to fit the review document; wireframes use all available review width up to a 920 px desktop cap, and the labeled frame-level control opens a larger view with fit, 125%, 150%, and 200% artboard zoom.
 Desktop, tablet, and phone frames use realistic minimum proportions, then grow when content needs more room instead of clipping or scrolling inside a false fixed viewport.
 Native tablet and phone chrome anchors shorter states so their device silhouettes remain intentional.
 Multiple screens can link to one another without adding executable plan-authored code, while the complete storyboard remains readable when scripts are disabled.
@@ -76,6 +76,10 @@ Every `Screen` requires a unique `id`, a non-empty `name`, and one `device`:
 
 A desktop screen may add `url` for the browser bar.
 Tablet and phone screens reject `url`; tablet uses native iPad chrome, while phone also rejects `AppShell` and `Sidebar` in favor of `TopBar`, one content column, and `BottomBar`.
+Tablet primitives also inherit a presentation-aware type scale: 26 px body, 20 px supporting copy, 30 px section titles, and 44 px page titles on the true-width artboard.
+At the normal reduced fit this makes body copy read at approximately the iPadOS 17 pt baseline, with generous headings that also suit child-oriented interfaces.
+Desktop primitives use the same presentation-aware model: 28 px body, 22 px supporting copy, 32 px section titles, and 42 px page titles on the 1440 px artboard, which paint like a conventionally zoomed desktop app after fitting.
+Viewer resize and visual-viewport changes refit the whole artboard, while the wireframe's own zoom controls enlarge frame and type together inside the maximized surface.
 
 `navigateTo` on `Button`, `NavItem`, `ListItem`, or `Crumb` must name another screen in the same wireframe.
 The compiler also diagnoses ambiguous record-detail selection and more than one filled work action per screen.

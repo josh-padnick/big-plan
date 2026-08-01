@@ -193,7 +193,9 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
     await expect
       .poll(() => artboard.evaluate((node) => node.clientWidth))
       .toBe(1440);
-    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(900);
+    expect(
+      await artboard.evaluate((node) => node.offsetHeight),
+    ).toBeGreaterThanOrEqual(900);
     expect(
       Math.abs(
         (await boxOf(frame)).width -
@@ -202,13 +204,87 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
     ).toBeLessThanOrEqual(1);
   });
 
+  await test.step("desktop type reads like a normally zoomed application", async () => {
+    const artboard = page.locator(
+      '[data-wireframe-screen="d-ticket"] .wireframe-artboard',
+    );
+    const type = await artboard.evaluate((node) => {
+      const frame = node.closest(".wireframe-frame");
+      const body = node.querySelector(".wireframe-list-item");
+      const supporting = node.querySelector(".wireframe-list-meta");
+      const title = node.querySelector(
+        ".wireframe-page-header .wireframe-heading",
+      );
+      if (
+        frame === null ||
+        body === null ||
+        supporting === null ||
+        title === null
+      ) {
+        return null;
+      }
+      const scale = frame.getBoundingClientRect().width / frame.offsetWidth;
+      const size = (element: Element): number =>
+        Number.parseFloat(getComputedStyle(element).fontSize);
+      return {
+        authoredBody: size(body),
+        authoredSupporting: size(supporting),
+        authoredTitle: size(title),
+        paintedBody: size(body) * scale,
+      };
+    });
+    expect(type).not.toBeNull();
+    expect(type?.authoredBody).toBe(28);
+    expect(type?.authoredSupporting).toBe(22);
+    expect(type?.authoredTitle).toBe(42);
+    expect(type?.paintedBody).toBeGreaterThanOrEqual(14.5);
+  });
+
   await test.step("landscape tablet drawings keep a four-by-three minimum", async () => {
     const tablet = page.locator('[data-wireframe-screen="t-inbox"]');
     const artboard = tablet.locator(".wireframe-artboard");
     await expect
       .poll(() => artboard.evaluate((node) => node.offsetWidth))
       .toBe(1112);
-    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(834);
+    expect(
+      await artboard.evaluate((node) => node.offsetHeight),
+    ).toBeGreaterThanOrEqual(834);
+  });
+
+  await test.step("tablet type reads at an idiomatic iPad scale after fitting", async () => {
+    const artboard = page.locator(
+      '[data-wireframe-screen="t-inbox"] .wireframe-artboard',
+    );
+    const type = await artboard.evaluate((node) => {
+      const frame = node.closest(".wireframe-frame");
+      const body = node.querySelector(".wireframe-list-item");
+      const supporting = node.querySelector(".wireframe-list-meta");
+      const title = node.querySelector(
+        ".wireframe-page-header .wireframe-heading",
+      );
+      if (
+        frame === null ||
+        body === null ||
+        supporting === null ||
+        title === null
+      ) {
+        return null;
+      }
+      const scale = frame.getBoundingClientRect().width / frame.offsetWidth;
+      const size = (element: Element): number =>
+        Number.parseFloat(getComputedStyle(element).fontSize);
+      return {
+        authoredBody: size(body),
+        authoredSupporting: size(supporting),
+        authoredTitle: size(title),
+        paintedBody: size(body) * scale,
+      };
+    });
+    expect(type).not.toBeNull();
+    expect(type?.authoredBody).toBe(26);
+    expect(type?.authoredSupporting).toBe(20);
+    expect(type?.authoredTitle).toBe(44);
+    expect(type?.paintedBody).toBeGreaterThanOrEqual(17);
   });
 
   await test.step("selection does not indent Ticket or Inbox queue rows", async () => {
@@ -342,9 +418,12 @@ test("should maximize and restore a wireframe in both themes", async ({
       document.documentElement.dataset.theme = value;
     }, theme);
     const wireframe = page.locator("[data-wireframe]").first();
-    const trigger = wireframe.locator("[data-figure-maximize]");
+    const trigger = wireframe.locator(
+      "[data-wireframe-screen]:visible [data-figure-maximize]",
+    );
     await expect(trigger).toBeVisible();
     await expect(trigger).toHaveAccessibleName("Maximize wireframe");
+    await expect(trigger).toContainText("Open larger + zoom");
     const before = await boxOf(wireframe.locator(".wireframe-frame:visible"));
 
     await trigger.click();
@@ -356,6 +435,25 @@ test("should maximize and restore a wireframe in both themes", async ({
           (await boxOf(wireframe.locator(".wireframe-frame:visible"))).width,
       )
       .toBeGreaterThan(before.width);
+    const zoomControls = wireframe.locator(
+      "[data-wireframe-screen]:visible [data-wireframe-zoom-controls]",
+    );
+    await expect(zoomControls).toBeVisible();
+    const fitted = await boxOf(wireframe.locator(".wireframe-frame:visible"));
+    await zoomControls
+      .getByRole("button", { name: "Zoom wireframe in" })
+      .click();
+    await expect(zoomControls).toContainText("125%");
+    await expect
+      .poll(
+        async () =>
+          (await boxOf(wireframe.locator(".wireframe-frame:visible"))).width,
+      )
+      .toBeGreaterThan(fitted.width * 1.2);
+    await zoomControls
+      .getByRole("button", { name: "Zoom wireframe out" })
+      .click();
+    await expect(zoomControls).toContainText("Fit");
 
     await page.keyboard.press("Escape");
     await expect(wireframe).not.toHaveAttribute("data-figure-maximized");

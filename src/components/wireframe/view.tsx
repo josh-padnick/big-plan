@@ -607,6 +607,37 @@ const Screen = ({
             : `${preset.minimumHeight}px minimum · grows with content`}
         </span>
       </div>
+      <div className="wireframe-frame-toolbar">
+        <div
+          className="wireframe-zoom-controls"
+          aria-label="Wireframe zoom"
+          hidden
+          data-wireframe-zoom-controls=""
+        >
+          <button
+            type="button"
+            className="wireframe-zoom-button"
+            aria-label="Zoom wireframe out"
+            data-wireframe-zoom-out=""
+          >
+            −
+          </button>
+          <span className="wireframe-zoom-label" aria-live="polite">
+            Fit
+          </span>
+          <button
+            type="button"
+            className="wireframe-zoom-button"
+            aria-label="Zoom wireframe in"
+            data-wireframe-zoom-in=""
+          >
+            +
+          </button>
+        </div>
+        {/* Figure controls are also the natural future hook for review
+            comments. This round adds only larger viewing and zoom. */}
+        <MaximizeButton subject="wireframe" variant="labeled" />
+      </div>
       <div className="wireframe-frame" data-wireframe-device={screen.device}>
         {desktop ? (
           <div className="wireframe-browser-bar">
@@ -657,9 +688,6 @@ export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
       {model.title === undefined ? null : (
         <span className="wireframe-caption-label">{model.title}</span>
       )}
-      {/* Figure controls are also the natural future hook for review comments.
-          This component only opts into the shared maximize behavior today. */}
-      <MaximizeButton subject="wireframe" />
     </figcaption>
     {model.screens.length < 2 ? null : (
       <nav className="wireframe-switcher" aria-label="Prototype screens">
@@ -679,7 +707,7 @@ export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
         ))}
       </nav>
     )}
-    <div className="wireframe-screens">
+    <div className="wireframe-screens" data-figure-body="">
       {model.screens.map((screen) => (
         <Screen
           key={screen.id}

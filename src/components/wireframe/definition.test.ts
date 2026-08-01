@@ -1126,6 +1126,8 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain("wireframe-browser-bar");
     expect(rendered).toContain('"data-figure-maximizable":"wireframe"');
     expect(rendered).toContain('"data-figure-maximize":""');
+    expect(rendered).toContain("Open larger + zoom");
+    expect(rendered).toContain('"data-wireframe-zoom-controls":""');
   });
 
   it("should reject the split viewport and chrome attributes", () => {
