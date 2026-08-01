@@ -86,7 +86,7 @@ export const RowsLayout = ({
           >
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span
-                className="text-base font-semibold text-ink"
+                className="text-lg leading-7 font-semibold text-ink"
                 data-option-title=""
                 id={option.titleId}
               >
@@ -94,13 +94,13 @@ export const RowsLayout = ({
               </span>
               {option.recommended ? <Recommended /> : null}
             </span>
-            <span className="decision-row-lines mt-1.5 grid gap-0.5">
+            <span className="decision-row-lines mt-2.5 grid gap-1">
               {criteria.map(({ row, title }) => (
                 <span className="decision-row-line" key={row}>
-                  <span className="decision-row-dimension text-muted">
-                    {title}
+                  <span className="decision-row-dimension font-semibold text-ink">
+                    {`${title}:`}
                   </span>
-                  <span className="decision-verdict font-semibold text-ink">
+                  <span className="decision-verdict font-normal text-ink">
                     {option.considerations[row]?.verdict ?? "-"}
                   </span>
                 </span>
@@ -258,7 +258,7 @@ export const BriefLayout = ({
     <div className="decision-brief" data-decision-brief="">
       {lead?.summary === undefined ? null : (
         <p
-          className="decision-brief-lead m-0 px-5 pb-3 text-base text-ink"
+          className="decision-brief-lead m-0 border-b border-edge bg-surface px-5 py-3.5 text-base leading-6 text-ink"
           data-decision-brief-lead=""
         >
           {lead.summary}

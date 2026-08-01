@@ -28,11 +28,13 @@ const consideration = (
 
 const option = ({
   title,
+  summary,
   recommended = false,
   chosen = false,
   considerations,
 }: {
   readonly title: string;
+  readonly summary?: string;
   readonly recommended?: boolean;
   readonly chosen?: boolean;
   readonly considerations: ReadonlyArray<ScopedChild>;
@@ -40,6 +42,7 @@ const option = ({
   name: "Option",
   attributes: {
     title,
+    ...(summary === undefined ? {} : { summary }),
     ...(recommended ? { recommended: true } : {}),
     ...(chosen ? { chosen: true } : {}),
   },
@@ -59,12 +62,14 @@ const parseRenderedElement = (compiled: CompiledComponent): Element => {
 const render = (
   scopedChildren: ReadonlyArray<ScopedChild>,
   status?: string,
+  layout?: string,
 ) => {
   const diagnostics = createDiagnosticCollector();
   const compiled = DECISION_COMPONENT_DEFINITION.compile({
     attributes: {
       question: "Which channel?",
       ...(status === undefined ? {} : { status }),
+      ...(layout === undefined ? {} : { layout }),
     },
     children: [],
     scopedChildren,
@@ -82,11 +87,13 @@ const twoOptions = ({
 }: { readonly chosen?: boolean } = {}): ReadonlyArray<ScopedChild> => [
   option({
     title: "Embedded",
+    summary: "Ships with the command.",
     recommended: true,
     considerations: [consideration("Version fidelity", "Exact", "good")],
   }),
   option({
     title: "Download",
+    summary: "Ships as a separate file.",
     chosen,
     considerations: [consideration("Version fidelity", "Drifts", "bad")],
   }),
@@ -125,6 +132,34 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     );
     expect(comparison).not.toContain("data-lucide");
     expect(rendered).not.toContain("matrix-tone-");
+  });
+
+  it("should give row options a distinct title above bold criterion labels and plain values", () => {
+    const { element, diagnostics } = render(twoOptions(), undefined, "rows");
+    expect(diagnostics).toEqual([]);
+    const rendered = JSON.stringify(element);
+    expect(rendered).toContain(
+      '"className":["text-lg","leading-7","font-semibold","text-ink"]',
+    );
+    expect(rendered).toContain('"value":"Version fidelity:"');
+    expect(rendered).toContain(
+      '"className":["decision-row-dimension","font-semibold","text-ink"]',
+    );
+    expect(rendered).toContain(
+      '"className":["decision-verdict","font-normal","text-ink"]',
+    );
+  });
+
+  it("should separate the brief's framing sentence from its option list", () => {
+    const { element, diagnostics } = render(twoOptions(), undefined, "brief");
+    expect(diagnostics).toEqual([]);
+    const rendered = JSON.stringify(element);
+    expect(rendered).toContain(
+      '"className":["decision-brief-lead","m-0","border-b","border-edge","bg-surface","px-5","py-3.5"',
+    );
+    expect(rendered.indexOf("decision-brief-lead")).toBeLessThan(
+      rendered.indexOf("decision-brief-list"),
+    );
   });
 
   it("should drop a criterion every option scores the same", () => {

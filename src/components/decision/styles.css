@@ -81,11 +81,6 @@
   article .decision-column[data-option-chosen]:has(.decision-radio:checked) {
     box-shadow: inset 0 2px 0 var(--decision-pro-c);
   }
-  /* Keyboard focus lands on the whole column header, not on the radio. */
-  article .decision-column:has(.decision-radio:focus-visible) {
-    outline: 2px solid var(--color-accent);
-    outline-offset: -2px;
-  }
   article .decision-column:has(.decision-radio:disabled) .decision-column-head {
     cursor: default;
   }
@@ -113,8 +108,17 @@
     border-color: var(--edge-c);
     background: transparent;
   }
+  /* Focus stays local to the native control. A low-opacity halo is easier to
+     parse than a hard rectangle around an entire row or matrix column. */
   article .decision-radio:focus-visible {
     outline: none;
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 24%, transparent);
+  }
+  article .decision-radio:checked:focus-visible {
+    box-shadow:
+      inset 0 0 0 2.5px var(--bg),
+      0 0 0 3px color-mix(in srgb, var(--color-accent) 24%, transparent);
   }
 
   /* The rationale region. Without scripts the panels stack and every one is
@@ -171,12 +175,6 @@
     background: color-mix(in srgb, var(--color-accent) 10%, var(--bg));
     box-shadow: inset 3px 0 0 var(--color-accent);
   }
-  article .decision-row:has(.decision-radio:focus-visible),
-  article .decision-brief-option:has(.decision-radio:focus-visible) {
-    outline: 2px solid var(--color-accent);
-    outline-offset: -2px;
-  }
-
   /* B - the matrix, with the chooser band held apart from the comparison. */
   article .decision-zone-compare {
     background: var(--bg);
@@ -244,9 +242,11 @@
     text-decoration-color: var(--color-accent);
   }
   article .decision-propose-link:has(:focus-visible) {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 2px;
+    outline: none;
     border-radius: 0.125rem;
+    color: var(--ink-c);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 20%, transparent);
   }
   article .decision-proposal-input {
     padding: 0.4375rem 0.625rem;
@@ -260,9 +260,16 @@
     resize: vertical;
   }
   article .decision-proposal-input:focus-visible {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 1px;
+    outline: none;
     border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 20%, transparent);
+  }
+  article .decision-details-summary:focus-visible {
+    outline: none;
+    color: var(--color-accent);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 20%, transparent);
   }
 
   /* The scrolling hint belongs only to the reader whose viewport clips the
@@ -294,8 +301,12 @@
   }
   article .decision-confirm:focus-visible,
   article .decision-change:focus-visible {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 2px;
+    outline: none;
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+  article .decision-change:focus-visible {
+    border-color: var(--color-accent);
   }
   article .decision-change {
     padding: 0.25rem 0.625rem;
@@ -332,5 +343,18 @@
   }
   article .decision-matrix {
     min-width: 34rem;
+  }
+}
+
+/* A row keeps its two-column scan line while the option has enough room.
+   Below phone width, stacking the verdict under its label preserves every
+   word instead of squeezing or clipping the value beside the radio gutter. */
+@media (width < 36rem) {
+  article .decision-row-line {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  article .decision-row-line .decision-verdict {
+    padding-left: 0.75rem;
   }
 }

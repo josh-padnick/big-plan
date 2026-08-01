@@ -1,0 +1,249 @@
+# Three ways to ask one question
+
+Same decision, same words, three shapes - judged only by how little the reader must hold to answer.
+
+<QuickSummary>
+
+<Why>
+
+- A decision the reader has to decode is a decision they postpone.
+
+</Why>
+
+<What>
+
+- One question rendered three ways, so the cheapest to read can win on evidence.
+
+</What>
+
+<How>
+
+- Cut what each shape asks the reader to process, then count it.
+
+</How>
+
+</QuickSummary>
+
+<TableOfContents>
+
+<Entry section="What you are comparing" gist="The same decision three times, and how to judge them" />
+
+<Entry section="The component model" gist="All three shapes exercise Decision; ComplexDecision remains separate" />
+
+<Entry section="A - options as rows" gist="One option per row, one line per dimension" />
+
+<Entry section="B - the comparison matrix" gist="Dimensions stated once, options across" />
+
+<Entry section="C - the brief" gist="The question, the choices, and the comparison on request" />
+
+<Entry section="How to choose" gist="What each shape costs the reader" />
+
+</TableOfContents>
+
+<Part title="Context" />
+
+## What you are comparing
+
+_Read each one cold and notice how much work it takes to answer._
+
+Every shape below renders the same decision with the same words.
+Only the arrangement differs, so any difference in effort is the arrangement's doing.
+
+Three reductions apply to all of them, because they were weight rather than information:
+
+- A verdict is one signal, the word. The glyph and the hue said the same thing twice more.
+- A criterion every option scores identically never renders, because it cannot inform a choice.
+- The rationale no longer restates the criteria the reader just read.
+
+## The component model
+
+_Three instances of one component, not three components._
+
+Variations A, B, and C each exercise the built-in `Decision` component through its `layout` attribute:
+
+- A is `<Decision layout="rows">`.
+- B is `<Decision layout="matrix">`.
+- C is `<Decision layout="brief">`.
+
+They are not `SmallDecision`, `ComplexDecision`, or separate component types.
+
+The already-approved component boundary remains: `Decision` asks the reviewer a question and ends in a confirmed answer; `ComplexDecision` records a weighted analysis for the reviewer to audit. They stay two components because they own different jobs.
+
+Their matrix-shaped presentations share the internal `ComparisonMatrix` primitive so the two components do not drift into different visual dialects. In this document, B uses that primitive directly and C uses it inside the on-demand comparison; A is the row presentation of `Decision`.
+
+<Part title="The three shapes" />
+
+## A - options as rows
+
+_One option per row, each carrying one short line per dimension._
+
+<Decision question="What should a maximized figure cover?" layout="rows">
+
+<Option title="Keep feedback tray visible" recommended summary="The figure fills the reading area; the Feedback tray stays where it is.">
+
+<Consideration title="Comment while maximized" verdict="Yes" tone="good">
+
+The tray stays visible and interactive, so the batch is built in one place.
+
+</Consideration>
+
+<Consideration title="Context preserved" verdict="Strong" tone="good">
+
+Maximize widens the reading area, not the whole application.
+
+</Consideration>
+
+<Consideration title="Build effort" verdict="Medium" tone="mixed">
+
+The tray and the overlay must agree on layering, and the focus trap must include the tray.
+
+</Consideration>
+
+</Option>
+
+<Option title="Cover the entire app" summary="The figure takes the whole window, tray included.">
+
+<Consideration title="Comment while maximized" verdict="No" tone="bad">
+
+A second tray inside the overlay would be the only way back to commenting.
+
+</Consideration>
+
+<Consideration title="Context preserved" verdict="Moderate" tone="mixed" />
+
+<Consideration title="Build effort" verdict="Low" tone="good">
+
+One focus trap, one layer, nothing to negotiate with the tray.
+
+</Consideration>
+
+</Option>
+
+<Option title="Open a dedicated figure view" summary="The reader leaves the document for a surface built around the figure.">
+
+<Consideration title="Comment while maximized" verdict="Possible" tone="mixed" />
+
+<Consideration title="Context preserved" verdict="Weak" tone="bad">
+
+The reviewer leaves the document and has to find their place again.
+
+</Consideration>
+
+<Consideration title="Build effort" verdict="High" tone="bad">
+
+A second surface to build, route, and maintain.
+
+</Consideration>
+
+</Option>
+
+</Decision>
+
+Nothing is cross-referenced: an option is understood by reading its own block.
+The cost is that each dimension name is printed once per option rather than once.
+
+## B - the comparison matrix
+
+_Dimensions stated once, options across, with the chooser held apart from the comparison._
+
+<Decision question="What should a maximized figure cover?" layout="matrix">
+
+<Option title="Keep feedback tray visible" recommended summary="The figure fills the reading area; the Feedback tray stays where it is.">
+
+<Consideration title="Comment while maximized" verdict="Yes" tone="good">
+
+The tray stays visible and interactive, so the batch is built in one place.
+
+</Consideration>
+
+<Consideration title="Context preserved" verdict="Strong" tone="good">
+
+Maximize widens the reading area, not the whole application.
+
+</Consideration>
+
+<Consideration title="Build effort" verdict="Medium" tone="mixed">
+
+The tray and the overlay must agree on layering, and the focus trap must include the tray.
+
+</Consideration>
+
+</Option>
+
+<Option title="Cover the entire app" summary="The figure takes the whole window, tray included.">
+
+<Consideration title="Comment while maximized" verdict="No" tone="bad" />
+
+<Consideration title="Context preserved" verdict="Moderate" tone="mixed" />
+
+<Consideration title="Build effort" verdict="Low" tone="good" />
+
+</Option>
+
+<Option title="Open a dedicated figure view" summary="The reader leaves the document for a surface built around the figure.">
+
+<Consideration title="Comment while maximized" verdict="Possible" tone="mixed" />
+
+<Consideration title="Context preserved" verdict="Weak" tone="bad" />
+
+<Consideration title="Build effort" verdict="High" tone="bad" />
+
+</Option>
+
+</Decision>
+
+Each dimension is named once, so the grid is the most compact of the three.
+The cost is that understanding one option means reading down a column and carrying the row labels with you.
+
+## C - the brief
+
+_The question, the choices, and the one sentence that decides it. The comparison opens on request._
+
+<Decision question="What should a maximized figure cover?" layout="brief">
+
+<Option title="Keep feedback tray visible" recommended summary="Only this option keeps the Feedback tray usable while a figure is maximized.">
+
+<Consideration title="Comment while maximized" verdict="Yes" tone="good" />
+
+<Consideration title="Context preserved" verdict="Strong" tone="good" />
+
+<Consideration title="Build effort" verdict="Medium" tone="mixed" />
+
+</Option>
+
+<Option title="Cover the entire app" summary="The figure takes the whole window, tray included.">
+
+<Consideration title="Comment while maximized" verdict="No" tone="bad" />
+
+<Consideration title="Context preserved" verdict="Moderate" tone="mixed" />
+
+<Consideration title="Build effort" verdict="Low" tone="good" />
+
+</Option>
+
+<Option title="Open a dedicated figure view" summary="The reader leaves the document for a surface built around the figure.">
+
+<Consideration title="Comment while maximized" verdict="Possible" tone="mixed" />
+
+<Consideration title="Context preserved" verdict="Weak" tone="bad" />
+
+<Consideration title="Build effort" verdict="High" tone="bad" />
+
+</Option>
+
+</Decision>
+
+A reader who agrees with the recommendation answers after one sentence.
+A reader who does not opens the comparison and gets B.
+
+<Part title="Shipping and your review" />
+
+## How to choose
+
+_Pick the cheapest shape that still supports a real choice._
+
+1. Every shape renders the same decision, so any difference in effort belongs to the shape.
+2. A verdict reaches the reader as one signal, never as a word and a glyph and a hue saying the same thing.
+3. A criterion that every option scores the same never renders.
+4. Choosing an option never moves anything else on the page.
+5. Every shape can be answered with the keyboard alone and read with scripts disabled.
