@@ -647,6 +647,38 @@ classes.
     text-decoration: line-through;
     opacity: 0.85;
   }
+
+  /* A saved comment has to remain visible where it was left. The same
+     MessageSquare glyph used by the Comment action becomes a compact marker
+     on the element itself, in both the reading canvas and maximized canvas. */
+  .flow-diagram-comment-marker {
+    position: absolute;
+    top: -0.45rem;
+    right: -0.45rem;
+    z-index: 4;
+    display: inline-flex;
+    min-width: 1.1rem;
+    height: 1.1rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.12rem;
+    padding: 0 0.25rem;
+    border: 2px solid var(--bg);
+    border-radius: 999px;
+    background: var(--accent-c);
+    color: var(--bg);
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
+    font-family: var(--font-sans);
+    font-size: 0.5625rem;
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
+  }
+  .flow-diagram-comment-marker svg {
+    width: 0.65rem;
+    height: 0.65rem;
+    flex: none;
+  }
   /* --- The diagram's own feedback collector -------------------------------
      Two levels that must not collapse. This holds the notes made on ONE
      diagram; the plan's feedback package holds everything and is sent once,
@@ -674,6 +706,7 @@ classes.
       0 16px 40px rgb(0 0 0 / 0.22),
       0 3px 10px rgb(0 0 0 / 0.1);
     font-family: var(--font-sans);
+    overflow: hidden;
   }
   .flow-collector[hidden] {
     display: none;
@@ -684,6 +717,7 @@ classes.
     gap: 0.4rem;
     padding: 0.55rem 0.7rem 0.45rem;
     border-bottom: 1px solid color-mix(in srgb, var(--ink-c) 9%, transparent);
+    background: var(--header-bg);
     color: var(--ink-c);
     font-size: 0.8125rem;
     font-weight: 700;
@@ -814,26 +848,25 @@ classes.
     color: var(--flow-warn-ink);
   }
 
-  /* The primary action. Inline this is the only thing a marked-up diagram
-     shows - the reading column never sprouts a tray - and maximized it sits
-     under the diagram's own list. */
+  /* The primary action changes host, not identity. Inline it is compact
+     diagram chrome beside the note count. Maximized it is the tray footer's
+     full-width conclusion, within the tray border and shadow. */
   .flow-collector-add {
-    position: absolute;
-    right: 1rem;
-    bottom: 1rem;
-    z-index: 78;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.35rem;
-    padding: 0.45rem 0.85rem;
+    min-height: 1.5rem;
+    padding: 0.25rem 0.6rem;
     border: 1px solid var(--accent-c);
     border-radius: 0.4rem;
     background: var(--accent-c);
     color: var(--bg);
-    box-shadow: 0 6px 18px rgb(0 0 0 / 0.24);
     font-family: var(--font-sans);
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
     cursor: pointer;
   }
   .flow-collector-add[hidden] {
@@ -845,6 +878,13 @@ classes.
   .flow-collector-add:focus-visible {
     outline: 2px solid var(--accent-c);
     outline-offset: 2px;
+  }
+  .flow-collector-foot > .flow-collector-add {
+    width: 100%;
+    min-height: 2rem;
+    margin-top: 0.55rem;
+    box-shadow: 0 3px 10px rgb(0 0 0 / 0.16);
+    font-size: 0.75rem;
   }
 
   /* --- Announcements ----------------------------------------------------- */

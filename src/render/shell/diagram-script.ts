@@ -487,7 +487,11 @@ export const DIAGRAM_SCRIPT = `
     drafts = drafts.filter(
       (d) => !(d.kind === "edit-text" && d.element === node && d.fieldName === name),
     );
-    if (next && next !== original) {
+    // Empty is still an edit. Dropping that draft left the contenteditable
+    // field empty in the live DOM, so deleting every character silently
+    // erased the authored text instead of painting the same visible diff as
+    // any other replacement.
+    if (next !== original) {
       drafts.push({
         id: nextId++, kind: "edit-text", diagram: node.closest("[data-flow-diagram]") || node,
         element: node, anchor: anchorOf(node), field, fieldName: name,
@@ -646,6 +650,9 @@ export const DIAGRAM_SCRIPT = `
   const clearLayer = () => {
     for (const diagram of diagrams) {
       diagram.removeAttribute("data-flow-proposed");
+      for (const marker of diagram.querySelectorAll("[data-flow-comment-marker]")) {
+        marker.remove();
+      }
       for (const n of diagram.querySelectorAll("[data-flow-proposed]")) {
         n.removeAttribute("data-flow-proposed");
       }
@@ -730,7 +737,18 @@ export const DIAGRAM_SCRIPT = `
       counts.set(draft.element, (counts.get(draft.element) || 0) + 1);
     }
     for (const entry of counts) {
-      restateName(entry[0], entry[1] === 1 ? ", 1 comment" : ", " + entry[1] + " comments");
+      const subject = entry[0];
+      const count = entry[1];
+      restateName(subject, count === 1 ? ", 1 comment" : ", " + count + " comments");
+      // The document already uses MessageSquare for comments. Repeating that
+      // glyph at the subject makes the saved comment visible without making
+      // every untouched element carry permanent review chrome.
+      const marker = el("span", "flow-diagram-comment-marker");
+      marker.setAttribute("data-flow-comment-marker", "");
+      marker.setAttribute("aria-hidden", "true");
+      marker.innerHTML = ICON.comment;
+      if (count > 1) marker.appendChild(el("span", "", String(count)));
+      subject.appendChild(marker);
     }
     for (const diagram of diagrams) {
       const mine = drafts.filter((d) => d.diagram === diagram);
@@ -1096,19 +1114,22 @@ export const DIAGRAM_SCRIPT = `
     const status = el("p", "flow-collector-status");
     status.hidden = true;
     foot.appendChild(status);
-    root.appendChild(foot);
-
-    // The primary action, in both the inline and the maximized presentation.
+    // One action, with two honest homes: beside the inline note count while
+    // reading, and inside the tray footer while the diagram is maximized.
+    // It starts hidden before it enters the document so initial paint can
+    // never expose an empty, unanchored green pill.
     const add = el("button", "flow-collector-add");
     add.type = "button";
+    add.hidden = true;
     add.addEventListener("click", (event) => {
       event.stopPropagation();
       handOff(diagram, status);
     });
+    foot.appendChild(add);
+    root.appendChild(foot);
 
     diagram.appendChild(root);
-    diagram.appendChild(add);
-    collectors.set(diagram, { root, list, count, add, status, scope });
+    collectors.set(diagram, { root, list, count, add, status, scope, foot });
   };
 
   const handOff = (diagram, status) => {
@@ -1196,8 +1217,15 @@ export const DIAGRAM_SCRIPT = `
     c.add.textContent = mine.length === 1
       ? "Add 1 note to plan feedback"
       : "Add " + mine.length + " notes to plan feedback";
-    // No note, no button. Inline shows only the button; the list is the
-    // maximized view's job, so the reading column never sprouts a tray.
+    const total = diagram.querySelector("[data-flow-total]");
+    const toolbar = diagram.querySelector("[data-flow-controls]");
+    if (maximized) {
+      if (c.add.parentElement !== c.foot) c.foot.appendChild(c.add);
+    } else if (total && toolbar && c.add.parentElement !== toolbar) {
+      total.insertAdjacentElement("afterend", c.add);
+    }
+    // No note, no button. Inline shows it as diagram chrome beside the note
+    // count; maximized shows it as the tray's final footer action.
     c.add.hidden = mine.length === 0;
     c.root.hidden = mine.length === 0 || !maximized;
     // The status describes one attempt at one batch. Once the batch changes it
