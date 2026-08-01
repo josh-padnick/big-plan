@@ -38,6 +38,10 @@ export type DocumentIdentity = {
   // Present only when a local review runtime rendered and served this copy.
   readonly reviewSessionId?: string;
   readonly reviewToken?: string;
+  // Validated runtime state serialized by the server. The viewer reads this
+  // synchronously before constructing its chrome, so reload recovery is part
+  // of the first interactive paint rather than an empty-state flash.
+  readonly reviewBootstrap?: string;
 };
 
 const rootAttributesFor = (
@@ -50,6 +54,9 @@ const rootAttributesFor = (
   ...(identity.reviewToken === undefined
     ? {}
     : { "data-review-token": identity.reviewToken }),
+  ...(identity.reviewBootstrap === undefined
+    ? {}
+    : { "data-review-bootstrap": identity.reviewBootstrap }),
 });
 
 const renderCompiledDocument = ({

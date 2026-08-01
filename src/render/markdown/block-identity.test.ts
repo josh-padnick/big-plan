@@ -151,6 +151,26 @@ describe("block identity boundaries", () => {
     );
   });
 
+  it("should give adjacent Markdown rows their concrete first-cell labels", () => {
+    const { html, blocks } = compile(
+      "## Rows\n\n| Field | Meaning |\n| --- | --- |\n| `versionId` | Content hash |\n| `number` | History position |\n",
+    );
+    const rows = blocks.filter((block) => block.kind === "table-row");
+    expect(rows.map((row) => row.label)).toEqual([
+      "Field",
+      "versionId",
+      "number",
+    ]);
+    expect(rows.map((row) => row.id)).toEqual([
+      "section/rows/table-row-1",
+      "section/rows/table-row-2",
+      "section/rows/table-row-3",
+    ]);
+    expect(html).toContain('data-block-label="versionId"');
+    expect(html).toContain('data-block-label="number"');
+    expect(rows.every((row) => row.section === "Rows")).toBe(true);
+  });
+
   it("should not address a component's private internals as blocks", () => {
     const { blocks } = compile(DECISION_FIXTURE);
     // The decision card is one target; its options and considerations are the

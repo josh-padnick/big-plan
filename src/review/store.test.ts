@@ -6,8 +6,10 @@ import {
   appendProgress,
   deriveReviewPlanId,
   prepareStore,
+  readActiveDraft,
   readProgress,
   reviewStoreFor,
+  writeActiveDraft,
 } from "./store.js";
 
 const created: Array<string> = [];
@@ -38,6 +40,7 @@ describe("review store placement", () => {
       store.reviewDirectory,
       store.feedbackDirectory,
       store.draftsPath,
+      store.activeDraftPath,
       store.sentPath,
       store.progressPath,
       store.sessionPath,
@@ -58,6 +61,24 @@ describe("review store placement", () => {
     expect(() =>
       reviewStoreFor({ planPath, planId: "../../../../etc" }),
     ).toThrow(/outside/);
+  });
+});
+
+describe("review store active draft", () => {
+  it("should round-trip the unfinished whole-plan field without trimming", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeActiveDraft({
+      path: store.activeDraftPath,
+      value: "  Unfinished thought.\n",
+    });
+    expect(
+      await readActiveDraft({
+        path: store.activeDraftPath,
+        validate: (value) => (typeof value === "string" ? value : ""),
+      }),
+    ).toBe("  Unfinished thought.\n");
   });
 });
 
