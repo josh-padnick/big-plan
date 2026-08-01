@@ -18,6 +18,9 @@ const COLLAPSIBLE_CONTENT =
 describe("bulk collapse controls", () => {
   it("should offer expand-all and collapse-all beside the contents label", () => {
     const html = shellFor(COLLAPSIBLE_CONTENT);
+    expect(html).toMatch(
+      /class="[^"]*\bflex\b[^"]*\bjustify-between\b[^"]*" data-toc-header>/,
+    );
     expect(html).toContain("data-expand-all");
     expect(html).toContain("data-collapse-all");
     expect(html).toContain('aria-label="Expand all sections"');
