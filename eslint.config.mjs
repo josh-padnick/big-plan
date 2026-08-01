@@ -20,6 +20,7 @@ export default tseslint.config(
       "examples/",
       "test-results/",
       "playwright-report/",
+      ".agent-runs/",
     ],
   },
   js.configs.recommended,

@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import type { Locator } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
+import { startReviewRuntime } from "../src/review/server.js";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -64,6 +65,7 @@ type WorkerFixtures = {
   readonly wireframeFormFactorsViewerUrl: string;
   readonly wireframeShortContentViewerUrl: string;
   readonly wireframeViewerUrl: string;
+  readonly reviewRuntimeUrl: string;
 };
 
 const ANNOTATION_CODE_MDX = `# Annotation code
@@ -224,7 +226,39 @@ const WIREFRAME_SHORT_CONTENT_MDX = `# Short wireframe
 </Wireframe>
 `;
 
+const REVIEW_RUNTIME_MDX = `# Review persistence
+
+Keep every reviewer note safe while the plan is discussed.
+
+## Details
+
+The table has adjacent targets that must remain distinguishable.
+
+| Field | Meaning |
+| --- | --- |
+| \`versionId\` | Content hash of the snapshot |
+| \`number\` | Position in this plan's history |
+
+## Delivery
+
+Sending writes one real feedback package beside this plan.
+`;
+
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
+  reviewRuntimeUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-review-runtime-"),
+      );
+      const inputPath = join(outputDir, "plan.mdx");
+      await writeFile(inputPath, REVIEW_RUNTIME_MDX, "utf8");
+      const runtime = await startReviewRuntime({ planPath: inputPath });
+      await use(runtime.url);
+      await runtime.close();
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
   annotationCodeViewerUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(

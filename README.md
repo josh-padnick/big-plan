@@ -32,7 +32,8 @@ Validation checks that the plan can be compiled and rendered, then applies linti
 Rendering applies the same linting rules, so a plan that fails lint never reaches a reviewer.
 Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.model.json`.
 Both sit next to the input, while the MDX file remains the canonical source and JSON is always derived output.
-The rendered HTML embeds all styling and branding assets, makes no external requests, and never executes plan-authored code; the only script is the shell's embedded viewer script for the [documented reader interactions](docs/src/content/docs/intro/features.md), and every affordance keeps a no-JS fallback.
+`review` serves the plan on loopback so a reviewer can comment on it and send one feedback package back to the agent; pending work restores across reloads, the tray stays reachable at desktop and tablet widths, and everything it writes stays under a `.big-plan/` directory beside the plan until you stop it.
+The rendered HTML embeds all styling and branding assets, makes no external requests, and never executes plan-authored code; its only scripts are the shell's own embedded viewer and commenting surfaces described in the [documented reader interactions](docs/src/content/docs/intro/features.md), and every affordance keeps a no-JS fallback.
 A responsive table of contents links to the document's level-two headings and highlights the section being read, and the light/dark theme follows the OS preference through CSS alone.
 
 Plans are prose plus validated components, like this callout:

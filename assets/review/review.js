@@ -95,21 +95,25 @@
   const kindFor = (block) =>
     (block && block.getAttribute("data-block-kind")) || "block";
 
-  // How a target reads in the tray, on a chip, and in the agent's brief. The
-  // kind leads so a reviewer scanning the tray sees what kind of thing they
-  // argued with before reading which one.
+  // How a target reads in the tray. The authored label stays in the middle,
+  // where adjacent same-kind targets differ, while section and kind keep the
+  // relationship to the plan explicit.
   const describeTarget = (target) => {
     if (target.type === "document") return "Whole plan";
     const kind = target.kind ? readableKind(target.kind) : "Block";
+    const location = [target.section, target.label]
+      .filter((part) => typeof part === "string" && part !== "")
+      .join(" / ");
     if (target.type === "lines") {
       const range =
         target.start === target.end
           ? "line " + target.start
           : "lines " + target.start + "-" + target.end;
-      return kind + " · " + range;
+      return location + " · " + kind + " · " + range;
     }
-    if (target.type === "selection") return kind + " · selected text";
-    return kind + " · " + (target.label || "");
+    if (target.type === "selection")
+      return location + " · " + kind + " · selected text";
+    return location + " · " + kind;
   };
 
   const readableKind = (kind) =>
@@ -131,6 +135,7 @@
   let composeTarget = null;
   let cursorBlock = null;
   let pendingSelection = null;
+  let activeDraft = "";
   let progressSeq = 0;
   let progressTimer = null;
   let runtimeConfirmed = false;
@@ -149,32 +154,43 @@
   // plan text, so a collision would leak one plan's content into another's.
   const storageKey = planId === "" ? null : "big-plan:review:drafts:" + planId;
 
-  const readLocalDrafts = () => {
-    if (storageKey === null) return [];
+  const emptyStoredState = () => ({ drafts: [], sent: [], activeDraft: "" });
+
+  const isStoredState = (value) =>
+    value !== null &&
+    typeof value === "object" &&
+    Array.isArray(value.drafts) &&
+    Array.isArray(value.sent) &&
+    typeof value.activeDraft === "string";
+
+  const checkedStoredState = (value) => {
+    if (!isStoredState(value)) return emptyStoredState();
+    return {
+      drafts: value.drafts.filter(isComment),
+      sent: value.sent.filter(isComment),
+      activeDraft: value.activeDraft.slice(0, BODY_LIMIT),
+    };
+  };
+
+  const readLocalState = () => {
+    if (storageKey === null) return emptyStoredState();
     try {
       const raw = localStorage.getItem(storageKey);
-      const parsed = raw === null ? [] : JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.filter(isComment) : [];
+      return checkedStoredState(raw === null ? null : JSON.parse(raw));
     } catch {
-      return [];
+      return emptyStoredState();
     }
   };
 
-  const writeLocalDrafts = () => {
+  const writeLocalState = () => {
     if (storageKey === null) return;
     try {
-      localStorage.setItem(storageKey, JSON.stringify(drafts));
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({ drafts, sent, activeDraft }),
+      );
     } catch {
       // A full or blocked store costs persistence, never the session.
-    }
-  };
-
-  const clearLocalDrafts = () => {
-    if (storageKey === null) return;
-    try {
-      localStorage.removeItem(storageKey);
-    } catch {
-      // Nothing to recover from; the runtime already holds the drafts.
     }
   };
 
@@ -185,6 +201,32 @@
     typeof value.body === "string" &&
     value.target !== null &&
     typeof value.target === "object";
+
+  const readBootstrapState = () => {
+    const raw = root.getAttribute("data-review-bootstrap");
+    if (raw === null) return emptyStoredState();
+    try {
+      return checkedStoredState(JSON.parse(raw));
+    } catch {
+      return emptyStoredState();
+    }
+  };
+
+  // The runtime injects validated state into the document itself, so this
+  // assignment runs before any review chrome is constructed. Browser storage
+  // is a synchronous recovery mirror for a reload that races the last disk
+  // write; the server remains the durable owner across runtime restarts.
+  const diskState = hasRuntime ? readBootstrapState() : emptyStoredState();
+  const browserState = readLocalState();
+  const initialIds = new Set(diskState.drafts.map((draft) => draft.id));
+  drafts = diskState.drafts.concat(
+    browserState.drafts.filter((draft) => !initialIds.has(draft.id)),
+  );
+  sent = diskState.sent;
+  activeDraft =
+    browserState.activeDraft !== ""
+      ? browserState.activeDraft
+      : diskState.activeDraft;
 
   // ---------------------------------------------------------------- transport
 
@@ -228,12 +270,15 @@
   };
 
   const persist = async () => {
+    writeLocalState();
     if (!hasRuntime) {
-      writeLocalDrafts();
       return;
     }
     await confirmRuntime();
-    await call("/api/drafts", { method: "PUT", body: { drafts } });
+    await call("/api/drafts", {
+      method: "PUT",
+      body: { drafts, activeDraft },
+    });
   };
 
   // ------------------------------------------------------------------ layout
@@ -248,7 +293,8 @@
     type: "button",
     "data-review-toggle": true,
     "aria-expanded": "false",
-    title: "Open the Feedback tray (Alt+C)",
+    "aria-label": "Show comments",
+    title: "Show comments (Alt+C)",
   });
   const toggleCount = el("span", {
     "data-review-toggle-count": true,
@@ -256,7 +302,7 @@
   });
   toggle.append(
     icon(ICON_COMMENT),
-    el("span", { text: "Review" }),
+    el("span", { text: "Comments" }),
     toggleCount,
   );
 
@@ -301,6 +347,7 @@
     rows: "3",
     placeholder: "Type a note about the whole plan…",
     maxlength: String(BODY_LIMIT),
+    value: activeDraft,
   });
   const attachInput = el("input", {
     type: "checkbox",
@@ -321,13 +368,56 @@
   const agentSave = el("button", {
     type: "button",
     "data-review-agent-save": true,
-    text: "Save draft",
+    text: "Add to feedback",
   });
   const progressList = el("ol", { "data-review-progress": true, hidden: true });
 
+  const outcomePreview = el(
+    "section",
+    {
+      "data-review-outcome-preview": true,
+      "aria-label": "Simulated agent response states",
+    },
+    [
+      el("div", { "data-review-preview-head": true }, [
+        el("h3", { text: "Response preview" }),
+        el("span", { "data-review-preview-chip": true, text: "Simulated" }),
+      ]),
+      el("p", {
+        "data-review-preview-note": true,
+        text:
+          "Package delivery is real. Agent replies are not connected yet; " +
+          "these are the outcome states the tray will use.",
+      }),
+      el("ol", { "data-review-outcome-list": true }, [
+        el("li", { "data-review-outcome": "changed" }, [
+          el("span", {
+            "data-review-outcome-state": true,
+            text: "Changed",
+          }),
+          el("span", { text: "The plan was revised." }),
+        ]),
+        el("li", { "data-review-outcome": "question" }, [
+          el("span", {
+            "data-review-outcome-state": true,
+            text: "Needs your answer",
+          }),
+          el("span", { text: "The agent needs a decision." }),
+        ]),
+        el("li", { "data-review-outcome": "declined" }, [
+          el("span", {
+            "data-review-outcome-state": true,
+            text: "Outside this plan",
+          }),
+          el("span", { text: "The request is beyond plan revision." }),
+        ]),
+      ]),
+    ],
+  );
+
   const agentPanel = el("section", { "data-review-agent": true }, [
     el("div", { "data-review-agent-head": true }, [
-      el("h3", { text: "Agent" }),
+      el("h3", { text: "Runtime status" }),
       agentState,
     ]),
     el("label", {
@@ -339,22 +429,64 @@
     attachLabel,
     agentSave,
     progressList,
+    outcomePreview,
   ]);
 
-  rail.append(
-    el("div", { "data-review-rail-head": true }, [
-      el("h2", { text: "Feedback tray" }),
-      countLabel,
-      hideButton,
-    ]),
-    el("div", { "data-review-scroll": true }, [
-      draftList,
-      emptyNote,
-      sentGroup,
-    ]),
-    el("div", { "data-review-send-bar": true }, [sendButton, sendNote]),
-    agentPanel,
+  const commentsTab = el("button", {
+    type: "button",
+    role: "tab",
+    "data-review-tab": "comments",
+    "aria-selected": "true",
+    "aria-controls": "big-plan-review-comments",
+  });
+  commentsTab.append(
+    icon(ICON_COMMENT),
+    el("span", { text: "Comments" }),
+    countLabel,
   );
+  const chatTab = el("button", {
+    type: "button",
+    role: "tab",
+    "data-review-tab": "chat",
+    "aria-selected": "false",
+    "aria-controls": "big-plan-review-chat",
+  });
+  chatTab.append(
+    el("span", { text: "Chat" }),
+    el("span", { "data-review-tab-preview": true, text: "Preview" }),
+  );
+  const tabList = el("div", { "data-review-tabs": true, role: "tablist" }, [
+    commentsTab,
+    chatTab,
+    hideButton,
+  ]);
+  const commentsPanel = el(
+    "section",
+    {
+      id: "big-plan-review-comments",
+      "data-review-panel": "comments",
+      role: "tabpanel",
+    },
+    [
+      el("div", { "data-review-scroll": true }, [
+        draftList,
+        emptyNote,
+        sentGroup,
+      ]),
+      el("div", { "data-review-send-bar": true }, [sendButton, sendNote]),
+    ],
+  );
+  const chatPanel = el(
+    "section",
+    {
+      id: "big-plan-review-chat",
+      "data-review-panel": "chat",
+      role: "tabpanel",
+      hidden: true,
+    },
+    [agentPanel],
+  );
+  rail.append(tabList, commentsPanel, chatPanel);
 
   const affordance = el("button", {
     type: "button",
@@ -383,6 +515,7 @@
   const composeSave = el("button", {
     type: "button",
     "data-review-compose-save": true,
+    disabled: true,
     text: "Save draft",
   });
   const compose = el(
@@ -413,13 +546,25 @@
     ],
   );
 
+  const markerLayer = el("div", {
+    "data-review-marker-layer": true,
+    "aria-label": "Existing comments",
+  });
   const live = el("p", { "data-review-live": true, "aria-live": "polite" });
+  const backdrop = el("button", {
+    type: "button",
+    "data-review-backdrop": true,
+    "aria-label": "Close comments and return to the plan",
+    hidden: true,
+  });
 
   const surface = el("div", { "data-review-root": true }, [
+    backdrop,
     toggle,
     rail,
     affordance,
     compose,
+    markerLayer,
     live,
   ]);
   document.body.appendChild(surface);
@@ -430,14 +575,46 @@
 
   // -------------------------------------------------------------- tray render
 
+  let readingPosition = window.scrollY;
+
   const setRailOpen = (open) => {
+    if (open === !rail.hidden) {
+      return;
+    }
+    if (open && rail.hidden) {
+      readingPosition = window.scrollY;
+    }
     rail.hidden = !open;
+    backdrop.hidden = !open;
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
-    if (open) root.setAttribute("data-review-open", "");
-    else root.removeAttribute("data-review-open");
+    toggle.setAttribute("aria-label", open ? "Hide comments" : "Show comments");
+    if (open) {
+      root.setAttribute("data-review-open", "");
+    } else {
+      root.removeAttribute("data-review-open");
+    }
+    // The drawer never navigates the document. Re-applying the captured
+    // position defeats scroll anchoring caused by the desktop width change
+    // and makes the below-1280 overlay reversible by construction.
+    requestAnimationFrame(() => window.scrollTo(0, readingPosition));
   };
 
   const railIsOpen = () => !rail.hidden;
+
+  const setActiveTab = (tab) => {
+    const commentsActive = tab === "comments";
+    commentsTab.setAttribute(
+      "aria-selected",
+      commentsActive ? "true" : "false",
+    );
+    chatTab.setAttribute("aria-selected", commentsActive ? "false" : "true");
+    commentsPanel.hidden = !commentsActive;
+    chatPanel.hidden = commentsActive;
+  };
+
+  commentsTab.addEventListener("click", () => setActiveTab("comments"));
+  chatTab.addEventListener("click", () => setActiveTab("chat"));
+  backdrop.addEventListener("click", () => setRailOpen(false));
 
   const chipCounts = () => {
     const counts = new Map();
@@ -449,8 +626,50 @@
     return counts;
   };
 
-  // Chips are drawn from an attribute by the stylesheet, so no markup is
-  // injected into authored content and the count is always the live truth.
+  const markerByBlock = new Map();
+
+  const positionMarkers = () => {
+    for (const [block, marker] of markerByBlock) {
+      const rect = block.getBoundingClientRect();
+      const visible =
+        marker.hasAttribute("data-review-marker-active") &&
+        rect.bottom >= 0 &&
+        rect.top <= window.innerHeight;
+      marker.hidden = !visible;
+      if (!visible) continue;
+      marker.style.top = Math.max(8, rect.top) + "px";
+      marker.style.left = Math.max(4, rect.left - 30) + "px";
+    }
+  };
+
+  const markerFor = (block) => {
+    const existing = markerByBlock.get(block);
+    if (existing) return existing;
+    const marker = el("button", {
+      type: "button",
+      "data-review-marker": true,
+    });
+    marker.appendChild(icon(ICON_COMMENT));
+    marker.addEventListener("click", () => {
+      const blockId = block.getAttribute("data-block-id");
+      const draft = drafts.find((item) => item.target.blockId === blockId);
+      const comment =
+        draft || sent.find((item) => item.target.blockId === blockId);
+      if (!comment) return;
+      editingId = draft ? draft.id : null;
+      setActiveTab("comments");
+      setRailOpen(true);
+      renderTray();
+      focusTarget(comment);
+    });
+    markerLayer.appendChild(marker);
+    markerByBlock.set(block, marker);
+    return marker;
+  };
+
+  // Attributes keep the rendered block's state machine-readable; the visible
+  // marker is a real button, so an existing comment is directly editable
+  // rather than a decorative pseudo-element.
   const paintChips = () => {
     const counts = chipCounts();
     const sentBlocks = new Set(
@@ -469,7 +688,24 @@
         block.removeAttribute("data-review-annotated");
         block.removeAttribute("data-review-chip-tone");
       }
+      const marker = markerFor(block);
+      const hasComment = pending > 0 || sentBlocks.has(id);
+      marker.hidden = !hasComment;
+      if (hasComment) marker.setAttribute("data-review-marker-active", "");
+      else marker.removeAttribute("data-review-marker-active");
+      marker.setAttribute(
+        "data-review-marker-tone",
+        pending > 0 ? "draft" : "sent",
+      );
+      marker.setAttribute(
+        "aria-label",
+        pending > 0
+          ? `Edit ${pending} comment${pending === 1 ? "" : "s"} on ${labelFor(block)}`
+          : `Open the sent comment on ${labelFor(block)}`,
+      );
+      marker.setAttribute("data-review-marker-count", String(pending));
     }
+    positionMarkers();
   };
 
   const focusTarget = (comment) => {
@@ -585,9 +821,7 @@
     emptyNote.hidden = drafts.length > 0;
     const pending = drafts.length;
     countLabel.textContent =
-      pending === 0
-        ? "Nothing pending"
-        : pending + (pending === 1 ? " pending" : " pending");
+      pending === 0 ? "0" : pending + (pending === 1 ? " pending" : " pending");
     toggleCount.textContent = String(pending);
     toggle.setAttribute(
       "data-review-has-pending",
@@ -649,17 +883,20 @@
       composeQuote.textContent = "";
     }
     composeInput.value = "";
+    composeSave.disabled = true;
     compose.hidden = false;
     positionCompose(target);
     // The tray opens with the first comment: the reviewer should see where a
     // draft is about to land before they have written it.
-    if (!railIsOpen()) setRailOpen(true);
+    if (!railIsOpen() && window.innerWidth >= 1280) setRailOpen(true);
     setTimeout(() => composeInput.focus(), 0);
   };
 
   const closeCompose = () => {
     compose.hidden = true;
     composeTarget = null;
+    compose.removeAttribute("data-review-compose-inline");
+    if (compose.parentElement !== surface) surface.appendChild(compose);
   };
 
   const positionCompose = (target) => {
@@ -668,32 +905,36 @@
           '[data-block-id="' + cssEscape(target.blockId) + '"]',
         )
       : null;
-    if (!block || window.innerWidth < 896) {
+    if (!block) {
       compose.removeAttribute("style");
       compose.setAttribute("data-review-compose-centered", "");
       return;
     }
+    // A table row cannot legally own a div sibling inside tbody, so its
+    // scroll container is the insertion anchor. Every other authored block
+    // can place the editor immediately after itself. Either way the editor is
+    // in flow and pushes following content instead of painting over it.
+    const anchor =
+      block.tagName === "TR"
+        ? block.closest("[data-table-scroll-container]") || block
+        : block;
+    compose.removeAttribute("style");
     compose.removeAttribute("data-review-compose-centered");
-    const rect = block.getBoundingClientRect();
-    const limit = rightLimit();
-    const width = Math.min(26 * 16, limit - 32);
-    const left = Math.max(16, Math.min(rect.left, limit - width - 16));
-    compose.style.width = width + "px";
-    compose.style.left = left + "px";
-    const height = compose.offsetHeight || 260;
-    const below = rect.bottom + 8;
-    // Below the block when there is room, above it when there is not - and
-    // always clamped inside the viewport, because a card the reviewer has to
-    // scroll to reach is a card they cannot type in.
-    const preferred =
-      below + height > window.innerHeight - 16 ? rect.top - height - 8 : below;
-    compose.style.top =
-      Math.max(16, Math.min(preferred, window.innerHeight - height - 16)) +
-      "px";
+    compose.setAttribute("data-review-compose-inline", "");
+    anchor.after(compose);
+  };
+
+  const normalizedComposeBody = () => composeInput.value.trim();
+
+  const syncComposeValidity = () => {
+    composeSave.disabled =
+      composeTarget === null || normalizedComposeBody() === "";
   };
 
   const saveCompose = async () => {
-    const body = composeInput.value.trim();
+    const body = normalizedComposeBody();
+    // The handler is the authority. Both pointer and Ctrl/Cmd+Enter arrive
+    // here, so the shortcut cannot bypass the button's disabled state.
     if (body === "" || composeTarget === null) return;
     addDraft(composeTarget, body);
     announce("Draft saved on " + describeTarget(composeTarget) + ".");
@@ -704,13 +945,16 @@
 
   composeSave.addEventListener("click", saveCompose);
   composeCancel.addEventListener("click", closeCompose);
+  composeInput.addEventListener("input", syncComposeValidity);
   composeInput.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       event.stopPropagation();
       closeCompose();
     }
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey))
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
       saveCompose();
+    }
   });
 
   // -------------------------------------------------------------- affordance
@@ -720,6 +964,7 @@
     blockId: block.getAttribute("data-block-id"),
     kind: kindFor(block),
     label: labelFor(block),
+    section: block.getAttribute("data-block-section") || "",
   });
 
   // The right edge the floating chrome may reach: the window, or the tray's
@@ -729,6 +974,10 @@
 
   const showAffordance = (block) => {
     if (!block || !compose.hidden) return;
+    if (railIsOpen() && window.innerWidth < 1280) {
+      affordance.hidden = true;
+      return;
+    }
     cursorBlock = block;
     const rect = block.getBoundingClientRect();
     if (rect.bottom < 0 || rect.top > window.innerHeight) return;
@@ -795,6 +1044,7 @@
       blockId: block.getAttribute("data-block-id"),
       kind: kindFor(block),
       label: labelFor(block),
+      section: block.getAttribute("data-block-section") || "",
       start: start,
       end: start + quote.length,
       quote: quote.slice(0, QUOTE_LIMIT),
@@ -817,6 +1067,7 @@
       blockId: block.getAttribute("data-block-id"),
       kind: kindFor(block),
       label: labelFor(block),
+      section: block.getAttribute("data-block-section") || "",
       start: Math.min(...numbers),
       end: Math.max(...numbers),
       quote: covered
@@ -866,6 +1117,7 @@
         : { type: "document" };
     addDraft(target, body);
     agentInput.value = "";
+    activeDraft = "";
     attachInput.checked = false;
     announce("Draft saved on " + describeTarget(target) + ".");
     renderTray();
@@ -873,9 +1125,21 @@
   };
 
   agentSave.addEventListener("click", saveAgentNote);
+  let activeDraftTimer = null;
+  agentInput.addEventListener("input", () => {
+    activeDraft = agentInput.value;
+    writeLocalState();
+    if (activeDraftTimer !== null) window.clearTimeout(activeDraftTimer);
+    activeDraftTimer = window.setTimeout(() => {
+      activeDraftTimer = null;
+      void save();
+    }, 120);
+  });
   agentInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey))
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
       saveAgentNote();
+    }
   });
 
   // ------------------------------------------------------------------- submit
@@ -887,8 +1151,7 @@
     agentState.textContent = text;
     agentState.setAttribute("data-tone", tone);
     toggle.setAttribute("data-review-agent-tone", tone);
-    toggle.title =
-      tone === "idle" ? "Open the Feedback tray (Alt+C)" : "Agent: " + text;
+    toggle.title = tone === "idle" ? "Show comments (Alt+C)" : "Agent: " + text;
     if (drafts.length === 0)
       toggleCount.textContent = tone === "idle" ? "0" : "·";
   };
@@ -914,6 +1177,7 @@
       });
       sent = sent.concat(drafts);
       drafts = [];
+      activeDraft = agentInput.value;
       renderTray();
       await persist();
       setAgentState("Package received", "working");
@@ -924,6 +1188,7 @@
         answer.packageId +
         ".";
       announce("Feedback sent to the agent.");
+      setActiveTab("chat");
       startProgress();
     } catch (error) {
       sendNote.textContent = describeError(error);
@@ -1051,6 +1316,7 @@
   window.addEventListener("resize", () => {
     if (!compose.hidden && composeTarget) positionCompose(composeTarget);
     affordance.hidden = true;
+    positionMarkers();
   });
   window.addEventListener(
     "scroll",
@@ -1059,6 +1325,7 @@
       if (!affordance.hidden && cursorBlock && !pendingSelection) {
         showAffordance(cursorBlock);
       }
+      positionMarkers();
     },
     { passive: true },
   );
@@ -1067,7 +1334,6 @@
 
   const boot = async () => {
     if (!hasRuntime) {
-      drafts = readLocalDrafts();
       sendNote.textContent =
         "Reading offline: drafts stay in this browser until you run " +
         "`big-plan review`.";
@@ -1080,23 +1346,33 @@
       // On-disk custody becomes the single home: anything the browser held is
       // handed over once and then cleared, so drafts do not linger in an
       // origin every local file shares.
-      const carried = readLocalDrafts();
       const answer = await call("/api/drafts");
       const known = new Set((answer.drafts || []).map((draft) => draft.id));
+      const carried = readLocalState();
       drafts = (answer.drafts || []).concat(
-        carried.filter((draft) => !known.has(draft.id)),
+        carried.drafts.filter((draft) => !known.has(draft.id)),
       );
       sent = answer.sent || [];
-      if (carried.length > 0) {
-        await call("/api/drafts", { method: "PUT", body: { drafts } });
-        clearLocalDrafts();
-      }
+      activeDraft =
+        carried.activeDraft !== ""
+          ? carried.activeDraft
+          : answer.activeDraft || activeDraft;
+      agentInput.value = activeDraft;
+      await call("/api/drafts", {
+        method: "PUT",
+        body: { drafts, activeDraft },
+      });
+      writeLocalState();
       renderTray();
       if (drafts.length > 0) setRailOpen(true);
       if (sent.length > 0) startProgress();
     } catch (error) {
       sendNote.textContent = describeError(error);
-      drafts = readLocalDrafts();
+      const carried = readLocalState();
+      drafts = carried.drafts;
+      sent = carried.sent;
+      activeDraft = carried.activeDraft;
+      agentInput.value = activeDraft;
       renderTray();
     }
   };

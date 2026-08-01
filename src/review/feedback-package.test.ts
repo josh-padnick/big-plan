@@ -107,6 +107,22 @@ describe("agent brief containment", () => {
     expect(brief).toContain("lines 13-18");
   });
 
+  it("should keep section, concrete label, and kind in a repeated target", () => {
+    const brief = briefFor([
+      {
+        ...NOTE,
+        target: {
+          type: "block",
+          blockId: "section/details/table-row-2",
+          kind: "table-row",
+          label: "versionId",
+          section: "Details",
+        },
+      },
+    ]);
+    expect(brief).toContain("Details / versionId · table row");
+  });
+
   it("should close with the whole of the agent's authority when applying it", () => {
     const brief = briefFor([NOTE]);
     expect(brief).toContain("Revise that plan source only");

@@ -23,6 +23,7 @@ export type BlockDescriptor = {
   readonly id: string;
   readonly kind: string;
   readonly label: string;
+  readonly section: string;
 };
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
@@ -249,6 +250,52 @@ const allocateId = ({
   return `${scope}/${idSegment(kind)}-${next}`;
 };
 
+// A Markdown table is one readable figure, but repeated rows are the units a
+// reviewer most often distinguishes in feedback. The row label comes from
+// its first authored cell ("versionId", "number", ...), which is concrete
+// enough for two adjacent rows to remain scannable in the comments tray.
+const stampTableRows = ({
+  table,
+  scope,
+  section,
+  blocks,
+  counter,
+}: {
+  readonly table: Element;
+  readonly scope: string;
+  readonly section: string;
+  readonly blocks: Array<BlockDescriptor>;
+  readonly counter: ScopeCounter;
+}): void => {
+  forEachDescendant({
+    node: table,
+    visit: (candidate) => {
+      if (candidate.tagName !== "tr") {
+        return;
+      }
+      const firstCell = candidate.children.find(
+        (child): child is Element =>
+          isElement(child) &&
+          (child.tagName === "th" || child.tagName === "td"),
+      );
+      const label =
+        firstCell === undefined ? "Table row" : summarize(textOf(firstCell));
+      const id = allocateId({ scope, kind: "table-row", counter });
+      candidate.properties["data-block-id"] = id;
+      candidate.properties["data-block-kind"] = "table-row";
+      candidate.properties["data-block-label"] =
+        label.length > 0 ? label : "Table row";
+      candidate.properties["data-block-section"] = section;
+      blocks.push({
+        id,
+        kind: "table-row",
+        label: label.length > 0 ? label : "Table row",
+        section,
+      });
+    },
+  });
+};
+
 // A container this walk is not allowed to enter: it belongs to a scope of its
 // own and will be visited as one.
 const isNestedScope = (node: Element): boolean =>
@@ -263,11 +310,13 @@ const isNestedScope = (node: Element): boolean =>
 const stampScope = ({
   container,
   scope,
+  section,
   blocks,
   counter = new Map(),
 }: {
   readonly container: Element | Root;
   readonly scope: string;
+  readonly section: string;
   readonly blocks: Array<BlockDescriptor>;
   readonly counter?: ScopeCounter;
 }): void => {
@@ -280,7 +329,7 @@ const stampScope = ({
     }
     const kind = kindOf(child);
     if (kind === undefined) {
-      stampScope({ container: child, scope, blocks, counter });
+      stampScope({ container: child, scope, section, blocks, counter });
       continue;
     }
     const label = labelOf({ node: child, kind });
@@ -288,9 +337,12 @@ const stampScope = ({
     child.properties["data-block-id"] = id;
     child.properties["data-block-kind"] = kind;
     child.properties["data-block-label"] = label;
-    blocks.push({ id, kind, label });
+    child.properties["data-block-section"] = section;
+    blocks.push({ id, kind, label, section });
     if (kind === "code" || kind.startsWith("code-")) {
       stampCodeLines(child);
+    } else if (kind === "table") {
+      stampTableRows({ table: child, scope, section, blocks, counter });
     }
   }
 };
@@ -335,7 +387,12 @@ export const rehypeBlockIdentity =
           child.properties["data-subpart"] === undefined,
       ),
     };
-    stampScope({ container: intro, scope: "document", blocks: collected });
+    stampScope({
+      container: intro,
+      scope: "document",
+      section: "Overview",
+      blocks: collected,
+    });
     let slideIndex = 0;
     for (const child of tree.children) {
       if (!isElement(child)) {
@@ -353,7 +410,15 @@ export const rehypeBlockIdentity =
         headingTag: isSubSlide ? "h3" : "h2",
         fallback: `slide/${slideIndex}`,
       });
-      stampScope({ container: child, scope, blocks: collected });
+      const sectionHeading = findDescendant({
+        node: child,
+        match: (candidate) => candidate.tagName === (isSubSlide ? "h3" : "h2"),
+      });
+      const section =
+        sectionHeading === undefined
+          ? `Section ${slideIndex}`
+          : summarize(textOf(sectionHeading)).replace(KICKER_PREFIX, "");
+      stampScope({ container: child, scope, section, blocks: collected });
     }
     blocks?.push(...collected);
   };

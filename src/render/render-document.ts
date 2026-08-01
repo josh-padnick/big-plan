@@ -17,6 +17,7 @@ import {
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
 export type { BlockDescriptor } from "./markdown/compile-markdown.js";
 import { renderPage } from "./page.js";
+export { derivePlanId } from "./plan-id.js";
 import { derivePlanId } from "./plan-id.js";
 import { serializeHtml } from "./serialize-html.js";
 import { renderShell } from "./shell/shell.js";
@@ -30,14 +31,42 @@ export type RenderedDocument = {
   readonly blocks: ReadonlyArray<BlockDescriptor>;
 };
 
+/** Document-level identity a rendered page carries for the viewer. */
+export type DocumentIdentity = {
+  // Namespaces persisted viewer state; absent means the viewer persists
+  // nothing rather than guessing a namespace from the title.
+  readonly planId?: string;
+  // Present only when a local review runtime rendered and served this copy.
+  readonly reviewSessionId?: string;
+  readonly reviewToken?: string;
+  // Validated runtime state serialized by the server. The viewer reads this
+  // synchronously before constructing its chrome, so reload recovery is part
+  // of the first interactive paint rather than an empty-state flash.
+  readonly reviewBootstrap?: string;
+};
+
+const rootAttributesFor = (
+  identity: DocumentIdentity,
+): Readonly<Record<string, string>> => ({
+  ...(identity.planId === undefined ? {} : { "data-plan-id": identity.planId }),
+  ...(identity.reviewSessionId === undefined
+    ? {}
+    : { "data-review-session": identity.reviewSessionId }),
+  ...(identity.reviewToken === undefined
+    ? {}
+    : { "data-review-token": identity.reviewToken }),
+  ...(identity.reviewBootstrap === undefined
+    ? {}
+    : { "data-review-bootstrap": identity.reviewBootstrap }),
+});
 const renderCompiledDocument = ({
   compiled,
   fallbackTitle,
-  planId,
+  identity,
 }: {
   readonly compiled: CompiledMarkdown;
   readonly fallbackTitle: string;
-  readonly planId?: string;
+  readonly identity: DocumentIdentity;
 }): RenderedDocument => {
   const { root, sections, elementIds, title, partIds, blocks } = compiled;
   const resolvedTitle = title ?? fallbackTitle;
@@ -68,7 +97,7 @@ const renderCompiledDocument = ({
     styles: shell.styles,
     bodyClassName: shell.bodyClassName,
     bodyHtml: shell.html,
-    planId,
+    rootAttributes: rootAttributesFor(identity),
   });
   return { html, title: resolvedTitle, sections, blocks };
 };
@@ -83,20 +112,32 @@ export const renderDocument = ({
   markdown,
   fallbackTitle,
   planPath,
+  identity,
 }: {
   readonly markdown: string;
   readonly fallbackTitle: string;
   // Only filesystem-backed render delivery supplies a path. Omitting it keeps
   // the pure renderer useful while deliberately disabling viewer persistence.
   readonly planPath?: string;
+  // A review runtime supplies its own session-bearing identity. Plain file
+  // rendering instead derives a revision-specific identity from the source.
+  readonly identity?: DocumentIdentity;
 }): RenderedDocument => {
   const compiled = compileMarkdown({ markdown });
+  const resolvedIdentity =
+    identity ??
+    (planPath === undefined
+      ? {}
+      : {
+          planId: derivePlanId({
+            planPath,
+            planContent: markdown,
+          }),
+        });
   return renderCompiledDocument({
     compiled,
     fallbackTitle,
-    ...(planPath === undefined
-      ? {}
-      : { planId: derivePlanId({ planPath, planContent: markdown }) }),
+    identity: resolvedIdentity,
   });
 };
 
@@ -115,6 +156,7 @@ export const validateDocument = ({
   const rendered = renderCompiledDocument({
     compiled,
     fallbackTitle,
+    identity: {},
   });
   return {
     title: rendered.title,
