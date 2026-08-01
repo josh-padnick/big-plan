@@ -16,12 +16,14 @@ export type CommentTarget =
       readonly blockId: string;
       readonly kind: string;
       readonly label: string;
+      readonly section?: string;
     }
   | {
       readonly type: "selection";
       readonly blockId: string;
       readonly kind: string;
       readonly label: string;
+      readonly section?: string;
       readonly start: number;
       readonly end: number;
       readonly quote: string;
@@ -31,6 +33,7 @@ export type CommentTarget =
       readonly blockId: string;
       readonly kind: string;
       readonly label: string;
+      readonly section?: string;
       readonly start: number;
       readonly end: number;
       readonly quote: string;
@@ -49,6 +52,7 @@ export type BlockMapEntry = {
   readonly id: string;
   readonly kind: string;
   readonly label: string;
+  readonly section?: string;
 };
 
 export class CommentRejected extends Error {
@@ -89,6 +93,18 @@ const asText = ({
   }
   return value;
 };
+
+/**
+ * Validates the in-progress whole-plan field without requiring it to be
+ * non-empty. Unlike a saved comment, this is reviewer-owned scratch text:
+ * preserving its exact whitespace is part of restoring an interrupted edit.
+ */
+export const validateActiveDraft = (value: unknown): string =>
+  asText({
+    value: value ?? "",
+    field: "activeDraft",
+    limit: BODY_LIMIT,
+  });
 
 // Ids are the document's own, so they may only be what the document mints:
 // hexadecimal, and short. Anything else is a caller that did not come from a
@@ -160,7 +176,12 @@ const validateTarget = ({
   const block = resolveBlock({ value: target.blockId, blocks });
   // Kind and label come back from the block map rather than from the request,
   // so the label a tray showed can never become the label an agent reads.
-  const identity = { blockId: block.id, kind: block.kind, label: block.label };
+  const identity = {
+    blockId: block.id,
+    kind: block.kind,
+    label: block.label,
+    ...(block.section === undefined ? {} : { section: block.section }),
+  };
   if (type === "block") {
     return { type: "block", ...identity };
   }

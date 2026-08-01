@@ -34,15 +34,21 @@ import {
   MarkdownDiagnosticsError,
 } from "../render/render-document.js";
 import type { BlockMapEntry, ReviewComment } from "./comment.js";
-import { CommentRejected, validateComments } from "./comment.js";
+import {
+  CommentRejected,
+  validateActiveDraft,
+  validateComments,
+} from "./comment.js";
 import { buildFeedbackPackage, renderBrief } from "./feedback-package.js";
 import {
   appendProgress,
   prepareStore,
   randomId,
+  readActiveDraft,
   readComments,
   readProgress,
   reviewStoreFor,
+  writeActiveDraft,
   writeComments,
   writeFeedbackPackage,
   writeSessionDescriptor,
@@ -193,17 +199,36 @@ export const startReviewRuntime = async ({
   const validate = (value: unknown): ReadonlyArray<ReviewComment> =>
     validateComments({ value, blocks, now: new Date().toISOString() });
 
+  const readBootstrap = async (): Promise<string> =>
+    JSON.stringify({
+      drafts: await readComments({ path: store.draftsPath, validate }),
+      sent: await readComments({ path: store.sentPath, validate }),
+      activeDraft: await readActiveDraft({
+        path: store.activeDraftPath,
+        validate: validateActiveDraft,
+      }),
+    });
+
   const renderPlan = async (): Promise<string> => {
     const markdown = await readFile(resolvedPlanPath, "utf8");
-    const rendered = renderDocument({
+    const firstPass = renderDocument({
       markdown,
       fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
       identity: { planId, reviewSessionId: sessionId, reviewToken: token },
     });
-    for (const block of rendered.blocks) {
+    for (const block of firstPass.blocks) {
       blocks.set(block.id, block);
     }
-    return rendered.html;
+    return renderDocument({
+      markdown,
+      fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+      identity: {
+        planId,
+        reviewSessionId: sessionId,
+        reviewToken: token,
+        reviewBootstrap: await readBootstrap(),
+      },
+    }).html;
   };
 
   const handleDocument = async (response: ServerResponse): Promise<void> => {
@@ -260,6 +285,10 @@ export const startReviewRuntime = async ({
         value: {
           drafts: await readComments({ path: store.draftsPath, validate }),
           sent: await readComments({ path: store.sentPath, validate }),
+          activeDraft: await readActiveDraft({
+            path: store.activeDraftPath,
+            validate: validateActiveDraft,
+          }),
         },
       });
       return;
@@ -271,7 +300,12 @@ export const startReviewRuntime = async ({
           ? (body as Readonly<Record<string, unknown>>)
           : {};
       const drafts = validate(payload.drafts);
+      const activeDraft = validateActiveDraft(payload.activeDraft);
       await writeComments({ path: store.draftsPath, comments: drafts });
+      await writeActiveDraft({
+        path: store.activeDraftPath,
+        value: activeDraft,
+      });
       sendJson({ response, status: 200, value: { drafts: drafts.length } });
       return;
     }
@@ -308,6 +342,7 @@ export const startReviewRuntime = async ({
         comments: [...alreadySent, ...comments],
       });
       await writeComments({ path: store.draftsPath, comments: [] });
+      await writeActiveDraft({ path: store.activeDraftPath, value: "" });
       progressSeq += 1;
       // The one event the runtime can honestly author: it has the package.
       // Everything after this belongs to the agent that reads the channel.

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { BlockMapEntry } from "./comment.js";
-import { CommentRejected, validateComments } from "./comment.js";
+import {
+  CommentRejected,
+  validateActiveDraft,
+  validateComments,
+} from "./comment.js";
 
 const BLOCKS: ReadonlyMap<string, BlockMapEntry> = new Map([
   [
@@ -9,6 +13,7 @@ const BLOCKS: ReadonlyMap<string, BlockMapEntry> = new Map([
       id: "section/status-quo/paragraph-1",
       kind: "paragraph",
       label: "Today's reality",
+      section: "Status quo",
     },
   ],
 ]);
@@ -49,6 +54,7 @@ describe("validateComments acceptance", () => {
       blockId: "section/status-quo/paragraph-1",
       kind: "paragraph",
       label: "Today's reality",
+      section: "Status quo",
       start: 12,
       end: 18,
       quote: "const a = 1;",
@@ -89,6 +95,7 @@ describe("validateComments target resolution", () => {
       blockId: "section/status-quo/paragraph-1",
       kind: "paragraph",
       label: "Today's reality",
+      section: "Status quo",
     });
   });
 
@@ -109,6 +116,20 @@ describe("validateComments target resolution", () => {
         }),
       ),
     ).toThrow(CommentRejected);
+  });
+});
+
+describe("validateActiveDraft", () => {
+  it("should preserve exact whitespace in an unfinished whole-plan field", () => {
+    expect(validateActiveDraft("  Still thinking.\n")).toBe(
+      "  Still thinking.\n",
+    );
+  });
+
+  it("should refuse an unfinished field beyond the comment body limit", () => {
+    expect(() => validateActiveDraft("x".repeat(4001))).toThrow(
+      CommentRejected,
+    );
   });
 });
 

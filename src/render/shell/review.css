@@ -11,8 +11,25 @@ elements exist and the document is exactly the document it always was.
 */
 
 [data-review-root] {
+  --review-control-hover: color-mix(
+    in srgb,
+    var(--surface-c) 88%,
+    var(--ink-c)
+  );
+  --review-control-active: color-mix(
+    in srgb,
+    var(--surface-c) 78%,
+    var(--ink-c)
+  );
   position: relative;
   z-index: 40;
+}
+
+[data-review-root] button:focus-visible,
+[data-review-root] textarea:focus-visible,
+[data-review-root] input:focus-visible {
+  outline: 1px solid var(--accent-c);
+  outline-offset: 2px;
 }
 
 /* The tray's entry point docks into the branding bar rather than floating
@@ -35,8 +52,12 @@ elements exist and the document is exactly the document it always was.
   cursor: pointer;
 }
 [data-review-toggle]:hover {
+  background: var(--review-control-hover);
   color: var(--ink-c);
   border-color: var(--muted-c);
+}
+[data-review-toggle]:active {
+  background: var(--review-control-active);
 }
 [data-review-toggle] svg {
   width: 0.95rem;
@@ -94,6 +115,7 @@ elements exist and the document is exactly the document it always was.
   background: var(--bg);
   box-shadow: -8px 0 24px rgb(0 0 0 / 0.06);
   font-size: 0.875rem;
+  overflow-anchor: none;
 }
 [data-review-rail][hidden] {
   display: none;
@@ -101,18 +123,104 @@ elements exist and the document is exactly the document it always was.
 
 /* Opening the tray reclaims width from the page rather than covering the
    column: the reading measure is unchanged, it simply re-centres. */
-@media (width >= 56rem) {
+@media (width >= 80rem) {
   :root[data-review-open] body {
     padding-right: 22rem;
   }
 }
 
-/* Below that width there is no room to give, so the tray becomes a full sheet
-   rather than a narrow strip cropping the document behind it. */
-@media (width < 56rem) {
+/* Below desktop width the tray is an intentional drawer over an inert
+   backdrop. Because the document never reflows, opening and closing preserve
+   exactly where the reviewer was reading. */
+@media (width < 80rem) {
+  [data-review-rail] {
+    width: min(24rem, calc(100vw - 2rem));
+  }
+}
+@media (width < 40rem) {
   [data-review-rail] {
     width: 100vw;
   }
+}
+
+[data-review-backdrop] {
+  position: fixed;
+  inset: 2.75rem 0 0;
+  z-index: 43;
+  border: 0;
+  background: rgb(0 0 0 / 0.28);
+  cursor: pointer;
+}
+[data-review-backdrop][hidden] {
+  display: none;
+}
+@media (width >= 80rem) {
+  [data-review-backdrop] {
+    display: none;
+  }
+}
+
+[data-review-tabs] {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  gap: 0.2rem;
+  padding: 0.35rem 0.4rem 0;
+  border-bottom: 1px solid var(--edge-c);
+}
+[data-review-tab] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.42rem 0.52rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted-c);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+[data-review-tab] svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+[data-review-tab]:hover {
+  background: var(--review-control-hover);
+}
+[data-review-tab]:active {
+  background: var(--review-control-active);
+}
+[data-review-tab][aria-selected="true"] {
+  border-bottom-color: var(--accent-c);
+  color: var(--ink-c);
+}
+[data-review-tab-preview] {
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--callout-note-bg);
+  color: var(--callout-note-c);
+  font-size: 0.625rem;
+}
+[data-review-tabs] [data-review-hide] {
+  align-self: center;
+  margin-left: auto;
+}
+[data-review-panel] {
+  min-height: 0;
+}
+[data-review-panel="comments"] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+[data-review-panel="chat"] {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+[data-review-panel][hidden] {
+  display: none;
 }
 
 [data-review-rail-head] {
@@ -129,7 +237,7 @@ elements exist and the document is exactly the document it always was.
   color: var(--ink-c);
 }
 [data-review-count] {
-  margin-left: auto;
+  margin-left: 0.1rem;
   color: var(--muted-c);
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
@@ -142,8 +250,11 @@ elements exist and the document is exactly the document it always was.
   cursor: pointer;
 }
 [data-review-hide]:hover {
-  background: var(--surface-c);
+  background: var(--review-control-hover);
   color: var(--ink-c);
+}
+[data-review-hide]:active {
+  background: var(--review-control-active);
 }
 [data-review-hide] svg {
   width: 1rem;
@@ -202,7 +313,12 @@ button[data-review-row-target] {
   cursor: pointer;
 }
 button[data-review-row-target]:hover {
+  border-radius: 0.2rem;
+  background: var(--review-control-hover);
   text-decoration: underline;
+}
+button[data-review-row-target]:active {
+  background: var(--review-control-active);
 }
 [data-review-row-body] {
   margin: 0;
@@ -228,8 +344,12 @@ button[data-review-row-target]:hover {
   cursor: pointer;
 }
 [data-review-row-actions] button:hover {
+  background: var(--review-control-hover);
   color: var(--ink-c);
   border-color: var(--muted-c);
+}
+[data-review-row-actions] button:active {
+  background: var(--review-control-active);
 }
 [data-review-row-delete]:hover {
   color: var(--diff-remove-c);
@@ -277,6 +397,12 @@ button[data-review-row-target]:hover {
   font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
+}
+[data-review-send]:not([disabled]):hover {
+  filter: brightness(1.08);
+}
+[data-review-send]:not([disabled]):active {
+  filter: brightness(0.94);
 }
 [data-review-send][disabled] {
   border-color: var(--edge-c);
@@ -369,8 +495,8 @@ button[data-review-row-target]:hover {
 [data-review-agent-input]:focus-visible,
 [data-review-compose-input]:focus-visible,
 [data-review-row-input]:focus-visible {
-  outline: 2px solid var(--accent-c);
-  outline-offset: 1px;
+  outline: 1px solid var(--accent-c);
+  outline-offset: 2px;
 }
 
 [data-review-attach] {
@@ -396,8 +522,85 @@ button[data-review-row-target]:hover {
   cursor: pointer;
 }
 [data-review-agent-save]:hover {
+  background: var(--review-control-hover);
   border-color: var(--accent-c);
   color: var(--accent-c);
+}
+[data-review-agent-save]:active {
+  background: var(--review-control-active);
+}
+
+[data-review-outcome-preview] {
+  margin-top: 0.8rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--edge-c);
+}
+[data-review-preview-head] {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+[data-review-preview-head] h3 {
+  margin: 0;
+  color: var(--ink-c);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+[data-review-preview-chip] {
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: var(--callout-note-bg);
+  color: var(--callout-note-c);
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+[data-review-preview-note] {
+  margin: 0.35rem 0 0;
+  color: var(--muted-c);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+[data-review-outcome-list] {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+[data-review-outcome] {
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--edge-c);
+  border-left-width: 2px;
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--muted-c);
+  font-size: 0.6875rem;
+}
+[data-review-outcome-state] {
+  font-size: 0.625rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+[data-review-outcome="changed"] {
+  border-left-color: var(--diff-add-c);
+}
+[data-review-outcome="changed"] [data-review-outcome-state] {
+  color: var(--diff-add-c);
+}
+[data-review-outcome="question"] {
+  border-left-color: var(--callout-warning-c);
+}
+[data-review-outcome="question"] [data-review-outcome-state] {
+  color: var(--callout-warning-c);
+}
+[data-review-outcome="declined"] {
+  border-left-color: var(--muted-c);
+}
+[data-review-outcome="declined"] [data-review-outcome-state] {
+  color: var(--muted-c);
 }
 
 [data-review-progress] {
@@ -470,8 +673,12 @@ button[data-review-row-target]:hover {
 }
 [data-review-affordance]:hover,
 [data-review-affordance]:focus-visible {
+  background: var(--review-control-hover);
   border-color: var(--accent-c);
   color: var(--accent-c);
+}
+[data-review-affordance]:active {
+  background: var(--review-control-active);
 }
 [data-review-affordance] svg {
   width: 0.85rem;
@@ -491,6 +698,13 @@ button[data-review-row-target]:hover {
 }
 [data-review-compose][hidden] {
   display: none;
+}
+[data-review-compose][data-review-compose-inline] {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  margin: 0.65rem 0 1rem;
+  box-shadow: 0 4px 18px rgb(0 0 0 / 0.11);
 }
 [data-review-compose][data-review-compose-centered] {
   top: 50%;
@@ -544,49 +758,85 @@ button[data-review-row-target]:hover {
   font-size: 0.75rem;
   cursor: pointer;
 }
+[data-review-compose-actions] button:hover {
+  background: var(--review-control-hover);
+}
+[data-review-compose-actions] button:active {
+  background: var(--review-control-active);
+}
 [data-review-compose-save] {
   border-color: var(--accent-c) !important;
   background: var(--accent-c) !important;
   color: var(--bg) !important;
   font-weight: 600;
 }
+[data-review-compose-save][disabled] {
+  border-color: var(--edge-c) !important;
+  background: var(--surface-c) !important;
+  color: var(--muted-c) !important;
+  cursor: default;
+}
 
 /* ------------------------------------------------------- chips and flashes */
 
-[data-review-annotated] {
-  position: relative;
-}
-[data-review-annotated]::after {
-  content: attr(data-review-annotated);
-  position: absolute;
-  top: 0;
-  right: -1.85rem;
+[data-review-marker] {
+  position: fixed;
+  z-index: 42;
   display: inline-flex;
-  min-width: 1.3rem;
-  height: 1.3rem;
+  width: 1.45rem;
+  height: 1.45rem;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  border: 1px solid var(--edge-c);
   border-radius: 999px;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  pointer-events: none;
+  background: var(--bg);
+  color: var(--accent-c);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
 }
-[data-review-chip-tone="draft"]::after {
+[data-review-marker][hidden] {
+  display: none;
+}
+[data-review-marker] svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+[data-review-marker]::after {
+  content: attr(data-review-marker-count);
+  position: absolute;
+  top: -0.42rem;
+  right: -0.48rem;
+  display: inline-flex;
+  min-width: 0.9rem;
+  height: 0.9rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.18rem;
+  border-radius: 999px;
+  font-size: 0.5rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+[data-review-marker-tone="draft"]::after {
   background: var(--accent-c);
   color: var(--bg);
 }
-[data-review-chip-tone="sent"]::after {
+[data-review-marker-tone="sent"] {
+  color: var(--muted-c);
+}
+[data-review-marker-tone="sent"]::after {
+  content: "✓";
   background: var(--surface-c);
   color: var(--muted-c);
   border: 1px solid var(--edge-c);
 }
-@media (width < 56rem) {
-  [data-review-annotated]::after {
-    right: 0;
-    top: -0.5rem;
-  }
+[data-review-marker]:hover {
+  background: var(--review-control-hover);
+  border-color: var(--accent-c);
+}
+[data-review-marker]:active {
+  background: var(--review-control-active);
 }
 
 [data-review-flash] {

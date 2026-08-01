@@ -1,6 +1,6 @@
 ---
 title: Reviewing a plan
-description: Comment on a rendered plan, collect drafts in the Feedback tray, and send one feedback package back to the agent.
+description: Comment on a rendered plan, collect drafts in the Comments tray, and send one feedback package back to the agent.
 ---
 
 Reading a plan is only half of a review.
@@ -25,17 +25,20 @@ A rendered plan carries a stable address for every commentable unit: each headin
 Keyboard users reach the same targets without a mouse: `Alt+↓` and `Alt+↑` move a review cursor block by block and announce each one, and `Alt+C` opens a comment on the block under the cursor.
 Inside a compose card, `Escape` cancels and `Cmd/Ctrl+Enter` saves.
 
-## The Feedback tray
+## The Comments tray
 
-Comments collect in the **Feedback tray**, which opens with your first comment and hides whenever you want the reading column back.
-The sticky **Review** control keeps the pending count and reopens the tray.
+Comments collect in the **Comments** tray, which opens with your first comment and hides whenever you want the reading column back.
+The sticky **Comments** control keeps the pending count and reopens the tray.
+On desktop the reading column makes room for the tray.
+Below 1280 px it becomes an overlay drawer, so opening and closing it cannot move the place you were reading.
 
 Until you send, every comment is yours:
 
 - Each row shows the target it points at and jumps to it when clicked.
+- Repeated targets include their concrete authored label, so adjacent table rows such as `versionId` and `number` remain distinct.
 - **Edit** rewrites a comment in place; **Delete** removes it.
-- A block that carries a draft shows a small count chip, which clears when its last draft goes.
-- Drafts survive closing the tab and reopening the plan.
+- A block that carries a draft shows a conversation marker; pressing it opens that comment for editing.
+- Drafts and the unfinished whole-plan field survive closing the tab, reloading, and reopening the plan.
 
 ## Sending feedback
 
@@ -47,7 +50,9 @@ Sending writes two files beside the plan, under `.big-plan/feedback/`:
 - A versioned JSON package holding each comment, its target, and the session it belongs to.
 - A short Markdown brief the agent can read directly.
 
-Sent comments move to a **Sent** group, their chips fade, and the **Agent** panel begins reporting progress.
+Sent comments move to a **Sent** group, their markers fade, and the **Chat** tab begins reporting runtime progress.
+Package delivery is real.
+Until an agent round-trip is connected, the response-state examples in that tab are explicitly labelled **Simulated**.
 
 ## What the agent may do with it
 
@@ -64,11 +69,11 @@ A comment is a request the agent considers while revising, never an instruction 
 
 Everything the runtime writes sits in a `.big-plan/` directory beside the plan, created readable only by your own account and ignored by version control by default:
 
-| What                             | Where                         |
-| -------------------------------- | ----------------------------- |
-| Draft and sent comments          | `.big-plan/review/<plan-id>/` |
-| Feedback packages and briefs     | `.big-plan/feedback/`         |
-| The running session's descriptor | `.big-plan/session.json`      |
+| What                                    | Where                         |
+| --------------------------------------- | ----------------------------- |
+| Drafts, active field, and sent comments | `.big-plan/review/<plan-id>/` |
+| Feedback packages and briefs            | `.big-plan/feedback/`         |
+| The running session's descriptor        | `.big-plan/session.json`      |
 
 Review state is namespaced by an id the renderer derives from the plan's own path, so two plans never share drafts even when they share a title.
 

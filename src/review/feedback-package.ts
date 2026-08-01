@@ -55,17 +55,22 @@ export const describeTarget = (comment: ReviewComment): string => {
   if (target.type === "document") {
     return "Whole plan";
   }
+  const location =
+    target.section === undefined
+      ? target.label
+      : `${target.section} / ${target.label}`;
+  const kind = target.kind.replaceAll("-", " ");
   if (target.type === "lines") {
     const range =
       target.start === target.end
         ? `line ${target.start}`
         : `lines ${target.start}-${target.end}`;
-    return `${target.label} · ${range}`;
+    return `${location} · ${kind} · ${range}`;
   }
   if (target.type === "selection") {
-    return `${target.label} · selected text`;
+    return `${location} · ${kind} · selected text`;
   }
-  return target.label;
+  return `${location} · ${kind}`;
 };
 
 const commentSection = ({

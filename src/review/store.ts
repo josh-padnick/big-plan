@@ -43,6 +43,7 @@ export type ReviewStore = {
   readonly reviewDirectory: string;
   readonly feedbackDirectory: string;
   readonly draftsPath: string;
+  readonly activeDraftPath: string;
   readonly sentPath: string;
   readonly progressPath: string;
   readonly sessionPath: string;
@@ -81,6 +82,10 @@ export const reviewStoreFor = ({
     reviewDirectory,
     feedbackDirectory: inside({ base: root, leaf: "feedback" }),
     draftsPath: inside({ base: reviewDirectory, leaf: "drafts.json" }),
+    activeDraftPath: inside({
+      base: reviewDirectory,
+      leaf: "active-draft.json",
+    }),
     sentPath: inside({ base: reviewDirectory, leaf: "sent.json" }),
     progressPath: inside({ base: reviewDirectory, leaf: "progress.jsonl" }),
     sessionPath: inside({ base: root, leaf: "session.json" }),
@@ -156,6 +161,33 @@ export const writeComments = async ({
   readonly comments: ReadonlyArray<ReviewComment>;
 }): Promise<void> => {
   await writeJson({ path, value: comments });
+};
+
+/** Reads the whole-plan field through the caller's bounded validator. */
+export const readActiveDraft = async ({
+  path,
+  validate,
+}: {
+  readonly path: string;
+  readonly validate: (value: unknown) => string;
+}): Promise<string> => {
+  const stored = await readJson(path);
+  try {
+    return validate(stored);
+  } catch {
+    return "";
+  }
+};
+
+/** Replaces the persisted whole-plan field without trimming reviewer text. */
+export const writeActiveDraft = async ({
+  path,
+  value,
+}: {
+  readonly path: string;
+  readonly value: string;
+}): Promise<void> => {
+  await writeJson({ path, value });
 };
 
 /**
