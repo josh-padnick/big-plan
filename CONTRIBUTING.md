@@ -9,4 +9,18 @@ The workflow is intentionally light:
 - **Checks.** Run `bun run lint`, `bun run build`, and `bun run test` before opening a pull request; CI enforces the same checks on branches pushed to this repository.
 - **License.** Big Plan is [MIT](LICENSE) licensed; contributions are accepted under the same license.
 
+## Styling commits
+
+CI replays every commit that changes a configured styling file or fixture and compares its Chrome screenshots with its first parent.
+The exact scope and captured states live in [.style-snapshots/config.json](.style-snapshots/config.json).
+
+End each affected commit subject with one visual contract:
+
+- `[visual:empty]` declares that every configured screenshot remains pixel-identical.
+- `[visual:approved]` declares an intentional visual change. The commit must add exactly one manifest under `.style-snapshots/manifests/` describing every changed styling file and capture, including property deltas for each and exact pixel evidence for each capture.
+
+Run `bun run verify:style-history -- --base origin/main` before opening the pull request.
+The verifier writes an evidence ledger and any before, after, and pixel-diff images to `test-results/style-history`; use that evidence to author an approved manifest, then rerun the command to verify it exactly.
+The verifier's diagnostics own the manifest's enforced schema.
+
 See [AGENTS.md](AGENTS.md) for architecture and engineering rules, and [README.md](README.md) for development commands.
