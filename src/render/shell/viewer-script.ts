@@ -390,12 +390,10 @@ export const VIEWER_SCRIPT = `<script>
     const grid = figure.querySelector("table");
     if (grid === null) continue;
     const headRow = grid.querySelector("thead tr");
-    const body = grid.querySelector("tbody");
-    if (headRow === null || body === null) continue;
+    const authoredBody = grid.querySelector("tbody");
+    if (headRow === null || authoredBody === null) continue;
     const heads = Array.from(headRow.children);
-    // Group subheadings live in the same tbody but are chrome, not data: they
-    // never count, never sort, and never match a filter on their own.
-    const rows = Array.from(body.querySelectorAll("[data-table-row]"));
+    const rows = Array.from(authoredBody.querySelectorAll("[data-table-row]"));
     const authoredRows = rows.slice().sort(
       (a, b) =>
         Number(a.getAttribute("data-table-row")) -
@@ -414,7 +412,7 @@ export const VIEWER_SCRIPT = `<script>
     const fitButton = figure.querySelector("[data-table-fit-button]");
     const fitList = figure.querySelector("[data-table-fit-list]");
     const resetButton = figure.querySelector("[data-table-reset]");
-    let groupRows = [];
+    let groupBodies = [];
     const authoredGroupColumn = Number(
       figure.getAttribute("data-table-group-column") || "-1",
     );
@@ -457,8 +455,8 @@ export const VIEWER_SCRIPT = `<script>
       authoredGroupColumn < 0 ? [] : [authoredGroupColumn];
     const syncGroupSpans = () => {
       const visible = columnCount - hiddenColumns().length;
-      for (const row of groupRows) {
-        const cell = row.firstElementChild;
+      for (const body of groupBodies) {
+        const cell = body.querySelector("[data-table-group-heading] > th");
         if (cell !== null) cell.colSpan = visible;
       }
     };
@@ -563,12 +561,12 @@ export const VIEWER_SCRIPT = `<script>
         if (match) shown += 1;
       }
       const visibleGroups = [];
-      for (const heading of groupRows) {
-        const label = heading.getAttribute("data-table-group-heading");
+      for (const groupBody of groupBodies) {
+        const label = groupBody.getAttribute("data-table-row-group");
         const visibleRows = rows.filter(
           (row) => !row.hidden && row.getAttribute("data-table-group") === label,
         );
-        heading.hidden = visibleRows.length === 0;
+        groupBody.hidden = visibleRows.length === 0;
         if (visibleRows.length !== 0) visibleGroups.push(visibleRows);
       }
       // Only groups with another visible band after them earn the separator.
@@ -637,11 +635,11 @@ export const VIEWER_SCRIPT = `<script>
           });
           return verdict === 0 ? positions.get(a) - positions.get(b) : verdict;
         });
-        if (groupRows.length !== 0) {
+        if (groupBodies.length !== 0) {
           // Re-append below restores group order; this keeps the array the
           // script reasons about in the same order the reader will see.
-          const groupOrder = groupRows.map((heading) =>
-            heading.getAttribute("data-table-group-heading"),
+          const groupOrder = groupBodies.map((body) =>
+            body.getAttribute("data-table-row-group"),
           );
           ordered.sort(
             (a, b) =>
@@ -658,15 +656,14 @@ export const VIEWER_SCRIPT = `<script>
       }
       // On a grouped table the subheadings are the outer order, so sorting
       // rearranges rows inside a group and never across one.
-      if (groupRows.length === 0) {
-        for (const row of ordered) body.appendChild(row);
+      if (groupBodies.length === 0) {
+        for (const row of ordered) authoredBody.appendChild(row);
       } else {
-        for (const heading of groupRows) {
-          const label = heading.getAttribute("data-table-group-heading");
-          body.appendChild(heading);
+        for (const groupBody of groupBodies) {
+          const label = groupBody.getAttribute("data-table-row-group");
           for (const row of ordered) {
             if (row.getAttribute("data-table-group") === label)
-              body.appendChild(row);
+              groupBody.appendChild(row);
           }
         }
       }
@@ -676,22 +673,24 @@ export const VIEWER_SCRIPT = `<script>
 
     // Grouping is a setting, so the reader can move it to another column.
     // This is the one place the script builds markup rather than toggling it;
-    // the row it creates matches the server-rendered band exactly, because
-    // both are the same contract.
-    const buildBand = (label) => {
+    // every selected value becomes one body containing its band and rows.
+    const buildGroupBody = (label) => {
+      const body = document.createElement("tbody");
+      body.setAttribute("data-table-row-group", label);
       const row = document.createElement("tr");
       row.className = "data-table-group-row";
       row.setAttribute("data-table-group-heading", label);
       const cell = document.createElement("th");
-      cell.setAttribute("scope", "colgroup");
+      cell.setAttribute("scope", "rowgroup");
       cell.textContent = label;
       row.appendChild(cell);
-      return row;
+      body.appendChild(row);
+      return body;
     };
     const setGroupColumn = (next, save) => {
       if (next === groupColumn) return;
-      for (const band of groupRows) band.remove();
-      groupRows = [];
+      for (const body of groupBodies) body.remove();
+      groupBodies = [];
       // The old grouping column goes back to being an ordinary visible column;
       // the new one hides, because its band now says what it said.
       if (groupColumn >= 0) setColumnHidden(groupColumn, false, false);
@@ -710,7 +709,14 @@ export const VIEWER_SCRIPT = `<script>
           const label = row.getAttribute("data-table-group");
           if (seen.indexOf(label) === -1) seen.push(label);
         }
-        for (const label of seen) groupRows.push(buildBand(label));
+        authoredBody.remove();
+        for (const label of seen) {
+          const body = buildGroupBody(label);
+          groupBodies.push(body);
+          grid.appendChild(body);
+        }
+      } else {
+        grid.appendChild(authoredBody);
       }
       figure.toggleAttribute("data-table-grouped", groupColumn >= 0);
       // Column 0 is only lockable while it is not the one supplying bands.

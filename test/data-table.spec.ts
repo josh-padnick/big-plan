@@ -129,6 +129,8 @@ test("should restore authored group order when resetting a regrouped table", asy
 
   await columnsButton.click();
   await table.getByRole("menuitemradio", { name: "No grouping" }).click();
+  await expect(table.locator("tbody")).toHaveCount(1);
+  await expect(table.locator("tbody[data-table-row-group]")).toHaveCount(0);
   await columnsButton.click();
   const tierSort = table.getByRole("button", { name: "Tier" });
   await tierSort.click();
@@ -146,6 +148,12 @@ test("should restore authored group order when resetting a regrouped table", asy
     "Enterprise",
     "Standard",
   ]);
+  await expect(table.locator("tbody[data-table-row-group]")).toHaveCount(2);
+  await expect(
+    table.locator(
+      'tbody[data-table-row-group] > tr[data-table-group-heading] > th[scope="rowgroup"]',
+    ),
+  ).toHaveText(["Enterprise", "Standard"]);
 });
 
 test("should preserve generous separation before visible group bands when sorting and filtering", async ({
@@ -158,7 +166,7 @@ test("should preserve generous separation before visible group bands when sortin
   });
   const groupEnds = table.locator("tr[data-table-group-end]");
   const separatedBands = table.locator(
-    "tr[data-table-group-end] + tr.data-table-group-row:not([hidden])",
+    "tbody:has(> tr[data-table-group-end]) + tbody:not([hidden]) > tr.data-table-group-row",
   );
   const groupEndRows = () =>
     groupEnds.evaluateAll((rows) =>
