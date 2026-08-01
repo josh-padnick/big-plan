@@ -1,43 +1,33 @@
-// Renders a compiled Decision as a comparison matrix over one stable
-// rationale panel: options are columns, criteria are rows, and the panel
-// beneath explains whichever option the reader is looking at. Comparison
-// comes first and explanation second, and choosing never moves the page -
-// every rationale panel occupies the same grid cell, so the panel is as tall
-// as the tallest one and swapping the visible panel shifts nothing.
+// The shell every Decision layout shares: the question, the chosen comparison
+// shape, the confirm step, and the answered record. The comparison itself
+// lives in view-layouts.tsx, which is where the three shapes under evaluation
+// differ.
 //
-// Selection is a native radio group, so choosing an option and the selected
-// column header survive with the viewer script disabled; without the script
-// every rationale panel simply stays stacked and readable.
+// Only the matrix keeps a rationale panel, and it now carries one line rather
+// than restating every criterion the reader just read. The rows and brief
+// shapes carry their reasoning inline, so a panel would be a third telling.
+// Where a panel exists, every option's panel occupies the same grid cell, so
+// the region is as tall as the longest one and choosing never moves the page.
+//
+// Selection is a native radio group, so choosing survives with the viewer
+// script disabled.
 
 import type {
   CompiledDecision,
-  CompiledDecisionConsideration,
   CompiledDecisionOption,
   DecisionStatus,
   DecisionTone,
 } from "./compile.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
-import {
-  ComparisonMatrix,
-  MATRIX_TONE_ICONS,
-  matrixToneClass,
-  type MatrixToneParity,
-} from "../_shared/comparison-matrix/comparison-matrix.js";
+import { type MatrixToneParity } from "../_shared/comparison-matrix/comparison-matrix.js";
+import { BriefLayout, MatrixLayout, RowsLayout } from "./view-layouts.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { BadgePill } from "../_shared/badge-pill/badge-pill.js";
-import { SectionLabel } from "../_shared/labeled-section/labeled-section.js";
 
 // Decision's tones are the shared matrix vocabulary; the alias fails the
 // build if the two ever diverge.
 const _TONE_PARITY: MatrixToneParity<DecisionTone> = true;
-
-const TONE_WORDS = {
-  good: "Favourable",
-  bad: "Unfavourable",
-  mixed: "Mixed",
-  neutral: "Neutral",
-} satisfies Record<DecisionTone, string>;
 
 const STATUS_LABELS = {
   open: "Open",
@@ -57,146 +47,9 @@ const defaultPanelIndex = (model: CompiledDecision): number => {
   return recommended === -1 ? 0 : recommended;
 };
 
-// One column header. The whole cell is the click target for its option, so
-// choosing never means hitting a 16px circle.
-const ColumnHeader = ({
-  option,
-  index,
-  groupName,
-  answerable,
-}: {
-  readonly option: CompiledDecisionOption;
-  readonly index: number;
-  readonly groupName: string;
-  readonly answerable: boolean;
-}) => (
-  <th
-    className="decision-column p-0 align-bottom"
-    scope="col"
-    data-decision-column={index}
-    {...(option.recommended ? { "data-option-recommended": "" } : {})}
-    {...(option.chosen ? { "data-option-chosen": "" } : {})}
-  >
-    <label
-      className="decision-column-head flex h-full cursor-pointer flex-col items-start gap-2 px-4 py-3.5"
-      htmlFor={option.id}
-    >
-      <span className="flex items-start gap-2">
-        <input
-          className="decision-radio mt-0.5 size-5 shrink-0 appearance-none rounded-full border"
-          type="radio"
-          id={option.id}
-          name={groupName}
-          value={option.title}
-          data-decision-choice=""
-          data-option-index={index}
-          {...(option.chosen ? { defaultChecked: true } : {})}
-          {...(answerable ? {} : { disabled: true })}
-        />
-        <span
-          id={option.titleId}
-          className="text-base leading-6 font-semibold text-ink"
-          data-option-title=""
-        >
-          {option.title}
-        </span>
-      </span>
-      {option.recommended ? (
-        <BadgePill label="Recommended" classNames={["badge-pill-quiet"]} />
-      ) : null}
-    </label>
-  </th>
-);
-
-const VerdictCell = ({
-  consideration,
-  index,
-}: {
-  readonly consideration: CompiledDecisionConsideration;
-  readonly index: number;
-}) => (
-  <td
-    className="decision-cell px-4 py-3"
-    data-decision-column={index}
-    data-verdict-tone={consideration.tone}
-  >
-    <span
-      className={`decision-verdict ${matrixToneClass(consideration.tone)} flex items-start gap-2 text-base leading-6 font-semibold [&>svg]:mt-[calc((1.5rem-1rem)/2)] [&>svg]:size-4 [&>svg]:shrink-0`}
-    >
-      {lucideIconToReact({
-        icon: MATRIX_TONE_ICONS[consideration.tone],
-        hidden: false,
-      })}
-      <span className="min-w-0">{consideration.verdict}</span>
-      <span className="sr-only">{` (${TONE_WORDS[consideration.tone]})`}</span>
-    </span>
-  </td>
-);
-
-// The comparison itself: one look that answers "how do these differ" before
-// the reader has read a sentence of reasoning.
-const Matrix = ({
-  model,
-  answerable,
-}: {
-  readonly model: CompiledDecision;
-  readonly answerable: boolean;
-}) => {
-  const criteria = model.options[0]?.considerations ?? [];
-  return (
-    <ComparisonMatrix className="decision-matrix">
-      <thead>
-        <tr>
-          <th className="decision-corner px-4 py-3.5 text-left" scope="col">
-            <span className="sr-only">{"Criterion"}</span>
-          </th>
-          {model.options.map((option, index) => (
-            <ColumnHeader
-              key={option.id}
-              option={option}
-              index={index}
-              groupName={model.id}
-              answerable={answerable}
-            />
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {criteria.map((criterion, row) => (
-          <tr key={row} className="comparison-matrix-row">
-            <th
-              className="decision-criterion px-4 py-3 text-left text-base leading-6 font-medium text-muted"
-              scope="row"
-            >
-              {criterion.title}
-            </th>
-            {model.options.map((option, index) => {
-              const consideration = option.considerations[row];
-              return consideration === undefined ? (
-                <td
-                  key={option.id}
-                  className="decision-cell px-4 py-3"
-                  data-decision-column={index}
-                >
-                  {"-"}
-                </td>
-              ) : (
-                <VerdictCell
-                  key={option.id}
-                  consideration={consideration}
-                  index={index}
-                />
-              );
-            })}
-          </tr>
-        ))}
-      </tbody>
-    </ComparisonMatrix>
-  );
-};
-
-// One option's reasoning, in criterion order, so it reads as an annotated
-// walk back across that option's column.
+// One option's reasoning in one line. Restating each criterion here was the
+// third time the reader met the same three values, and the round-4 review
+// counted that as weight carried for nothing.
 const RationalePanel = ({
   option,
   index,
@@ -205,43 +58,19 @@ const RationalePanel = ({
   readonly option: CompiledDecisionOption;
   readonly index: number;
   readonly isDefault: boolean;
-}) => {
-  const explained = option.considerations.filter(
-    (consideration) => consideration.detail.length > 0,
-  );
-  return (
-    <div
-      className="decision-rationale-panel"
-      data-rationale-panel=""
-      data-option-index={index}
-      {...(isDefault ? { "data-rationale-default": "" } : {})}
-    >
-      <p className="m-0 text-base font-semibold text-ink">{option.title}</p>
-      {option.summary === undefined ? null : (
-        <p className="mt-1 mb-0 text-base text-muted">{option.summary}</p>
-      )}
-      {explained.length === 0 ? null : (
-        <dl className="mt-2.5 mb-0 grid gap-2">
-          {explained.map((consideration, row) => (
-            <div key={row}>
-              <dt className="text-sm font-semibold text-ink">
-                {`${consideration.title}: ${consideration.verdict}`}
-              </dt>
-              <dd className="m-0 text-base text-muted [&>:last-child]:mb-0">
-                {hastContentToReact(consideration.detail)}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      {option.detail.length === 0 ? null : (
-        <div className="mt-2.5 text-sm text-muted [&>:last-child]:mb-0">
-          {hastContentToReact(option.detail)}
-        </div>
-      )}
-    </div>
-  );
-};
+}) => (
+  <div
+    className="decision-rationale-panel"
+    data-rationale-panel=""
+    data-option-index={index}
+    {...(isDefault ? { "data-rationale-default": "" } : {})}
+  >
+    <span className="text-base font-semibold text-ink">{option.title}</span>
+    {option.summary === undefined ? null : (
+      <span className="text-base text-muted">{` - ${option.summary}`}</span>
+    )}
+  </div>
+);
 
 // The escape hatch, demoted to a quiet link so it never competes with the
 // real options. Its radio still belongs to the group, so proposing clears
@@ -345,6 +174,22 @@ const AnswerControls = () => (
   </>
 );
 
+const Comparison = ({
+  model,
+  answerable,
+}: {
+  readonly model: CompiledDecision;
+  readonly answerable: boolean;
+}) => {
+  if (model.layout === "rows") {
+    return <RowsLayout model={model} answerable={answerable} />;
+  }
+  if (model.layout === "brief") {
+    return <BriefLayout model={model} answerable={answerable} />;
+  }
+  return <MatrixLayout model={model} answerable={answerable} />;
+};
+
 export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
   const answerable = isAnswerable(model.status);
   const defaultIndex = defaultPanelIndex(model);
@@ -382,52 +227,37 @@ export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
       <fieldset className="decision-fieldset m-0 min-w-0 border-0 p-0">
         <legend className="sr-only">{model.question}</legend>
         <div
-          className="decision-zone-matrix flex flex-wrap items-baseline justify-between gap-x-3 border-t border-edge px-5 pt-4 pb-2.5"
+          className="decision-zone-compare border-t border-edge"
           data-decision-compare=""
         >
-          <SectionLabel
-            label={answerable ? "Choose one" : "Options"}
-            dataProperties={{ "data-decision-choose-label": "" }}
-          />
-          {/* Stated only where it is true: a scrolling hint for the reader
-              whose viewport actually clips the matrix, not a note about the
-              layout aimed at everyone. */}
-          <p className="decision-scroll-note m-0 text-xs text-muted">
-            {"Scroll sideways to compare every option."}
-          </p>
+          <Comparison model={model} answerable={answerable} />
         </div>
-        <div
-          className="decision-zone-matrix border-b border-edge pb-2"
-          data-decision-compare=""
-        >
-          <Matrix model={model} answerable={answerable} />
-        </div>
-        <div
-          className="decision-zone-rationale px-5 pt-4 pb-4"
-          data-decision-explain=""
-        >
-          <SectionLabel label="Why this option" />
+        {/* Only the matrix earns a rationale region: its cells are values, so
+            the reader still needs a sentence naming what they mean. The other
+            shapes already carry their reasoning in line. */}
+        {model.layout === "matrix" ? (
           <div
-            className="decision-rationale mt-2"
-            data-decision-rationale=""
-            data-default-index={defaultIndex}
+            className="decision-zone-rationale border-t border-edge px-5 py-3.5"
+            data-decision-explain=""
           >
-            {model.options.map((option, index) => (
-              <RationalePanel
-                key={option.id}
-                option={option}
-                index={index}
-                isDefault={index === defaultIndex}
-              />
-            ))}
+            <div
+              className="decision-rationale"
+              data-decision-rationale=""
+              data-default-index={defaultIndex}
+            >
+              {model.options.map((option, index) => (
+                <RationalePanel
+                  key={option.id}
+                  option={option}
+                  index={index}
+                  isDefault={index === defaultIndex}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-        {/* The escape hatch sits outside the rationale zone and shares its
-            surface: a confirmed proposal retires the comparison and its
-            reasoning, but the reader's own words must survive as the
-            recorded answer. */}
+        ) : null}
         {answerable ? (
-          <div className="decision-zone-rationale px-5 pb-5">
+          <div className="decision-zone-propose border-t border-edge px-5 py-3">
             <ProposeLink model={model} />
           </div>
         ) : null}
