@@ -422,7 +422,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
 ## Tablet
 
 Same product on landscape tablet.
-Master/detail with intentional card surfaces and breathing room.
+Master/detail keeps the queue and ticket context nearby without stretching either across the full canvas.
 
 <Wireframe
   id="harbor-tablet"
@@ -445,22 +445,64 @@ Master/detail with intentional card surfaces and breathing room.
         </Nav>
       </Sidebar>
       <AppContent>
-        <PageHeader title="Inbox" description="Touch-friendly queue.">
-          <Button label="New" emphasis="primary" navigateTo="t-compose" />
+        <PageHeader title="Inbox" description="12 open tickets">
+          <Button
+            label="New ticket"
+            emphasis="primary"
+            navigateTo="t-compose"
+          />
         </PageHeader>
         <Row gap="md">
-          <Panel title="Open">
+          <Panel title="Open" span="list" surface="filled">
             <List>
-              <ListItem label="Checkout freeze" meta="14m" value="#4821" />
-              <ListItem label="SSO timeout" meta="2h" value="#4818" />
-              <ListItem label="Invoice PDF" meta="1d" value="#4802" />
+              <ListItem
+                label="Checkout freeze"
+                meta="Priority · Maya"
+                value="14m"
+                selected
+                navigateTo="t-ticket"
+              />
+              <ListItem
+                label="SSO timeout"
+                meta="Waiting · Lee"
+                value="2h"
+              />
+              <ListItem
+                label="Invoice PDF"
+                meta="Open · Alex"
+                value="1d"
+              />
+              <ListItem
+                label="Webhook retries"
+                meta="Unassigned"
+                value="3d"
+              />
+              <ListItem
+                label="CSV rows missing"
+                meta="Open · Alex"
+                value="4d"
+              />
             </List>
-            <Button label="Open selected" navigateTo="t-ticket" />
           </Panel>
-          <Panel title="Preview">
-            <Text text="Maya Chen · Northwind" role="helper" />
+          <Panel title="Selected ticket" span="main">
+            <Badge label="Priority · 14m" tone="warning" />
             <Heading text="Cannot complete checkout" level="2" />
+            <Text text="Maya Chen · Northwind" role="helper" />
             <Text text="Card form freezes on submit in Chrome." />
+            <Metric label="First response" value="11m" note="Target: 15m" />
+            <Divider label="Latest exchange" />
+            <Message
+              author="Maya"
+              time="14m"
+              kind="customer"
+              text="The card form freezes as soon as I press submit."
+            />
+            <Message
+              author="Alex"
+              time="8m"
+              kind="agent"
+              text="Please send the cart ID and browser version."
+            />
             <Button
               label="Open full ticket"
               emphasis="secondary"
@@ -488,19 +530,59 @@ Master/detail with intentional card surfaces and breathing room.
         </Nav>
       </Sidebar>
       <AppContent>
-        <PageHeader title="#4821 Checkout freeze" badge="Priority">
-          <Button label="Back" emphasis="tertiary" navigateTo="t-inbox" />
+        <PageHeader
+          title="Cannot complete checkout"
+          description="#4821 · Maya Chen · Northwind"
+          badge="Priority"
+        >
+          <Button label="Back to inbox" emphasis="tertiary" navigateTo="t-inbox" />
           <Button label="Resolve" emphasis="secondary" />
         </PageHeader>
-        <Panel title="Thread">
-          <List>
-            <ListItem label="Maya" meta="14m" value="Form freezes on submit" />
-            <ListItem label="Alex" meta="8m" value="Need cart id" />
-            <ListItem label="Maya" meta="2m" value="cart_9f2a" />
-          </List>
-          <TextArea label="Reply" placeholder="Reply..." />
-          <Button label="Send" emphasis="primary" />
-        </Panel>
+        <Row gap="md">
+          <Panel title="Conversation" span="main" surface="filled">
+            <Message
+              author="Maya"
+              time="14m"
+              kind="customer"
+              text="Card form freezes when I submit the checkout page."
+            />
+            <Message
+              author="Alex"
+              time="8m"
+              kind="agent"
+              text="Could you share the cart ID and browser version?"
+            />
+            <Message
+              author="Maya"
+              time="2m"
+              kind="customer"
+              text="cart_9f2a · Chrome 128"
+            />
+            <Divider />
+            <SegmentedControl>
+              <Button label="Reply" emphasis="primary" />
+              <Button label="Internal note" />
+            </SegmentedControl>
+            <TextArea label="Message" placeholder="Write a reply…" />
+            <Button label="Send reply" emphasis="primary" />
+          </Panel>
+          <Stack gap="lg" span="rail">
+            <Panel title="Ticket details" surface="outlined">
+              <Select label="Status" value="Open" />
+              <Select label="Assignee" value="Alex Rivera" />
+              <Select label="Team" value="Payments" />
+            </Panel>
+            <Panel title="Related" surface="filled">
+              <List>
+                <ListItem
+                  label="Prior checkout freeze"
+                  meta="Resolved"
+                  value="#4410"
+                />
+              </List>
+            </Panel>
+          </Stack>
+        </Row>
       </AppContent>
     </AppShell>
   </Screen>
@@ -521,15 +603,63 @@ Master/detail with intentional card surfaces and breathing room.
         </Nav>
       </Sidebar>
       <AppContent>
-        <PageHeader title="New ticket">
-          <Button label="Cancel" emphasis="tertiary" navigateTo="t-inbox" />
+        <PageHeader
+          title="New ticket"
+          description="Capture the issue, then route it."
+        >
+          <Button
+            label="Cancel"
+            emphasis="tertiary"
+            navigateTo="t-inbox"
+          />
         </PageHeader>
-        <Panel title="Details">
-          <TextField label="Subject" placeholder="Summary" />
-          <Select label="Customer" value="Northwind Labs" />
-          <TextArea label="Description" placeholder="What happened?" />
-          <Button label="Create" emphasis="primary" navigateTo="t-ticket" />
-        </Panel>
+        <Row gap="lg">
+          <Panel title="Ticket details" span="main">
+            <Select label="Customer" value="Northwind Labs" />
+            <TextField
+              label="Subject"
+              value="Cannot complete checkout"
+              placeholder="Short summary"
+            />
+            <TextArea
+              label="Description"
+              placeholder="What happened, who is affected, error text…"
+            />
+            <Checkbox
+              label="Send a confirmation email"
+              checked
+              hint="To maya@northwind.example"
+            />
+            <Button
+              label="Create ticket"
+              emphasis="primary"
+              navigateTo="t-ticket"
+            />
+          </Panel>
+          <Stack gap="lg" span="rail">
+            <Panel title="Possible match" surface="filled">
+              <List>
+                <ListItem
+                  label="Prior checkout freeze"
+                  meta="Close match"
+                  value="#4410"
+                />
+              </List>
+              <Text
+                text="Review this match before creating the ticket."
+                role="helper"
+              />
+            </Panel>
+            <Panel title="Routing" surface="plain">
+              <Text
+                text="Suggested from similar tickets"
+                role="helper"
+              />
+              <Select label="Team" value="Payments" />
+              <Select label="Assignee" value="Unassigned" />
+            </Panel>
+          </Stack>
+        </Row>
       </AppContent>
     </AppShell>
   </Screen>
@@ -549,12 +679,41 @@ Master/detail with intentional card surfaces and breathing room.
         </Nav>
       </Sidebar>
       <AppContent>
-        <PageHeader title="Settings" />
-        <Panel title="Alerts">
-          <Switch label="Email on assignment" on />
-          <Switch label="Slack on SLA risk" on />
-          <Button label="Save" emphasis="primary" navigateTo="t-inbox" />
-        </Panel>
+        <PageHeader
+          title="Notification settings"
+          description="Choose when Harbor should interrupt you."
+        >
+          <Button label="Save changes" emphasis="primary" navigateTo="t-inbox" />
+        </PageHeader>
+        <Row gap="lg">
+          <Panel title="Settings" span="list" surface="filled">
+            <Nav label="Settings sections">
+              <NavItem label="Notifications" active />
+              <NavItem label="Business hours" />
+              <NavItem label="Integrations" />
+              <NavItem label="Members" />
+            </Nav>
+          </Panel>
+          <Stack gap="lg" span="main">
+            <Panel title="Alerts" surface="outlined">
+              <Switch label="Email when a ticket is assigned to me" on />
+              <Switch label="Slack when an SLA is at risk" on />
+              <Text
+                text="Slack alerts go to #support-alerts."
+                role="helper"
+              />
+            </Panel>
+            <Panel title="Morning digest" surface="filled">
+              <Switch label="Send a daily summary" />
+              <TextField
+                label="Digest hour"
+                value="—"
+                hint="Turn on the daily summary to choose a time."
+                disabled
+              />
+            </Panel>
+          </Stack>
+        </Row>
       </AppContent>
     </AppShell>
   </Screen>

@@ -466,7 +466,7 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     ]);
   });
 
-  it("should draw progress in fixed steps and always write the number beside it", () => {
+  it("should draw progress in fixed steps and allow a tangible value label", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [
         screen({
@@ -474,7 +474,11 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
           children: [
             element({
               name: "Progress",
-              attributes: { label: "Goal", value: "61" },
+              attributes: {
+                label: "Goal",
+                value: "61",
+                valueLabel: "Only $27.50 to go",
+              },
             }),
           ],
         }),
@@ -483,7 +487,8 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(diagnostics).toEqual([]);
     const rendered = html(render(compiled));
     expect(rendered).toContain('"data-wireframe-progress":"60"');
-    expect(rendered).toContain("61");
+    expect(rendered).toContain("Only $27.50 to go");
+    expect(rendered).not.toContain(">61%<");
     // No authored value ever reaches a style attribute.
     expect(rendered).not.toContain('"style"');
   });

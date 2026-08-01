@@ -237,13 +237,15 @@ const WireframeElement = ({
         </div>
       );
     case "Progress":
-      // The bar is decoration; the percentage beside it is the state, so a
-      // reader without the drawing still knows how far along this is.
+      // The bar is decoration; readable text beside it carries the state. A
+      // concrete authored phrase can replace the abstract percentage.
       return (
         <div className="wireframe-progress flex flex-col gap-1">
           <div className="wireframe-progress-line flex justify-between gap-2">
             <span>{node.label ?? "Progress"}</span>
-            <span className="wireframe-progress-value">{node.value}%</span>
+            <span className="wireframe-progress-value">
+              {node.valueLabel ?? `${node.value}%`}
+            </span>
           </div>
           <div className="wireframe-progress-track" aria-hidden="true">
             <div
@@ -594,7 +596,10 @@ const Screen = ({
           <span />
         )}
         <span className="wireframe-screen-viewport">
-          {preset.label} · {preset.width}px wide · content height
+          {preset.label} · {preset.width}px wide ·{" "}
+          {preset.minimumHeight === undefined
+            ? "content height"
+            : `${preset.minimumHeight}px minimum · grows with content`}
         </span>
       </div>
       <div className="wireframe-frame" data-wireframe-device={screen.device}>

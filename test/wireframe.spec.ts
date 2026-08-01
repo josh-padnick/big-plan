@@ -178,7 +178,7 @@ test("should keep each painted desktop screen inside its card", async ({
   }
 });
 
-test("should preserve the captain's desktop and phone measurements", async ({
+test("should preserve the captain's desktop, tablet, and phone measurements", async ({
   page,
   wireframeFormFactorsViewerUrl,
 }) => {
@@ -192,7 +192,17 @@ test("should preserve the captain's desktop and phone measurements", async ({
     await expect
       .poll(() => artboard.evaluate((node) => node.clientWidth))
       .toBe(1440);
+    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(900);
     expect((await boxOf(frame)).width).toBeCloseTo(768, 1);
+  });
+
+  await test.step("landscape tablet drawings keep a four-by-three minimum", async () => {
+    const tablet = page.locator('[data-wireframe-screen="t-inbox"]');
+    const artboard = tablet.locator(".wireframe-artboard");
+    await expect
+      .poll(() => artboard.evaluate((node) => node.clientWidth))
+      .toBe(1112);
+    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(834);
   });
 
   await test.step("selection does not indent Ticket or Inbox queue rows", async () => {
@@ -289,7 +299,7 @@ test("should preserve the captain's desktop and phone measurements", async ({
   });
 });
 
-test("should size a short artboard to content instead of device height", async ({
+test("should keep a short phone artboard content-driven", async ({
   page,
   wireframeShortContentViewerUrl,
 }) => {
@@ -300,5 +310,5 @@ test("should size a short artboard to content instead of device height", async (
   expect(await artboard.evaluate((node) => node.clientHeight)).toBeLessThan(
     400,
   );
-  expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1440);
+  expect(await artboard.evaluate((node) => node.clientWidth)).toBe(390);
 });
