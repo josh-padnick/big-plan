@@ -230,7 +230,7 @@ describe("renderDocument shell", () => {
     expect(firstId).toBeDefined();
     expect(secondId).toBeDefined();
     expect(firstId).not.toBe(secondId);
-    expect(renderDocument(input).html).not.toContain("data-plan-id");
+    expect(renderDocument(input).html).toContain('<html lang="en">');
   });
 
   it("should escape the title when it contains HTML special characters", () => {

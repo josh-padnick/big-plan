@@ -25,9 +25,7 @@ test("should scope persisted viewer state to the stamped plan identity", async (
   expect(firstPlanId).toMatch(/^[a-f0-9]{32}$/);
   expect(dataTableId).not.toBeNull();
   await firstTable.getByRole("button", { name: "Choose columns" }).click();
-  await firstTable
-    .getByRole("menuitemcheckbox", { name: "Comment" })
-    .click();
+  await firstTable.getByRole("menuitemcheckbox", { name: "Comment" }).click();
   await expect(firstTable.locator(".table-schema-head-comment")).toBeHidden();
   await firstDataTable.getByRole("button", { name: "Choose columns" }).click();
   await firstDataTable
@@ -37,19 +35,21 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     firstDataTable.locator('th[data-table-column="2"]'),
   ).toBeHidden();
   await page.getByRole("button", { name: "Add review comment" }).click();
-  await page.getByRole("textbox", { name: "Comment draft" }).fill(
-    "First plan draft",
-  );
+  await page
+    .getByRole("textbox", { name: "Comment draft" })
+    .fill("First plan draft");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect
     .poll(() =>
       page.evaluate(() =>
-        Object.keys(localStorage).filter(
-          (key) =>
-            key.startsWith("big-plan:table:") ||
-            key.startsWith("big-plan:draft:") ||
-            key.startsWith("big-plan:datatable:"),
-        ).sort(),
+        Object.keys(localStorage)
+          .filter(
+            (key) =>
+              key.startsWith("big-plan:table:") ||
+              key.startsWith("big-plan:draft:") ||
+              key.startsWith("big-plan:datatable:"),
+          )
+          .sort(),
       ),
     )
     .toEqual(
@@ -96,14 +96,12 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     secondDataTable.locator('th[data-table-column="2"]'),
   ).toBeVisible();
   await page.getByRole("button", { name: "Add review comment" }).click();
-  await expect(page.getByRole("textbox", { name: "Comment draft" })).toHaveValue(
-    "",
-  );
+  await expect(
+    page.getByRole("textbox", { name: "Comment draft" }),
+  ).toHaveValue("");
 
   await secondTable.getByRole("button", { name: "Choose columns" }).click();
-  await secondTable
-    .getByRole("menuitemcheckbox", { name: "Default" })
-    .click();
+  await secondTable.getByRole("menuitemcheckbox", { name: "Default" }).click();
   await expect(secondTable.locator(".table-schema-head-default")).toBeHidden();
   await secondDataTable.getByRole("button", { name: "Choose columns" }).click();
   await secondDataTable
@@ -112,9 +110,9 @@ test("should scope persisted viewer state to the stamped plan identity", async (
   await expect(
     secondDataTable.locator('th[data-table-column="1"]'),
   ).toBeHidden();
-  await page.getByRole("textbox", { name: "Comment draft" }).fill(
-    "Second plan draft",
-  );
+  await page
+    .getByRole("textbox", { name: "Comment draft" })
+    .fill("Second plan draft");
   await page.getByRole("button", { name: "Save draft" }).click();
   await secondSlide
     .locator(":scope > [data-collapse-header] > [data-collapse-toggle]")
@@ -136,10 +134,9 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     );
 
   await page.goto(planIdCollisionViewerUrls.first);
-  await expect(firstTable.locator(".table-schema-head-comment")).toHaveAttribute(
-    "hidden",
-    "",
-  );
+  await expect(
+    firstTable.locator(".table-schema-head-comment"),
+  ).toHaveAttribute("hidden", "");
   await expect(
     firstTable.locator(".table-schema-head-default"),
   ).not.toHaveAttribute("hidden");
@@ -150,9 +147,9 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     firstDataTable.locator('th[data-table-column="1"]'),
   ).not.toHaveAttribute("hidden");
   await page.getByRole("button", { name: "Add review comment" }).click();
-  await expect(page.getByRole("textbox", { name: "Comment draft" })).toHaveValue(
-    "First plan draft",
-  );
+  await expect(
+    page.getByRole("textbox", { name: "Comment draft" }),
+  ).toHaveValue("First plan draft");
 });
 
 for (const identity of ["absent", "empty"] as const) {
