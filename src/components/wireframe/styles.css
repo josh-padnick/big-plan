@@ -680,9 +680,10 @@ marks and a plan diff never jitters.
 
   /* A sparse child dashboard still composes the full landscape canvas. The
      existing balance, activity, loan, lesson, and navigation regions grow in
-     scale and distribute their own contents; no filler copy is invented just
-     to occupy the device silhouette. Metric + progress uniquely identifies
-     this focal-dashboard shape among the tablet showcase screens. */
+     scale while related content stays top-anchored and close together; empty
+     space collects after each group instead of splitting it apart. Metric +
+     progress uniquely identifies this focal-dashboard shape among the tablet
+     showcase screens. */
   .wireframe-artboard[data-wireframe-device="tablet"]:has(
       .wireframe-progress
     ):has(.wireframe-metric)
@@ -729,16 +730,17 @@ marks and a plan diff never jitters.
     ):has(.wireframe-metric)
     .wireframe-sidebar
     .wireframe-nav {
-    flex: 1;
-    justify-content: space-evenly;
+    flex: none;
+    gap: 0.5rem;
+    justify-content: flex-start;
   }
   .wireframe-artboard[data-wireframe-device="tablet"]:has(
       .wireframe-progress
     ):has(.wireframe-metric)
     .wireframe-sidebar
     .wireframe-nav-item {
-    min-height: 3.25rem;
-    padding: 0.75rem 0.875rem;
+    min-height: 2.75rem;
+    padding: 0.55rem 0.75rem;
     font-size: 1.0625rem;
   }
   .wireframe-artboard[data-wireframe-device="tablet"]:has(
@@ -766,7 +768,7 @@ marks and a plan diff never jitters.
     > .wireframe-row
     > .wireframe-panel
     .wireframe-panel-head {
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
   }
   .wireframe-artboard[data-wireframe-device="tablet"]:has(
       .wireframe-progress
@@ -793,8 +795,8 @@ marks and a plan diff never jitters.
     > .wireframe-panel
     > .wireframe-panel-body {
     flex: 1;
-    justify-content: space-evenly;
-    gap: 1.5rem;
+    justify-content: flex-start;
+    gap: 1rem;
   }
   .wireframe-artboard[data-wireframe-device="tablet"]:has(
       .wireframe-progress
@@ -803,8 +805,8 @@ marks and a plan diff never jitters.
     > .wireframe-row
     > .wireframe-panel:has(.wireframe-progress)
     > .wireframe-panel-body {
-    justify-content: center;
-    gap: 5rem;
+    justify-content: flex-start;
+    gap: 2rem;
   }
   .wireframe-artboard[data-wireframe-device="tablet"]:has(
       .wireframe-progress
@@ -856,8 +858,8 @@ marks and a plan diff never jitters.
     > .wireframe-row
     > .wireframe-panel:has(.wireframe-list)
     .wireframe-list {
-    flex: 1;
-    justify-content: space-evenly;
+    flex: none;
+    justify-content: flex-start;
   }
   .wireframe-artboard[data-wireframe-device="tablet"]:has(
       .wireframe-progress
@@ -866,8 +868,18 @@ marks and a plan diff never jitters.
     > .wireframe-row
     > .wireframe-panel:has(.wireframe-list)
     .wireframe-list-item {
-    padding: 0.85rem 0.35rem;
+    padding: 0.5rem 0.35rem;
     font-size: 1rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet"]:has(
+      .wireframe-progress
+    ):has(.wireframe-metric)
+    .wireframe-app-content
+    > .wireframe-row
+    > .wireframe-panel:has(.wireframe-list)
+    > .wireframe-panel-body
+    > .wireframe-button {
+    margin-top: auto;
   }
   .wireframe-artboard[data-wireframe-device="tablet"]:has(
       .wireframe-progress
@@ -898,8 +910,8 @@ marks and a plan diff never jitters.
     > .wireframe-panel
     > .wireframe-panel-body {
     flex: 1;
-    justify-content: center;
-    gap: 1rem;
+    justify-content: flex-start;
+    gap: 0.75rem;
   }
   .wireframe-artboard[data-wireframe-device="tablet"]:has(
       .wireframe-progress
