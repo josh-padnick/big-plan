@@ -67,6 +67,15 @@ test("should render every proof at its native device geometry", async ({
         targets.every((height) => height >= 44),
         `touch targets: ${targets.join(", ")}`,
       ).toBe(true);
+      const completedStepMarks = await screen
+        .locator('[data-wireframe-step="done"]')
+        .evaluateAll((steps) =>
+          steps.map((step) => getComputedStyle(step, "::before").content),
+        );
+      expect(
+        completedStepMarks.every((mark) => mark === '"✓"'),
+        `completed step marks: ${completedStepMarks.join(", ")}`,
+      ).toBe(true);
     }
   });
 

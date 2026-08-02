@@ -20,28 +20,28 @@ That component guidance owns the judgment calls for product layout, form-factor 
 
 ## Design front door: CLEAR
 
-Use one memorable standard before reaching for the detailed device rules:
+Use CLEAR as the index into the design standard, not as a replacement for its detail.
+The generated `big-plan guidance Wireframe` output groups every implementation principle, anti-pattern, per-device pass criterion, and mechanical contract beneath these five headings:
 
-1. **Clear job** - one screen advances one task, and its primary action names that goal.
-2. **Layout follows attention** - one focal point, deliberate reading order, meaningful proximity, and contrast proportional to importance.
-3. **Explicit change** - selection changes the outcome, later information appears progressively, and mode handoffs are unmistakable.
-4. **Audience language** - concrete words, outcomes, and amounts match the intended user's mental model and emotional goal.
-5. **Real device** - native shells, interaction models, aspect ratios, and affordances; rough fidelity never excuses loose alignment or state.
+1. **Clear job** - one screen and one step advance one present decision; title and primary action name the present task and immediate result; a sequential step has one route back and one forward; completion closes the learning loop concretely.
+2. **Layout follows attention** - visual order follows decision order; proximity explains causality; parallel choices stay parallel; contrast tracks importance; achievement comes before quieter reassurance.
+3. **Explicit change** - selection changes visible outcomes; later information appears progressively; progress communicates done/current/todo; actor boundaries are unmistakable; authentication proves identity but never grants consent.
+4. **Audience language** - one screen speaks to one audience using one term per concept, concrete branch-specific language, and reassurance that names the actual risk.
+5. **Real device** - desktop, tablet, and phone keep distinct shells, patterns, ratios, densities, and affordances; roughness may change strokes, never information architecture or target size.
 
-Everything else is subordinate: the device table below owns form-factor pass criteria; the component, compiler, lint, and geometry tests own mechanical rules; LOOP in the generated guidance owns render-and-review practice.
+The generated guidance is the exact agent-facing owner of those grouped rules.
+The device table below is the syntax-level form-factor contract; the component, compiler, lint, and geometry tests own mechanical facts; LOOP in the generated guidance owns render-and-review practice.
 CRAP still governs the surrounding plan page, not product UI inside an artboard.
 
 ### How the standards were distilled
 
-| Previous source | Where it went |
-| --- | --- |
-| Fourteen general hierarchy principles | Focal point, reading order, proximity, grouping, scanning, restrained decoration, emotional goal, and rough fidelity collapsed into CLEAR rather than remaining a flat checklist. |
-| Ten task-flow principles | One job and goal-matching action became **Clear job**; progressive reveal, visible outcomes, and mode boundaries became **Explicit change**; containers and contrast became **Layout**; child-facing copy became **Audience language**. |
-| STAMP | Retired as a second design acronym: Space/Tiers/Align/Minimal boxes map to **Layout** and device contracts; Plain state maps to **Explicit change**. |
-| LOOP | Retained only as the delivery workflow: look up, open, object three times, push the fix down. |
-| Per-form-factor principles | Live as desktop/tablet/phone pass and reject criteria, backed by device primitives. |
-| Type, aspect, state, and target rules | Live in fixed type roles, the fixed iPad frame, hover/focus/selection paint, 44 px tablet/phone targets, compile diagnostics, and Playwright geometry checks. |
-| CRAP | Remains the plan-page layout standard; CLEAR does not duplicate it. |
+- **Fourteen hierarchy principles** retain their explicit focal-point, reading-order, proximity, grouping, scanning, decoration, emotional-goal, and rough-fidelity rules under CLEAR.
+- **The original task-flow round** retains one job, goal-matching actions, selection outcomes, progressive reveal, hierarchy over containers, attention order, affordances, mode boundaries, concrete language, and importance-based contrast.
+- **The task-flow refinement round** retains all fifteen individual rules: one decision; present-task title; decision hierarchy; one term; one route each way; meaningful progress; parallel options; disciplined irregularity; one audience; authentication is not consent; immediate-result labels; visible handoffs; risk-specific reassurance; celebration before reassurance; and a concrete learning loop.
+- **STAMP** is retired as a competing acronym, but its details remain: Space, Tiers, Align, and Minimal boxes live under Layout and mechanics; Plain state lives under Explicit change.
+- **Per-form-factor principles** live under Real device as explicit desktop/tablet/phone pass and reject criteria.
+- **Type, aspect, state, and target contracts** live under Real device and their mechanical owners: fixed type roles, fixed iPad frame, state paint, 44 px tablet/phone targets, compile diagnostics, and browser geometry tests.
+- **LOOP** remains only the delivery workflow; **CRAP** remains the plan-page layout standard.
 
 ## Authoring
 
@@ -105,7 +105,8 @@ Tablet screens reject `url`.
 Phone screens reject `url`, `AppShell`, and `Sidebar`; use `TopBar`, a single content column, and `BottomBar` instead.
 
 `navigateTo` on `Button`, `NavItem`, `ListItem`, or `Crumb` must name another screen in the same wireframe.
-The compiler blocks multiple page-level jobs, equal flexible thirds on desktop, ambiguous record-detail selection, four or more outlined sibling panels, phone desktop-shell primitives, and more than one filled work action per screen.
+The compiler blocks multiple page-level jobs, equal flexible thirds on desktop, ambiguous record-detail selection, four or more outlined sibling panels, phone desktop-shell primitives, more than one filled work action per screen, and ambiguous Stepper progress.
+A Stepper must contain exactly one current step in `done` → `current` → `todo` order, while each Step label names only the task because the primitive draws its own number or completion mark.
 A composer's Send button counts as a filled action even when it omits `emphasis="primary"`; selected buttons inside `SegmentedControl` and `BottomBar` are mode or navigation state and do not count as filled work actions.
 
 ## Optional screen patterns

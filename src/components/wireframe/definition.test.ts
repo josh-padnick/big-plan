@@ -621,6 +621,103 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).not.toContain('"1."');
   });
 
+  it("should reject a step label that repeats numbering owned by Stepper", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "choose",
+          children: [
+            element({
+              name: "Stepper",
+              children: [
+                element({
+                  name: "Step",
+                  attributes: { label: "1 Choose", state: "current" },
+                }),
+                element({
+                  name: "Step",
+                  attributes: { label: "Tell us", state: "todo" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Step label "1 Choose" repeats the progress indicator; write only the task because Stepper draws numbering and completion state',
+    ]);
+  });
+
+  it("should require exactly one current step", () => {
+    const compileStates = (
+      states: ReadonlyArray<"done" | "current" | "todo">,
+    ) =>
+      compile({
+        scopedChildren: [
+          screen({
+            id: "flow",
+            children: [
+              element({
+                name: "Stepper",
+                children: states.map((state, index) =>
+                  element({
+                    name: "Step",
+                    attributes: { label: `Task ${index + 1}`, state },
+                  }),
+                ),
+              }),
+            ],
+          }),
+        ],
+      });
+
+    expect(
+      compileStates(["done", "todo"]).diagnostics.map((entry) => entry.message),
+    ).toEqual([
+      'Screen "flow" Stepper needs exactly one current Step; found 0',
+    ]);
+    expect(
+      compileStates(["current", "current"]).diagnostics.map(
+        (entry) => entry.message,
+      ),
+    ).toEqual([
+      'Screen "flow" Stepper needs exactly one current Step; found 2',
+    ]);
+  });
+
+  it("should order progress as done, current, then todo", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "check",
+          children: [
+            element({
+              name: "Stepper",
+              children: [
+                element({
+                  name: "Step",
+                  attributes: { label: "Choose", state: "todo" },
+                }),
+                element({
+                  name: "Step",
+                  attributes: { label: "Check", state: "current" },
+                }),
+                element({
+                  name: "Step",
+                  attributes: { label: "Handoff", state: "done" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "check" Stepper state must read done, then one current, then todo',
+    ]);
+  });
+
   it("should keep a connector's condition as text and its arrow as decoration", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [

@@ -931,6 +931,15 @@ const CATALOG = {
         diagnostics,
         schema: STEP_SCHEMA,
       });
+      if (
+        validated.label !== undefined &&
+        /^(?:[✓✔]\s*|\(?\d+\)?[.)]?\s+)/u.test(validated.label)
+      ) {
+        diagnostics.add({
+          message: `Step label "${validated.label}" repeats the progress indicator; write only the task because Stepper draws numbering and completion state`,
+          position,
+        });
+      }
       return {
         element: "Step",
         label: validated.label ?? "",

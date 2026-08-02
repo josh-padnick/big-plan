@@ -481,6 +481,51 @@ const checkOneClearJob = ({
   }
 };
 
+/** Progress has one present step, with completed work before work still ahead. */
+const checkStepperState = ({
+  screen,
+  position,
+  diagnostics,
+}: {
+  readonly screen: WireframeScreen;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const steppers = flatten(screen.children).filter(
+    (node) => node.element === "Stepper",
+  );
+  for (const stepper of steppers) {
+    const steps = stepper.children.filter((node) => node.element === "Step");
+    const currentIndexes = steps.flatMap((step, index) =>
+      step.element === "Step" && step.state === "current" ? [index] : [],
+    );
+    if (currentIndexes.length !== 1) {
+      diagnostics.add({
+        message: `Screen "${screen.id}" Stepper needs exactly one current Step; found ${currentIndexes.length}`,
+        position,
+      });
+      continue;
+    }
+    const currentIndex = currentIndexes[0] ?? -1;
+    const ordered = steps.every(
+      (step, index) =>
+        step.element === "Step" &&
+        step.state ===
+          (index < currentIndex
+            ? "done"
+            : index === currentIndex
+              ? "current"
+              : "todo"),
+    );
+    if (!ordered) {
+      diagnostics.add({
+        message: `Screen "${screen.id}" Stepper state must read done, then one current, then todo`,
+        position,
+      });
+    }
+  }
+};
+
 /** A phone uses its compact shell primitives, never a stacked desktop shell. */
 const checkPhoneShell = ({
   screen,
@@ -635,6 +680,7 @@ const compileScreen = ({
     diagnostics,
   });
   checkOneClearJob({ screen, position: child.position, diagnostics });
+  checkStepperState({ screen, position: child.position, diagnostics });
   checkPhoneShell({ screen, position: child.position, diagnostics });
   checkOneFilledAction({ screen, position: child.position, diagnostics });
   return screen;

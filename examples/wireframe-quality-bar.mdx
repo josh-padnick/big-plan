@@ -1,29 +1,122 @@
 # Fresh-agent wireframe quality proof
 
-The standards now lead with one memorable design test, then move device details and checkable rules beneath it. The product sketches use only public Wireframe guidance and defaults.
+The standards now lead with one memorable index without throwing away the implementation detail. The product sketches use only public Wireframe guidance and defaults.
 
 ## CLEAR is the front door
 
-**Five questions, in order.**
+**CLEAR groups the standard; it does not compress it.** Ask the five questions in order, then follow every relevant rule beneath that letter.
 
-- **C · Clear job.** Does this screen advance one task, with a primary action that names the goal? _Absorbs one-screen-one-job, obvious next action, and goal-matching action._
-- **L · Layout follows attention.** Is there one focal point and an effortless reading order? _Absorbs hierarchy, proximity, grouping, scanning, alignment, minimal boxes, contrast, and decoration._
-- **E · Explicit change.** Can I see what selection changes, what appears next, and when the mode changes? _Absorbs visible outcomes, progressive disclosure, states, consistency, relationships, and handoff boundaries._
-- **A · Audience language.** Would this audience naturally say these concrete words and amounts? _Absorbs tangible language, mental model, emotional goal, and outcome-named actions._
-- **R · Real device.** Does it behave like this device while remaining deliberately rough? _Absorbs native shells, aspect ratio, density, affordances, touch size, and fidelity._
+- **C · Clear job.** Does this screen advance one present task?
+- **L · Layout follows attention.** Does visual order match decision order?
+- **E · Explicit change.** Is every selection, state, and mode change visible?
+- **A · Audience language.** Does one audience hear concrete, consistent words?
+- **R · Real device.** Does it behave like this device while remaining deliberately rough?
 
-The hierarchy is deliberate: **CLEAR** judges the product UI; per-device pass criteria decide native composition; primitives and diagnostics settle facts an agent should not have to remember; **LOOP** is only the render-and-review workflow. **CRAP** remains the separate standard for the plan page around the artboard.
+**LOOP** is only the render-and-review workflow. **CRAP** remains the separate standard for the plan page around the artboard.
 
-## What the curation removed
+## C · Clear job
 
-**Every previous standard now has one unambiguous home.**
+**Implementation principles**
 
-- **Fourteen general principles → CLEAR.** Layout, Explicit change, Audience language, and Real device absorb the review questions.
-- **Ten task-flow principles → CLEAR.** They supply Clear job and sharpen the other four questions.
-- **STAMP → retired.** Space, Tiers, Align, and Minimal boxes become Layout and contracts; Plain state becomes Explicit change.
-- **Per-form-factor principles → pass/reject criteria.** They remain beneath CLEAR for desktop, tablet, and phone.
-- **Type, aspect, state, and target rules → mechanics.** Primitives, compile diagnostics, and browser geometry checks own them.
-- **LOOP and CRAP → separate jobs.** LOOP proves a render; CRAP structures the plan page around it.
+- Give one screen one job and one step one decision. Split choosing, telling, checking, handing off, authenticating, reviewing, approving, and completing when each asks a different question.
+- Make the title name the present task—not the next step, a system state, or another actor's future work.
+- Make the primary action match the goal and describe its immediate result: `Check my request`, `Unlock to review`, or `See my wallet`, never vague `Continue`, premature `Approve`, or `Done`.
+- In a sequence, provide one nearby route back and one prominent route forward. A branch may instead offer parallel alternatives.
+- Close a learning loop concretely: lead with achievement, answer the original question, show specific evidence, say what remains true in the real world, then offer a purposeful next action.
+
+**Reject:** mixed jobs; future-facing titles; actions that exit instead of advance; duplicate back or forward routes; receipt-like endings that never say what the user learned.
+
+**Mechanics:** compilation blocks multiple page headers and multiple filled work actions. Wording still requires review.
+
+## L · Layout follows attention
+
+**Order and relationships**
+
+- Create one focal point with deliberate size, position, spacing, and contrast.
+- Make visual hierarchy follow decision hierarchy: question or primary work first, supporting facts second, next action last. Celebrate achievement before quieter reassurance.
+- Give the screen an effortless reading order; a focused flow must not require desktop-style left-right-back scanning.
+- Use proximity to explain relationships. Put a changed outcome beside the selection that changes it.
+- Group by user concepts, not available data. Prefer hierarchy over a wall of containers.
+
+**Emphasis and expression**
+
+- Keep parallel options parallel in grammar, weight, information depth, and target treatment.
+- Spend the strongest border, fill, badge, type, and color only on the most important content or action.
+- Optimize for a five-second scan before careful reading.
+- Use decoration only to identify content, communicate state, reinforce the emotional goal, or explain an unfinished visual decision.
+
+**Reject:** equal-weight regions; card walls; floating metadata; unrelated adjacency; oversized empty panels; biased choices; decorative filler; anything louder than its importance.
+
+**Mechanics:** plain panels, dominant derived panes, and `Rail` encode the default hierarchy. Compilation blocks equal desktop thirds and four-or-more outlined siblings; geometry tests block cramped panes, overlap, and dead bands.
+
+## E · Explicit change
+
+**Implementation principles**
+
+- Make a selected row, card, or mode agree visibly with its dependent outcome.
+- Reveal information progressively: choices before summary, review before approval, and no later-stage detail before the present decision.
+- Paint hover, focus, active, selected, disabled, error, done, current, and unavailable states unmistakably.
+- Make progress communicate state: completed steps look complete, exactly one step is current, future steps are quiet, and task labels never repeat generated numbers or checkmarks.
+- Show causal results next to the action that produces them.
+- Give actor and mode changes a visible boundary: a new screen, actor-specific heading, simplified content, lock cue, and different treatment.
+- Treat authentication as identity proof, never consent: handoff → authenticate → review → approve or decline. `Unlock to review` cannot buy or approve.
+- Preserve the first actor's exit before handoff; once authentication starts, the next actor may enter a focused gate.
+
+**Reject:** generic summaries after specific choices; faint selection; premature summaries; ambiguous progress; heading-only handoffs; mixed audiences; Face ID or PIN labeled as approval.
+
+**Mechanics:** compilation requires one selected record beside visible detail, checks navigation targets and Stepper state, and rejects authored progress numbering. State primitives own interaction paint.
+
+## A · Audience language
+
+**Implementation principles**
+
+- Use concrete words, outcomes, amounts, and time from the audience's mental model: `$27.50 to go`, `two Friday payments left`, or `Nothing will be bought yet`.
+- Use one term per concept and one label per destination.
+- Make one screen speak to one audience; change mode and heading before addressing the next actor.
+- Name the current branch—a purchase request, loan question, or confusing topic—not a generic summary.
+- Make reassurance name the actual risk and what remains unchanged: `Unlocking does not approve or buy anything`; `This was practice—no money moved`.
+- Avoid internal, technical, adult-oriented, or agent-process language the audience would not say.
+- Serve the emotional goal—capable, safe, motivated, informed, or in control—without hiding facts.
+- Prefer specific feedback and a visual recap over praise the product cannot verify.
+
+**Reject:** terminology drift; abstract labels where plain language exists; mixed audiences; branchless summaries; generic reassurance; technical badges; unverified praise.
+
+**Mechanics:** lint keeps agent-process copy outside the artboard. Audience fit, terminology, and risk wording require review.
+
+## R · Real device
+
+**Cross-device contracts**
+
+- Use a native layout language, not one design scaled three ways: dense B2B patterns on desktop, iPadOS composition on tablet, and iOS push navigation on phone.
+- Put hand-drawn irregularity in strokes, grid, icons, and rough borders—never alignment, spacing, reading order, contrast, information architecture, or target size.
+- Keep three legible type roles: page title, content, and metadata.
+- Make controls unmistakable through shape and state. Tablet and phone targets are at least 44px.
+
+**Desktop passes:** 1440 × 900 minimum; flush, narrow, full-height sidebar; stable global navigation; most width for the canvas; a 60–75% primary surface; secondary properties in a 240–320px-class `Rail`; tight vertical rhythm; Linear-style settings; create/edit as a route or true modal.
+
+**Desktop rejects:** equal thirds; a sidebar taking a third; floating tablet navigation; two large settings cards; inflated chrome; oversized iPad sheets.
+
+**Tablet passes:** fixed 1180 × 820 or 820 × 1180 iPad frame, about 1.44:1, with internal overflow; no browser bar; touch-first type and 44px controls; wider gutters; intentional master/detail or focused steps; card grouping only where useful.
+
+**Tablet rejects:** a stretched near-square bezel; compressed desktop density; browser chrome; squeezed desktop sidebars; tiny text; desktop task flows.
+
+**Phone passes:** 390 × 720 minimum; compact top bar; one column; 44px controls and 52–64px rows; bottom destinations; fewer fields; progressive disclosure; list → detail push navigation.
+
+**Phone rejects:** desktop shells; side-by-side properties; a vertical iPad; height-only tablet cards; desktop copy squeezed narrow.
+
+**Mechanics:** device presets own widths, fixed tablet ratio, shell availability, type roles, pane widths, touch floors, contrast, and state paint. Browser geometry checks fence 1.39–1.44 tablet ratio, shells, readable panes, overlap, dead bands, and target sizes.
+
+## What the curation absorbed
+
+**Every prior standard remains explicit under one owner.**
+
+- **Fourteen hierarchy principles → CLEAR.** Focal point, reading order, proximity, grouping, scanning, restrained decoration, emotional goal, and rough fidelity live under Layout, Audience, and Real device.
+- **Original task-flow round → CLEAR.** One job, goal-matching actions, selection outcomes, progressive reveal, hierarchy over containers, attention order, unmistakable affordances, mode boundaries, concrete language, and importance-based contrast remain explicit above.
+- **Task-flow refinement round → CLEAR.** The fifteen rules now appear individually: one decision; present-task title; decision hierarchy; one term; one route each way; meaningful progress; parallel options; disciplined irregularity; one audience; authentication is not consent; immediate-result labels; visible handoffs; risk-specific reassurance; celebration before reassurance; and a concrete learning loop.
+- **STAMP → retired, detail retained.** Space, Tiers, Align, and Minimal boxes live under Layout and mechanics; Plain state lives under Explicit change.
+- **Per-device principles → Real device.** Desktop, tablet, and phone each retain distinct pass criteria and anti-patterns.
+- **Type, aspect, state, and target rules → mechanics beneath CLEAR.** Primitives, compile diagnostics, and browser geometry checks own the facts.
+- **LOOP and CRAP → separate jobs.** LOOP proves a render; CRAP structures the surrounding plan page.
 
 ## Desktop support workspace
 
@@ -130,7 +223,7 @@ The selected queue record remains visible while the conversation dominates and p
 
 ## Tablet grown-up handoff
 
-The fixed-ratio iPad flow gives each step one job: choose, prepare, then cross an explicit grown-up boundary.
+The fixed-ratio iPad flow gives each decision its own screen, makes progress meaningful, and separates child handoff from grown-up authentication and consent.
 
 <Wireframe
   id="quality-tablet"
@@ -141,7 +234,8 @@ The fixed-ratio iPad flow gives each step one job: choose, prepare, then cross a
     <Center measure="wide">
       <Stepper>
         <Step label="Choose" state="current" />
-        <Step label="Prepare" state="todo" />
+        <Step label="Tell us" state="todo" />
+        <Step label="Check" state="todo" />
         <Step label="Handoff" state="todo" />
       </Stepper>
       <PageHeader
@@ -152,7 +246,7 @@ The fixed-ratio iPad flow gives each step one job: choose, prepare, then cross a
         <Panel title="Choose one">
           <List>
             <ListItem
-              label="Buy something"
+              label="Ask about a purchase"
               meta="See what money stays in my wallet"
               selected
             />
@@ -161,16 +255,16 @@ The fixed-ratio iPad flow gives each step one job: choose, prepare, then cross a
               meta="See what I owe and ask a question"
             />
             <ListItem
-              label="Change my allowance"
-              meta="Explain what I want to change"
+              label="Ask about something confusing"
+              meta="Explain what I want help understanding"
             />
           </List>
         </Panel>
-        <Panel title="Buying means" surface="filled">
+        <Panel title="Purchase request" surface="filled">
           <Text text="Next, tell us the item and price." />
           <Text text="We will show how much money you would have afterward." />
           <Button
-            label="Continue with buying"
+            label="Tell us about the purchase"
             emphasis="primary"
             navigateTo="quality-tablet-prepare"
           />
@@ -183,11 +277,12 @@ The fixed-ratio iPad flow gives each step one job: choose, prepare, then cross a
     <Center measure="prose">
       <Stepper>
         <Step label="Choose" state="done" />
-        <Step label="Prepare" state="current" />
+        <Step label="Tell us" state="current" />
+        <Step label="Check" state="todo" />
         <Step label="Handoff" state="todo" />
       </Stepper>
       <PageHeader
-        title="What are you hoping to buy?"
+        title="Tell us about the purchase"
         description="Tell us what you know. Your grown-up can help with the rest."
       />
       <Panel surface="filled">
@@ -202,7 +297,40 @@ The fixed-ratio iPad flow gives each step one job: choose, prepare, then cross a
           navigateTo="quality-tablet-choose"
         />
         <Button
-          label="Review with my grown-up"
+          label="Check my request"
+          emphasis="primary"
+          navigateTo="quality-tablet-check"
+        />
+      </Row>
+    </Center>
+  </Screen>
+
+  <Screen id="quality-tablet-check" name="Tablet · Check" device="tablet">
+    <Center measure="prose">
+      <Stepper>
+        <Step label="Choose" state="done" />
+        <Step label="Tell us" state="done" />
+        <Step label="Check" state="current" />
+        <Step label="Handoff" state="todo" />
+      </Stepper>
+      <PageHeader
+        title="Check your purchase request"
+        description="This is what your grown-up will see."
+      />
+      <Panel title="Soccer ball" surface="filled">
+        <Metric label="Price" value="$18" />
+        <Text text="Money now: $42.50" />
+        <Text text="Money afterward: $24.50" />
+        <Text text="Nothing will be bought yet." role="helper" />
+      </Panel>
+      <Row justify="between">
+        <Button
+          label="Edit my request"
+          emphasis="tertiary"
+          navigateTo="quality-tablet-prepare"
+        />
+        <Button
+          label="Hand the iPad to my grown-up"
           emphasis="primary"
           navigateTo="quality-tablet-handoff"
         />
@@ -214,27 +342,58 @@ The fixed-ratio iPad flow gives each step one job: choose, prepare, then cross a
     <Center measure="prose">
       <Stepper>
         <Step label="Choose" state="done" />
-        <Step label="Prepare" state="done" />
+        <Step label="Tell us" state="done" />
+        <Step label="Check" state="done" />
         <Step label="Handoff" state="current" />
       </Stepper>
       <PageHeader
-        title="Now hand the iPad to your grown-up"
-        description="They will review this with you before anything is bought."
+        title="Time for your grown-up"
+        description="Hand them the iPad. They will unlock it before reviewing your request."
         badge="Grown-up handoff"
       />
-      <Panel title="Eddy wants help buying" surface="filled">
-        <Metric label="Item" value="Soccer ball" note="$18" />
-        <Text text="Money now: $42.50" />
-        <Text text="Money afterward: $24.50" />
-        <Text text="Loan still owed: $12" />
+      <Panel title="Eddy's purchase request" surface="filled">
+        <Badge label="Request locked" tone="info" />
+        <Text text="Give the iPad to your grown-up before continuing." />
+        <Text text="Nothing will be bought yet. Your grown-up will review the request first." />
       </Panel>
       <Row justify="between">
         <Button
-          label="Change my request"
+          label="Go back"
           emphasis="tertiary"
-          navigateTo="quality-tablet-prepare"
+          navigateTo="quality-tablet-check"
         />
-        <Button label="Start grown-up review" emphasis="primary" />
+        <Button
+          label="I'm the grown-up"
+          emphasis="primary"
+          navigateTo="quality-tablet-unlock"
+        />
+      </Row>
+    </Center>
+  </Screen>
+
+  <Screen
+    id="quality-tablet-unlock"
+    name="Tablet · Grown-up"
+    device="tablet"
+  >
+    <Center measure="prose">
+      <PageHeader
+        title="Unlock Eddy's purchase request"
+        description="Use Face ID or your PIN to enter grown-up mode."
+        badge="Grown-up mode"
+      />
+      <Panel title="Identity check" surface="filled">
+        <Badge label="Face ID ready" tone="info" />
+        <Text text="Look at the iPad or enter your PIN." />
+        <Text text="Unlocking does not approve or buy anything." role="helper" />
+      </Panel>
+      <Row justify="between">
+        <Button
+          label="Not now"
+          emphasis="tertiary"
+          navigateTo="quality-tablet-handoff"
+        />
+        <Button label="Unlock to review" emphasis="primary" />
       </Row>
     </Center>
   </Screen>
