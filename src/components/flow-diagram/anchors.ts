@@ -12,7 +12,7 @@
 //   component/FlowDiagram#1                     the figure
 //   component/FlowDiagram#1/stage/package       a stage column
 //   component/FlowDiagram#1/node/apply          a node card
-//   component/FlowDiagram#1/edge/apply-progress a connection
+//   component/FlowDiagram#1/edge/apply/progress a connection
 //   component/FlowDiagram#1/footer              the figure's own line
 // Each string slots straight into the `anchors` field of a BlockDescriptor, so
 // no parallel identity scheme appears beside the block tree.
@@ -57,7 +57,8 @@ export const flowEdgeAnchor = ({
   readonly figure: string;
   readonly from: string;
   readonly to: string;
-}): string => `${figure}/edge/${from}-${to}`;
+}): string =>
+  `${figure}/edge/${encodeURIComponent(from)}/${encodeURIComponent(to)}`;
 
 export const flowFooterAnchor = ({
   figure,

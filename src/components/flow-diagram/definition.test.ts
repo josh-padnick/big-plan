@@ -374,9 +374,49 @@ describe("FLOW_DIAGRAM_COMPONENT_DEFINITION", () => {
       "component/FlowDiagram#1/node/pr",
     );
     expect(compiled.model.edges[0]?.anchor).toBe(
-      "component/FlowDiagram#1/edge/pr-skill",
+      "component/FlowDiagram#1/edge/pr/skill",
     );
     expect(compiled.model.footerAnchor).toBe("component/FlowDiagram#1/footer");
+  });
+
+  it("should keep hyphenated edge endpoints as distinct feedback targets", () => {
+    const scopedChildren = [
+      stage("First", [node({ id: "a", label: "A" })]),
+      stage("Second", [node({ id: "b-c", label: "B-C" })]),
+      stage("Third", [node({ id: "a-b", label: "A-B" })]),
+      stage("Fourth", [node({ id: "c", label: "C" })]),
+      edge({ from: "a", to: "b-c" }),
+      edge({ from: "b-c", to: "a-b" }),
+      edge({ from: "a-b", to: "c" }),
+    ];
+    const compiled = compile({
+      scopedChildren,
+      children: [paragraph("The endpoints remain independently addressable.")],
+    });
+    const anchors = compiled.model.edges.map((item) => item.anchor);
+
+    expect(compiled.diagnostics).toEqual([]);
+    expect(anchors).toEqual([
+      "component/FlowDiagram#1/edge/a/b-c",
+      "component/FlowDiagram#1/edge/b-c/a-b",
+      "component/FlowDiagram#1/edge/a-b/c",
+    ]);
+    expect(new Set(anchors).size).toBe(3);
+    expect(compiled.model.anchor).toBe("component/FlowDiagram#1");
+    expect(compiled.model.stages[0]?.anchor).toBe(
+      "component/FlowDiagram#1/stage/first",
+    );
+    expect(compiled.model.stages[0]?.nodes[0]?.anchor).toBe(
+      "component/FlowDiagram#1/node/a",
+    );
+    expect(compiled.model.footerAnchor).toBe("component/FlowDiagram#1/footer");
+
+    const rendered = render({ scopedChildren });
+    expect(rendered.diagnostics).toEqual([]);
+    const markup = JSON.stringify(rendered.element);
+    for (const anchor of anchors) {
+      expect(markup).toContain(`"data-flow-anchor":"${anchor}"`);
+    }
   });
 
   it("should keep a stage's anchor when its title changes but its id does not", () => {
