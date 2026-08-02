@@ -1482,7 +1482,19 @@ export const DIAGRAM_SCRIPT = `
   // Collapsing a slide changes no attribute on the diagram itself, so the
   // teardown is driven by what actually changed: the size of its host.
   if (typeof ResizeObserver === "function") {
-    const sizes = new ResizeObserver(() => reanchor());
+    const sizes = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const diagram = entry.target;
+        if (
+          entry.contentRect.width > 0 &&
+          entry.contentRect.height > 0 &&
+          !diagram.hasAttribute("data-figure-maximized")
+        ) {
+          refitIfUntouched(diagram);
+        }
+      }
+      reanchor();
+    });
     for (const diagram of diagrams) sizes.observe(diagram);
   }
 

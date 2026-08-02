@@ -1,6 +1,6 @@
-// Critical browser journeys for reviewing a FlowDiagram: clearing authored
-// text remains a visible proposal, comments stay marked at their subject, and
-// the diagram's handoff action occupies the correct chrome in each view.
+// Critical browser journeys for reviewing a FlowDiagram: edits and comments
+// remain faithful, canvas state survives reader interactions, and the review
+// chrome occupies the correct place in each view.
 
 import { expect, test } from "./fixtures";
 
@@ -103,6 +103,48 @@ test("should preserve a panned canvas when feedback repaints it", async ({
   await expect(diagram.locator(".flow-diagram-actionbar-hint")).toHaveText(
     "Delete to restore",
   );
+});
+
+test("should size a persisted-collapsed diagram when expanded", async ({
+  page,
+  slideCraftViewerUrl,
+}) => {
+  await page.goto(slideCraftViewerUrl);
+
+  const host = page.locator(
+    '[data-collapsible="slide"][data-collapse-id="the-indexing-pipeline"]',
+  );
+  const diagram = host.locator("[data-flow-diagram]");
+  const viewport = diagram.locator("[data-flow-viewport]");
+  const sizer = diagram.locator("[data-flow-sizer]");
+  const toggle = host.locator(
+    ":scope > [data-collapse-header] > [data-collapse-toggle]",
+  );
+
+  await toggle.click();
+  await expect(host).toHaveAttribute("data-collapsed", "");
+  await page.reload();
+  await expect(host).toHaveAttribute("data-collapsed", "");
+  await expect(viewport).toBeHidden();
+  expect(
+    await viewport.evaluate((element) => (element as HTMLElement).style.height),
+  ).toBe("");
+
+  await toggle.click();
+  await expect(host).not.toHaveAttribute("data-collapsed", "");
+  await expect(viewport).toBeVisible();
+  await expect
+    .poll(() =>
+      viewport.evaluate(
+        (element) => (element as HTMLElement).getBoundingClientRect().height,
+      ),
+    )
+    .toBeGreaterThanOrEqual(140);
+  await expect
+    .poll(() =>
+      sizer.evaluate((element) => (element as HTMLElement).style.transform),
+    )
+    .toContain("scale(");
 });
 
 test("should reach footer review actions with the mouse", async ({
