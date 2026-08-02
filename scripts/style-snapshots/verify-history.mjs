@@ -5,20 +5,39 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   copyFile,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rm,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { PNG } from "pngjs";
 
 const execFileAsync = promisify(execFile);
+
+const RELEVANCE_FLOOR = {
+  fixturePaths: ["examples/mdx-components.mdx", "examples/deck.mdx"],
+  stylingFilePatterns: [
+    "^\\.style-snapshots/config\\.json$",
+    "^assets/(?:logo-(?:light|dark)\\.svg|favicon-(?:light|dark)\\.ico)$",
+    "^src/.*\\.css$",
+    "^src/components/(?:.*/)?view[^/]*\\.tsx$",
+    "^src/components/_shared/.*\\.tsx$",
+    "^src/icons/lucide/.*\\.ts$",
+    "^src/render/branding\\.generated\\.ts$",
+    "^src/render/global\\.generated\\.ts$",
+    "^src/render/page\\.ts$",
+    "^src/render/render-document\\.ts$",
+    "^src/render/(?:markdown|shell)/.*\\.ts$",
+  ],
+};
 
 /** Runs a command and returns trimmed stdout with a useful failure boundary. */
 const run = async ({ command, args, cwd, env = process.env }) => {
@@ -30,9 +49,9 @@ const run = async ({ command, args, cwd, env = process.env }) => {
   return stdout.trim();
 };
 
-/** Reads and validates the stable surface of the screenshot configuration. */
-const readConfig = async (configPath) => {
-  const config = JSON.parse(await readFile(configPath, "utf8"));
+/** Validates the stable surface of one screenshot configuration revision. */
+const parseConfig = (source) => {
+  const config = JSON.parse(source);
   if (config.schemaVersion !== 1) {
     throw new Error("Style screenshot config must use schemaVersion 1.");
   }
@@ -52,6 +71,76 @@ const readConfig = async (configPath) => {
     throw new Error("Style screenshot config requires manifestDirectory.");
   }
   return config;
+};
+
+/** Reads the active screenshot configuration from the harness checkout. */
+const readConfig = async (configPath) =>
+  parseConfig(await readFile(configPath, "utf8"));
+
+/** Reads a historical config when that revision contains one. */
+const readConfigAtCommit = async ({ repoRoot, commit, configRepoPath }) => {
+  try {
+    return parseConfig(
+      await run({
+        command: "git",
+        args: ["show", `${commit}:${configRepoPath}`],
+        cwd: repoRoot,
+      }),
+    );
+  } catch (error) {
+    if (error.code === 128) {
+      return null;
+    }
+    throw error;
+  }
+};
+
+/** Restricts destructive evidence cleanup to the repository-owned run root. */
+const validateArtifactRoot = async ({ repoRoot, artifactRoot }) => {
+  const resolvedRepoRoot = resolve(repoRoot);
+  const resolvedArtifactRoot = resolve(artifactRoot);
+  const artifactRepoPath = relative(resolvedRepoRoot, resolvedArtifactRoot);
+  if (
+    artifactRepoPath === "" ||
+    artifactRepoPath.startsWith("..") ||
+    isAbsolute(artifactRepoPath)
+  ) {
+    throw new Error(
+      "Style history artifacts must stay under test-results/style-history.",
+    );
+  }
+
+  const canonicalRepoRoot = await realpath(resolvedRepoRoot);
+  const canonicalArtifactRoot = resolve(canonicalRepoRoot, artifactRepoPath);
+  const disposableRoot = join(
+    canonicalRepoRoot,
+    "test-results",
+    "style-history",
+  );
+  const disposablePath = relative(disposableRoot, canonicalArtifactRoot);
+  if (disposablePath.startsWith("..") || isAbsolute(disposablePath)) {
+    throw new Error(
+      "Style history artifacts must stay under test-results/style-history.",
+    );
+  }
+
+  let current = canonicalRepoRoot;
+  for (const part of artifactRepoPath.split(/[\\/]/)) {
+    current = join(current, part);
+    try {
+      if ((await lstat(current)).isSymbolicLink()) {
+        throw new Error(
+          "Style history artifact paths must not traverse symbolic links.",
+        );
+      }
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        break;
+      }
+      throw error;
+    }
+  }
+  return canonicalArtifactRoot;
 };
 
 /** Lists files recursively using POSIX-style relative names for manifests. */
@@ -381,16 +470,21 @@ export const verifyHistory = async ({
   configPath,
   artifactRoot,
 }) => {
+  const disposableArtifactRoot = await validateArtifactRoot({
+    repoRoot,
+    artifactRoot,
+  });
   const config = await readConfig(configPath);
   const harnessRoot = dirname(dirname(configPath));
+  const configRepoPath = relative(repoRoot, configPath).replaceAll("\\", "/");
+  if (configRepoPath.startsWith("../") || isAbsolute(configRepoPath)) {
+    throw new Error("Style screenshot config must be inside the repository.");
+  }
   const head = await run({
     command: "git",
     args: ["rev-parse", "HEAD"],
     cwd: repoRoot,
   });
-  const patterns = config.stylingFilePatterns.map(
-    (pattern) => new RegExp(pattern),
-  );
   const mergeBase = await run({
     command: "git",
     args: ["merge-base", base, "HEAD"],
@@ -402,6 +496,24 @@ export const verifyHistory = async ({
     cwd: repoRoot,
   });
   const commits = commitOutput.split("\n").filter(Boolean);
+  const historicalConfigs = await Promise.all(
+    [mergeBase, ...commits].map((commit) =>
+      readConfigAtCommit({ repoRoot, commit, configRepoPath }),
+    ),
+  );
+  const relevanceConfigs = [
+    RELEVANCE_FLOOR,
+    ...historicalConfigs.filter((candidate) => candidate !== null),
+    config,
+  ];
+  const fixturePaths = new Set(
+    relevanceConfigs.flatMap((candidate) => candidate.fixturePaths),
+  );
+  const patterns = [
+    ...new Set(
+      relevanceConfigs.flatMap((candidate) => candidate.stylingFilePatterns),
+    ),
+  ].map((pattern) => new RegExp(pattern));
   const relevant = [];
 
   for (const commit of commits) {
@@ -420,11 +532,11 @@ export const verifyHistory = async ({
         ? await run({
             command: "git",
             args: [
-              "diff-tree",
-              "--cc",
+              "show",
+              "--remerge-diff",
               "--name-only",
-              "--no-commit-id",
-              "-r",
+              "--format=",
+              "--no-renames",
               commit,
             ],
             cwd: repoRoot,
@@ -439,7 +551,8 @@ export const verifyHistory = async ({
       .filter(Boolean);
     const stylingFiles = changedFiles.filter(
       (path) =>
-        config.fixturePaths.includes(path) ||
+        path === configRepoPath ||
+        fixturePaths.has(path) ||
         patterns.some((pattern) => pattern.test(path)),
     );
     if (stylingFiles.length === 0) {
@@ -534,7 +647,8 @@ export const verifyHistory = async ({
 
   const results = [];
   try {
-    await rm(artifactRoot, { recursive: true, force: true });
+    await rm(disposableArtifactRoot, { recursive: true, force: true });
+    await captureCommit(head);
     for (const entry of relevant) {
       const beforeDirectory = await captureCommit(entry.parent);
       const afterDirectory = await captureCommit(entry.commit);
@@ -543,7 +657,10 @@ export const verifyHistory = async ({
         afterDirectory,
       });
       const changes = captures.filter((capture) => capture.changedPixels > 0);
-      const artifactDirectory = join(artifactRoot, entry.commit.slice(0, 12));
+      const artifactDirectory = join(
+        disposableArtifactRoot,
+        entry.commit.slice(0, 12),
+      );
       await writeEvidenceLedger({
         artifactDirectory,
         entry,
