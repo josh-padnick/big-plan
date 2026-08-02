@@ -430,16 +430,17 @@ export const DIAGRAM_SCRIPT = `
   for (const diagram of diagrams) {
     const c = canvas.get(diagram);
     if (!c) continue;
-    c.viewport.addEventListener("click", (event) => {
-      if (suppressClick) { suppressClick = false; return; }
+    diagram.addEventListener("click", (event) => {
+      const inViewport = c.viewport.contains(event.target);
+      if (inViewport && suppressClick) { suppressClick = false; return; }
       if (event.target.closest("[data-flow-editing]")) return;
       const node = event.target.closest("[data-flow-element]");
       if (node && node !== diagram) select(node);
-      else deselect();
+      else if (inViewport) deselect();
     });
     // Double-click goes straight into the words: the shortest path from
     // "that is wrong" to typing the right thing.
-    c.viewport.addEventListener("dblclick", (event) => {
+    diagram.addEventListener("dblclick", (event) => {
       const field = event.target.closest("[data-flow-field]");
       if (!field) return;
       const node = field.closest("[data-flow-element]");
@@ -936,11 +937,13 @@ export const DIAGRAM_SCRIPT = `
     if (!selected || actionBar.hidden) return;
     const diagram = selected.closest("[data-flow-diagram]") || selected;
     const c = canvas.get(diagram);
+    const canvasSelection = c && c.viewport.contains(selected);
     const subject = selected.getBoundingClientRect();
     const size = actionBar.getBoundingClientRect();
-    const bounds = c ? c.viewport.getBoundingClientRect()
-                     : { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
-    if (c && (subject.bottom < bounds.top || subject.top > bounds.bottom)) {
+    const bounds = canvasSelection
+      ? c.viewport.getBoundingClientRect()
+      : { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+    if (canvasSelection && (subject.bottom < bounds.top || subject.top > bounds.bottom)) {
       actionBar.style.visibility = "hidden";
       return;
     }
@@ -950,7 +953,7 @@ export const DIAGRAM_SCRIPT = `
     // treating an 11-pixel heading as something worth being pushed below the
     // selection for is how it once ended up below when the captain asked for
     // above.
-    const obstacles = (c ? elementsIn(diagram) : [])
+    const obstacles = (canvasSelection ? elementsIn(diagram) : [])
       .filter((n) => n !== selected && (kindOf(n) === "node" || kindOf(n) === "edge"))
       .map(obstacleRectOf)
       .filter((r) => r !== null);
@@ -1001,7 +1004,7 @@ export const DIAGRAM_SCRIPT = `
   const bringIntoView = (node) => {
     const diagram = node.closest("[data-flow-diagram]");
     const c = diagram ? canvas.get(diagram) : null;
-    if (!c) return;
+    if (!c || !c.viewport.contains(node)) return;
     const subject = node.getBoundingClientRect();
     const bounds = c.viewport.getBoundingClientRect();
     let dx = 0, dy = 0;
@@ -1048,6 +1051,19 @@ export const DIAGRAM_SCRIPT = `
         buildActionBar();
       }
     }
+  };
+
+  const pendingCountFor = (diagram) => {
+    if (editing) {
+      const owner = editing.node.closest("[data-flow-diagram]") || editing.node;
+      if (owner === diagram) stopEditing(false);
+    }
+    const saved = drafts.filter((draft) => draft.diagram === diagram).length;
+    if (!composeSubject) return saved;
+    const owner = composeSubject.closest("[data-flow-diagram]") || composeSubject;
+    if (owner !== diagram) return saved;
+    const textarea = compose.querySelector("textarea");
+    return saved + (textarea && textarea.value.trim() ? 1 : 0);
   };
 
   const positionCompose = () => {
@@ -1140,7 +1156,7 @@ export const DIAGRAM_SCRIPT = `
     const description = el("p", "flow-diagram-exit-alert-description");
     description.id = descriptionId;
     const actions = el("div", "flow-diagram-exit-alert-actions");
-    const stay = el("button", "flow-diagram-exit-alert-button", "Stay in full screen");
+    const stay = el("button", "flow-diagram-exit-alert-button", "Go back");
     stay.type = "button";
     const exit = el(
       "button",
@@ -1189,7 +1205,7 @@ export const DIAGRAM_SCRIPT = `
     };
 
     diagram.addEventListener("figure-restore-request", (event) => {
-      const count = drafts.filter((draft) => draft.diagram === diagram).length;
+      const count = pendingCountFor(diagram);
       if (count === 0) return;
       event.preventDefault();
       openAlert(count);

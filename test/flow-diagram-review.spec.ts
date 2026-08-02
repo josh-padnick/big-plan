@@ -105,6 +105,88 @@ test("should preserve a panned canvas when feedback repaints it", async ({
   );
 });
 
+test("should reach footer review actions with the mouse", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const footer = diagram.locator("[data-flow-diagram-footer]");
+  const footerField = footer.locator('[data-flow-field="footer"]');
+  const exitAlert = diagram.getByRole("alertdialog");
+
+  await diagram.locator("[data-figure-maximize]").focus();
+  await page.keyboard.press("Enter");
+  await footer.click();
+  await expect(footer).toHaveAttribute("data-flow-selected", "");
+  await expect(diagram.locator('[data-flow-action="comment"]')).toBeVisible();
+  await diagram.locator('[data-flow-action="comment"]').click();
+  await expect(diagram.locator(".flow-diagram-compose")).toBeVisible();
+  await diagram.getByRole("button", { name: "Cancel", exact: true }).click();
+
+  await footerField.dblclick();
+  await expect(footerField).toHaveAttribute("data-flow-editing", "");
+  await footerField.fill("One reviewed footer");
+  await diagram.locator("[data-figure-maximize]").click();
+  await expect(exitAlert).toContainText(
+    "You still have 1 feedback note to submit.",
+  );
+  await expect(
+    exitAlert.getByRole("button", { name: "Go back", exact: true }),
+  ).toBeVisible();
+  await expect(
+    exitAlert.getByRole("button", { name: "Exit full screen", exact: true }),
+  ).toBeVisible();
+});
+
+test("should exit without an alert after handing off the last note", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.addInitScript(() => {
+    const batches: Array<unknown> = [];
+    Object.assign(window, {
+      bigPlan: {
+        feedback: {
+          add: (batch: unknown) => batches.push(batch),
+        },
+      },
+    });
+  });
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const node = diagram.locator('[data-flow-node="authored"]');
+  const compose = diagram.locator(".flow-diagram-compose");
+  const exitAlert = diagram.getByRole("alertdialog");
+  const maximize = diagram.locator("[data-figure-maximize]");
+  const toolbarAdd = diagram
+    .locator("[data-flow-controls]")
+    .locator(":scope > .flow-collector-add");
+
+  await maximize.focus();
+  await page.keyboard.press("Enter");
+  await node.click();
+  await diagram.locator('[data-flow-action="comment"]').click();
+  await compose.locator("textarea").fill("One open note");
+  await maximize.click();
+  await expect(exitAlert).toContainText(
+    "You still have 1 feedback note to submit.",
+  );
+  await exitAlert.getByRole("button", { name: "Go back", exact: true }).click();
+  await expect(compose.locator("textarea")).toHaveValue("One open note");
+
+  await compose.getByRole("button", { name: "Comment", exact: true }).click();
+  await expect(toolbarAdd).toHaveText("Add 1 note to plan feedback");
+  await toolbarAdd.click();
+  await expect(toolbarAdd).toBeHidden();
+
+  await maximize.click();
+  await expect(diagram).not.toHaveAttribute("data-figure-maximized");
+  await expect(exitAlert).toBeHidden();
+});
+
 test("should keep review chrome stable through zoom and maximize in both themes", async ({
   page,
   flowDiagramViewerUrl,
@@ -279,7 +361,7 @@ test("should keep review chrome stable through zoom and maximize in both themes"
       );
       await expect(diagram).toHaveAttribute("data-figure-maximized", "");
       const stay = exitAlert.getByRole("button", {
-        name: "Stay in full screen",
+        name: "Go back",
       });
       const exit = exitAlert.getByRole("button", {
         name: "Exit full screen",
