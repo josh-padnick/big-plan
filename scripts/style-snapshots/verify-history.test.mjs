@@ -8,10 +8,11 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import test from "node:test";
 import { PNG } from "pngjs";
+import { availableDocuments } from "./available-documents.mjs";
 import { verifyHistory } from "./verify-history.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -965,10 +966,10 @@ test("should reject changed merge-base capture definitions", async () => {
   }
 });
 
-test("should reject transient capture definition changes", async () => {
-  const documents = [
+test("should allow capture evolution after a config-free merge base", async () => {
+  const initialDocuments = [
     {
-      name: "fixture",
+      name: "sample",
       source: "fixture.txt",
       captures: [
         {
@@ -981,29 +982,123 @@ test("should reject transient capture definition changes", async () => {
       ],
     },
   ];
-  const { repoRoot, configPath, config, base } = await createMinimalRepository({
-    documents,
+  const { repoRoot, configPath, config } = await createMinimalRepository({
+    documents: initialDocuments,
   });
   try {
-    const changedDocuments = structuredClone(documents);
-    changedDocuments[0].captures[0].selector = "header";
+    await git({
+      repoRoot,
+      arguments_: ["rm", ".style-snapshots/config.json"],
+    });
+    const base = await commit({
+      repoRoot,
+      subject: "test: establish config-free merge base",
+    });
+    await mkdir(dirname(configPath), { recursive: true });
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    await commit({
+      repoRoot,
+      subject: "test: introduce sample capture [visual:empty]",
+    });
+    const finalDocuments = structuredClone(initialDocuments);
+    finalDocuments[0].name = "components";
+    finalDocuments[0].captures[0].name = "full-document";
+    await writeFile(
+      configPath,
+      `${JSON.stringify({ ...config, documents: finalDocuments }, null, 2)}\n`,
+      "utf8",
+    );
+    await commit({
+      repoRoot,
+      subject: "test: replace sample capture matrix [visual:empty]",
+    });
+
+    const results = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "config-evolution",
+      }),
+    });
+    assert.equal(results.length, 2);
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should preserve absent-before evidence for a new fixture", async () => {
+  const existingDocument = {
+    name: "existing",
+    source: "fixture.txt",
+    captures: [
+      {
+        name: "document",
+        selector: "article",
+        themes: ["light"],
+        viewports: [{ name: "desktop", width: 1440, height: 900 }],
+        actions: [],
+      },
+    ],
+  };
+  const { repoRoot, configPath, config, base } = await createMinimalRepository({
+    documents: [existingDocument],
+  });
+  try {
+    const helperUrl = pathToFileURL(
+      join(
+        repositoryRoot,
+        "scripts",
+        "style-snapshots",
+        "available-documents.mjs",
+      ),
+    ).href;
+    const capture = onePixelPng({ red: 255, green: 0, blue: 0 });
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { availableDocuments } from ${JSON.stringify(helperUrl)};
+const checkout = process.env.STYLE_SNAPSHOT_CHECKOUT;
+const output = process.env.STYLE_SNAPSHOT_OUTPUT_DIR;
+const config = JSON.parse(await readFile(process.env.STYLE_SNAPSHOT_CONFIG, "utf8"));
+await mkdir(output, { recursive: true });
+for (const document of await availableDocuments({ checkout, documents: config.documents })) {
+  await writeFile(
+    join(output, document.name + "__document__desktop__light.png"),
+    Buffer.from(${JSON.stringify(capture.toString("base64"))}, "base64"),
+  );
+}
+`,
+      "utf8",
+    );
+    const addedDocument = {
+      ...existingDocument,
+      name: "added",
+      source: "added-fixture.txt",
+    };
+    await writeFile(
+      join(repoRoot, "added-fixture.txt"),
+      "added fixture\n",
+      "utf8",
+    );
     await writeFile(
       configPath,
       `${JSON.stringify(
-        { ...config, documents: changedDocuments },
+        { ...config, documents: [existingDocument, addedDocument] },
         null,
         2,
       )}\n`,
       "utf8",
     );
-    await commit({
+    const fixtureCommit = await commit({
       repoRoot,
-      subject: "test: transiently change capture [visual:empty]",
+      subject: "test: add fixture capture [visual:empty]",
     });
-    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
-    await commit({
+    const artifacts = artifactPath({
       repoRoot,
-      subject: "test: restore capture definition [visual:empty]",
+      name: "new-fixture-before-null",
     });
 
     await assert.rejects(
@@ -1011,12 +1106,39 @@ test("should reject transient capture definition changes", async () => {
         repoRoot,
         base,
         configPath,
-        artifactRoot: artifactPath({
-          repoRoot,
-          name: "transient-capture-definition",
-        }),
+        artifactRoot: artifacts,
       }),
-      /existing definitions are immutable and additions require new capture keys/,
+      /added__document__desktop__light\.png \(1 changed pixels\)/,
+    );
+    const evidence = JSON.parse(
+      await readFile(
+        join(artifacts, fixtureCommit.slice(0, 12), "evidence.json"),
+        "utf8",
+      ),
+    );
+    const addedCapture = evidence.captures.find(
+      (entry) => entry.capture === "added__document__desktop__light.png",
+    );
+    assert.equal(addedCapture.before, null);
+    assert.match(addedCapture.after.sha256, /^[0-9a-f]{64}$/);
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should skip only documents missing from a historical checkout", async () => {
+  const repoRoot = await mkdtemp(join(tmpdir(), "capture-source-test-"));
+  try {
+    await writeFile(join(repoRoot, "present.mdx"), "present\n", "utf8");
+    const present = { name: "present", source: "present.mdx" };
+    const missing = { name: "missing", source: "missing.mdx" };
+
+    assert.deepEqual(
+      await availableDocuments({
+        checkout: repoRoot,
+        documents: [present, missing],
+      }),
+      [present],
     );
   } finally {
     await rm(repoRoot, { recursive: true, force: true });

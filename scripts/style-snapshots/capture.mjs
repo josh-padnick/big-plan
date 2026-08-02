@@ -9,6 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { chromium } from "@playwright/test";
+import { availableDocuments } from "./available-documents.mjs";
 
 const execFileAsync = promisify(execFile);
 const checkout = process.env["STYLE_SNAPSHOT_CHECKOUT"];
@@ -122,7 +123,11 @@ try {
   await mkdir(outputDirectory, { recursive: true });
   await prepareCheckout();
 
-  for (const document of config.documents) {
+  const documents = await availableDocuments({
+    checkout,
+    documents: config.documents,
+  });
+  for (const document of documents) {
     const documentDirectory = join(temporaryDirectory, document.name);
     const htmlPath = join(documentDirectory, `${document.name}.html`);
     const stateDirectory = join(documentDirectory, "state");

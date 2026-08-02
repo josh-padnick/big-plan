@@ -160,26 +160,6 @@ const assertCaptureCoverage = ({ config, baselineConfig }) => {
   }
 };
 
-/** Enforces additive capture coverage across every configuration revision. */
-const assertCaptureCoverageHistory = (configs) => {
-  let establishedConfig = null;
-  for (const config of configs) {
-    if (config === null) {
-      if (establishedConfig !== null) {
-        throw new Error(
-          "Style screenshot config cannot be removed after capture coverage is established.",
-        );
-      }
-      continue;
-    }
-    assertCaptureCoverage({
-      config,
-      baselineConfig: establishedConfig,
-    });
-    establishedConfig = config;
-  }
-};
-
 /** Includes document sources in relevance without duplicating config entries. */
 const fixturePathsForConfig = (config) => [
   ...config.fixturePaths,
@@ -616,7 +596,10 @@ export const verifyHistory = async ({
       readConfigAtCommit({ repoRoot, commit, configRepoPath }),
     ),
   );
-  assertCaptureCoverageHistory([...historicalConfigs, config]);
+  assertCaptureCoverage({
+    config,
+    baselineConfig: historicalConfigs[0],
+  });
   const relevanceConfigs = [
     RELEVANCE_FLOOR,
     ...historicalConfigs.filter((candidate) => candidate !== null),
