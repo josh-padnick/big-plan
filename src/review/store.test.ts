@@ -8,7 +8,9 @@ import {
   readActiveDraft,
   readProgress,
   reviewStoreFor,
+  sessionHeartbeatIsFresh,
   writeActiveDraft,
+  writeSessionHeartbeat,
 } from "./store.js";
 
 const created: Array<string> = [];
@@ -32,11 +34,16 @@ describe("review store placement", () => {
     for (const path of [
       store.reviewDirectory,
       store.feedbackDirectory,
+      store.agentRequestDirectory,
+      store.agentResponseDirectory,
+      store.agentDraftDirectory,
+      store.agentPromptPath,
       store.draftsPath,
       store.activeDraftPath,
       store.sentPath,
       store.progressPath,
       store.sessionPath,
+      store.heartbeatPath,
     ]) {
       expect(path.startsWith(join(directory, ".big-plan"))).toBe(true);
     }
@@ -91,6 +98,54 @@ describe("review store creation", () => {
     expect(await readFile(join(store.root, ".gitignore"), "utf8")).toContain(
       "*",
     );
+  });
+});
+
+describe("review store session heartbeat", () => {
+  it("should accept only a fresh running heartbeat from the matching session", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeSessionHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      running: true,
+      now: 10_000,
+    });
+    await expect(
+      sessionHeartbeatIsFresh({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 12_000,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      sessionHeartbeatIsFresh({
+        store,
+        sessionId: "bbbbbbbbbbbbbbbb",
+        now: 12_000,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      sessionHeartbeatIsFresh({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 14_000,
+      }),
+    ).resolves.toBe(false);
+    await writeSessionHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      running: false,
+      now: 14_000,
+    });
+    await expect(
+      sessionHeartbeatIsFresh({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 14_000,
+      }),
+    ).resolves.toBe(false);
   });
 });
 

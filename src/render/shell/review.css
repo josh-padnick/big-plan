@@ -590,6 +590,10 @@ button[data-review-row-target]:active {
 [data-review-chat-message="agent"] {
   background: color-mix(in srgb, var(--callout-note-bg) 46%, var(--bg));
 }
+[data-review-chat-message="waiting"] {
+  border-style: dashed;
+  color: var(--muted-c);
+}
 [data-review-chat-message] p {
   margin: 0.25rem 0 0;
   color: var(--ink-c);
@@ -626,10 +630,12 @@ button[data-review-row-target]:active {
 [data-review-outcome="question"] [data-review-outcome-state] {
   color: var(--callout-warning-c);
 }
-[data-review-outcome="declined"] {
+[data-review-outcome="outside"],
+[data-review-outcome="waiting"] {
   border-left-color: var(--muted-c);
 }
-[data-review-outcome="declined"] [data-review-outcome-state] {
+[data-review-outcome="outside"] [data-review-outcome-state],
+[data-review-outcome="waiting"] [data-review-outcome-state] {
   color: var(--muted-c);
 }
 
@@ -715,7 +721,7 @@ button[data-review-row-target]:active {
   display: grid;
   width: 100%;
   min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 0.4rem;
   padding: 0.18rem 0.22rem;
@@ -746,7 +752,8 @@ button[data-review-row-target]:active {
   background: var(--callout-warning-bg);
   color: var(--callout-warning-c);
 }
-[data-review-thread-summary] [data-review-outcome-state="declined"] {
+[data-review-thread-summary] [data-review-outcome-state="outside"],
+[data-review-thread-summary] [data-review-outcome-state="waiting"] {
   background: var(--surface-c);
   color: var(--muted-c);
 }
@@ -757,12 +764,10 @@ button[data-review-row-target]:active {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-[data-review-simulated] {
+[data-review-thread-waiting] {
+  margin: 0.35rem 0;
   color: var(--muted-c);
-  font-size: 0.5625rem;
-  font-weight: 650;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 0.6875rem;
 }
 [data-review-thread-expanded] [data-review-thread-summary] {
   margin-bottom: 0.55rem;
@@ -1173,12 +1178,24 @@ button[data-review-row-target]:active {
   color: var(--bg);
 }
 [data-review-marker-tone="changed"],
-[data-review-marker-tone="declined"] {
+[data-review-marker-tone="outside"],
+[data-review-marker-tone="waiting"] {
   color: var(--muted-c);
 }
-[data-review-marker-tone="changed"]::after,
-[data-review-marker-tone="declined"]::after {
+[data-review-marker-tone="changed"]::after {
   content: "✓";
+  background: var(--surface-c);
+  color: var(--muted-c);
+  border: 1px solid var(--edge-c);
+}
+[data-review-marker-tone="outside"]::after {
+  content: "·";
+  background: var(--surface-c);
+  color: var(--muted-c);
+  border: 1px solid var(--edge-c);
+}
+[data-review-marker-tone="waiting"]::after {
+  content: "…";
   background: var(--surface-c);
   color: var(--muted-c);
   border: 1px solid var(--edge-c);

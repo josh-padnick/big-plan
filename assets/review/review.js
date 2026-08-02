@@ -37,6 +37,9 @@
   const LONG_COMMENT_LIMIT = 180;
   const PROGRESS_INTERVAL_MS = 1500;
   const MESSAGE_LIMIT = 200;
+  const FLOAT_TOP = 52;
+  const FLOAT_GAP = 8;
+  const FLOAT_EDGE = 12;
 
   // ---------------------------------------------------------------- elements
 
@@ -147,6 +150,9 @@
   let activeDraft = "";
   let threadReplies = {};
   let planChatMessages = [];
+  let agentRequests = [];
+  let agentResponses = [];
+  let sourceRevision = "";
   let progressSeq = 0;
   let progressTimer = null;
   let runtimeConfirmed = false;
@@ -166,7 +172,40 @@
   // renderer stamped a plan id. There is deliberately no title-keyed fallback:
   // two plans that share a title would share a namespace, and drafts quote
   // plan text, so a collision would leak one plan's content into another's.
+  const isExchangeId = (value) =>
+    typeof value === "string" && /^[a-f0-9]{4,64}$/.test(value);
+
   const storageKey = planId === "" ? null : "big-plan:review:drafts:" + planId;
+  const reloadKey =
+    planId === "" ? null : "big-plan:review:live-reload:" + planId;
+
+  const readReloadState = () => {
+    if (reloadKey === null) return null;
+    try {
+      const raw = sessionStorage.getItem(reloadKey);
+      sessionStorage.removeItem(reloadKey);
+      if (raw === null) return null;
+      const value = JSON.parse(raw);
+      if (
+        value === null ||
+        typeof value !== "object" ||
+        typeof value.scrollY !== "number" ||
+        !Array.isArray(value.expanded)
+      ) {
+        return null;
+      }
+      return {
+        scrollY: Math.max(0, value.scrollY),
+        expanded: value.expanded.filter(isExchangeId),
+        tab: value.tab === "chat" ? "chat" : "comments",
+        railOpen: value.railOpen === true,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const reloadState = readReloadState();
 
   const emptyStoredState = () => ({
     drafts: [],
@@ -174,6 +213,8 @@
     activeDraft: "",
     threadReplies: {},
     planChatMessages: [],
+    agent: { requests: [], responses: [] },
+    sourceRevision: "",
   });
 
   const isStoredState = (value) =>
@@ -223,6 +264,69 @@
       activeDraft: value.activeDraft.slice(0, BODY_LIMIT),
       threadReplies: checkedThreadReplies(value.threadReplies),
       planChatMessages: checkedMessages(value.planChatMessages),
+      agent: checkedAgentSnapshot(value.agent),
+      sourceRevision:
+        typeof value.sourceRevision === "string" &&
+        /^[a-f0-9]{16,64}$/.test(value.sourceRevision)
+          ? value.sourceRevision
+          : "",
+    };
+  };
+
+  const isAgentRequest = (value) =>
+    value !== null &&
+    typeof value === "object" &&
+    isExchangeId(value.requestId) &&
+    (value.kind === "feedback" ||
+      value.kind === "reply" ||
+      value.kind === "chat") &&
+    typeof value.createdAt === "string" &&
+    !Number.isNaN(Date.parse(value.createdAt)) &&
+    (value.kind === "feedback" ||
+      (typeof value.body === "string" &&
+        value.body.trim() !== "" &&
+        value.body.length <= BODY_LIMIT));
+
+  const isAgentOutcome = (value) =>
+    value !== null &&
+    typeof value === "object" &&
+    isExchangeId(value.commentId) &&
+    (value.state === "changed" ||
+      value.state === "question" ||
+      value.state === "outside") &&
+    typeof value.message === "string" &&
+    value.message.trim() !== "" &&
+    value.message.length <= BODY_LIMIT &&
+    (value.changeTarget === undefined ||
+      (typeof value.changeTarget === "string" &&
+        value.changeTarget.length <= 300));
+
+  const isAgentResponse = (value) =>
+    value !== null &&
+    typeof value === "object" &&
+    isExchangeId(value.requestId) &&
+    (value.kind === "feedback" ||
+      value.kind === "reply" ||
+      value.kind === "chat") &&
+    typeof value.createdAt === "string" &&
+    !Number.isNaN(Date.parse(value.createdAt)) &&
+    (value.kind === "chat"
+      ? typeof value.message === "string" &&
+        value.message.trim() !== "" &&
+        value.message.length <= BODY_LIMIT
+      : Array.isArray(value.outcomes) && value.outcomes.every(isAgentOutcome));
+
+  const checkedAgentSnapshot = (value) => {
+    if (value === null || typeof value !== "object") {
+      return { requests: [], responses: [] };
+    }
+    return {
+      requests: (Array.isArray(value.requests) ? value.requests : [])
+        .filter(isAgentRequest)
+        .slice(0, MESSAGE_LIMIT),
+      responses: (Array.isArray(value.responses) ? value.responses : [])
+        .filter(isAgentResponse)
+        .slice(0, MESSAGE_LIMIT),
     };
   };
 
@@ -289,6 +393,12 @@
       : diskState.activeDraft;
   threadReplies = browserState.threadReplies;
   planChatMessages = browserState.planChatMessages;
+  agentRequests = diskState.agent.requests;
+  agentResponses = diskState.agent.responses;
+  sourceRevision = diskState.sourceRevision;
+  for (const id of reloadState?.expanded || []) {
+    expandedThreadIds.add(id);
+  }
 
   // ---------------------------------------------------------------- transport
 
@@ -446,7 +556,9 @@
     ]),
     el("p", {
       "data-review-chat-note": true,
-      text: "Simulated agent turns · feedback package delivery remains real.",
+      text: hasRuntime
+        ? "Live coding-agent conversation through this plan’s local review session."
+        : "Start `big-plan review` and its coding-agent session to chat.",
     }),
     planChatList,
     el("label", {
@@ -479,10 +591,7 @@
     "aria-selected": "false",
     "aria-controls": "big-plan-review-chat",
   });
-  chatTab.append(
-    el("span", { text: "Chat" }),
-    el("span", { "data-review-tab-preview": true, text: "Simulated" }),
-  );
+  chatTab.append(el("span", { text: "Chat" }));
   const tabList = el("div", { "data-review-tabs": true, role: "tablist" }, [
     commentsTab,
     chatTab,
@@ -657,6 +766,7 @@
   // -------------------------------------------------------------- tray render
 
   let readingPosition = window.scrollY;
+  let restoreReadingPosition = true;
 
   const setRailOpen = (open) => {
     if (open === !rail.hidden) {
@@ -664,6 +774,7 @@
     }
     if (open && rail.hidden) {
       readingPosition = window.scrollY;
+      restoreReadingPosition = true;
     }
     rail.hidden = !open;
     backdrop.hidden = !open;
@@ -684,7 +795,7 @@
     // position defeats scroll anchoring caused by the desktop width change
     // and makes the below-1280 overlay reversible by construction.
     requestAnimationFrame(() => {
-      window.scrollTo(0, readingPosition);
+      if (restoreReadingPosition) window.scrollTo(0, readingPosition);
       if (!compose.hidden && composeTarget) positionCompose(composeTarget);
       positionThreadCards();
     });
@@ -725,11 +836,11 @@
       const visible =
         window.innerWidth < 1280 &&
         marker.hasAttribute("data-review-marker-active") &&
-        rect.bottom >= 0 &&
+        rect.bottom >= FLOAT_TOP &&
         rect.top <= window.innerHeight;
       marker.hidden = !visible;
       if (!visible) continue;
-      marker.style.top = Math.max(8, rect.top) + "px";
+      marker.style.top = Math.max(FLOAT_TOP, rect.top) + "px";
       marker.style.left = Math.max(4, rect.left - 30) + "px";
     }
   };
@@ -812,6 +923,7 @@
   };
 
   const focusTarget = (comment) => {
+    if (railIsOpen()) restoreReadingPosition = false;
     const id = comment.target.blockId;
     const block = id
       ? document.querySelector('[data-block-id="' + cssEscape(id) + '"]')
@@ -960,41 +1072,62 @@
     }).format(new Date(time));
   };
 
-  const THREAD_OUTCOMES = [
-    {
-      key: "changed",
-      label: "Changed",
-      reply:
-        "I revised this part of the plan to address your comment. The highlighted source is the change to review.",
-    },
-    {
-      key: "question",
-      label: "Needs your answer",
-      reply:
-        "I need one decision before I can revise this safely. Which direction should the plan take?",
-    },
-    {
-      key: "declined",
-      label: "Outside this plan",
-      reply:
-        "This asks for work beyond revising this plan, so I left the plan unchanged and kept the request in this thread.",
-    },
-  ];
+  const OUTCOME_LABELS = {
+    changed: "Changed",
+    question: "Needs your answer",
+    outside: "Outside this plan",
+    waiting: "With agent",
+  };
 
-  // Until the agent round-trip owns response payloads, sent comments receive
-  // deterministic simulated outcomes in reading order. This makes every
-  // adopted thread state genuinely operable without presenting demo prose as
-  // an agent-authored result.
+  const outcomeEventsFor = (comment) => {
+    const events = [];
+    for (const response of agentResponses) {
+      if (response.kind !== "feedback" && response.kind !== "reply") continue;
+      const outcome = response.outcomes.find(
+        (entry) => entry.commentId === comment.id,
+      );
+      if (!outcome) continue;
+      events.push({
+        key: outcome.state,
+        label: OUTCOME_LABELS[outcome.state],
+        reply: outcome.message,
+        changeTarget: outcome.changeTarget,
+        createdAt: response.createdAt,
+        requestId: response.requestId,
+      });
+    }
+    return events;
+  };
+
   const outcomeFor = (comment) => {
-    const index = Math.max(
-      0,
-      sent.findIndex((item) => item.id === comment.id),
+    const events = outcomeEventsFor(comment);
+    const answered = new Set(
+      agentResponses.map((response) => response.requestId),
     );
-    return THREAD_OUTCOMES[index % THREAD_OUTCOMES.length];
+    const pendingReply = agentRequests.some(
+      (request) =>
+        request.kind === "reply" &&
+        request.commentId === comment.id &&
+        !answered.has(request.requestId),
+    );
+    if (pendingReply) {
+      return {
+        key: "waiting",
+        label: OUTCOME_LABELS.waiting,
+        reply: "Waiting for the coding agent to answer this reply.",
+      };
+    }
+    return (
+      events[events.length - 1] || {
+        key: "waiting",
+        label: OUTCOME_LABELS.waiting,
+        reply: "Waiting for the coding agent to answer this comment.",
+      }
+    );
   };
 
   const outcomeCounts = () => {
-    const counts = { changed: 0, question: 0, declined: 0 };
+    const counts = { changed: 0, question: 0, outside: 0, waiting: 0 };
     for (const comment of sent) {
       counts[outcomeFor(comment).key] += 1;
     }
@@ -1106,6 +1239,7 @@
   const openThreadAt = (comment) => {
     expandedThreadIds.add(comment.id);
     editingId = null;
+    if (railIsOpen()) restoreReadingPosition = false;
     setRailOpen(false);
     renderTray();
     requestAnimationFrame(() => {
@@ -1114,25 +1248,61 @@
     });
   };
 
-  const sendThreadReply = (comment, field) => {
+  const sendThreadReply = async (comment, field, button) => {
     const body = field.value.trim();
     if (body === "") return;
-    const createdAt = new Date().toISOString();
-    const existing = threadReplies[comment.id] || [];
-    threadReplies[comment.id] = existing.concat([
-      { role: "user", body, createdAt },
-      {
-        role: "agent",
-        body:
-          "Thanks — this simulated turn shows how the anchored conversation grows. " +
-          "A live agent reply is not connected yet.",
-        createdAt: new Date(Date.now() + 1).toISOString(),
-      },
+    if (!hasRuntime) {
+      announce("Start the local review runtime to reply to the agent.");
+      return;
+    }
+    button.disabled = true;
+    try {
+      await confirmRuntime();
+      const answer = await call("/api/agent-requests", {
+        method: "POST",
+        body: { kind: "reply", commentId: comment.id, body },
+      });
+      if (isAgentRequest(answer.request)) {
+        agentRequests = agentRequests.concat([answer.request]);
+      }
+      field.value = "";
+      expandedThreadIds.add(comment.id);
+      setAgentState("With agent", "working");
+      announce("Reply sent to the coding agent.");
+      renderTray();
+      startProgress();
+    } catch (error) {
+      announce(describeError(error));
+      button.disabled = false;
+    }
+  };
+
+  const focusChangeTarget = (comment, blockId) => {
+    const block =
+      typeof blockId === "string"
+        ? document.querySelector('[data-block-id="' + cssEscape(blockId) + '"]')
+        : null;
+    if (!block) {
+      focusTarget(comment);
+      return;
+    }
+    block.scrollIntoView({ behavior: "smooth", block: "center" });
+    block.setAttribute("data-review-flash", "");
+    setTimeout(() => block.removeAttribute("data-review-flash"), 1400);
+  };
+
+  const agentTurn = (outcome, createdAt) => {
+    const node = el("div", { "data-review-thread-turn": "agent" }, [
+      el("div", { "data-review-turn-meta": true }, [
+        el("strong", { text: "Agent" }),
+        el("time", {
+          datetime: createdAt,
+          text: relativeCommentTime(createdAt),
+        }),
+      ]),
+      el("p", { text: outcome.message }),
     ]);
-    expandedThreadIds.add(comment.id);
-    writeLocalState();
-    announce("Reply added to this comment thread.");
-    renderTray();
+    return node;
   };
 
   const conversationNodes = (comment) => {
@@ -1148,45 +1318,87 @@
         ]),
         el("p", { text: comment.body }),
       ]),
-      el("div", { "data-review-thread-turn": "agent" }, [
-        el("div", { "data-review-turn-meta": true }, [
-          el("strong", { text: "Agent" }),
-          el("span", { "data-review-simulated": true, text: "Simulated" }),
-        ]),
-        el("p", { text: outcome.reply }),
-      ]),
     ];
 
-    if (outcome.key === "changed") {
-      const seeChange = el("button", {
-        type: "button",
-        "data-review-see-change": true,
-        text: "See the change",
-      });
-      seeChange.addEventListener("click", () => focusTarget(comment));
-      nodes.push(seeChange);
-    }
-
-    for (const message of threadReplies[comment.id] || []) {
+    for (const request of agentRequests) {
+      const response = agentResponses.find(
+        (entry) => entry.requestId === request.requestId,
+      );
+      if (
+        request.kind === "feedback" &&
+        Array.isArray(request.comments) &&
+        request.comments.some((entry) => entry.id === comment.id) &&
+        response &&
+        response.kind === "feedback"
+      ) {
+        const responseOutcome = response.outcomes.find(
+          (entry) => entry.commentId === comment.id,
+        );
+        if (responseOutcome) {
+          nodes.push(agentTurn(responseOutcome, response.createdAt));
+          if (
+            responseOutcome.state === "changed" &&
+            responseOutcome.changeTarget
+          ) {
+            const seeChange = el("button", {
+              type: "button",
+              "data-review-see-change": true,
+              text: "See the change",
+            });
+            seeChange.addEventListener("click", () =>
+              focusChangeTarget(comment, responseOutcome.changeTarget),
+            );
+            nodes.push(seeChange);
+          }
+        }
+      }
+      if (request.kind !== "reply" || request.commentId !== comment.id) {
+        continue;
+      }
       nodes.push(
-        el("div", { "data-review-thread-turn": message.role }, [
+        el("div", { "data-review-thread-turn": "user" }, [
           el("div", { "data-review-turn-meta": true }, [
-            el("strong", {
-              text: message.role === "user" ? "You" : "Agent",
+            el("strong", { text: "You" }),
+            el("time", {
+              datetime: request.createdAt,
+              text: relativeCommentTime(request.createdAt),
             }),
-            message.role === "agent"
-              ? el("span", {
-                  "data-review-simulated": true,
-                  text: "Simulated",
-                })
-              : el("time", {
-                  datetime: message.createdAt,
-                  text: relativeCommentTime(message.createdAt),
-                }),
           ]),
-          el("p", { text: message.body }),
+          el("p", { text: request.body }),
         ]),
       );
+      if (response && response.kind === "reply") {
+        const responseOutcome = response.outcomes.find(
+          (entry) => entry.commentId === comment.id,
+        );
+        if (responseOutcome) {
+          nodes.push(agentTurn(responseOutcome, response.createdAt));
+          if (
+            responseOutcome.state === "changed" &&
+            responseOutcome.changeTarget
+          ) {
+            const seeChange = el("button", {
+              type: "button",
+              "data-review-see-change": true,
+              text: "See the change",
+            });
+            seeChange.addEventListener("click", () =>
+              focusChangeTarget(comment, responseOutcome.changeTarget),
+            );
+            nodes.push(seeChange);
+          }
+        }
+      }
+    }
+
+    if (outcome.key === "waiting") {
+      nodes.push(
+        el("p", {
+          "data-review-thread-waiting": true,
+          text: "Waiting for the coding agent to respond…",
+        }),
+      );
+      return nodes;
     }
 
     const field = el("textarea", {
@@ -1215,10 +1427,12 @@
     field.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
-        sendThreadReply(comment, field);
+        void sendThreadReply(comment, field, sendReply);
       }
     });
-    sendReply.addEventListener("click", () => sendThreadReply(comment, field));
+    sendReply.addEventListener("click", () => {
+      void sendThreadReply(comment, field, sendReply);
+    });
     nodes.push(
       el("div", { "data-review-thread-reply-box": true }, [
         el("label", {
@@ -1308,7 +1522,6 @@
             "data-review-thread-echo": true,
             text: shortEcho(comment.body),
           }),
-          el("span", { "data-review-simulated": true, text: "Simulated" }),
         ],
       );
       summary.addEventListener("click", () => {
@@ -1437,6 +1650,9 @@
     root.toggleAttribute("data-review-floating", shouldFloat);
   };
 
+  const floatingBlockForTarget = (target) =>
+    target?.type === "document" ? blocks[0] || null : blockForTarget(target);
+
   const positionThreadCards = () => {
     syncFloatingMode();
     const canFloat =
@@ -1451,29 +1667,32 @@
       !compose.hidden &&
       compose.hasAttribute("data-review-compose-floating")
         ? compose.getBoundingClientRect().bottom
-        : 44;
-    let previousBottom = Math.max(44, composeBottom);
+        : FLOAT_TOP - FLOAT_GAP;
+    let previousBottom = Math.max(FLOAT_TOP - FLOAT_GAP, composeBottom);
     for (const card of cards) {
       const id = card.getAttribute("data-review-comment-id");
       const comment = drafts
         .concat(sent)
         .find((candidate) => candidate.id === id);
-      const block = comment ? blockForTarget(comment.target) : null;
+      const block = comment ? floatingBlockForTarget(comment.target) : null;
       const rect = block?.getBoundingClientRect();
       const visible =
         canFloat &&
-        (rect === undefined ||
-          rect === null ||
-          (rect.bottom >= 44 && rect.top <= window.innerHeight));
+        rect !== undefined &&
+        rect !== null &&
+        rect.bottom >= FLOAT_TOP &&
+        rect.top <= window.innerHeight;
       card.hidden = !visible;
       if (!visible) continue;
-      const preferredTop = rect ? Math.max(52, rect.top) : 52;
-      const top = Math.max(preferredTop, previousBottom + 8);
-      card.style.top =
-        Math.min(
-          top,
-          Math.max(52, window.innerHeight - card.offsetHeight - 12),
-        ) + "px";
+      // Fit before stacking. A viewport clamp after this constraint can pull
+      // a later chip back over an expanded card or composer and cover its
+      // textarea and Reply button.
+      const fittedTop = Math.max(
+        FLOAT_TOP,
+        Math.min(rect.top, window.innerHeight - card.offsetHeight - FLOAT_EDGE),
+      );
+      const top = Math.max(fittedTop, previousBottom + FLOAT_GAP);
+      card.style.top = top + "px";
       previousBottom = Number.parseFloat(card.style.top) + card.offsetHeight;
     }
   };
@@ -1519,12 +1738,15 @@
       " changed · " +
       counts.question +
       " needs your answer · " +
-      counts.declined +
-      " outside this plan";
+      counts.outside +
+      " outside this plan · " +
+      counts.waiting +
+      " with agent";
     const groups = [
       { key: "question", label: "Needs your answer" },
       { key: "changed", label: "Changed" },
-      { key: "declined", label: "Outside this plan" },
+      { key: "outside", label: "Outside this plan" },
+      { key: "waiting", label: "With agent" },
     ];
     sentList.replaceChildren(
       ...groups
@@ -1681,8 +1903,11 @@
       const rect = block.getBoundingClientRect();
       compose.style.top =
         Math.max(
-          52,
-          Math.min(rect.top, window.innerHeight - compose.offsetHeight - 12),
+          FLOAT_TOP,
+          Math.min(
+            rect.top,
+            window.innerHeight - compose.offsetHeight - FLOAT_EDGE,
+          ),
         ) + "px";
       return;
     }
@@ -1757,13 +1982,16 @@
     }
     cursorBlock = block;
     const rect = block.getBoundingClientRect();
-    if (rect.bottom < 0 || rect.top > window.innerHeight) return;
+    if (rect.bottom < FLOAT_TOP || rect.top > window.innerHeight) {
+      affordance.hidden = true;
+      return;
+    }
     affordance.hidden = false;
     affordance.setAttribute(
       "aria-label",
       "Comment on " + kindFor(block) + ": " + labelFor(block),
     );
-    affordance.style.top = Math.max(8, rect.top) + "px";
+    affordance.style.top = Math.max(FLOAT_TOP, rect.top) + "px";
     const width = affordance.offsetWidth || 108;
     affordance.style.left =
       Math.min(rect.right + 8, rightLimit() - width - 12) + "px";
@@ -1920,7 +2148,7 @@
     const rect = selection.getRangeAt(0).getBoundingClientRect();
     affordance.hidden = false;
     affordance.setAttribute("aria-label", "Comment on the selected text");
-    affordance.style.top = Math.max(8, rect.top - 40) + "px";
+    affordance.style.top = Math.max(FLOAT_TOP, rect.top - 40) + "px";
     const width = affordance.offsetWidth || 108;
     affordance.style.left =
       Math.max(12, Math.min(rect.left, rightLimit() - width - 12)) + "px";
@@ -1944,8 +2172,38 @@
 
   // --------------------------------------------------------- plan-wide chat
 
+  const livePlanChatMessages = () => {
+    const messages = [];
+    for (const request of agentRequests) {
+      if (request.kind !== "chat") continue;
+      messages.push({
+        role: "user",
+        body: request.body,
+        createdAt: request.createdAt,
+      });
+      const response = agentResponses.find(
+        (entry) => entry.requestId === request.requestId,
+      );
+      if (response && response.kind === "chat") {
+        messages.push({
+          role: "agent",
+          body: response.message,
+          createdAt: response.createdAt,
+        });
+      } else {
+        messages.push({
+          role: "waiting",
+          body: "Waiting for agent…",
+          createdAt: request.createdAt,
+        });
+      }
+    }
+    return messages;
+  };
+
   const renderPlanChat = () => {
-    if (planChatMessages.length === 0) {
+    const messages = hasRuntime ? livePlanChatMessages() : planChatMessages;
+    if (messages.length === 0) {
       planChatList.replaceChildren(
         el("li", {
           "data-review-chat-empty": true,
@@ -1955,21 +2213,23 @@
       return;
     }
     planChatList.replaceChildren(
-      ...planChatMessages.map((message) =>
+      ...messages.map((message) =>
         el("li", { "data-review-chat-message": message.role }, [
           el("div", { "data-review-turn-meta": true }, [
             el("strong", {
-              text: message.role === "user" ? "You" : "Agent",
+              text:
+                message.role === "user"
+                  ? "You"
+                  : message.role === "agent"
+                    ? "Agent"
+                    : "Agent status",
             }),
-            message.role === "agent"
-              ? el("span", {
-                  "data-review-simulated": true,
-                  text: "Simulated",
-                })
-              : el("time", {
+            message.role !== "waiting"
+              ? el("time", {
                   datetime: message.createdAt,
                   text: relativeCommentTime(message.createdAt),
-                }),
+                })
+              : null,
           ]),
           el("p", { text: message.body }),
         ]),
@@ -1996,25 +2256,34 @@
       return;
     }
 
-    const createdAt = new Date().toISOString();
-    planChatMessages = planChatMessages.concat([
-      { role: "user", body, createdAt },
-      {
-        role: "agent",
-        body:
-          "This simulated whole-plan reply shows the separate chat scope. " +
-          "A live plan-wide agent round-trip is not connected yet.",
-        createdAt: new Date(Date.now() + 1).toISOString(),
-      },
-    ]);
-    agentInput.value = "";
-    activeDraft = "";
-    attachInput.checked = false;
-    syncPlanChatValidity();
-    writeLocalState();
-    renderPlanChat();
-    announce("Plan-wide chat message sent.");
-    await save();
+    if (!hasRuntime) {
+      announce("Start the local review runtime to chat with the agent.");
+      return;
+    }
+    agentSave.disabled = true;
+    try {
+      await confirmRuntime();
+      const answer = await call("/api/agent-requests", {
+        method: "POST",
+        body: { kind: "chat", body },
+      });
+      if (isAgentRequest(answer.request)) {
+        agentRequests = agentRequests.concat([answer.request]);
+      }
+      agentInput.value = "";
+      activeDraft = "";
+      attachInput.checked = false;
+      syncPlanChatValidity();
+      writeLocalState();
+      renderPlanChat();
+      setAgentState("With agent", "working");
+      announce("Plan-wide question sent to the coding agent.");
+      await save();
+      startProgress();
+    } catch (error) {
+      announce(describeError(error));
+      agentSave.disabled = false;
+    }
   };
 
   agentSave.addEventListener("click", sendPlanChat);
@@ -2068,11 +2337,14 @@
         body: { comments: drafts },
       });
       sent = sent.concat(drafts);
+      if (isAgentRequest(answer.agentRequest)) {
+        agentRequests = agentRequests.concat([answer.agentRequest]);
+      }
       drafts = [];
       activeDraft = agentInput.value;
       renderTray();
       await persist();
-      setAgentState("Package received", "working");
+      setAgentState("With agent", "working");
       sendNote.textContent =
         "Sent " +
         answer.comments +
@@ -2111,6 +2383,61 @@
   const displayState = ({ event, index, total }) =>
     event.state === "live" && index < total - 1 ? "done" : event.state;
 
+  const exchangeSignature = ({ requests, responses }) =>
+    JSON.stringify([
+      requests.map((request) => request.requestId),
+      responses.map((response) => [response.requestId, response.createdAt]),
+    ]);
+
+  const reloadForSourceRevision = () => {
+    if (reloadKey !== null) {
+      try {
+        sessionStorage.setItem(
+          reloadKey,
+          JSON.stringify({
+            scrollY: window.scrollY,
+            expanded: Array.from(expandedThreadIds),
+            tab: chatPanel.hidden ? "comments" : "chat",
+            railOpen: railIsOpen(),
+          }),
+        );
+      } catch {
+        // Losing a restore hint never blocks the source refresh.
+      }
+    }
+    window.location.reload();
+  };
+
+  const applyAgentSnapshot = (answer) => {
+    const checked = checkedAgentSnapshot(answer);
+    const changed =
+      exchangeSignature(checked) !==
+      exchangeSignature({
+        requests: agentRequests,
+        responses: agentResponses,
+      });
+    agentRequests = checked.requests;
+    agentResponses = checked.responses;
+    if (!changed) return;
+    renderTray();
+    const pending = pendingAgentRequestCount();
+    if (needsAnswerCount() > 0) {
+      setAgentState("Needs your answer", "ready");
+    } else if (pending > 0) {
+      setAgentState("With agent", "working");
+    } else if (agentResponses.length > 0) {
+      setAgentState("Ready to re-review", "ready");
+    }
+  };
+
+  const pendingAgentRequestCount = () => {
+    const answered = new Set(
+      agentResponses.map((response) => response.requestId),
+    );
+    return agentRequests.filter((request) => !answered.has(request.requestId))
+      .length;
+  };
+
   const renderProgress = (events) => {
     if (events.length === 0) return;
     progressList.hidden = false;
@@ -2133,8 +2460,17 @@
       }),
     );
     const last = events[events.length - 1];
-    if (last.state === "done" && /re-?review/i.test(last.step)) {
+    if (needsAnswerCount() > 0) {
+      setAgentState("Needs your answer", "ready");
+    } else if (pendingAgentRequestCount() > 0) {
+      setAgentState("With agent", "working");
+    } else if (
+      last.state === "done" &&
+      (/re-?review/i.test(last.step) || /agent response ready/i.test(last.step))
+    ) {
       setAgentState("Ready to re-review", "ready");
+    } else if (last.state === "done") {
+      setAgentState("Caught up", "ready");
     } else if (last.state === "failed") {
       setAgentState("Needs your attention", "failed");
     } else {
@@ -2146,7 +2482,22 @@
     if (progressTimer !== null || !hasRuntime) return;
     const tick = async () => {
       try {
-        const answer = await call("/api/progress");
+        const [answer, exchange] = await Promise.all([
+          call("/api/progress"),
+          call("/api/agent"),
+        ]);
+        if (
+          typeof exchange.sourceRevision === "string" &&
+          sourceRevision !== "" &&
+          exchange.sourceRevision !== sourceRevision
+        ) {
+          reloadForSourceRevision();
+          return;
+        }
+        if (typeof exchange.sourceRevision === "string") {
+          sourceRevision = exchange.sourceRevision;
+        }
+        applyAgentSnapshot(exchange);
         // The runtime already drops foreign and out-of-order events; the
         // document checks the same two facts again rather than trusting that
         // an event reached it only because it was allowed to.
@@ -2217,7 +2568,13 @@
     "scroll",
     () => {
       if (!compose.hidden && composeTarget) positionCompose(composeTarget);
-      if (!affordance.hidden && cursorBlock && !pendingSelection) {
+      if (pendingSelection) {
+        pendingSelection = null;
+        attachLabel.hidden = true;
+        affordance.hidden = true;
+        window.getSelection()?.removeAllRanges();
+        paintTargetHighlights();
+      } else if (!affordance.hidden && cursorBlock) {
         showAffordance(cursorBlock);
       }
       positionThreadCards();
@@ -2263,7 +2620,15 @@
       writeLocalState();
       renderTray();
       if (drafts.length > 0) setRailOpen(true);
-      if (sent.length > 0) startProgress();
+      if (sent.length > 0 || agentRequests.length > 0) startProgress();
+      if (reloadState !== null) {
+        setActiveTab(reloadState.tab);
+        setRailOpen(reloadState.railOpen);
+        requestAnimationFrame(() => {
+          window.scrollTo(0, reloadState.scrollY);
+          renderThreads();
+        });
+      }
     } catch (error) {
       sendNote.textContent = describeError(error);
       const carried = readLocalState();

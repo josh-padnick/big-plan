@@ -1,6 +1,6 @@
 ---
 title: Reviewing a plan
-description: Comment on a rendered plan, collect drafts in the Comments tray, and send one feedback package back to the agent.
+description: Comment on a rendered plan and carry the review through a real local coding-agent conversation.
 ---
 
 Reading a plan is only half of a review.
@@ -59,9 +59,57 @@ Press a chip to expand the original comment, agent response, and reply box in pl
 At narrow widths, an expanded thread moves into the document flow below its source.
 The Comments tray groups the same outcomes as a compact lifecycle index, and each row jumps back to the expanded anchored thread.
 
-Package delivery is real.
-The current agent responses, per-thread replies, and plan-wide Chat replies are local simulations and are labelled **Simulated** wherever they appear.
-They make the intended conversation model usable while the live agent round-trip is not connected.
+Package delivery and agent conversation are real.
+Until the coding-agent session responds, a sent thread says **With agent** and
+does not invent an outcome.
+When the agent publishes its response, the chip becomes **Changed**,
+**Needs your answer**, or **Outside this plan** and the real agent message
+appears in the expanded thread.
+
+## Start the coding-agent session
+
+Keep the review runtime running, then ask Big Plan for the exact prompt bound to
+that plan and session:
+
+```sh
+npx big-plan agent plans/checkout-retry.mdx
+```
+
+Run the returned `codex` or `claude` command in the plan's repository and
+leave that session running while you review. The command reads the generated
+owner-only `prompt_file`; `agent_prompt` is also returned when you want to
+paste the contract into an already-open coding-agent session.
+The prompt tells that session to run `big-plan agent next <plan> --wait`, revise
+the authoritative MDX when appropriate, and publish each answer with
+`big-plan agent respond`.
+The same session returns to `agent next --wait` after every response, so replies
+from an expanded comment thread and questions from the Chat tab continue the
+real conversation instead of starting over.
+
+The exchange contract is deliberately filesystem-first:
+
+1. **Send** writes the human-readable brief and machine-readable feedback
+   package, then creates a session-scoped agent request.
+2. `agent next` returns the oldest unanswered request, its prior thread
+   history, a response template, a safe ignored response-draft path, and the
+   exact `agent respond` command.
+3. For each anchored comment the agent reports exactly one outcome:
+   `changed`, `question`, or `outside`. A `changed` outcome is rejected unless
+   the plan source digest changed and its `changeTarget` resolves in the revised
+   render.
+4. `agent respond` re-renders and lints the current MDX before accepting the
+   response. It fills trusted session metadata itself; the agent never mints
+   session or plan identity.
+5. The review runtime polls the validated exchange and plan-source digest.
+   Agent responses replace waiting chips immediately. A source change reloads
+   the freshly rendered document while restoring the open thread, tray tab,
+   and reading position.
+
+**See the change** jumps to the block the agent named in the revised render.
+Submitting the thread reply creates another request for the same comment and
+includes the prior turns when the coding agent runs `agent next`.
+Plan-wide Chat uses the same mechanism but remains separate from anchored
+threads.
 
 ## What the agent may do with it
 
@@ -78,11 +126,13 @@ A comment is a request the agent considers while revising, never an instruction 
 
 Everything the runtime writes sits in a `.big-plan/` directory beside the plan, created readable only by your own account and ignored by version control by default:
 
-| What                                    | Where                         |
-| --------------------------------------- | ----------------------------- |
-| Drafts, active field, and sent comments | `.big-plan/review/<plan-id>/` |
-| Feedback packages and briefs            | `.big-plan/feedback/`         |
-| The running session's descriptor        | `.big-plan/session.json`      |
+| What                                     | Where                               |
+| ---------------------------------------- | ----------------------------------- |
+| Drafts, active field, and sent comments  | `.big-plan/review/<plan-id>/`       |
+| Agent requests, responses, and drafts    | `.big-plan/review/<plan-id>/agent/` |
+| Feedback packages and briefs             | `.big-plan/feedback/`               |
+| The running session's descriptor         | `.big-plan/session.json`            |
+| The running session's liveness heartbeat | `.big-plan/session-heartbeat.json`  |
 
 Review state is namespaced by an id the renderer derives from the plan's own path, so two plans never share drafts even when they share a title.
 
@@ -97,6 +147,14 @@ Every request is therefore authorised on its own merits.
 - It sends no CORS allowance at all and refuses a foreign `Origin` outright, because CORS hides a response without stopping a write.
 - It serves only documents it renders itself from your plan source. It never serves a pre-existing `.html`, because arbitrary HTML is arbitrary script on its own origin.
 - Nothing leaves the machine. Neither the document nor the runtime makes a request to any origin but the runtime's own.
+- The coding agent is a separate local process with the explicit authority in
+  its prompt: consider untrusted reviewer feedback, edit only the named plan
+  source, and publish data through the validated exchange. Big Plan does not
+  invoke a model provider or send plan content over the network itself.
+- Agent commands verify the session through its filesystem heartbeat rather
+  than process-control or loopback probes, so ordinary coding-agent sandboxes
+  can participate. A graceful stop marks the heartbeat stopped; a crashed
+  runtime becomes stale within three seconds.
 
 ## Reading without the runtime
 
