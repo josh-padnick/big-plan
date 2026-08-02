@@ -1890,7 +1890,7 @@ export const VIEWER_SCRIPT = `<script>
 ${DIAGRAM_SCRIPT}
 (() => {
   const roots = Array.from(document.querySelectorAll("[data-wireframe]"));
-  const zoomSteps = [1, 1.25, 1.5, 2];
+  const zoomSteps = [0.5, 0.75, 1, 1.25, 1.5, 2];
   const zoomOf = (screen) => {
     const authored = Number(screen.getAttribute("data-wireframe-user-zoom"));
     return zoomSteps.includes(authored) ? authored : 1;
@@ -1909,12 +1909,35 @@ ${DIAGRAM_SCRIPT}
       zoomIn.disabled = multiplier === zoomSteps[zoomSteps.length - 1];
   };
   const fit = (screen) => {
-    const frame = screen.querySelector(":scope > .wireframe-frame");
+    const stage = screen.querySelector(":scope > .wireframe-frame-stage");
+    const frame =
+      stage === null ? null : stage.querySelector(":scope > .wireframe-frame");
     if (frame === null || screen.clientWidth === 0) return;
     // offsetWidth stays in the frame's unscaled coordinate space. Writing a
     // numeric zoom avoids relying on unsupported length division in CSS.
     frame.style.zoom = "1";
-    const fitScale = Math.min(1, screen.clientWidth / frame.offsetWidth);
+    const maximized = screen
+      .closest("[data-wireframe]")
+      ?.hasAttribute("data-figure-maximized");
+    const stageStyle = stage === null ? null : getComputedStyle(stage);
+    const horizontalPadding =
+      stageStyle === null
+        ? 0
+        : parseFloat(stageStyle.paddingLeft) +
+          parseFloat(stageStyle.paddingRight);
+    const verticalPadding =
+      stageStyle === null
+        ? 0
+        : parseFloat(stageStyle.paddingTop) +
+          parseFloat(stageStyle.paddingBottom);
+    const widthScale =
+      ((stage?.clientWidth ?? screen.clientWidth) - horizontalPadding) /
+      frame.offsetWidth;
+    const heightScale =
+      maximized && stage !== null
+        ? (stage.clientHeight - verticalPadding) / frame.offsetHeight
+        : 1;
+    const fitScale = Math.max(0.1, Math.min(1, widthScale, heightScale));
     const multiplier = zoomOf(screen);
     frame.style.zoom = String(fitScale * multiplier);
     screen.setAttribute("data-wireframe-fit-scale", String(fitScale));

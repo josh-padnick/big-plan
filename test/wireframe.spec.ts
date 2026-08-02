@@ -25,7 +25,7 @@ test("should walk the wireframe prototype between screens", async ({
     await page.getByRole("button", { name: "Start lesson" }).click();
     await expect(lesson).toBeVisible();
     await expect(home).toBeHidden();
-    await expect(lesson).toContainText("Borrow now, repay later");
+    await expect(lesson).toContainText("How paying back works");
   });
 
   await test.step("the screen switcher follows the walk", async () => {
@@ -33,12 +33,17 @@ test("should walk the wireframe prototype between screens", async ({
       name: "Prototype screens",
     });
     await expect(
-      switcher.getByRole("button", { name: "Loan lesson" }),
+      switcher.getByRole("button", { name: "Lesson · learn" }),
     ).toHaveAttribute("aria-current", "true");
   });
 
   await test.step("the prototype walks back the way it came", async () => {
-    await page.getByRole("button", { name: "I understand" }).click();
+    await page
+      .getByRole("button", { name: "Try it with my $12 loan", exact: true })
+      .click();
+    await page.getByRole("button", { name: "$6 is paid back" }).click();
+    await page.getByRole("button", { name: "Finish this lesson" }).click();
+    await page.getByRole("button", { name: "Back to my wallet" }).click();
     await expect(home).toBeVisible();
     await expect(lesson).toBeHidden();
   });
@@ -47,7 +52,7 @@ test("should walk the wireframe prototype between screens", async ({
     const switcher = page.getByRole("navigation", {
       name: "Prototype screens",
     });
-    await switcher.getByRole("button", { name: "Loan lesson" }).click();
+    await switcher.getByRole("button", { name: "Lesson · learn" }).click();
     await expect(lesson).toBeVisible();
   });
 
@@ -81,7 +86,7 @@ test("should scale a true-size drawing inside a narrow review viewport", async (
   await test.step("the artboard keeps device geometry without widening the page", async () => {
     await expect
       .poll(() => artboard.evaluate((node) => node.offsetWidth))
-      .toBe(1112);
+      .toBe(1180);
     const box = await boxOf(artboard);
     expect(box.width).toBeLessThanOrEqual(320);
     const overflow = await page.evaluate(
@@ -240,15 +245,16 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
     expect(type?.paintedBody).toBeGreaterThanOrEqual(14.5);
   });
 
-  await test.step("landscape tablet drawings keep a four-by-three minimum", async () => {
+  await test.step("landscape tablet drawings hold a fixed iPad viewport", async () => {
     const tablet = page.locator('[data-wireframe-screen="t-inbox"]');
     const artboard = tablet.locator(".wireframe-artboard");
     await expect
       .poll(() => artboard.evaluate((node) => node.offsetWidth))
-      .toBe(1112);
+      .toBe(1180);
+    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(820);
     expect(
-      await artboard.evaluate((node) => node.offsetHeight),
-    ).toBeGreaterThanOrEqual(834);
+      await artboard.evaluate((node) => node.offsetWidth / node.offsetHeight),
+    ).toBeCloseTo(1.439, 2);
   });
 
   await test.step("tablet type reads at an idiomatic iPad scale after fitting", async () => {
@@ -423,7 +429,7 @@ test("should maximize and restore a wireframe in both themes", async ({
     );
     await expect(trigger).toBeVisible();
     await expect(trigger).toHaveAccessibleName("Maximize wireframe");
-    await expect(trigger).toContainText("Open larger + zoom");
+    await expect(trigger).toHaveText("");
     const before = await boxOf(wireframe.locator(".wireframe-frame:visible"));
 
     await trigger.click();
@@ -440,6 +446,25 @@ test("should maximize and restore a wireframe in both themes", async ({
     );
     await expect(zoomControls).toBeVisible();
     const fitted = await boxOf(wireframe.locator(".wireframe-frame:visible"));
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+    if (viewport !== null) {
+      expect(
+        Math.abs(fitted.x + fitted.width / 2 - viewport.width / 2),
+      ).toBeLessThanOrEqual(2);
+    }
+    await zoomControls
+      .getByRole("button", { name: "Zoom wireframe out" })
+      .click();
+    await expect(zoomControls).toContainText("75%");
+    const zoomedOut = await boxOf(
+      wireframe.locator(".wireframe-frame:visible"),
+    );
+    expect(zoomedOut.width).toBeLessThan(fitted.width * 0.8);
+    await zoomControls
+      .getByRole("button", { name: "Zoom wireframe in" })
+      .click();
+    await expect(zoomControls).toContainText("Fit");
     await zoomControls
       .getByRole("button", { name: "Zoom wireframe in" })
       .click();
@@ -459,4 +484,48 @@ test("should maximize and restore a wireframe in both themes", async ({
     await expect(wireframe).not.toHaveAttribute("data-figure-maximized");
     await expect(trigger).toHaveAccessibleName("Maximize wireframe");
   }
+});
+
+test("should comment on a whole wireframe screen and one specific element", async ({
+  page,
+  wireframeViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(wireframeViewerUrl);
+  const screen = page.locator('[data-wireframe-screen="child-home"]');
+  const affordance = page.locator("[data-review-affordance]");
+
+  await test.step("the screen is a registered shared block target", async () => {
+    await screen.locator(".wireframe-screen-caption").hover();
+    await expect(affordance).toBeVisible();
+    await expect(affordance).toHaveAttribute(
+      "aria-label",
+      /^Comment on wireframe-screen:/,
+    );
+    await affordance.click();
+    await page
+      .locator("[data-review-compose-input]")
+      .fill("Keep the whole wallet screen calm.");
+    await page.locator("[data-review-compose-save]").click();
+    await expect(page.locator("[data-review-drafts] li")).toHaveCount(1);
+  });
+
+  await test.step("a product element uses the same tray and package", async () => {
+    const action = screen.getByRole("button", { name: "✋ Ask a grown-up" });
+    await action.hover();
+    await expect(affordance).toHaveAttribute(
+      "aria-label",
+      /^Comment on wireframe-button:/,
+    );
+    await affordance.click();
+    await page
+      .locator("[data-review-compose-input]")
+      .fill("Keep this action welcoming.");
+    await page.locator("[data-review-compose-save]").click();
+    await expect(page.locator("[data-review-drafts] li")).toHaveCount(2);
+    const ids = await page
+      .locator("[data-review-annotated]")
+      .evaluateAll((nodes) => nodes.map((node) => node.dataset.blockId));
+    expect(new Set(ids).size).toBe(2);
+  });
 });

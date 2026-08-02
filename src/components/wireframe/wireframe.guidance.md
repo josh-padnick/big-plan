@@ -13,8 +13,9 @@ A hand-drawn sketch of a product screen, drawn from a fixed vocabulary so a revi
 - Say state in words first. A `Badge`, or a table cell written `[Failed:danger]`, is a word that a tone only reinforces; a reviewer who cannot see the tint still reads the state.
 - Borrow a layout a real product already proved - a table with a toolbar, master-detail, a settings two-column, a focused centered form - rather than inventing one for a solved problem.
 - Give every screen one `device`: `desktop`, `tablet`, `tablet-portrait`, or `phone`. It chooses both the true layout width and the matching desktop browser, native iPad, or phone frame, so contradictory combinations are impossible. Add `url` only to `device="desktop"` when the web route matters.
-- The artboard lays out at that true width and scales as one unit to fit the plan; it never reflows into the reading column. Every device keeps a realistic minimum silhouette and grows with content. Persistent native chrome should anchor short states (for example a phone tab bar at the foot), so extra height has structure rather than becoming a dead box. Never clip content to preserve a ratio.
-- The frame-level `Open larger + zoom` control is part of the review surface, not product UI. Use it to inspect hierarchy at a larger scale, then zoom the artboard itself rather than using browser page zoom as a substitute; frame and type continue to scale together when the page viewport changes.
+- The artboard lays out at its true device width and scales as one unit to fit the plan; it never reflows into the reading column. Desktop and phone keep realistic minimum silhouettes and may grow. Tablet is different: landscape holds a fixed 1180 × 820 viewport (portrait 820 × 1180), and content that does not fit compacts or scrolls inside the app surface instead of stretching the iPad bezel.
+- The frame-level maximize icon is review chrome, not product UI. It opens the current screen fitted and centered in the viewport; use the artboard zoom controls to go below or above that fit while frame and type continue to scale together.
+- Every wireframe screen and each meaningful element is already a target in Big Plan's shared commenting model. Reviewers can comment on the whole screen or point at a panel, label, field, or action; do not draw comment pins, notes, or review controls inside the product UI.
 - Use `pattern="list-detail|triage|create|settings"` only when one of those proven layouts fits. `triage` consumes three direct `Panel` slots; the others consume two, and the compiler expands them into ordinary `Row`, `Panel`, and `Rail` nodes at the right widths. Omit `pattern` and use the full vocabulary for dashboards, canvas + inspector, wizards, onboarding, and every other layout.
 
 For how slides, headings, and components sit on the **plan page** (Contrast, Repetition, Alignment, Proximity), follow plan-writing guidance CRAP via `big-plan guidance` section "Lay out slides with CRAP".
@@ -79,6 +80,23 @@ For every screen, answer these questions from the rendered result:
 
 If any answer is unclear, revise the hierarchy, spacing, grouping, or language before adding more detail.
 
+## Design short task flows, not overloaded destination screens
+
+When a screen asks a person to choose, prepare information, confirm an outcome, or hand work to someone else, draw the sequence instead of compressing every state into one canvas.
+
+1. Give each screen one clear job and one focal point.
+2. Make the strongest action name the user's immediate goal; Back, cancel, and change actions stay secondary.
+3. Let a choice visibly change the next state or preview. A selected row with an unchanged summary is not a state transition.
+4. Reveal information progressively: choose first, ask only for fields the choice needs, then show the complete preview.
+5. Use hierarchy, spacing, and a few meaningful surfaces before adding more bordered containers.
+6. Lay the sequence along attention: a centered step flow or compact step rail, with the primary action after the active content.
+7. Make touch targets unmistakable and at least 44-48 pt; selected state needs a visible word, check, or pressed treatment in addition to tint.
+8. Draw a deliberate handoff boundary when control changes person, role, or trust level. Say who holds the device next and place adult approval, authentication, or irreversible work behind that boundary.
+9. Use concrete, audience-native language and numbers. Say what exists now, what changes afterward, and what cannot happen yet.
+10. Keep sketch looseness on the visual surface only. Reading order, alignment, interaction state, and navigation must remain exceptionally clear.
+
+A useful default sequence is **choose → specify → preview → handoff or finish**. A lesson usually follows **learn → try → see the result → finish**. Keep an error path close to the choice and show that practice did not mutate real state.
+
 ## Responsive product design guidelines
 
 Accepted bar for wireframe product mockups.
@@ -122,6 +140,7 @@ Phone musts: `device="phone"`, a realistic tall silhouette, single column, `Bott
 Tablet is its own native layout language, not desktop squeezed into a smaller browser.
 
 - Use the native iPad device frame: no traffic-light dots, URL field, or web-browser route.
+- Hold the device viewport itself to 1180 × 820 in landscape (about 1.44:1) or 820 × 1180 in portrait. Compact the composition or let the app content region scroll; never make the bezel taller to accommodate one screen.
 - Let the tablet device type scale do its job. Its 26px authored body, 20px supporting copy, 30px section titles, and 44px page titles are deliberately larger than nominal iPadOS points because the true-width artboard is reduced into the review column; at the ordinary fit, body copy paints at roughly 17-19px. Do not shrink individual labels to make more content fit. A children's experience should keep this generous default and use the upper levels decisively.
 - Prefer a compact top navigation bar above deliberate master/detail. A master list, lesson outline, or settings section list may remain visible beside the selected detail.
 - Spend width on nearby context and touch-friendly card-like surfaces. Use wider gutters and a calmer density than desktop.

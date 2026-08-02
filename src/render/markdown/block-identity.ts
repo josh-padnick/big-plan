@@ -11,10 +11,11 @@
 // can never carry an authored string into a filesystem path.
 //
 // Presentation-only wrappers stay outside the block tree: the walk stamps a
-// scope's direct children and a component's root, never a component's private
-// internals. Code figures are the one exception - their line rows carry
-// `data-block-line` so a comment can name a line range the way an authored
-// Annotation does.
+// scope's direct children and a component's root. A component may explicitly
+// mark meaningful private targets with `data-block-anchor`; this transform
+// then mints their final ids under the component root. Code figures likewise
+// carry `data-block-line` so a comment can name a line range the way an
+// authored Annotation does.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 
@@ -296,6 +297,56 @@ const stampTableRows = ({
   });
 };
 
+// Component views mark only elements that are meaningful review targets. The
+// marker is an anchor, never a final id: this renderer remains the one owner
+// that namespaces and registers every address accepted by the review runtime.
+const stampComponentTargets = ({
+  component,
+  componentId,
+  section,
+  blocks,
+}: {
+  readonly component: Element;
+  readonly componentId: string;
+  readonly section: string;
+  readonly blocks: Array<BlockDescriptor>;
+}): void => {
+  const ids = new Set<string>();
+  forEachDescendant({
+    node: component,
+    visit: (candidate) => {
+      const anchor = candidate.properties["data-block-anchor"];
+      if (typeof anchor !== "string" || anchor.length === 0) {
+        return;
+      }
+      const kindValue = candidate.properties["data-block-kind"];
+      const labelValue = candidate.properties["data-block-label"];
+      const kind =
+        typeof kindValue === "string" && kindValue.length > 0
+          ? idSegment(kindValue)
+          : "component-element";
+      const label =
+        typeof labelValue === "string" && labelValue.length > 0
+          ? summarize(labelValue)
+          : readableKind(kind);
+      const baseId = `${componentId}/${idSegment(anchor)}`;
+      let id = baseId;
+      let suffix = 2;
+      while (ids.has(id)) {
+        id = `${baseId}-${suffix}`;
+        suffix += 1;
+      }
+      ids.add(id);
+      delete candidate.properties["data-block-anchor"];
+      candidate.properties["data-block-id"] = id;
+      candidate.properties["data-block-kind"] = kind;
+      candidate.properties["data-block-label"] = label;
+      candidate.properties["data-block-section"] = section;
+      blocks.push({ id, kind, label, section });
+    },
+  });
+};
+
 // A container this walk is not allowed to enter: it belongs to a scope of its
 // own and will be visited as one.
 const isNestedScope = (node: Element): boolean =>
@@ -339,6 +390,14 @@ const stampScope = ({
     child.properties["data-block-label"] = label;
     child.properties["data-block-section"] = section;
     blocks.push({ id, kind, label, section });
+    if (componentName(child) !== undefined) {
+      stampComponentTargets({
+        component: child,
+        componentId: id,
+        section,
+        blocks,
+      });
+    }
     if (kind === "code" || kind.startsWith("code-")) {
       stampCodeLines(child);
     } else if (kind === "table") {
@@ -394,15 +453,7 @@ export const rehypeBlockIdentity =
       blocks: collected,
     });
     let slideIndex = 0;
-    for (const child of tree.children) {
-      if (!isElement(child)) {
-        continue;
-      }
-      const isSubpart = child.properties["data-subpart"] !== undefined;
-      const isSlide = child.properties["data-slide"] !== undefined;
-      if (!isSubpart && !isSlide) {
-        continue;
-      }
+    const stampDeckScope = (child: Element): void => {
       slideIndex += 1;
       const isSubSlide = child.properties["data-subslide"] !== undefined;
       const scope = scopeNameFor({
@@ -419,6 +470,37 @@ export const rehypeBlockIdentity =
           ? `Section ${slideIndex}`
           : summarize(textOf(sectionHeading)).replace(KICKER_PREFIX, "");
       stampScope({ container: child, scope, section, blocks: collected });
-    }
+      // Current deck chrome nests sub-slides inside the parent collapse body.
+      // They remain independent comment scopes, so walk through presentation
+      // wrappers to find them after stamping (and deliberately skipping) the
+      // parent scope's own private child scope.
+      forEachDescendant({
+        node: child,
+        visit: (candidate) => {
+          if (candidate.properties["data-subslide"] !== undefined) {
+            stampDeckScope(candidate);
+          }
+        },
+      });
+    };
+    // Part groups are presentation wrappers around their slides. Find each
+    // outer slide through those wrappers instead of assuming slides remain
+    // direct root children after the deck transforms finish. A parent slide
+    // owns discovery of its own sub-slides, so the outer walk stops at it.
+    const stampOuterSlides = (container: Element | Root): void => {
+      for (const child of container.children) {
+        if (!isElement(child)) {
+          continue;
+        }
+        if (child.properties["data-slide"] !== undefined) {
+          if (child.properties["data-subslide"] === undefined) {
+            stampDeckScope(child);
+          }
+          continue;
+        }
+        stampOuterSlides(child);
+      }
+    };
+    stampOuterSlides(tree);
     blocks?.push(...collected);
   };

@@ -25,6 +25,23 @@ elements exist and the document is exactly the document it always was.
   z-index: 40;
 }
 
+/* A promoted figure remains commentable. The shared figure surface sits at
+   z=70, so the existing page-level affordance, compose card, and tray move
+   above it instead of creating a wireframe-only collector or draft store. */
+:root[data-figure-maximized-open] [data-review-root] {
+  z-index: 74;
+}
+:root[data-figure-maximized-open] [data-review-toggle],
+:root[data-figure-maximized-open] [data-review-rail] {
+  z-index: 75;
+}
+:root[data-figure-maximized-open] [data-review-affordance] {
+  z-index: 76;
+}
+:root[data-figure-maximized-open] [data-review-compose] {
+  z-index: 77;
+}
+
 [data-review-root] button:focus-visible,
 [data-review-root] textarea:focus-visible,
 [data-review-root] input:focus-visible {

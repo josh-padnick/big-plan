@@ -905,8 +905,13 @@
           '[data-block-id="' + cssEscape(target.blockId) + '"]',
         )
       : null;
-    if (!block) {
+    // A wireframe target lives inside a scaled product canvas. Inserting the
+    // page compose card beside that element would mutate the drawing's layout,
+    // so the shared editor uses its established centered presentation while
+    // keeping the same block id, draft store, tray, and feedback package.
+    if (!block || block.closest("[data-wireframe]")) {
       compose.removeAttribute("style");
+      compose.removeAttribute("data-review-compose-inline");
       compose.setAttribute("data-review-compose-centered", "");
       return;
     }

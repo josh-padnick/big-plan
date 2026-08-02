@@ -81,6 +81,19 @@ describe("block identity scopes", () => {
     ]);
   });
 
+  it("should find slides nested inside a Part group", () => {
+    const { blocks } = compile(
+      '<Part title="Context" />\n\n## Status quo\n\nToday.\n\n- One\n- Two\n',
+    );
+    expect(blocks.map((block) => block.id)).toEqual(
+      expect.arrayContaining([
+        "section/status-quo/heading-1",
+        "section/status-quo/paragraph-1",
+        "section/status-quo/list-1",
+      ]),
+    );
+  });
+
   it("should number repeats of one kind within a scope in document order", () => {
     const { blocks } = compile("## One\n\nA.\n\nB.\n\nC.\n");
     expect(blocks.map((block) => block.id)).toEqual([
@@ -180,6 +193,34 @@ describe("block identity boundaries", () => {
       "section/calls/heading-1",
       "section/calls/decision-1",
     ]);
+  });
+
+  it("should register wireframe screen and element markers under the component block", () => {
+    const { blocks } = compile(
+      '## Prototype\n\n<Wireframe id="wallet">\n<Screen id="home" name="Home" device="tablet">\n<Panel title="Balance"><Text text="You have $42.50" /></Panel>\n</Screen>\n</Wireframe>\n',
+    );
+    const wireframe = blocks.find((block) => block.kind === "wireframe");
+    expect(wireframe).toBeDefined();
+    expect(
+      blocks.some(
+        (block) =>
+          block.kind === "wireframe-screen" &&
+          block.label === "Home" &&
+          block.id.startsWith(`${wireframe?.id}/`),
+      ),
+    ).toBe(true);
+    expect(
+      blocks.some(
+        (block) =>
+          block.kind === "wireframe-panel" && block.label === "Balance",
+      ),
+    ).toBe(true);
+    expect(
+      blocks.some(
+        (block) =>
+          block.kind === "wireframe-text" && block.label === "You have $42.50",
+      ),
+    ).toBe(true);
   });
 
   it("should give a code figure's rows their file-absolute line numbers", () => {

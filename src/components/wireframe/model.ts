@@ -191,27 +191,50 @@ export const WIREFRAME_PATTERNS: ReadonlyArray<WireframePattern> = [
 ];
 
 /**
- * One device preset's logical width and reader-facing name.
+ * One device preset's logical viewport and reader-facing name.
  *
  * The artboard lays out at this true size and scales as one unit to fit the
- * review surface. Every preset supplies a believable minimum device
- * silhouette while longer content grows the paper instead of overflowing it.
- * Native layouts pin their own persistent chrome (such as a phone tab bar) so
- * minimum height creates useful composition rather than an arbitrary dead box.
+ * review surface. Desktop and phone keep a believable minimum silhouette and
+ * may grow with their document-like content. An iPad is a viewport, not paper:
+ * its fixed, device-true aspect ratio holds while excess content scrolls or
+ * compacts inside the native app surface.
  */
-export type WireframeDevicePreset = {
-  readonly label: string;
-  readonly width: number;
-  readonly minimumHeight?: number;
-};
+export type WireframeDevicePreset =
+  | {
+      readonly label: string;
+      readonly width: number;
+      readonly height: number;
+      readonly heightMode: "minimum";
+    }
+  | {
+      readonly label: string;
+      readonly width: number;
+      readonly height: number;
+      readonly heightMode: "viewport";
+    };
 
 export const WIREFRAME_DEVICE_PRESETS: Readonly<
   Record<WireframeDevice, WireframeDevicePreset>
 > = {
-  desktop: { label: "Desktop", width: 1440, minimumHeight: 900 },
-  tablet: { label: "Tablet, landscape", width: 1112, minimumHeight: 834 },
-  "tablet-portrait": { label: "Tablet", width: 834, minimumHeight: 1112 },
-  phone: { label: "Phone", width: 390, minimumHeight: 844 },
+  desktop: {
+    label: "Desktop",
+    width: 1440,
+    height: 900,
+    heightMode: "minimum",
+  },
+  tablet: {
+    label: "Tablet, landscape",
+    width: 1180,
+    height: 820,
+    heightMode: "viewport",
+  },
+  "tablet-portrait": {
+    label: "Tablet",
+    width: 820,
+    height: 1180,
+    heightMode: "viewport",
+  },
+  phone: { label: "Phone", width: 390, height: 844, heightMode: "minimum" },
 };
 
 /**

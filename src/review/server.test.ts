@@ -166,6 +166,7 @@ describe("review runtime transport", () => {
     const response = await fetch(runtime.url);
     const policy = response.headers.get("content-security-policy") ?? "";
     expect(policy).toContain("connect-src 'self'");
+    expect(policy).toContain("font-src data:");
     expect(policy).toContain("frame-ancestors 'none'");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");

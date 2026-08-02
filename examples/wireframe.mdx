@@ -2,18 +2,16 @@
 
 A kid-safe wallet gets its own screens, sketched here with `Wireframe` so the shape of the experience is arguable before any of it is built.
 
-## The wallet home
+## The wallet and its two child-sized tasks
 
-A child opens the app to one question: how much do I have, and how close am I to the thing I am saving for.
-
-Everything else on the screen is secondary, so balance and goal own the widest region and the lesson prompt sits beside them.
+The wallet leads with what Eddy has and what he is saving for. Asking a grown-up and learning about a loan each become a short sequence with one job, one obvious next action, and a deliberate ending.
 
 <Wireframe
   id="eddys-wallet"
-  title="Child mode, four screens"
+  title="Child wallet task flows"
   initialScreen="child-home"
 >
-  <Screen id="child-home" name="My wallet" device="tablet">
+  <Screen id="child-home" name="Wallet" device="tablet">
     <AppShell>
       <TopBar title="Eddy's Wallet">
         <Text text="Child mode" role="helper" />
@@ -42,77 +40,327 @@ Everything else on the screen is secondary, so balance and goal own the widest r
               detail="$42.50 of $70"
             />
           </Panel>
-          <Stack gap="md">
-            <Panel title="Recent activity" surface="filled">
-              <List>
-                <ListItem label="+ $5.00  Weekly allowance" meta="Today" />
-                <ListItem label="− $8.50  Book fair" meta="Friday" />
-                <ListItem label="− $2.00  Headphones goal" meta="Friday" />
-              </List>
-              <Button label="See all" navigateTo="activity" />
+          <Panel title="Recent activity" surface="filled">
+            <List>
+              <ListItem label="+ $5.00  Weekly allowance" meta="Today" />
+              <ListItem label="− $8.50  Book fair" meta="Friday" />
+              <ListItem label="− $2.00  Headphones goal" meta="Friday" />
+            </List>
+            <Button label="See all" navigateTo="activity" />
+          </Panel>
+          <Stack gap="md" span="rail">
+            <Panel title="My loan" surface="outlined">
+              <Metric
+                label="Left to repay"
+                value="$12"
+                note="Two Friday payments left"
+              />
             </Panel>
-            <Row gap="md">
-              <Panel title="My loan" surface="outlined">
-                <Metric
-                  label="Left to repay"
-                  value="$12"
-                  note="Two Friday payments left"
-                />
-              </Panel>
-              <Panel title="Next lesson" surface="filled">
-                <Text text="Learn how borrowing works" role="helper" />
-                <Heading text="Borrow now, repay later" level="3" />
-                <Button
-                  label="Start lesson"
-                  emphasis="primary"
-                  navigateTo="loan-lesson"
-                />
-              </Panel>
-            </Row>
+            <Panel title="Next lesson" surface="filled">
+              <Text text="Learn how borrowing works" role="helper" />
+              <Heading text="Borrow now, repay later" level="3" />
+              <Button
+                label="Start lesson"
+                emphasis="primary"
+                navigateTo="loan-lesson"
+              />
+            </Panel>
           </Stack>
         </Row>
       </AppContent>
     </AppShell>
   </Screen>
 
-  <Screen id="grown-up-help" name="Ask a grown-up" device="tablet">
+  <Screen id="grown-up-help" name="Ask · choose" device="tablet">
     <AppShell>
       <TopBar title="Eddy's Wallet">
-        <Button
-          label="‹ My wallet"
-          emphasis="tertiary"
-          navigateTo="child-home"
-        />
+        <Button label="‹ My wallet" emphasis="tertiary" navigateTo="child-home" />
       </TopBar>
       <AppContent>
-        <PageHeader
-          title="Let's ask a grown-up"
-          description="Choose what you need help with, then show them the summary."
-        />
-        <Row gap="lg">
-          <Panel title="What do you need help with?" span="list" surface="filled">
-            <List>
-              <ListItem
-                label="Buying something"
-                meta="Ask before money moves"
-                selected
+        <Center measure="wide">
+          <Stepper>
+            <Step label="1 Choose" state="current" />
+            <Step label="2 Tell us" state="todo" />
+            <Step label="3 Check" state="todo" />
+            <Step label="4 Handoff" state="todo" />
+          </Stepper>
+          <PageHeader
+            title="What do you want help with?"
+            description="Tap the card that sounds most like what you need."
+          />
+          <Panel surface="filled">
+            <Row gap="md">
+              <Button
+                label="⚽ Buying something"
+                navigateTo="grown-up-specify"
               />
-              <ListItem label="My loan" meta="$12 left to repay" />
-              <ListItem label="Something feels confusing" meta="Talk it through" />
-            </List>
+              <Button label="💵 My loan" navigateTo="grown-up-loan" />
+              <Button label="💬 Something feels confusing" navigateTo="grown-up-talk" />
+            </Row>
           </Panel>
-          <Panel title="Show your grown-up" span="main" surface="outlined">
-            <Heading text="Eddy's wallet summary" level="2" />
-          <Text text="Eddy has $42.50 available." />
-          <Text text="$12 is left to repay on the current loan." />
-          <Text text="No money moves until a grown-up approves it." />
+          <Text text="You can always come back and choose something else." role="helper" />
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="grown-up-loan" name="Ask · loan" device="tablet">
+    <AppShell>
+      <TopBar title="Eddy's Wallet">
+        <Button label="‹ Change my choice" emphasis="tertiary" navigateTo="grown-up-help" />
+      </TopBar>
+      <AppContent>
+        <Center measure="wide">
+          <Stepper>
+            <Step label="1 Choose" state="done" />
+            <Step label="2 Tell us" state="current" />
+            <Step label="3 Check" state="todo" />
+            <Step label="4 Handoff" state="todo" />
+          </Stepper>
+          <PageHeader
+            title="What do you want to ask about your loan?"
+            description="You still owe $12. Your grown-up can explain what happens next."
+          />
+          <TextArea
+            label="My question"
+            value="When will my loan be paid back?"
+            hint="Your words are okay."
+          />
+          <Row gap="sm" justify="end">
+            <Button label="Change my request" navigateTo="grown-up-help" />
             <Button
-              label="Done — back to my wallet"
+              label="Preview my question"
               emphasis="primary"
-              navigateTo="child-home"
+              navigateTo="grown-up-loan-preview"
+            />
+          </Row>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="grown-up-loan-preview" name="Ask · loan preview" device="tablet">
+    <AppShell>
+      <TopBar title="Eddy's Wallet">
+        <Button label="‹ Change my question" emphasis="tertiary" navigateTo="grown-up-loan" />
+      </TopBar>
+      <AppContent>
+        <Center measure="wide">
+          <Stepper>
+            <Step label="1 Choose" state="done" />
+            <Step label="2 Tell us" state="done" />
+            <Step label="3 Check" state="current" />
+            <Step label="4 Handoff" state="todo" />
+          </Stepper>
+          <Panel title="Show your grown-up" surface="outlined">
+            <Heading text="Eddy has a question about his loan" level="2" />
+            <Text text="“When will my loan be paid back?”" />
+            <Metric label="Loan still owed" value="$12" note="Two Friday payments left" />
+            <Text text="Nothing about the loan changes until your grown-up says so." role="helper" />
+          </Panel>
+          <Row gap="sm" justify="end">
+            <Button label="Change my request" navigateTo="grown-up-loan" />
+            <Button
+              label="Ready — hand this to my grown-up"
+              emphasis="primary"
+              navigateTo="grown-up-handoff"
+            />
+          </Row>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="grown-up-talk" name="Ask · talk" device="tablet">
+    <AppShell>
+      <TopBar title="Eddy's Wallet">
+        <Button label="‹ Change my choice" emphasis="tertiary" navigateTo="grown-up-help" />
+      </TopBar>
+      <AppContent>
+        <Center measure="wide">
+          <Stepper>
+            <Step label="1 Choose" state="done" />
+            <Step label="2 Tell us" state="current" />
+            <Step label="3 Check" state="todo" />
+            <Step label="4 Handoff" state="todo" />
+          </Stepper>
+          <PageHeader
+            title="What feels confusing?"
+            description="A short note helps your grown-up know where to start."
+          />
+          <TextArea
+            label="I want to talk about…"
+            value="I am not sure why my balance changed."
+            hint="You can say this out loud instead."
+          />
+          <Row gap="sm" justify="end">
+            <Button label="Change my request" navigateTo="grown-up-help" />
+            <Button
+              label="Preview my note"
+              emphasis="primary"
+              navigateTo="grown-up-talk-preview"
+            />
+          </Row>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="grown-up-talk-preview" name="Ask · talk preview" device="tablet">
+    <AppShell>
+      <TopBar title="Eddy's Wallet">
+        <Button label="‹ Change my note" emphasis="tertiary" navigateTo="grown-up-talk" />
+      </TopBar>
+      <AppContent>
+        <Center measure="wide">
+          <Stepper>
+            <Step label="1 Choose" state="done" />
+            <Step label="2 Tell us" state="done" />
+            <Step label="3 Check" state="current" />
+            <Step label="4 Handoff" state="todo" />
+          </Stepper>
+          <Panel title="Show your grown-up" surface="outlined">
+            <Heading text="Eddy wants to talk something through" level="2" />
+            <Text text="“I am not sure why my balance changed.”" />
+            <Text text="You have $42.50 now." />
+            <Text text="Nothing will change while you talk." role="helper" />
+          </Panel>
+          <Row gap="sm" justify="end">
+            <Button label="Change my request" navigateTo="grown-up-talk" />
+            <Button
+              label="Ready — hand this to my grown-up"
+              emphasis="primary"
+              navigateTo="grown-up-handoff"
+            />
+          </Row>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="grown-up-specify" name="Ask · item" device="tablet">
+    <AppShell>
+      <TopBar title="Eddy's Wallet">
+        <Button label="‹ Change my choice" emphasis="tertiary" navigateTo="grown-up-help" />
+      </TopBar>
+      <AppContent>
+        <Center measure="wide">
+          <Stepper>
+            <Step label="1 Choose" state="done" />
+            <Step label="2 Tell us" state="current" />
+            <Step label="3 Check" state="todo" />
+            <Step label="4 Handoff" state="todo" />
+          </Stepper>
+          <PageHeader
+            title="What are you hoping to buy?"
+            description="Buying something ✓"
+          />
+          <Panel title="Tell your grown-up" surface="filled">
+            <TextField label="What is it?" value="Soccer ball" />
+            <TextField
+              label="How much does it cost?"
+              kind="number"
+              value="18"
+              hint="Dollars"
             />
           </Panel>
-        </Row>
+          <Row gap="sm" justify="end">
+            <Button label="Change my request" navigateTo="grown-up-help" />
+            <Button
+              label="Preview what my grown-up will see"
+              emphasis="primary"
+              navigateTo="grown-up-preview"
+            />
+          </Row>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="grown-up-preview" name="Ask · preview" device="tablet">
+    <AppShell>
+      <TopBar title="Eddy's Wallet">
+        <Button label="‹ Change the item" emphasis="tertiary" navigateTo="grown-up-specify" />
+      </TopBar>
+      <AppContent>
+        <Center measure="wide">
+          <Stepper>
+            <Step label="1 Choose" state="done" />
+            <Step label="2 Tell us" state="done" />
+            <Step label="3 Check" state="current" />
+            <Step label="4 Handoff" state="todo" />
+          </Stepper>
+          <Panel title="Show your grown-up" surface="outlined">
+            <Heading text="Eddy wants to buy a soccer ball" level="2" />
+            <Text text="Soccer ball · $18" />
+            <Row gap="md">
+              <Metric label="Money now" value="$42.50" />
+              <Metric label="Money afterward" value="$24.50" />
+              <Metric label="Loan still owed" value="$12" />
+            </Row>
+            <Divider />
+            <Text text="Nothing will be bought until your grown-up says yes." role="helper" />
+          </Panel>
+          <Row gap="sm" justify="end">
+            <Button label="Change my request" navigateTo="grown-up-specify" />
+            <Button
+              label="Ready — hand this to my grown-up"
+              emphasis="primary"
+              navigateTo="grown-up-handoff"
+            />
+          </Row>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="grown-up-handoff" name="Ask · handoff" device="tablet">
+    <AppShell>
+      <TopBar title="Eddy's Wallet" />
+      <AppContent>
+        <Center measure="prose">
+          <Stepper>
+            <Step label="1 Choose" state="done" />
+            <Step label="2 Tell us" state="done" />
+            <Step label="3 Check" state="done" />
+            <Step label="4 Handoff" state="current" />
+          </Stepper>
+          <Panel title="Grown-up turn" surface="filled">
+            <Heading text="Now hand the iPad to your grown-up" level="1" />
+            <Text text="They will use Face ID or their grown-up PIN before they can approve anything." />
+            <Text text="You have not bought anything yet." role="helper" />
+            <Button
+              label="Grown-up: unlock approval"
+              emphasis="primary"
+              navigateTo="grown-up-approval"
+            />
+          </Panel>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="grown-up-approval" name="Grown-up check" device="tablet">
+    <AppShell>
+      <TopBar title="Grown-up approval">
+        <Text text="Face ID confirmed" role="helper" />
+      </TopBar>
+      <AppContent>
+        <Center measure="wide">
+          <PageHeader
+            title="Eddy is asking to buy a soccer ball"
+            description="Review the request before any money moves."
+          />
+          <Panel surface="outlined">
+            <Text text="Soccer ball · $18" />
+            <Text text="Balance after approval: $24.50" />
+            <Text text="Loan still owed: $12" />
+          </Panel>
+          <Row gap="sm" justify="end">
+            <Button label="Not now" navigateTo="child-home" />
+            <Button label="Approve this request" emphasis="primary" navigateTo="child-home" />
+          </Row>
+        </Center>
       </AppContent>
     </AppShell>
   </Screen>
@@ -120,11 +368,7 @@ Everything else on the screen is secondary, so balance and goal own the widest r
   <Screen id="activity" name="Activity" device="tablet">
     <AppShell>
       <TopBar title="Eddy's Wallet">
-        <Button
-          label="‹ My wallet"
-          emphasis="tertiary"
-          navigateTo="child-home"
-        />
+        <Button label="‹ My wallet" emphasis="tertiary" navigateTo="child-home" />
       </TopBar>
       <AppContent>
         <PageHeader
@@ -165,58 +409,151 @@ Everything else on the screen is secondary, so balance and goal own the widest r
     </AppShell>
   </Screen>
 
-  <Screen id="loan-lesson" name="Loan lesson" device="tablet">
+  <Screen id="loan-lesson" name="Lesson · learn" device="tablet">
     <AppShell>
       <TopBar title="Money lessons">
-        <Button
-          label="‹ My wallet"
-          emphasis="tertiary"
-          navigateTo="child-home"
-        />
+        <Button label="‹ My wallet" emphasis="tertiary" navigateTo="child-home" />
       </TopBar>
       <AppContent>
-        <PageHeader
-          title="Borrow now, repay later"
-          description="Lesson 3 of 6"
-        />
-        <Row gap="lg">
-          <Panel title="Lesson steps" span="list" surface="filled">
-            <List>
-              <ListItem label="Meet loans" meta="Done" />
-              <ListItem label="Borrow & repay" meta="Now" selected />
-              <ListItem label="Try it" meta="Next" />
-            </List>
-          </Panel>
-          <Panel title="What a loan is" span="main" surface="outlined">
-            <ImagePlaceholder
-              label="Doodle: two kids and a skateboard"
-              shape="wide"
+        <Center measure="wide">
+          <Stepper>
+            <Step label="1 Learn" state="current" />
+            <Step label="2 Try it" state="todo" />
+            <Step label="3 Finish" state="todo" />
+          </Stepper>
+          <PageHeader
+            title="How paying back works"
+            description="One small lesson about your $12 loan."
+          />
+          <Row gap="lg">
+            <ImagePlaceholder label="Doodle: skateboard now, two Fridays later" shape="wide" />
+            <Panel title="Your loan" span="main" surface="outlined">
+              <Heading text="You got help now. You pay it back a little at a time." level="2" />
+              <Text text="You still owe $12." />
+              <Text text="$6 comes out this Friday, then $6 next Friday." />
+              <Text text="After those two payments, you will owe $0." role="helper" />
+            </Panel>
+          </Row>
+          <Row gap="sm" justify="end">
+            <Button label="Back to my wallet" navigateTo="child-home" />
+            <Button
+              label="Try it with my $12 loan"
+              emphasis="primary"
+              navigateTo="loan-practice"
             />
-            <Heading text="Get help now, pay it back over time" level="2" />
-            <Text text="Someone helps you buy something now." />
-            <Text text="You pay them back a little at a time." />
-            <Text text="Your $12 loan takes two more Fridays to repay." />
-            <Row gap="sm" justify="between">
-              <Button
-                label="Back to my wallet"
-                emphasis="tertiary"
-                navigateTo="child-home"
-              />
-              <Button
-                label="I understand"
-                emphasis="primary"
-                navigateTo="child-home"
-              />
+          </Row>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="loan-practice" name="Lesson · try" device="tablet">
+    <AppShell>
+      <TopBar title="Money lessons">
+        <Button label="‹ Back to the example" emphasis="tertiary" navigateTo="loan-lesson" />
+      </TopBar>
+      <AppContent>
+        <Center measure="wide">
+          <Stepper>
+            <Step label="1 Learn" state="done" />
+            <Step label="2 Try it" state="current" />
+            <Step label="3 Finish" state="todo" />
+          </Stepper>
+          <PageHeader
+            title="What happens this Friday?"
+            description="You owe $12. Your Friday payment is $6."
+          />
+          <Panel title="Choose one answer" surface="filled">
+            <Row gap="md">
+              <Button label="$6 is paid back" navigateTo="loan-feedback" />
+              <Button label="All $12 is paid back" navigateTo="loan-try-again" />
+              <Button label="Nothing changes" navigateTo="loan-try-again" />
             </Row>
           </Panel>
-        </Row>
+          <Text text="Tap the answer that makes sense to you." role="helper" />
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="loan-try-again" name="Lesson · try again" device="tablet">
+    <AppShell>
+      <TopBar title="Money lessons" />
+      <AppContent>
+        <Center measure="wide">
+          <Stepper>
+            <Step label="1 Learn" state="done" />
+            <Step label="2 Try it" state="current" />
+            <Step label="3 Finish" state="todo" />
+          </Stepper>
+          <Panel title="Almost — try once more" surface="filled">
+            <Heading text="Only one Friday payment happens at a time" level="2" />
+            <Text text="You owe $12 now. This Friday, $6 is paid back." />
+            <Text text="Then you will still owe $6." role="helper" />
+            <Button
+              label="Choose again"
+              emphasis="primary"
+              navigateTo="loan-practice"
+            />
+          </Panel>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="loan-feedback" name="Lesson · result" device="tablet">
+    <AppShell>
+      <TopBar title="Money lessons" />
+      <AppContent>
+        <Center measure="wide">
+          <Stepper>
+            <Step label="1 Learn" state="done" />
+            <Step label="2 Try it" state="done" />
+            <Step label="3 Finish" state="current" />
+          </Stepper>
+          <Panel title="You got it ✓" surface="outlined">
+            <Heading text="$6 is paid back this Friday" level="1" />
+            <Row gap="md">
+              <Metric label="You owe now" value="$12" />
+              <Metric label="After Friday" value="$6" />
+              <Metric label="After next Friday" value="$0" />
+            </Row>
+            <Text text="This practice did not move any real money." role="helper" />
+          </Panel>
+          <Row gap="sm" justify="end">
+            <Button label="Try the question again" navigateTo="loan-practice" />
+            <Button
+              label="Finish this lesson"
+              emphasis="primary"
+              navigateTo="loan-complete"
+            />
+          </Row>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="loan-complete" name="Lesson · done" device="tablet">
+    <AppShell>
+      <TopBar title="Money lessons" />
+      <AppContent>
+        <Center measure="prose">
+          <Panel title="Lesson finished" surface="filled">
+            <Heading text="You know how your two payments work" level="1" />
+            <Text text="You still owe $12 today. Your real balance and loan did not change while you practiced." />
+            <Badge label="Lesson 3 complete ✓" tone="success" />
+            <Button
+              label="Back to my wallet"
+              emphasis="primary"
+              navigateTo="child-home"
+            />
+          </Panel>
+        </Center>
       </AppContent>
     </AppShell>
   </Screen>
 </Wireframe>
 
-## Why four screens
+## Why this prototype is longer
 
-The lesson and grown-up handoff are the two places the child leaves the wallet, so the prototype walks both paths and returns.
-
-A reviewer can click through it here rather than imagining it, which is the whole point of drawing it at all.
+The two risky moments are now explicit task flows instead of overloaded destination screens. The child chooses, supplies only the information needed, sees the exact outcome, and crosses a clear handoff or completion boundary before returning to the wallet.
