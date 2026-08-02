@@ -7,13 +7,31 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import test from "node:test";
 import { PNG } from "pngjs";
 import { verifyHistory } from "./verify-history.mjs";
 
 const execFileAsync = promisify(execFile);
+const repositoryRoot = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+);
+
+const directPixelProducingInputs = [
+  "assets/logo-light.svg",
+  "assets/favicon-light.ico",
+  "scripts/gen-assets.mjs",
+  "scripts/gen-css.mjs",
+  "src/icons/lucide/info.ts",
+  "src/render/branding.generated.ts",
+  "src/render/page.ts",
+  "src/render/render-document.ts",
+  "src/render/serialize-html.ts",
+];
 
 const git = async (repoRoot, arguments_) => {
   const { stdout } = await execFileAsync("git", arguments_, {
@@ -450,14 +468,7 @@ test("should retain relevance from every config revision", async () => {
 test("should classify every direct pixel-producing input as relevant", async () => {
   const { repoRoot, configPath, base } = await createMinimalRepository();
   try {
-    for (const path of [
-      "assets/logo-light.svg",
-      "assets/favicon-light.ico",
-      "src/icons/lucide/info.ts",
-      "src/render/branding.generated.ts",
-      "src/render/page.ts",
-      "src/render/render-document.ts",
-    ]) {
+    for (const path of directPixelProducingInputs) {
       await git(repoRoot, ["reset", "--hard", base]);
       await mkdir(join(repoRoot, path, ".."), { recursive: true });
       await writeFile(join(repoRoot, path), "pixel input\n", "utf8");
@@ -477,6 +488,25 @@ test("should classify every direct pixel-producing input as relevant", async () 
     }
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should configure every direct pixel-producing input as relevant", async () => {
+  const config = JSON.parse(
+    await readFile(
+      join(repositoryRoot, ".style-snapshots", "config.json"),
+      "utf8",
+    ),
+  );
+  const patterns = config.stylingFilePatterns.map(
+    (pattern) => new RegExp(pattern),
+  );
+
+  for (const path of directPixelProducingInputs) {
+    assert.ok(
+      patterns.some((pattern) => pattern.test(path)),
+      "Active style snapshot config must include " + path,
+    );
   }
 });
 
