@@ -11,6 +11,7 @@ test("should compare, answer, and confirm an open decision", async ({
 }) => {
   await page.goto(decisionViewerUrl);
   const decision = page.locator("[data-decision-selector]").first();
+  const choices = decision.locator(".decision-keyed-option");
   const columns = decision.locator("th.decision-column");
   const confirm = decision.locator("[data-decision-confirm]");
 
@@ -27,9 +28,10 @@ test("should compare, answer, and confirm an open decision", async ({
   });
 
   await test.step("the comparison is a matrix of options over criteria", async () => {
+    await expect(choices).toHaveCount(2);
     await expect(columns).toHaveCount(2);
     const criteria = await decision
-      .locator("th.decision-criterion")
+      .locator("tbody th.decision-criterion")
       .allInnerTexts();
     // "Single source of truth" is authored, but both options score it "One
     // file", so it cannot inform the choice and never renders.
@@ -48,6 +50,37 @@ test("should compare, answer, and confirm an open decision", async ({
     await expect(firstCell.locator("[class*=matrix-tone]")).toHaveCount(0);
   });
 
+  await test.step("criterion meanings and value reasons reveal on hover and activation", async () => {
+    const criterion = decision
+      .locator('[data-decision-definition="criterion"]')
+      .first();
+    const value = decision
+      .locator('[data-decision-definition="value"]')
+      .first();
+    await criterion.locator("summary").hover();
+    await expect(criterion).toHaveAttribute("open", "");
+    await expect(criterion.locator("[data-info-popover-body]")).toContainText(
+      "Whether the delivered skill exactly matches the installed CLI version",
+    );
+    await page.mouse.move(2, 2);
+    await expect(criterion).not.toHaveAttribute("open", "");
+
+    await value.locator("summary").hover();
+    await expect(value).toHaveAttribute("open", "");
+    await expect(value.locator("[data-info-popover-body]")).toContainText(
+      "compiled into the package",
+    );
+    await page.mouse.move(2, 2);
+    await expect(value).not.toHaveAttribute("open", "");
+
+    // Activation pins a disclosure even when pointerenter fires immediately
+    // before click, which is how a tap-capable browser is driven here.
+    await value.locator("summary").click();
+    await expect(value).toHaveAttribute("open", "");
+    await decision.locator("[data-decision-question]").click();
+    await expect(value).not.toHaveAttribute("open", "");
+  });
+
   await test.step("confirming is refused until a column is picked", async () => {
     await expect(confirm).toBeDisabled();
     await expect(
@@ -60,7 +93,7 @@ test("should compare, answer, and confirm an open decision", async ({
     const before = await boxOf(rationale);
     const heights = [before.height];
     for (const index of [0, 1]) {
-      await columns.nth(index).locator("[data-decision-choice]").check();
+      await choices.nth(index).locator("[data-decision-choice]").check();
       heights.push((await boxOf(rationale)).height);
     }
     // Layout stability is the point of the single-cell grid: the rationale
@@ -69,7 +102,7 @@ test("should compare, answer, and confirm an open decision", async ({
   });
 
   await test.step("picking a column names the choice and lights the action", async () => {
-    await columns.nth(0).locator("[data-decision-choice]").check();
+    await choices.nth(0).locator("[data-decision-choice]").check();
     await expect(
       decision.locator("[data-decision-selection-summary]"),
     ).toContainText("Embedded in the CLI, printed by a new command selected");
@@ -78,10 +111,10 @@ test("should compare, answer, and confirm an open decision", async ({
   });
 
   await test.step("the keyboard moves between columns", async () => {
-    await columns.nth(0).locator("[data-decision-choice]").focus();
+    await choices.nth(0).locator("[data-decision-choice]").focus();
     await page.keyboard.press("ArrowRight");
     await expect(
-      columns.nth(1).locator("[data-decision-choice]"),
+      choices.nth(1).locator("[data-decision-choice]"),
     ).toBeChecked();
   });
 
@@ -103,7 +136,7 @@ test("should compare, answer, and confirm an open decision", async ({
     await decision.locator("[data-decision-proposal-cancel]").click();
     await expect(proposal).toBeHidden();
     await expect(
-      columns.nth(1).locator("[data-decision-choice]"),
+      choices.nth(1).locator("[data-decision-choice]"),
     ).toBeChecked();
     await expect(confirm).toHaveText("Confirm choice");
     await expect(confirm).toBeEnabled();
@@ -113,11 +146,12 @@ test("should compare, answer, and confirm an open decision", async ({
   });
 
   await test.step("confirming compresses the matrix to the chosen column", async () => {
-    await columns.nth(0).locator("[data-decision-choice]").check();
+    await choices.nth(0).locator("[data-decision-choice]").check();
     await confirm.click();
     await expect(decision.locator("[data-decision-answer]")).toBeVisible();
     await expect(decision.locator("[data-decision-footer]")).toBeHidden();
-    await expect(columns.nth(0)).toBeVisible();
+    await expect(choices.nth(0)).toBeVisible();
+    await expect(choices.nth(1)).toBeHidden();
     await expect(columns.nth(1)).toBeHidden();
     await expect(decision.locator("[data-option-proposal]")).toBeHidden();
   });
@@ -125,7 +159,7 @@ test("should compare, answer, and confirm an open decision", async ({
   await test.step("changing the decision restores every column", async () => {
     await decision.locator("[data-decision-change]").click();
     await expect(decision.locator("[data-decision-answer]")).toBeHidden();
-    await expect(columns.nth(1)).toBeVisible();
+    await expect(choices.nth(1)).toBeVisible();
     await expect(confirm).toBeEnabled();
   });
 });
@@ -160,7 +194,7 @@ test("should keep a nested decision's controls out of its parent", async ({
 
   await test.step("answering the inner decision leaves the outer untouched", async () => {
     await inner
-      .locator("th.decision-column")
+      .locator(".decision-keyed-option")
       .first()
       .locator("[data-decision-choice]")
       .check();

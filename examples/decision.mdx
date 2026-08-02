@@ -6,17 +6,43 @@ The skill's delivery channel gets decided with the `Decision` component, one opt
 
 The authored skill file in the repository is canonical either way; this decision is only about the delivery channel.
 
+<Criterion title="Version fidelity">
+
+Whether the delivered skill exactly matches the installed CLI version.
+
+</Criterion>
+
+<Criterion title="Single source of truth">
+
+Whether authors maintain the skill text in only one place.
+
+</Criterion>
+
+<Criterion title="Works offline">
+
+Whether installation succeeds without network access.
+
+</Criterion>
+
 <Option title="Embedded in the CLI, printed by a new command" recommended summary="A skill command prints the file verbatim; the agent redirects it into place.">
 
-<Consideration title="Version fidelity" verdict="Exact" tone="good">
+<Consideration criterion="Version fidelity" verdict="Exact" tone="good">
 
-The skill is compiled into the package, so its text can never disagree with the installed CLI.
+The skill is compiled into the package, so its text cannot disagree with the installed CLI.
 
 </Consideration>
 
-<Consideration title="Single source of truth" verdict="One file" tone="good" />
+<Consideration criterion="Single source of truth" verdict="One file" tone="good">
 
-<Consideration title="Works offline" verdict="Yes" tone="good" />
+The repository copy is the only authored source.
+
+</Consideration>
+
+<Consideration criterion="Works offline" verdict="Yes" tone="good">
+
+The installed package already contains the skill text.
+
+</Consideration>
 
 Re-running the command after an upgrade refreshes the installed skill.
 
@@ -24,15 +50,23 @@ Re-running the command after an upgrade refreshes the installed skill.
 
 <Option title="Docs-site download" summary="Setup tells the agent to fetch the skill from the docs site.">
 
-<Consideration title="Version fidelity" verdict="Drifts" tone="bad">
+<Consideration criterion="Version fidelity" verdict="Drifts" tone="bad">
 
-The site always serves the latest text, which can disagree with an older installed CLI.
+The site can serve newer text than an older installed CLI expects.
 
 </Consideration>
 
-<Consideration title="Single source of truth" verdict="One file" tone="good" />
+<Consideration criterion="Single source of truth" verdict="One file" tone="good">
 
-<Consideration title="Works offline" verdict="No" tone="bad" />
+The repository copy still generates the published download.
+
+</Consideration>
+
+<Consideration criterion="Works offline" verdict="No" tone="bad">
+
+Setup must reach the documentation site.
+
+</Consideration>
 
 </Option>
 
@@ -42,19 +76,47 @@ The site always serves the latest text, which can disagree with an older install
 
 <Decision question="Where does the authored skill file live?" status="decided">
 
+<Criterion title="Review path">
+
+Where reviewers must go to approve a change.
+
+</Criterion>
+
+<Criterion title="Drift risk">
+
+Whether separate source copies can disagree.
+
+</Criterion>
+
 <Option title="In this repository" chosen summary="The skill ships beside the code it teaches.">
 
-<Consideration title="Review path" verdict="Normal PR" tone="good" />
+<Consideration criterion="Review path" verdict="Normal PR" tone="good">
 
-<Consideration title="Drift risk" verdict="None" tone="good" />
+The skill change follows the product's normal pull request.
+
+</Consideration>
+
+<Consideration criterion="Drift risk" verdict="None" tone="good">
+
+There is no second authored copy to synchronize.
+
+</Consideration>
 
 </Option>
 
 <Option title="In a separate skills repository" summary="A shared home for every published skill.">
 
-<Consideration title="Review path" verdict="Second repo" tone="mixed" />
+<Consideration criterion="Review path" verdict="Second repo" tone="mixed">
 
-<Consideration title="Drift risk" verdict="Real" tone="bad" />
+Reviewers must follow the change into another repository.
+
+</Consideration>
+
+<Consideration criterion="Drift risk" verdict="Real" tone="bad">
+
+The product and skill can merge or release independently.
+
+</Consideration>
 
 </Option>
 

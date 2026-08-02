@@ -1,27 +1,23 @@
-// The Decision comparison shapes under evaluation. They render the same
-// compiled decision and differ only in how much the reader must hold to
-// answer, which is the axis they are being judged on.
-//
-// Every shape obeys two reductions the round-4 review asked for. A verdict is
-// one signal - the word - because an icon and a colour saying the same thing
-// are two more marks to process and nothing more to learn. And a criterion
-// every option scores identically cannot inform a choice, so it never renders;
-// the model marks which positions actually discriminate.
+// Decision's three approved reading depths. Rows explain each option in
+// place, matrix separates a full-title chooser rail from a keyed comparison,
+// and brief keeps the comparison collapsed until the reader asks for it.
 
+import type { ElementContent } from "hast";
 import type { CompiledDecision, CompiledDecisionOption } from "./compile.js";
 import { ComparisonMatrix } from "../_shared/comparison-matrix/comparison-matrix.js";
 import { BadgePill } from "../_shared/badge-pill/badge-pill.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
+import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 
 const RADIO_CLASSES =
   "decision-radio mt-0.5 size-5 shrink-0 appearance-none rounded-full border";
 
 const criteriaOf = (model: CompiledDecision) =>
-  model.discriminating.map((row) => ({
-    row,
-    title: model.options[0]?.considerations[row]?.title ?? "",
-  }));
+  model.discriminating.flatMap((row) => {
+    const criterion = model.criteria[row];
+    return criterion === undefined ? [] : [{ row, criterion }];
+  });
 
 const Radio = ({
   option,
@@ -51,9 +47,36 @@ const Recommended = () => (
   <BadgePill label="Recommended" classNames={["badge-pill-quiet"]} />
 );
 
-// A: one option per row, each carrying one short line per dimension. Nothing
-// is cross-referenced - a reader understands an option by reading its own
-// block - at the cost of repeating the dimension labels once per option.
+// The same native disclosure powers pointer hover, keyboard focus, and tap.
+// It remains readable without the viewer script; the shell upgrades it into
+// the floating popover already shared with ComplexDecision.
+const DefinitionDisclosure = ({
+  label,
+  detail,
+  kind,
+}: {
+  readonly label: string;
+  readonly detail: ReadonlyArray<ElementContent>;
+  readonly kind: "criterion" | "value";
+}) => (
+  <details
+    className="decision-definition"
+    data-info-popover=""
+    data-decision-definition={kind}
+  >
+    <summary className="decision-definition-trigger">{label}</summary>
+    <div
+      className="decision-definition-body max-w-72 text-xs leading-5"
+      data-info-popover-body=""
+    >
+      {hastContentToReact(detail)}
+    </div>
+  </details>
+);
+
+// The row form intentionally keeps definitions out of the reading path. It
+// is the approved compact summary: a distinct option title followed by small
+// bold criterion labels and plain values.
 export const RowsLayout = ({
   model,
   answerable,
@@ -97,10 +120,10 @@ export const RowsLayout = ({
               {option.recommended ? <Recommended /> : null}
             </span>
             <span className="decision-row-lines mt-2 grid gap-1">
-              {criteria.map(({ row, title }) => (
+              {criteria.map(({ row, criterion }) => (
                 <span className="decision-row-line" key={row}>
                   <span className="decision-row-dimension font-semibold text-ink">
-                    {`${title}:`}
+                    {`${criterion.title}:`}
                   </span>
                   <span className="decision-verdict font-normal text-ink">
                     {option.considerations[row]?.verdict ?? "-"}
@@ -115,188 +138,13 @@ export const RowsLayout = ({
   );
 };
 
-// B: the column matrix, which states each dimension once instead of once per
-// option, with hard surface boundaries between asking, choosing, and
-// comparing. Cheaper to read down a dimension, dearer to read one option.
-export const MatrixLayout = ({
-  model,
-  answerable,
-}: {
-  readonly model: CompiledDecision;
-  readonly answerable: boolean;
-}) => {
-  const criteria = criteriaOf(model);
-  return (
-    <ComparisonMatrix className="decision-matrix">
-      <thead>
-        <tr className="decision-chooser-row">
-          <th className="decision-corner px-4 py-3.5 text-left" scope="col">
-            <span className="sr-only">{"Criterion"}</span>
-          </th>
-          {model.options.map((option, index) => (
-            <th
-              className="decision-column p-0 align-bottom"
-              key={option.id}
-              scope="col"
-              data-decision-column={index}
-              {...(option.recommended ? { "data-option-recommended": "" } : {})}
-              {...(option.chosen ? { "data-option-chosen": "" } : {})}
-            >
-              <label
-                className="decision-column-head flex h-full cursor-pointer flex-col items-start gap-2 px-4 py-3.5"
-                htmlFor={option.id}
-              >
-                <span className="flex items-start gap-2">
-                  <Radio
-                    option={option}
-                    index={index}
-                    groupName={model.id}
-                    answerable={answerable}
-                  />
-                  <span
-                    className="text-base leading-6 font-semibold text-ink"
-                    data-option-title=""
-                    id={option.titleId}
-                  >
-                    {option.title}
-                  </span>
-                </span>
-                {option.recommended ? <Recommended /> : null}
-              </label>
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {criteria.map(({ row, title }) => (
-          <tr className="comparison-matrix-row" key={row}>
-            <th
-              className="decision-criterion px-4 py-3 text-left text-base leading-6 font-medium text-muted"
-              scope="row"
-            >
-              {title}
-            </th>
-            {model.options.map((option, index) => (
-              <td
-                className="decision-cell px-4 py-3"
-                key={option.id}
-                data-decision-column={index}
-              >
-                <span className="decision-verdict text-base leading-6 font-semibold text-ink">
-                  {option.considerations[row]?.verdict ?? "-"}
-                </span>
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </ComparisonMatrix>
-  );
-};
-
-// Round 5 / matrix 1: keep the familiar orientation and spend more horizontal
-// space on it. The figure itself breaks beyond the reading measure; the table
-// remains the same shared primitive and interaction model.
-export const WideMatrixLayout = ({
-  model,
-  answerable,
-}: {
-  readonly model: CompiledDecision;
-  readonly answerable: boolean;
-}) => <MatrixLayout model={model} answerable={answerable} />;
-
-// Round 5 / matrix 2: transpose the grid. Full option names now own the roomy
-// row-header axis, while short criterion names span the columns.
-export const TransposedMatrixLayout = ({
-  model,
-  answerable,
-}: {
-  readonly model: CompiledDecision;
-  readonly answerable: boolean;
-}) => {
-  const criteria = criteriaOf(model);
-  return (
-    <ComparisonMatrix className="decision-matrix decision-matrix-transposed">
-      <thead>
-        <tr className="decision-chooser-row">
-          <th
-            className="decision-transposed-corner px-4 py-3 text-left text-sm font-medium text-muted"
-            scope="col"
-          >
-            {"Option"}
-          </th>
-          {criteria.map(({ row, title }) => (
-            <th
-              className="decision-transposed-criterion px-4 py-3 text-left text-sm leading-5 font-medium text-muted"
-              key={row}
-              scope="col"
-            >
-              {title}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {model.options.map((option, index) => (
-          <tr className="comparison-matrix-row" key={option.id}>
-            <th
-              className="decision-transposed-option p-0 text-left"
-              scope="row"
-              data-decision-column={index}
-              {...(option.recommended ? { "data-option-recommended": "" } : {})}
-              {...(option.chosen ? { "data-option-chosen": "" } : {})}
-            >
-              <label
-                className="decision-transposed-head flex cursor-pointer items-start gap-2 px-4 py-3"
-                htmlFor={option.id}
-              >
-                <Radio
-                  option={option}
-                  index={index}
-                  groupName={model.id}
-                  answerable={answerable}
-                />
-                <span className="min-w-0">
-                  <span
-                    className="block text-base leading-6 font-semibold text-ink"
-                    data-option-title=""
-                    id={option.titleId}
-                  >
-                    {option.title}
-                  </span>
-                  {option.recommended ? (
-                    <span className="mt-1.5 inline-flex">
-                      <Recommended />
-                    </span>
-                  ) : null}
-                </span>
-              </label>
-            </th>
-            {criteria.map(({ row }) => (
-              <td
-                className="decision-transposed-cell px-4 py-3"
-                key={row}
-                data-decision-column={index}
-              >
-                <span className="decision-verdict text-base leading-6 font-semibold text-ink">
-                  {option.considerations[row]?.verdict ?? "-"}
-                </span>
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </ComparisonMatrix>
-  );
-};
-
 const optionKey = (index: number): string =>
   String.fromCharCode("A".charCodeAt(0) + index);
 
-// Round 5 / matrix 3: separate choosing from comparing. A full-width option
-// rail preserves every name; compact letter keys then keep the grid itself
-// airy without inventing abbreviations for author-owned option titles.
-export const KeyedMatrixLayout = ({
+// The chosen matrix: full option names live in the chooser rail, while stable
+// letter keys leave the comparison grid enough room to scan. Definitions sit
+// on the authored term or value itself instead of adding an icon vocabulary.
+export const MatrixLayout = ({
   model,
   answerable,
 }: {
@@ -369,25 +217,38 @@ export const KeyedMatrixLayout = ({
           </tr>
         </thead>
         <tbody>
-          {criteria.map(({ row, title }) => (
-            <tr className="comparison-matrix-row" key={row}>
+          {criteria.map(({ row, criterion }) => (
+            <tr className="comparison-matrix-row" key={criterion.id}>
               <th
                 className="decision-criterion px-4 py-3 text-left text-sm leading-5 font-medium text-muted"
                 scope="row"
               >
-                {title}
+                <DefinitionDisclosure
+                  label={criterion.title}
+                  detail={criterion.detail}
+                  kind="criterion"
+                />
               </th>
-              {model.options.map((option, index) => (
-                <td
-                  className="decision-cell px-4 py-3 text-center"
-                  key={option.id}
-                  data-decision-column={index}
-                >
-                  <span className="decision-verdict text-base leading-6 font-semibold text-ink">
-                    {option.considerations[row]?.verdict ?? "-"}
-                  </span>
-                </td>
-              ))}
+              {model.options.map((option, index) => {
+                const consideration = option.considerations[row];
+                return (
+                  <td
+                    className="decision-cell px-4 py-3 text-center"
+                    key={option.id}
+                    data-decision-column={index}
+                  >
+                    {consideration === undefined ? (
+                      "-"
+                    ) : (
+                      <DefinitionDisclosure
+                        label={consideration.verdict}
+                        detail={consideration.detail}
+                        kind="value"
+                      />
+                    )}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
@@ -396,9 +257,8 @@ export const KeyedMatrixLayout = ({
   );
 };
 
-// The comparison a reader opens rather than answers: same shape as the matrix,
-// no controls, so it can sit inside another layout without emitting a second
-// radio group with duplicate ids.
+// Brief's expanded comparison is deliberately plain: this approved low-depth
+// form reveals the evidence in one action and does not add nested disclosures.
 const ReadOnlyComparison = ({
   model,
 }: {
@@ -424,13 +284,13 @@ const ReadOnlyComparison = ({
         </tr>
       </thead>
       <tbody>
-        {criteria.map(({ row, title }) => (
-          <tr className="comparison-matrix-row" key={row}>
+        {criteria.map(({ row, criterion }) => (
+          <tr className="comparison-matrix-row" key={criterion.id}>
             <th
               className="decision-criterion px-4 py-2.5 text-left text-base leading-6 font-medium text-muted"
               scope="row"
             >
-              {title}
+              {criterion.title}
             </th>
             {model.options.map((option) => (
               <td className="decision-cell px-4 py-2.5" key={option.id}>
@@ -446,9 +306,8 @@ const ReadOnlyComparison = ({
   );
 };
 
-// C: the question, the choices, and the one sentence that decides it. The
-// comparison exists but starts closed, because a reader who agrees with the
-// recommendation should not have to read a grid to say so.
+// The question, the choices, and the one sentence that frames the decision.
+// The comparison starts closed because agreement should not require a grid.
 export const BriefLayout = ({
   model,
   answerable,

@@ -117,6 +117,11 @@ export const VIEWER_SCRIPT = `<script>
     const body = info.querySelector("[data-info-popover-body]");
     if (summary === null || body === null) continue;
     info.setAttribute("data-info-popover-floating", "");
+    // Hover/focus openings are transient; a click or tap pins the same
+    // disclosure until an outside activation or Escape.
+    // Tracking that distinction prevents a pointerenter immediately before a
+    // click from opening and then closing the popover in one gesture.
+    let pinned = false;
     const open = () => {
       info.open = true;
       const anchor = summary.getBoundingClientRect();
@@ -145,27 +150,44 @@ export const VIEWER_SCRIPT = `<script>
       if (event.pointerType !== "touch") open();
     });
     info.addEventListener("pointerleave", () => {
-      if (!info.matches(":focus-within")) close();
+      if (!pinned && !info.matches(":focus-within")) close();
     });
     summary.addEventListener("focus", () => {
       if (summary.matches(":focus-visible")) open();
     });
     info.addEventListener("focusout", (event) => {
       if (
-        !(event.relatedTarget instanceof Node) ||
-        !info.contains(event.relatedTarget)
+        !pinned &&
+        (!(event.relatedTarget instanceof Node) ||
+          !info.contains(event.relatedTarget))
       )
         close();
     });
     summary.addEventListener("click", (event) => {
       event.preventDefault();
-      if (info.open) close();
-      else open();
+      pinned = true;
+      // Chrome's trusted Summary activation may apply its native toggle
+      // after this listener when hover already opened the Details. Reassert
+      // the intended pinned state after that default-action phase.
+      setTimeout(() => {
+        open();
+      }, 0);
     });
     summary.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || !info.open) return;
+      pinned = false;
       event.bigPlanEscapeHandled = true;
       close();
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (
+        pinned &&
+        event.target instanceof Node &&
+        !info.contains(event.target)
+      ) {
+        pinned = false;
+        close();
+      }
     });
     document.addEventListener(
       "scroll",

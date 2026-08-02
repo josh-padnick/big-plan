@@ -20,6 +20,10 @@ export const DECISION_COMPONENT_DEFINITION = defineComponent({
   compile: compileDecisionComponent,
   view: Decision,
   scopedChildren: {
+    Criterion: {
+      kind: "scoped-child",
+      markdownBody: bodyPolicy("Criterion"),
+    },
     Option: {
       kind: "scoped-child",
       markdownBody: bodyPolicy("Option"),

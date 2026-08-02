@@ -19,14 +19,7 @@ import type {
 } from "./compile.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { type MatrixToneParity } from "../_shared/comparison-matrix/comparison-matrix.js";
-import {
-  BriefLayout,
-  KeyedMatrixLayout,
-  MatrixLayout,
-  RowsLayout,
-  TransposedMatrixLayout,
-  WideMatrixLayout,
-} from "./view-layouts.js";
+import { BriefLayout, MatrixLayout, RowsLayout } from "./view-layouts.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { BadgePill } from "../_shared/badge-pill/badge-pill.js";
@@ -200,20 +193,11 @@ const Comparison = ({
   if (model.layout === "brief") {
     return <BriefLayout model={model} answerable={answerable} />;
   }
-  if (model.layout === "matrix-wide") {
-    return <WideMatrixLayout model={model} answerable={answerable} />;
-  }
-  if (model.layout === "matrix-transposed") {
-    return <TransposedMatrixLayout model={model} answerable={answerable} />;
-  }
-  if (model.layout === "matrix-keyed") {
-    return <KeyedMatrixLayout model={model} answerable={answerable} />;
-  }
   return <MatrixLayout model={model} answerable={answerable} />;
 };
 
 const isMatrixLayout = (model: CompiledDecision): boolean =>
-  model.layout.startsWith("matrix");
+  model.layout === "matrix";
 
 export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
   const answerable = isAnswerable(model.status);

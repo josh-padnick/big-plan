@@ -1,24 +1,24 @@
-# Round 5: give every option name room
+# Final Decision component direction
 
-Three matrix directions, plus the shared row, proposal, and disclosure refinements requested in review.
+The approved row and brief treatments now sit beside the selected keyed matrix, with definitions attached directly to every matrix criterion and value.
 
 <QuickSummary>
 
 <Why>
 
-- A matrix stops helping when its option names turn into narrow towers of words.
+- A decision should expose just enough evidence to choose without making the reader decode cramped headers or unexplained shorthand.
 
 </Why>
 
 <What>
 
-- The same question in three genuinely different matrix arrangements.
+- One Decision component with three reading depths: rows, keyed matrix, and brief.
 
 </What>
 
 <How>
 
-- Change which axis owns the long names, not merely their font size.
+- Author each criterion meaning and each value reason once, then reveal them from dashed-underlined terms on hover, focus, or tap.
 
 </How>
 
@@ -26,311 +26,306 @@ Three matrix directions, plus the shared row, proposal, and disclosure refinemen
 
 <TableOfContents>
 
-<Entry section="What you are comparing" gist="One decision, three matrix answers, and the shared review fixes" />
+<Entry section="The component model" gist="Decision and ComplexDecision stay separate and share a primitive" />
 
-<Entry section="The component model" gist="Every variation exercises Decision; ComplexDecision remains separate" />
+<Entry section="Rows - approved" gist="Strong option titles over smaller comparison copy" />
 
-<Entry section="Shared refinements" gist="Row hierarchy, proposal cancellation, and a centered disclosure" />
+<Entry section="Matrix - keyed chooser rail" gist="Full names above a compact grid with definitions in place" />
 
-<Entry section="Matrix 1 - wide breakout" gist="Keep the familiar matrix and relax the reading measure" />
+<Entry section="Brief - approved" gist="One framing sentence and an optional comparison" />
 
-<Entry section="Matrix 2 - options as rows" gist="Transpose the grid so names own the roomy axis" />
-
-<Entry section="Matrix 3 - keyed chooser rail" gist="Full names above a compact letter-keyed grid" />
-
-<Entry section="The brief disclosure" gist="Compare all three is centered in its own row" />
-
-<Entry section="How to choose" gist="What each matrix direction trades" />
+<Entry section="Authoring contract" gist="One-sentence criterion meanings and value reasons" />
 
 </TableOfContents>
 
-<Part title="Context" />
-
-## What you are comparing
-
-_Read each one cold and notice how much work it takes to answer._
-
-Every matrix below renders the same decision with the same words.
-Only the arrangement differs, so any difference in header legibility is the arrangement's doing.
-
-Round 5 also applies three shared refinements to the real `Decision` component:
-
-- Every row-layout option name has a rule beneath it, with smaller criteria copy below.
-- Proposing another approach reveals an explicit **Cancel** action that restores the prior selection.
-- The brief's **Compare all three** label is vertically centered in its collapsed row.
+<Part title="Component model" />
 
 ## The component model
 
-_Five instances of one component, not five components._
+_One Decision component, three layouts; ComplexDecision remains a different component._
 
-Every surface in this review exercises the built-in `Decision` component through temporary comparison layouts:
+All three surfaces below exercise the built-in `Decision` component:
 
-- Shared row hierarchy is `<Decision layout="rows">`.
-- Matrix 1 is `<Decision layout="matrix-wide">`.
-- Matrix 2 is `<Decision layout="matrix-transposed">`.
-- Matrix 3 is `<Decision layout="matrix-keyed">`.
-- The disclosure check is `<Decision layout="brief">`.
+- `layout="rows"` is the approved per-option scan.
+- `layout="matrix"` is the selected Matrix 3 keyed chooser rail.
+- `layout="brief"` is the approved disclosure-first version.
 
-They are not `SmallDecision`, `ComplexDecision`, or separate component types.
+Matrix 1 and Matrix 2 were exploration-only layouts and are removed. They are not separate components and are no longer authorable.
 
-The already-approved component boundary remains: `Decision` asks the reviewer a question and ends in a confirmed answer; `ComplexDecision` records a weighted analysis for the reviewer to audit. They stay two components because they own different jobs.
+The approved round-2 boundary remains intact: `Decision` asks the reviewer a question and ends in a confirmed answer, while `ComplexDecision` records a weighted analysis for audit. They stay separate components because they own different jobs, and both build matrix-shaped presentations on the internal `ComparisonMatrix` primitive.
 
-Their matrix-shaped presentations share the internal `ComparisonMatrix` primitive so the two components do not drift into different visual dialects. All three matrix directions below and the brief's on-demand comparison use that primitive; the row layout is the non-matrix presentation of `Decision`.
+<Part title="Approved rows" />
 
-<Part title="Shared refinements" />
+## Rows - approved
 
-## Shared refinements
-
-_The option title is the anchor; criteria are supporting evidence below a consistent rule._
+_The option title is the anchor; smaller criteria and values follow beneath a rule._
 
 <Decision question="What should a maximized figure cover?" layout="rows">
 
+<Criterion title="Comment while maximized">
+
+Whether the reviewer can keep using the Feedback tray while the figure is enlarged.
+
+</Criterion>
+<Criterion title="Context preserved">
+
+How much of the surrounding review document remains visible.
+
+</Criterion>
+<Criterion title="Build effort">
+
+The relative implementation and maintenance cost.
+
+</Criterion>
+
 <Option title="Keep feedback tray visible" recommended summary="The figure fills the reading area; the Feedback tray stays where it is.">
+<Consideration criterion="Comment while maximized" verdict="Yes" tone="good">
 
-<Consideration title="Comment while maximized" verdict="Yes" tone="good">
-
-The tray stays visible and interactive, so the batch is built in one place.
-
-</Consideration>
-
-<Consideration title="Context preserved" verdict="Strong" tone="good">
-
-Maximize widens the reading area, not the whole application.
+The tray remains visible and interactive beside the enlarged figure.
 
 </Consideration>
+<Consideration criterion="Context preserved" verdict="Strong" tone="good">
 
-<Consideration title="Build effort" verdict="Medium" tone="mixed">
-
-The tray and the overlay must agree on layering, and the focus trap must include the tray.
+Only the reading area expands, so the application context remains intact.
 
 </Consideration>
+<Consideration criterion="Build effort" verdict="Medium" tone="mixed">
 
+The overlay and tray must coordinate layering and keyboard focus.
+
+</Consideration>
 </Option>
 
 <Option title="Cover the entire app" summary="The figure takes the whole window, tray included.">
+<Consideration criterion="Comment while maximized" verdict="No" tone="bad">
 
-<Consideration title="Comment while maximized" verdict="No" tone="bad">
-
-A second tray inside the overlay would be the only way back to commenting.
-
-</Consideration>
-
-<Consideration title="Context preserved" verdict="Moderate" tone="mixed" />
-
-<Consideration title="Build effort" verdict="Low" tone="good">
-
-One focus trap, one layer, nothing to negotiate with the tray.
+The full-window overlay hides the existing Feedback tray.
 
 </Consideration>
+<Consideration criterion="Context preserved" verdict="Moderate" tone="mixed">
 
+The document is obscured while the application shell remains conceptually present.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="Low" tone="good">
+
+One overlay owns the whole window and its focus trap.
+
+</Consideration>
 </Option>
 
 <Option title="Open a dedicated figure view" summary="The reader leaves the document for a surface built around the figure.">
+<Consideration criterion="Comment while maximized" verdict="Possible" tone="mixed">
 
-<Consideration title="Comment while maximized" verdict="Possible" tone="mixed" />
-
-<Consideration title="Context preserved" verdict="Weak" tone="bad">
-
-The reviewer leaves the document and has to find their place again.
+A separate view could add its own commenting controls.
 
 </Consideration>
+<Consideration criterion="Context preserved" verdict="Weak" tone="bad">
 
-<Consideration title="Build effort" verdict="High" tone="bad">
-
-A second surface to build, route, and maintain.
+The reader leaves the plan to inspect the figure.
 
 </Consideration>
+<Consideration criterion="Build effort" verdict="High" tone="bad">
 
+A new route needs navigation, state transfer, and its own review controls.
+
+</Consideration>
 </Option>
 
 </Decision>
 
-Open **Propose another approach** after choosing an option, enter a draft, then use **Cancel**. The field closes and the earlier option returns.
+<Part title="Selected matrix" />
 
-<Part title="Three matrix directions" />
+## Matrix - keyed chooser rail
 
-## Matrix 1 - wide breakout
+_Full option names stay readable; compact keys give the comparison room._
 
-_Keep the familiar options-across matrix, but let the component borrow room beyond the prose measure._
+<Decision question="What should a maximized figure cover?" layout="matrix">
 
-<Decision question="What should a maximized figure cover?" layout="matrix-wide">
+<Criterion title="Comment while maximized">
+
+Whether the reviewer can keep using the Feedback tray while the figure is enlarged.
+
+</Criterion>
+<Criterion title="Context preserved">
+
+How much of the surrounding review document remains visible.
+
+</Criterion>
+<Criterion title="Build effort">
+
+The relative implementation and maintenance cost.
+
+</Criterion>
 
 <Option title="Keep feedback tray visible" recommended summary="The figure fills the reading area; the Feedback tray stays where it is.">
+<Consideration criterion="Comment while maximized" verdict="Yes" tone="good">
 
-<Consideration title="Comment while maximized" verdict="Yes" tone="good">
-
-The tray stays visible and interactive, so the batch is built in one place.
-
-</Consideration>
-
-<Consideration title="Context preserved" verdict="Strong" tone="good">
-
-Maximize widens the reading area, not the whole application.
+The tray remains visible and interactive beside the enlarged figure.
 
 </Consideration>
+<Consideration criterion="Context preserved" verdict="Strong" tone="good">
 
-<Consideration title="Build effort" verdict="Medium" tone="mixed">
-
-The tray and the overlay must agree on layering, and the focus trap must include the tray.
+Only the reading area expands, so the application context remains intact.
 
 </Consideration>
+<Consideration criterion="Build effort" verdict="Medium" tone="mixed">
 
+The overlay and tray must coordinate layering and keyboard focus.
+
+</Consideration>
 </Option>
 
 <Option title="Cover the entire app" summary="The figure takes the whole window, tray included.">
+<Consideration criterion="Comment while maximized" verdict="No" tone="bad">
 
-<Consideration title="Comment while maximized" verdict="No" tone="bad" />
+The full-window overlay hides the existing Feedback tray.
 
-<Consideration title="Context preserved" verdict="Moderate" tone="mixed" />
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Moderate" tone="mixed">
 
-<Consideration title="Build effort" verdict="Low" tone="good" />
+The document is obscured while the application shell remains conceptually present.
 
+</Consideration>
+<Consideration criterion="Build effort" verdict="Low" tone="good">
+
+One overlay owns the whole window and its focus trap.
+
+</Consideration>
 </Option>
 
 <Option title="Open a dedicated figure view" summary="The reader leaves the document for a surface built around the figure.">
+<Consideration criterion="Comment while maximized" verdict="Possible" tone="mixed">
 
-<Consideration title="Comment while maximized" verdict="Possible" tone="mixed" />
+A separate view could add its own commenting controls.
 
-<Consideration title="Context preserved" verdict="Weak" tone="bad" />
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Weak" tone="bad">
 
-<Consideration title="Build effort" verdict="High" tone="bad" />
+The reader leaves the plan to inspect the figure.
 
+</Consideration>
+<Consideration criterion="Build effort" verdict="High" tone="bad">
+
+A new route needs navigation, state transfer, and its own review controls.
+
+</Consideration>
 </Option>
 
 </Decision>
 
-This preserves the familiar scan direction and full option titles. Its cost is claiming more horizontal space from the document shell.
+The dashed underline is the definition affordance, not decoration:
 
-## Matrix 2 - options as rows
+- Hover, keyboard focus, or tap a criterion to read what the criterion means.
+- Hover, keyboard focus, or tap a value to read why that value holds.
+- Each reveal is one sentence maximum, so the popover answers one question without becoming a second document.
 
-_Transpose the matrix so the long option names own the roomy row-header axis._
+<Part title="Approved brief" />
 
-<Decision question="What should a maximized figure cover?" layout="matrix-transposed">
+## Brief - approved
 
-<Option title="Keep feedback tray visible" recommended summary="The figure fills the reading area; the Feedback tray stays where it is.">
-
-<Consideration title="Comment while maximized" verdict="Yes" tone="good" />
-
-<Consideration title="Context preserved" verdict="Strong" tone="good" />
-
-<Consideration title="Build effort" verdict="Medium" tone="mixed" />
-
-</Option>
-
-<Option title="Cover the entire app" summary="The figure takes the whole window, tray included.">
-
-<Consideration title="Comment while maximized" verdict="No" tone="bad" />
-
-<Consideration title="Context preserved" verdict="Moderate" tone="mixed" />
-
-<Consideration title="Build effort" verdict="Low" tone="good" />
-
-</Option>
-
-<Option title="Open a dedicated figure view" summary="The reader leaves the document for a surface built around the figure.">
-
-<Consideration title="Comment while maximized" verdict="Possible" tone="mixed" />
-
-<Consideration title="Context preserved" verdict="Weak" tone="bad" />
-
-<Consideration title="Build effort" verdict="High" tone="bad" />
-
-</Option>
-
-</Decision>
-
-This is the most direct cure: option names read normally and each option still aligns across every criterion. Its cost is making criteria the horizontal scan.
-
-## Matrix 3 - keyed chooser rail
-
-_Keep full names in a dedicated chooser rail, then compare compact A/B/C columns below._
-
-<Decision question="What should a maximized figure cover?" layout="matrix-keyed">
-
-<Option title="Keep feedback tray visible" recommended summary="The figure fills the reading area; the Feedback tray stays where it is.">
-
-<Consideration title="Comment while maximized" verdict="Yes" tone="good" />
-
-<Consideration title="Context preserved" verdict="Strong" tone="good" />
-
-<Consideration title="Build effort" verdict="Medium" tone="mixed" />
-
-</Option>
-
-<Option title="Cover the entire app" summary="The figure takes the whole window, tray included.">
-
-<Consideration title="Comment while maximized" verdict="No" tone="bad" />
-
-<Consideration title="Context preserved" verdict="Moderate" tone="mixed" />
-
-<Consideration title="Build effort" verdict="Low" tone="good" />
-
-</Option>
-
-<Option title="Open a dedicated figure view" summary="The reader leaves the document for a surface built around the figure.">
-
-<Consideration title="Comment while maximized" verdict="Possible" tone="mixed" />
-
-<Consideration title="Context preserved" verdict="Weak" tone="bad" />
-
-<Consideration title="Build effort" verdict="High" tone="bad" />
-
-</Option>
-
-</Decision>
-
-No title wraps in the grid because titles do not live there. Its cost is one small cross-reference from the full-name rail to the lettered columns.
-
-<Part title="Disclosure check" />
-
-## The brief disclosure
-
-_The question, the choices, and the one sentence that decides it. The comparison opens on request._
+_The recommendation frames the call; comparison remains available without reading as a fourth option._
 
 <Decision question="What should a maximized figure cover?" layout="brief">
 
-<Option title="Keep feedback tray visible" recommended summary="Only this option keeps the Feedback tray usable while a figure is maximized.">
+<Criterion title="Comment while maximized">
 
-<Consideration title="Comment while maximized" verdict="Yes" tone="good" />
+Whether the reviewer can keep using the Feedback tray while the figure is enlarged.
 
-<Consideration title="Context preserved" verdict="Strong" tone="good" />
+</Criterion>
+<Criterion title="Context preserved">
 
-<Consideration title="Build effort" verdict="Medium" tone="mixed" />
+How much of the surrounding review document remains visible.
 
+</Criterion>
+<Criterion title="Build effort">
+
+The relative implementation and maintenance cost.
+
+</Criterion>
+
+<Option title="Keep feedback tray visible" recommended summary="Keep the Feedback tray in place while the figure expands across only the reading area.">
+<Consideration criterion="Comment while maximized" verdict="Yes" tone="good">
+
+The tray remains visible and interactive beside the enlarged figure.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Strong" tone="good">
+
+Only the reading area expands, so the application context remains intact.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="Medium" tone="mixed">
+
+The overlay and tray must coordinate layering and keyboard focus.
+
+</Consideration>
 </Option>
 
 <Option title="Cover the entire app" summary="The figure takes the whole window, tray included.">
+<Consideration criterion="Comment while maximized" verdict="No" tone="bad">
 
-<Consideration title="Comment while maximized" verdict="No" tone="bad" />
+The full-window overlay hides the existing Feedback tray.
 
-<Consideration title="Context preserved" verdict="Moderate" tone="mixed" />
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Moderate" tone="mixed">
 
-<Consideration title="Build effort" verdict="Low" tone="good" />
+The document is obscured while the application shell remains conceptually present.
 
+</Consideration>
+<Consideration criterion="Build effort" verdict="Low" tone="good">
+
+One overlay owns the whole window and its focus trap.
+
+</Consideration>
 </Option>
 
 <Option title="Open a dedicated figure view" summary="The reader leaves the document for a surface built around the figure.">
+<Consideration criterion="Comment while maximized" verdict="Possible" tone="mixed">
 
-<Consideration title="Comment while maximized" verdict="Possible" tone="mixed" />
+A separate view could add its own commenting controls.
 
-<Consideration title="Context preserved" verdict="Weak" tone="bad" />
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Weak" tone="bad">
 
-<Consideration title="Build effort" verdict="High" tone="bad" />
+The reader leaves the plan to inspect the figure.
 
+</Consideration>
+<Consideration criterion="Build effort" verdict="High" tone="bad">
+
+A new route needs navigation, state transfer, and its own review controls.
+
+</Consideration>
 </Option>
 
 </Decision>
 
-A reader who agrees with the recommendation answers after one sentence.
-A reader who does not opens the vertically centered **Compare all three** row.
+<Part title="Contract" />
 
-<Part title="Shipping and your review" />
+## Authoring contract
 
-## How to choose
+_Meanings and reasons belong in the model, so every delivery surface can use them._
 
-_Pick the matrix whose trade is cheapest for real plan content._
+`Decision` now declares criteria explicitly, matching the structural clarity already proven by `ComplexDecision`:
 
-1. **Wide breakout** preserves the familiar matrix but spends document width.
-2. **Options as rows** gives names the most natural reading position but turns criteria sideways.
-3. **Keyed chooser rail** keeps the grid compact but asks the reader to carry A/B/C.
-4. Every direction keeps native radio behavior, stable rationale height, proposal cancellation, and the shared matrix primitive.
+```mdx
+<Criterion title="Build effort">
+
+
+The relative implementation and maintenance cost.
+
+
+</Criterion>
+
+<Consideration criterion="Build effort" verdict="Medium" tone="mixed">
+
+
+The overlay and tray must coordinate layering and keyboard focus.
+
+
+</Consideration>
+```
+
+The Criterion body is required and explains what the criterion means in one sentence maximum. Each Option supplies one Consideration for every Criterion; its body is required and explains why that verdict holds in one sentence maximum.
+
+This is component behavior, not document-local mock CSS. The default matrix renders the shared popover interaction, while the approved rows and brief layouts retain their lighter visual treatment.

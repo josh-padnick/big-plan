@@ -1,12 +1,11 @@
 ---
 title: Decision
-description: The default decision card - one comparison matrix over a stable rationale panel, so the tradeoff reads in a single look.
+description: A compact choice with rows, a keyed comparison matrix, or a disclosure-first brief.
 ---
 
 **Purpose: ask the reviewer one question and end with their confirmed answer.**
 
-`Decision` presents one tradeoff as a comparison matrix: options are columns, criteria are rows, and a single rationale panel beneath explains whichever option the reader is looking at.
-Comparison comes first and explanation second, and selecting an option swaps the panel without moving anything on the page.
+`Decision` supports three reading depths over one component model. The default keyed matrix keeps full option names in a chooser rail and compares them with compact letter keys; `layout="rows"` repeats short criteria under each option, while `layout="brief"` keeps the comparison collapsed.
 Escalate to [ComplexDecision](/components/complex-decision/) when the call needs weighted scoring or a reversibility record, and drop to [SimpleDecisionSet](/components/simple-decision-set/) for quick calls.
 
 ## Authoring
@@ -16,25 +15,47 @@ Escalate to [ComplexDecision](/components/complex-decision/) when the call needs
 
 Context the reviewer needs before the options.
 
+<Criterion title="Version fidelity">
+
+Whether the delivered skill exactly matches the installed CLI version.
+
+</Criterion>
+
+<Criterion title="Works offline">
+
+Whether installation succeeds without network access.
+
+</Criterion>
+
 <Option title="Embedded in the CLI" recommended summary="A skill command prints the file verbatim.">
 
-<Consideration title="Version fidelity" verdict="Exact" tone="good">
+<Consideration criterion="Version fidelity" verdict="Exact" tone="good">
 
-The skill is compiled into the package, so it can never disagree with the installed CLI.
+The skill is compiled into the package, so it cannot disagree with the installed CLI.
 
 </Consideration>
 
-<Consideration title="Works offline" verdict="Yes" tone="good" />
+<Consideration criterion="Works offline" verdict="Yes" tone="good">
 
-Optional prose detail, shown with the considerations in the rationale panel.
+The installed package already contains the skill.
+
+</Consideration>
 
 </Option>
 
 <Option title="Docs-site download" summary="Setup fetches the skill from the docs site.">
 
-<Consideration title="Version fidelity" verdict="Drifts" tone="bad" />
+<Consideration criterion="Version fidelity" verdict="Drifts" tone="bad">
 
-<Consideration title="Works offline" verdict="No" tone="bad" />
+The site can change independently of an installed CLI.
+
+</Consideration>
+
+<Consideration criterion="Works offline" verdict="No" tone="bad">
+
+Setup must reach the documentation site.
+
+</Consideration>
 
 </Option>
 
@@ -43,32 +64,21 @@ Optional prose detail, shown with the considerations in the rationale panel.
 
 ## The contract
 
-- `question` is required; `status` is `open`, `decided`, or `deferred` (default `open`).
-- At least two `Option` children, at most one marked `recommended`.
-- Every `Option` needs at least one `Consideration` with a required `title` and `verdict`; `tone` is `good`, `bad`, `mixed`, or `neutral` (default `neutral`).
-- Every `Option` must list the same `Consideration` titles in the same order, so the options stay comparable.
-- A `verdict` is at most 24 characters: it is a value to compare, not a sentence to read. Keep one scale per row.
+- `question` is required; `status` is `open`, `decided`, or `deferred` (default `open`), and `layout` is `matrix`, `rows`, or `brief` (default `matrix`).
+- Define at least one `Criterion`; its body is the one-sentence-maximum explanation of what the criterion means.
+- Add at least two `Option` children, with at most one marked `recommended`.
+- Every `Option` has one `Consideration` for every Criterion, linked by the required `criterion` attribute.
+- A Consideration's body explains in one sentence at most why its required `verdict` holds; `tone` is `good`, `bad`, `mixed`, or `neutral`.
+- A `verdict` is at most 24 characters: it is a value to compare, not a sentence to read.
 - `status="decided"` requires exactly one `Option` marked `chosen`, and a `chosen` Option requires `status="decided"`.
-- Consideration and option bodies are markdown without headings, footnotes, or typed components.
 
 Each violation fails `validate` and `render` with a positional diagnostic.
 Run `big-plan guidance Decision` for judgment-level usage guidance.
 
 ## What the reader gets
 
-The matrix answers "how do these differ" in one look, before the reader has read a sentence of reasoning.
-Each verdict carries a word, a glyph, and a colour, so no reader depends on hue alone.
-Below it, one rationale panel explains the option currently in view - the recommended one until the reader chooses otherwise.
-Every panel occupies the same grid cell, so the region is as tall as the longest rationale and **choosing never moves the page**.
+The default matrix separates choosing from comparing. Full option titles stay readable in the keyed chooser rail, and the table below uses A, B, and C so criterion columns have room.
+Each criterion and value carries a dashed underline: hover, keyboard focus, or tap reveals its one-sentence meaning or reason.
 
-An open decision renders as a native radio group, so picking an option, moving between columns with the arrow keys, and the selected column header all work with scripts disabled; without scripts every rationale panel simply stays stacked and readable.
-The whole column header is the click target, and selecting highlights the entire column.
-Recommendation, selection, and outcome stay three separate states: a recommendation is a neutral chip, a picked column takes the accent, and a settled one takes the decided colour.
-An open decision never announces that it is open - being asked is what makes it open.
-
-Every open decision also offers a quiet **Propose another approach** link that reveals a text box only when asked, so a reviewer is never limited to the options the agent thought of.
-The confirm row sits directly beneath the rationale panel and names the current choice beside the action.
-Confirming drops the columns the reader turned down and records the answer in the rendered document.
-Delivering that answer back to the agent arrives with review commenting; until then, tell the agent your answer in conversation.
-
-Below the reading breakpoint the matrix scrolls sideways, and a hint says so to the readers who need it.
+Rows preserve a faster per-option scan, while brief presents the recommended framing first and keeps **Compare all three** collapsed.
+All layouts use a native radio group, and an open Decision also offers **Propose another approach** with an explicit Cancel action.

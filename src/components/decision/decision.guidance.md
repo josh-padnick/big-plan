@@ -2,19 +2,18 @@
 
 **Purpose: ask the reviewer one question and end with their confirmed answer.**
 
-The default decision card: one question, options as columns, criteria as rows, and one rationale panel beneath that explains whichever option the reader is looking at. Comparison comes first, explanation second.
+Decision has three reading depths over one authored model. The default `matrix` separates a full-title chooser rail from a compact letter-keyed comparison; `rows` repeats the comparison under each option; `brief` leads with the recommendation and keeps comparison collapsed.
 
-- Reach for it for most tradeoffs; escalate to ComplexDecision only when the call needs weighted scoring or a reversibility record, and drop to SimpleDecisionSet for quick calls.
-- Give every option the same `Consideration` titles in the same order. That is what makes a matrix possible at all, and Big Plan rejects a Decision whose options compare different things.
-- Name each criterion as **the thing being compared**, not as a verdict: `Build effort`, not `Complexity`; `Context preserved`, not `Loses context`. Read the row labels together - they should sound like one consistent set of questions.
-- Write each `verdict` as a normalized value on one scale per row: `Yes / No / Possible`, `Strong / Moderate / Weak`, `Low / Medium / High`. A row whose values are not on one scale cannot be compared at a glance.
-- Frame the question around the behavior you want, not the mechanism that delivers it. Ask "What should a maximized figure cover?", not a question that tests knowledge of overlay internals.
-- Name options by their outcome for the reader - "Keep feedback tray visible" - rather than by their implementation.
-- Put the reasoning in the `Consideration` body. It lands in the rationale panel under the matrix, so it costs the scanning reader nothing and is there for the reader who wants it.
-- Keep the option count to what a matrix can carry. Three or four columns compare well; beyond that the reader is scanning a spreadsheet.
-- Mark your recommendation. It renders as a neutral chip that never looks like a selection, and it is what the rationale panel explains before the reader chooses.
-- Never announce that an open decision is open - being asked is what makes it open. Set `status="decided"` with a `chosen` Option once the call is made, or `status="deferred"` when it is parked.
-- Every open decision offers a "Propose another approach" link for free; do not author an escape-hatch option yourself.
-- A reviewer's confirmed answer is held in the rendered document and announced on it. Delivering answers back to the agent arrives with review commenting, so ask for the answer in conversation until then.
+- Reach for Decision for most tradeoffs; use ComplexDecision when the call needs weighted scoring or a reversibility record, and SimpleDecisionSet for quick calls.
+- Define each `Criterion` once. Name the thing being compared (`Build effort`, not `Complex`) and use its body for a one-sentence-maximum explanation of what it means.
+- Give every Option one `Consideration` per Criterion, linked by the criterion title.
+- Write each `verdict` as a short normalized value on one scale per criterion: `Yes / No / Possible`, `Strong / Moderate / Weak`, or `Low / Medium / High`.
+- Use the Consideration body for a one-sentence-maximum explanation of why that value holds.
+- The default matrix reveals criterion meanings and value reasons from their dashed underlines on hover, focus, or tap; do not repeat those explanations in option prose.
+- Frame the question around desired behavior and name options by their outcome for the reader rather than their implementation.
+- Keep the option count small. Three or four compare well; beyond that the reader is scanning a spreadsheet.
+- Mark your recommendation. It renders as a neutral chip that never looks like a selection.
+- Never announce that an open decision is open. Set `status="decided"` with a `chosen` Option once the call is made, or `status="deferred"` when it is parked.
+- Every open decision provides **Propose another approach** and Cancel; do not author an escape-hatch option yourself.
 
-Choosing between them: `Decision` asks, `ComplexDecision` records, `SimpleDecisionSet` gathers. Decision and ComplexDecision present the same shape - options across, criteria down - on purpose, so a reader who learns one can read the other.
+Choosing between them: `Decision` asks, `ComplexDecision` records, and `SimpleDecisionSet` gathers. Decision and ComplexDecision remain separate components with different jobs while sharing the internal `ComparisonMatrix` presentation primitive.

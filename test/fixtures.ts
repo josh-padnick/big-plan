@@ -92,22 +92,50 @@ const NESTED_DECISION_MATRIX_MDX = `# Nested decision matrices
 
 <Decision question="Which inner channel?">
 
+<Criterion title="Cost">
+
+The relative implementation cost.
+
+</Criterion>
+
 <Option title="Inner A" recommended summary="First inner option.">
-<Consideration title="Cost" verdict="Low" tone="good" />
+<Consideration criterion="Cost" verdict="Low" tone="good">
+
+It reuses the existing inner path.
+
+</Consideration>
 </Option>
 
 <Option title="Inner B" summary="Second inner option.">
-<Consideration title="Cost" verdict="High" tone="bad" />
+<Consideration criterion="Cost" verdict="High" tone="bad">
+
+It requires a separate inner path.
+
+</Consideration>
 </Option>
 
 </Decision>
 
+<Criterion title="Cost">
+
+The relative implementation cost.
+
+</Criterion>
+
 <Option title="Outer A" recommended summary="First outer option.">
-<Consideration title="Cost" verdict="Low" tone="good" />
+<Consideration criterion="Cost" verdict="Low" tone="good">
+
+It reuses the existing outer path.
+
+</Consideration>
 </Option>
 
 <Option title="Outer B" summary="Second outer option.">
-<Consideration title="Cost" verdict="High" tone="bad" />
+<Consideration criterion="Cost" verdict="High" tone="bad">
+
+It requires a separate outer path.
+
+</Consideration>
 </Option>
 
 </Decision>

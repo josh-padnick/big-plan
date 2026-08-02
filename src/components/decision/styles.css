@@ -146,7 +146,7 @@
     visibility: visible;
   }
 
-  /* --- The three shapes under evaluation --------------------------------- */
+  /* --- The three approved reading depths -------------------------------- */
 
   /* Shared: a verdict is one signal now, the word. Tone colour and the glyph
      said the same thing twice more. */
@@ -179,7 +179,7 @@
     background: color-mix(in srgb, var(--color-accent) 10%, var(--bg));
     box-shadow: inset 3px 0 0 var(--color-accent);
   }
-  /* B - the matrix, with the chooser band held apart from the comparison. */
+  /* B - the keyed matrix, with its chooser held apart from comparison. */
   article .decision-zone-compare {
     background: var(--bg);
   }
@@ -188,41 +188,7 @@
     border-bottom: 1px solid var(--edge-c);
   }
 
-  /* Matrix direction 2: option names become row headers. The selected row
-     paints as a unit, preserving the same interaction language as columns. */
-  article .decision-transposed-corner {
-    width: 40%;
-  }
-  article .decision-transposed-criterion {
-    width: 20%;
-  }
-  article .decision-transposed-option,
-  article .decision-transposed-cell {
-    background: transparent;
-  }
-  article
-    .decision-matrix-transposed
-    tr:has(.decision-radio:enabled):hover
-    > * {
-    background: var(--surface-c);
-  }
-  article .decision-transposed-option[data-column-selected],
-  article .decision-transposed-cell[data-column-selected] {
-    background: color-mix(in srgb, var(--color-accent) 10%, var(--bg));
-  }
-  article .decision-transposed-option[data-column-selected] {
-    box-shadow: inset 3px 0 0 var(--color-accent);
-  }
-  article
-    .decision-transposed-option[data-column-selected]:is(
-      [data-option-chosen],
-      [data-column-settled]
-    ),
-  article .decision-transposed-cell[data-column-selected][data-column-settled] {
-    background: var(--decision-pro-bg);
-  }
-
-  /* Matrix direction 3: the full-title rail and keyed table are intentionally
+  /* The full-title rail and keyed table are intentionally
      separate surfaces. Letters carry identity into the grid without asking
      authors to coin brittle abbreviations. */
   article .decision-keyed-chooser {
@@ -235,6 +201,7 @@
   article .decision-keyed-option:has(.decision-radio:enabled):hover {
     background: color-mix(in srgb, var(--color-accent) 5%, var(--surface-c));
   }
+  article .decision-keyed-option:has(.decision-radio:checked),
   article .decision-keyed-option[data-column-selected] {
     background: color-mix(in srgb, var(--color-accent) 10%, var(--bg));
     box-shadow: inset 3px 0 0 var(--color-accent);
@@ -253,6 +220,49 @@
   article .decision-matrix-keyed .decision-criterion {
     width: 46%;
     white-space: normal;
+  }
+
+  /* The authored term is the affordance: dashed underlines work equally for
+     criterion meanings and value reasons without adding a second icon
+     language. The shell's shared info-popover behavior supplies hover, focus,
+     tap, Escape, and edge-aware positioning. */
+  article .decision-definition {
+    display: inline;
+  }
+  article .decision-definition-trigger {
+    display: inline;
+    list-style: none;
+    cursor: help;
+    text-decoration-line: underline;
+    text-decoration-style: dashed;
+    text-decoration-color: color-mix(in srgb, currentColor 52%, transparent);
+    text-underline-offset: 0.2em;
+  }
+  article .decision-definition-trigger::-webkit-details-marker {
+    display: none;
+  }
+  article .decision-definition-trigger:hover,
+  article .decision-definition[open] > .decision-definition-trigger {
+    color: var(--color-accent);
+    text-decoration-color: currentColor;
+  }
+  article .decision-definition-trigger:focus-visible {
+    outline: none;
+    border-radius: 0.125rem;
+    color: var(--color-accent);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 20%, transparent);
+  }
+  article .decision-definition-body {
+    color: var(--ink-c);
+    font-weight: 400;
+    text-align: left;
+  }
+  article .decision-definition-body > :first-child {
+    margin-top: 0;
+  }
+  article .decision-definition-body > :last-child {
+    margin-bottom: 0;
   }
 
   /* C - the brief. The comparison is available, not imposed - and separated
@@ -440,20 +450,6 @@
   article .decision-answer-mark {
     background: var(--decision-pro-c);
     color: var(--bg);
-  }
-}
-
-/* The breakout only turns on when the shell has enough room to preserve the
-   desktop contents rail and a real gutter. Between the navigation breakpoint
-   and 72rem, centering an 832px card would overlap the rail and create page
-   overflow, so the familiar matrix stays at the reading measure there. */
-@media (width >= 72rem) {
-  article .decision[data-decision-layout="matrix-wide"] {
-    position: relative;
-    left: 50%;
-    width: min(52rem, calc(100vw - 4rem));
-    max-width: none;
-    transform: translateX(-50%);
   }
 }
 
