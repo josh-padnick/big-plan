@@ -28,9 +28,7 @@ test("should scope persisted viewer state to the stamped plan identity", async (
   await firstTable.getByRole("menuitemcheckbox", { name: "Comment" }).click();
   await expect(firstTable.locator(".table-schema-head-comment")).toBeHidden();
   await firstDataTable.getByRole("button", { name: "Choose columns" }).click();
-  await firstDataTable
-    .getByRole("menuitemcheckbox", { name: "Note" })
-    .click();
+  await firstDataTable.getByRole("menuitemcheckbox", { name: "Note" }).click();
   await expect(
     firstDataTable.locator('th[data-table-column="2"]'),
   ).toBeHidden();
@@ -182,9 +180,7 @@ for (const identity of ["absent", "empty"] as const) {
     await table.getByRole("menuitemcheckbox", { name: "Comment" }).click();
     await expect(table.locator(".table-schema-head-comment")).toBeHidden();
     await dataTable.getByRole("button", { name: "Choose columns" }).click();
-    await dataTable
-      .getByRole("menuitemcheckbox", { name: "Note" })
-      .click();
+    await dataTable.getByRole("menuitemcheckbox", { name: "Note" }).click();
     await expect(dataTable.locator('th[data-table-column="2"]')).toBeHidden();
     await page.getByRole("button", { name: "Add review comment" }).click();
     await page
@@ -203,9 +199,7 @@ for (const identity of ["absent", "empty"] as const) {
     await page.reload();
     await expect(slide).not.toHaveAttribute("data-collapsed");
     await expect(table.locator(".table-schema-head-comment")).toBeVisible();
-    await expect(
-      dataTable.locator('th[data-table-column="2"]'),
-    ).toBeVisible();
+    await expect(dataTable.locator('th[data-table-column="2"]')).toBeVisible();
     await page.getByRole("button", { name: "Add review comment" }).click();
     await expect(
       page.getByRole("textbox", { name: "Comment draft" }),
