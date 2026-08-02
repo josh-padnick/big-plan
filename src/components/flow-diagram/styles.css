@@ -345,11 +345,9 @@ classes.
 
   /* --- The fixed affordance layer ----------------------------------------
      Everything a reviewer aims at lives here, outside the artboard, in
-     viewport pixels. That is what keeps the action bar and every proposal
-     label the same visual size at 25 percent and at 400: they are never
-     inside the thing being scaled. */
+     viewport pixels. That keeps the action bar and composer the same visual
+     size at 25 percent and at 400. */
 
-  .flow-diagram-actions,
   .flow-diagram-compose {
     position: fixed;
     z-index: 75;
@@ -358,7 +356,6 @@ classes.
   /* Every one of these sets its own display, so the user-agent's [hidden]
      rule loses to it and the attribute has to be honored here. */
   .flow-diagram-actionbar[hidden],
-  .flow-diagram-actions[hidden],
   .flow-diagram-compose[hidden],
   .flow-diagram-zoom[hidden],
   .flow-diagram-proposal-group[hidden],
@@ -406,9 +403,6 @@ classes.
     outline: 2px solid var(--accent-c);
     outline-offset: -1px;
   }
-  .flow-diagram-actionbar-button[data-flow-action="delete"] {
-    color: var(--diff-remove-c);
-  }
   .flow-diagram-actionbar-button[data-flow-action="revert"] {
     color: var(--muted-c);
   }
@@ -426,70 +420,8 @@ classes.
     font-size: 0.625rem;
     white-space: nowrap;
   }
-  .flow-diagram-actionbar-sep {
-    width: 1px;
-    align-self: stretch;
-    margin: 0.15rem 0.1rem;
-    background: var(--edge-c);
-  }
-
-  /* A proposal label. It lives in the fixed layer for two reasons: it must
-     stay legible at every zoom, and it must be free to move where it does not
-     collide - which it cannot do while parented to the artwork it describes. */
-  .flow-diagram-plabel {
-    position: fixed;
-    z-index: 74;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.2rem;
-    height: 1.05rem;
-    padding: 0 0.35rem;
-    border-radius: 999px;
-    font-family: var(--font-sans);
-    font-size: 0.625rem;
-    font-weight: 700;
-    line-height: 1;
-    white-space: nowrap;
-    pointer-events: none;
-  }
-  .flow-diagram-plabel[hidden] {
-    display: none;
-  }
-  .flow-diagram-plabel[data-kind="removed"] {
-    background: var(--diff-remove-c);
-    color: var(--bg);
-  }
-  .flow-diagram-plabel[data-kind="edited"] {
-    background: var(--flow-warn-ink);
-    color: var(--bg);
-  }
-  .flow-diagram-plabel[data-kind="comment"] {
-    background: var(--accent-c);
-    color: var(--bg);
-  }
-  /* A leader line from the label back to its subject, drawn only when the
-     placement had to move the label away from the element it names. */
-  .flow-diagram-leader {
-    position: fixed;
-    z-index: 73;
-    height: 1px;
-    transform-origin: 0 50%;
-    background: color-mix(in srgb, var(--ink-c) 35%, transparent);
-    pointer-events: none;
-  }
-  .flow-diagram-leader[hidden] {
-    display: none;
-  }
-
-  .flow-diagram-actions {
-    display: flex;
-    flex-direction: column;
-    min-width: 12rem;
-    padding: 0.25rem;
-  }
   /* Every control the viewer leg creates takes the document's focus ring, so
      a keyboard reviewer never meets a stray user-agent blue. */
-  .flow-diagram-action:focus-visible,
   .flow-diagram-button:focus-visible,
   .flow-diagram-actionbar-button:focus-visible,
   .flow-collector-target:focus-visible,
@@ -501,43 +433,6 @@ classes.
     outline: 2px solid var(--accent-c);
     outline-offset: 2px;
   }
-  .flow-diagram-actions-target {
-    padding: 0.3rem 0.5rem 0.35rem;
-    border-bottom: 1px solid var(--edge-c);
-    margin-bottom: 0.25rem;
-    color: var(--muted-c);
-    font-size: 0.6875rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-  .flow-diagram-action {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    width: 100%;
-    padding: 0.35rem 0.5rem;
-    border: 0;
-    border-radius: 0.3rem;
-    background: transparent;
-    color: var(--ink-c);
-    font-size: 0.8125rem;
-    text-align: left;
-    cursor: pointer;
-  }
-  .flow-diagram-action:hover,
-  .flow-diagram-action:focus-visible {
-    background: var(--surface-c);
-  }
-  .flow-diagram-action[data-flow-action="remove"] {
-    color: var(--diff-remove-c);
-  }
-  .flow-diagram-action svg {
-    width: 0.875rem;
-    height: 0.875rem;
-    flex: none;
-  }
-
   /* The comment surface floats ABOVE the diagram and has to look it. Its
      failure before was reading as one more node: same paper, same border
      weight, same corner radius. Now it is a composer - a lifted card with a

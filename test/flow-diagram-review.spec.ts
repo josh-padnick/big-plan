@@ -88,6 +88,44 @@ test("should preserve work when focus moves outside the diagram", async ({
   await expect(diagram.locator("[data-flow-total]")).toHaveText("1 note");
 });
 
+test("should preserve work across diagram interaction transitions", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const viewport = diagram.locator("[data-flow-viewport]");
+  const firstNode = diagram.locator('[data-flow-node="authored"]');
+  const firstLabel = firstNode.locator('[data-flow-field="label"]');
+  const secondNode = diagram.locator('[data-flow-node="generator"]');
+  const secondLabel = secondNode.locator('[data-flow-field="label"]');
+  const compose = diagram.locator(".flow-diagram-compose");
+
+  await firstLabel.dblclick();
+  await firstLabel.fill("Author deliberately");
+  await viewport.click({ position: { x: 4, y: 4 } });
+  await expect(firstLabel).toHaveText("Author deliberately");
+
+  await firstLabel.dblclick();
+  await firstLabel.fill("Author precisely");
+  await secondLabel.dblclick();
+  await secondLabel.fill("Generate carefully");
+  await page.keyboard.press("Enter");
+  await expect(firstLabel).toHaveText("Author precisely");
+  await expect(secondLabel).toHaveText("Generate carefully");
+
+  await firstNode.click();
+  await diagram.locator('[data-flow-action="comment"]').click();
+  await compose.locator("textarea").fill("Keep the first target explicit.");
+  await secondNode.click();
+  await diagram.locator('[data-flow-action="comment"]').click();
+  await expect(compose.locator(".flow-diagram-compose-target")).toHaveText(
+    'Comment on node "Generate"',
+  );
+  await expect(diagram.locator("[data-flow-total]")).toHaveText("3 notes");
+});
+
 test("should leave toolbar keyboard activation to the focused control", async ({
   page,
   flowDiagramViewerUrl,
@@ -233,6 +271,8 @@ test("should size a persisted-collapsed diagram when expanded", async ({
   const toggle = host.locator(
     ":scope > [data-collapse-header] > [data-collapse-toggle]",
   );
+  const node = diagram.locator('[data-flow-element="node"]').first();
+  const compose = diagram.locator(".flow-diagram-compose");
 
   await toggle.click();
   await expect(host).toHaveAttribute("data-collapsed", "");
@@ -258,6 +298,14 @@ test("should size a persisted-collapsed diagram when expanded", async ({
       sizer.evaluate((element) => (element as HTMLElement).style.transform),
     )
     .toContain("scale(");
+
+  await node.click();
+  await diagram.locator('[data-flow-action="comment"]').click();
+  await compose.locator("textarea").fill("Preserve this collapsed note.");
+  await toggle.click();
+  await expect(compose).toBeHidden();
+  await toggle.click();
+  await expect(diagram.locator("[data-flow-total]")).toHaveText("1 note");
 });
 
 test("should reach footer review actions with the mouse", async ({
@@ -316,6 +364,7 @@ test("should exit without an alert after handing off the last note", async ({
   const compose = diagram.locator(".flow-diagram-compose");
   const exitAlert = diagram.getByRole("alertdialog");
   const maximize = diagram.locator("[data-figure-maximize]");
+  const undoShortcut = process.platform === "darwin" ? "Meta+z" : "Control+z";
   const toolbarAdd = diagram
     .locator("[data-flow-controls]")
     .locator(":scope > .flow-collector-add");
@@ -336,6 +385,8 @@ test("should exit without an alert after handing off the last note", async ({
   await compose.getByRole("button", { name: "Comment", exact: true }).click();
   await expect(toolbarAdd).toHaveText("Add 1 note to plan feedback");
   await toolbarAdd.click();
+  await expect(toolbarAdd).toBeHidden();
+  await page.keyboard.press(undoShortcut);
   await expect(toolbarAdd).toBeHidden();
 
   await maximize.click();

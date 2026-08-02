@@ -37,15 +37,11 @@
 // its face rather than pretending to deliver.
 
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
-import { PENCIL_LINE_ICON } from "../../icons/lucide/pencil-line.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
-import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { lucideIconToMarkup } from "./lucide-icon-markup.js";
 
 const ICON_COMMENT = lucideIconToMarkup(MESSAGE_SQUARE_ICON);
-const ICON_EDIT = lucideIconToMarkup(PENCIL_LINE_ICON);
-const ICON_DELETE = lucideIconToMarkup(TRASH_2_ICON);
 const ICON_REVERT = lucideIconToMarkup(ROTATE_CCW_ICON);
 const ICON_CLOSE = lucideIconToMarkup(X_ICON);
 
@@ -56,8 +52,6 @@ export const DIAGRAM_SCRIPT = `
 
   const ICON = {
     comment: '${ICON_COMMENT}',
-    edit: '${ICON_EDIT}',
-    del: '${ICON_DELETE}',
     revert: '${ICON_REVERT}',
     close: '${ICON_CLOSE}',
   };
@@ -432,7 +426,7 @@ export const DIAGRAM_SCRIPT = `
     buildActionBar();
   };
   const deselect = () => {
-    stopEditing(true);
+    stopEditing(false);
     if (selected) selected.removeAttribute("data-flow-selected");
     selected = null;
     buildActionBar();
@@ -471,7 +465,7 @@ export const DIAGRAM_SCRIPT = `
   // --- Editing in place ---------------------------------------------------
   const startEditing = (field) => {
     if (!field) return;
-    stopEditing(true);
+    stopEditing(false);
     const node = field.closest("[data-flow-element]");
     if (removalOn(node)) return;
     editing = { field, node, before: field.textContent, beforeHtml: field.innerHTML };
@@ -993,7 +987,7 @@ export const DIAGRAM_SCRIPT = `
 
   const dismissOrphanedChrome = () => {
     if (selected && !onScreen(selected)) {
-      if (editing) stopEditing(true);
+      if (editing) stopEditing(false);
       selected.removeAttribute("data-flow-selected");
       selected = null;
       actionBar.hidden = true;
@@ -1043,10 +1037,12 @@ export const DIAGRAM_SCRIPT = `
   document.body.appendChild(compose);
   let composeSubject = null;
 
-  const closeCompose = () => {
+  const closeCompose = (discard) => {
+    if (!discard && composeText()) return commitCompose();
     compose.hidden = true;
     compose.textContent = "";
     composeSubject = null;
+    return true;
   };
 
   const composeText = () => {
@@ -1069,7 +1065,7 @@ export const DIAGRAM_SCRIPT = `
       element: node, anchor: anchorOf(node), body: value,
     });
     announce("Comment saved on " + nameOf(node));
-    closeCompose();
+    closeCompose(true);
     paint();
     return true;
   };
@@ -1081,7 +1077,7 @@ export const DIAGRAM_SCRIPT = `
     }
     if (editing) {
       const owner = editing.node.closest("[data-flow-diagram]") || editing.node;
-      if (owner === diagram) stopEditing(true);
+      if (owner === diagram) stopEditing(false);
     }
     if (selected) {
       const owner = selected.closest("[data-flow-diagram]") || selected;
@@ -1119,6 +1115,7 @@ export const DIAGRAM_SCRIPT = `
   };
 
   const openCompose = (node) => {
+    if (composeSubject) closeCompose();
     compose.textContent = "";
     composeSubject = node;
     compose.appendChild(el("p", "flow-diagram-compose-target", "Comment on " + nameOf(node)));
@@ -1144,7 +1141,7 @@ export const DIAGRAM_SCRIPT = `
     row.appendChild(el("span", "flow-diagram-compose-hint", shortcut + "+Enter to comment"));
     const cancel = el("button", "flow-diagram-button", "Cancel");
     cancel.type = "button";
-    cancel.addEventListener("click", closeCompose);
+    cancel.addEventListener("click", () => closeCompose(true));
     const save = el("button", "flow-diagram-button", "Comment");
     save.type = "button";
     save.setAttribute("data-variant", "primary");
@@ -1374,6 +1371,9 @@ export const DIAGRAM_SCRIPT = `
       })),
     });
     drafts = drafts.filter((d) => d.diagram !== diagram);
+    for (let index = 0; index < history.length; index += 1) {
+      history[index] = history[index].filter((draft) => draft.diagram !== diagram);
+    }
     status.setAttribute("data-tone", "added");
     collectors.get(diagram).statusFor = 0;
     status.textContent = "Added " + mine.length + " note" + (mine.length === 1 ? "" : "s") +
