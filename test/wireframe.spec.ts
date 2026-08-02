@@ -499,11 +499,18 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
       await desktopSwitcher.getByRole("button", { name }).click();
       const screen = page.locator(`[data-wireframe-screen="${id}"]`);
       const artboard = screen.locator(".wireframe-artboard");
+      const sidebar = screen.locator(".wireframe-sidebar").first();
       await expect(screen).toBeVisible();
       expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(900);
       expect(
         await artboard.evaluate((node) => node.scrollWidth - node.clientWidth),
       ).toBeLessThanOrEqual(1);
+      expect(await sidebar.evaluate((node) => node.offsetWidth)).toBe(224);
+      expect(
+        await sidebar.evaluate((node) =>
+          Number.parseFloat(getComputedStyle(node).paddingLeft),
+        ),
+      ).toBeGreaterThanOrEqual(20);
     }
 
     const ticket = page.locator('[data-wireframe-screen="d-ticket"]');
@@ -753,6 +760,7 @@ test("should comment on a whole wireframe screen and one specific element", asyn
   await page.goto(wireframeViewerUrl);
   const screen = page.locator('[data-wireframe-screen="child-home"]');
   const affordance = page.locator("[data-review-affordance]");
+  const commentsToggle = page.locator("[data-review-toggle]");
 
   await test.step("the screen is a registered shared block target", async () => {
     await screen.locator(".wireframe-screen-caption").hover();
@@ -769,6 +777,7 @@ test("should comment on a whole wireframe screen and one specific element", asyn
 
   await test.step("an element is selected before using the same tray and package", async () => {
     await screen.locator("[data-figure-maximize]").click();
+    await expect(commentsToggle).toBeHidden();
     const elementComment = screen.locator("[data-wireframe-comment-element]");
     await expect(elementComment).toBeVisible();
     await expect(elementComment).toHaveAccessibleName("Select element");
@@ -779,8 +788,24 @@ test("should comment on a whole wireframe screen and one specific element", asyn
     });
     await action.click();
     await expect(action).toHaveAttribute("data-wireframe-comment-selected", "");
-    await expect(elementComment).toHaveText("Comment on ✋ Ask a grown-up");
-    await elementComment.click();
+    await expect(elementComment).toHaveText("Change selection");
+    const nearbyComment = page.locator(
+      '[data-wireframe-selected-comment="eddys-wallet"]',
+    );
+    await expect(nearbyComment).toBeVisible();
+    await expect(nearbyComment).toHaveAccessibleName(
+      "Comment on ✋ Ask a grown-up",
+    );
+    await expect(nearbyComment).toBeFocused();
+    const actionBox = await boxOf(action);
+    const nearbyBox = await boxOf(nearbyComment);
+    expect(
+      Math.abs(nearbyBox.x + nearbyBox.width - (actionBox.x + actionBox.width)),
+    ).toBeLessThanOrEqual(16);
+    expect(actionBox.y - (nearbyBox.y + nearbyBox.height)).toBeLessThanOrEqual(
+      16,
+    );
+    await nearbyComment.click();
     await page
       .locator("[data-review-compose-input]")
       .fill("Keep this action welcoming.");

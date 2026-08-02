@@ -669,8 +669,9 @@ marks and a plan diff never jitters.
   .wireframe-app-shell {
     display: grid;
     flex: 1;
-    /* Narrow nav rail: labels only, not a third of the canvas. */
-    grid-template-columns: minmax(7rem, 9.5rem) 1fr;
+    /* Navigation earns readable width: a desktop rail holds its labels and
+       breathing room instead of becoming a sliver beside the workspace. */
+    grid-template-columns: 14rem minmax(0, 1fr);
     gap: 0;
     /* The nav runs the full height of the app, the way a desktop product's
        does, rather than stopping where its own links end. */
@@ -695,7 +696,7 @@ marks and a plan diff never jitters.
   }
   /* One divider between panes rather than an outline around each. */
   .wireframe-sidebar {
-    padding: 0.625rem 0.65rem;
+    padding: 1.25rem 1.5rem;
     border: 0;
     border-right: 2px solid var(--wf-stroke);
     border-radius: 0;

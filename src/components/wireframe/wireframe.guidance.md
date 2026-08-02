@@ -125,7 +125,7 @@ Skip any "momentum / enjoyment" framing - clarity and speed are enough.
 Desktop shell and density specifics:
 
 - Let the desktop device type scale do its job. Its 28px authored body, 22px supporting copy, 32px section titles, and 42px page titles compensate for the true 1440px workspace being fitted into the review column; at the ordinary fit they paint like roughly 15px body, 12px metadata, 17px section headings, and a 22px page title. Do not shrink controls or labels to create artificial density. Simplify the workspace or let content use more of its realistic canvas.
-- Flush-left global nav rail, identical destinations on every screen (for example Inbox, Customers, Reports, Settings).
+- Navigation earns readable width. Size a primary desktop rail to its labels plus breathing room—roughly 200-240px at a 1440px workspace—so destinations never wrap, truncate, or crowd the edge. Keep the flush-left rail and its destinations identical on every screen (for example Inbox, Customers, Reports, Settings); at narrower sizes, collapse it deliberately to icons instead of squeezing readable labels into a sliver.
 - Keep **global destinations** separate from **contextual views** (Mine, Unassigned, SLA risk) - views live with the inbox content, not mixed into global nav as peers of Settings.
 - Master-detail for record work: do **not** replace the queue when opening a ticket. Prefer narrow global nav | list (`span="list"`) | flexible primary (`span="main"`) | properties (`span="rail"`).
 - Secondary panes are rails, not equal thirds with the primary surface.

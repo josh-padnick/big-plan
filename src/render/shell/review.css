@@ -31,15 +31,22 @@ elements exist and the document is exactly the document it always was.
 :root[data-figure-maximized-open] [data-review-root] {
   z-index: 74;
 }
-:root[data-figure-maximized-open] [data-review-toggle],
 :root[data-figure-maximized-open] [data-review-rail] {
   z-index: 75;
 }
-:root[data-figure-maximized-open] [data-review-affordance] {
+:root[data-figure-maximized-open] [data-review-affordance],
+:root[data-figure-maximized-open] [data-wireframe-selected-comment] {
   z-index: 76;
 }
 :root[data-figure-maximized-open] [data-review-compose] {
   z-index: 77;
+}
+/* Maximize is a focused canvas over the whole page header. Its local
+   whole-screen and element actions remain available, so the global Comments
+   pill can leave the top edge instead of colliding with the viewport label. */
+:root[data-figure-maximized-open] [data-review-toggle] {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 [data-review-root] button:focus-visible,
@@ -698,6 +705,44 @@ button[data-review-row-target]:active {
   background: var(--review-control-active);
 }
 [data-review-affordance] svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+/* Selection and response stay adjacent: once a wireframe element is chosen,
+   this one action hugs its outline instead of asking the eye to return to the
+   distant maximize toolbar. */
+[data-wireframe-selected-comment] {
+  position: fixed;
+  z-index: 46;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--accent-c);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--accent-c);
+  font-size: 0.75rem;
+  font-weight: 650;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.14);
+}
+[data-wireframe-selected-comment][hidden] {
+  display: none;
+}
+[data-wireframe-selected-comment]:hover,
+[data-wireframe-selected-comment]:focus-visible {
+  background: var(--review-control-hover);
+  border-color: var(--accent-c);
+  color: var(--accent-c);
+}
+[data-wireframe-selected-comment]:active {
+  background: var(--review-control-active);
+  transform: translateY(1px);
+}
+[data-wireframe-selected-comment] svg {
   width: 0.85rem;
   height: 0.85rem;
 }

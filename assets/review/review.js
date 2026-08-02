@@ -1012,6 +1012,17 @@
     let selectedElement = null;
     let selecting = false;
     const tabState = new Map();
+    const selectedComment = el(
+      "button",
+      {
+        type: "button",
+        "data-wireframe-selected-comment":
+          wireframe.getAttribute("data-wireframe") || "",
+        hidden: true,
+      },
+      [icon(ICON_COMMENT), el("span", { text: "Comment" })],
+    );
+    surface.appendChild(selectedComment);
     const screenButtons = Array.from(
       wireframe.querySelectorAll("[data-wireframe-comment-screen]"),
     );
@@ -1054,10 +1065,28 @@
       const button = currentElementButton();
       if (button !== null) button.setAttribute("aria-pressed", "false");
     };
+    const positionSelectedComment = () => {
+      if (selectedElement === null || selectedComment.hidden) return;
+      const rect = selectedElement.getBoundingClientRect();
+      const width = selectedComment.offsetWidth || 90;
+      const height = selectedComment.offsetHeight || 28;
+      const limit = rightLimit();
+      selectedComment.style.left =
+        Math.max(12, Math.min(rect.right - width, limit - width - 12)) + "px";
+      selectedComment.style.top =
+        Math.max(
+          12,
+          Math.min(rect.top - height - 8, window.innerHeight - height - 12),
+        ) + "px";
+    };
     const clearSelection = () => {
       if (selectedElement !== null)
         selectedElement.removeAttribute("data-wireframe-comment-selected");
       selectedElement = null;
+      selectedComment.hidden = true;
+      selectedComment.removeAttribute("aria-label");
+      selectedComment.removeAttribute("title");
+      selectedComment.removeAttribute("style");
       const button = currentElementButton();
       if (button !== null) button.textContent = "Select element";
     };
@@ -1066,11 +1095,14 @@
       selectedElement = element;
       element.setAttribute("data-wireframe-comment-selected", "");
       stopSelecting();
+      const label = labelFor(element);
+      selectedComment.hidden = false;
+      selectedComment.setAttribute("aria-label", "Comment on " + label);
+      selectedComment.setAttribute("title", "Comment on " + label);
+      positionSelectedComment();
+      selectedComment.focus();
       const button = currentElementButton();
-      if (button !== null) {
-        button.textContent = "Comment on " + labelFor(element);
-        button.focus();
-      }
+      if (button !== null) button.textContent = "Change selection";
     };
     const beginSelecting = () => {
       clearSelection();
@@ -1090,16 +1122,16 @@
     };
     for (const button of elementButtons) {
       button.addEventListener("click", () => {
-        if (selectedElement !== null) {
-          const target = targetForBlock(selectedElement);
-          clearSelection();
-          openCompose(target);
-          return;
-        }
         if (selecting) stopSelecting();
         else beginSelecting();
       });
     }
+    selectedComment.addEventListener("click", () => {
+      if (selectedElement === null) return;
+      const target = targetForBlock(selectedElement);
+      clearSelection();
+      openCompose(target);
+    });
     const targetFrom = (event) =>
       event.target instanceof Element
         ? event.target.closest("[data-wireframe-element][data-block-id]")
@@ -1133,6 +1165,14 @@
         choose(target);
       },
       true,
+    );
+    addEventListener("resize", positionSelectedComment, { passive: true });
+    addEventListener("scroll", positionSelectedComment, {
+      capture: true,
+      passive: true,
+    });
+    wireframe.addEventListener("click", () =>
+      requestAnimationFrame(positionSelectedComment),
     );
     wireframe.addEventListener("figuremaximizechange", (event) => {
       const maximized = event.detail.maximized === true;
