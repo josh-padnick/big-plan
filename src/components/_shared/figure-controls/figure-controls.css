@@ -60,7 +60,8 @@
 
 /* This late layer outranks the resting Tailwind utilities on the shared
    button. See the DataTable focus rules for the same chrome vocabulary. */
-@layer control-focus {
+@layer bp-state {
+  /* Override invariant: keyboard focus beats resting button color utilities. */
   article .figure-control:focus-visible {
     outline: none;
     background: var(--edge-c);
@@ -70,13 +71,15 @@
   /* A pointer reader who never saw a focus ring should not be handed one when
      Escape returns focus to the trigger. Focus still lands, so the next Tab
      continues from here; only the visible treatment is withheld, and the
-     tooltip keys off :focus-visible so it goes quiet with it. */
+     tooltip keys off :focus-visible so it goes quiet with it.
+     Override invariant: quiet focus beats the visible focus treatment. */
   article [data-figure-focus-quiet]:focus-visible {
     outline: none;
     background: transparent;
     color: var(--muted-c);
     box-shadow: none;
   }
+  /* Override invariant: quiet focus suppresses the resting focus tooltip. */
   article [data-figure-focus-quiet]:focus-visible::after {
     content: none;
   }
