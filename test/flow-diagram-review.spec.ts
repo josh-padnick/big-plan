@@ -170,10 +170,11 @@ test("should exit without an alert after handing off the last note", async ({
   await node.click();
   await diagram.locator('[data-flow-action="comment"]').click();
   await compose.locator("textarea").fill("One open note");
-  await maximize.click();
+  await page.keyboard.press("Escape");
   await expect(exitAlert).toContainText(
     "You still have 1 feedback note to submit.",
   );
+  await expect(compose.locator("textarea")).toHaveValue("One open note");
   await exitAlert.getByRole("button", { name: "Go back", exact: true }).click();
   await expect(compose.locator("textarea")).toHaveValue("One open note");
 
@@ -196,6 +197,7 @@ test("should keep review chrome stable through zoom and maximize in both themes"
   const diagram = page.locator("[data-flow-diagram]").first();
   const node = diagram.locator('[data-flow-node="authored"]');
   const footer = diagram.locator("[data-flow-diagram-footer]");
+  const viewport = diagram.locator("[data-flow-viewport]");
   const toolbar = diagram.locator("[data-flow-controls]");
   const toolbarAdd = toolbar.locator(":scope > .flow-collector-add");
   const trayAdd = diagram.locator(".flow-collector-foot > .flow-collector-add");
@@ -329,6 +331,8 @@ test("should keep review chrome stable through zoom and maximize in both themes"
 
       await diagram.locator("[data-figure-maximize]").click();
       await expect(diagram).toHaveAttribute("data-figure-maximized", "");
+      await expect(viewport).toHaveCSS("overflow", "hidden");
+      await expect(viewport).toHaveCSS("padding", "0px");
       await expect(toolbarAdd).toBeVisible();
       await expect(trayAdd).toBeVisible();
       await expect(trayAdd).toHaveText("Add 2 notes to plan feedback");
@@ -367,10 +371,7 @@ test("should keep review chrome stable through zoom and maximize in both themes"
         name: "Exit full screen",
       });
       await expect(stay).toBeFocused();
-      await expect(diagram.locator("[data-flow-viewport]")).toHaveJSProperty(
-        "inert",
-        true,
-      );
+      await expect(viewport).toHaveJSProperty("inert", true);
       await page.keyboard.press("Backspace");
       await page.keyboard.press("Control+z");
       await expect(exitAlert).toContainText(
@@ -390,8 +391,12 @@ test("should keep review chrome stable through zoom and maximize in both themes"
       await node.click();
       await diagram.locator('[data-flow-action="comment"]').click();
       await expect(compose).toBeVisible();
+      await compose.locator("textarea").fill("One unsubmitted note");
       await diagram.locator("[data-figure-maximize]").click();
       await expect(exitAlert).toBeVisible();
+      await expect(exitAlert).toContainText(
+        "You still have 3 feedback notes to submit.",
+      );
       await exit.click();
       await expect(exitAlert).toBeHidden();
       await expect(compose).toBeHidden();

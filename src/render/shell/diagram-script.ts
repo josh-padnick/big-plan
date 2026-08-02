@@ -1131,6 +1131,12 @@ export const DIAGRAM_SCRIPT = `
 
   document.addEventListener("keydown", (event) => {
     if (activeExitAlert !== null || event.key !== "Escape" || compose.hidden) return;
+    const diagram = composeSubject && composeSubject.closest("[data-flow-diagram]");
+    if (
+      diagram &&
+      diagram.hasAttribute("data-figure-maximized") &&
+      pendingCountFor(diagram) > 0
+    ) return;
     event.stopPropagation();
     closeCompose();
     if (selected) selected.focus({ preventScroll: true });

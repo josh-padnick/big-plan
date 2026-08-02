@@ -190,10 +190,6 @@ classes.
   .flow-diagram[data-flow-canvas] .flow-diagram-artboard {
     transform: none;
   }
-  /* Promoted, the canvas takes the panel's remaining height. */
-  .flow-diagram[data-figure-maximized] .flow-diagram-viewport {
-    padding: 0;
-  }
   /* The footer is the figure's own line, not part of the canvas. */
   .flow-diagram[data-figure-maximized] > [data-flow-diagram-footer] {
     flex: none;
@@ -985,6 +981,14 @@ classes.
     clip-path: inset(50%);
     white-space: nowrap;
     border: 0;
+  }
+}
+
+@layer flow-diagram-maximized {
+  .flow-diagram[data-flow-canvas][data-figure-maximized]
+    > .flow-diagram-viewport {
+    overflow: hidden;
+    padding: 0;
   }
 }
 
