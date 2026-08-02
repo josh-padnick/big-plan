@@ -78,6 +78,7 @@ export const DIAGRAM_SCRIPT = `
 
   // Set by a pan that actually moved, read by the click that follows it.
   let suppressClick = false;
+  let activeExitAlert = null;
 
   const clamp = (value, low, high) => Math.max(low, Math.min(value, high));
   const el = (tag, className, text) => {
@@ -225,7 +226,7 @@ export const DIAGRAM_SCRIPT = `
   const zoomAbout = (diagram, nextZoom, px, py) => {
     const c = canvas.get(diagram);
     if (!c) return;
-    c.userZoomed = true;
+    c.userTransformed = true;
     const z1 = clamp(nextZoom, ZOOM_MIN, ZOOM_MAX);
     if (z1 === c.zoom) return;
     const ratio = z1 / c.zoom;
@@ -256,18 +257,18 @@ export const DIAGRAM_SCRIPT = `
     c.zoom = clamp(Math.min((vw - pad) / aw, (vh - pad) / ah, 1), ZOOM_MIN, ZOOM_MAX);
     c.x = (vw - aw * c.zoom) / 2;
     c.y = (vh - ah * c.zoom) / 2;
-    c.userZoomed = false;
+    c.userTransformed = false;
     diagram.removeAttribute("data-flow-zoomed");
     applyTransform(diagram);
   };
 
   // An edit changes how wide a node is, which changes how much room the
   // diagram needs. A canvas the reader has not taken control of follows the
-  // content; one they have zoomed themselves is left exactly where they put
+  // content; one they have transformed themselves is left where they put
   // it, because moving it under them would be worse than a little clipping.
   const refitIfUntouched = (diagram) => {
     const c = canvas.get(diagram);
-    if (!c || c.userZoomed) return;
+    if (!c || c.userTransformed) return;
     sizeRestingCanvas(diagram);
     fit(diagram);
   };
@@ -316,6 +317,7 @@ export const DIAGRAM_SCRIPT = `
         zoomAbout(diagram, c.zoom * factor, event.clientX - rect.left, event.clientY - rect.top);
         return;
       }
+      c.userTransformed = true;
       c.x -= event.deltaX;
       c.y -= event.deltaY;
       clampPan(diagram);
@@ -336,6 +338,7 @@ export const DIAGRAM_SCRIPT = `
       if (!pan.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
       if (!pan.moved) {
         pan.moved = true;
+        c.userTransformed = true;
         c.viewport.setAttribute("data-flow-panning", "");
         c.viewport.setPointerCapture(pan.id);
       }
@@ -450,11 +453,7 @@ export const DIAGRAM_SCRIPT = `
     diagram.addEventListener("focusin", (event) => {
       if (event.target === diagram) select(diagram);
     });
-    diagram.addEventListener("figure-restored", () => {
-      if (!selected) return;
-      const owner = selected.closest("[data-flow-diagram]") || selected;
-      if (owner === diagram) deselect();
-    });
+    diagram.addEventListener("figure-restored", () => clearDiagramChrome(diagram));
   }
 
   // --- Editing in place ---------------------------------------------------
@@ -463,7 +462,7 @@ export const DIAGRAM_SCRIPT = `
     stopEditing(true);
     const node = field.closest("[data-flow-element]");
     if (removalOn(node)) return;
-    editing = { field, node, before: field.textContent };
+    editing = { field, node, before: field.textContent, beforeHtml: field.innerHTML };
     field.setAttribute("data-flow-editing", "");
     field.setAttribute("contenteditable", "plaintext-only");
     field.focus();
@@ -479,7 +478,7 @@ export const DIAGRAM_SCRIPT = `
 
   const stopEditing = (cancel) => {
     if (!editing) return;
-    const { field, node, before } = editing;
+    const { field, node, before, beforeHtml } = editing;
     editing = null;
     field.removeAttribute("contenteditable");
     field.removeAttribute("data-flow-editing");
@@ -488,7 +487,7 @@ export const DIAGRAM_SCRIPT = `
     const original = originalText.get(field);
     const name = field.getAttribute("data-flow-field");
     if (cancel) {
-      field.textContent = before;
+      field.innerHTML = beforeHtml;
       paint();
       return;
     }
@@ -509,11 +508,14 @@ export const DIAGRAM_SCRIPT = `
         before: original, after: next,
       });
       announce("Edited " + (FIELD_LABELS[name] || name).toLowerCase() + " of " + nameOf(node));
+    } else {
+      field.innerHTML = originalHtml.get(field);
     }
     paint();
   };
 
   document.addEventListener("keydown", (event) => {
+    if (activeExitAlert !== null) return;
     // Undo first: it must work whether or not something is selected, and
     // whether or not the pointer is anywhere near the diagram.
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {
@@ -906,9 +908,12 @@ export const DIAGRAM_SCRIPT = `
       actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
         "Enter to save \u00b7 Esc to cancel"));
     } else if (kindOf(selected) !== "figure") {
-      const canType = fieldsIn(selected).length > 0 && !removalOn(selected);
+      const removed = removalOn(selected);
+      const canType = fieldsIn(selected).length > 0 && !removed;
       actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
-        canType ? "Type to edit \u00b7 Delete to remove" : "Delete to restore"));
+        canType
+          ? "Type to edit \u00b7 Delete to remove"
+          : removed ? "Delete to restore" : "Delete to remove"));
     }
     if (actionBar.childElementCount === 0) {
       actionBar.hidden = true;
@@ -1026,6 +1031,25 @@ export const DIAGRAM_SCRIPT = `
     composeSubject = null;
   };
 
+  const clearDiagramChrome = (diagram) => {
+    if (composeSubject) {
+      const owner = composeSubject.closest("[data-flow-diagram]") || composeSubject;
+      if (owner === diagram) closeCompose();
+    }
+    if (editing) {
+      const owner = editing.node.closest("[data-flow-diagram]") || editing.node;
+      if (owner === diagram) stopEditing(true);
+    }
+    if (selected) {
+      const owner = selected.closest("[data-flow-diagram]") || selected;
+      if (owner === diagram) {
+        selected.removeAttribute("data-flow-selected");
+        selected = null;
+        buildActionBar();
+      }
+    }
+  };
+
   const positionCompose = () => {
     if (compose.hidden || !composeSubject) return;
     const subject = composeSubject.getBoundingClientRect();
@@ -1090,7 +1114,7 @@ export const DIAGRAM_SCRIPT = `
   };
 
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || compose.hidden) return;
+    if (activeExitAlert !== null || event.key !== "Escape" || compose.hidden) return;
     event.stopPropagation();
     closeCompose();
     if (selected) selected.focus({ preventScroll: true });
@@ -1134,8 +1158,12 @@ export const DIAGRAM_SCRIPT = `
     diagram.appendChild(overlay);
 
     let returnFocus = null;
+    let isolated = [];
     const close = (restoreFocus) => {
       overlay.hidden = true;
+      activeExitAlert = null;
+      for (const element of isolated) element.inert = false;
+      isolated = [];
       if (restoreFocus && returnFocus && returnFocus.isConnected) {
         returnFocus.focus({ preventScroll: true });
       }
@@ -1147,7 +1175,16 @@ export const DIAGRAM_SCRIPT = `
         "You still have " + count + " feedback note" +
         (count === 1 ? "" : "s") +
         " to submit. Are you sure you want to exit full screen mode?";
+      if (activeExitAlert === overlay) {
+        stay.focus({ preventScroll: true });
+        return;
+      }
+      isolated = Array.from(diagram.children).filter(
+        (element) => element !== overlay && !element.inert,
+      );
+      for (const element of isolated) element.inert = true;
       overlay.hidden = false;
+      activeExitAlert = overlay;
       stay.focus({ preventScroll: true });
     };
 

@@ -32,6 +32,79 @@ test("should render cleared node text as a struck-through edit", async ({
   });
 });
 
+test("should preserve authored markup when an edit is canceled or cleared", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").nth(1);
+  const body = diagram
+    .locator('[data-flow-node="skill"]')
+    .locator('[data-flow-field="body"]');
+  const original = "Calls big-plan guidance in its workflow";
+
+  await body.dblclick();
+  await body.fill("Temporary replacement");
+  await page.keyboard.press("Escape");
+  await expect(body).toHaveText(original);
+  await expect(body.locator("code")).toHaveText("big-plan guidance");
+
+  await body.dblclick();
+  await body.fill(original);
+  await page.keyboard.press("Enter");
+  await expect(body).toHaveText(original);
+  await expect(body.locator("code")).toHaveText("big-plan guidance");
+  await expect(body).not.toHaveAttribute("data-flow-edited");
+});
+
+test("should preserve a panned canvas when feedback repaints it", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const viewport = diagram.locator("[data-flow-viewport]");
+  const sizer = diagram.locator("[data-flow-sizer]");
+  const node = diagram.locator('[data-flow-node="authored"]');
+  const initialTransform = await sizer.evaluate(
+    (element) => (element as HTMLElement).style.transform,
+  );
+
+  await viewport.dispatchEvent("wheel", { deltaX: 40, deltaY: 30 });
+  const pannedTransform = await sizer.evaluate(
+    (element) => (element as HTMLElement).style.transform,
+  );
+  expect(pannedTransform).not.toBe(initialTransform);
+
+  await node.click();
+  await diagram.locator('[data-flow-action="comment"]').click();
+  await diagram
+    .locator(".flow-diagram-compose textarea")
+    .fill("Keep this framing.");
+  await diagram
+    .locator('.flow-diagram-compose button[data-variant="primary"]')
+    .click();
+  await expect
+    .poll(() =>
+      sizer.evaluate((element) => (element as HTMLElement).style.transform),
+    )
+    .toBe(pannedTransform);
+
+  const unlabeledEdge = diagram.locator(
+    '[data-flow-edge-from="generator"][data-flow-edge-to="cli"]',
+  );
+  await unlabeledEdge.click();
+  await expect(diagram.locator(".flow-diagram-actionbar-hint")).toHaveText(
+    "Delete to remove",
+  );
+  await page.keyboard.press("Delete");
+  await expect(diagram.locator(".flow-diagram-actionbar-hint")).toHaveText(
+    "Delete to restore",
+  );
+});
+
 test("should keep review chrome stable through zoom and maximize in both themes", async ({
   page,
   flowDiagramViewerUrl,
@@ -45,6 +118,7 @@ test("should keep review chrome stable through zoom and maximize in both themes"
   const toolbarAdd = toolbar.locator(":scope > .flow-collector-add");
   const trayAdd = diagram.locator(".flow-collector-foot > .flow-collector-add");
   const exitAlert = diagram.getByRole("alertdialog");
+  const compose = diagram.locator(".flow-diagram-compose");
 
   await test.step("render no empty handoff controls or whole-diagram comment action", async () => {
     await expect(toolbarAdd).toBeHidden();
@@ -69,6 +143,16 @@ test("should keep review chrome stable through zoom and maximize in both themes"
         '.flow-diagram-actionbar-button[data-flow-action="comment"]',
       ),
     ).toBeHidden();
+
+    await node.click();
+    await diagram.locator('[data-flow-action="comment"]').click();
+    await expect(compose).toBeVisible();
+    await diagram.locator("[data-figure-maximize]").click();
+    await expect(diagram).not.toHaveAttribute("data-figure-maximized");
+    await expect(compose).toBeHidden();
+    await expect(diagram).not.toHaveAttribute("data-flow-selected");
+
+    await diagram.locator("[data-figure-maximize]").click();
     await page.keyboard.press("Escape");
     await expect(diagram).not.toHaveAttribute("data-figure-maximized");
     await expect(diagram).not.toHaveAttribute("data-flow-selected");
@@ -201,6 +285,18 @@ test("should keep review chrome stable through zoom and maximize in both themes"
         name: "Exit full screen",
       });
       await expect(stay).toBeFocused();
+      await expect(diagram.locator("[data-flow-viewport]")).toHaveJSProperty(
+        "inert",
+        true,
+      );
+      await page.keyboard.press("Backspace");
+      await page.keyboard.press("Control+z");
+      await expect(exitAlert).toContainText(
+        "You still have 2 feedback notes to submit.",
+      );
+      await expect(node.locator("[data-flow-comment-marker]")).toContainText(
+        "2",
+      );
       await page.keyboard.press("Tab");
       await expect(exit).toBeFocused();
       await page.keyboard.press("Shift+Tab");
@@ -209,10 +305,14 @@ test("should keep review chrome stable through zoom and maximize in both themes"
       await expect(exitAlert).toBeHidden();
       await expect(diagram).toHaveAttribute("data-figure-maximized", "");
 
+      await node.click();
+      await diagram.locator('[data-flow-action="comment"]').click();
+      await expect(compose).toBeVisible();
       await diagram.locator("[data-figure-maximize]").click();
       await expect(exitAlert).toBeVisible();
       await exit.click();
       await expect(exitAlert).toBeHidden();
+      await expect(compose).toBeHidden();
       await expect(diagram).not.toHaveAttribute("data-figure-maximized");
       await expect(diagram).not.toHaveAttribute("data-flow-selected");
       await expect(diagram).toHaveAttribute("data-figure-focus-quiet", "");
