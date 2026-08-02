@@ -113,6 +113,29 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
     );
     const base = await commit({ repoRoot, subject: "test: establish fixture" });
 
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "red\nCI repair without a visual contract\n",
+      "utf8",
+    );
+    await commit({ repoRoot, subject: "no-mistakes: apply CI fixes" });
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: join(repoRoot, "artifacts-missing-contract"),
+      }),
+      /styling commits must end with \[visual:empty\] or \[visual:approved\]/,
+    );
+    await git(repoRoot, [
+      "commit",
+      "--amend",
+      "-m",
+      "no-mistakes: apply CI fixes [visual:empty]",
+    ]);
+    const ciRepairCommit = await git(repoRoot, ["rev-parse", "HEAD"]);
+
     await writeFile(join(repoRoot, "fixture.txt"), "new-syntax\n", "utf8");
     await writeFile(join(repoRoot, "supports-new-syntax"), "yes\n", "utf8");
     const fixtureCommit = await commit({
@@ -193,10 +216,12 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
       [
         { visualKind: "empty", changedCaptures: 0, changedPixels: 0 },
         { visualKind: "empty", changedCaptures: 0, changedPixels: 0 },
+        { visualKind: "empty", changedCaptures: 0, changedPixels: 0 },
         { visualKind: "approved", changedCaptures: 1, changedPixels: 1 },
       ],
     );
     for (const commitHash of [
+      ciRepairCommit,
       fixtureCommit,
       emptyStyleCommit,
       approvedCommit,
