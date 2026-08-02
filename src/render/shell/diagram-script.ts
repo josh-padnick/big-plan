@@ -179,12 +179,19 @@ export const DIAGRAM_SCRIPT = `
     history.push(drafts.slice());
     if (history.length > 50) history.shift();
   };
+  const sameDrafts = (left, right) =>
+    left.length === right.length &&
+    left.every((draft, index) => draft === right[index]);
   const undo = () => {
-    if (history.length === 0) return false;
-    drafts = history.pop();
-    announce("Undone");
-    paint();
-    return true;
+    while (history.length > 0) {
+      const previous = history.pop();
+      if (sameDrafts(previous, drafts)) continue;
+      drafts = previous;
+      announce("Undone");
+      paint();
+      return true;
+    }
+    return false;
   };
 
   // --- The canvas ---------------------------------------------------------

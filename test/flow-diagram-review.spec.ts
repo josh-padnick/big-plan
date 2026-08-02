@@ -394,6 +394,73 @@ test("should exit without an alert after handing off the last note", async ({
   await expect(exitAlert).toBeHidden();
 });
 
+test("should undo the latest remaining diagram after handoff", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.addInitScript(() => {
+    Object.assign(window, {
+      bigPlan: {
+        feedback: {
+          add: () => undefined,
+        },
+      },
+    });
+  });
+  await page.goto(flowDiagramViewerUrl);
+
+  const firstDiagram = page.locator("[data-flow-diagram]").first();
+  const secondDiagram = page.locator("[data-flow-diagram]").nth(1);
+  const firstNode = firstDiagram.locator('[data-flow-node="authored"]');
+  const secondNode = secondDiagram.locator('[data-flow-node="skill"]');
+  const firstAdd = firstDiagram
+    .locator("[data-flow-controls]")
+    .locator(":scope > .flow-collector-add");
+  const secondAdd = secondDiagram
+    .locator("[data-flow-controls]")
+    .locator(":scope > .flow-collector-add");
+  const undoShortcut = process.platform === "darwin" ? "Meta+z" : "Control+z";
+  const saveComment = async ({
+    diagram,
+    node,
+    body,
+  }: {
+    diagram: typeof firstDiagram;
+    node: typeof firstNode;
+    body: string;
+  }) => {
+    await node.click();
+    await diagram.locator('[data-flow-action="comment"]').click();
+    const compose = diagram.locator(".flow-diagram-compose");
+    await compose.locator("textarea").fill(body);
+    await compose.getByRole("button", { name: "Comment", exact: true }).click();
+  };
+
+  await saveComment({
+    diagram: firstDiagram,
+    node: firstNode,
+    body: "First diagram note",
+  });
+  await saveComment({
+    diagram: secondDiagram,
+    node: secondNode,
+    body: "Second diagram note",
+  });
+  await saveComment({
+    diagram: firstDiagram,
+    node: firstNode,
+    body: "Another first diagram note",
+  });
+
+  await firstAdd.click();
+  await expect(firstAdd).toBeHidden();
+  await expect(secondAdd).toBeVisible();
+
+  await page.keyboard.press(undoShortcut);
+  await expect(firstAdd).toBeHidden();
+  await expect(secondAdd).toBeHidden();
+});
+
 test("should keep review chrome stable through zoom and maximize in both themes", async ({
   page,
   flowDiagramViewerUrl,
