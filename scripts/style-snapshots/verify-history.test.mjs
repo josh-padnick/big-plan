@@ -23,6 +23,8 @@ const repositoryRoot = join(
 );
 
 const directPixelProducingInputs = [
+  "package.json",
+  "bun.lock",
   "assets/logo-light.svg",
   "assets/favicon-light.ico",
   "scripts/gen-assets.mjs",

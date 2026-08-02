@@ -26,6 +26,8 @@ const RELEVANCE_FLOOR = {
   fixturePaths: ["examples/mdx-components.mdx", "examples/deck.mdx"],
   stylingFilePatterns: [
     "^\\.style-snapshots/config\\.json$",
+    "^bun\\.lock$",
+    "^package\\.json$",
     "^assets/(?:logo-(?:light|dark)\\.svg|favicon-(?:light|dark)\\.ico)$",
     "^scripts/gen-assets\\.mjs$",
     "^scripts/gen-css\\.mjs$",
