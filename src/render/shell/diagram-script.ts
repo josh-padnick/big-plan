@@ -407,7 +407,12 @@ export const DIAGRAM_SCRIPT = `
     if (selected) selected.removeAttribute("data-flow-selected");
     selected = node;
     if (selected) {
-      selected.setAttribute("data-flow-selected", "");
+      // The figure is a keyboard entry point, not an authored target. Keep it
+      // in the roving-selection model so Arrow keys can enter the diagram,
+      // but do not paint a whole-canvas selection ring after Escape.
+      if (kindOf(selected) !== "figure") {
+        selected.setAttribute("data-flow-selected", "");
+      }
       announce("Selected " + nameOf(selected));
     }
     buildActionBar();

@@ -54,6 +54,7 @@ test("should keep review chrome stable through zoom and maximize in both themes"
     await expect(trayAdd).toHaveAttribute("hidden", "");
 
     await diagram.focus();
+    await expect(diagram).not.toHaveAttribute("data-flow-selected");
     await expect(
       diagram.locator(
         '.flow-diagram-actionbar-button[data-flow-action="comment"]',
@@ -69,6 +70,7 @@ test("should keep review chrome stable through zoom and maximize in both themes"
     ).toBeHidden();
     await page.keyboard.press("Escape");
     await expect(diagram).not.toHaveAttribute("data-figure-maximized");
+    await expect(diagram).not.toHaveAttribute("data-flow-selected");
     await expect(diagram).toBeFocused();
     await expect(diagram.locator("[data-figure-maximize]")).not.toBeFocused();
   });
