@@ -65,7 +65,7 @@ test("should walk the wireframe prototype between screens", async ({
       .click();
     await page.getByRole("button", { name: "$6 is paid back" }).click();
     await page.getByRole("button", { name: "Finish this lesson" }).click();
-    await page.getByRole("button", { name: "Back to my wallet" }).click();
+    await page.getByRole("button", { name: "See my wallet" }).click();
     await expect(home).toBeVisible();
     await expect(lesson).toBeHidden();
   });
@@ -95,6 +95,131 @@ test("should reach every prototype action from the keyboard", async ({
   await expect(action).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(lesson).toBeVisible();
+});
+
+test("should separate the child's question, the handoff, authentication, and approval", async ({
+  page,
+  wireframeViewerUrl,
+}) => {
+  await page.goto(wireframeViewerUrl);
+
+  await test.step("the child chooses a parallel, concrete branch", async () => {
+    await page.getByRole("button", { name: "✋ Ask a grown-up" }).click();
+    await expect(
+      page.getByRole("button", { name: "⚽ Ask about a purchase" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "💵 Ask about my loan" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: "💬 Ask about something confusing",
+      }),
+    ).toBeVisible();
+    const optionBoxes = await Promise.all(
+      [
+        "⚽ Ask about a purchase",
+        "💵 Ask about my loan",
+        "💬 Ask about something confusing",
+      ].map((name) => boxOf(page.getByRole("button", { name }))),
+    );
+    expect(optionBoxes.map((box) => Math.round(box.x))).toEqual([
+      Math.round(optionBoxes[0].x),
+      Math.round(optionBoxes[0].x),
+      Math.round(optionBoxes[0].x),
+    ]);
+    expect(optionBoxes.map((box) => Math.round(box.width))).toEqual([
+      Math.round(optionBoxes[0].width),
+      Math.round(optionBoxes[0].width),
+      Math.round(optionBoxes[0].width),
+    ]);
+    await page.getByRole("button", { name: "⚽ Ask about a purchase" }).click();
+  });
+
+  await test.step("the preview only checks the child's question", async () => {
+    await page.getByRole("button", { name: "Check my question" }).click();
+    const preview = page.locator('[data-wireframe-screen="grown-up-preview"]');
+    await expect(preview).toContainText("Check your question");
+    await expect(preview).toContainText("“Can I buy a soccer ball for $18?”");
+    await expect(
+      preview.getByRole("button", { name: "Edit question" }),
+    ).toHaveCount(1);
+    await expect(
+      preview.getByRole("button", { name: "Looks good →" }),
+    ).toHaveCount(1);
+
+    const stepLabels = await preview
+      .locator(".wireframe-step")
+      .allTextContents();
+    expect(stepLabels).toEqual(["Choose", "Tell us", "Check", "Handoff"]);
+    const completedMarker = await preview
+      .locator('.wireframe-step[data-wireframe-step="done"]')
+      .first()
+      .evaluate((node) => getComputedStyle(node, "::before").content);
+    expect(completedMarker).toContain("✓");
+    await preview.getByRole("button", { name: "Looks good →" }).click();
+  });
+
+  await test.step("the child explicitly hands the device to the adult", async () => {
+    const handoff = page.locator(
+      '[data-wireframe-screen="grown-up-purchase-handoff"]',
+    );
+    await expect(handoff).toContainText("Time for your grown-up");
+    await expect(handoff).toContainText("Nothing will be bought yet");
+    await expect(
+      handoff.getByRole("button", { name: "Approve purchase" }),
+    ).toHaveCount(0);
+    await handoff.getByRole("button", { name: "I'm the grown-up" }).click();
+  });
+
+  await test.step("authentication unlocks review without approving", async () => {
+    const unlock = page.locator(
+      '[data-wireframe-screen="grown-up-purchase-unlock"]',
+    );
+    await expect(unlock).toContainText("Eddy has a purchase request for you");
+    await expect(unlock).toContainText(
+      "Unlocking does not approve or buy anything",
+    );
+    await expect(
+      unlock.getByRole("button", { name: "Approve purchase" }),
+    ).toHaveCount(0);
+    await unlock.getByRole("button", { name: "Unlock to review" }).click();
+  });
+
+  await test.step("approval appears only after the full request", async () => {
+    const review = page.locator(
+      '[data-wireframe-screen="grown-up-purchase-review"]',
+    );
+    await expect(review).toContainText("Soccer ball · $18");
+    await expect(review).toContainText("Balance after purchase: $24.50");
+    await expect(
+      review.getByRole("button", { name: "Approve purchase" }),
+    ).toBeVisible();
+  });
+});
+
+test("should close the loan lesson with an achievement and real-world recap", async ({
+  page,
+  wireframeViewerUrl,
+}) => {
+  await page.goto(wireframeViewerUrl);
+  const switcher = page.getByRole("navigation", {
+    name: "Prototype screens",
+  });
+  await switcher.getByRole("button", { name: "Lesson · done" }).click();
+  const done = page.locator('[data-wireframe-screen="loan-complete"]');
+
+  await expect(done).toContainText("Nice work, Eddy!");
+  await expect(done).toContainText("TWO PAYMENTS LEFT");
+  await expect(done).toContainText("Friday payment");
+  await expect(done).toContainText("Final Friday payment");
+  await expect(done).toContainText(
+    "No money moved. Your loan still has $12 left.",
+  );
+  await done.getByRole("button", { name: "See my wallet" }).click();
+  await expect(
+    page.locator('[data-wireframe-screen="child-home"]'),
+  ).toBeVisible();
 });
 
 test("should scale a true-size drawing inside a narrow review viewport", async ({

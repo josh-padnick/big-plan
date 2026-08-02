@@ -2193,6 +2193,7 @@ marks and a plan diff never jitters.
     content: "";
   }
   .wireframe-step[data-wireframe-step="done"]::before {
+    content: "✓";
     background: var(--wf-fill);
   }
   .wireframe-step[data-wireframe-step="current"] {

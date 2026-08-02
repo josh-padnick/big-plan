@@ -97,6 +97,12 @@ When a screen asks a person to choose, prepare information, confirm an outcome, 
 
 A useful default sequence is **choose → specify → preview → handoff or finish**. A lesson usually follows **learn → try → see the result → finish**. Keep an error path close to the choice and show that practice did not mutate real state.
 
+Each step does one present-tense job. A preview is for checking the exact words or outcome, with **Edit** and **Looks good** as its two routes; the following handoff screen owns the physical transfer. Keep one term for each concept throughout the flow, and let the stepper draw its own numbers rather than repeating numbers inside labels.
+
+When an actor changes, show a real mode boundary. A child-facing handoff preserves the child's exit and says who should hold the device; the adult-facing gate names the branch-specific request being unlocked. Authentication proves who is present—it never implies consent. Put the full request and any approval action on a separate review state after authentication, and label every button by its immediate result.
+
+Finish learning flows achievement-first: name what the learner figured out, restate the useful answer with a compact visual recap, then quietly distinguish practice from real-world state. The return action should name the purposeful destination, such as **See my wallet**, rather than merely saying Back.
+
 ## Responsive product design guidelines
 
 Accepted bar for wireframe product mockups.
