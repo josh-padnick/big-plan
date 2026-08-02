@@ -27,6 +27,8 @@ const RELEVANCE_FLOOR = {
   stylingFilePatterns: [
     "^\\.style-snapshots/config\\.json$",
     "^assets/(?:logo-(?:light|dark)\\.svg|favicon-(?:light|dark)\\.ico)$",
+    "^scripts/gen-assets\\.mjs$",
+    "^scripts/gen-css\\.mjs$",
     "^src/.*\\.css$",
     "^src/components/(?:.*/)?view[^/]*\\.tsx$",
     "^src/components/_shared/.*\\.tsx$",
@@ -35,6 +37,7 @@ const RELEVANCE_FLOOR = {
     "^src/render/global\\.generated\\.ts$",
     "^src/render/page\\.ts$",
     "^src/render/render-document\\.ts$",
+    "^src/render/serialize-html\\.ts$",
     "^src/render/(?:markdown|shell)/.*\\.ts$",
   ],
 };
