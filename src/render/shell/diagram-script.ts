@@ -200,6 +200,7 @@ export const DIAGRAM_SCRIPT = `
     if (!c) return;
     c.sizer.style.transform =
       "translate(" + c.x + "px," + c.y + "px) scale(" + c.zoom + ")";
+    c.sizer.style.setProperty("--flow-marker-scale", String(1 / c.zoom));
     const readout = diagram.querySelector("[data-flow-zoom-readout]");
     if (readout) readout.textContent = Math.round(c.zoom * 100) + "%";
     reanchor();
@@ -519,7 +520,16 @@ export const DIAGRAM_SCRIPT = `
     if (!selected) return;
     const active = document.activeElement;
     if (active && active.closest && active.closest(".flow-diagram-compose, .flow-collector")) return;
-    if (event.key === "Escape") { event.stopPropagation(); deselect(); return; }
+    if (event.key === "Escape") {
+      const diagram = selected.closest("[data-flow-diagram]") || selected;
+      // A promoted diagram is one interaction surface. Let the shared
+      // maximize leg restore it on the first Escape; selection can follow the
+      // focus that leg returns to the diagram container.
+      if (diagram.hasAttribute("data-figure-maximized")) return;
+      event.stopPropagation();
+      deselect();
+      return;
+    }
     if (event.key === "Delete" || event.key === "Backspace") {
       if (kindOf(selected) === "figure") return;
       event.preventDefault();
@@ -871,8 +881,12 @@ export const DIAGRAM_SCRIPT = `
     // rather than a thing you have selected: with an element selected you
     // type to overwrite it and press Delete to remove it. What stays is
     // Comment, which is not direct manipulation and has nowhere else to live,
-    // and Revert, which only exists once there is something to revert.
-    addAction("comment", ICON.comment, "Comment", () => openCompose(selected));
+    // and Revert, which only exists once there is something to revert. The
+    // figure is only the diagram's keyboard entry point: slide-level comments
+    // own feedback about the whole diagram, so it offers no floating action.
+    if (kindOf(selected) !== "figure") {
+      addAction("comment", ICON.comment, "Comment", () => openCompose(selected));
+    }
     const mine = drafts.filter((d) => d.element === selected);
     if (mine.length > 0) {
       addAction("revert", ICON.revert, "Revert", () => revertElement(selected),
@@ -885,6 +899,10 @@ export const DIAGRAM_SCRIPT = `
       const canType = fieldsIn(selected).length > 0 && !removalOn(selected);
       actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
         canType ? "Type to edit \u00b7 Delete to remove" : "Delete to restore"));
+    }
+    if (actionBar.childElementCount === 0) {
+      actionBar.hidden = true;
+      return;
     }
     adopt(actionBar, selected);
     actionBar.hidden = false;
@@ -1114,22 +1132,31 @@ export const DIAGRAM_SCRIPT = `
     const status = el("p", "flow-collector-status");
     status.hidden = true;
     foot.appendChild(status);
-    // One action, with two honest homes: beside the inline note count while
-    // reading, and inside the tray footer while the diagram is maximized.
-    // It starts hidden before it enters the document so initial paint can
+    // Both homes are real controls: the viewer toolbar stays consistent in
+    // both modes, while the maximized tray repeats the action as its footer.
+    // Both start hidden before entering the document so initial paint can
     // never expose an empty, unanchored green pill.
-    const add = el("button", "flow-collector-add");
-    add.type = "button";
-    add.hidden = true;
-    add.addEventListener("click", (event) => {
-      event.stopPropagation();
-      handOff(diagram, status);
-    });
-    foot.appendChild(add);
+    const createAdd = () => {
+      const add = el("button", "flow-collector-add");
+      add.type = "button";
+      add.hidden = true;
+      add.addEventListener("click", (event) => {
+        event.stopPropagation();
+        handOff(diagram, status);
+      });
+      return add;
+    };
+    const toolbarAdd = createAdd();
+    const toolbar = diagram.querySelector("[data-flow-controls]");
+    if (toolbar) toolbar.prepend(toolbarAdd);
+    const trayAdd = createAdd();
+    foot.appendChild(trayAdd);
     root.appendChild(foot);
 
     diagram.appendChild(root);
-    collectors.set(diagram, { root, list, count, add, status, scope, foot });
+    collectors.set(diagram, {
+      root, list, count, toolbarAdd, trayAdd, status, scope, foot,
+    });
   };
 
   const handOff = (diagram, status) => {
@@ -1216,19 +1243,14 @@ export const DIAGRAM_SCRIPT = `
     }
 
     c.count.textContent = String(mine.length);
-    c.add.textContent = mine.length === 1
+    const addLabel = mine.length === 1
       ? "Add 1 note to plan feedback"
       : "Add " + mine.length + " notes to plan feedback";
-    const total = diagram.querySelector("[data-flow-total]");
-    const toolbar = diagram.querySelector("[data-flow-controls]");
-    if (maximized) {
-      if (c.add.parentElement !== c.foot) c.foot.appendChild(c.add);
-    } else if (total && toolbar && c.add.parentElement !== toolbar) {
-      total.insertAdjacentElement("afterend", c.add);
+    for (const add of [c.toolbarAdd, c.trayAdd]) {
+      add.textContent = addLabel;
+      add.hidden = mine.length === 0;
+      if (add.inert) add.inert = false;
     }
-    // No note, no button. Inline shows it as diagram chrome beside the note
-    // count; maximized shows it as the tray's final footer action.
-    c.add.hidden = mine.length === 0;
     c.root.hidden = mine.length === 0 || !maximized;
     // The status describes one attempt at one batch. Once the batch changes it
     // is describing something that no longer exists, so it goes.
@@ -1237,7 +1259,6 @@ export const DIAGRAM_SCRIPT = `
       c.status.textContent = "";
       c.status.removeAttribute("data-tone");
     }
-    if (c.add.inert) c.add.inert = false;
     if (c.root.inert) c.root.inert = false;
   };
 

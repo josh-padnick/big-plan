@@ -32,7 +32,7 @@ test("should render cleared node text as a struck-through edit", async ({
   });
 });
 
-test("should keep the handoff hidden on load and place it in active chrome", async ({
+test("should keep review chrome stable through zoom and maximize in both themes", async ({
   page,
   flowDiagramViewerUrl,
 }) => {
@@ -40,12 +40,37 @@ test("should keep the handoff hidden on load and place it in active chrome", asy
 
   const diagram = page.locator("[data-flow-diagram]").first();
   const node = diagram.locator('[data-flow-node="authored"]');
-  const add = diagram.locator(".flow-collector-add");
+  const footer = diagram.locator("[data-flow-diagram-footer]");
+  const toolbar = diagram.locator("[data-flow-controls]");
+  const toolbarAdd = toolbar.locator(":scope > .flow-collector-add");
+  const trayAdd = diagram.locator(".flow-collector-foot > .flow-collector-add");
 
-  await test.step("render no empty handoff control on initial load", async () => {
-    await expect(add).toBeHidden();
-    await expect(add).toHaveText("");
-    await expect(add).toHaveAttribute("hidden", "");
+  await test.step("render no empty handoff controls or whole-diagram comment action", async () => {
+    await expect(toolbarAdd).toBeHidden();
+    await expect(toolbarAdd).toHaveText("");
+    await expect(toolbarAdd).toHaveAttribute("hidden", "");
+    await expect(trayAdd).toBeHidden();
+    await expect(trayAdd).toHaveText("");
+    await expect(trayAdd).toHaveAttribute("hidden", "");
+
+    await diagram.focus();
+    await expect(
+      diagram.locator(
+        '.flow-diagram-actionbar-button[data-flow-action="comment"]',
+      ),
+    ).toBeHidden();
+
+    await diagram.locator("[data-figure-maximize]").click();
+    await expect(diagram).toHaveAttribute("data-figure-maximized", "");
+    await expect(
+      diagram.locator(
+        '.flow-diagram-actionbar-button[data-flow-action="comment"]',
+      ),
+    ).toBeHidden();
+    await page.keyboard.press("Escape");
+    await expect(diagram).not.toHaveAttribute("data-figure-maximized");
+    await expect(diagram).toBeFocused();
+    await expect(diagram.locator("[data-figure-maximize]")).not.toBeFocused();
   });
 
   await test.step("mark a saved comment at its diagram element", async () => {
@@ -65,43 +90,107 @@ test("should keep the handoff hidden on load and place it in active chrome", asy
     ).toBeVisible();
   });
 
-  await test.step("place the inline action beside the note count", async () => {
+  await test.step("pin the inline action to the toolbar's left edge", async () => {
     const total = diagram.locator("[data-flow-total]");
     await expect(total).toHaveText("1 note");
-    await expect(add).toBeVisible();
-    await expect(add).toHaveText("Add 1 note to plan feedback");
-    expect(
-      await add.evaluate(
-        (element) =>
-          element.previousElementSibling?.hasAttribute("data-flow-total") ??
-          false,
-      ),
-    ).toBe(true);
-    await expect(add.locator("xpath=..")).toHaveAttribute(
-      "data-flow-controls",
-      "true",
-    );
+    await expect(toolbarAdd).toBeVisible();
+    await expect(toolbarAdd).toHaveText("Add 1 note to plan feedback");
+    const placement = await toolbar.evaluate((element) => {
+      const add = element.querySelector(":scope > .flow-collector-add");
+      const total = element.querySelector("[data-flow-total]");
+      if (add === null || total === null) return null;
+      const barRect = element.getBoundingClientRect();
+      const addRect = add.getBoundingClientRect();
+      const totalRect = total.getBoundingClientRect();
+      return {
+        first: element.firstElementChild === add,
+        leftInset: addRect.left - barRect.left,
+        paddingLeft: Number.parseFloat(getComputedStyle(element).paddingLeft),
+        overlap: Math.max(
+          0,
+          Math.min(addRect.right, totalRect.right) -
+            Math.max(addRect.left, totalRect.left),
+        ),
+      };
+    });
+    expect(placement).not.toBeNull();
+    expect(placement?.first).toBe(true);
+    expect(placement?.leftInset).toBeCloseTo(placement?.paddingLeft ?? -1);
+    expect(placement?.overlap).toBe(0);
   });
 
-  await test.step("place the maximized action inside the distinct tray footer", async () => {
-    await diagram.locator("[data-figure-maximize]").click();
-    await expect(diagram).toHaveAttribute("data-figure-maximized", "");
-    await expect(node.locator("[data-flow-comment-marker]")).toBeVisible();
+  for (const theme of ["light", "dark"]) {
+    await test.step(`${theme}: keep markers fixed, footer quiet, and Escape focus sensible`, async () => {
+      await page.evaluate((value) => {
+        document.documentElement.dataset["theme"] = value;
+      }, theme);
 
-    const tray = diagram.locator(".flow-collector");
-    const head = tray.locator(".flow-collector-head");
-    const list = tray.locator(".flow-collector-list");
-    await expect(tray).toBeVisible();
-    await expect(add.locator("xpath=..")).toHaveClass(/flow-collector-foot/);
-    await expect(add).toBeVisible();
-    expect(
-      await head.evaluate(
-        (element) => getComputedStyle(element).backgroundColor,
-      ),
-    ).not.toBe(
-      await list.evaluate(
-        (element) => getComputedStyle(element).backgroundColor,
-      ),
-    );
+      await footer.hover();
+      await expect
+        .poll(() =>
+          footer.evaluate((element) => getComputedStyle(element).outlineStyle),
+        )
+        .toBe("none");
+
+      await diagram.locator('[data-flow-zoom="fit"]').click();
+      for (let index = 0; index < 2; index += 1) {
+        await diagram.locator('[data-flow-zoom="out"]').click();
+      }
+      const smallZoomMarker = await node
+        .locator("[data-flow-comment-marker]")
+        .boundingBox();
+      for (let index = 0; index < 4; index += 1) {
+        await diagram.locator('[data-flow-zoom="in"]').click();
+      }
+      const largeZoomMarker = await node
+        .locator("[data-flow-comment-marker]")
+        .boundingBox();
+      expect(smallZoomMarker).not.toBeNull();
+      expect(largeZoomMarker).not.toBeNull();
+      expect(largeZoomMarker?.width).toBeCloseTo(smallZoomMarker?.width ?? -1);
+      expect(largeZoomMarker?.height).toBeCloseTo(
+        smallZoomMarker?.height ?? -1,
+      );
+
+      await diagram.locator("[data-figure-maximize]").click();
+      await expect(diagram).toHaveAttribute("data-figure-maximized", "");
+      await expect(toolbarAdd).toBeVisible();
+      await expect(trayAdd).toBeVisible();
+      await expect(trayAdd).toHaveText("Add 1 note to plan feedback");
+      await expect(node.locator("[data-flow-comment-marker]")).toBeVisible();
+      const tray = diagram.locator(".flow-collector");
+      const head = tray.locator(".flow-collector-head");
+      const list = tray.locator(".flow-collector-list");
+      await expect(tray).toBeVisible();
+      expect(
+        await head.evaluate(
+          (element) => getComputedStyle(element).backgroundColor,
+        ),
+      ).not.toBe(
+        await list.evaluate(
+          (element) => getComputedStyle(element).backgroundColor,
+        ),
+      );
+
+      await footer.hover();
+      await expect
+        .poll(() =>
+          footer.evaluate((element) => getComputedStyle(element).outlineStyle),
+        )
+        .toBe("none");
+      await page.keyboard.press("Escape");
+      await expect(diagram).not.toHaveAttribute("data-figure-maximized");
+      await expect(diagram).toBeFocused();
+      await expect(diagram.locator("[data-figure-maximize]")).not.toBeFocused();
+    });
+  }
+
+  await test.step("add the note from the viewer toolbar", async () => {
+    await toolbarAdd.click();
+    const status = diagram.locator(".flow-collector-status");
+    await expect(status).not.toHaveAttribute("hidden", "");
+    await expect(status).toHaveAttribute("data-tone", "unavailable");
+    await expect(status).toContainText("nothing was added");
+    await expect(toolbarAdd).toBeVisible();
   });
 });

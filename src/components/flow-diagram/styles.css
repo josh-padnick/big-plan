@@ -280,8 +280,7 @@ classes.
      exactly what the captain hit. Outline and shadow are channels the artwork
      itself never uses. */
   .flow-diagram[data-flow-canvas] [data-flow-element="node"]:hover,
-  .flow-diagram[data-flow-canvas] [data-flow-element="stage"]:hover,
-  .flow-diagram[data-flow-canvas] [data-flow-element="footer"]:hover {
+  .flow-diagram[data-flow-canvas] [data-flow-element="stage"]:hover {
     outline: 1px solid color-mix(in srgb, var(--accent-c) 55%, transparent);
     outline-offset: 2px;
     box-shadow: 0 1px 6px rgb(0 0 0 / 0.1);
@@ -673,6 +672,12 @@ classes.
     font-weight: 700;
     line-height: 1;
     pointer-events: none;
+    /* The marker is parented to its subject so it follows pan and remains
+       anchored to the card. The canvas supplies the reciprocal scale: Figma-
+       style review pins stay one screen size while the artwork zooms below
+       them. */
+    transform: scale(var(--flow-marker-scale, 1));
+    transform-origin: center;
   }
   .flow-diagram-comment-marker svg {
     width: 0.75rem;
@@ -848,9 +853,10 @@ classes.
     color: var(--flow-warn-ink);
   }
 
-  /* The primary action changes host, not identity. Inline it is compact
-     diagram chrome beside the note count. Maximized it is the tray footer's
-     full-width conclusion, within the tray border and shadow. */
+  /* The toolbar action always owns the far-left slot. The remaining controls
+     stay right-aligned, so the note counter can never collide with the longer
+     handoff label as the viewer changes size. Maximized mode repeats the same
+     action in the tray footer as a deliberate conclusion to the note list. */
   .flow-collector-add {
     display: inline-flex;
     align-items: center;
@@ -878,6 +884,9 @@ classes.
   .flow-collector-add:focus-visible {
     outline: 2px solid var(--accent-c);
     outline-offset: 2px;
+  }
+  .flow-diagram-controls > .flow-collector-add {
+    margin-right: auto;
   }
   .flow-collector-foot > .flow-collector-add {
     width: 100%;

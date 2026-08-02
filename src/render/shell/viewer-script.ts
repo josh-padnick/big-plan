@@ -1393,8 +1393,12 @@ export const VIEWER_SCRIPT = `<script>
     // so one decision settles both.
     const trigger = frame.querySelector("[data-figure-maximize]");
     if (trigger === null) return;
-    if (!keyboard) trigger.setAttribute("data-figure-focus-quiet", "");
-    trigger.focus({ focusVisible: keyboard });
+    // A diagram is already its own keyboard entry point. Returning there
+    // keeps Escape from highlighting a toolbar action the reader did not ask
+    // to use again; other figure families retain their trigger restoration.
+    const target = frame.matches("[data-flow-diagram]") ? frame : trigger;
+    if (!keyboard) target.setAttribute("data-figure-focus-quiet", "");
+    target.focus({ focusVisible: keyboard });
   });
   // focusVisible is not honoured everywhere; the attribute is the fallback and
   // is spent the moment the reader does anything else.

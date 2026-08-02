@@ -11,11 +11,12 @@
 //     order carries no visual meaning and the picture is identical either way;
 //     assistive technology reads the flow instead of four titles, five cards,
 //     and three loose verbs.
-//  2. Every authored element - stage, node, edge, footer, and the figure - is
-//     a comment and suggested-edit target. It carries its anchor from
-//     ./anchors.ts, an accessible name stating its role and relationships, and
-//     the field marks a proposal repaints. Drawn connectors, rails, and stubs
-//     stay decoration and are hidden from assistive technology.
+//  2. Every authored element inside the figure - stage, node, edge, and
+//     footer - is a comment and suggested-edit target. The figure itself is
+//     the diagram's keyboard entry point and address, not a comment target:
+//     slide-level feedback owns whole-diagram remarks. Drawn connectors,
+//     rails, and stubs stay decoration and are hidden from assistive
+//     technology.
 
 import type { CSSProperties, ReactNode } from "react";
 import type {
