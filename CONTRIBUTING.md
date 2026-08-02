@@ -11,8 +11,9 @@ The workflow is intentionally light:
 
 ## Styling commits
 
-CI replays every commit that changes a configured styling file or fixture and compares its Chrome screenshots with its first parent.
-The exact scope and captured states live in [.style-snapshots/config.json](.style-snapshots/config.json).
+CI replays every relevant single-parent commit and compares its Chrome screenshots with its parent.
+The active styling files, fixtures, and captured states live in [.style-snapshots/config.json](.style-snapshots/config.json); the verifier unions that configuration with its mandatory coverage floor and every configuration revision in the verification range so a commit cannot narrow its own relevance.
+Merge commits that resolve a configured styling conflict are rejected because their visual delta cannot be isolated from the merged branch; record the resolution in a single-parent styling commit instead.
 
 End each affected commit subject with one visual contract:
 
