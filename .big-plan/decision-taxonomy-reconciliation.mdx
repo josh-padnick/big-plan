@@ -184,7 +184,7 @@ _Four variations isolate the remaining questions: audit versus choose, three ver
 - **`Reversibility`** — `rating: "easy" | "somewhat-hard" | "hard"` and a concise body describe the cost of changing course.
 - **`Details`** — optional body for deeper analysis.
 
-Every option supplies one score for every criterion. There is no `layout` or `useComplexMode` prop, and there is no criteria-free fallback. `interaction="audit"` never renders answer controls. `interaction="choose"` is valid only for a proposed analysis; confirmation records a reading-session answer without rewriting the authored plan. Weighted scoring makes the formula public: `Σ(impact × option score) ÷ Σ(impact × 5)`, with every input constrained to the same 1–5 scale.
+Every option supplies one score for every criterion. There is no `layout` or `useComplexMode` prop, and there is no criteria-free fallback. `interaction="audit"` never renders answer controls. `interaction="choose"` is valid only for a proposed analysis; confirmation records a reading-session answer without rewriting the authored plan. Weighted scoring makes the formula public: `Σ(impact × option score) ÷ Σ(impact × 5)`, with every input constrained to the same 1–5 scale. Authored impacts and scores initialize the controls; reader adjustments update the live analysis without rewriting the plan source.
 
 ### Variation A — audit only
 
@@ -504,7 +504,7 @@ The dedicated route can fail without taking the review document with it.
 
 ### Variation D — full weighted scoring
 
-_This enabled chooser adds explicit 1–5 option scores and live 1–5 IMPACT weights directly below each criterion; each option's total finishes the matrix, with exact arithmetic available on request._
+_This enabled chooser adds explicit 1–5 option scores as settable star ratings, with the numeric value above each group, plus live 1–5 IMPACT weights directly below each criterion; each option's total finishes the matrix, with exact row-by-row arithmetic available in a calculation matrix on request._
 
 <Decision question="Which maximized-figure approach wins after weighting the criteria?" layout="matrix" scoring="weighted">
 
@@ -625,7 +625,7 @@ The four variations preserve the same option identity and one-sentence definitio
 - **Audit only:** strongest round-2 and taxonomy fit; plan acceptance or feedback settles disagreement outside the matrix.
 - **Three-criterion interactive:** the approved 4.1.3 baseline and fastest direct comparison.
 - **Seven-criterion interactive:** exposes how the keyed rail and matrix feel when a real analysis becomes long.
-- **Full weighted scoring:** matches ComplexDecision's criterion-local priority controls, keeps each live total at the matrix foot, and reveals exact composite arithmetic only when requested.
+- **Full weighted scoring:** matches ComplexDecision's criterion-local priority controls, makes each option score a compact settable star rating with its number above, keeps each live total at the matrix foot, and reveals exact composite arithmetic as a matrix only when requested.
 
 <Part title="QuickDecision" />
 

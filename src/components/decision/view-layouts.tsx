@@ -7,6 +7,7 @@ import type { CompiledDecision, CompiledDecisionOption } from "./compile.js";
 import { ComparisonMatrix } from "../_shared/comparison-matrix/comparison-matrix.js";
 import { BadgePill } from "../_shared/badge-pill/badge-pill.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
+import { STAR_ICON } from "../../icons/lucide/star.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 
@@ -59,17 +60,24 @@ const DefinitionDisclosure = ({
   label,
   detail,
   kind,
+  liveScore,
 }: {
   readonly label: string;
   readonly detail: ReadonlyArray<ElementContent>;
   readonly kind: "criterion" | "value";
+  readonly liveScore?: boolean;
 }) => (
   <details
     className="decision-definition"
     data-info-popover=""
     data-decision-definition={kind}
   >
-    <summary className="decision-definition-trigger">{label}</summary>
+    <summary
+      className="decision-definition-trigger"
+      {...(liveScore ? { "data-decision-score-output": "" } : {})}
+    >
+      {label}
+    </summary>
     <div
       className="decision-definition-body max-w-72 text-xs leading-5"
       data-info-popover-body=""
@@ -213,44 +221,150 @@ const WeightControl = ({
   </div>
 );
 
-const Formula = ({
-  model,
-  option,
+// Weighted values use the same compact, keyboard-operable five-step grammar
+// as impacts, but star silhouettes make the different input roles obvious.
+// The numeric value stays above the stars for fast column scanning.
+const ScoreControl = ({
+  optionTitle,
+  criterionTitle,
+  detail,
+  score,
   optionIndex,
+  criterionIndex,
+}: {
+  readonly optionTitle: string;
+  readonly criterionTitle: string;
+  readonly detail: ReadonlyArray<ElementContent>;
+  readonly score: number;
+  readonly optionIndex: number;
+  readonly criterionIndex: number;
+}) => (
+  <div
+    className="decision-score-control inline-flex flex-col items-center"
+    role="radiogroup"
+    aria-label={`Score ${optionTitle} on ${criterionTitle}`}
+    data-decision-score-group=""
+    data-option-index={optionIndex}
+    data-criterion-index={criterionIndex}
+    data-decision-score-value={score}
+  >
+    <DefinitionDisclosure
+      label={`${score}/5`}
+      detail={detail}
+      kind="value"
+      liveScore={true}
+    />
+    <span className="decision-score-stars mt-1 inline-flex items-center">
+      {[1, 2, 3, 4, 5].map((value) => (
+        <button
+          className="decision-score-star"
+          type="button"
+          role="radio"
+          key={value}
+          aria-label={`Set ${optionTitle} to ${value} of 5 for ${criterionTitle}`}
+          aria-checked={value === score}
+          tabIndex={value === score ? 0 : -1}
+          title={`${optionTitle}: ${value} of 5 for ${criterionTitle}`}
+          data-decision-score=""
+          data-score-value={value}
+          {...(value <= score ? { "data-score-filled": "" } : {})}
+        >
+          {lucideIconToReact({ icon: STAR_ICON, hidden: false })}
+        </button>
+      ))}
+    </span>
+  </div>
+);
+
+// The arithmetic disclosure repeats the comparison's row/column shape. Each
+// cell shows one contribution, and the footer reconciles those contributions
+// with the same normalized total displayed in the primary matrix.
+const ScoreCalculationMatrix = ({
+  model,
 }: {
   readonly model: CompiledDecision;
-  readonly option: CompiledDecisionOption;
-  readonly optionIndex: number;
 }) => {
-  const total = weightedTotal({ model, option });
-  const formula = total.weights
-    .map(
-      (weight, criterionIndex) =>
-        `${weight}×${total.scores[criterionIndex] ?? 0}`,
-    )
-    .join(" + ");
+  const criteria = criteriaOf(model);
+  const totals = model.options.map((option) =>
+    weightedTotal({ model, option }),
+  );
   return (
-    <div
-      className="decision-score-formula min-w-0 rounded-md border border-edge bg-paper px-3 py-2.5"
-      data-decision-composite=""
-      data-option-index={optionIndex}
-      data-score-values={total.scores.join(",")}
-    >
-      <div className="flex min-w-0 items-baseline gap-2">
-        <span className="decision-key inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-xs font-bold">
-          {optionKey(optionIndex)}
-        </span>
-        <span className="min-w-0 flex-1 text-sm font-semibold text-ink">
-          {option.title}
-        </span>
-      </div>
-      <p className="mt-1.5 mb-0 break-words font-mono text-xs leading-5 text-muted">
-        <span data-decision-formula="">{formula}</span>
-        {" = "}
-        <span data-decision-numerator="">{total.numerator}</span>
-        {" / "}
-        <span data-decision-denominator="">{total.denominator}</span>
-      </p>
+    <div className="decision-calculation-scroll mt-3">
+      <table className="decision-calculation-matrix w-full border-collapse">
+        <thead>
+          <tr>
+            <th scope="col">{"Criterion"}</th>
+            <th scope="col">{"Impact"}</th>
+            {model.options.map((option, optionIndex) => (
+              <th scope="col" key={option.id}>
+                <span aria-hidden="true">{optionKey(optionIndex)}</span>
+                <span className="sr-only">{option.title}</span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {criteria.map(({ row, criterion }) => (
+            <tr key={criterion.id}>
+              <th scope="row">{criterion.title}</th>
+              <td
+                className="decision-calculation-impact"
+                data-decision-calculation-weight=""
+                data-criterion-index={row}
+              >
+                {criterion.impact}
+              </td>
+              {model.options.map((option, optionIndex) => {
+                const score = option.considerations[row]?.score ?? 0;
+                const impact = criterion.impact ?? 0;
+                return (
+                  <td
+                    className="decision-calculation-contribution"
+                    key={option.id}
+                    data-decision-contribution=""
+                    data-option-index={optionIndex}
+                    data-criterion-index={row}
+                  >
+                    {`${impact} × ${score} = ${impact * score}`}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th scope="row">{"Total"}</th>
+            <td data-decision-max-total="">
+              {`${totals[0]?.denominator ?? 0} max`}
+            </td>
+            {model.options.map((option, optionIndex) => {
+              const total = totals[optionIndex];
+              return (
+                <td
+                  className="decision-calculation-total"
+                  key={option.id}
+                  data-decision-composite=""
+                  data-option-index={optionIndex}
+                  data-score-values={total?.scores.join(",")}
+                >
+                  <span data-decision-numerator="">
+                    {total?.numerator ?? 0}
+                  </span>
+                  {" / "}
+                  <span data-decision-denominator="">
+                    {total?.denominator ?? 0}
+                  </span>
+                  {" = "}
+                  <strong data-decision-percent="">
+                    {`${total?.percent ?? 0}%`}
+                  </strong>
+                </td>
+              );
+            })}
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 };
@@ -302,16 +416,7 @@ const WeightedScoreFooter = ({
             </span>
             <span data-score-breakdown-open="">{"Hide score calculation"}</span>
           </summary>
-          <div className="mt-3 grid gap-2">
-            {model.options.map((option, optionIndex) => (
-              <Formula
-                key={option.id}
-                model={model}
-                option={option}
-                optionIndex={optionIndex}
-              />
-            ))}
-          </div>
+          <ScoreCalculationMatrix model={model} />
           <p className="mt-2.5 mb-0 text-xs text-muted">
             {
               "Each total is Σ(impact × option score) ÷ Σ(impact × 5), normalized to 100%."
@@ -434,14 +539,19 @@ export const MatrixLayout = ({
                   >
                     {consideration === undefined ? (
                       "-"
+                    ) : model.scoring === "weighted" &&
+                      consideration.score !== undefined ? (
+                      <ScoreControl
+                        optionTitle={option.title}
+                        criterionTitle={criterion.title}
+                        detail={consideration.detail}
+                        score={consideration.score}
+                        optionIndex={index}
+                        criterionIndex={row}
+                      />
                     ) : (
                       <DefinitionDisclosure
-                        label={
-                          model.scoring === "weighted" &&
-                          consideration.score !== undefined
-                            ? `${consideration.score}/5 · ${consideration.verdict}`
-                            : consideration.verdict
-                        }
+                        label={consideration.verdict}
                         detail={consideration.detail}
                         kind="value"
                       />

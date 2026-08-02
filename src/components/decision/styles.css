@@ -244,6 +244,62 @@
     box-shadow: 0 0 0 3px
       color-mix(in srgb, var(--color-accent) 22%, transparent);
   }
+  article .decision-score-control {
+    min-width: 5.875rem;
+  }
+  article .decision-score-control > .decision-definition {
+    line-height: 1;
+  }
+  article
+    .decision-score-control
+    > .decision-definition
+    > .decision-definition-trigger {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 700;
+    color: var(--color-ink);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  article .decision-score-stars {
+    gap: 0.0625rem;
+    white-space: nowrap;
+  }
+  article .decision-score-star {
+    display: inline-flex;
+    width: 1.125rem;
+    height: 1.125rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    border: 0;
+    border-radius: 0.1875rem;
+    background: transparent;
+    color: color-mix(in srgb, var(--color-muted) 48%, transparent);
+  }
+  article .decision-score-star svg {
+    width: 0.875rem;
+    height: 0.875rem;
+    fill: transparent;
+    stroke-width: 1.75;
+  }
+  article .decision-score-star[data-score-filled] {
+    color: color-mix(in srgb, var(--color-accent) 82%, var(--color-ink));
+  }
+  article .decision-score-star[data-score-filled] svg {
+    fill: currentColor;
+  }
+  article .decision-score-star:hover {
+    color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  }
+  article .decision-score-star:focus-visible {
+    outline: none;
+    color: var(--color-accent);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
   article .decision-score-row > th,
   article .decision-score-row > td {
     border-top: 2px solid var(--edge-c);
@@ -285,6 +341,54 @@
   }
   article .decision-score-breakdown[open] > .decision-score-breakdown-link {
     color: var(--color-ink);
+  }
+  article .decision-calculation-scroll {
+    min-width: 0;
+  }
+  article .decision-calculation-scroll > [data-table-scroll-container] {
+    margin-bottom: 0;
+  }
+  article .decision-calculation-matrix {
+    min-width: 36rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+  article .decision-calculation-matrix th,
+  article .decision-calculation-matrix td {
+    padding: 0.5rem 0.625rem;
+    border-right: 1px solid var(--edge-c);
+    border-bottom: 1px solid var(--edge-c);
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  article .decision-calculation-matrix th:last-child,
+  article .decision-calculation-matrix td:last-child {
+    border-right: 0;
+  }
+  article .decision-calculation-matrix thead th {
+    background: var(--surface-c);
+    color: var(--color-muted);
+    font-weight: 700;
+  }
+  article .decision-calculation-matrix th:first-child {
+    width: 32%;
+    text-align: left;
+  }
+  article .decision-calculation-matrix tbody th {
+    color: var(--color-ink);
+    font-weight: 500;
+  }
+  article .decision-calculation-contribution,
+  article .decision-calculation-impact,
+  article .decision-calculation-total {
+    white-space: nowrap;
+  }
+  article .decision-calculation-matrix tfoot th,
+  article .decision-calculation-matrix tfoot td {
+    border-bottom: 0;
+    background: color-mix(in srgb, var(--color-accent) 6%, var(--bg));
+    color: var(--color-ink);
+    font-weight: 600;
   }
 
   /* The authored term is the affordance: dashed underlines work equally for

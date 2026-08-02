@@ -260,9 +260,14 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"tabIndex":-1');
     expect(rendered).toContain("data-decision-composite");
     expect(rendered).toContain("decision-score-row");
+    expect(rendered).toContain("data-decision-score-group");
+    expect(rendered).toContain("decision-score-star");
+    expect(rendered).toContain("data-decision-score-output");
+    expect(rendered).toContain("decision-calculation-matrix");
+    expect(rendered).toContain("data-decision-contribution");
     expect(rendered).toContain("Show score calculation");
-    expect(rendered).toContain('"value":"5/5 · High"');
-    expect(rendered).toContain('"value":"5×5 + 2×3"');
+    expect(rendered).toContain('"value":"5/5"');
+    expect(rendered).toContain('"value":"5 × 5 = 25"');
     expect(rendered).toContain('"value":"31"');
     expect(rendered).toContain('"value":"35"');
     expect(rendered).toContain('"value":"89%"');

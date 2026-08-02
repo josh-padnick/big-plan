@@ -24,9 +24,9 @@ This note records the stage-1 review of the captain-verdict revision. The approv
 
 ### Weighted DecisionAnalysis
 
-1. A separate weight panel forced the reader to cross-reference criteria, while five ordinary tab stops per row would make the replacement tedious by keyboard. Fixed by matching ComplexDecision's criterion-local priority squares directly below every criterion name and giving each group one roving tab stop.
-2. Totals below the matrix felt like a detached calculator. Fixed by ending the matrix itself with a live Total score row aligned under option keys A, B, and C.
-3. Always-visible arithmetic overwhelmed the comparison. Fixed by moving each exact formula, numerator, and denominator behind one “Show score calculation” disclosure immediately below the totals.
+1. The score values wrapped and were not directly settable. Fixed by placing a tabular numeric value above a compact five-star radio group in every option-score cell.
+2. Dense rating controls could create an exhausting keyboard path. Fixed with one roving rating stop per group alongside its definition affordance; arrow/Home/End changes the score, and visible focus uses the established single-ring treatment.
+3. Prose formulas made the arithmetic hard to reconcile with the comparison. Fixed by revealing a second matrix whose rows show each impact × score contribution and whose footer reconciles every numerator, denominator, and normalized total.
 
 ### QuickDecision
 
@@ -40,7 +40,7 @@ This note records the stage-1 review of the captain-verdict revision. The approv
 - DecisionAnalysis audit: tapped a dashed criterion definition in both themes; the matching one-sentence explanation opened, all option controls remained disabled, and the decided status remained intact.
 - DecisionAnalysis interactive: selected “Cover the entire app,” confirmed it, and used Change to reopen it in both themes; the same radio remained selected and regained focus.
 - Seven-criterion analysis: selected an option, confirmed it, and used Change in both themes; all seven criteria remained present and the same option regained focus.
-- Weighted analysis: changed a criterion-local impact with a real square click and arrow-key gesture in both themes, asserted all three matrix-foot totals changed, opened the score-calculation disclosure, and verified the formulas matched those totals.
+- Weighted analysis: changed a criterion-local impact and multiple option scores with real pointer and arrow-key gestures in both themes, asserted the numeric ratings, filled stars, contribution cells, and all three matrix-foot totals changed, then opened the score-calculation disclosure and verified its row arithmetic and footer matched those totals.
 - QuickDecision: completed an independent select–confirm–Change cycle on each of the three briefs in both themes.
 - QuickDecision structure: asserted three authored options, one proposal choice, and no `.decision-brief-compare` element on every call.
 - Layout: the document width equaled the 1440 px viewport in both themes; no visible element crossed either horizontal edge.

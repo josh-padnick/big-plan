@@ -1536,28 +1536,76 @@ export const VIEWER_SCRIPT = `<script>
       rationale === null ? "0" : rationale.getAttribute("data-default-index");
 
     // Weighted analysis follows ComplexDecision's direct-manipulation
-    // treatment: compact priority squares live below each criterion, the
-    // matrix foot shows live totals, and exact arithmetic stays available in
-    // one optional disclosure.
+    // treatment: priority squares live below criteria, star ratings keep
+    // option scores compact, and the optional arithmetic matrix stays in sync.
     if (weighting !== null) {
       const weightGroups = Array.from(
         weighting.querySelectorAll("[data-decision-weight-group]"),
       );
+      const scoreGroups = Array.from(
+        weighting.querySelectorAll("[data-decision-score-group]"),
+      );
       const compositeRows = Array.from(
         weighting.querySelectorAll("[data-decision-composite]"),
+      );
+      const calculationWeights = Array.from(
+        weighting.querySelectorAll("[data-decision-calculation-weight]"),
+      );
+      const contributions = Array.from(
+        weighting.querySelectorAll("[data-decision-contribution]"),
+      );
+      const maxTotals = Array.from(
+        weighting.querySelectorAll("[data-decision-max-total]"),
       );
       const syncScoring = () => {
         const weights = weightGroups.map((group) =>
           Number(group.getAttribute("data-decision-weight-value") || "0"),
         );
+        const scoresByOption = new Map();
+        for (const group of scoreGroups) {
+          const optionIndex = group.getAttribute("data-option-index") || "0";
+          const criterionIndex = Number(
+            group.getAttribute("data-criterion-index") || "0",
+          );
+          const scores = scoresByOption.get(optionIndex) || [];
+          scores[criterionIndex] = Number(
+            group.getAttribute("data-decision-score-value") || "0",
+          );
+          scoresByOption.set(optionIndex, scores);
+        }
         const denominator = weights.reduce(
           (sum, weight) => sum + weight * 5,
           0,
         );
+        for (const node of calculationWeights) {
+          const criterionIndex = Number(
+            node.getAttribute("data-criterion-index") || "0",
+          );
+          node.textContent = String(weights[criterionIndex] || 0);
+        }
+        for (const node of maxTotals) {
+          node.textContent = String(denominator) + " max";
+        }
+        for (const cell of contributions) {
+          const optionIndex = cell.getAttribute("data-option-index") || "0";
+          const criterionIndex = Number(
+            cell.getAttribute("data-criterion-index") || "0",
+          );
+          const weight = weights[criterionIndex] || 0;
+          const score =
+            scoresByOption.get(optionIndex)?.[criterionIndex] || 0;
+          cell.textContent =
+            String(weight) +
+            " × " +
+            String(score) +
+            " = " +
+            String(weight * score);
+        }
         for (const row of compositeRows) {
-          const scores = (row.getAttribute("data-score-values") || "")
-            .split(",")
-            .map(Number);
+          const optionIndex = row.getAttribute("data-option-index") || "0";
+          const scores =
+            scoresByOption.get(optionIndex) ||
+            (row.getAttribute("data-score-values") || "").split(",").map(Number);
           const numerator = weights.reduce(
             (sum, weight, index) => sum + weight * (scores[index] || 0),
             0,
@@ -1566,13 +1614,6 @@ export const VIEWER_SCRIPT = `<script>
             denominator === 0
               ? 0
               : Math.round((numerator / denominator) * 100);
-          const formula = weights
-            .map(
-              (weight, index) =>
-                String(weight) + "×" + String(scores[index] || 0),
-            )
-            .join(" + ");
-          const formulaNode = row.querySelector("[data-decision-formula]");
           const numeratorNode = row.querySelector(
             "[data-decision-numerator]",
           );
@@ -1580,7 +1621,6 @@ export const VIEWER_SCRIPT = `<script>
             "[data-decision-denominator]",
           );
           const percentNode = row.querySelector("[data-decision-percent]");
-          if (formulaNode !== null) formulaNode.textContent = formula;
           if (numeratorNode !== null) {
             numeratorNode.textContent = String(numerator);
           }
@@ -1608,6 +1648,22 @@ export const VIEWER_SCRIPT = `<script>
         }
         syncScoring();
       };
+      const applyScore = (group, value) => {
+        group.setAttribute("data-decision-score-value", String(value));
+        const output = group.querySelector("[data-decision-score-output]");
+        if (output !== null) output.textContent = String(value) + "/5";
+        for (const star of group.querySelectorAll("[data-decision-score]")) {
+          const starValue = Number(star.getAttribute("data-score-value"));
+          star.setAttribute(
+            "aria-checked",
+            starValue === value ? "true" : "false",
+          );
+          star.tabIndex = starValue === value ? 0 : -1;
+          if (starValue <= value) star.setAttribute("data-score-filled", "");
+          else star.removeAttribute("data-score-filled");
+        }
+        syncScoring();
+      };
       for (const group of weightGroups) {
         for (const step of group.querySelectorAll("[data-decision-weight]")) {
           step.addEventListener("click", () => {
@@ -1632,6 +1688,34 @@ export const VIEWER_SCRIPT = `<script>
             applyWeight(group, next);
             group
               .querySelector('[data-weight-value="' + String(next) + '"]')
+              ?.focus();
+          });
+        }
+      }
+      for (const group of scoreGroups) {
+        for (const star of group.querySelectorAll("[data-decision-score]")) {
+          star.addEventListener("click", () => {
+            applyScore(group, Number(star.getAttribute("data-score-value")));
+          });
+          star.addEventListener("keydown", (event) => {
+            const current = Number(
+              group.getAttribute("data-decision-score-value") || "1",
+            );
+            const next =
+              event.key === "ArrowRight" || event.key === "ArrowUp"
+                ? Math.min(5, current + 1)
+                : event.key === "ArrowLeft" || event.key === "ArrowDown"
+                  ? Math.max(1, current - 1)
+                  : event.key === "Home"
+                    ? 1
+                    : event.key === "End"
+                      ? 5
+                      : null;
+            if (next === null) return;
+            event.preventDefault();
+            applyScore(group, next);
+            group
+              .querySelector('[data-score-value="' + String(next) + '"]')
               ?.focus();
           });
         }
