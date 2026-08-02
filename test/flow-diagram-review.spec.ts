@@ -114,8 +114,7 @@ test("should preserve diagram drafts when undoing review text", async ({
   const diagram = page.locator("[data-flow-diagram]").first();
   const node = diagram.locator('[data-flow-node="authored"]');
   const total = diagram.locator("[data-flow-total]");
-  const undoShortcut =
-    process.platform === "darwin" ? "Meta+z" : "Control+z";
+  const undoShortcut = process.platform === "darwin" ? "Meta+z" : "Control+z";
 
   await node.click();
   await diagram.locator('[data-flow-action="comment"]').click();
