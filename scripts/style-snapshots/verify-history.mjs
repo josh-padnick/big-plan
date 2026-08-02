@@ -450,6 +450,11 @@ export const verifyHistory = async ({
       args: ["show", "-s", "--format=%s", commit],
       cwd: repoRoot,
     });
+    if (parents.length > 1) {
+      throw new Error(
+        `${subject}: a merge commit resolved a configured styling file, so its visual delta cannot be isolated from the merged branch. Rebase and record the resolution as a single-parent [visual:empty] or [visual:approved] commit.`,
+      );
+    }
     const visualKind = subject.match(/\[visual:(empty|approved)\]$/)?.[1];
     if (visualKind === undefined) {
       throw new Error(

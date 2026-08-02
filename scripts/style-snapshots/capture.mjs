@@ -27,11 +27,8 @@ if (
 
 const config = JSON.parse(await readFile(configPath, "utf8"));
 
-/**
- * Runs the repository's own build and CLI from the historical checkout so
- * each capture reflects that commit rather than the harness commit.
- */
-const renderDocument = async ({ source, outputPath, stateDirectory }) => {
+/** Prepares one historical checkout before any of its documents are rendered. */
+const prepareCheckout = async () => {
   await execFileAsync("bun", ["install", "--frozen-lockfile"], {
     cwd: checkout,
     maxBuffer: 10 * 1024 * 1024,
@@ -40,7 +37,13 @@ const renderDocument = async ({ source, outputPath, stateDirectory }) => {
     cwd: checkout,
     maxBuffer: 50 * 1024 * 1024,
   });
+};
 
+/**
+ * Runs the repository's own CLI from the historical checkout so each capture
+ * reflects that commit rather than the harness commit.
+ */
+const renderDocument = async ({ source, outputPath, stateDirectory }) => {
   const binPath = join(checkout, "bin", "big-plan.mjs");
   const env = { ...process.env, BIG_PLAN_STATE_DIR: stateDirectory };
   await execFileAsync(process.execPath, [binPath, "guidance"], {
@@ -118,6 +121,7 @@ const browser = await chromium.launch({
 
 try {
   await mkdir(outputDirectory, { recursive: true });
+  await prepareCheckout();
 
   for (const document of config.documents) {
     const documentDirectory = join(temporaryDirectory, document.name);

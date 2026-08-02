@@ -302,6 +302,56 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
       "a pure merge commit must not require a second visual declaration",
     );
 
+    const cleanMergeCommit = await git(repoRoot, ["rev-parse", "HEAD"]);
+    await git(repoRoot, ["checkout", "-b", "conflicting-style-feature"]);
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "blue\nconflicting feature comment\n",
+      "utf8",
+    );
+    await commit({
+      repoRoot,
+      subject: "style: edit feature commentary [visual:empty]",
+    });
+    await git(repoRoot, ["checkout", "main"]);
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "blue\nconflicting main comment\n",
+      "utf8",
+    );
+    await commit({
+      repoRoot,
+      subject: "style: edit main commentary [visual:empty]",
+    });
+    await assert.rejects(
+      git(repoRoot, [
+        "merge",
+        "--no-ff",
+        "conflicting-style-feature",
+        "-m",
+        "Merge pull request #2 from example/conflicting-style-feature",
+      ]),
+    );
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "blue\nresolved commentary\n",
+      "utf8",
+    );
+    await commit({
+      repoRoot,
+      subject: "Merge pull request #2 from example/conflicting-style-feature",
+    });
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: join(repoRoot, "artifacts-conflicting-merge"),
+      }),
+      /merge commit resolved a configured styling file.*Rebase and record the resolution as a single-parent/,
+    );
+    await git(repoRoot, ["reset", "--hard", cleanMergeCommit]);
+
     await writeFile(join(repoRoot, "style.txt"), "green\n", "utf8");
     await commit({
       repoRoot,
