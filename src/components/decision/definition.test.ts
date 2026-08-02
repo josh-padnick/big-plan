@@ -134,13 +134,14 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     expect(rendered).not.toContain("matrix-tone-");
   });
 
-  it("should give row options a distinct title above bold criterion labels and plain values", () => {
+  it("should separate every row option title from smaller criteria with bold labels and plain values", () => {
     const { element, diagnostics } = render(twoOptions(), undefined, "rows");
     expect(diagnostics).toEqual([]);
     const rendered = JSON.stringify(element);
     expect(rendered).toContain(
       '"className":["text-lg","leading-7","font-semibold","text-ink"]',
     );
+    expect(rendered.split("decision-row-head").length - 1).toBe(2);
     expect(rendered).toContain('"value":"Version fidelity:"');
     expect(rendered).toContain(
       '"className":["decision-row-dimension","font-semibold","text-ink"]',
@@ -160,6 +161,20 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     expect(rendered.indexOf("decision-brief-lead")).toBeLessThan(
       rendered.indexOf("decision-brief-list"),
     );
+    expect(rendered).toContain("decision-details-chevron");
+  });
+
+  it.each([
+    ["matrix-wide", "decision-matrix"],
+    ["matrix-transposed", "decision-matrix-transposed"],
+    ["matrix-keyed", "decision-matrix-keyed"],
+  ])("should render the %s comparison experiment", (layout, marker) => {
+    const { element, diagnostics } = render(twoOptions(), undefined, layout);
+    expect(diagnostics).toEqual([]);
+    const rendered = JSON.stringify(element);
+    expect(rendered).toContain(`"data-decision-layout":"${layout}"`);
+    expect(rendered).toContain(marker);
+    expect(rendered).toContain("data-decision-rationale");
   });
 
   it("should drop a criterion every option scores the same", () => {
@@ -198,6 +213,8 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"value":"Propose another approach"');
     expect(rendered).toContain("decision-propose-link");
     expect(rendered).toContain("data-decision-proposal-text");
+    expect(rendered).toContain("data-decision-proposal-cancel");
+    expect(rendered).toContain('"value":"Cancel"');
     expect(rendered).toContain('"value":"Confirm choice"');
     expect(rendered).toContain('"disabled":true');
     expect(rendered).toContain('"value":"Nothing selected yet."');

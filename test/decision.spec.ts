@@ -85,7 +85,7 @@ test("should compare, answer, and confirm an open decision", async ({
     ).toBeChecked();
   });
 
-  await test.step("a proposal is a link that asks for text before submitting", async () => {
+  await test.step("a proposal asks for text and cancel restores the prior option", async () => {
     const proposal = decision.locator("[data-decision-proposal]");
     await expect(proposal).toBeHidden();
     // The reader clicks the link, not the visually hidden radio behind it.
@@ -100,6 +100,16 @@ test("should compare, answer, and confirm an open decision", async ({
       .locator("[data-decision-proposal-text]")
       .fill("Ship it as an npx-installable package instead.");
     await expect(confirm).toBeEnabled();
+    await decision.locator("[data-decision-proposal-cancel]").click();
+    await expect(proposal).toBeHidden();
+    await expect(
+      columns.nth(1).locator("[data-decision-choice]"),
+    ).toBeChecked();
+    await expect(confirm).toHaveText("Confirm choice");
+    await expect(confirm).toBeEnabled();
+    await expect(decision.locator("[data-decision-proposal-text]")).toHaveValue(
+      "",
+    );
   });
 
   await test.step("confirming compresses the matrix to the chosen column", async () => {

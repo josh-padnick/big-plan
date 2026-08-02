@@ -1,24 +1,24 @@
-# Three ways to ask one question
+# Round 5: give every option name room
 
-Same decision, same words, three shapes - judged only by how little the reader must hold to answer.
+Three matrix directions, plus the shared row, proposal, and disclosure refinements requested in review.
 
 <QuickSummary>
 
 <Why>
 
-- A decision the reader has to decode is a decision they postpone.
+- A matrix stops helping when its option names turn into narrow towers of words.
 
 </Why>
 
 <What>
 
-- One question rendered three ways, so the cheapest to read can win on evidence.
+- The same question in three genuinely different matrix arrangements.
 
 </What>
 
 <How>
 
-- Cut what each shape asks the reader to process, then count it.
+- Change which axis owns the long names, not merely their font size.
 
 </How>
 
@@ -26,17 +26,21 @@ Same decision, same words, three shapes - judged only by how little the reader m
 
 <TableOfContents>
 
-<Entry section="What you are comparing" gist="The same decision three times, and how to judge them" />
+<Entry section="What you are comparing" gist="One decision, three matrix answers, and the shared review fixes" />
 
-<Entry section="The component model" gist="All three shapes exercise Decision; ComplexDecision remains separate" />
+<Entry section="The component model" gist="Every variation exercises Decision; ComplexDecision remains separate" />
 
-<Entry section="A - options as rows" gist="One option per row, one line per dimension" />
+<Entry section="Shared refinements" gist="Row hierarchy, proposal cancellation, and a centered disclosure" />
 
-<Entry section="B - the comparison matrix" gist="Dimensions stated once, options across" />
+<Entry section="Matrix 1 - wide breakout" gist="Keep the familiar matrix and relax the reading measure" />
 
-<Entry section="C - the brief" gist="The question, the choices, and the comparison on request" />
+<Entry section="Matrix 2 - options as rows" gist="Transpose the grid so names own the roomy axis" />
 
-<Entry section="How to choose" gist="What each shape costs the reader" />
+<Entry section="Matrix 3 - keyed chooser rail" gist="Full names above a compact letter-keyed grid" />
+
+<Entry section="The brief disclosure" gist="Compare all three is centered in its own row" />
+
+<Entry section="How to choose" gist="What each matrix direction trades" />
 
 </TableOfContents>
 
@@ -46,36 +50,38 @@ Same decision, same words, three shapes - judged only by how little the reader m
 
 _Read each one cold and notice how much work it takes to answer._
 
-Every shape below renders the same decision with the same words.
-Only the arrangement differs, so any difference in effort is the arrangement's doing.
+Every matrix below renders the same decision with the same words.
+Only the arrangement differs, so any difference in header legibility is the arrangement's doing.
 
-Three reductions apply to all of them, because they were weight rather than information:
+Round 5 also applies three shared refinements to the real `Decision` component:
 
-- A verdict is one signal, the word. The glyph and the hue said the same thing twice more.
-- A criterion every option scores identically never renders, because it cannot inform a choice.
-- The rationale no longer restates the criteria the reader just read.
+- Every row-layout option name has a rule beneath it, with smaller criteria copy below.
+- Proposing another approach reveals an explicit **Cancel** action that restores the prior selection.
+- The brief's **Compare all three** label is vertically centered in its collapsed row.
 
 ## The component model
 
-_Three instances of one component, not three components._
+_Five instances of one component, not five components._
 
-Variations A, B, and C each exercise the built-in `Decision` component through its `layout` attribute:
+Every surface in this review exercises the built-in `Decision` component through temporary comparison layouts:
 
-- A is `<Decision layout="rows">`.
-- B is `<Decision layout="matrix">`.
-- C is `<Decision layout="brief">`.
+- Shared row hierarchy is `<Decision layout="rows">`.
+- Matrix 1 is `<Decision layout="matrix-wide">`.
+- Matrix 2 is `<Decision layout="matrix-transposed">`.
+- Matrix 3 is `<Decision layout="matrix-keyed">`.
+- The disclosure check is `<Decision layout="brief">`.
 
 They are not `SmallDecision`, `ComplexDecision`, or separate component types.
 
 The already-approved component boundary remains: `Decision` asks the reviewer a question and ends in a confirmed answer; `ComplexDecision` records a weighted analysis for the reviewer to audit. They stay two components because they own different jobs.
 
-Their matrix-shaped presentations share the internal `ComparisonMatrix` primitive so the two components do not drift into different visual dialects. In this document, B uses that primitive directly and C uses it inside the on-demand comparison; A is the row presentation of `Decision`.
+Their matrix-shaped presentations share the internal `ComparisonMatrix` primitive so the two components do not drift into different visual dialects. All three matrix directions below and the brief's on-demand comparison use that primitive; the row layout is the non-matrix presentation of `Decision`.
 
-<Part title="The three shapes" />
+<Part title="Shared refinements" />
 
-## A - options as rows
+## Shared refinements
 
-_One option per row, each carrying one short line per dimension._
+_The option title is the anchor; criteria are supporting evidence below a consistent rule._
 
 <Decision question="What should a maximized figure cover?" layout="rows">
 
@@ -139,14 +145,15 @@ A second surface to build, route, and maintain.
 
 </Decision>
 
-Nothing is cross-referenced: an option is understood by reading its own block.
-The cost is that each dimension name is printed once per option rather than once.
+Open **Propose another approach** after choosing an option, enter a draft, then use **Cancel**. The field closes and the earlier option returns.
 
-## B - the comparison matrix
+<Part title="Three matrix directions" />
 
-_Dimensions stated once, options across, with the chooser held apart from the comparison._
+## Matrix 1 - wide breakout
 
-<Decision question="What should a maximized figure cover?" layout="matrix">
+_Keep the familiar options-across matrix, but let the component borrow room beyond the prose measure._
+
+<Decision question="What should a maximized figure cover?" layout="matrix-wide">
 
 <Option title="Keep feedback tray visible" recommended summary="The figure fills the reading area; the Feedback tray stays where it is.">
 
@@ -192,10 +199,91 @@ The tray and the overlay must agree on layering, and the focus trap must include
 
 </Decision>
 
-Each dimension is named once, so the grid is the most compact of the three.
-The cost is that understanding one option means reading down a column and carrying the row labels with you.
+This preserves the familiar scan direction and full option titles. Its cost is claiming more horizontal space from the document shell.
 
-## C - the brief
+## Matrix 2 - options as rows
+
+_Transpose the matrix so the long option names own the roomy row-header axis._
+
+<Decision question="What should a maximized figure cover?" layout="matrix-transposed">
+
+<Option title="Keep feedback tray visible" recommended summary="The figure fills the reading area; the Feedback tray stays where it is.">
+
+<Consideration title="Comment while maximized" verdict="Yes" tone="good" />
+
+<Consideration title="Context preserved" verdict="Strong" tone="good" />
+
+<Consideration title="Build effort" verdict="Medium" tone="mixed" />
+
+</Option>
+
+<Option title="Cover the entire app" summary="The figure takes the whole window, tray included.">
+
+<Consideration title="Comment while maximized" verdict="No" tone="bad" />
+
+<Consideration title="Context preserved" verdict="Moderate" tone="mixed" />
+
+<Consideration title="Build effort" verdict="Low" tone="good" />
+
+</Option>
+
+<Option title="Open a dedicated figure view" summary="The reader leaves the document for a surface built around the figure.">
+
+<Consideration title="Comment while maximized" verdict="Possible" tone="mixed" />
+
+<Consideration title="Context preserved" verdict="Weak" tone="bad" />
+
+<Consideration title="Build effort" verdict="High" tone="bad" />
+
+</Option>
+
+</Decision>
+
+This is the most direct cure: option names read normally and each option still aligns across every criterion. Its cost is making criteria the horizontal scan.
+
+## Matrix 3 - keyed chooser rail
+
+_Keep full names in a dedicated chooser rail, then compare compact A/B/C columns below._
+
+<Decision question="What should a maximized figure cover?" layout="matrix-keyed">
+
+<Option title="Keep feedback tray visible" recommended summary="The figure fills the reading area; the Feedback tray stays where it is.">
+
+<Consideration title="Comment while maximized" verdict="Yes" tone="good" />
+
+<Consideration title="Context preserved" verdict="Strong" tone="good" />
+
+<Consideration title="Build effort" verdict="Medium" tone="mixed" />
+
+</Option>
+
+<Option title="Cover the entire app" summary="The figure takes the whole window, tray included.">
+
+<Consideration title="Comment while maximized" verdict="No" tone="bad" />
+
+<Consideration title="Context preserved" verdict="Moderate" tone="mixed" />
+
+<Consideration title="Build effort" verdict="Low" tone="good" />
+
+</Option>
+
+<Option title="Open a dedicated figure view" summary="The reader leaves the document for a surface built around the figure.">
+
+<Consideration title="Comment while maximized" verdict="Possible" tone="mixed" />
+
+<Consideration title="Context preserved" verdict="Weak" tone="bad" />
+
+<Consideration title="Build effort" verdict="High" tone="bad" />
+
+</Option>
+
+</Decision>
+
+No title wraps in the grid because titles do not live there. Its cost is one small cross-reference from the full-name rail to the lettered columns.
+
+<Part title="Disclosure check" />
+
+## The brief disclosure
 
 _The question, the choices, and the one sentence that decides it. The comparison opens on request._
 
@@ -234,16 +322,15 @@ _The question, the choices, and the one sentence that decides it. The comparison
 </Decision>
 
 A reader who agrees with the recommendation answers after one sentence.
-A reader who does not opens the comparison and gets B.
+A reader who does not opens the vertically centered **Compare all three** row.
 
 <Part title="Shipping and your review" />
 
 ## How to choose
 
-_Pick the cheapest shape that still supports a real choice._
+_Pick the matrix whose trade is cheapest for real plan content._
 
-1. Every shape renders the same decision, so any difference in effort belongs to the shape.
-2. A verdict reaches the reader as one signal, never as a word and a glyph and a hue saying the same thing.
-3. A criterion that every option scores the same never renders.
-4. Choosing an option never moves anything else on the page.
-5. Every shape can be answered with the keyboard alone and read with scripts disabled.
+1. **Wide breakout** preserves the familiar matrix but spends document width.
+2. **Options as rows** gives names the most natural reading position but turns criteria sideways.
+3. **Keyed chooser rail** keeps the grid compact but asks the reader to carry A/B/C.
+4. Every direction keeps native radio behavior, stable rationale height, proposal cancellation, and the shared matrix primitive.

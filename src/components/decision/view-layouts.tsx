@@ -1,6 +1,6 @@
-// The three comparison shapes under evaluation. They render the same compiled
-// decision and differ only in how much the reader must hold to answer, which
-// is the axis they are being judged on.
+// The Decision comparison shapes under evaluation. They render the same
+// compiled decision and differ only in how much the reader must hold to
+// answer, which is the axis they are being judged on.
 //
 // Every shape obeys two reductions the round-4 review asked for. A verdict is
 // one signal - the word - because an icon and a colour saying the same thing
@@ -11,6 +11,8 @@
 import type { CompiledDecision, CompiledDecisionOption } from "./compile.js";
 import { ComparisonMatrix } from "../_shared/comparison-matrix/comparison-matrix.js";
 import { BadgePill } from "../_shared/badge-pill/badge-pill.js";
+import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
+import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 
 const RADIO_CLASSES =
   "decision-radio mt-0.5 size-5 shrink-0 appearance-none rounded-full border";
@@ -84,7 +86,7 @@ export const RowsLayout = ({
             className="decision-row-label min-w-0 cursor-pointer"
             htmlFor={option.id}
           >
-            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="decision-row-head flex flex-wrap items-center gap-x-2 gap-y-1">
               <span
                 className="text-lg leading-7 font-semibold text-ink"
                 data-option-title=""
@@ -94,7 +96,7 @@ export const RowsLayout = ({
               </span>
               {option.recommended ? <Recommended /> : null}
             </span>
-            <span className="decision-row-lines mt-2.5 grid gap-1">
+            <span className="decision-row-lines mt-2 grid gap-1">
               {criteria.map(({ row, title }) => (
                 <span className="decision-row-line" key={row}>
                   <span className="decision-row-dimension font-semibold text-ink">
@@ -189,6 +191,208 @@ export const MatrixLayout = ({
         ))}
       </tbody>
     </ComparisonMatrix>
+  );
+};
+
+// Round 5 / matrix 1: keep the familiar orientation and spend more horizontal
+// space on it. The figure itself breaks beyond the reading measure; the table
+// remains the same shared primitive and interaction model.
+export const WideMatrixLayout = ({
+  model,
+  answerable,
+}: {
+  readonly model: CompiledDecision;
+  readonly answerable: boolean;
+}) => <MatrixLayout model={model} answerable={answerable} />;
+
+// Round 5 / matrix 2: transpose the grid. Full option names now own the roomy
+// row-header axis, while short criterion names span the columns.
+export const TransposedMatrixLayout = ({
+  model,
+  answerable,
+}: {
+  readonly model: CompiledDecision;
+  readonly answerable: boolean;
+}) => {
+  const criteria = criteriaOf(model);
+  return (
+    <ComparisonMatrix className="decision-matrix decision-matrix-transposed">
+      <thead>
+        <tr className="decision-chooser-row">
+          <th
+            className="decision-transposed-corner px-4 py-3 text-left text-sm font-medium text-muted"
+            scope="col"
+          >
+            {"Option"}
+          </th>
+          {criteria.map(({ row, title }) => (
+            <th
+              className="decision-transposed-criterion px-4 py-3 text-left text-sm leading-5 font-medium text-muted"
+              key={row}
+              scope="col"
+            >
+              {title}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {model.options.map((option, index) => (
+          <tr className="comparison-matrix-row" key={option.id}>
+            <th
+              className="decision-transposed-option p-0 text-left"
+              scope="row"
+              data-decision-column={index}
+              {...(option.recommended ? { "data-option-recommended": "" } : {})}
+              {...(option.chosen ? { "data-option-chosen": "" } : {})}
+            >
+              <label
+                className="decision-transposed-head flex cursor-pointer items-start gap-2 px-4 py-3"
+                htmlFor={option.id}
+              >
+                <Radio
+                  option={option}
+                  index={index}
+                  groupName={model.id}
+                  answerable={answerable}
+                />
+                <span className="min-w-0">
+                  <span
+                    className="block text-base leading-6 font-semibold text-ink"
+                    data-option-title=""
+                    id={option.titleId}
+                  >
+                    {option.title}
+                  </span>
+                  {option.recommended ? (
+                    <span className="mt-1.5 inline-flex">
+                      <Recommended />
+                    </span>
+                  ) : null}
+                </span>
+              </label>
+            </th>
+            {criteria.map(({ row }) => (
+              <td
+                className="decision-transposed-cell px-4 py-3"
+                key={row}
+                data-decision-column={index}
+              >
+                <span className="decision-verdict text-base leading-6 font-semibold text-ink">
+                  {option.considerations[row]?.verdict ?? "-"}
+                </span>
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </ComparisonMatrix>
+  );
+};
+
+const optionKey = (index: number): string =>
+  String.fromCharCode("A".charCodeAt(0) + index);
+
+// Round 5 / matrix 3: separate choosing from comparing. A full-width option
+// rail preserves every name; compact letter keys then keep the grid itself
+// airy without inventing abbreviations for author-owned option titles.
+export const KeyedMatrixLayout = ({
+  model,
+  answerable,
+}: {
+  readonly model: CompiledDecision;
+  readonly answerable: boolean;
+}) => {
+  const criteria = criteriaOf(model);
+  return (
+    <div className="decision-keyed">
+      <ol className="decision-keyed-chooser m-0 grid list-none gap-0 p-0">
+        {model.options.map((option, index) => (
+          <li
+            className="decision-keyed-option"
+            key={option.id}
+            data-decision-column={index}
+            {...(option.recommended ? { "data-option-recommended": "" } : {})}
+            {...(option.chosen ? { "data-option-chosen": "" } : {})}
+          >
+            <label
+              className="decision-keyed-head flex cursor-pointer items-center gap-3 px-4 py-3"
+              htmlFor={option.id}
+            >
+              <Radio
+                option={option}
+                index={index}
+                groupName={model.id}
+                answerable={answerable}
+              />
+              <span className="decision-key inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-xs font-bold">
+                {optionKey(index)}
+              </span>
+              <span
+                className="min-w-0 text-base leading-6 font-semibold text-ink"
+                data-option-title=""
+                id={option.titleId}
+              >
+                {option.title}
+              </span>
+              {option.recommended ? (
+                <span className="ml-auto">
+                  <Recommended />
+                </span>
+              ) : null}
+            </label>
+          </li>
+        ))}
+      </ol>
+      <ComparisonMatrix className="decision-matrix decision-matrix-keyed">
+        <thead>
+          <tr className="decision-chooser-row">
+            <th
+              className="decision-criterion px-4 py-3 text-left text-sm leading-5 font-medium text-muted"
+              scope="col"
+            >
+              {"Criterion"}
+            </th>
+            {model.options.map((option, index) => (
+              <th
+                className="decision-column px-4 py-3 text-center align-middle"
+                key={option.id}
+                scope="col"
+                data-decision-column={index}
+              >
+                <span className="text-sm font-bold text-ink" aria-hidden="true">
+                  {optionKey(index)}
+                </span>
+                <span className="sr-only">{option.title}</span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {criteria.map(({ row, title }) => (
+            <tr className="comparison-matrix-row" key={row}>
+              <th
+                className="decision-criterion px-4 py-3 text-left text-sm leading-5 font-medium text-muted"
+                scope="row"
+              >
+                {title}
+              </th>
+              {model.options.map((option, index) => (
+                <td
+                  className="decision-cell px-4 py-3 text-center"
+                  key={option.id}
+                  data-decision-column={index}
+                >
+                  <span className="decision-verdict text-base leading-6 font-semibold text-ink">
+                    {option.considerations[row]?.verdict ?? "-"}
+                  </span>
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </ComparisonMatrix>
+    </div>
   );
 };
 
@@ -296,11 +500,17 @@ export const BriefLayout = ({
           </li>
         ))}
       </ul>
-      <details className="decision-brief-compare px-5 pt-1 pb-4">
-        <summary className="decision-details-summary w-fit cursor-pointer rounded-sm text-sm font-semibold">
-          {"Compare all three"}
+      <details className="decision-brief-compare px-5">
+        <summary className="decision-details-summary flex min-h-12 w-fit cursor-pointer items-center gap-1.5 rounded-sm text-sm font-semibold">
+          <span className="decision-details-chevron inline-flex size-3.5 shrink-0">
+            {lucideIconToReact({
+              icon: CHEVRON_RIGHT_ICON,
+              hidden: false,
+            })}
+          </span>
+          <span>{"Compare all three"}</span>
         </summary>
-        <div className="decision-brief-compare-body mt-3">
+        <div className="decision-brief-compare-body mb-4">
           <ReadOnlyComparison model={model} />
         </div>
       </details>

@@ -1487,6 +1487,8 @@ export const VIEWER_SCRIPT = `<script>
     const rationale = own("[data-decision-rationale]");
     const question = own("[data-decision-question]");
     const proposalText = own("[data-decision-proposal-text]");
+    const proposalCancel = own("[data-decision-proposal-cancel]");
+    const proposalLink = own(".decision-propose-link");
     const propose = own("[data-option-proposal]");
     if (confirm === null || change === null || answer === null) continue;
     const choices = ownAll("[data-decision-choice]");
@@ -1501,6 +1503,8 @@ export const VIEWER_SCRIPT = `<script>
       choice.hasAttribute("data-decision-proposal-choice");
     const proposalValue = () =>
       proposalText === null ? "" : proposalText.value.trim();
+    let previousOptionChoice =
+      choices.find((choice) => choice.checked && !proposes(choice)) || null;
 
     // Overlapping the panels freezes the region at the tallest one, so from
     // here on swapping the visible panel cannot move anything below it.
@@ -1544,10 +1548,23 @@ export const VIEWER_SCRIPT = `<script>
     };
     decision.addEventListener("change", (event) => {
       if (!mine(event.target)) return;
+      if (!proposes(event.target) && event.target.checked) {
+        previousOptionChoice = event.target;
+      }
       sync();
       if (proposes(event.target) && proposalText !== null) proposalText.focus();
     });
     if (proposalText !== null) proposalText.addEventListener("input", sync);
+    if (proposalCancel !== null) {
+      proposalCancel.addEventListener("click", () => {
+        const proposalChoice = choices.find(proposes) || null;
+        if (proposalChoice !== null) proposalChoice.checked = false;
+        if (previousOptionChoice !== null) previousOptionChoice.checked = true;
+        if (proposalText !== null) proposalText.value = "";
+        sync();
+        if (proposalLink !== null) proposalLink.focus();
+      });
+    }
 
     const compress = (answered) => {
       if (footer !== null) footer.hidden = answered;

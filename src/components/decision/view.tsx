@@ -1,7 +1,6 @@
 // The shell every Decision layout shares: the question, the chosen comparison
 // shape, the confirm step, and the answered record. The comparison itself
-// lives in view-layouts.tsx, which is where the three shapes under evaluation
-// differ.
+// lives in view-layouts.tsx, which is where the shapes under evaluation differ.
 //
 // Only the matrix keeps a rationale panel, and it now carries one line rather
 // than restating every criterion the reader just read. The rows and brief
@@ -20,7 +19,14 @@ import type {
 } from "./compile.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { type MatrixToneParity } from "../_shared/comparison-matrix/comparison-matrix.js";
-import { BriefLayout, MatrixLayout, RowsLayout } from "./view-layouts.js";
+import {
+  BriefLayout,
+  KeyedMatrixLayout,
+  MatrixLayout,
+  RowsLayout,
+  TransposedMatrixLayout,
+  WideMatrixLayout,
+} from "./view-layouts.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { BadgePill } from "../_shared/badge-pill/badge-pill.js";
@@ -94,8 +100,8 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecision }) => {
       </label>
       {/* Visibility is CSS keyed on the radio, not the hidden attribute, so
           activating the link reveals the field with the viewer script
-          disabled - the component promises everything but confirm works
-          without scripts. */}
+          disabled. The shell enhances that reachable authored state with
+          cancellation, confirmation, and answer recording. */}
       <div className="decision-proposal mt-2.5" data-decision-proposal="">
         <label className="sr-only" htmlFor={textId}>
           {"Proposed approach"}
@@ -110,6 +116,13 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecision }) => {
         <p className="mt-1.5 mb-0 text-xs text-muted">
           {"The agent revises the plan to answer a proposal."}
         </p>
+        <button
+          className="decision-proposal-cancel mt-2"
+          type="button"
+          data-decision-proposal-cancel=""
+        >
+          {"Cancel"}
+        </button>
       </div>
     </div>
   );
@@ -187,8 +200,20 @@ const Comparison = ({
   if (model.layout === "brief") {
     return <BriefLayout model={model} answerable={answerable} />;
   }
+  if (model.layout === "matrix-wide") {
+    return <WideMatrixLayout model={model} answerable={answerable} />;
+  }
+  if (model.layout === "matrix-transposed") {
+    return <TransposedMatrixLayout model={model} answerable={answerable} />;
+  }
+  if (model.layout === "matrix-keyed") {
+    return <KeyedMatrixLayout model={model} answerable={answerable} />;
+  }
   return <MatrixLayout model={model} answerable={answerable} />;
 };
+
+const isMatrixLayout = (model: CompiledDecision): boolean =>
+  model.layout.startsWith("matrix");
 
 export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
   const answerable = isAnswerable(model.status);
@@ -199,6 +224,7 @@ export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
       className="decision mb-5 min-w-0 overflow-hidden rounded-md border border-edge bg-paper"
       data-decision=""
       data-decision-status={model.status}
+      data-decision-layout={model.layout}
       {...(answerable ? { "data-decision-selector": "" } : {})}
     >
       <figcaption className="decision-zone-question bg-header px-5 py-4">
@@ -235,7 +261,7 @@ export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
         {/* Only the matrix earns a rationale region: its cells are values, so
             the reader still needs a sentence naming what they mean. The other
             shapes already carry their reasoning in line. */}
-        {model.layout === "matrix" ? (
+        {isMatrixLayout(model) ? (
           <div
             className="decision-zone-rationale border-t border-edge px-5 py-3.5"
             data-decision-explain=""
