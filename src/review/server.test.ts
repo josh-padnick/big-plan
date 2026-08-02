@@ -7,6 +7,10 @@ import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  nextPendingAgentRequest,
+  readAgentExchange,
+} from "./agent-exchange.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 
@@ -253,6 +257,64 @@ describe("review runtime feedback", () => {
     expect(written.some((name) => /^\d{14}-[a-f0-9]{16}\.md$/.test(name))).toBe(
       true,
     );
+    const exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    expect(nextPendingAgentRequest(exchange)).toMatchObject({
+      kind: "feedback",
+      comments: [{ id: "55667788" }],
+    });
+  });
+
+  it("should route a thread reply back into the same agent exchange", async () => {
+    const response = await call({
+      path: "/api/agent-requests",
+      method: "POST",
+      body: {
+        kind: "reply",
+        commentId: "55667788",
+        body: "Keep the lede under twelve words.",
+      },
+    });
+    expect(response.status).toBe(200);
+    const answer: unknown = await response.json();
+    expect(answer).toMatchObject({
+      request: {
+        kind: "reply",
+        commentId: "55667788",
+        body: "Keep the lede under twelve words.",
+      },
+    });
+  });
+
+  it("should expose only validated live agent exchange state", async () => {
+    const answer: unknown = await (await call({ path: "/api/agent" })).json();
+    expect(answer).toMatchObject({
+      sourceRevision: expect.stringMatching(/^[a-f0-9]{16}$/),
+      requests: [
+        { kind: "feedback" },
+        { kind: "reply", commentId: "55667788" },
+      ],
+      responses: [],
+    });
+    if (
+      typeof answer !== "object" ||
+      answer === null ||
+      !("sourceRevision" in answer)
+    ) {
+      throw new Error("The agent snapshot did not expose a source revision");
+    }
+    const acceptedRevision = answer.sourceRevision;
+    await writeFile(runtime.planPath, `${PLAN}\n<unfinished`);
+    const whileEditing: unknown = await (
+      await call({ path: "/api/agent" })
+    ).json();
+    expect(whileEditing).toMatchObject({
+      sourceRevision: acceptedRevision,
+    });
+    await writeFile(runtime.planPath, PLAN);
   });
 
   it("should keep a retried feedback id unique in sent state", async () => {
@@ -305,13 +367,15 @@ describe("review runtime feedback", () => {
     const answer: unknown = await (
       await call({ path: "/api/progress" })
     ).json();
-    expect(answer).toMatchObject({ events: expect.any(Array) });
-    expect(
-      (answer as { events: Array<{ sessionId: string; state: string }> })
-        .events,
-    ).toContainEqual(
-      expect.objectContaining({ sessionId: runtime.sessionId, state: "done" }),
-    );
+    expect(answer).toMatchObject({
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          sessionId: runtime.sessionId,
+          state: "done",
+          step: "Feedback package received",
+        }),
+      ]),
+    });
   });
 });
 
