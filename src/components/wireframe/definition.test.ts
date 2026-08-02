@@ -1379,6 +1379,65 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(diagnostics).toEqual([]);
   });
 
+  it("should reject two page-level jobs in one screen", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "handoff",
+          attributes: { device: "tablet" },
+          children: [
+            element({
+              name: "PageHeader",
+              attributes: { title: "Choose what you need" },
+            }),
+            element({
+              name: "PageHeader",
+              attributes: { title: "Show your grown-up" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "handoff" draws 2 PageHeaders; keep one page-level job and move the other task into another Screen',
+    ]);
+  });
+
+  it("should allow one page job with subordinate groups and progress", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "request",
+          attributes: { device: "tablet" },
+          children: [
+            element({
+              name: "PageHeader",
+              attributes: { title: "What do you want help with?" },
+            }),
+            element({
+              name: "Stepper",
+              children: [
+                element({
+                  name: "Step",
+                  attributes: { label: "Choose", state: "current" },
+                }),
+                element({
+                  name: "Step",
+                  attributes: { label: "Prepare", state: "todo" },
+                }),
+              ],
+            }),
+            element({
+              name: "Panel",
+              attributes: { title: "Buying something", surface: "filled" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+  });
+
   it("should count a composer send button as the screen's filled action", () => {
     const { diagnostics } = compile({
       scopedChildren: [

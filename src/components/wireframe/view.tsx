@@ -602,10 +602,10 @@ const Screen = ({
           <span />
         )}
         <span className="wireframe-screen-viewport">
-          {preset.label} · {preset.width}px wide ·{" "}
-          {preset.minimumHeight === undefined
-            ? "content height"
-            : `${preset.minimumHeight}px minimum · grows with content`}
+          {preset.label} · {preset.width} × {preset.height}px{" "}
+          {preset.heightPolicy === "fixed"
+            ? "fixed frame"
+            : "minimum · grows with content"}
         </span>
       </div>
       <div className="wireframe-frame" data-wireframe-device={screen.device}>
@@ -626,6 +626,7 @@ const Screen = ({
         <div
           className="wireframe-artboard"
           data-wireframe-device={screen.device}
+          data-wireframe-height-policy={preset.heightPolicy}
           {...(screen.pattern === undefined
             ? {}
             : { "data-wireframe-pattern": screen.pattern })}

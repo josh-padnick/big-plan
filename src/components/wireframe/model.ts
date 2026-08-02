@@ -174,26 +174,47 @@ export const WIREFRAME_PATTERNS: ReadonlyArray<WireframePattern> = [
 ];
 
 /**
- * One device preset's logical width and reader-facing name.
+ * One device preset's logical frame and reader-facing name.
  *
  * The artboard lays out at this true size and scales as one unit to fit the
- * review surface. Device heights are minimums rather than clipping heights:
- * compact screens keep a believable silhouette, while longer content grows
- * the paper instead of overflowing it.
+ * review surface. Desktop and phone use a minimum height and grow with
+ * content. Tablet holds an iPad-shaped viewport; overflow stays inside the
+ * device instead of stretching its bezel.
  */
 export type WireframeDevicePreset = {
   readonly label: string;
   readonly width: number;
-  readonly minimumHeight?: number;
+  readonly height: number;
+  readonly heightPolicy: "fixed" | "minimum";
 };
 
 export const WIREFRAME_DEVICE_PRESETS: Readonly<
   Record<WireframeDevice, WireframeDevicePreset>
 > = {
-  desktop: { label: "Desktop", width: 1440, minimumHeight: 900 },
-  tablet: { label: "Tablet, landscape", width: 1112, minimumHeight: 834 },
-  "tablet-portrait": { label: "Tablet", width: 834, minimumHeight: 1112 },
-  phone: { label: "Phone", width: 390, minimumHeight: 720 },
+  desktop: {
+    label: "Desktop",
+    width: 1440,
+    height: 900,
+    heightPolicy: "minimum",
+  },
+  tablet: {
+    label: "Tablet, landscape",
+    width: 1180,
+    height: 820,
+    heightPolicy: "fixed",
+  },
+  "tablet-portrait": {
+    label: "Tablet",
+    width: 820,
+    height: 1180,
+    heightPolicy: "fixed",
+  },
+  phone: {
+    label: "Phone",
+    width: 390,
+    height: 720,
+    heightPolicy: "minimum",
+  },
 };
 
 /**

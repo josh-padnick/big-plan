@@ -1,6 +1,29 @@
 # Fresh-agent wireframe quality proof
 
-Three small product sketches use only Wireframe guidance and defaults to demonstrate native desktop, tablet, and phone layouts.
+The standards now lead with one memorable design test, then move device details and checkable rules beneath it. The product sketches use only public Wireframe guidance and defaults.
+
+## CLEAR is the front door
+
+**Five questions, in order.**
+
+- **C · Clear job.** Does this screen advance one task, with a primary action that names the goal? _Absorbs one-screen-one-job, obvious next action, and goal-matching action._
+- **L · Layout follows attention.** Is there one focal point and an effortless reading order? _Absorbs hierarchy, proximity, grouping, scanning, alignment, minimal boxes, contrast, and decoration._
+- **E · Explicit change.** Can I see what selection changes, what appears next, and when the mode changes? _Absorbs visible outcomes, progressive disclosure, states, consistency, relationships, and handoff boundaries._
+- **A · Audience language.** Would this audience naturally say these concrete words and amounts? _Absorbs tangible language, mental model, emotional goal, and outcome-named actions._
+- **R · Real device.** Does it behave like this device while remaining deliberately rough? _Absorbs native shells, aspect ratio, density, affordances, touch size, and fidelity._
+
+The hierarchy is deliberate: **CLEAR** judges the product UI; per-device pass criteria decide native composition; primitives and diagnostics settle facts an agent should not have to remember; **LOOP** is only the render-and-review workflow. **CRAP** remains the separate standard for the plan page around the artboard.
+
+## What the curation removed
+
+**Every previous standard now has one unambiguous home.**
+
+- **Fourteen general principles → CLEAR.** Layout, Explicit change, Audience language, and Real device absorb the review questions.
+- **Ten task-flow principles → CLEAR.** They supply Clear job and sharpen the other four questions.
+- **STAMP → retired.** Space, Tiers, Align, and Minimal boxes become Layout and contracts; Plain state becomes Explicit change.
+- **Per-form-factor principles → pass/reject criteria.** They remain beneath CLEAR for desktop, tablet, and phone.
+- **Type, aspect, state, and target rules → mechanics.** Primitives, compile diagnostics, and browser geometry checks own them.
+- **LOOP and CRAP → separate jobs.** LOOP proves a render; CRAP structures the plan page around it.
 
 ## Desktop support workspace
 
@@ -105,55 +128,115 @@ The selected queue record remains visible while the conversation dominates and p
   </Screen>
 </Wireframe>
 
-## Tablet project hub
+## Tablet grown-up handoff
 
-The native iPad layout pairs a generous project canvas with one touch-friendly context Rail and no browser chrome.
+The fixed-ratio iPad flow gives each step one job: choose, prepare, then cross an explicit grown-up boundary.
 
-<Wireframe id="quality-tablet" title="Atlas launch readiness">
-  <Screen id="quality-tablet-project" name="Tablet · Project" device="tablet">
-    <Stack gap="lg">
-      <TopBar title="Atlas launch">
-        <Button label="Projects" emphasis="tertiary" />
-        <Button label="Add update" emphasis="primary" />
-      </TopBar>
+<Wireframe
+  id="quality-tablet"
+  title="Eddy asks a grown-up"
+  initialScreen="quality-tablet-choose"
+>
+  <Screen id="quality-tablet-choose" name="Tablet · Choose" device="tablet">
+    <Center measure="wide">
+      <Stepper>
+        <Step label="Choose" state="current" />
+        <Step label="Prepare" state="todo" />
+        <Step label="Handoff" state="todo" />
+      </Stepper>
       <PageHeader
-        title="Launch readiness"
-        description="6 of 8 milestones complete"
+        title="What do you want help with?"
+        description="Choose one. You can change it later."
       />
-      <Row gap="lg">
-        <Panel title="This week" surface="filled">
-          <Progress
-            label="Launch checklist"
-            value="75"
-            valueLabel="2 milestones to go"
-            detail="Research and rollout remain"
-          />
-          <ImagePlaceholder label="Release timeline" shape="wide" />
+      <Row gap="md">
+        <Panel title="Choose one">
           <List>
             <ListItem
-              label="Pricing approved"
-              meta="Complete · Yesterday"
-              value="✓"
+              label="Buy something"
+              meta="See what money stays in my wallet"
+              selected
             />
             <ListItem
-              label="Migration rehearsal"
-              meta="In progress · Today"
-              value="3 of 5"
+              label="Ask about my loan"
+              meta="See what I owe and ask a question"
+            />
+            <ListItem
+              label="Change my allowance"
+              meta="Explain what I want to change"
             />
           </List>
         </Panel>
-        <Rail>
-          <Panel title="Project health" surface="outlined">
-            <Metric label="Confidence" value="High" note="No blocked work" />
-            <Badge label="On track" tone="success" />
-          </Panel>
-          <Panel title="Next decision">
-            <Text text="Choose the rollout window." />
-            <Button label="Review options" emphasis="secondary" />
-          </Panel>
-        </Rail>
+        <Panel title="Buying means" surface="filled">
+          <Text text="Next, tell us the item and price." />
+          <Text text="We will show how much money you would have afterward." />
+          <Button
+            label="Continue with buying"
+            emphasis="primary"
+            navigateTo="quality-tablet-prepare"
+          />
+        </Panel>
       </Row>
-    </Stack>
+    </Center>
+  </Screen>
+
+  <Screen id="quality-tablet-prepare" name="Tablet · Prepare" device="tablet">
+    <Center measure="prose">
+      <Stepper>
+        <Step label="Choose" state="done" />
+        <Step label="Prepare" state="current" />
+        <Step label="Handoff" state="todo" />
+      </Stepper>
+      <PageHeader
+        title="What are you hoping to buy?"
+        description="Tell us what you know. Your grown-up can help with the rest."
+      />
+      <Panel surface="filled">
+        <TextField label="Item" value="Soccer ball" />
+        <TextField label="Price" kind="number" value="$18" />
+        <Text text="You have $42.50. You would have $24.50 afterward." />
+      </Panel>
+      <Row justify="between">
+        <Button
+          label="Change my choice"
+          emphasis="tertiary"
+          navigateTo="quality-tablet-choose"
+        />
+        <Button
+          label="Review with my grown-up"
+          emphasis="primary"
+          navigateTo="quality-tablet-handoff"
+        />
+      </Row>
+    </Center>
+  </Screen>
+
+  <Screen id="quality-tablet-handoff" name="Tablet · Handoff" device="tablet">
+    <Center measure="prose">
+      <Stepper>
+        <Step label="Choose" state="done" />
+        <Step label="Prepare" state="done" />
+        <Step label="Handoff" state="current" />
+      </Stepper>
+      <PageHeader
+        title="Now hand the iPad to your grown-up"
+        description="They will review this with you before anything is bought."
+        badge="Grown-up handoff"
+      />
+      <Panel title="Eddy wants help buying" surface="filled">
+        <Metric label="Item" value="Soccer ball" note="$18" />
+        <Text text="Money now: $42.50" />
+        <Text text="Money afterward: $24.50" />
+        <Text text="Loan still owed: $12" />
+      </Panel>
+      <Row justify="between">
+        <Button
+          label="Change my request"
+          emphasis="tertiary"
+          navigateTo="quality-tablet-prepare"
+        />
+        <Button label="Start grown-up review" emphasis="primary" />
+      </Row>
+    </Center>
   </Screen>
 </Wireframe>
 

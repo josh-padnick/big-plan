@@ -5,9 +5,9 @@ description: True-size product screens with honest device proportions, safe cont
 
 `Wireframe` draws low-fidelity product UI inside a device-appropriate frame.
 Each screen lays out at its device's true width and scales as one unit to fit the review document; desktop screens preserve their 1440 px logical layout within a shared 768 px painted cap.
-Desktop and tablet frames use realistic minimum proportions, then grow when content needs more room instead of clipping or scrolling inside a false fixed viewport.
+Desktop and phone use realistic minimum silhouettes and grow with content.
+Tablet holds a real iPad aspect ratio; overflow scrolls inside the fixed device instead of stretching its bezel.
 Only desktop uses browser chrome; tablet renders as a native device.
-Phone height remains content-driven so a compact state does not become a mostly empty handset.
 Multiple screens can link to one another without adding executable plan-authored code, while the complete storyboard remains readable when scripts are disabled.
 
 ## When to use it
@@ -17,6 +17,31 @@ Keep explanations and design rationale in the surrounding prose, and put only cu
 
 Run `big-plan guidance Wireframe` before authoring one.
 That component guidance owns the judgment calls for product layout, form-factor honesty, action hierarchy, and choosing among primitives; this page is the syntax reference.
+
+## Design front door: CLEAR
+
+Use one memorable standard before reaching for the detailed device rules:
+
+1. **Clear job** - one screen advances one task, and its primary action names that goal.
+2. **Layout follows attention** - one focal point, deliberate reading order, meaningful proximity, and contrast proportional to importance.
+3. **Explicit change** - selection changes the outcome, later information appears progressively, and mode handoffs are unmistakable.
+4. **Audience language** - concrete words, outcomes, and amounts match the intended user's mental model and emotional goal.
+5. **Real device** - native shells, interaction models, aspect ratios, and affordances; rough fidelity never excuses loose alignment or state.
+
+Everything else is subordinate: the device table below owns form-factor pass criteria; the component, compiler, lint, and geometry tests own mechanical rules; LOOP in the generated guidance owns render-and-review practice.
+CRAP still governs the surrounding plan page, not product UI inside an artboard.
+
+### How the standards were distilled
+
+| Previous source | Where it went |
+| --- | --- |
+| Fourteen general hierarchy principles | Focal point, reading order, proximity, grouping, scanning, restrained decoration, emotional goal, and rough fidelity collapsed into CLEAR rather than remaining a flat checklist. |
+| Ten task-flow principles | One job and goal-matching action became **Clear job**; progressive reveal, visible outcomes, and mode boundaries became **Explicit change**; containers and contrast became **Layout**; child-facing copy became **Audience language**. |
+| STAMP | Retired as a second design acronym: Space/Tiers/Align/Minimal boxes map to **Layout** and device contracts; Plain state maps to **Explicit change**. |
+| LOOP | Retained only as the delivery workflow: look up, open, object three times, push the fix down. |
+| Per-form-factor principles | Live as desktop/tablet/phone pass and reject criteria, backed by device primitives. |
+| Type, aspect, state, and target rules | Live in fixed type roles, the fixed iPad frame, hover/focus/selection paint, 44 px tablet/phone targets, compile diagnostics, and Playwright geometry checks. |
+| CRAP | Remains the plan-page layout standard; CLEAR does not duplicate it. |
 
 ## Authoring
 
@@ -70,17 +95,17 @@ Every `Screen` requires a unique `id`, a non-empty `name`, and one `device`:
 
 | `device`          | Logical size                      | Frame                 |
 | ----------------- | --------------------------------- | --------------------- |
-| `desktop`         | 1440 × 900 px minimum             | Desktop browser       |
-| `tablet`          | 1112 × 834 px minimum (about 4:3) | Landscape tablet      |
-| `tablet-portrait` | 834 × 1112 px minimum (about 3:4) | Portrait tablet       |
-| `phone`           | 390 × 720 px minimum              | Phone, no browser bar |
+| `desktop`         | 1440 × 900 px minimum              | Desktop browser                  |
+| `tablet`          | 1180 × 820 px fixed (about 1.44:1) | Landscape tablet; internal scroll |
+| `tablet-portrait` | 820 × 1180 px fixed                | Portrait tablet; internal scroll  |
+| `phone`           | 390 × 720 px minimum               | Phone, no browser bar             |
 
 Only a desktop screen may add `url` for its browser bar.
 Tablet screens reject `url`.
 Phone screens reject `url`, `AppShell`, and `Sidebar`; use `TopBar`, a single content column, and `BottomBar` instead.
 
 `navigateTo` on `Button`, `NavItem`, `ListItem`, or `Crumb` must name another screen in the same wireframe.
-The compiler blocks equal flexible thirds on desktop, ambiguous record-detail selection, four or more outlined sibling panels, phone desktop-shell primitives, and more than one filled work action per screen.
+The compiler blocks multiple page-level jobs, equal flexible thirds on desktop, ambiguous record-detail selection, four or more outlined sibling panels, phone desktop-shell primitives, and more than one filled work action per screen.
 A composer's Send button counts as a filled action even when it omits `emphasis="primary"`; selected buttons inside `SegmentedControl` and `BottomBar` are mode or navigation state and do not count as filled work actions.
 
 ## Optional screen patterns

@@ -27,16 +27,47 @@ test("should render every proof at its native device geometry", async ({
     await expect(screen.locator(".wireframe-browser-bar")).toHaveCount(1);
   });
 
-  await test.step("tablet is four-by-three and carries no browser shell", async () => {
-    const screen = page.locator(
-      '[data-wireframe-screen="quality-tablet-project"]',
-    );
-    const artboard = screen.locator(".wireframe-artboard");
+  await test.step("tablet holds a real iPad ratio and carries no browser shell", async () => {
+    const wireframe = page.locator('[data-wireframe="quality-tablet"]');
+    const switches = wireframe.locator("[data-wireframe-switch]");
 
-    expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1112);
-    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(834);
-    await expect(screen.locator(".wireframe-browser-bar")).toHaveCount(0);
-    await expect(screen.locator(".wireframe-tablet-handle")).toHaveCount(1);
+    for (
+      let screenIndex = 0;
+      screenIndex < (await switches.count());
+      screenIndex += 1
+    ) {
+      await switches.nth(screenIndex).click();
+      const screen = wireframe.locator(
+        '[data-wireframe-device="tablet"]:visible',
+      );
+      const artboard = screen.locator(".wireframe-artboard");
+
+      expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1180);
+      expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(820);
+      const ratio = await artboard.evaluate(
+        (node) => node.offsetWidth / node.offsetHeight,
+      );
+      expect(ratio).toBeGreaterThanOrEqual(1.39);
+      expect(ratio).toBeLessThanOrEqual(1.44);
+      expect(
+        await artboard.evaluate((node) => getComputedStyle(node).overflowY),
+      ).toBe("auto");
+      await expect(screen.locator(".wireframe-browser-bar")).toHaveCount(0);
+      await expect(screen.locator(".wireframe-tablet-handle")).toHaveCount(1);
+      const targets = await screen
+        .locator(
+          ".wireframe-button, .wireframe-nav-item, .wireframe-list-item, .wireframe-input",
+        )
+        .evaluateAll((nodes) =>
+          nodes.map((node) =>
+            node instanceof HTMLElement ? node.offsetHeight : 0,
+          ),
+        );
+      expect(
+        targets.every((height) => height >= 44),
+        `touch targets: ${targets.join(", ")}`,
+      ).toBe(true);
+    }
   });
 
   await test.step("phone is single-column native chrome with touch targets", async () => {
@@ -55,7 +86,9 @@ test("should render every proof at its native device geometry", async ({
     const targets = await screen
       .locator(".wireframe-button, .wireframe-list-item")
       .evaluateAll((nodes) =>
-        nodes.map((node) => node.getBoundingClientRect().height),
+        nodes.map((node) =>
+          node instanceof HTMLElement ? node.offsetHeight : 0,
+        ),
       );
     expect(targets.every((height) => height >= 44)).toBe(true);
   });

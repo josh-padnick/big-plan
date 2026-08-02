@@ -460,6 +460,27 @@ const checkOutlinedSiblingBudget = ({
   visit(screen.children);
 };
 
+/** Multiple page-level headers make one screen claim more than one clear job. */
+const checkOneClearJob = ({
+  screen,
+  position,
+  diagnostics,
+}: {
+  readonly screen: WireframeScreen;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const pageHeaders = flatten(screen.children).filter(
+    (node) => node.element === "PageHeader",
+  );
+  if (pageHeaders.length > 1) {
+    diagnostics.add({
+      message: `Screen "${screen.id}" draws ${pageHeaders.length} PageHeaders; keep one page-level job and move the other task into another Screen`,
+      position,
+    });
+  }
+};
+
 /** A phone uses its compact shell primitives, never a stacked desktop shell. */
 const checkPhoneShell = ({
   screen,
@@ -601,7 +622,7 @@ const compileScreen = ({
     name: validated.name,
     device: validated.device ?? "desktop",
     ...(validated.pattern === undefined ? {} : { pattern: validated.pattern }),
-    ...(validated.url === undefined || validated.device === "phone"
+    ...(validated.url === undefined || validated.device !== "desktop"
       ? {}
       : { url: validated.url }),
     children,
@@ -613,6 +634,7 @@ const compileScreen = ({
     position: child.position,
     diagnostics,
   });
+  checkOneClearJob({ screen, position: child.position, diagnostics });
   checkPhoneShell({ screen, position: child.position, diagnostics });
   checkOneFilledAction({ screen, position: child.position, diagnostics });
   return screen;

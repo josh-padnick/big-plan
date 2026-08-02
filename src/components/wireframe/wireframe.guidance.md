@@ -2,34 +2,32 @@
 
 Draw product UI only when a reviewer must see a screen to judge the plan. Keep rationale outside the artboard, copy in attributes, fidelity rough, and prototypes to one two-or-three-screen path. `device` owns true width and frame: `desktop` may show `url`; `tablet` and `tablet-portrait` use native device frames; `phone` is one column with `TopBar` and `BottomBar`.
 
-## LOOP: make the design
+## CLEAR: the design front door
 
-1. **Look it up.** Name a proven pattern from Linear, GitHub, Notion, Stripe, Figma, iPadOS, or iOS before drawing.
-2. **Open the render.** Inspect every screen at its declared device size, light and dark, including hover, focus, active, empty, disabled, and error states.
-3. **Object three times.** Name three things a picky reviewer would flag on each screen, fix them, then present.
-4. **Push the fix down.** When a defect is possible because of a primitive or default, fix that layer rather than one example.
-
-## STAMP: judge the screen
-
-- **Space:** primary work dominates. `Rail` is the only secondary-width primitive and wraps instead of squeezing. Authors never set pane widths.
-- **Tiers:** page title, content, metadata; one primary work action. Navigation and mode selection are state, not extra actions.
-- **Align:** one spacing rhythm, numeric columns right-aligned, two-line list rows, content-driven pane height.
-- **Minimal boxes:** `Panel` is plain by default; use `filled` for a pane and `outlined` only for a card.
-- **Plain state:** say state in words, reinforce it with tone, and mark selection with tint plus an inset edge.
+- **Clear job.** One screen advances one task; the primary action names that goal. Split choose, prepare, handoff, and approval into screens.
+- **Layout follows attention.** One focal point leads through related groups to the next action. Use proximity, alignment, restrained boxes, three text tiers, and contrast—not equal visual weight.
+- **Explicit change.** Selection visibly changes the outcome; reveal later information progressively; mark active, selected, disabled, error, and mode handoffs unmistakably.
+- **Audience language.** Use concrete words, outcomes, and amounts the intended user says. Support the desired feeling; avoid technical, process, or abstract summary copy.
+- **Real device.** Use the native shell and interaction model. Keep fidelity rough but alignment exact, affordances obvious, and decoration meaningful.
 
 ## Pass by device
 
-| Device  | Pass when                                                                                                                                                                                                                                                | Reject                                                                                         |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Desktop | Professional dense B2B workspace: flush full-height `Sidebar`, stable global nav, main canvas owns most width, primary surface about 60–75%, `Rail` about 300px. Settings use sub-nav plus one dense field column; create/edit is a route or real modal. | Equal thirds; floating tablet sidebar; two large settings cards; inflated chrome.              |
-| Tablet  | Intentional iPad multi-column or master/detail at 4:3 or 3:4, with touch spacing and card-like grouping only where useful.                                                                                                                               | Browser `url`; compressed desktop density; very wide short strips; forced phone single-column. |
-| Phone   | Tall narrow native flow: compact `TopBar`, one column, 44px controls, 52–64px rows, bottom tabs, list → detail push, progressive disclosure.                                                                                                             | `AppShell`/`Sidebar`; side-by-side properties; vertical iPad; desktop copy squeezed narrow.    |
+| Device  | Pass when                                                                                                                                                                                                                                                | Reject                                                                                      |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Desktop | Professional dense B2B workspace: flush full-height `Sidebar`, stable global nav, main canvas owns most width, primary surface about 60–75%, `Rail` about 300px. Settings use sub-nav plus one dense field column; create/edit is a route or real modal. | Equal thirds; floating tablet sidebar; two large settings cards; inflated chrome.           |
+| Tablet  | Intentional iPad layout in a fixed 1180 × 820 or 820 × 1180 frame (about 1.44:1), with 44px controls, progressive steps, and card-like grouping only where useful.                                                                                       | Stretched bezel; browser `url`; compressed desktop density; desktop-like task flow.         |
+| Phone   | Tall narrow native flow: compact `TopBar`, one column, 44px controls, 52–64px rows, bottom tabs, list → detail push, progressive disclosure.                                                                                                             | `AppShell`/`Sidebar`; side-by-side properties; vertical iPad; desktop copy squeezed narrow. |
 
-## Establish hierarchy
+## Contracts and blocking checks
 
-1. One focal point. 2. Deliberate reading order. 3. Proximity shows relationships. 4. Groups map to user concepts. 5. The next action is obvious and outcome-named. 6. Language is tangible (`$27.50 to go`, not `61%`). 7. Terms match the user’s mental model. 8. Effects and relationships are explicit. 9. Weak signals recede. 10. Names and states stay consistent. 11. A five-second scan reveals purpose. 12. Decoration reinforces meaning. 13. The screen supports the intended feeling. 14. Fidelity stays as rough as the decision permits.
+Defaults own pane widths, fixed type roles, device frames, contrast, hover/focus paint, selection, and touch floors. Compilation blocks multiple `PageHeader`s, multiple primary work actions, equal desktop thirds, missing detail selection, boxed-region walls, and device-shell mismatches. Lint keeps process copy outside the artboard. Geometry tests fence pane width, overlap, dead bands, iPad ratio, shells, and touch targets.
 
-Before delivery ask: what lands first, what job is primary, what happens next, what belongs together, what is accidentally connected, what is too loud, what can sound more human, and can the screen be understood in five seconds?
+## LOOP: prove it before delivery
+
+1. **Look it up:** start from a proven native pattern.
+2. **Open the render:** inspect every screen at declared size, light/dark, hover, focus, active, empty, disabled, and error.
+3. **Object three times:** challenge each screen with CLEAR, fix three findings, and re-open it.
+4. **Push the fix down:** when the interface allowed the defect, repair the primitive or diagnostic rather than one example.
 
 ## Six paste-ready patterns
 
