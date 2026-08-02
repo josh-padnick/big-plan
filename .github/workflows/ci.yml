@@ -14,11 +14,10 @@ jobs:
   lint:
     # Runs on the local self-hosted runner.
     runs-on: self-hosted
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
-        with:
-          # Styling history verification replays every relevant commit.
-          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           # Reads the packageManager field so CI and local bun stay in lockstep.
@@ -36,6 +35,26 @@ jobs:
             exit 1
           fi
       - run: bun run test
+
+  style-history:
+    # Historical commits execute only in this disposable GitHub-hosted job,
+    # never on the persistent self-hosted runner.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Styling history verification replays every relevant commit.
+          fetch-depth: 0
+          # Historical code must not inherit checkout's repository credential.
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Install isolated Chrome runtime
+        run: bunx playwright install --with-deps chrome
       - name: Styling commits must match their visual contract
         env:
           STYLE_HISTORY_BASE: ${{ github.ref == 'refs/heads/main' && github.event.before || 'origin/main' }}
