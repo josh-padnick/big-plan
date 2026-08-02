@@ -684,6 +684,83 @@ classes.
     height: 0.75rem;
     flex: none;
   }
+
+  /* --- Guarded maximize exit ---------------------------------------------
+     This is an alert dialog rather than a toast: leaving would hide the tray
+     that contains the pending batch, so the reviewer must make an explicit
+     stay-or-exit choice. It follows the document's shadcn-like surface
+     language - dimmed scrim, compact card, quiet cancel, solid primary - and
+     remains inside the promoted figure so maximize isolation cannot inert it. */
+  .flow-diagram-exit-alert {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgb(8 6 4 / 0.58);
+    font-family: var(--font-sans);
+  }
+  .flow-diagram-exit-alert[hidden] {
+    display: none;
+  }
+  .flow-diagram-exit-alert-card {
+    width: min(28rem, calc(100vw - 2rem));
+    padding: 1.25rem;
+    border: 1px solid var(--edge-c);
+    border-radius: 0.65rem;
+    background: var(--bg);
+    color: var(--ink-c);
+    box-shadow:
+      0 20px 54px rgb(0 0 0 / 0.32),
+      0 4px 14px rgb(0 0 0 / 0.14);
+  }
+  .flow-diagram-exit-alert-title {
+    margin: 0;
+    color: var(--ink-c);
+    font-size: 1rem;
+    font-weight: 650;
+    line-height: 1.35;
+  }
+  .flow-diagram-exit-alert-description {
+    margin: 0.45rem 0 0;
+    color: var(--muted-c);
+    font-size: 0.8125rem;
+    line-height: 1.55;
+  }
+  .flow-diagram-exit-alert-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1.1rem;
+  }
+  .flow-diagram-exit-alert-button {
+    min-height: 2rem;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--edge-c);
+    border-radius: 0.4rem;
+    background: var(--bg);
+    color: var(--ink-c);
+    font-size: 0.75rem;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .flow-diagram-exit-alert-button:hover {
+    background: var(--surface-c);
+  }
+  .flow-diagram-exit-alert-button[data-variant="primary"] {
+    border-color: var(--accent-c);
+    background: var(--accent-c);
+    color: var(--bg);
+  }
+  .flow-diagram-exit-alert-button[data-variant="primary"]:hover {
+    background: color-mix(in srgb, var(--accent-c) 85%, var(--ink-c));
+  }
+  .flow-diagram-exit-alert-button:focus-visible {
+    outline: 2px solid var(--accent-c);
+    outline-offset: 2px;
+  }
+
   /* --- The diagram's own feedback collector -------------------------------
      Two levels that must not collapse. This holds the notes made on ONE
      diagram; the plan's feedback package holds everything and is sent once,

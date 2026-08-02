@@ -44,6 +44,7 @@ test("should keep review chrome stable through zoom and maximize in both themes"
   const toolbar = diagram.locator("[data-flow-controls]");
   const toolbarAdd = toolbar.locator(":scope > .flow-collector-add");
   const trayAdd = diagram.locator(".flow-collector-foot > .flow-collector-add");
+  const exitAlert = diagram.getByRole("alertdialog");
 
   await test.step("render no empty handoff controls or whole-diagram comment action", async () => {
     await expect(toolbarAdd).toBeHidden();
@@ -71,32 +72,38 @@ test("should keep review chrome stable through zoom and maximize in both themes"
     await page.keyboard.press("Escape");
     await expect(diagram).not.toHaveAttribute("data-figure-maximized");
     await expect(diagram).not.toHaveAttribute("data-flow-selected");
+    await expect(diagram).toHaveAttribute("data-figure-focus-quiet", "");
     await expect(diagram).toBeFocused();
     await expect(diagram.locator("[data-figure-maximize]")).not.toBeFocused();
+    await expect(exitAlert).toBeHidden();
   });
 
-  await test.step("mark a saved comment at its diagram element", async () => {
-    await node.click();
-    await diagram.locator('[data-flow-action="comment"]').click();
-    await diagram
-      .locator(".flow-diagram-compose textarea")
-      .fill("Keep this source explicit.");
-    await diagram
-      .locator('.flow-diagram-compose button[data-variant="primary"]')
-      .click();
+  await test.step("mark two saved comments at the diagram element", async () => {
+    for (const body of [
+      "Keep this source explicit.",
+      "Preserve the ownership label.",
+    ]) {
+      await node.click();
+      await diagram.locator('[data-flow-action="comment"]').click();
+      await diagram.locator(".flow-diagram-compose textarea").fill(body);
+      await diagram
+        .locator('.flow-diagram-compose button[data-variant="primary"]')
+        .click();
+    }
 
     const marker = node.locator("[data-flow-comment-marker]");
     await expect(marker).toBeVisible();
     await expect(
       marker.locator('[data-lucide="message-square"]'),
     ).toBeVisible();
+    await expect(marker).toContainText("2");
   });
 
   await test.step("pin the inline action to the toolbar's left edge", async () => {
     const total = diagram.locator("[data-flow-total]");
-    await expect(total).toHaveText("1 note");
+    await expect(total).toHaveText("2 notes");
     await expect(toolbarAdd).toBeVisible();
-    await expect(toolbarAdd).toHaveText("Add 1 note to plan feedback");
+    await expect(toolbarAdd).toHaveText("Add 2 notes to plan feedback");
     const placement = await toolbar.evaluate((element) => {
       const add = element.querySelector(":scope > .flow-collector-add");
       const total = element.querySelector("[data-flow-total]");
@@ -158,7 +165,7 @@ test("should keep review chrome stable through zoom and maximize in both themes"
       await expect(diagram).toHaveAttribute("data-figure-maximized", "");
       await expect(toolbarAdd).toBeVisible();
       await expect(trayAdd).toBeVisible();
-      await expect(trayAdd).toHaveText("Add 1 note to plan feedback");
+      await expect(trayAdd).toHaveText("Add 2 notes to plan feedback");
       await expect(node.locator("[data-flow-comment-marker]")).toBeVisible();
       const tray = diagram.locator(".flow-collector");
       const head = tray.locator(".flow-collector-head");
@@ -180,8 +187,35 @@ test("should keep review chrome stable through zoom and maximize in both themes"
           footer.evaluate((element) => getComputedStyle(element).outlineStyle),
         )
         .toBe("none");
+
       await page.keyboard.press("Escape");
+      await expect(exitAlert).toBeVisible();
+      await expect(exitAlert).toContainText(
+        "You still have 2 feedback notes to submit. Are you sure you want to exit full screen mode?",
+      );
+      await expect(diagram).toHaveAttribute("data-figure-maximized", "");
+      const stay = exitAlert.getByRole("button", {
+        name: "Stay in full screen",
+      });
+      const exit = exitAlert.getByRole("button", {
+        name: "Exit full screen",
+      });
+      await expect(stay).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(exit).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(stay).toBeFocused();
+      await stay.click();
+      await expect(exitAlert).toBeHidden();
+      await expect(diagram).toHaveAttribute("data-figure-maximized", "");
+
+      await diagram.locator("[data-figure-maximize]").click();
+      await expect(exitAlert).toBeVisible();
+      await exit.click();
+      await expect(exitAlert).toBeHidden();
       await expect(diagram).not.toHaveAttribute("data-figure-maximized");
+      await expect(diagram).not.toHaveAttribute("data-flow-selected");
+      await expect(diagram).toHaveAttribute("data-figure-focus-quiet", "");
       await expect(diagram).toBeFocused();
       await expect(diagram.locator("[data-figure-maximize]")).not.toBeFocused();
     });

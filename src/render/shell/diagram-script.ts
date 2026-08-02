@@ -450,6 +450,11 @@ export const DIAGRAM_SCRIPT = `
     diagram.addEventListener("focusin", (event) => {
       if (event.target === diagram) select(diagram);
     });
+    diagram.addEventListener("figure-restored", () => {
+      if (!selected) return;
+      const owner = selected.closest("[data-flow-diagram]") || selected;
+      if (owner === diagram) deselect();
+    });
   }
 
   // --- Editing in place ---------------------------------------------------
@@ -1091,6 +1096,92 @@ export const DIAGRAM_SCRIPT = `
     if (selected) selected.focus({ preventScroll: true });
   }, true);
 
+  // --- Guarded maximize exit ---------------------------------------------
+  // The shared maximize leg knows how to restore a figure but deliberately
+  // knows nothing about component drafts. Its cancelable request lands here:
+  // the diagram blocks only while its actual pending batch is non-empty, and
+  // confirms by dispatching the shared leg's restore-complete event.
+  const buildExitAlert = (diagram, index) => {
+    const overlay = el("div", "flow-diagram-exit-alert");
+    overlay.hidden = true;
+    const card = el("div", "flow-diagram-exit-alert-card");
+    card.setAttribute("role", "alertdialog");
+    card.setAttribute("aria-modal", "true");
+    const titleId = "flow-diagram-exit-title-" + index;
+    const descriptionId = "flow-diagram-exit-description-" + index;
+    card.setAttribute("aria-labelledby", titleId);
+    card.setAttribute("aria-describedby", descriptionId);
+    const title = el("h3", "flow-diagram-exit-alert-title", "Unsubmitted feedback");
+    title.id = titleId;
+    const description = el("p", "flow-diagram-exit-alert-description");
+    description.id = descriptionId;
+    const actions = el("div", "flow-diagram-exit-alert-actions");
+    const stay = el("button", "flow-diagram-exit-alert-button", "Stay in full screen");
+    stay.type = "button";
+    const exit = el(
+      "button",
+      "flow-diagram-exit-alert-button",
+      "Exit full screen",
+    );
+    exit.type = "button";
+    exit.setAttribute("data-variant", "primary");
+    actions.appendChild(stay);
+    actions.appendChild(exit);
+    card.appendChild(title);
+    card.appendChild(description);
+    card.appendChild(actions);
+    overlay.appendChild(card);
+    diagram.appendChild(overlay);
+
+    let returnFocus = null;
+    const close = (restoreFocus) => {
+      overlay.hidden = true;
+      if (restoreFocus && returnFocus && returnFocus.isConnected) {
+        returnFocus.focus({ preventScroll: true });
+      }
+      returnFocus = null;
+    };
+    const openAlert = (count) => {
+      returnFocus = document.activeElement;
+      description.textContent =
+        "You still have " + count + " feedback note" +
+        (count === 1 ? "" : "s") +
+        " to submit. Are you sure you want to exit full screen mode?";
+      overlay.hidden = false;
+      stay.focus({ preventScroll: true });
+    };
+
+    diagram.addEventListener("figure-restore-request", (event) => {
+      const count = drafts.filter((draft) => draft.diagram === diagram).length;
+      if (count === 0) return;
+      event.preventDefault();
+      openAlert(count);
+    });
+    stay.addEventListener("click", (event) => {
+      event.stopPropagation();
+      close(true);
+    });
+    exit.addEventListener("click", (event) => {
+      event.stopPropagation();
+      close(false);
+      diagram.dispatchEvent(new CustomEvent("figure-restore-confirmed"));
+    });
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        close(true);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      event.preventDefault();
+      event.stopPropagation();
+      // Two controls make forward and backward wrapping the same toggle.
+      const target = document.activeElement === stay ? exit : stay;
+      target.focus();
+    });
+  };
+
   // --- The diagram's own feedback collector -------------------------------
   // TWO LEVELS THAT MUST NOT COLLAPSE
   // A diagram holds the notes made on ITS elements. The page holds the one
@@ -1317,7 +1408,10 @@ export const DIAGRAM_SCRIPT = `
     closeCompose();
     deselect();
   });
-  for (const diagram of diagrams) buildCollector(diagram);
+  diagrams.forEach((diagram, index) => {
+    buildExitAlert(diagram, index);
+    buildCollector(diagram);
+  });
 
   // First layout runs last: fitting the canvas re-anchors the action bar, so
   // it has to exist before anything is fitted.
