@@ -5,7 +5,8 @@ description: True-size product screens with honest device proportions, safe cont
 
 `Wireframe` draws low-fidelity product UI inside a device-appropriate frame.
 Each screen lays out at its device's true width and scales as one unit to fit the review document; desktop screens preserve their 1440 px logical layout within a shared 768 px painted cap.
-Desktop and phone use realistic minimum silhouettes and grow with content.
+Desktop pages and phone screens use realistic minimum silhouettes and grow with content.
+Desktop application shells instead hold a 1440 × 900 workspace viewport: persistent panes own their overflow while the app itself never scrolls sideways.
 Tablet holds a real iPad aspect ratio; overflow scrolls inside the fixed device instead of stretching its bezel.
 Only desktop uses browser chrome; tablet renders as a native device.
 Multiple screens can link to one another without adding executable plan-authored code, while the complete storyboard remains readable when scripts are disabled.
@@ -21,13 +22,14 @@ That component guidance owns the judgment calls for product layout, form-factor 
 ## Design front door: CLEAR
 
 Use CLEAR as the index into the design standard, not as a replacement for its detail.
+It covers the product screen and any comments, decisions, diagrams, toolbars, or expanded modes the screen depicts.
 The generated `big-plan guidance Wireframe` output groups every implementation principle, anti-pattern, per-device pass criterion, and mechanical contract beneath these five headings:
 
-1. **Clear job** - one screen and one step advance one present decision; title and primary action name the present task and immediate result; a sequential step has one route back and one forward; completion closes the learning loop concretely.
-2. **Layout follows attention** - visual order follows decision order; proximity explains causality; parallel choices stay parallel; contrast tracks importance; achievement comes before quieter reassurance.
-3. **Explicit change** - selection changes visible outcomes; later information appears progressively; progress communicates done/current/todo; actor boundaries are unmistakable; authentication proves identity but never grants consent.
-4. **Audience language** - one screen speaks to one audience using one term per concept, concrete branch-specific language, and reassurance that names the actual risk.
-5. **Real device** - desktop, tablet, and phone keep distinct shells, patterns, ratios, densities, and affordances; roughness may change strokes, never information architecture or target size.
+1. **Clear job** - one screen and one step advance one present decision; every persistent pane and review action has one owner; every temporary surface has an exit.
+2. **Layout follows attention** - visual order follows decision order; option titles, criteria, definitions, anchored comments, toolbars, facts, recommendations, and side effects remain visually distinct.
+3. **Explicit change** - selections, modes, comments, destructive edits, live counts, persistence, focus return, and preserved scroll make every state transition observable.
+4. **Audience language** - one screen speaks to one audience using one term per concept, outcome-oriented labels, anchored context without repetition, actionable time, and unconfusable live-state labels.
+5. **Real device** - desktop, tablet, phone, and expanded viewers keep truthful viewport, navigation, zoom, marker-size, density, and interaction contracts; roughness may change strokes, never information architecture.
 
 The generated guidance is the exact agent-facing owner of those grouped rules.
 The device table below is the syntax-level form-factor contract; the component, compiler, lint, and geometry tests own mechanical facts; LOOP in the generated guidance owns render-and-review practice.
@@ -37,7 +39,12 @@ CRAP still governs the surrounding plan page, not product UI inside an artboard.
 
 - **Fourteen hierarchy principles** retain their explicit focal-point, reading-order, proximity, grouping, scanning, decoration, emotional-goal, and rough-fidelity rules under CLEAR.
 - **The original task-flow round** retains one job, goal-matching actions, selection outcomes, progressive reveal, hierarchy over containers, attention order, affordances, mode boundaries, concrete language, and importance-based contrast.
-- **The task-flow refinement round** retains all fifteen individual rules: one decision; present-task title; decision hierarchy; one term; one route each way; meaningful progress; parallel options; disciplined irregularity; one audience; authentication is not consent; immediate-result labels; visible handoffs; risk-specific reassurance; celebration before reassurance; and a concrete learning loop.
+- **The complete task-flow refinement round** retains all 23 check-step, handoff/authentication, and learning-loop principles; its earlier fifteen-rule summary is absorbed by this complete inventory rather than competing with it.
+- **The maximize navigation and commenting-calm round** retains left-side expanded navigation, arrow-key movement, select-then-comment, passive-scroll calm, comment-role ownership, and context/scroll preservation.
+- **Commenting rounds 4–5** retain anchor-visible presence, glyph-safe highlights, non-repeated context, `… more`, edit/delete/confirmation, the shared anchor flow, lifecycle navigation, outcome chips, separated chat scopes, live counts, exact labels, and adversarial path review.
+- **Decision rounds 4–5** retain option-name rules, type contrast, bold-colon criterion labels, regular values, readable matrix headers, centered collapsed actions, idiomatic focus, exit paths, separated dashed-underlined definitions, and explicit component ownership.
+- **Diagram rounds 5–6** retain valid load state, visible deletion diffs, anchor markers, contained tray chrome, toolbar-owned actions, no redundant whole-diagram control, no meaningless footer hover, fixed-size zoom markers, stable note placement, and focus return.
+- **The desktop workspace round** retains viewport fit, independent pane scroll, anchored header and composer, primary dominance, multi-signal dangerous modes, one state owner, compare-versus-judge panes, justified widths, saved views versus filters, actionable time, recommendation provenance, distinct facts/recommendations/side effects, explicit settings context, nested dependencies, outcome labels, and observable persistence.
 - **STAMP** is retired as a competing acronym, but its details remain: Space, Tiers, Align, and Minimal boxes live under Layout and mechanics; Plain state lives under Explicit change.
 - **Per-form-factor principles** live under Real device as explicit desktop/tablet/phone pass and reject criteria.
 - **Type, aspect, state, and target contracts** live under Real device and their mechanical owners: fixed type roles, fixed iPad frame, state paint, 44 px tablet/phone targets, compile diagnostics, and browser geometry tests.
@@ -95,7 +102,7 @@ Every `Screen` requires a unique `id`, a non-empty `name`, and one `device`:
 
 | `device`          | Logical size                      | Frame                 |
 | ----------------- | --------------------------------- | --------------------- |
-| `desktop`         | 1440 × 900 px minimum              | Desktop browser                  |
+| `desktop`         | 1440 × 900 px minimum              | Desktop browser; an `AppShell` holds the viewport |
 | `tablet`          | 1180 × 820 px fixed (about 1.44:1) | Landscape tablet; internal scroll |
 | `tablet-portrait` | 820 × 1180 px fixed                | Portrait tablet; internal scroll  |
 | `phone`           | 390 × 720 px minimum               | Phone, no browser bar             |
@@ -108,6 +115,8 @@ Phone screens reject `url`, `AppShell`, and `Sidebar`; use `TopBar`, a single co
 The compiler blocks multiple page-level jobs, equal flexible thirds on desktop, ambiguous record-detail selection, four or more outlined sibling panels, phone desktop-shell primitives, more than one filled work action per screen, and ambiguous Stepper progress.
 A Stepper must contain exactly one current step in `done` → `current` → `todo` order, while each Step label names only the task because the primitive draws its own number or completion mark.
 A composer's Send button counts as a filled action even when it omits `emphasis="primary"`; selected buttons inside `SegmentedControl` and `BottomBar` are mode or navigation state and do not count as filled work actions.
+On desktop, a direct workspace `Row` derives flexible minmax-style columns: a record collection becomes the bounded comparison pane, `Rail` owns secondary width, and the remaining surface becomes dominant.
+Inside an `AppShell`, the workspace fills the fixed application viewport without app-wide horizontal scrolling; its panes scroll independently, while a conversation thread scrolls behind an anchored mode switch and composer.
 
 ## Optional screen patterns
 

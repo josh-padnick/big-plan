@@ -1,16 +1,16 @@
 # Fresh-agent wireframe quality proof
 
-The standards now lead with one memorable index without throwing away the implementation detail. The product sketches use only public Wireframe guidance and defaults.
+CLEAR keeps the complete design standard memorable. The product sketches use only public Wireframe guidance and defaults.
 
 ## CLEAR is the front door
 
 **CLEAR groups the standard; it does not compress it.** Ask the five questions in order, then follow every relevant rule beneath that letter.
 
-- **C · Clear job.** Does this screen advance one present task?
-- **L · Layout follows attention.** Does visual order match decision order?
-- **E · Explicit change.** Is every selection, state, and mode change visible?
-- **A · Audience language.** Does one audience hear concrete, consistent words?
-- **R · Real device.** Does it behave like this device while remaining deliberately rough?
+- **C · Clear job.** Does one task, pane, action owner, and escape path make the job obvious?
+- **L · Layout follows attention.** Do visual order, groups, anchors, and toolbars match decision order?
+- **E · Explicit change.** Is every selection, lifecycle, destructive edit, focus move, and mode change visible?
+- **A · Audience language.** Does one audience hear concrete terms, exact outcomes, and unconfusable live state?
+- **R · Real device.** Does the device or expanded mode keep truthful viewport, navigation, zoom, and interaction behavior?
 
 **LOOP** is only the render-and-review workflow. **CRAP** remains the separate standard for the plan page around the artboard.
 
@@ -20,11 +20,21 @@ The standards now lead with one memorable index without throwing away the implem
 
 - Give one screen one job and one step one decision. Split choosing, telling, checking, handing off, authenticating, reviewing, approving, and completing when each asks a different question.
 - Make the title name the present task—not the next step, a system state, or another actor's future work.
-- Make the primary action match the goal and describe its immediate result: `Check my request`, `Unlock to review`, or `See my wallet`, never vague `Continue`, premature `Approve`, or `Done`.
+- Make every action and control label describe its immediate outcome: `Check my request`, `Unlock to review`, or `Email assignees when tickets are assigned`, never vague `Continue`, technology names, premature `Approve`, or `Done`.
 - In a sequence, provide one nearby route back and one prominent route forward. A branch may instead offer parallel alternatives.
 - Close a learning loop concretely: lead with achievement, answer the original question, show specific evidence, say what remains true in the real world, then offer a purposeful next action.
+- Use one achievement headline; a completion badge is metadata, not a second headline. When a concept changes over time, reinforce memory with one compact visual sequence before reassurance.
 
-**Reject:** mixed jobs; future-facing titles; actions that exit instead of advance; duplicate back or forward routes; receipt-like endings that never say what the user learned.
+**Workspace and review surfaces**
+
+- Make every persistent pane earn its width with a distinct, always-useful job.
+- Give a collection and preview different jobs: the list supports rapid comparison; the preview supports rapid judgment with urgency, context, recommendation, and a route into the work.
+- Keep core inspector properties visible and collapse Related, Activity, and Customer detail. In create/edit flows, keep facts primary, routing together, duplicates conditional, drafts safe during review/cancel, and required validation inline.
+- Give every opened form, figure, thread, dialog, drawer, and temporary mode a visible Cancel, Close, Escape, or return path.
+- Give each review action one owner: whole-screen comments belong to the screen or slide; element comments belong to selected elements in expanded mode. Never duplicate whole-figure commenting as a floating action.
+- State whether visual variations configure one component or represent different components. One concept gets one named owner.
+
+**Reject:** mixed jobs; future-facing titles; actions that exit instead of advance; duplicate routes; redundant panes; doubled completion headlines; receipt-like endings; inescapable temporary surfaces; duplicate comment routes; ambiguous component ownership; list/preview pairs that repeat the same facts.
 
 **Mechanics:** compilation blocks multiple page headers and multiple filled work actions. Wording still requires review.
 
@@ -34,24 +44,43 @@ The standards now lead with one memorable index without throwing away the implem
 
 - Create one focal point with deliberate size, position, spacing, and contrast.
 - Make visual hierarchy follow decision hierarchy: question or primary work first, supporting facts second, next action last. Celebrate achievement before quieter reassurance.
+- Make the primary workspace surface visibly dominant in width, breathing room, and contrast.
 - Give the screen an effortless reading order; a focused flow must not require desktop-style left-right-back scanning.
 - Use proximity to explain relationships. Put a changed outcome beside the selection that changes it.
 - Group by user concepts, not available data. Prefer hierarchy over a wall of containers.
+- Nest dependent controls directly beneath their parent in one shared group.
 
 **Emphasis and expression**
 
 - Keep parallel options parallel in grammar, weight, information depth, and target treatment.
+- Make each decision option name a distinct title, then place a rule before its criteria. Criteria are smaller than the name; labels are bold with `:`, values regular.
+- Keep matrix labels readable at their longest value. Widen or break out the comparison, abbreviate with a nearby legend, or choose another explicit composition before allowing one-word-per-line headers. Center collapsed actions on both axes.
+- Separate a one-sentence definition from answer rows with breathing room and one consistent dashed-underline definition affordance.
 - Spend the strongest border, fill, badge, type, and color only on the most important content or action.
+- Give facts, recommendations with provenance, and side effects at the final action visibly different treatments.
+
+**Anchors and operational surfaces**
+
+- Align comment input, cards, and outcome chips with their source in a quiet side gutter. The highlight carries context, so cards do not repeat selected text or block paths; long bodies collapse behind `… more`.
+- Give the Comments panel a top border and one scannable staged → submitted → resolved lifecycle instead of an undifferentiated gutter pile.
+- Keep highlights outside glyphs. Use padding, background, underline, or an outside marker so comment presence is obvious without obscuring text.
+- Let toolbars own viewer actions. Keep note submission, live counts, zoom, Fit, and maximize in stable positions; keep the tray header distinct and its primary action inside its footer—never detached over the canvas.
+
+**Scan and expression**
+
+- Make lists scan in stable rows—title/time, person/organization, state/identifier—and give customer, agent, and internal messages consistent distinct treatments. Unread, priority, assignment, waiting, selection, and open state cannot share one signal.
+- Use one sticky inbox toolbar for search, filter count, and sort, with active chips beneath. Show the result count once, keep create secondary during triage, and add bulk controls only for real batching.
+- Size controls to their values: channels 320–400px, times 140–180px, and readable forms around 760px.
 - Optimize for a five-second scan before careful reading.
 - Use decoration only to identify content, communicate state, reinforce the emotional goal, or explain an unfinished visual decision.
 
-**Reject:** equal-weight regions; card walls; floating metadata; unrelated adjacency; oversized empty panels; biased choices; decorative filler; anything louder than its importance.
+**Reject:** equal-weight or squeezed panes; card walls; floating metadata or actions; cramped matrix headers; criteria styled like option titles; definitions that read as answers; comment borders crossing text; repeated anchored context; detached tray actions; unrelated dependencies; recommendation/value ambiguity; oversized empty panels; biased choices; decorative filler; anything louder than its importance.
 
 **Mechanics:** plain panels, dominant derived panes, and `Rail` encode the default hierarchy. Compilation blocks equal desktop thirds and four-or-more outlined siblings; geometry tests block cramped panes, overlap, and dead bands.
 
 ## E · Explicit change
 
-**Implementation principles**
+**State and flow**
 
 - Make a selected row, card, or mode agree visibly with its dependent outcome.
 - Reveal information progressively: choices before summary, review before approval, and no later-stage detail before the present decision.
@@ -62,9 +91,35 @@ The standards now lead with one memorable index without throwing away the implem
 - Treat authentication as identity proof, never consent: handoff → authenticate → review → approve or decline. `Unlock to review` cannot buy or approve.
 - Preserve the first actor's exit before handoff; once authentication starts, the next actor may enter a focused gate.
 
-**Reject:** generic summaries after specific choices; faint selection; premature summaries; ambiguous progress; heading-only handoffs; mixed audiences; Face ID or PIN labeled as approval.
+**Risk and persistence**
 
-**Mechanics:** compilation requires one selected record beside visible detail, checks navigation targets and Stepper state, and rejects authored progress numbering. State primitives own interaction paint.
+- Make dangerous mode switches change several signals together: selection, surface and border, heading or icon, placeholder, action, and persistent visibility warning.
+- Give every piece of state one owner; duplicate controls must be explicitly synchronized shortcuts.
+- Keep recommendations labeled with their evidence until accepted or changed.
+- Before a setting changes, show its scope, outcome, current state, and dependency.
+- Make persistence observable: Saving → Saved, undo after consequential auto-save, unsaved counts for explicit save, and no silent navigation loss.
+
+**Comments and mode lifecycle**
+
+- Make comment presence obvious at its exact anchor in inline and expanded modes. A gutter marker selects that same anchor and enters the same flow as text selection.
+- Any nonempty selection—including a whole paragraph—shows one compact icon-plus-`Comment` affordance, not a formatting toolbar. It disappears when selection or hover ends; passive scrolling never leaves orphaned buttons or sprays controls across the page.
+- Show the full lifecycle: staged comments navigate to targets; responded threads collapse to one-line outcome chips, expand in place, use their reply box as per-comment chat, and keep plan-wide chat separate.
+- Keep edit and remove easy to find on the author's own comment; confirm immediately before removal.
+
+**Safety and continuity**
+
+- Keep counts live and labels unconfusable after create, edit, delete, submit, and response. Persist only an exact signal such as `Needs your answer 2`, never stale or ambiguous `Comments 2`.
+- Confirm destructive actions. Deleting authored content in an edit review stays visible as a struck-through diff; it never disappears silently.
+- Use idiomatic focus paint: border shift plus soft halo, not a thick double ring. On mode exit, return focus to a sensible container or prior control.
+- Preserve document scroll, selected target, active screen, and relevant internal scroll across maximize, drawer, and comment-mode changes.
+- Render controls only with a valid state and anchor. No unexplained dot, empty pill, footer hover line, or delayed-hide workaround on load.
+- Distinguish selection from opening: background plus outside indicator selects; unread and priority use different signals; Enter or a labeled preview route opens.
+- Show required-field errors beside fields before submit. Name the person, address, and event for notification consent; never enable it silently. Preserve a draft or warn on Cancel.
+- Settings show visible `On`/`Off` text as well as position and contrast. Keep dependencies visible-but-disabled under parents, show `Connected` or `Connect Slack`, and offer a safe test action.
+
+**Reject:** generic summaries after specific choices; faint selection; premature summaries; ambiguous progress; single-signal dangerous modes; duplicate state owners; invisible comment anchors; comment clutter; highlights that cover text; stale counts; ambiguous alerts; unconfirmed deletion; silent destructive edits; awkward or stranded focus; lost scroll or selection; invalid load-state controls; unlabeled recommendations; silent persistence; scope-free settings; heading-only handoffs; mixed audiences; Face ID or PIN labeled as approval.
+
+**Mechanics:** compilation requires one selected record beside visible detail, checks navigation targets and Stepper state, and rejects authored progress numbering. State primitives own interaction paint; viewer primitives own comment lifecycle, focus return, and context preservation.
 
 ## A · Audience language
 
@@ -75,11 +130,24 @@ The standards now lead with one memorable index without throwing away the implem
 - Make one screen speak to one audience; change mode and heading before addressing the next actor.
 - Name the current branch—a purchase request, loan question, or confusing topic—not a generic summary.
 - Make reassurance name the actual risk and what remains unchanged: `Unlocking does not approve or buy anything`; `This was practice—no money moved`.
+
+**Review-surface language**
+
+- Let the anchor carry comment context. Use the slide or screen title for a thread title and keep the highlighted source visible; never repeat a paragraph excerpt or internal block path in the card.
+- Separate person from organization, or present one identity that names both. A side effect such as email consent names the person, destination, and triggering event.
+- Group settings by event or goal, not technology. Keep daily/digest wording consistent, name delivery time and timezone, and say who integration-dependent behavior reaches.
+- Name toggles and alerts by their current live outcome: `Show comments`, `Hide comments`, or `Needs your answer 2`. Update label and count together; a panel toggle must not look like an ordinary action.
+- Keep definitions to one plain sentence behind the same dashed-underline affordance everywhere.
 - Avoid internal, technical, adult-oriented, or agent-process language the audience would not say.
 - Serve the emotional goal—capable, safe, motivated, informed, or in control—without hiding facts.
 - Prefer specific feedback and a visual recap over praise the product cannot verify.
 
-**Reject:** terminology drift; abstract labels where plain language exists; mixed audiences; branchless summaries; generic reassurance; technical badges; unverified praise.
+**Operational language**
+
+- Keep saved views—reusable queues such as `All`, `Mine`, and `Unassigned`—separate from temporary filters such as `Waiting ×`, `SLA risk ×`, and `+ Add filter`.
+- Prefer time-to-act over arithmetic: `First response due in 4m`, `Breached by 6m`, or `Waiting 2h`; never require elapsed/target calculation or color alone.
+
+**Reject:** terminology drift; abstract labels where plain language exists; mixed audiences; branchless summaries; repeated comment excerpts or block paths; stale or ambiguous count labels; ordinary-action styling for state toggles; inconsistent definition treatments; saved-view/filter ambiguity; elapsed/target arithmetic; generic reassurance; technical badges; unverified praise.
 
 **Mechanics:** lint keeps agent-process copy outside the artboard. Audience fit, terminology, and risk wording require review.
 
@@ -91,10 +159,14 @@ The standards now lead with one memorable index without throwing away the implem
 - Put hand-drawn irregularity in strokes, grid, icons, and rough borders—never alignment, spacing, reading order, contrast, information architecture, or target size.
 - Keep three legible type roles: page title, content, and metadata.
 - Make controls unmistakable through shape and state. Tablet and phone targets are at least 44px.
+- In an expanded multi-screen viewer, show screen names as a vertical list on the left; arrow keys move through it and keep the active screen visible.
+- Enter expanded mode fit-to-viewport and centered on both axes; allow zoom below 100%. Comment and selection markers keep a fixed readable screen size under zoom instead of scaling with the canvas.
+- Reserve element comments for expanded mode: select the element, then comment. Inline mode keeps one calm whole-screen comment area and passive scrolling never triggers element affordances.
+- Keep the expanded toolbar stable: `Add N notes to plan feedback` stays flush left in inline and expanded modes and never overlaps the live note count.
 
-**Desktop passes:** 1440 × 900 minimum; flush, narrow, full-height sidebar; stable global navigation; most width for the canvas; a 60–75% primary surface; secondary properties in a 240–320px-class `Rail`; tight vertical rhythm; Linear-style settings; create/edit as a route or true modal.
+**Desktop passes:** a 1440 × 900 application viewport with no app-wide horizontal scroll; flexible minmax-style columns keep a 64–180px navigation rail, 280–320px list, dominant primary surface, and 280–320px inspector in one row; persistent panes scroll independently while the header and composer remain anchored; narrower widths collapse navigation, then inspector, before overflow; tight vertical rhythm; Linear-style settings; create/edit as a route or true modal; and keyboard shortcuts for list movement, search, open, compose, mode switch, send, assign, and resolve that supplement visible controls.
 
-**Desktop rejects:** equal thirds; a sidebar taking a third; floating tablet navigation; two large settings cards; inflated chrome; oversized iPad sheets.
+**Desktop rejects:** equal thirds; whole-page scrolling while answering; app-wide horizontal scroll; four squeezed screens; a sidebar taking a third; floating tablet navigation; two large settings cards; inflated chrome; oversized iPad sheets.
 
 **Tablet passes:** fixed 1180 × 820 or 820 × 1180 iPad frame, about 1.44:1, with internal overflow; no browser bar; touch-first type and 44px controls; wider gutters; intentional master/detail or focused steps; card grouping only where useful.
 
@@ -104,15 +176,28 @@ The standards now lead with one memorable index without throwing away the implem
 
 **Phone rejects:** desktop shells; side-by-side properties; a vertical iPad; height-only tablet cards; desktop copy squeezed narrow.
 
-**Mechanics:** device presets own widths, fixed tablet ratio, shell availability, type roles, pane widths, touch floors, contrast, and state paint. Browser geometry checks fence 1.39–1.44 tablet ratio, shells, readable panes, overlap, dead bands, and target sizes.
+**Mechanics:** device presets own widths, fixed tablet ratio, shell availability, type roles, flexible pane widths, independent overflow, anchored conversation chrome, touch floors, contrast, and state paint. Viewer primitives own fit, centered expansion, below-100% zoom, fixed-size markers, expanded navigation, toolbar placement, focus return, and scroll preservation. Browser geometry checks fence app-wide overflow, primary dominance, independent panes, anchored header/composer, 1.39–1.44 tablet ratio, shells, readable panes, overlap, unjustified dead bands, and target sizes.
 
 ## What the curation absorbed
 
 **Every prior standard remains explicit under one owner.**
 
+**Foundational and flow rounds**
+
 - **Fourteen hierarchy principles → CLEAR.** Focal point, reading order, proximity, grouping, scanning, restrained decoration, emotional goal, and rough fidelity live under Layout, Audience, and Real device.
 - **Original task-flow round → CLEAR.** One job, goal-matching actions, selection outcomes, progressive reveal, hierarchy over containers, attention order, unmistakable affordances, mode boundaries, concrete language, and importance-based contrast remain explicit above.
-- **Task-flow refinement round → CLEAR.** The fifteen rules now appear individually: one decision; present-task title; decision hierarchy; one term; one route each way; meaningful progress; parallel options; disciplined irregularity; one audience; authentication is not consent; immediate-result labels; visible handoffs; risk-specific reassurance; celebration before reassurance; and a concrete learning loop.
+- **Task-flow refinement round → CLEAR.** All 23 principles remain explicit: the eight check-step rules, seven audience/authentication/handoff rules, and eight learning-loop rules—including one completion headline, a compact memory recap, concrete real-world state, and purposeful return.
+- **Maximize navigation and commenting-calm round → CLEAR.** Expanded screen list and arrow navigation live under Real device; select-then-comment and passive-scroll calm live under Explicit change; whole-screen versus element ownership lives under Clear job; context and scroll preservation live under Explicit change.
+
+**Component and workspace rounds**
+
+- **Commenting rounds 4–5 → CLEAR.** Anchor-visible presence, glyph-safe highlights, context-free side cards, `… more`, edit/delete with confirmation, one shared anchor flow, complete lifecycle, outcome chips, per-comment versus plan chat, live exact counts, unconfusable labels, and adversarial lifecycle review remain explicit.
+- **Decision rounds 4–5 → CLEAR.** Option-name rules, smaller bold-colon criteria labels with regular values, readable matrix headers, centered collapsed actions, idiomatic focus, exit paths, separated one-sentence dashed-underlined definitions, and explicit component ownership remain explicit.
+- **Diagram rounds 5–6 → CLEAR.** Valid load state, visible deletion diffs, anchor markers, distinct tray chrome with contained footer, toolbar-owned actions, no redundant whole-diagram button, no meaningless footer hover, fixed-size zoom markers, stable flush-left note action, and safe focus return remain explicit.
+- **Desktop workspace round → CLEAR.** Verified complete: viewport fit; flexible bounded columns; independent pane scrolling; anchored header/composer; primary dominance; multi-signal modes; one state owner; scannable lists; speaker differentiation; observable auto-save; progressive inspector; keyboard support; compare-versus-judge panes; saved views versus filters; time-to-act; sticky toolbar; selection/open clarity; side-effect confirmation; customer identity; duplicate evidence/actions; recommendation provenance; grouped routing; specific consent; validation/draft safety; explicit setting scope/effect/dependency/state; nested controls; outcome labels; visible On/Off; persistent save; consistent dependencies/sizing; integration readiness; and no horizontal overflow.
+
+**Prior standards and mechanics**
+
 - **STAMP → retired, detail retained.** Space, Tiers, Align, and Minimal boxes live under Layout and mechanics; Plain state lives under Explicit change.
 - **Per-device principles → Real device.** Desktop, tablet, and phone each retain distinct pass criteria and anti-patterns.
 - **Type, aspect, state, and target rules → mechanics beneath CLEAR.** Primitives, compile diagnostics, and browser geometry checks own the facts.
@@ -142,32 +227,30 @@ The selected queue record remains visible while the conversation dominates and p
       <AppContent>
         <PageHeader
           title="Cannot complete checkout"
-          description="#4821 · Northwind · Open"
-        >
-          <Button label="Resolve" emphasis="secondary" />
-        </PageHeader>
+          description="#4821 · Maya Chen · Northwind"
+        />
         <Panel title="Queue">
           <List>
             <ListItem
               label="Cannot complete checkout"
-              meta="Priority · Maya"
-              value="14m"
+              meta="Open · Alex Rivera"
+              value="Due in 4m · #4821"
               selected
             />
             <ListItem
               label="SSO session expires early"
               meta="Waiting · Lee"
-              value="2h"
+              value="Waiting 2h · #4818"
             />
             <ListItem
               label="Invoice PDF missing items"
-              meta="Mine · Alex"
-              value="1d"
+              meta="Open · Alex Rivera"
+              value="Due tomorrow · #4802"
             />
             <ListItem
               label="Webhook retries exhausted"
-              meta="Unassigned"
-              value="3d"
+              meta="Unassigned · Payments"
+              value="Breached by 6m · #4790"
             />
           </List>
         </Panel>
@@ -202,19 +285,62 @@ The selected queue record remains visible while the conversation dominates and p
             kind="customer"
             text="Thanks—I'll retry as soon as the rollback finishes."
           />
+          <Message
+            author="Alex"
+            time="Now"
+            kind="agent"
+            text="I am checking the rollback status now."
+          />
+          <Message
+            author="Priya"
+            time="Now"
+            kind="internal"
+            text="PAY-218 is healthy in canary."
+          />
+          <Message
+            author="Alex"
+            time="Now"
+            kind="agent"
+            text="The rollback is complete. Please retry checkout."
+          />
+          <Message
+            author="Maya"
+            time="Now"
+            kind="customer"
+            text="The form submitted this time."
+          />
+          <Message
+            author="Alex"
+            time="Now"
+            kind="agent"
+            text="Great—I can see the order in processing."
+          />
+          <Message
+            author="Priya"
+            time="Now"
+            kind="internal"
+            text="Keep this open until the order confirms."
+          />
           <Divider />
           <SegmentedControl>
-            <Button label="Reply" emphasis="primary" />
-            <Button label="Internal note" />
+            <Button label="Reply" />
+            <Button label="Internal note" emphasis="primary" />
           </SegmentedControl>
-          <TextArea label="Message" placeholder="Write a reply…" />
-          <Button label="Send reply" emphasis="primary" />
+          <Text
+            text="Internal note · Only your team will see this"
+            role="section"
+          />
+          <TextArea
+            label="Internal note"
+            placeholder="Write an internal note…"
+          />
+          <Button label="Add internal note" emphasis="primary" />
         </Panel>
         <Panel title="Properties">
           <Select label="Status" value="Open" />
           <Select label="Assignee" value="Alex Rivera" />
           <Select label="Team" value="Payments" />
-          <Text text="Changes save automatically." role="helper" />
+          <Text text="Saved just now · Undo" role="helper" />
         </Panel>
       </AppContent>
     </AppShell>

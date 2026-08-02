@@ -66,37 +66,35 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
         <PageHeader
           title="Cannot complete checkout"
           description="#4821 · Maya Chen · Northwind"
-        >
-          <Button label="Resolve" emphasis="secondary" />
-        </PageHeader>
+        />
         <Row gap="none">
           <Panel>
             <List>
               <ListItem
                 label="Cannot complete checkout"
-                meta="Priority · Maya"
-                value="14m · #4821"
+                meta="Open · Alex Rivera"
+                value="Due in 4m · #4821"
                 selected
               />
               <ListItem
                 label="SSO session expires early"
                 meta="Waiting · Lee"
-                value="2h · #4818"
+                value="Waiting 2h · #4818"
               />
               <ListItem
                 label="Invoice PDF missing line items"
-                meta="Mine · Alex"
-                value="1d · #4802"
+                meta="Open · Alex Rivera"
+                value="Due tomorrow · #4802"
               />
               <ListItem
                 label="Webhook retries exhausting"
-                meta="Unassigned"
-                value="3d · #4790"
+                meta="Unassigned · Payments"
+                value="Breached by 6m · #4790"
               />
               <ListItem
                 label="Export CSV truncates rows"
-                meta="Mine · Alex"
-                value="4d · #4788"
+                meta="Open · Alex Rivera"
+                value="Due Friday · #4788"
               />
             </List>
           </Panel>
@@ -125,13 +123,62 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
               kind="internal"
               text="Linked prior freeze #4410. Do not promise an ETA."
             />
+            <Message
+              author="Priya"
+              time="1m"
+              kind="internal"
+              text="PAY-218 is healthy in canary."
+            />
+            <Message
+              author="Alex"
+              time="Now"
+              kind="agent"
+              text="The rollback is complete. Please retry checkout."
+            />
+            <Message
+              author="Maya"
+              time="Now"
+              kind="customer"
+              text="The form submitted this time."
+            />
+            <Message
+              author="Alex"
+              time="Now"
+              kind="agent"
+              text="Great—I can see the order in processing."
+            />
+            <Message
+              author="Priya"
+              time="Now"
+              kind="internal"
+              text="Keep this open until the order confirms."
+            />
+            <Message
+              author="Alex"
+              time="Now"
+              kind="agent"
+              text="I will watch it through confirmation."
+            />
+            <Message
+              author="Maya"
+              time="Now"
+              kind="customer"
+              text="Thank you."
+            />
             <Divider />
             <SegmentedControl>
-              <Button label="Reply" emphasis="primary" />
-              <Button label="Internal note" />
+              <Button label="Reply" />
+              <Button label="Internal note" emphasis="primary" />
             </SegmentedControl>
-            <TextArea label="Message" placeholder="Write a reply…" />
-            <Button label="Send reply" emphasis="primary" />
+            <Text
+              text="Internal note · Only your team will see this"
+              role="section"
+            />
+            <TextArea
+              label="Internal note"
+              placeholder="Write an internal note…"
+            />
+            <Button label="Add internal note" emphasis="primary" />
           </Panel>
           <Rail>
             <Stack gap="sm">
@@ -140,7 +187,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
               <Select label="Assignee" value="Alex Rivera" />
               <Select label="Team" value="Payments" />
               <TextField label="Customer" value="Northwind Labs" />
-              <Text text="Changes save automatically" role="helper" />
+              <Text text="Saved just now · Undo" role="helper" />
             </Stack>
             <Stack gap="sm">
               <Heading text="Related" level="3" />
@@ -180,7 +227,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
         </Nav>
       </Sidebar>
       <AppContent>
-        <PageHeader title="Inbox" description="12 open">
+        <PageHeader title="Inbox">
           <Button
             label="New ticket"
             emphasis="primary"
@@ -196,15 +243,19 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
           <Select label="Sort" value="Newest activity" />
         </Row>
         <Row gap="sm" justify="between">
-          <SegmentedControl>
-            <Button label="All 12" emphasis="primary" />
-            <Button label="Mine 4" />
-            <Button label="Unassigned 3" />
-          </SegmentedControl>
+          <Stack gap="xs">
+            <Text text="Saved views" role="section" />
+            <SegmentedControl>
+              <Button label="All 12" emphasis="primary" />
+              <Button label="Mine 4" />
+              <Button label="Unassigned 3" />
+            </SegmentedControl>
+          </Stack>
           <Row gap="sm">
-            <Text text="Filters" role="helper" />
-            <Button label="Waiting 3" emphasis="tertiary" />
-            <Button label="SLA risk 2" emphasis="tertiary" />
+            <Text text="Filters" role="section" />
+            <Button label="Waiting ×" emphasis="tertiary" />
+            <Button label="SLA risk ×" emphasis="tertiary" />
+            <Button label="+ Add filter" emphasis="tertiary" />
           </Row>
         </Row>
         <Row gap="none">
@@ -212,14 +263,14 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
             <List>
               <ListItem
                 label="Cannot complete checkout"
-                meta="Priority · Maya"
-                value="14m · #4821"
+                meta="Open · Alex Rivera"
+                value="Due in 4m · #4821"
                 selected
               />
               <ListItem
                 label="SSO session expires early"
                 meta="Waiting · Lee"
-                value="2h · #4818"
+                value="Waiting 2h · #4818"
               />
               <ListItem
                 label="Invoice PDF missing line items"
@@ -229,7 +280,7 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
               <ListItem
                 label="Webhook retries exhausting"
                 meta="Unassigned"
-                value="3d · #4790"
+                value="Breached by 6m · #4790"
               />
               <ListItem
                 label="Export CSV truncates rows"
@@ -254,14 +305,30 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
             </List>
           </Panel>
           <Rail>
-            <Panel>
+            <Panel title="Ticket preview">
               <Badge label="#4821 · Priority" />
               <Heading text="Cannot complete checkout" level="2" />
-              <Text text="Maya Chen · Northwind" role="helper" />
-              <Text text="Card form freezes on submit in Chrome." />
-              <Metric label="First response" value="11m" note="Target 15m" />
+              <Text text="Open · Alex Rivera · Payments" role="helper" />
+              <Text
+                text="Maya Chen · Northwind · Enterprise checkout"
+                role="helper"
+              />
+              <Text
+                text="Latest · Card form freezes on submit in Chrome 128."
+              />
+              <Metric
+                label="First response"
+                value="Due in 4m"
+                note="Enterprise SLA"
+              />
+              <Text text="Recommended next action" role="section" />
+              <Text text="Confirm the rollback, then ask Maya to retry." />
+              <Text
+                text="Suggested from incident PAY-218 and ticket #4410"
+                role="helper"
+              />
               <Button
-                label="View ticket"
+                label="Open conversation"
                 emphasis="secondary"
                 navigateTo="d-ticket"
               />
@@ -291,15 +358,14 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
       <AppContent>
         <PageHeader title="New ticket">
           <Button label="Cancel" emphasis="tertiary" navigateTo="d-inbox" />
-          <Button
-            label="Create ticket"
-            emphasis="primary"
-            navigateTo="d-ticket"
-          />
         </PageHeader>
         <Row gap="none">
           <Panel>
-            <Select label="Customer" value="Northwind Labs" />
+            <Text text="Ticket facts" role="section" />
+            <Select
+              label="Customer"
+              value="Maya Chen · maya@northwind.example · Northwind Labs"
+            />
             <TextField
               label="Subject"
               value="Cannot complete checkout"
@@ -309,18 +375,17 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
               label="Description"
               placeholder="What happened, who is affected, error text…"
             />
-            <Select label="Priority" value="Normal" />
             <Checkbox
-              label="Send a confirmation email"
+              label="Email Maya when this ticket is created"
               checked
-              hint="To maya@northwind.example"
+              hint="Sends to maya@northwind.example after creation."
             />
           </Panel>
           <Rail>
             <Stack gap="sm">
               <Heading text="Possible duplicates" level="3" />
               <Text
-                text="Shown after subject text is entered"
+                text="86% title match · same checkout symptom · resolved 12 days ago"
                 role="helper"
               />
               <List>
@@ -331,23 +396,37 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
                 />
               </List>
               <Row gap="sm">
-                <Button label="Open" emphasis="tertiary" />
-                <Button label="Link" emphasis="tertiary" />
-                <Button label="Dismiss" emphasis="tertiary" />
+                <Button label="Review ticket" emphasis="tertiary" />
+                <Button label="Create and link" emphasis="tertiary" />
+                <Button label="Not a duplicate" emphasis="tertiary" />
               </Row>
             </Stack>
             <Stack gap="sm">
-              <Heading text="Routing" level="3" />
+              <Heading text="Recommended routing" level="3" />
               <Text
-                text="Suggested from similar tickets"
+                text="Suggested from ticket #4410 and Payments ownership"
                 role="helper"
               />
+              <Select label="Priority" value="Normal" />
               <Select label="Team" value="Payments" />
               <Select label="Assignee" value="Unassigned" />
               <Switch label="Watch this ticket" on />
             </Stack>
           </Rail>
         </Row>
+        <Panel surface="filled">
+          <Row gap="sm" align="center" justify="between">
+            <Text
+              text="Creates #4822 and emails maya@northwind.example."
+              role="helper"
+            />
+            <Button
+              label="Create ticket and email Maya"
+              emphasis="primary"
+              navigateTo="d-ticket"
+            />
+          </Row>
+        </Panel>
       </AppContent>
     </AppShell>
   </Screen>
@@ -369,53 +448,67 @@ Content hierarchy comes from type and layout; major panes use dividers rather th
         </Nav>
       </Sidebar>
       <AppContent>
-        <PageHeader title="Settings" />
-        <Row gap="sm">
-          <Text text="You have unsaved changes" role="helper" />
-          <Button label="Discard" emphasis="tertiary" />
-          <Button label="Save" emphasis="primary" />
-        </Row>
+        <PageHeader
+          title="Workspace notifications"
+          description="Applies to everyone in Acme Support"
+        />
+        <Panel surface="filled">
+          <Row gap="sm" align="center" justify="between">
+            <Text text="3 unsaved changes" role="section" />
+            <Row gap="sm">
+              <Button label="Discard" emphasis="tertiary" />
+              <Button label="Save notification changes" emphasis="primary" />
+            </Row>
+          </Row>
+        </Panel>
         <Row gap="none">
           <Rail>
             <Panel>
               <Nav label="Settings">
-                <NavItem label="Notifications" active />
-                <NavItem label="Business hours" />
-                <NavItem label="Integrations" />
-                <NavItem label="Members" />
+                <NavItem label="Notify the team" active />
+                <NavItem label="Set support hours" />
+                <NavItem label="Connect tools" />
+                <NavItem label="Manage teammates" />
               </Nav>
             </Panel>
           </Rail>
           <Stack gap="md">
-            <Heading text="Notifications" level="2" />
-            <Switch
-              label="Email on assignment"
-              on
-              hint="Notify the assignee when a ticket is given to them."
-            />
-            <Switch
-              label="Slack on SLA risk"
-              on
-              hint="Posts to the channel below when a ticket nears breach."
-            />
-            <Heading text="Channels" level="3" />
-            <Select
-              label="Default Slack channel"
-              value="#support-alerts"
-              hint="Used while Slack on SLA risk is on."
-            />
-            <Heading text="Digest" level="3" />
-            <Switch label="Digest every morning" />
+            <Heading text="Notify the team" level="2" />
             <Text
-              text="Digest hour is unavailable while the morning digest is off."
+              text="Choose which workspace events reach teammates outside Harbor."
               role="helper"
             />
-            <TextField
-              label="Digest hour"
-              value="—"
-              hint="Enable morning digest to set a time."
-              disabled
-            />
+            <Panel surface="filled">
+              <Switch
+                label="Email assignees when tickets are assigned"
+                on
+                hint="On · Emails the newly assigned teammate."
+              />
+            </Panel>
+            <Panel surface="filled">
+              <Switch
+                label="Post to Slack before an SLA breach"
+                on
+                hint="On · Posts 10 minutes before breach. Requires Slack."
+              />
+              <Select
+                label="Post SLA warnings in"
+                value="#support-alerts"
+                hint="Connected · Harbor can post in this channel."
+              />
+            </Panel>
+            <Panel surface="filled">
+              <Switch
+                label="Email a daily ticket summary"
+                hint="Off · No daily email is sent."
+              />
+              <TextField
+                label="Send the daily summary at"
+                value="—"
+                hint="Unavailable until daily summary is on."
+                disabled
+              />
+            </Panel>
           </Stack>
         </Row>
       </AppContent>

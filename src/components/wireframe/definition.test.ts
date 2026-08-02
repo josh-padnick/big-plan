@@ -1727,6 +1727,64 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"data-wireframe-surface":"outlined"');
   });
 
+  it("should derive an independently scrolling thread and anchored composer", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "ticket",
+          children: [
+            element({
+              name: "Panel",
+              attributes: { title: "Conversation" },
+              children: [
+                element({
+                  name: "Message",
+                  attributes: {
+                    author: "Maya",
+                    time: "Now",
+                    text: "Checkout worked.",
+                  },
+                }),
+                element({
+                  name: "SegmentedControl",
+                  children: [
+                    element({ name: "Button", attributes: { label: "Reply" } }),
+                    element({
+                      name: "Button",
+                      attributes: {
+                        label: "Internal note",
+                        emphasis: "primary",
+                      },
+                    }),
+                  ],
+                }),
+                element({
+                  name: "TextArea",
+                  attributes: {
+                    label: "Internal note",
+                    placeholder: "Write an internal note…",
+                  },
+                }),
+                element({
+                  name: "Button",
+                  attributes: {
+                    label: "Add internal note",
+                    emphasis: "primary",
+                  },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-wireframe-conversation":""');
+    expect(rendered).toContain("wireframe-thread");
+    expect(rendered).toContain("wireframe-composer");
+  });
+
   it("should hold centered content to a measure", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [

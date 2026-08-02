@@ -62,6 +62,34 @@ const isWorkspaceRow = (children: ReadonlyArray<WireframeNode>): boolean =>
   children.some((child) => child.element === "Rail") ||
   (children.length > 1 && children.some(isMasterPane));
 
+// A conversation has two independently behaving regions behind the ordinary
+// Panel interface: the thread scrolls, while the mode and composer stay
+// anchored. Authors only arrange the familiar message and control primitives.
+const conversationPartsFor = (
+  children: ReadonlyArray<WireframeNode>,
+):
+  | {
+      readonly thread: ReadonlyArray<WireframeNode>;
+      readonly composer: ReadonlyArray<WireframeNode>;
+    }
+  | undefined => {
+  const composerIndex = children.findIndex(
+    (child) => child.element === "SegmentedControl",
+  );
+  if (
+    composerIndex < 0 ||
+    !children
+      .slice(0, composerIndex)
+      .some((child) => child.element === "Message")
+  ) {
+    return undefined;
+  }
+  return {
+    thread: children.slice(0, composerIndex),
+    composer: children.slice(composerIndex),
+  };
+};
+
 const WireframeElement = ({
   node,
 }: {
@@ -87,7 +115,8 @@ const WireframeElement = ({
           <WireframeElements nodes={node.children} />
         </div>
       );
-    case "Panel":
+    case "Panel": {
+      const conversation = conversationPartsFor(node.children);
       return (
         <section
           className="wireframe-panel"
@@ -104,11 +133,28 @@ const WireframeElement = ({
               )}
             </header>
           )}
-          <div className="wireframe-panel-body flex flex-col gap-3">
-            <WireframeElements nodes={node.children} />
+          <div
+            className="wireframe-panel-body flex flex-col gap-3"
+            {...(conversation === undefined
+              ? {}
+              : { "data-wireframe-conversation": "" })}
+          >
+            {conversation === undefined ? (
+              <WireframeElements nodes={node.children} />
+            ) : (
+              <>
+                <div className="wireframe-thread flex flex-col gap-3">
+                  <WireframeElements nodes={conversation.thread} />
+                </div>
+                <div className="wireframe-composer flex flex-col gap-3">
+                  <WireframeElements nodes={conversation.composer} />
+                </div>
+              </>
+            )}
           </div>
         </section>
       );
+    }
     case "Heading": {
       const Tag = HEADING_TAGS[node.level];
       return <Tag className="wireframe-heading">{node.text}</Tag>;
@@ -587,6 +633,8 @@ const Screen = ({
   const preset = WIREFRAME_DEVICE_PRESETS[screen.device];
   const desktop = screen.device === "desktop";
   const phone = screen.device === "phone";
+  const workspaceViewport =
+    desktop && screen.children.some((child) => child.element === "AppShell");
   return (
     <section
       className="wireframe-screen"
@@ -603,9 +651,11 @@ const Screen = ({
         )}
         <span className="wireframe-screen-viewport">
           {preset.label} · {preset.width} × {preset.height}px{" "}
-          {preset.heightPolicy === "fixed"
-            ? "fixed frame"
-            : "minimum · grows with content"}
+          {workspaceViewport
+            ? "workspace viewport"
+            : preset.heightPolicy === "fixed"
+              ? "fixed frame"
+              : "minimum · grows with content"}
         </span>
       </div>
       <div className="wireframe-frame" data-wireframe-device={screen.device}>
