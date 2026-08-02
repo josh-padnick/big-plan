@@ -24,9 +24,10 @@ const paragraph = (value: string): Element => ({
 const criterion = (
   title: string,
   detail = `Defines what ${title.toLowerCase()} measures.`,
+  impact?: string,
 ): ScopedChild => ({
   name: "Criterion",
-  attributes: { title },
+  attributes: { title, ...(impact === undefined ? {} : { impact }) },
   children: [paragraph(detail)],
   position: POSITION,
 });
@@ -36,12 +37,14 @@ const consideration = (
   verdict: string,
   tone?: string,
   detail = `${verdict} holds because the option has this property.`,
+  score?: string,
 ): ScopedChild => ({
   name: "Consideration",
   attributes: {
     criterion: criterionTitle,
     verdict,
     ...(tone === undefined ? {} : { tone }),
+    ...(score === undefined ? {} : { score }),
   },
   children: [paragraph(detail)],
   position: POSITION,
@@ -82,6 +85,7 @@ const render = (
   scopedChildren: ReadonlyArray<ScopedChild>,
   status?: string,
   layout?: string,
+  scoring?: string,
 ) => {
   const diagnostics = createDiagnosticCollector();
   const compiled = DECISION_COMPONENT_DEFINITION.compile({
@@ -89,6 +93,7 @@ const render = (
       question: "Which channel?",
       ...(status === undefined ? {} : { status }),
       ...(layout === undefined ? {} : { layout }),
+      ...(scoring === undefined ? {} : { scoring }),
     },
     children: [],
     scopedChildren,
@@ -197,6 +202,110 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     expect(rendered).not.toContain("data-decision-definition");
   });
 
+  it("should render transparent weighted scoring inputs and formulas", () => {
+    const weighted = [
+      criterion("Reach", "How many readers benefit.", "5"),
+      criterion("Effort", "How much work the option requires.", "2"),
+      option({
+        title: "Focused",
+        recommended: true,
+        considerations: [
+          consideration(
+            "Reach",
+            "High",
+            "good",
+            "The focused path reaches the intended readers.",
+            "5",
+          ),
+          consideration(
+            "Effort",
+            "Medium",
+            "mixed",
+            "The focused path needs a moderate implementation.",
+            "3",
+          ),
+        ],
+      }),
+      option({
+        title: "Broad",
+        considerations: [
+          consideration(
+            "Reach",
+            "Medium",
+            "mixed",
+            "The broad path dilutes the primary use case.",
+            "3",
+          ),
+          consideration(
+            "Effort",
+            "High",
+            "bad",
+            "The broad path needs substantially more implementation.",
+            "1",
+          ),
+        ],
+      }),
+    ];
+    const { element, diagnostics } = render(
+      weighted,
+      undefined,
+      "matrix",
+      "weighted",
+    );
+    expect(diagnostics).toEqual([]);
+    const rendered = JSON.stringify(element);
+    expect(rendered).toContain("decision-weight-input");
+    expect(rendered).toContain("data-decision-composite");
+    expect(rendered).toContain('"value":"5/5 · High"');
+    expect(rendered).toContain('"value":"5×5 + 2×3"');
+    expect(rendered).toContain('"value":"31"');
+    expect(rendered).toContain('"value":"35"');
+    expect(rendered).toContain('"value":"89%"');
+  });
+
+  it("should require complete 1–5 values for weighted scoring", () => {
+    const { diagnostics } = render(
+      [
+        criterion("Reach", "How many readers benefit.", "9"),
+        option({
+          title: "Focused",
+          considerations: [
+            consideration(
+              "Reach",
+              "High",
+              "good",
+              "The focused path reaches the intended readers.",
+            ),
+          ],
+        }),
+        option({
+          title: "Broad",
+          considerations: [
+            consideration(
+              "Reach",
+              "Low",
+              "bad",
+              "The broad path reaches fewer intended readers.",
+              "0",
+            ),
+          ],
+        }),
+      ],
+      undefined,
+      "rows",
+      "weighted",
+    );
+    const messages = diagnostics.map(({ message }) => message);
+    expect(messages).toContain(
+      "Decision impact must be an integer from 1 to 5",
+    );
+    expect(messages).toContain("Decision score must be an integer from 1 to 5");
+    expect(messages).toContain('A weighted Decision must use layout="matrix"');
+    expect(messages).toContain(
+      'Weighted Decision Criterion "Reach" needs impact="1" through impact="5"',
+    );
+  });
+
   it("should omit brief comparison when no criterion distinguishes the options", () => {
     const sameVerdict = [
       criterion("Needs deeper comparison"),
@@ -216,11 +325,7 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
         ],
       }),
     ];
-    const { element, diagnostics } = render(
-      sameVerdict,
-      undefined,
-      "brief",
-    );
+    const { element, diagnostics } = render(sameVerdict, undefined, "brief");
     expect(diagnostics).toEqual([]);
     const rendered = JSON.stringify(element);
     expect(rendered).toContain("decision-brief-lead");

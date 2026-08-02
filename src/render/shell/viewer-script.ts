@@ -1519,6 +1519,7 @@ export const VIEWER_SCRIPT = `<script>
     const columnHeaders = ownAll(".decision-column");
     const compareZones = ownAll("[data-decision-compare]");
     const explainZone = own("[data-decision-explain]");
+    const scoringPanel = own("section[data-decision-scoring]");
     const picked = () => choices.find((choice) => choice.checked) || null;
     const proposes = (choice) =>
       choice instanceof Element &&
@@ -1533,6 +1534,74 @@ export const VIEWER_SCRIPT = `<script>
     if (rationale !== null) rationale.setAttribute("data-rationale-live", "");
     const defaultIndex =
       rationale === null ? "0" : rationale.getAttribute("data-default-index");
+
+    // Weighted analysis keeps every number inspectable. The authored values
+    // render a complete no-script formula; sliders only replace criterion
+    // impacts, then recompute the same numerator and denominator in place.
+    if (scoringPanel !== null) {
+      const weightInputs = Array.from(
+        scoringPanel.querySelectorAll("[data-decision-weight]"),
+      );
+      const compositeRows = Array.from(
+        scoringPanel.querySelectorAll("[data-decision-composite]"),
+      );
+      const syncScoring = () => {
+        const weights = weightInputs.map((input) => Number(input.value));
+        const denominator = weights.reduce(
+          (sum, weight) => sum + weight * 5,
+          0,
+        );
+        for (const input of weightInputs) {
+          const row = input.closest(".decision-weight-row");
+          const output =
+            row === null
+              ? null
+              : row.querySelector("[data-decision-weight-output]");
+          if (output !== null) output.textContent = input.value;
+        }
+        for (const row of compositeRows) {
+          const scores = (row.getAttribute("data-score-values") || "")
+            .split(",")
+            .map(Number);
+          const numerator = weights.reduce(
+            (sum, weight, index) => sum + weight * (scores[index] || 0),
+            0,
+          );
+          const percent =
+            denominator === 0
+              ? 0
+              : Math.round((numerator / denominator) * 100);
+          const formula = weights
+            .map(
+              (weight, index) =>
+                String(weight) + "×" + String(scores[index] || 0),
+            )
+            .join(" + ");
+          const formulaNode = row.querySelector("[data-decision-formula]");
+          const numeratorNode = row.querySelector(
+            "[data-decision-numerator]",
+          );
+          const denominatorNode = row.querySelector(
+            "[data-decision-denominator]",
+          );
+          const percentNode = row.querySelector("[data-decision-percent]");
+          if (formulaNode !== null) formulaNode.textContent = formula;
+          if (numeratorNode !== null) {
+            numeratorNode.textContent = String(numerator);
+          }
+          if (denominatorNode !== null) {
+            denominatorNode.textContent = String(denominator);
+          }
+          if (percentNode !== null) {
+            percentNode.textContent = String(percent) + "%";
+          }
+        }
+      };
+      for (const input of weightInputs) {
+        input.addEventListener("input", syncScoring);
+      }
+      syncScoring();
+    }
 
     const showPanel = (index) => {
       for (const panel of panels) {

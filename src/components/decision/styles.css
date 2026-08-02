@@ -222,6 +222,36 @@
     white-space: normal;
   }
 
+  /* Weighted analysis is a transparent calculator, not a magic rank. Each
+     impact keeps a native 1–5 range control, and every option prints the exact
+     multiplication, numerator, denominator, and normalized percentage. */
+  article .decision-weight-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  article .decision-weight-input {
+    grid-column: 1 / -1;
+    width: 100%;
+    accent-color: var(--color-accent);
+    cursor: pointer;
+  }
+  article .decision-weight-input:focus-visible {
+    outline: none;
+    border-radius: 999px;
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+  article .decision-composite-option[data-column-selected] {
+    border-color: color-mix(in srgb, var(--color-accent) 42%, var(--edge-c));
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--bg));
+    box-shadow: inset 3px 0 0 var(--color-accent);
+  }
+  article
+    .decision-composite-option[data-column-selected][data-column-settled] {
+    border-color: var(--decision-pro-c);
+    background: var(--decision-pro-bg);
+    box-shadow: inset 3px 0 0 var(--decision-pro-c);
+  }
+
   /* The authored term is the affordance: dashed underlines work equally for
      criterion meanings and value reasons without adding a second icon
      language. The shell's shared info-popover behavior supplies hover, focus,
@@ -461,6 +491,22 @@
   }
   article .decision-matrix {
     min-width: 34rem;
+  }
+}
+
+@media (width >= 56rem) {
+  article .decision-scoring {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1rem 1.25rem;
+    align-items: start;
+  }
+  article .decision-scoring-intro {
+    grid-column: 1 / -1;
+  }
+  article .decision-weight-list,
+  article .decision-composite {
+    margin-top: 0;
   }
 }
 

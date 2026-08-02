@@ -18,6 +18,8 @@ export type DecisionStatus = "open" | "decided" | "deferred";
 
 export type DecisionTone = "good" | "bad" | "mixed" | "neutral";
 
+export type DecisionScoring = "qualitative" | "weighted";
+
 // The captain approved all three reading depths. The default matrix uses the
 // keyed chooser rail; rows and brief remain the lighter presentations.
 export type DecisionLayout = "matrix" | "rows" | "brief";
@@ -41,6 +43,11 @@ const DECISION_TONES: ReadonlyArray<DecisionTone> = [
   "neutral",
 ];
 
+const DECISION_SCORING: ReadonlyArray<DecisionScoring> = [
+  "qualitative",
+  "weighted",
+];
+
 // A verdict is a value to compare, not a sentence to read. The cap forces the
 // normalized-word shape ("Yes", "Strong", "Somewhat"); the one-sentence reason
 // belongs in the Consideration body.
@@ -50,12 +57,14 @@ export type CompiledDecisionCriterion = {
   readonly id: string;
   readonly title: string;
   readonly detail: ReadonlyArray<ElementContent>;
+  readonly impact?: number;
 };
 
 export type CompiledDecisionConsideration = {
   readonly verdict: string;
   readonly tone: DecisionTone;
   readonly detail: ReadonlyArray<ElementContent>;
+  readonly score?: number;
 };
 
 export type CompiledDecisionOption = {
@@ -79,6 +88,7 @@ export type CompiledDecision = {
   readonly question: string;
   readonly status: DecisionStatus;
   readonly layout: DecisionLayout;
+  readonly scoring: DecisionScoring;
   readonly context: ReadonlyArray<ElementContent>;
   readonly criteria: ReadonlyArray<CompiledDecisionCriterion>;
   readonly options: ReadonlyArray<CompiledDecisionOption>;
@@ -93,10 +103,12 @@ const DECISION_SCHEMA = {
   question: { kind: "string", required: true, nonEmpty: true },
   status: { kind: "enum", values: DECISION_STATUSES },
   layout: { kind: "enum", values: DECISION_LAYOUTS },
+  scoring: { kind: "enum", values: DECISION_SCORING },
 } satisfies ComponentAttributeSchema;
 
 const CRITERION_SCHEMA = {
   title: { kind: "string", required: true, nonEmpty: true },
+  impact: { kind: "string" },
 } satisfies ComponentAttributeSchema;
 
 const OPTION_SCHEMA = {
@@ -110,6 +122,7 @@ const CONSIDERATION_SCHEMA = {
   criterion: { kind: "string", required: true, nonEmpty: true },
   verdict: { kind: "string", required: true, nonEmpty: true },
   tone: { kind: "enum", values: DECISION_TONES },
+  score: { kind: "string" },
 } satisfies ComponentAttributeSchema;
 
 const isElement = (node: ElementContent): node is Element =>
@@ -166,6 +179,28 @@ const validateOneSentenceBody = ({
   return detail;
 };
 
+const parseFivePointValue = ({
+  value,
+  label,
+  position,
+  diagnostics,
+}: {
+  readonly value: string | undefined;
+  readonly label: "impact" | "score";
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): number | undefined => {
+  if (value === undefined) return undefined;
+  if (!/^[1-5]$/u.test(value)) {
+    diagnostics.add({
+      message: `Decision ${label} must be an integer from 1 to 5`,
+      position,
+    });
+    return undefined;
+  }
+  return Number(value);
+};
+
 const compileCriterion = ({
   child,
   diagnostics,
@@ -197,6 +232,16 @@ const compileCriterion = ({
       kind: "Criterion",
       diagnostics,
     }),
+    ...(parseFivePointValue({
+      value: validated.impact,
+      label: "impact",
+      position: child.position,
+      diagnostics,
+    }) === undefined
+      ? {}
+      : {
+          impact: Number(validated.impact),
+        }),
   };
 };
 
@@ -238,6 +283,16 @@ const compileConsideration = ({
         kind: "Consideration",
         diagnostics,
       }),
+      ...(parseFivePointValue({
+        value: validated.score,
+        label: "score",
+        position: child.position,
+        diagnostics,
+      }) === undefined
+        ? {}
+        : {
+            score: Number(validated.score),
+          }),
     },
   };
 };
@@ -398,6 +453,48 @@ const validateSelection = ({
   }
 };
 
+const validateWeightedScoring = ({
+  scoring,
+  layout,
+  criteria,
+  options,
+  position,
+  diagnostics,
+}: {
+  readonly scoring: DecisionScoring;
+  readonly layout: DecisionLayout;
+  readonly criteria: ReadonlyArray<CompiledDecisionCriterion>;
+  readonly options: ReadonlyArray<CompiledDecisionOption>;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  if (scoring !== "weighted") return;
+  if (layout !== "matrix") {
+    diagnostics.add({
+      message: 'A weighted Decision must use layout="matrix"',
+      position,
+    });
+  }
+  for (const criterion of criteria) {
+    if (criterion.impact === undefined) {
+      diagnostics.add({
+        message: `Weighted Decision Criterion "${criterion.title}" needs impact="1" through impact="5"`,
+        position,
+      });
+    }
+  }
+  for (const option of options) {
+    criteria.forEach((criterion, row) => {
+      if (option.considerations[row]?.score === undefined) {
+        diagnostics.add({
+          message: `Weighted Decision Option "${option.title}" needs a 1–5 score for criterion "${criterion.title}"`,
+          position,
+        });
+      }
+    });
+  }
+};
+
 /** Compiles one Decision component into the model consumed by rendering. */
 export const compileDecisionComponent = ({
   attributes,
@@ -416,6 +513,8 @@ export const compileDecisionComponent = ({
   });
   const question = validated.question ?? "";
   const status = validated.status ?? "open";
+  const layout = validated.layout ?? "matrix";
+  const scoring = validated.scoring ?? "qualitative";
   const id = ids.allocate({
     prefix: "decision",
     label: question,
@@ -456,6 +555,14 @@ export const compileDecisionComponent = ({
     diagnostics,
   });
   validateSelection({ options, status, position, diagnostics });
+  validateWeightedScoring({
+    scoring,
+    layout,
+    criteria,
+    options,
+    position,
+    diagnostics,
+  });
   const chosenOption = options.find((option) => option.chosen);
   const discriminating = Array.from(
     { length: criteria.length },
@@ -470,7 +577,8 @@ export const compileDecisionComponent = ({
     questionId: `${id}-question`,
     question,
     status,
-    layout: validated.layout ?? "matrix",
+    layout,
+    scoring,
     context: meaningfulChildren(children),
     criteria,
     options,

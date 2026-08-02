@@ -19,7 +19,12 @@ import type {
 } from "./compile.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { type MatrixToneParity } from "../_shared/comparison-matrix/comparison-matrix.js";
-import { BriefLayout, MatrixLayout, RowsLayout } from "./view-layouts.js";
+import {
+  BriefLayout,
+  MatrixLayout,
+  RowsLayout,
+  WeightedScorePanel,
+} from "./view-layouts.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { BadgePill } from "../_shared/badge-pill/badge-pill.js";
@@ -209,6 +214,7 @@ export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
       data-decision=""
       data-decision-status={model.status}
       data-decision-layout={model.layout}
+      data-decision-scoring={model.scoring}
       {...(answerable ? { "data-decision-selector": "" } : {})}
     >
       <figcaption className="decision-zone-question bg-header px-5 py-4">
@@ -242,6 +248,9 @@ export const Decision = ({ model }: { readonly model: CompiledDecision }) => {
         >
           <Comparison model={model} answerable={answerable} />
         </div>
+        {model.scoring === "weighted" ? (
+          <WeightedScorePanel model={model} />
+        ) : null}
         {/* Only the matrix earns a rationale region: its cells are values, so
             the reader still needs a sentence naming what they mean. The other
             shapes already carry their reasoning in line. */}
