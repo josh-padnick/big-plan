@@ -17,6 +17,8 @@
 // Each string slots straight into the `anchors` field of a BlockDescriptor, so
 // no parallel identity scheme appears beside the block tree.
 
+import { slugForComponentId } from "../_authoring/contract.js";
+
 /** Carries an element's anchor string into the rendered document. */
 export const FLOW_ANCHOR_ATTRIBUTE = "data-flow-anchor";
 
@@ -39,7 +41,7 @@ export const flowStageAnchor = ({
 }: {
   readonly figure: string;
   readonly stageId: string;
-}): string => `${figure}/stage/${stageId}`;
+}): string => `${figure}/stage/${encodeURIComponent(stageId)}`;
 
 export const flowNodeAnchor = ({
   figure,
@@ -47,7 +49,7 @@ export const flowNodeAnchor = ({
 }: {
   readonly figure: string;
   readonly nodeId: string;
-}): string => `${figure}/node/${nodeId}`;
+}): string => `${figure}/node/${encodeURIComponent(nodeId)}`;
 
 export const flowEdgeAnchor = ({
   figure,
@@ -66,18 +68,6 @@ export const flowFooterAnchor = ({
   readonly figure: string;
 }): string => `${figure}/footer`;
 
-// Stage titles are prose, so the slug drops anything that is not a letter,
-// a number, or a word break. An empty result would make two untitled stages
-// share one address, so it falls back to the ordinal instead.
-const slugForStageTitle = (title: string): string =>
-  title
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
-    .replace(/\s+/gu, "-")
-    .replace(/-+/gu, "-")
-    .replace(/^-|-$/gu, "");
-
 /**
  * Resolves one stable id per stage in authored order.
  *
@@ -88,16 +78,28 @@ const slugForStageTitle = (title: string): string =>
 export const resolveStageIds = (
   stages: ReadonlyArray<{ readonly id?: string; readonly title: string }>,
 ): ReadonlyArray<string> => {
+  // Reserve the author's explicit namespace before allocating any title slug.
+  // Otherwise an earlier prose title can steal a later authored id and make
+  // the supposedly stable address change when that title is reworded.
+  const authored = new Set(
+    stages.flatMap((stage) => (stage.id === undefined ? [] : [stage.id])),
+  );
   const used = new Set<string>();
   return stages.map((stage, index) => {
     const preferred =
-      stage.id ?? (slugForStageTitle(stage.title) || `stage-${index + 1}`);
-    if (!used.has(preferred)) {
+      stage.id ?? (slugForComponentId(stage.title) || `stage-${index + 1}`);
+    if (
+      !used.has(preferred) &&
+      (stage.id !== undefined || !authored.has(preferred))
+    ) {
       used.add(preferred);
       return preferred;
     }
     let suffix = 2;
-    while (used.has(`${preferred}-${suffix}`)) {
+    while (
+      used.has(`${preferred}-${suffix}`) ||
+      authored.has(`${preferred}-${suffix}`)
+    ) {
       suffix += 1;
     }
     const id = `${preferred}-${suffix}`;

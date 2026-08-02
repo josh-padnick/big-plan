@@ -185,6 +185,7 @@ type StageDraft = {
   readonly authoredId?: string;
   readonly title: string;
   readonly nodes: ReadonlyArray<CompiledFlowDiagramNode>;
+  readonly position: ScopedChild["position"];
 };
 
 // Validates one Stage and its Node children into a column model.
@@ -224,6 +225,7 @@ const compileStage = ({
       const compiled = compileNode({ child: node, figure, diagnostics });
       return compiled === undefined ? [] : [compiled];
     }),
+    position: child.position,
   };
 };
 
@@ -388,6 +390,17 @@ export const compileFlowDiagramComponent = ({
   const drafts = stageChildren.map((child) =>
     compileStage({ child, figure, diagnostics }),
   );
+  const authoredStageIds = new Set<string>();
+  for (const draft of drafts) {
+    if (draft.authoredId === undefined) continue;
+    if (authoredStageIds.has(draft.authoredId)) {
+      diagnostics.add({
+        message: `Duplicate stage id "${draft.authoredId}"`,
+        position: draft.position,
+      });
+    }
+    authoredStageIds.add(draft.authoredId);
+  }
   const stageIds = resolveStageIds(
     drafts.map((draft) => ({
       ...(draft.authoredId === undefined ? {} : { id: draft.authoredId }),

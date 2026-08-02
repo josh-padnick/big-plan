@@ -166,11 +166,14 @@ classes.
   .flow-diagram[data-flow-canvas] .flow-diagram-viewport {
     position: relative;
     overflow: hidden;
-    overscroll-behavior: contain;
-    /* The gestures are ours: the browser must not also scroll the page or
-       run its own pinch-zoom underneath them. */
-    touch-action: none;
     cursor: grab;
+  }
+  .flow-diagram[data-flow-canvas][data-figure-maximized]
+    .flow-diagram-viewport {
+    overscroll-behavior: contain;
+    /* Only the promoted canvas owns touch panning. At rest the document keeps
+       the ordinary vertical scroll gesture when the pointer crosses a figure. */
+    touch-action: none;
   }
   .flow-diagram[data-flow-canvas] .flow-diagram-viewport[data-flow-panning] {
     cursor: grabbing;

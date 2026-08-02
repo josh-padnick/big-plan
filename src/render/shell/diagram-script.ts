@@ -94,6 +94,10 @@ export const DIAGRAM_SCRIPT = `
     target.closest(
       'input, textarea, select, [contenteditable]:not([contenteditable="false"])',
     );
+  const isInteractiveControl = (target) =>
+    target &&
+    target.closest &&
+    target.closest('button, a[href], input, select, textarea, summary');
 
   // --- Announcements ----------------------------------------------------
   const live = el("div", "flow-diagram-live");
@@ -311,14 +315,15 @@ export const DIAGRAM_SCRIPT = `
     const c = canvas.get(diagram);
     if (!c) continue;
 
-    // Trackpad first: a pinch arrives as a wheel event with ctrlKey set, and
-    // two-finger panning as a plain wheel with both deltas. Both are ours, so
-    // both are prevented - otherwise the page scrolls out from under the
-    // gesture and the browser runs its own zoom on top of it.
+    // A pinch is always an explicit canvas gesture. Plain two-finger panning
+    // belongs to the canvas only while it is promoted; at rest, the same
+    // vertical gesture keeps scrolling the review document.
     c.viewport.addEventListener("wheel", (event) => {
+      const zoomGesture = event.ctrlKey || event.metaKey;
+      if (!zoomGesture && !diagram.hasAttribute("data-figure-maximized")) return;
       event.preventDefault();
       const rect = c.viewport.getBoundingClientRect();
-      if (event.ctrlKey || event.metaKey) {
+      if (zoomGesture) {
         const factor = Math.exp(-event.deltaY * 0.01);
         zoomAbout(diagram, c.zoom * factor, event.clientX - rect.left, event.clientY - rect.top);
         return;
@@ -537,6 +542,10 @@ export const DIAGRAM_SCRIPT = `
     }
     if (!compose.hidden) return;
     if (!selected) return;
+    // The selected canvas element keeps its state while focus moves through
+    // viewer chrome. Native button/link activation must win over the canvas's
+    // Enter-to-edit and type-to-overwrite shortcuts.
+    if (isInteractiveControl(event.target)) return;
     const active = document.activeElement;
     if (active && active.closest && active.closest(".flow-diagram-compose, .flow-collector")) return;
     if (event.key === "Escape") {
@@ -1040,6 +1049,31 @@ export const DIAGRAM_SCRIPT = `
     composeSubject = null;
   };
 
+  const composeText = () => {
+    const textarea = compose.querySelector("textarea");
+    return textarea ? textarea.value.trim() : "";
+  };
+
+  const commitCompose = (diagram) => {
+    if (!composeSubject) return false;
+    const owner =
+      composeSubject.closest("[data-flow-diagram]") || composeSubject;
+    if (diagram && owner !== diagram) return false;
+    const value = composeText();
+    if (!value) return false;
+    const node = composeSubject;
+    pushHistory();
+    drafts.push({
+      id: nextId++, kind: "comment",
+      diagram: owner,
+      element: node, anchor: anchorOf(node), body: value,
+    });
+    announce("Comment saved on " + nameOf(node));
+    closeCompose();
+    paint();
+    return true;
+  };
+
   const clearDiagramChrome = (diagram) => {
     if (composeSubject) {
       const owner = composeSubject.closest("[data-flow-diagram]") || composeSubject;
@@ -1092,17 +1126,7 @@ export const DIAGRAM_SCRIPT = `
     textarea.placeholder = "Write a comment...";
 
     const submit = () => {
-      const value = textarea.value.trim();
-      if (!value) { textarea.focus(); return; }
-      pushHistory();
-      drafts.push({
-        id: nextId++, kind: "comment",
-        diagram: node.closest("[data-flow-diagram]") || node,
-        element: node, anchor: anchorOf(node), body: value,
-      });
-      announce("Comment saved on " + nameOf(node));
-      closeCompose();
-      paint();
+      if (!commitCompose()) textarea.focus();
     };
 
     // Cmd+Enter on a Mac, Ctrl+Enter elsewhere. Plain Enter stays a newline,
@@ -1228,6 +1252,10 @@ export const DIAGRAM_SCRIPT = `
     });
     exit.addEventListener("click", (event) => {
       event.stopPropagation();
+      // The alert counts non-empty composer text as pending work. Move that
+      // exact work into the saved batch before teardown so confirming the
+      // warning cannot make its own count false.
+      commitCompose(diagram);
       close(false);
       diagram.dispatchEvent(new CustomEvent("figure-restore-confirmed"));
     });
@@ -1470,7 +1498,11 @@ export const DIAGRAM_SCRIPT = `
     if (compose.contains(event.target) || actionBar.contains(event.target)) return;
     if (event.target.closest && event.target.closest(".flow-collector, .flow-collector-add")) return;
     if (event.target.closest("[data-flow-diagram]")) return;
-    closeCompose();
+    // Pointerdown precedes the field's focusout, so commit explicitly before
+    // deselection. Keep non-empty comment text open for an intentional
+    // Comment/Cancel choice; an outside click is never a silent discard.
+    if (editing) stopEditing(false);
+    if (!composeText()) closeCompose();
     deselect();
   });
   diagrams.forEach((diagram, index) => {

@@ -36,7 +36,10 @@ import { PLUS_ICON } from "../../icons/lucide/plus.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
-import { MAXIMIZABLE_ATTRIBUTE } from "../_model/figure-controls/figure-controls.js";
+import {
+  BODY_ATTRIBUTE,
+  MAXIMIZABLE_ATTRIBUTE,
+} from "../_model/figure-controls/figure-controls.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
 const BADGE_CLASSES =
@@ -508,7 +511,7 @@ export const FlowDiagram = ({
       <div
         className="flow-diagram-viewport"
         data-flow-viewport
-        data-figure-body
+        {...{ [BODY_ATTRIBUTE]: "" }}
       >
         <div className="flow-diagram-sizer" data-flow-sizer>
           <div className="flow-diagram-artboard" data-flow-artboard>

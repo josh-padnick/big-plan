@@ -58,6 +58,58 @@ test("should preserve authored markup when an edit is canceled or cleared", asyn
   await expect(body).not.toHaveAttribute("data-flow-edited");
 });
 
+test("should preserve work when focus moves outside the diagram", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const node = diagram.locator('[data-flow-node="authored"]');
+  const label = node.locator('[data-flow-field="label"]');
+  const compose = diagram.locator(".flow-diagram-compose");
+  const outside = page.getByRole("heading").first();
+
+  await label.dblclick();
+  await label.fill("Author carefully");
+  await outside.click();
+  await expect(label).toHaveText("Author carefully");
+  await expect(label).toHaveAttribute("data-flow-edited", "");
+  await expect(diagram.locator("[data-flow-total]")).toHaveText("1 note");
+
+  await node.click();
+  await diagram.locator('[data-flow-action="comment"]').click();
+  await compose.locator("textarea").fill("Keep this unfinished note.");
+  await outside.click();
+  await expect(compose).toBeVisible();
+  await expect(compose.locator("textarea")).toHaveValue(
+    "Keep this unfinished note.",
+  );
+  await expect(diagram.locator("[data-flow-total]")).toHaveText("1 note");
+});
+
+test("should leave toolbar keyboard activation to the focused control", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const node = diagram.locator('[data-flow-node="authored"]');
+  const label = node.locator('[data-flow-field="label"]');
+  const zoomIn = diagram.getByRole("button", { name: "Zoom in" });
+  const readout = diagram.locator("[data-flow-zoom-readout]");
+
+  await node.click();
+  await zoomIn.focus();
+  const before = await readout.textContent();
+  await page.keyboard.press("Space");
+
+  await expect(label).not.toHaveAttribute("data-flow-editing");
+  await expect(zoomIn).toBeFocused();
+  await expect(readout).not.toHaveText(before ?? "");
+});
+
 test("should preserve a panned canvas when feedback repaints it", async ({
   page,
   flowDiagramViewerUrl,
@@ -72,6 +124,21 @@ test("should preserve a panned canvas when feedback repaints it", async ({
     (element) => (element as HTMLElement).style.transform,
   );
 
+  await viewport.hover();
+  await expect(viewport).toHaveCSS("touch-action", "auto");
+  const restingScroll = await page.evaluate(() => scrollY);
+  await page.mouse.wheel(0, 240);
+  await expect
+    .poll(() => page.evaluate(() => scrollY))
+    .toBeGreaterThan(restingScroll);
+  await expect
+    .poll(() =>
+      sizer.evaluate((element) => (element as HTMLElement).style.transform),
+    )
+    .toBe(initialTransform);
+
+  await diagram.locator("[data-figure-maximize]").click();
+  await expect(diagram).toHaveAttribute("data-figure-maximized", "");
   await viewport.dispatchEvent("wheel", { deltaX: 40, deltaY: 30 });
   const pannedTransform = await sizer.evaluate(
     (element) => (element as HTMLElement).style.transform,
@@ -291,6 +358,7 @@ test("should keep review chrome stable through zoom and maximize in both themes"
   const trayAdd = diagram.locator(".flow-collector-foot > .flow-collector-add");
   const exitAlert = diagram.getByRole("alertdialog");
   const compose = diagram.locator(".flow-diagram-compose");
+  const undoShortcut = process.platform === "darwin" ? "Meta+z" : "Control+z";
 
   await test.step("render no empty handoff controls or whole-diagram comment action", async () => {
     await expect(toolbarAdd).toBeHidden();
@@ -421,6 +489,7 @@ test("should keep review chrome stable through zoom and maximize in both themes"
       await expect(diagram).toHaveAttribute("data-figure-maximized", "");
       await expect(viewport).toHaveCSS("overflow", "hidden");
       await expect(viewport).toHaveCSS("padding", "0px");
+      await expect(viewport).toHaveCSS("touch-action", "none");
       await expect(toolbarAdd).toBeVisible();
       await expect(trayAdd).toBeVisible();
       await expect(trayAdd).toHaveText("Add 2 notes to plan feedback");
@@ -490,9 +559,12 @@ test("should keep review chrome stable through zoom and maximize in both themes"
       await expect(compose).toBeHidden();
       await expect(diagram).not.toHaveAttribute("data-figure-maximized");
       await expect(diagram).not.toHaveAttribute("data-flow-selected");
+      await expect(toolbarAdd).toHaveText("Add 3 notes to plan feedback");
       await expect(diagram).toHaveAttribute("data-figure-focus-quiet", "");
       await expect(diagram).toBeFocused();
       await expect(diagram.locator("[data-figure-maximize]")).not.toBeFocused();
+      await page.keyboard.press(undoShortcut);
+      await expect(toolbarAdd).toHaveText("Add 2 notes to plan feedback");
     });
   }
 

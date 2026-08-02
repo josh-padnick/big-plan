@@ -419,6 +419,31 @@ describe("FLOW_DIAGRAM_COMPONENT_DEFINITION", () => {
     }
   });
 
+  it("should encode authored ids as opaque anchor path segments", () => {
+    const compiled = compile({
+      scopedChildren: [
+        stage(
+          "First",
+          [node({ id: "source/50%", label: "Source" })],
+          "phase/one",
+        ),
+        stage("Second", [node({ id: "result?", label: "Result" })]),
+        edge({ from: "source/50%", to: "result?" }),
+      ],
+    });
+
+    expect(compiled.diagnostics).toEqual([]);
+    expect(compiled.model.stages[0]?.anchor).toBe(
+      "component/FlowDiagram#1/stage/phase%2Fone",
+    );
+    expect(compiled.model.stages[0]?.nodes[0]?.anchor).toBe(
+      "component/FlowDiagram#1/node/source%2F50%25",
+    );
+    expect(compiled.model.edges[0]?.anchor).toBe(
+      "component/FlowDiagram#1/edge/source%2F50%25/result%3F",
+    );
+  });
+
   it("should keep a stage's anchor when its title changes but its id does not", () => {
     const named = (title: string) =>
       compile({
@@ -441,6 +466,42 @@ describe("FLOW_DIAGRAM_COMPONENT_DEFINITION", () => {
       ],
     });
     expect(compiled.model.stages.map((stage) => stage.id)).toEqual([
+      "review",
+      "review-2",
+    ]);
+  });
+
+  it("should reserve an authored stage id before allocating title slugs", () => {
+    const compiled = compile({
+      scopedChildren: [
+        stage("Review!", [node({ id: "a", label: "A" })]),
+        stage("Second pass", [node({ id: "b", label: "B" })], "review"),
+        edge({ from: "a", to: "b" }),
+      ],
+    });
+
+    expect(compiled.diagnostics).toEqual([]);
+    expect(compiled.model.stages.map((item) => item.id)).toEqual([
+      "review-2",
+      "review",
+    ]);
+  });
+
+  it("should report duplicate authored stage ids", () => {
+    const compiled = compile({
+      scopedChildren: [
+        stage("First", [node({ id: "a", label: "A" })], "review"),
+        stage("Second", [node({ id: "b", label: "B" })], "review"),
+        edge({ from: "a", to: "b" }),
+      ],
+    });
+
+    expect(compiled.diagnostics).toContainEqual({
+      line: 5,
+      column: 1,
+      message: 'Duplicate stage id "review"',
+    });
+    expect(compiled.model.stages.map((item) => item.id)).toEqual([
       "review",
       "review-2",
     ]);

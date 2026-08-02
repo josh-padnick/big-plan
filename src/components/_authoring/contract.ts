@@ -68,6 +68,16 @@ export type ComponentIdAllocator = {
   readonly nextOrdinal: (input: { readonly component: string }) => number;
 };
 
+/** Normalizes authored prose into the stable slug used by generated ids. */
+export const slugForComponentId = (label: string): string =>
+  label
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
+    .replace(/\s+/gu, "-")
+    .replace(/-+/gu, "-")
+    .replace(/^-|-$/gu, "");
+
 /** Creates one authored-order id namespace for a rendered document. */
 export const createComponentIdAllocator = ({
   reservedIds = [],
@@ -84,13 +94,7 @@ export const createComponentIdAllocator = ({
       return ordinal;
     },
     allocate: ({ prefix, label, fallbackId }) => {
-      const slug = label
-        .trim()
-        .toLowerCase()
-        .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
-        .replace(/\s+/gu, "-")
-        .replace(/-+/gu, "-")
-        .replace(/^-|-$/gu, "");
+      const slug = slugForComponentId(label);
       const preferredId = slug === "" ? fallbackId : `${prefix}-${slug}`;
       let id = preferredId;
       let nextSuffix = nextSuffixes.get(preferredId) ?? 2;
