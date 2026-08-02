@@ -105,6 +105,53 @@ test("should preserve a panned canvas when feedback repaints it", async ({
   );
 });
 
+test("should preserve diagram drafts when undoing review text", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const node = diagram.locator('[data-flow-node="authored"]');
+  const total = diagram.locator("[data-flow-total]");
+  const undoShortcut =
+    process.platform === "darwin" ? "Meta+z" : "Control+z";
+
+  await node.click();
+  await diagram.locator('[data-flow-action="comment"]').click();
+  await diagram
+    .locator(".flow-diagram-compose textarea")
+    .fill("Saved diagram note");
+  await diagram
+    .locator(".flow-diagram-compose")
+    .getByRole("button", { name: "Comment", exact: true })
+    .click();
+  await expect(total).toHaveText("1 note");
+
+  await test.step("use native undo in the diagram composer", async () => {
+    await node.click();
+    await diagram.locator('[data-flow-action="comment"]').click();
+    const input = diagram.locator(".flow-diagram-compose textarea");
+    await input.fill("Composer text");
+    await page.keyboard.type("!");
+    await expect(input).toHaveValue("Composer text!");
+    await page.keyboard.press(undoShortcut);
+    await expect(input).toHaveValue("Composer text");
+    await expect(total).toHaveText("1 note");
+  });
+
+  await test.step("use native undo in the page review composer", async () => {
+    await page.locator("[data-comment-draft-open]").click();
+    const input = page.locator("[data-comment-draft-input]");
+    await input.fill("Page review text");
+    await page.keyboard.type("!");
+    await expect(input).toHaveValue("Page review text!");
+    await page.keyboard.press(undoShortcut);
+    await expect(input).toHaveValue("Page review text");
+    await expect(total).toHaveText("1 note");
+  });
+});
+
 test("should size a persisted-collapsed diagram when expanded", async ({
   page,
   slideCraftViewerUrl,

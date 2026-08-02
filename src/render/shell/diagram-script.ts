@@ -88,6 +88,12 @@ export const DIAGRAM_SCRIPT = `
     return node;
   };
   const quote = (v) => String.fromCharCode(8220) + v + String.fromCharCode(8221);
+  const isTextEditor = (target) =>
+    target &&
+    target.closest &&
+    target.closest(
+      'input, textarea, select, [contenteditable]:not([contenteditable="false"])',
+    );
 
   // --- Announcements ----------------------------------------------------
   const live = el("div", "flow-diagram-live");
@@ -520,7 +526,7 @@ export const DIAGRAM_SCRIPT = `
     // Undo first: it must work whether or not something is selected, and
     // whether or not the pointer is anywhere near the diagram.
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {
-      if (editing) return;
+      if (editing || isTextEditor(event.target)) return;
       if (undo()) { event.preventDefault(); event.stopPropagation(); }
       return;
     }
