@@ -21,6 +21,28 @@ test("should walk the wireframe prototype between screens", async ({
     await expect(home).toContainText("$42.50");
   });
 
+  await test.step("the narrow goal card stacks its label and amount cleanly", async () => {
+    const goalLine = home.locator(".wireframe-progress-line");
+    const geometry = await goalLine.evaluate((node) => {
+      const [label, amount] = node.children;
+      if (label === undefined || amount === undefined) {
+        return null;
+      }
+      const labelRect = label.getBoundingClientRect();
+      const amountRect = amount.getBoundingClientRect();
+      return {
+        direction: getComputedStyle(node).flexDirection,
+        labelBottom: labelRect.bottom,
+        amountTop: amountRect.top,
+      };
+    });
+    expect(geometry).not.toBeNull();
+    expect(geometry?.direction).toBe("column");
+    expect(geometry?.labelBottom ?? 1).toBeLessThanOrEqual(
+      geometry?.amountTop ?? 0,
+    );
+  });
+
   await test.step("an action inside the drawing moves the prototype", async () => {
     await page.getByRole("button", { name: "Start lesson" }).click();
     await expect(lesson).toBeVisible();
