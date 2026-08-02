@@ -274,7 +274,8 @@ export const VIEWER_SCRIPT = `<script>
       });
     }
     table.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !list.hidden) {
+        event.bigPlanEscapeHandled = true;
         setMenuOpen(false);
         button.focus();
       }
@@ -347,6 +348,7 @@ export const VIEWER_SCRIPT = `<script>
   });
   control.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !panel.hidden) {
+      event.bigPlanEscapeHandled = true;
       setOpen(false);
       openButton.focus();
     }
