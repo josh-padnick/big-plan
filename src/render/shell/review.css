@@ -34,8 +34,7 @@ elements exist and the document is exactly the document it always was.
 :root[data-figure-maximized-open] [data-review-rail] {
   z-index: 75;
 }
-:root[data-figure-maximized-open] [data-review-affordance],
-:root[data-figure-maximized-open] [data-wireframe-selected-comment] {
+:root[data-figure-maximized-open] [data-review-affordance] {
   z-index: 76;
 }
 :root[data-figure-maximized-open] [data-review-compose] {
@@ -61,7 +60,10 @@ elements exist and the document is exactly the document it always was.
 [data-review-toggle] {
   position: fixed;
   top: 0.3rem;
-  right: 1rem;
+  /* The legacy page-note control still occupies the far-right header slot.
+     Keep the package tray beside it until that surface is retired; overlapping
+     controls make either one unreachable and violate one-owner interaction. */
+  right: 7.75rem;
   z-index: 45;
   display: inline-flex;
   align-items: center;
@@ -705,44 +707,6 @@ button[data-review-row-target]:active {
   background: var(--review-control-active);
 }
 [data-review-affordance] svg {
-  width: 0.85rem;
-  height: 0.85rem;
-}
-
-/* Selection and response stay adjacent: once a wireframe element is chosen,
-   this one action hugs its outline instead of asking the eye to return to the
-   distant maximize toolbar. */
-[data-wireframe-selected-comment] {
-  position: fixed;
-  z-index: 46;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  min-height: 2rem;
-  padding: 0.3rem 0.65rem;
-  border: 1px solid var(--accent-c);
-  border-radius: 999px;
-  background: var(--bg);
-  color: var(--accent-c);
-  font-size: 0.75rem;
-  font-weight: 650;
-  cursor: pointer;
-  box-shadow: 0 3px 10px rgb(0 0 0 / 0.14);
-}
-[data-wireframe-selected-comment][hidden] {
-  display: none;
-}
-[data-wireframe-selected-comment]:hover,
-[data-wireframe-selected-comment]:focus-visible {
-  background: var(--review-control-hover);
-  border-color: var(--accent-c);
-  color: var(--accent-c);
-}
-[data-wireframe-selected-comment]:active {
-  background: var(--review-control-active);
-  transform: translateY(1px);
-}
-[data-wireframe-selected-comment] svg {
   width: 0.85rem;
   height: 0.85rem;
 }

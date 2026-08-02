@@ -1003,31 +1003,70 @@
     section: block.getAttribute("data-block-section") || "",
   });
 
-  // Wireframes deliberately use the same stable block identities and Add
-  // composer as every other plan surface, but discovery is calmer. A screen
-  // gets one dedicated action at rest. Element targeting is an explicit
-  // maximize-only inspect mode, so ordinary scrolling never sprays controls
-  // across the product drawing.
+  // Component-local collectors feed the same draft list and one Send action.
+  // FlowDiagram established this Add seam; Wireframe now uses it unchanged.
+  // Anchors resolve back to the renderer's stable block identities before a
+  // draft is accepted, so a component cannot create a parallel target model.
+  const bodyForComponentItem = (item) => {
+    if (item.kind === "comment") return item.body || "";
+    if (item.kind === "edit-text")
+      return (
+        "Change " +
+        (item.field || "text") +
+        ' from "' +
+        (item.before || "") +
+        '" to "' +
+        (item.after || "") +
+        '".'
+      );
+    if (item.kind === "remove-element")
+      return (
+        "Remove this element." +
+        (item.reason ? " Reason: " + item.reason + "." : "") +
+        (item.consequence ? " Consequence: " + item.consequence + "." : "")
+      );
+    return item.body || "Review this element.";
+  };
+  const addComponentBatch = (batch) => {
+    let added = 0;
+    for (const item of batch.items || []) {
+      const anchor = String(item.anchor || "");
+      const escaped = cssEscape(anchor);
+      const block =
+        document.querySelector('[data-block-id="' + escaped + '"]') ||
+        document.querySelector('[data-flow-anchor="' + escaped + '"]');
+      const owner =
+        block && block.hasAttribute("data-block-id")
+          ? block
+          : document.querySelector(
+              '[data-flow-anchor="' +
+                cssEscape(String(batch.anchor || "")) +
+                '"]',
+            );
+      if (owner === null || !owner.hasAttribute("data-block-id")) continue;
+      const body = bodyForComponentItem(item).trim();
+      if (body === "") continue;
+      addDraft(targetForBlock(owner), body);
+      added += 1;
+    }
+    if (added === 0) throw new Error("No stable review targets were found.");
+    affordance.hidden = true;
+    renderTray();
+    void save();
+    return added;
+  };
+  window.bigPlan = window.bigPlan || {};
+  window.bigPlan.feedback = { add: addComponentBatch };
+
+  // Wireframes keep whole-screen comments in the page runtime. Element
+  // comments deliberately borrow the landed diagram runtime's selection,
+  // nearby action bar, inline composer, collector, and feedback handoff.
+  // This loop owns only the maximize-only Use/Comment mode that decides
+  // whether clicks operate the prototype or choose a review target.
   for (const wireframe of document.querySelectorAll("[data-wireframe]")) {
-    let selectedElement = null;
-    let selecting = false;
     const tabState = new Map();
-    const selectedComment = el(
-      "button",
-      {
-        type: "button",
-        "data-wireframe-selected-comment":
-          wireframe.getAttribute("data-wireframe") || "",
-        hidden: true,
-      },
-      [icon(ICON_COMMENT), el("span", { text: "Comment" })],
-    );
-    surface.appendChild(selectedComment);
     const screenButtons = Array.from(
       wireframe.querySelectorAll("[data-wireframe-comment-screen]"),
-    );
-    const elementButtons = Array.from(
-      wireframe.querySelectorAll("[data-wireframe-comment-element]"),
     );
     for (const button of screenButtons) {
       button.hidden = false;
@@ -1036,11 +1075,34 @@
         if (screen !== null) openCompose(targetForBlock(screen));
       });
     }
-    const currentElementButton = () =>
-      wireframe.querySelector(
+    const modeToggle = el("div", {
+      "data-wireframe-review-mode": "",
+      role: "group",
+      "aria-label": "Wireframe interaction mode",
+      hidden: true,
+    });
+    const useButton = el("button", {
+      type: "button",
+      "data-wireframe-review-use": "",
+      "aria-pressed": "true",
+      text: "Use",
+    });
+    const commentButton = el("button", {
+      type: "button",
+      "data-wireframe-review-comment": "",
+      "aria-pressed": "false",
+      text: "Comment",
+    });
+    modeToggle.append(useButton, commentButton);
+    const placeModeToggle = () => {
+      const toolbar = wireframe.querySelector(
         "[data-wireframe-screen][data-wireframe-current] " +
-          "[data-wireframe-comment-element]",
+          ".wireframe-frame-toolbar",
       );
+      if (toolbar !== null && modeToggle.parentElement !== toolbar)
+        toolbar.prepend(modeToggle);
+    };
+    placeModeToggle();
     const selectableElements = () => {
       const screen = wireframe.querySelector(
         "[data-wireframe-screen][data-wireframe-current]",
@@ -1058,80 +1120,22 @@
       }
       tabState.clear();
     };
-    const stopSelecting = () => {
-      selecting = false;
-      wireframe.removeAttribute("data-wireframe-comment-selecting");
+    const setMode = (mode) => {
+      const commenting = mode === "comment";
+      wireframe.toggleAttribute("data-wireframe-comment-mode", commenting);
+      useButton.setAttribute("aria-pressed", commenting ? "false" : "true");
+      commentButton.setAttribute("aria-pressed", commenting ? "true" : "false");
       restoreTabStops();
-      const button = currentElementButton();
-      if (button !== null) button.setAttribute("aria-pressed", "false");
-    };
-    const positionSelectedComment = () => {
-      if (selectedElement === null || selectedComment.hidden) return;
-      const rect = selectedElement.getBoundingClientRect();
-      const width = selectedComment.offsetWidth || 90;
-      const height = selectedComment.offsetHeight || 28;
-      const limit = rightLimit();
-      selectedComment.style.left =
-        Math.max(12, Math.min(rect.right - width, limit - width - 12)) + "px";
-      selectedComment.style.top =
-        Math.max(
-          12,
-          Math.min(rect.top - height - 8, window.innerHeight - height - 12),
-        ) + "px";
-    };
-    const clearSelection = () => {
-      if (selectedElement !== null)
-        selectedElement.removeAttribute("data-wireframe-comment-selected");
-      selectedElement = null;
-      selectedComment.hidden = true;
-      selectedComment.removeAttribute("aria-label");
-      selectedComment.removeAttribute("title");
-      selectedComment.removeAttribute("style");
-      const button = currentElementButton();
-      if (button !== null) button.textContent = "Select element";
-    };
-    const choose = (element) => {
-      clearSelection();
-      selectedElement = element;
-      element.setAttribute("data-wireframe-comment-selected", "");
-      stopSelecting();
-      const label = labelFor(element);
-      selectedComment.hidden = false;
-      selectedComment.setAttribute("aria-label", "Comment on " + label);
-      selectedComment.setAttribute("title", "Comment on " + label);
-      positionSelectedComment();
-      selectedComment.focus();
-      const button = currentElementButton();
-      if (button !== null) button.textContent = "Change selection";
-    };
-    const beginSelecting = () => {
-      clearSelection();
-      selecting = true;
-      wireframe.setAttribute("data-wireframe-comment-selecting", "");
-      const button = currentElementButton();
-      if (button !== null) {
-        button.setAttribute("aria-pressed", "true");
-        button.textContent = "Choose an element…";
-      }
+      wireframe.dispatchEvent(new CustomEvent("flow-review-clear"));
+      if (!commenting) return;
       const elements = selectableElements();
       for (const element of elements) {
         tabState.set(element, element.getAttribute("tabindex"));
         element.setAttribute("tabindex", "0");
       }
-      if (elements[0] !== undefined) elements[0].focus();
     };
-    for (const button of elementButtons) {
-      button.addEventListener("click", () => {
-        if (selecting) stopSelecting();
-        else beginSelecting();
-      });
-    }
-    selectedComment.addEventListener("click", () => {
-      if (selectedElement === null) return;
-      const target = targetForBlock(selectedElement);
-      clearSelection();
-      openCompose(target);
-    });
+    useButton.addEventListener("click", () => setMode("use"));
+    commentButton.addEventListener("click", () => setMode("comment"));
     const targetFrom = (event) =>
       event.target instanceof Element
         ? event.target.closest("[data-wireframe-element][data-block-id]")
@@ -1139,13 +1143,18 @@
     wireframe.addEventListener(
       "click",
       (event) => {
-        if (!selecting || !wireframe.hasAttribute("data-figure-maximized"))
+        if (
+          !wireframe.hasAttribute("data-wireframe-comment-mode") ||
+          !wireframe.hasAttribute("data-figure-maximized")
+        )
           return;
         const target = targetFrom(event);
         if (target === null || !wireframe.contains(target)) return;
         event.preventDefault();
         event.stopImmediatePropagation();
-        choose(target);
+        wireframe.dispatchEvent(
+          new CustomEvent("flow-review-select", { detail: { target } }),
+        );
       },
       true,
     );
@@ -1153,7 +1162,7 @@
       "keydown",
       (event) => {
         if (
-          !selecting ||
+          !wireframe.hasAttribute("data-wireframe-comment-mode") ||
           !wireframe.hasAttribute("data-figure-maximized") ||
           !["Enter", " "].includes(event.key)
         )
@@ -1162,21 +1171,16 @@
         if (target === null || !wireframe.contains(target)) return;
         event.preventDefault();
         event.stopImmediatePropagation();
-        choose(target);
+        wireframe.dispatchEvent(
+          new CustomEvent("flow-review-select", { detail: { target } }),
+        );
       },
       true,
     );
-    addEventListener("resize", positionSelectedComment, { passive: true });
-    addEventListener("scroll", positionSelectedComment, {
-      capture: true,
-      passive: true,
-    });
-    wireframe.addEventListener("click", () =>
-      requestAnimationFrame(positionSelectedComment),
-    );
     wireframe.addEventListener("figuremaximizechange", (event) => {
       const maximized = event.detail.maximized === true;
-      for (const button of elementButtons) button.hidden = !maximized;
+      placeModeToggle();
+      modeToggle.hidden = !maximized;
       affordance.hidden = true;
       if (maximized) cursorBlock = null;
       // The review rail occupies the same edge as the maximize-only element
@@ -1184,11 +1188,25 @@
       // opening its composer will bring the established rail back on demand.
       if (maximized && railIsOpen()) setRailOpen(false);
       if (!maximized) {
-        stopSelecting();
-        clearSelection();
+        setMode("use");
       }
     });
+    wireframe.addEventListener("click", () =>
+      requestAnimationFrame(placeModeToggle),
+    );
+    wireframe.addEventListener("keydown", () =>
+      requestAnimationFrame(placeModeToggle),
+    );
   }
+
+  // Maximized figures own the viewport. Component collectors can repaint the
+  // page while a figure is open, so close the floating page affordance in
+  // JavaScript as well as CSS; stale hover chrome must never cover a figure's
+  // own maximize or Comment controls.
+  document.addEventListener("figuremaximizechange", () => {
+    affordance.hidden = true;
+    cursorBlock = null;
+  });
 
   // The right edge the floating chrome may reach: the window, or the tray's
   // own left edge while the tray is open, so a control never lands under it.
@@ -1197,6 +1215,10 @@
 
   const showAffordance = (block) => {
     if (!block || !compose.hidden) return;
+    if (document.querySelector("[data-figure-maximized]") !== null) {
+      affordance.hidden = true;
+      return;
+    }
     if (railIsOpen() && window.innerWidth < 1280) {
       affordance.hidden = true;
       return;

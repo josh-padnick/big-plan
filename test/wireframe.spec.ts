@@ -758,6 +758,7 @@ test("should comment on a whole wireframe screen and one specific element", asyn
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(wireframeViewerUrl);
+  const wireframe = page.locator("[data-wireframe]");
   const screen = page.locator('[data-wireframe-screen="child-home"]');
   const affordance = page.locator("[data-review-affordance]");
   const commentsToggle = page.locator("[data-review-toggle]");
@@ -775,46 +776,58 @@ test("should comment on a whole wireframe screen and one specific element", asyn
     await expect(page.locator("[data-review-drafts] li")).toHaveCount(1);
   });
 
-  await test.step("an element is selected before using the same tray and package", async () => {
+  await test.step("Comment mode reuses the diagram selection and inline composer", async () => {
     await screen.locator("[data-figure-maximize]").click();
     await expect(commentsToggle).toBeHidden();
-    const elementComment = screen.locator("[data-wireframe-comment-element]");
-    await expect(elementComment).toBeVisible();
-    await expect(elementComment).toHaveAccessibleName("Select element");
-    await elementComment.click();
+    const mode = screen.locator("[data-wireframe-review-mode]");
+    const use = mode.getByRole("button", { name: "Use" });
+    const comment = mode.getByRole("button", { name: "Comment" });
+    await expect(mode).toBeVisible();
+    await expect(use).toHaveAttribute("aria-pressed", "true");
+    await comment.click();
+    await expect(comment).toHaveAttribute("aria-pressed", "true");
     const action = screen.getByRole("button", {
       name: "✋ Ask a grown-up",
       exact: true,
     });
+    await action.hover();
+    await expect
+      .poll(() =>
+        action.evaluate((node) => getComputedStyle(node).outlineStyle),
+      )
+      .not.toBe("none");
     await action.click();
-    await expect(action).toHaveAttribute("data-wireframe-comment-selected", "");
-    await expect(elementComment).toHaveText("Change selection");
-    const nearbyComment = page.locator(
-      '[data-wireframe-selected-comment="eddys-wallet"]',
-    );
+    await expect(action).toHaveAttribute("data-flow-selected", "");
+    const nearbyComment = wireframe
+      .locator(".flow-diagram-actionbar")
+      .getByRole("button", { name: "Comment" });
     await expect(nearbyComment).toBeVisible();
-    await expect(nearbyComment).toHaveAccessibleName(
-      "Comment on ✋ Ask a grown-up",
-    );
-    await expect(nearbyComment).toBeFocused();
     const actionBox = await boxOf(action);
     const nearbyBox = await boxOf(nearbyComment);
-    expect(
-      Math.abs(nearbyBox.x + nearbyBox.width - (actionBox.x + actionBox.width)),
-    ).toBeLessThanOrEqual(16);
-    expect(actionBox.y - (nearbyBox.y + nearbyBox.height)).toBeLessThanOrEqual(
-      16,
-    );
+    expect(Math.abs(nearbyBox.x - actionBox.x)).toBeLessThanOrEqual(240);
+    expect(Math.abs(nearbyBox.y - actionBox.y)).toBeLessThanOrEqual(80);
     await nearbyComment.click();
     await page
-      .locator("[data-review-compose-input]")
+      .locator(".flow-diagram-compose textarea")
       .fill("Keep this action welcoming.");
-    await page.locator("[data-review-compose-save]").click();
+    await wireframe
+      .locator(".flow-diagram-compose")
+      .getByRole("button", { name: "Comment" })
+      .click();
+    const collector = wireframe.locator(".flow-collector");
+    await expect(collector).toBeVisible();
+    await expect(collector).toContainText("Keep this action welcoming.");
+    await collector
+      .getByRole("button", { name: "Add 1 note to plan feedback" })
+      .click();
     await expect(page.locator("[data-review-drafts] li")).toHaveCount(2);
     const ids = await page
       .locator("[data-review-annotated]")
       .evaluateAll((nodes) => nodes.map((node) => node.dataset.blockId));
     expect(new Set(ids).size).toBe(2);
     await expect(affordance).toBeHidden();
+    await use.click();
+    await expect(use).toHaveAttribute("aria-pressed", "true");
+    await expect(action).not.toHaveAttribute("data-flow-selected");
   });
 });

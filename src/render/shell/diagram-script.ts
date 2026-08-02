@@ -308,6 +308,15 @@ export const DIAGRAM_SCRIPT = `
 
   for (const diagram of diagrams) {
     const c = canvas.get(diagram);
+    // Comment-only surfaces deliberately reuse this runtime without becoming
+    // editable canvases. Their Use/Comment mode owns hit testing and sends a
+    // stable target through these events; selection, the nearby action bar,
+    // inline composer, collector, and feedback handoff stay exactly shared.
+    diagram.addEventListener("flow-review-select", (event) => {
+      const node = event.detail && event.detail.target;
+      if (node instanceof Element && diagram.contains(node)) select(node);
+    });
+    diagram.addEventListener("flow-review-clear", () => clearDiagramChrome(diagram));
     if (!c) continue;
 
     // A pinch is always an explicit canvas gesture. Plain two-finger panning
@@ -537,6 +546,12 @@ export const DIAGRAM_SCRIPT = `
     }
     if (!compose.hidden) return;
     if (!selected) return;
+    // A wireframe borrows the diagram runtime's target/comment pipeline, not
+    // its direct-manipulation editor. Its arrows remain slide navigation and
+    // its Delete/type keys remain ordinary viewer input.
+    const selectedOwner =
+      selected.closest("[data-flow-diagram]") || selected;
+    if (selectedOwner.hasAttribute("data-flow-comment-only")) return;
     // The selected canvas element keeps its state while focus moves through
     // viewer chrome. Native button/link activation must win over the canvas's
     // Enter-to-edit and type-to-overwrite shortcuts.
@@ -907,18 +922,20 @@ export const DIAGRAM_SCRIPT = `
     // and Revert, which only exists once there is something to revert. The
     // figure is only the diagram's keyboard entry point: slide-level comments
     // own feedback about the whole diagram, so it offers no floating action.
+    const owner = selected.closest("[data-flow-diagram]") || selected;
+    const commentOnly = owner.hasAttribute("data-flow-comment-only");
     if (kindOf(selected) !== "figure") {
       addAction("comment", ICON.comment, "Comment", () => openCompose(selected));
     }
     const mine = drafts.filter((d) => d.element === selected);
-    if (mine.length > 0) {
+    if (!commentOnly && mine.length > 0) {
       addAction("revert", ICON.revert, "Revert", () => revertElement(selected),
         "Revert every change on this element");
     }
-    if (editing) {
+    if (!commentOnly && editing) {
       actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
         "Enter to save \u00b7 Esc to cancel"));
-    } else if (kindOf(selected) !== "figure") {
+    } else if (!commentOnly && kindOf(selected) !== "figure") {
       const removed = removalOn(selected);
       const canType = fieldsIn(selected).length > 0 && !removed;
       actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
@@ -1294,15 +1311,17 @@ export const DIAGRAM_SCRIPT = `
     (window.bigPlan && window.bigPlan.feedback) || null;
 
   const buildCollector = (diagram) => {
+    const commentOnly = diagram.hasAttribute("data-flow-comment-only");
+    const surfaceName = commentOnly ? "wireframe" : "diagram";
     const root = el("aside", "flow-collector");
     root.hidden = true;
-    root.setAttribute("aria-label", "Feedback on this diagram");
+    root.setAttribute("aria-label", "Feedback on this " + surfaceName);
 
     const head = el("div", "flow-collector-head");
     const title = el("div", "");
-    title.appendChild(el("span", "", "Feedback on this diagram"));
+    title.appendChild(el("span", "", "Feedback on this " + surfaceName));
     const scope = el("span", "flow-collector-scope",
-      diagram.getAttribute("data-flow-scope") || "This diagram");
+      diagram.getAttribute("data-flow-scope") || "This " + surfaceName);
     title.appendChild(scope);
     head.appendChild(title);
     const count = el("span", "flow-collector-count", "0");
@@ -1363,7 +1382,7 @@ export const DIAGRAM_SCRIPT = `
       return;
     }
     target.add({
-      source: "flow-diagram",
+      source: diagram.getAttribute("data-feedback-source") || "flow-diagram",
       anchor: diagram.getAttribute("data-flow-anchor"),
       items: mine.map((d) => ({
         kind: d.kind, anchor: d.anchor, field: d.fieldName,
@@ -1393,7 +1412,8 @@ export const DIAGRAM_SCRIPT = `
     for (const draft of mine) {
       const item = el("li", "flow-collector-item");
       const line = el("div", "flow-collector-item-head");
-      const target = el("button", "flow-collector-target", "Flow: " + nameOf(draft.element));
+      const prefix = diagram.hasAttribute("data-flow-comment-only") ? "Wireframe: " : "Flow: ";
+      const target = el("button", "flow-collector-target", prefix + nameOf(draft.element));
       target.type = "button";
       target.addEventListener("click", (event) => {
         event.stopPropagation();

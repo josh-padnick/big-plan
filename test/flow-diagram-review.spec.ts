@@ -690,8 +690,9 @@ test("should keep review chrome stable through zoom and maximize in both themes"
     await toolbarAdd.click();
     const status = diagram.locator(".flow-collector-status");
     await expect(status).not.toHaveAttribute("hidden", "");
-    await expect(status).toHaveAttribute("data-tone", "unavailable");
-    await expect(status).toContainText("nothing was added");
-    await expect(toolbarAdd).toBeVisible();
+    await expect(status).toHaveAttribute("data-tone", "added");
+    await expect(status).toContainText("Added 2 notes");
+    await expect(toolbarAdd).toBeHidden();
+    await expect(page.locator("[data-review-drafts] li")).toHaveCount(2);
   });
 });

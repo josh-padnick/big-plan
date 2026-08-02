@@ -124,6 +124,9 @@ const targetProps = ({
   "data-block-anchor": `screen-${context.prefix}-element-${context.path}`,
   "data-block-kind": `wireframe-${safeTargetSegment(node.element)}`,
   "data-block-label": nodeLabel(node),
+  "data-flow-anchor": `screen-${context.prefix}-element-${context.path}`,
+  "data-flow-element": "review-target",
+  "data-flow-name": nodeLabel(node),
   "data-wireframe-element": node.element,
 });
 
@@ -834,14 +837,6 @@ const Screen = ({
               +
             </button>
           </div>
-          <button
-            type="button"
-            className="wireframe-element-comment-button"
-            data-wireframe-comment-element=""
-            hidden
-          >
-            Select element
-          </button>
           <MaximizeButton subject="wireframe" />
         </div>
         <div className="wireframe-frame" data-wireframe-device={screen.device}>
@@ -891,6 +886,10 @@ const Screen = ({
 export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
   <figure
     className="wireframe"
+    data-flow-diagram=""
+    data-flow-comment-only=""
+    data-flow-scope={model.title ?? model.id}
+    data-feedback-source="wireframe"
     data-wireframe={model.id}
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "wireframe" }}
     {...(model.screens.some((screen) => screen.device === "desktop")
