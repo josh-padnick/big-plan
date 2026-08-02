@@ -58,6 +58,11 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Styling commits must match their visual contract
         env:
+          # Checkout's host-side safe-directory setting is not visible inside
+          # the job container. Trust only this workspace for the verifier.
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: safe.directory
+          GIT_CONFIG_VALUE_0: ${{ github.workspace }}
           STYLE_HISTORY_BASE: ${{ github.ref == 'refs/heads/main' && github.event.before || 'origin/main' }}
         run: bun run verify:style-history -- --base "$STYLE_HISTORY_BASE"
       - name: Upload styling history evidence
