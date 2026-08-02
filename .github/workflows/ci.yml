@@ -50,6 +50,8 @@ jobs:
           fetch-depth: 0
           # Historical code must not inherit checkout's repository credential.
           persist-credentials: false
+      - name: Install Bun archive dependency
+        run: apt-get update && apt-get install --yes --no-install-recommends unzip
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
