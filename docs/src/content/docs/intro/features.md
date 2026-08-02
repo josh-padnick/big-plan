@@ -17,7 +17,8 @@ Everything on this page is shipped and works today.
 - A table of contents built from the plan's level-two headings.
 - A sticky sidebar on wide screens; a compact sticky `Sections` menu on narrow ones.
 - Section links scroll smoothly, unless you've asked your OS for reduced motion.
-- Collapse controls on Parts, slides, and sub-slides, plus document-wide expand-all and collapse-all controls in the table of contents; choices persist for the document, and TOC jumps expand collapsed ancestors.
+- Collapse controls on Parts, slides, and sub-slides, plus document-wide expand-all and collapse-all controls in the table of contents; TOC jumps expand collapsed ancestors.
+- Collapse choices, database-schema column choices, and a document-level review-comment draft persist only for the exact source path and authored revision, so same-titled plans and distinct authored revisions never share viewer state.
 
 ## Code
 
@@ -44,7 +45,7 @@ Everything on this page is shipped and works today.
 ## Output
 
 - One self-contained HTML file with styling and branding embedded.
-- One small embedded viewer script (TOC scroll-spy, hover popovers, deck collapse, figure maximize); content stays fully readable with scripts disabled.
+- One small embedded viewer script (TOC scroll-spy, hover popovers, deck collapse, database-schema columns, comment drafts, figure maximize); content stays fully readable with scripts disabled.
 - No external requests, ever.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 

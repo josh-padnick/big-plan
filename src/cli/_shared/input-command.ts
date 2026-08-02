@@ -9,6 +9,9 @@ import { MarkdownDiagnosticsError } from "../../render/render-document.js";
 type DerivationInput = {
   readonly markdown: string;
   readonly fallbackTitle: string;
+  // Derivations that stamp a document identity need the authoritative source
+  // path as well as its content.
+  readonly inputPath: string;
 };
 
 /** Parses one required input plus a command-defined number of trailing args. */
@@ -82,6 +85,7 @@ export const deriveInputFile = async <Derived>({
       derived: derive({
         markdown,
         fallbackTitle: basename(inputPath, extname(inputPath)),
+        inputPath,
       }),
     };
   } catch (error: unknown) {

@@ -2,21 +2,16 @@
 // a scroll-spy that marks the section being read with aria-current on its TOC
 // links (falling back to the overview links above the first section), hover
 // popovers that float [data-info-popover] disclosures beside their triggers,
-// collapse toggles for deck parts, slides, and sub-slides, DataTable sorting,
-// filtering, text fit, column layout and grouping, and one maximize behavior
-// shared by every figure family. Plan content never contributes script, and
-// every affordance keeps a no-JS fallback.
+// collapse toggles for deck parts, slides, and sub-slides, table-schema column
+// state, a document comment draft, DataTable sorting, filtering, text fit,
+// column layout and grouping, and one maximize behavior shared by every figure
+// family. Plan content never contributes script, and every affordance keeps a
+// no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
 // sibling. Every collapse query here is a direct-child lookup relying on that
 // shape, so read those invariants before changing this or the deck transform.
-//
-// The DataTable leg reads the contract owned by components/data-table/view.tsx,
-// and the maximize leg the one owned by
-// components/_model/figure-controls/figure-controls.ts. This file is a string
-// template and cannot import either, so a change to those attribute spellings
-// changes the strings here too.
 //
 // The DataTable leg reads the contract owned by components/data-table/view.tsx:
 // [data-data-table] wraps one scroll container holding one table whose head
@@ -180,11 +175,193 @@ export const VIEWER_SCRIPT = `<script>
   }
 })();
 (() => {
+  const tables = Array.from(
+    document.querySelectorAll("[data-database-table-schema]"),
+  );
+  if (tables.length === 0) return;
+  const planId = document.documentElement.getAttribute("data-plan-id");
+  const storageKey = (table) => {
+    const tableName = table.getAttribute("data-schema-table-name");
+    return planId === null ||
+      planId === "" ||
+      tableName === null ||
+      tableName === ""
+      ? null
+      : "big-plan:table:" + planId + ":" + tableName;
+  };
+  for (const table of tables) {
+    const button = table.querySelector("[data-schema-columns-button]");
+    const list = table.querySelector("[data-schema-columns-list]");
+    if (button === null || list === null) continue;
+    const toggles = Array.from(
+      list.querySelectorAll("[data-schema-column-toggle]"),
+    );
+    const allowedColumns = new Set(
+      toggles.map((toggle) =>
+        toggle.getAttribute("data-schema-column-toggle"),
+      ),
+    );
+    const hiddenColumns = new Set();
+    const applyColumn = (column, hidden) => {
+      if (!allowedColumns.has(column)) return;
+      if (hidden) hiddenColumns.add(column);
+      else hiddenColumns.delete(column);
+      for (const cell of table.querySelectorAll(
+        ".table-schema-head-" + column + ", .table-schema-cell-" + column,
+      )) {
+        cell.hidden = hidden;
+      }
+      const toggle = toggles.find(
+        (candidate) =>
+          candidate.getAttribute("data-schema-column-toggle") === column,
+      );
+      if (toggle !== undefined) {
+        toggle.setAttribute("aria-checked", hidden ? "false" : "true");
+        const check = toggle.querySelector('[data-lucide="check"]');
+        if (check !== null) check.toggleAttribute("hidden", hidden);
+      }
+    };
+    const key = storageKey(table);
+    if (key !== null) {
+      try {
+        const stored = JSON.parse(localStorage.getItem(key) || "null");
+        if (stored !== null && Array.isArray(stored.hiddenColumns)) {
+          for (const column of stored.hiddenColumns) {
+            if (typeof column === "string") applyColumn(column, true);
+          }
+        }
+      } catch (_) {}
+    }
+    const persist = () => {
+      if (key === null) return;
+      try {
+        if (hiddenColumns.size === 0) localStorage.removeItem(key);
+        else
+          localStorage.setItem(
+            key,
+            JSON.stringify({ hiddenColumns: Array.from(hiddenColumns) }),
+          );
+      } catch (_) {}
+    };
+    const setMenuOpen = (open) => {
+      list.hidden = !open;
+      button.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    button.hidden = false;
+    for (const toggle of toggles) {
+      toggle.removeAttribute("tabindex");
+      toggle.addEventListener("click", (event) => {
+        event.preventDefault();
+        const column = toggle.getAttribute("data-schema-column-toggle");
+        if (column === null || column === "") return;
+        applyColumn(column, !hiddenColumns.has(column));
+        persist();
+      });
+    }
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      setMenuOpen(list.hidden);
+    });
+    const reset = list.querySelector("[data-schema-reset-columns]");
+    if (reset !== null) {
+      reset.removeAttribute("tabindex");
+      reset.addEventListener("click", (event) => {
+        event.preventDefault();
+        for (const column of Array.from(hiddenColumns)) {
+          applyColumn(column, false);
+        }
+        persist();
+      });
+    }
+    table.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !list.hidden) {
+        event.bigPlanEscapeHandled = true;
+        setMenuOpen(false);
+        button.focus();
+      }
+    });
+    document.addEventListener("click", (event) => {
+      if (
+        !(event.target instanceof Node) ||
+        !list.parentElement.contains(event.target)
+      ) {
+        setMenuOpen(false);
+      }
+    });
+  }
+})();
+(() => {
+  const control = document.querySelector("[data-comment-draft-control]");
+  if (control === null) return;
+  const openButton = control.querySelector("[data-comment-draft-open]");
+  const panel = control.querySelector("[data-comment-draft-panel]");
+  const closeButton = control.querySelector("[data-comment-draft-close]");
+  const input = control.querySelector("[data-comment-draft-input]");
+  const saveButton = control.querySelector("[data-comment-draft-save]");
+  const status = control.querySelector("[data-comment-draft-status]");
+  if (
+    openButton === null ||
+    panel === null ||
+    closeButton === null ||
+    input === null ||
+    saveButton === null ||
+    status === null
+  )
+    return;
+  const planId = document.documentElement.getAttribute("data-plan-id");
+  const key =
+    planId === null || planId === ""
+      ? null
+      : "big-plan:draft:" + planId + ":document";
+  if (key !== null) {
+    try {
+      input.value = localStorage.getItem(key) || "";
+    } catch (_) {}
+  }
+  const setOpen = (open) => {
+    panel.hidden = !open;
+    openButton.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) input.focus();
+  };
+  control.hidden = false;
+  openButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    setOpen(panel.hidden);
+  });
+  closeButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    setOpen(false);
+    openButton.focus();
+  });
+  input.addEventListener("input", () => {
+    status.textContent = "";
+  });
+  saveButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    if (key !== null) {
+      try {
+        if (input.value === "") localStorage.removeItem(key);
+        else localStorage.setItem(key, input.value);
+      } catch (_) {}
+    }
+    status.textContent = key === null ? "Kept in memory" : "Draft saved";
+  });
+  control.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !panel.hidden) {
+      event.bigPlanEscapeHandled = true;
+      setOpen(false);
+      openButton.focus();
+    }
+  });
+})();
+(() => {
   const blocks = Array.from(document.querySelectorAll("[data-collapsible]"));
   if (blocks.length === 0) return;
   const planId = document.documentElement.getAttribute("data-plan-id");
-  const docKey = planId || document.title + ":" + location.pathname;
-  const storageKey = (id) => "big-plan:collapse:" + docKey + ":" + id;
+  const storageKey = (id) =>
+    planId === null || planId === ""
+      ? null
+      : "big-plan:collapse:" + planId + ":" + id;
   // deck-collapse.ts guarantees one header per collapsible and that the body
   // is its sibling, so every lookup here is a direct-child query.
   const headerFor = (block) =>
@@ -211,9 +388,12 @@ export const VIEWER_SCRIPT = `<script>
     }
     const id = block.getAttribute("data-collapse-id");
     if (id !== null && id !== "") {
-      try {
-        localStorage.setItem(storageKey(id), collapsed ? "1" : "0");
-      } catch (_) {}
+      const key = storageKey(id);
+      if (key !== null) {
+        try {
+          localStorage.setItem(key, collapsed ? "1" : "0");
+        } catch (_) {}
+      }
     }
   };
   const refreshScrollSpy = () => {
@@ -274,8 +454,9 @@ export const VIEWER_SCRIPT = `<script>
   for (const block of blocks) {
     const id = block.getAttribute("data-collapse-id");
     if (id !== null && id !== "") {
+      const key = storageKey(id);
       try {
-        if (localStorage.getItem(storageKey(id)) === "1") {
+        if (key !== null && localStorage.getItem(key) === "1") {
           applyCollapsed(block, true);
           restoredCollapse = true;
         }
@@ -366,12 +547,10 @@ export const VIEWER_SCRIPT = `<script>
 (() => {
   const tables = Array.from(document.querySelectorAll("[data-data-table]"));
   if (tables.length === 0) return;
-  const docKey =
-    document.documentElement.getAttribute("data-plan-id") ||
-    location.pathname ||
-    document.title;
+  const planId = document.documentElement.getAttribute("data-plan-id");
   const FITS = ["wrap", "truncate", "scroll"];
   const read = (key) => {
+    if (key === null) return null;
     try {
       return JSON.parse(localStorage.getItem(key) || "null");
     } catch (_) {
@@ -379,6 +558,7 @@ export const VIEWER_SCRIPT = `<script>
     }
   };
   const write = (key, value) => {
+    if (key === null) return;
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch (_) {}
@@ -402,10 +582,12 @@ export const VIEWER_SCRIPT = `<script>
     const columnCount = heads.length;
     const authoredFit = figure.getAttribute("data-table-fit") || "wrap";
     const storageKey =
-      "big-plan:datatable:" +
-      docKey +
-      ":" +
-      (figure.getAttribute("data-table-id") || "table");
+      planId === null || planId === ""
+        ? null
+        : "big-plan:datatable:" +
+          planId +
+          ":" +
+          (figure.getAttribute("data-table-id") || "table");
     const countLabel = figure.querySelector("[data-table-count]");
     const empty = figure.querySelector("[data-table-empty]");
     const filterInput = figure.querySelector("[data-table-filter-input]");

@@ -12,6 +12,7 @@ import {
 } from "./markdown/compile-markdown.js";
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
 import { renderPage } from "./page.js";
+import { derivePlanId } from "./plan-id.js";
 import { serializeHtml } from "./serialize-html.js";
 import { renderShell } from "./shell/shell.js";
 
@@ -24,9 +25,11 @@ export type RenderedDocument = {
 const renderCompiledDocument = ({
   compiled,
   fallbackTitle,
+  planId,
 }: {
   readonly compiled: CompiledMarkdown;
   readonly fallbackTitle: string;
+  readonly planId?: string;
 }): RenderedDocument => {
   const { root, sections, elementIds, title, partIds } = compiled;
   const resolvedTitle = title ?? fallbackTitle;
@@ -56,6 +59,7 @@ const renderCompiledDocument = ({
     styles: shell.styles,
     bodyClassName: shell.bodyClassName,
     bodyHtml: shell.html,
+    planId,
   });
   return { html, title: resolvedTitle, sections };
 };
@@ -69,14 +73,21 @@ const renderCompiledDocument = ({
 export const renderDocument = ({
   markdown,
   fallbackTitle,
+  planPath,
 }: {
   readonly markdown: string;
   readonly fallbackTitle: string;
+  // Only filesystem-backed render delivery supplies a path. Omitting it keeps
+  // the pure renderer useful while deliberately disabling viewer persistence.
+  readonly planPath?: string;
 }): RenderedDocument => {
   const compiled = compileMarkdown({ markdown });
   return renderCompiledDocument({
     compiled,
     fallbackTitle,
+    ...(planPath === undefined
+      ? {}
+      : { planId: derivePlanId({ planPath, planContent: markdown }) }),
   });
 };
 

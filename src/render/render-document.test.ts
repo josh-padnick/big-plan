@@ -122,9 +122,9 @@ describe("renderDocument affordances", () => {
     expect(html).not.toContain("@import");
   });
 
-  it("should inline one stylesheet and only the scroll-spy script when rendering", () => {
+  it("should inline one stylesheet and one viewer script when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
-    // The shell's scroll-spy is the single script; plan content can never
+    // The shell's viewer behavior is the single script; plan content can never
     // contribute another, and nothing external is referenced.
     expect(html.match(/<script>/g)).toHaveLength(1);
     expect(html).toContain("data-section-link");
@@ -210,6 +210,29 @@ Tomorrow.
 });
 
 describe("renderDocument shell", () => {
+  it("should stamp a path-and-content identity only for filesystem-backed rendering", () => {
+    const input = {
+      markdown: "# Shared title\n\nA concise plan thesis.\n",
+      fallbackTitle: "Plan",
+    };
+    const first = renderDocument({
+      ...input,
+      planPath: "/plans/first.mdx",
+    }).html;
+    const second = renderDocument({
+      ...input,
+      planPath: "/plans/second.mdx",
+    }).html;
+    const idPattern = /data-plan-id="([a-f0-9]{32})"/;
+    const firstId = first.match(idPattern)?.[1];
+    const secondId = second.match(idPattern)?.[1];
+
+    expect(firstId).toBeDefined();
+    expect(secondId).toBeDefined();
+    expect(firstId).not.toBe(secondId);
+    expect(renderDocument(input).html).toContain('<html lang="en">');
+  });
+
   it("should escape the title when it contains HTML special characters", () => {
     const { html } = renderDocument({
       markdown: "hello",
@@ -230,7 +253,8 @@ describe("renderDocument shell", () => {
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("</html>");
     expect(html).not.toContain("<nav");
-    expect(html).not.toContain("<script>");
+    expect(html).toMatch(/data-comment-draft-control hidden/);
+    expect(html).toContain("<script>");
     // The reading column keeps its ~74ch measure even without a sidebar.
     expect(html).toContain("wide:grid-cols-[minmax(0,74ch)]");
   });

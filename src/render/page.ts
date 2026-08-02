@@ -18,14 +18,20 @@ export const renderPage = ({
   styles,
   bodyClassName,
   bodyHtml,
+  planId,
 }: {
   readonly title: string;
   readonly styles: string;
   readonly bodyClassName: string;
   readonly bodyHtml: string;
+  // Absence is meaningful: an unstamped document gets no persisted viewer
+  // state, so the viewer never guesses an identity from presentation text.
+  readonly planId?: string;
 }): string => {
+  const planAttribute =
+    planId === undefined ? "" : ` data-plan-id="${escapeHtml(planId)}"`;
   return `<!doctype html>
-<html lang="en">
+<html lang="en"${planAttribute}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
