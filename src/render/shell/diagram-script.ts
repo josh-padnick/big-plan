@@ -30,12 +30,6 @@
 // It never promotes or restores a figure itself. The shared leg owns that
 // toggle; this one watches for the attribute and refits the canvas.
 //
-// THE TRANSPORT IS A STUB, ON PURPOSE
-// Drafts live in memory and Send does nothing. Commenting Phase 1 owns the
-// real draft store, tray, and package; this leg exists so the interaction
-// design can be tried end to end before that lands, and the tray says so on
-// its face rather than pretending to deliver.
-
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { X_ICON } from "../../icons/lucide/x.js";
