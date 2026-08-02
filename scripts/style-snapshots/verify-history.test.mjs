@@ -49,6 +49,47 @@ const pngIdentity = (buffer) => {
   };
 };
 
+const artifactPath = (repoRoot, name) =>
+  join(repoRoot, "test-results", "style-history", name);
+
+const createMinimalRepository = async ({
+  stylingFilePatterns = ["^irrelevant\\.txt$"],
+} = {}) => {
+  const repoRoot = await mkdtemp(join(tmpdir(), "style-history-test-"));
+  await git(repoRoot, ["init", "-b", "main"]);
+  await git(repoRoot, ["config", "user.name", "Style History Test"]);
+  await git(repoRoot, [
+    "config",
+    "user.email",
+    "style-history@example.invalid",
+  ]);
+  await mkdir(join(repoRoot, ".style-snapshots"), { recursive: true });
+  await writeFile(join(repoRoot, "fixture.txt"), "fixture\n", "utf8");
+  await writeFile(join(repoRoot, "style.txt"), "red\n", "utf8");
+  const capture = onePixelPng({ red: 255, green: 0, blue: 0 });
+  await writeFile(
+    join(repoRoot, "capture.mjs"),
+    `import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const output = process.env.STYLE_SNAPSHOT_OUTPUT_DIR;
+await mkdir(output, { recursive: true });
+await writeFile(join(output, "state.png"), Buffer.from(${JSON.stringify(capture.toString("base64"))}, "base64"));
+`,
+    "utf8",
+  );
+  const configPath = join(repoRoot, ".style-snapshots", "config.json");
+  const config = {
+    schemaVersion: 1,
+    fixturePaths: ["fixture.txt"],
+    stylingFilePatterns,
+    manifestDirectory: ".style-snapshots/manifests",
+    captureCommand: ["node", "{harnessRoot}/capture.mjs"],
+  };
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  const base = await commit({ repoRoot, subject: "test: establish fixture" });
+  return { repoRoot, configPath, config, base };
+};
+
 test("should stop at the commit whose screenshots exceed its visual contract", async () => {
   const repoRoot = await mkdtemp(join(tmpdir(), "style-history-test-"));
   try {
@@ -124,7 +165,7 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
         repoRoot,
         base,
         configPath,
-        artifactRoot: join(repoRoot, "artifacts-missing-contract"),
+        artifactRoot: artifactPath(repoRoot, "missing-contract"),
       }),
       /styling commits must end with \[visual:empty\] or \[visual:approved\]/,
     );
@@ -200,7 +241,7 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
     await writeManifest(approvedManifest);
     const approvedCommit = await commit({ repoRoot, subject: approvedSubject });
 
-    const passingArtifacts = join(repoRoot, "artifacts-passing");
+    const passingArtifacts = artifactPath(repoRoot, "passing");
     const passing = await verifyHistory({
       repoRoot,
       base,
@@ -254,7 +295,7 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
         repoRoot,
         base,
         configPath,
-        artifactRoot: join(repoRoot, "artifacts-mismatched-manifest"),
+        artifactRoot: artifactPath(repoRoot, "mismatched-manifest"),
       }),
       /exact capture evidence does not match the approved manifest/,
     );
@@ -289,7 +330,7 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
       repoRoot,
       base,
       configPath,
-      artifactRoot: join(repoRoot, "artifacts-merged"),
+      artifactRoot: artifactPath(repoRoot, "merged"),
     });
     assert.ok(
       mergedPassing.some((result) => result.commit === featureCommit),
@@ -346,7 +387,7 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
         repoRoot,
         base,
         configPath,
-        artifactRoot: join(repoRoot, "artifacts-conflicting-merge"),
+        artifactRoot: artifactPath(repoRoot, "conflicting-merge"),
       }),
       /merge commit resolved a configured styling file.*Rebase and record the resolution as a single-parent/,
     );
@@ -362,9 +403,190 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
         repoRoot,
         base,
         configPath,
-        artifactRoot: join(repoRoot, "artifacts-failing"),
+        artifactRoot: artifactPath(repoRoot, "failing"),
       }),
       /expected zero changed pixels; observed state\.png \(1 changed pixels\)/,
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should retain relevance from every config revision", async () => {
+  const { repoRoot, configPath, config, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^custom-pixel\\.txt$"],
+  });
+  try {
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        { ...config, stylingFilePatterns: ["^irrelevant\\.txt$"] },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await commit({
+      repoRoot,
+      subject: "test: narrow mutable relevance [visual:empty]",
+    });
+    await writeFile(join(repoRoot, "custom-pixel.txt"), "changed\n", "utf8");
+    await commit({ repoRoot, subject: "test: omit the visual contract" });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath(repoRoot, "relevance-floor"),
+      }),
+      /styling commits must end with \[visual:empty\] or \[visual:approved\]/,
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should classify every direct pixel-producing input as relevant", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository();
+  try {
+    for (const path of [
+      "assets/logo-light.svg",
+      "assets/favicon-light.ico",
+      "src/icons/lucide/info.ts",
+      "src/render/branding.generated.ts",
+      "src/render/page.ts",
+      "src/render/render-document.ts",
+    ]) {
+      await git(repoRoot, ["reset", "--hard", base]);
+      await mkdir(join(repoRoot, path, ".."), { recursive: true });
+      await writeFile(join(repoRoot, path), "pixel input\n", "utf8");
+      await commit({ repoRoot, subject: `test: change ${path}` });
+      await assert.rejects(
+        verifyHistory({
+          repoRoot,
+          base,
+          configPath,
+          artifactRoot: artifactPath(
+            repoRoot,
+            `pixel-input-${path.replaceAll("/", "-")}`,
+          ),
+        }),
+        /styling commits must end with \[visual:empty\] or \[visual:approved\]/,
+      );
+    }
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should reject artifact cleanup outside the disposable evidence root", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository();
+  try {
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: repoRoot,
+      }),
+      /artifacts must stay under test-results\/style-history/,
+    );
+    assert.equal(
+      JSON.parse(await readFile(configPath, "utf8")).schemaVersion,
+      1,
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should reject a styling conflict resolved to one parent's version", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  try {
+    await git(repoRoot, ["checkout", "-b", "style-feature"]);
+    await writeFile(join(repoRoot, "style.txt"), "blue\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: change feature color [visual:empty]",
+    });
+    await git(repoRoot, ["checkout", "main"]);
+    await writeFile(join(repoRoot, "style.txt"), "green\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: change main color [visual:empty]",
+    });
+    await assert.rejects(
+      git(repoRoot, [
+        "merge",
+        "--no-ff",
+        "style-feature",
+        "-m",
+        "Merge pull request #3 from example/style-feature",
+      ]),
+    );
+    await writeFile(join(repoRoot, "style.txt"), "blue\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "Merge pull request #3 from example/style-feature",
+    });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath(repoRoot, "parent-equal-merge"),
+      }),
+      /merge commit resolved a configured styling file.*Rebase and record the resolution as a single-parent/,
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should validate final HEAD capture completeness unconditionally", async () => {
+  const { repoRoot, configPath, config, base } =
+    await createMinimalRepository();
+  try {
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          ...config,
+          documents: [
+            {
+              captures: [
+                {
+                  themes: ["light", "dark"],
+                  viewports: [{}],
+                },
+              ],
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await commit({
+      repoRoot,
+      subject: "test: add an incomplete capture [visual:empty]",
+    });
+    await writeFile(join(repoRoot, "non-style.txt"), "advance HEAD\n", "utf8");
+    await commit({ repoRoot, subject: "test: advance HEAD" });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath(repoRoot, "head-completeness"),
+      }),
+      /Final style fixture produced 1 of 2 configured captures/,
     );
   } finally {
     await rm(repoRoot, { recursive: true, force: true });

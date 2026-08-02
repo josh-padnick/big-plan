@@ -3,10 +3,15 @@
   "fixturePaths": ["examples/mdx-components.mdx", "examples/deck.mdx"],
   "stylingFilePatterns": [
     "^\\.style-snapshots/config\\.json$",
+    "^assets/(?:logo-(?:light|dark)\\.svg|favicon-(?:light|dark)\\.ico)$",
     "^src/.*\\.css$",
     "^src/components/(?:.*/)?view[^/]*\\.tsx$",
     "^src/components/_shared/.*\\.tsx$",
+    "^src/icons/lucide/.*\\.ts$",
+    "^src/render/branding\\.generated\\.ts$",
     "^src/render/global\\.generated\\.ts$",
+    "^src/render/page\\.ts$",
+    "^src/render/render-document\\.ts$",
     "^src/render/(?:markdown|shell)/.*\\.ts$"
   ],
   "manifestDirectory": ".style-snapshots/manifests",
