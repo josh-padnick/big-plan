@@ -1,6 +1,141 @@
 # Wireframe reference patterns
 
-Six proven layouts provide copyable starting points for common product screens without exposing pane-width decisions.
+Seven proven layouts provide copyable starting points for common product screens without exposing pane-width decisions.
+
+## Simple tablet choice
+
+*Let the decision dominate, then reveal continuation after a deliberate tap.*
+
+<Wireframe
+  id="pattern-tablet-choice"
+  initialScreen="choose"
+>
+  <Screen id="choose" name="Choose" device="tablet">
+    <Stack>
+      <TopBar title="Eddy's Wallet">
+        <Button label="Back to my wallet" emphasis="tertiary" />
+      </TopBar>
+      <Center measure="wide">
+        <PageHeader
+          title="What do you want help with?"
+          description="Tap one. You can change it later."
+        />
+        <ChoiceGroup>
+          <ChoiceCard
+            icon="⚽"
+            title="Ask about a purchase"
+            description="See how much money I would have left"
+            navigateTo="purchase-selected"
+          />
+          <ChoiceCard
+            icon="💵"
+            title="Ask about my loan"
+            description="See what I owe and ask a question"
+            navigateTo="loan-selected"
+          />
+        </ChoiceGroup>
+      </Center>
+    </Stack>
+  </Screen>
+  <Screen
+    id="purchase-selected"
+    name="Purchase selected"
+    device="tablet"
+  >
+    <Stack>
+      <TopBar title="Eddy's Wallet">
+        <Button label="Back to my wallet" emphasis="tertiary" />
+      </TopBar>
+      <Center measure="wide">
+        <PageHeader
+          title="What do you want help with?"
+          description="You can change your choice."
+        />
+        <ChoiceGroup>
+          <ChoiceCard
+            icon="⚽"
+            title="Ask about a purchase"
+            description="See how much money I would have left"
+            selected
+          />
+          <ChoiceCard
+            icon="💵"
+            title="Ask about my loan"
+            description="See what I owe and ask a question"
+            navigateTo="loan-selected"
+          />
+        </ChoiceGroup>
+        <Text
+          text="Next, tell us the item and price. Nothing will be bought yet."
+          role="helper"
+        />
+        <Button
+          label="Continue"
+          emphasis="primary"
+          navigateTo="tell-us"
+        />
+      </Center>
+    </Stack>
+  </Screen>
+  <Screen id="loan-selected" name="Loan selected" device="tablet">
+    <Stack>
+      <TopBar title="Eddy's Wallet">
+        <Button label="Back to my wallet" emphasis="tertiary" />
+      </TopBar>
+      <Center measure="wide">
+        <PageHeader
+          title="What do you want help with?"
+          description="You can change your choice."
+        />
+        <ChoiceGroup>
+          <ChoiceCard
+            icon="⚽"
+            title="Ask about a purchase"
+            description="See how much money I would have left"
+            navigateTo="purchase-selected"
+          />
+          <ChoiceCard
+            icon="💵"
+            title="Ask about my loan"
+            description="See what I owe and ask a question"
+            selected
+          />
+        </ChoiceGroup>
+        <Text
+          text="Next, tell us your loan question. Your balance will not change."
+          role="helper"
+        />
+        <Button
+          label="Continue"
+          emphasis="primary"
+          navigateTo="loan-question"
+        />
+      </Center>
+    </Stack>
+  </Screen>
+  <Screen id="tell-us" name="Tell us" device="tablet">
+    <Stack>
+      <TopBar title="Eddy's Wallet">
+        <Button label="Back to my wallet" emphasis="tertiary" />
+      </TopBar>
+      <Center measure="prose">
+        <PageHeader title="Tell us about the purchase" />
+        <TextField label="Item" />
+      </Center>
+    </Stack>
+  </Screen>
+  <Screen id="loan-question" name="Loan question" device="tablet">
+    <Stack>
+      <TopBar title="Eddy's Wallet">
+        <Button label="Back to my wallet" emphasis="tertiary" />
+      </TopBar>
+      <Center measure="prose">
+        <PageHeader title="What do you want to know about your loan?" />
+        <TextArea label="My loan question" placeholder="I want to know…" />
+      </Center>
+    </Stack>
+  </Screen>
+</Wireframe>
 
 ## Master-detail
 

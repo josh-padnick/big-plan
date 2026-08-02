@@ -336,6 +336,16 @@ const expandPattern = ({
 const childNodes = (node: WireframeNode): ReadonlyArray<WireframeNode> =>
   "children" in node ? node.children : [];
 
+const containsElement = ({
+  node,
+  element,
+}: {
+  readonly node: WireframeNode;
+  readonly element: WireframeNode["element"];
+}): boolean =>
+  node.element === element ||
+  childNodes(node).some((child) => containsElement({ node: child, element }));
+
 const containsRecordCollection = (node: WireframeNode): boolean =>
   node.element === "Panel" &&
   node.children.some(
@@ -458,6 +468,137 @@ const checkOutlinedSiblingBudget = ({
     nodes.forEach((node) => visit(childNodes(node)));
   };
   visit(screen.children);
+};
+
+/**
+ * A small choice is one dominant touch interaction, not a record workspace.
+ *
+ * ChoiceGroup is deliberately a deep primitive: once an author names this
+ * intent, the compiler owns selection timing and composition while the view
+ * owns touch treatment.
+ */
+const checkChoiceComposition = ({
+  screen,
+  position,
+  diagnostics,
+}: {
+  readonly screen: WireframeScreen;
+  readonly position: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const all = flatten(screen.children);
+  const groups = all.filter((node) => node.element === "ChoiceGroup");
+  if (groups.length === 0) {
+    return;
+  }
+  const selected = groups.flatMap((group) =>
+    group.children.filter(
+      (node) => node.element === "ChoiceCard" && node.selected,
+    ),
+  );
+  if (selected.length > 1) {
+    diagnostics.add({
+      message: `Screen "${screen.id}" selects ${selected.length} ChoiceCards; a simple decision shows at most one deliberate selection`,
+      position,
+    });
+  }
+  const primaryActions = all.filter(
+    (node) => node.element === "Button" && node.emphasis === "primary",
+  );
+  if (selected.length === 0 && primaryActions.length > 0) {
+    diagnostics.add({
+      message: `Screen "${screen.id}" shows a primary continuation before any ChoiceCard is selected; hide it until a deliberate tap reveals the selected state`,
+      position,
+    });
+  }
+  if (selected.length === 1 && primaryActions.length === 0) {
+    diagnostics.add({
+      message: `Screen "${screen.id}" selects a ChoiceCard but offers no primary continuation; add one short next action after the deliberate choice`,
+      position,
+    });
+  }
+  if (screen.device !== "tablet" && screen.device !== "tablet-portrait") {
+    return;
+  }
+  const visit = (nodes: ReadonlyArray<WireframeNode>): void => {
+    for (const node of nodes) {
+      if (
+        node.element === "Row" &&
+        node.children.length > 1 &&
+        node.children.some((child) =>
+          containsElement({ node: child, element: "ChoiceGroup" }),
+        )
+      ) {
+        diagnostics.add({
+          message: `Tablet Screen "${screen.id}" puts a ChoiceGroup beside a competing region; the decision must dominate one centered column, never a miniature list-and-inspector workspace`,
+          position,
+        });
+      }
+      visit(childNodes(node));
+    }
+  };
+  visit(screen.children);
+};
+
+/**
+ * Every unselected touch option must reveal the state for that same option.
+ *
+ * This is checked after all screens compile because a static prototype models
+ * selection as navigation to a deliberate selected-state screen.
+ */
+const checkChoiceNavigation = ({
+  screens,
+  positions,
+  fallbackPosition,
+  diagnostics,
+}: {
+  readonly screens: ReadonlyArray<WireframeScreen>;
+  readonly positions: ReadonlyArray<ScopedChild>;
+  readonly fallbackPosition: ScopedChild["position"];
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const byId = new Map(screens.map((screen) => [screen.id, screen]));
+  const positionFor = (screen: WireframeScreen): ScopedChild["position"] =>
+    positions.find((child) => child.attributes.id === screen.id)?.position ??
+    fallbackPosition;
+
+  for (const screen of screens) {
+    const groups = flatten(screen.children).filter(
+      (node) => node.element === "ChoiceGroup",
+    );
+    for (const group of groups) {
+      const choices = group.children.filter(
+        (node) => node.element === "ChoiceCard",
+      );
+      for (const choice of choices.filter((candidate) => !candidate.selected)) {
+        if (choice.navigateTo === undefined) {
+          diagnostics.add({
+            message: `ChoiceCard "${choice.title}" on Screen "${screen.id}" has no selected-state destination; make the whole option reveal a screen that selects this same choice`,
+            position: positionFor(screen),
+          });
+          continue;
+        }
+        const destination = byId.get(choice.navigateTo);
+        if (destination === undefined) {
+          continue;
+        }
+        const selectedChoices = flatten(destination.children).flatMap((node) =>
+          node.element === "ChoiceCard" && node.selected ? [node] : [],
+        );
+        const selectedChoice = selectedChoices[0];
+        if (
+          selectedChoices.length !== 1 ||
+          selectedChoice?.title !== choice.title ||
+          selectedChoice?.description !== choice.description
+        ) {
+          diagnostics.add({
+            message: `ChoiceCard "${choice.title}" on Screen "${screen.id}" navigates to "${choice.navigateTo}" without selecting that same title and consequence; every option needs its own truthful visible outcome`,
+            position: positionFor(screen),
+          });
+        }
+      }
+    }
+  }
 };
 
 /** Multiple page-level headers make one screen claim more than one clear job. */
@@ -679,6 +820,7 @@ const compileScreen = ({
     position: child.position,
     diagnostics,
   });
+  checkChoiceComposition({ screen, position: child.position, diagnostics });
   checkOneClearJob({ screen, position: child.position, diagnostics });
   checkStepperState({ screen, position: child.position, diagnostics });
   checkPhoneShell({ screen, position: child.position, diagnostics });
@@ -773,6 +915,12 @@ export const compileWireframe = ({
       });
     }
   }
+  checkChoiceNavigation({
+    screens,
+    positions: screenChildren,
+    fallbackPosition: position,
+    diagnostics,
+  });
   const firstScreen = screens[0];
   if (
     validated.initialScreen !== undefined &&
@@ -783,15 +931,31 @@ export const compileWireframe = ({
       position,
     });
   }
+  const initialScreenId =
+    validated.initialScreen !== undefined &&
+    screenIds.has(validated.initialScreen)
+      ? validated.initialScreen
+      : (firstScreen?.id ?? "");
+  const initialScreen = screens.find((screen) => screen.id === initialScreenId);
+  const selectedInitialChoices =
+    initialScreen === undefined
+      ? []
+      : flatten(initialScreen.children).filter(
+          (node) => node.element === "ChoiceCard" && node.selected,
+        );
+  if (selectedInitialChoices.length > 0) {
+    diagnostics.add({
+      message: `Initial Screen "${initialScreenId}" preselects a consequential ChoiceCard; start unselected and reveal the selected state only after a deliberate tap`,
+      position:
+        screenChildren.find((child) => child.attributes.id === initialScreenId)
+          ?.position ?? position,
+    });
+  }
 
   return {
     id: validated.id ?? "",
     ...(validated.title === undefined ? {} : { title: validated.title }),
-    initialScreenId:
-      validated.initialScreen !== undefined &&
-      screenIds.has(validated.initialScreen)
-        ? validated.initialScreen
-        : (firstScreen?.id ?? ""),
+    initialScreenId,
     screens,
   };
 };

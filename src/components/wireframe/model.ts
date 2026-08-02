@@ -343,6 +343,20 @@ export type WireframeNode =
       readonly children: ReadonlyArray<WireframeNode>;
     }
   | {
+      // A small consequential decision owns the surface instead of borrowing
+      // record-list or master-detail semantics.
+      readonly element: "ChoiceGroup";
+      readonly children: ReadonlyArray<WireframeNode>;
+    }
+  | {
+      readonly element: "ChoiceCard";
+      readonly icon: string;
+      readonly title: string;
+      readonly description: string;
+      readonly selected: boolean;
+      readonly navigateTo?: string;
+    }
+  | {
       readonly element: "ListItem";
       readonly label: string;
       readonly meta?: string;

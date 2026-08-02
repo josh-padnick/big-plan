@@ -25,11 +25,11 @@ Use CLEAR as the index into the design standard, not as a replacement for its de
 It covers the product screen and any comments, decisions, diagrams, toolbars, or expanded modes the screen depicts.
 The generated `big-plan guidance Wireframe` output groups every implementation principle, anti-pattern, per-device pass criterion, and mechanical contract beneath these five headings:
 
-1. **Clear job** - one screen and one step advance one present decision; every persistent pane and review action has one owner; every temporary surface has an exit.
-2. **Layout follows attention** - visual order follows decision order; option titles, criteria, definitions, anchored comments, toolbars, facts, recommendations, and side effects remain visually distinct.
-3. **Explicit change** - selections, modes, comments, destructive edits, live counts, persistence, focus return, and preserved scroll make every state transition observable.
-4. **Audience language** - one screen speaks to one audience using one term per concept, outcome-oriented labels, anchored context without repetition, actionable time, and unconfusable live-state labels.
-5. **Real device** - desktop, tablet, phone, and expanded viewers keep truthful viewport, navigation, zoom, marker-size, density, and interaction contracts; roughness may change strokes, never information architecture.
+1. **Clear job** - decision complexity selects the composition before layout begins; one screen and one step advance one present decision; every persistent pane and review action has one owner; every temporary surface has an exit.
+2. **Layout follows attention** - visual order follows decision order; a small tablet choice is one dominant column of complete touch surfaces; option titles, criteria, definitions, anchored comments, toolbars, facts, recommendations, and side effects remain visually distinct.
+3. **Explicit change** - consequential choices start unselected and reveal continuation only after a deliberate tap; selections, modes, comments, destructive edits, live counts, persistence, focus return, and preserved scroll make every state transition observable.
+4. **Audience language** - one screen speaks to one audience using one term per concept, natural outcome copy, visible identity and escape, anchored context without repetition, actionable time, and unconfusable live-state labels.
+5. **Real device** - desktop, tablet, phone, and expanded viewers keep truthful viewport, navigation, zoom, marker-size, density, and interaction contracts; on tablet the decision is the dominant touch interaction, never a miniature workspace.
 
 The generated guidance is the exact agent-facing owner of those grouped rules.
 The device table below is the syntax-level form-factor contract; the component, compiler, lint, and geometry tests own mechanical facts; LOOP in the generated guidance owns render-and-review practice.
@@ -45,6 +45,7 @@ CRAP still governs the surrounding plan page, not product UI inside an artboard.
 - **Decision rounds 4–5** retain option-name rules, type contrast, bold-colon criterion labels, regular values, readable matrix headers, centered collapsed actions, idiomatic focus, exit paths, separated dashed-underlined definitions, and explicit component ownership.
 - **Diagram rounds 5–6** retain valid load state, visible deletion diffs, anchor markers, contained tray chrome, toolbar-owned actions, no redundant whole-diagram control, no meaningless footer hover, fixed-size zoom markers, stable note placement, and focus return.
 - **The desktop workspace round** retains viewport fit, independent pane scroll, anchored header and composer, primary dominance, multi-signal dangerous modes, one state owner, compare-versus-judge panes, justified widths, saved views versus filters, actionable time, recommendation provenance, distinct facts/recommendations/side effects, explicit settings context, nested dependencies, outcome labels, and observable persistence.
+- **The CLEAR gap critique** retains all twelve gold-bar corrections: composition follows decision complexity; touch surfaces look touchable; selection uses several signals; consequential choices start unselected; child vocabulary survives selection; detail earns its place; instructions are not repeated; identity and escape stay visible; tablet space enlarges rather than shrinks; the grid quiets behind interaction; copy sounds natural; and next actions stay short.
 - **STAMP** is retired as a competing acronym, but its details remain: Space, Tiers, Align, and Minimal boxes live under Layout and mechanics; Plain state lives under Explicit change.
 - **Per-form-factor principles** live under Real device as explicit desktop/tablet/phone pass and reject criteria.
 - **Type, aspect, state, and target contracts** live under Real device and their mechanical owners: fixed type roles, fixed iPad frame, state paint, 44 px tablet/phone targets, compile diagnostics, and browser geometry tests.
@@ -113,6 +114,7 @@ Phone screens reject `url`, `AppShell`, and `Sidebar`; use `TopBar`, a single co
 
 `navigateTo` on `Button`, `NavItem`, `ListItem`, or `Crumb` must name another screen in the same wireframe.
 The compiler blocks multiple page-level jobs, equal flexible thirds on desktop, ambiguous record-detail selection, four or more outlined sibling panels, phone desktop-shell primitives, more than one filled work action per screen, and ambiguous Stepper progress.
+A `ChoiceGroup` is the mechanically owned simple-decision path: it holds two to five `ChoiceCard`s, starts unselected on the initial screen, gives every option its own destination that visibly selects the same title and consequence, reveals a short primary continuation only after selection, and cannot share a tablet row with a competing region.
 A Stepper must contain exactly one current step in `done` → `current` → `todo` order, while each Step label names only the task because the primitive draws its own number or completion mark.
 A composer's Send button counts as a filled action even when it omits `emphasis="primary"`; selected buttons inside `SegmentedControl` and `BottomBar` are mode or navigation state and do not count as filled work actions.
 On desktop, a direct workspace `Row` derives flexible minmax-style columns: a record collection becomes the bounded comparison pane, `Rail` owns secondary width, and the remaining surface becomes dominant.
@@ -173,6 +175,8 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `ImagePlaceholder` | Required `label`; optional `shape="square|wide|tall"`.                                                            |
 | `List`             | Holds only `ListItem`.                                                                                              |
 | `ListItem`         | Required `label`; optional `meta`, `value`, `selected`, and `navigateTo`; valid only in `List`.                      |
+| `ChoiceGroup`      | Holds two to five `ChoiceCard` options as one dominant simple-decision surface.                                     |
+| `ChoiceCard`       | Required `icon`, `title`, and one-line `description`; optional `selected` and `navigateTo`; valid only in `ChoiceGroup`. |
 | `Message`          | Required `author`, `time`, and `text`; optional `kind="customer|agent|internal"`.                                  |
 
 ### Forms and flows

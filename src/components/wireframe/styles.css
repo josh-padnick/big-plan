@@ -782,6 +782,76 @@ marks and a plan diff never jitters.
     padding: 0.65rem 1rem;
     font-size: 1rem;
   }
+  /* On iPad, a small decision is the dominant touch interaction. It uses a
+     generous centered column, never the list/detail widths of a workspace. */
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    ):has(.wireframe-choice-group)
+    .wireframe-center-inner {
+    width: min(100%, 54rem);
+    max-width: 54rem;
+    margin-inline: auto;
+    gap: 1.15rem;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-choice-group {
+    gap: 0.9rem;
+    padding: 1.15rem;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-choice-card {
+    grid-template-columns: 3.75rem minmax(0, 1fr) auto;
+    min-height: 6rem;
+    padding: 1rem 1.15rem;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-choice-icon {
+    width: 3.75rem;
+    height: 3.75rem;
+    font-size: 1.8rem;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-choice-title {
+    font-size: 1.25rem;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-choice-description {
+    font-size: 1rem;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-top-bar
+    > :last-child:not(.wireframe-brand) {
+    margin-left: auto;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-center-inner:has(.wireframe-choice-group)
+    > .wireframe-button:last-child {
+    align-self: flex-end;
+    min-width: 7rem;
+    text-align: center;
+  }
   .wireframe-artboard[data-wireframe-device="tablet-portrait"]
     .wireframe-app-shell
     > .wireframe-top-bar,
@@ -1616,6 +1686,93 @@ marks and a plan diff never jitters.
   }
   .wireframe-list-item:has(> .wireframe-list-row) {
     padding: 0;
+  }
+
+  /* A small decision is not a queue. The group quiets the graph paper and
+     every complete option surface carries touch, copy, and selection state. */
+  .wireframe-choice-group {
+    align-self: stretch;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-radius: 14px 11px 13px 10px / 11px 14px 10px 13px;
+    background: color-mix(in srgb, var(--color-paper) 72%, var(--wf-fill));
+  }
+  .wireframe-choice-card {
+    display: grid;
+    grid-template-columns: 3.25rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.9rem;
+    width: 100%;
+    min-height: 5rem;
+    padding: 0.85rem 1rem;
+    border: 2px solid var(--wf-stroke-soft);
+    border-radius: 12px 9px 13px 10px / 9px 13px 10px 12px;
+    box-shadow: 1px 2px 0 -1px var(--wf-stroke-soft);
+    background: var(--color-paper);
+    text-align: left;
+    cursor: pointer;
+  }
+  .wireframe-choice-card:hover {
+    border-color: var(--wf-stroke);
+    background: color-mix(in srgb, var(--color-paper) 82%, var(--wf-fill));
+  }
+  .wireframe-choice-card:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+    outline-offset: 3px;
+    border-color: var(--color-accent);
+  }
+  .wireframe-choice-card[data-wireframe-selected] {
+    border-width: 3px;
+    border-color: var(--color-ink);
+    box-shadow:
+      inset 5px 0 0 var(--color-ink),
+      2px 3px 0 -1px var(--wf-stroke-soft);
+    background: color-mix(in srgb, var(--color-paper) 72%, var(--wf-fill));
+  }
+  .wireframe-choice-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    border: 1px dashed var(--wf-stroke-soft);
+    border-radius: 50%;
+    background: var(--color-paper);
+    font-size: 1.55rem;
+  }
+  .wireframe-choice-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .wireframe-choice-title {
+    font-size: 1.05rem;
+    font-weight: 650;
+  }
+  .wireframe-choice-description {
+    color: var(--color-muted);
+    font-size: 0.875rem;
+  }
+  .wireframe-choice-state {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 1.5rem;
+  }
+  .wireframe-choice-radio {
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 2px solid var(--wf-stroke);
+    border-radius: 50%;
+    background: var(--color-paper);
+  }
+  .wireframe-choice-card[data-wireframe-selected] .wireframe-choice-radio {
+    border: 0.35rem solid var(--color-ink);
+  }
+  .wireframe-choice-check {
+    min-width: 1rem;
+    font-weight: 700;
   }
 
   /* Conversation timeline messages (not table rows). */

@@ -340,6 +340,45 @@ const WireframeElement = ({
           <WireframeElements nodes={node.children} />
         </ul>
       );
+    case "ChoiceGroup":
+      return (
+        <div
+          className="wireframe-choice-group flex flex-col"
+          role="radiogroup"
+          aria-label="Choose one"
+        >
+          <WireframeElements nodes={node.children} />
+        </div>
+      );
+    case "ChoiceCard":
+      return (
+        <button
+          type="button"
+          className="wireframe-choice-card"
+          role="radio"
+          aria-checked={node.selected}
+          {...(node.selected ? { "data-wireframe-selected": "" } : {})}
+          {...(node.navigateTo === undefined
+            ? {}
+            : { "data-wireframe-navigate": node.navigateTo })}
+        >
+          <span className="wireframe-choice-icon" aria-hidden="true">
+            {node.icon}
+          </span>
+          <span className="wireframe-choice-copy">
+            <span className="wireframe-choice-title">{node.title}</span>
+            <span className="wireframe-choice-description">
+              {node.description}
+            </span>
+          </span>
+          <span className="wireframe-choice-state" aria-hidden="true">
+            <span className="wireframe-choice-radio" />
+            <span className="wireframe-choice-check">
+              {node.selected ? "✓" : ""}
+            </span>
+          </span>
+        </button>
+      );
     case "ListItem": {
       // Every queue/inbox row is two lines so a narrow desktop list column never
       // jams title, status, and age onto one flex line (which overflows as

@@ -1,0 +1,60 @@
+# Bad tablet choice outcome
+
+Two polished options cannot route to the same selected state.
+
+<Wireframe id="bad-tablet-choice-outcome" initialScreen="choose">
+  <Screen id="choose" name="Choose" device="tablet">
+    <ChoiceGroup>
+      <ChoiceCard
+        icon="⚽"
+        title="Ask about a purchase"
+        description="See how much money I would have left"
+        navigateTo="purchase-selected"
+      />
+      <ChoiceCard
+        icon="💵"
+        title="Ask about my loan"
+        description="See what I owe and ask a question"
+        navigateTo="purchase-selected"
+      />
+    </ChoiceGroup>
+  </Screen>
+  <Screen
+    id="purchase-selected"
+    name="Purchase selected"
+    device="tablet"
+  >
+    <ChoiceGroup>
+      <ChoiceCard
+        icon="⚽"
+        title="Ask about a purchase"
+        description="See how much money I would have left"
+        selected
+      />
+      <ChoiceCard
+        icon="💵"
+        title="Ask about my loan"
+        description="See what I owe and ask a question"
+        navigateTo="loan-selected"
+      />
+    </ChoiceGroup>
+    <Button label="Continue" emphasis="primary" />
+  </Screen>
+  <Screen id="loan-selected" name="Loan selected" device="tablet">
+    <ChoiceGroup>
+      <ChoiceCard
+        icon="⚽"
+        title="Ask about a purchase"
+        description="See how much money I would have left"
+        navigateTo="purchase-selected"
+      />
+      <ChoiceCard
+        icon="💵"
+        title="Ask about my loan"
+        description="See what I owe and ask a question"
+        selected
+      />
+    </ChoiceGroup>
+    <Button label="Continue" emphasis="primary" />
+  </Screen>
+</Wireframe>

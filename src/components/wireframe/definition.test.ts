@@ -123,6 +123,51 @@ const LESSON = screen({
   children: [element({ name: "Text", attributes: { text: "Lesson 3 of 6" } })],
 });
 
+type ChoiceName = "purchase" | "loan";
+
+const choiceGroup = (selected?: ChoiceName): ScopedChild =>
+  element({
+    name: "ChoiceGroup",
+    children: [
+      element({
+        name: "ChoiceCard",
+        attributes: {
+          icon: "⚽",
+          title: "Ask about a purchase",
+          description: "See how much money I would have left",
+          ...(selected === "purchase"
+            ? { selected: true }
+            : { navigateTo: "purchase-selected" }),
+        },
+      }),
+      element({
+        name: "ChoiceCard",
+        attributes: {
+          icon: "💵",
+          title: "Ask about my loan",
+          description: "See what I owe and ask a question",
+          ...(selected === "loan"
+            ? { selected: true }
+            : { navigateTo: "loan-selected" }),
+        },
+      }),
+    ],
+  });
+
+const selectedChoiceScreen = (selected: ChoiceName): ScopedChild =>
+  screen({
+    id: `${selected}-selected`,
+    name: `${selected} selected`,
+    attributes: { device: "tablet" },
+    children: [
+      choiceGroup(selected),
+      element({
+        name: "Button",
+        attributes: { label: "Continue", emphasis: "primary" },
+      }),
+    ],
+  });
+
 describe("WIREFRAME_COMPONENT_DEFINITION", () => {
   it("should compile a two-screen prototype when every reference resolves", () => {
     const { compiled, diagnostics } = compile({
@@ -1783,6 +1828,156 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain('"data-wireframe-conversation":""');
     expect(rendered).toContain("wireframe-thread");
     expect(rendered).toContain("wireframe-composer");
+  });
+
+  it("should render a deliberate simple-choice flow through the touch-card primitive", () => {
+    const { compiled, diagnostics } = compile({
+      attributes: { id: "choice", initialScreen: "choose" },
+      scopedChildren: [
+        screen({
+          id: "choose",
+          attributes: { device: "tablet" },
+          children: [
+            element({
+              name: "Center",
+              children: [choiceGroup()],
+            }),
+          ],
+        }),
+        selectedChoiceScreen("purchase"),
+        selectedChoiceScreen("loan"),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    const rendered = html(render(compiled));
+    expect(rendered).toContain("wireframe-choice-group");
+    expect(rendered).toContain("wireframe-choice-card");
+    expect(rendered).toContain('"ariaChecked":"true"');
+    expect(rendered).toContain('"data-wireframe-selected":""');
+  });
+
+  it("should reject options that route to another choice's selected outcome", () => {
+    const misleadingGroup = element({
+      name: "ChoiceGroup",
+      children: [
+        element({
+          name: "ChoiceCard",
+          attributes: {
+            icon: "⚽",
+            title: "Ask about a purchase",
+            description: "See how much money I would have left",
+            navigateTo: "purchase-selected",
+          },
+        }),
+        element({
+          name: "ChoiceCard",
+          attributes: {
+            icon: "💵",
+            title: "Ask about my loan",
+            description: "See what I owe and ask a question",
+            navigateTo: "purchase-selected",
+          },
+        }),
+      ],
+    });
+    const { diagnostics } = compile({
+      attributes: { id: "choice", initialScreen: "choose" },
+      scopedChildren: [
+        screen({
+          id: "choose",
+          attributes: { device: "tablet" },
+          children: [misleadingGroup],
+        }),
+        selectedChoiceScreen("purchase"),
+        selectedChoiceScreen("loan"),
+      ],
+    });
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.message).toContain(
+      "every option needs its own truthful visible outcome",
+    );
+  });
+
+  it("should reject preselection on the initial consequential choice", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "choose",
+          attributes: { device: "tablet" },
+          children: [
+            choiceGroup("purchase"),
+            element({
+              name: "Button",
+              attributes: { label: "Continue", emphasis: "primary" },
+            }),
+          ],
+        }),
+        selectedChoiceScreen("purchase"),
+        selectedChoiceScreen("loan"),
+      ],
+    });
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.message).toContain(
+      'Initial Screen "choose" preselects a consequential ChoiceCard',
+    );
+  });
+
+  it("should reject a primary continuation before a deliberate choice", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "choose",
+          attributes: { device: "tablet" },
+          children: [
+            choiceGroup(),
+            element({
+              name: "Button",
+              attributes: { label: "Continue", emphasis: "primary" },
+            }),
+          ],
+        }),
+        selectedChoiceScreen("purchase"),
+        selectedChoiceScreen("loan"),
+      ],
+    });
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.message).toContain(
+      "shows a primary continuation before any ChoiceCard is selected",
+    );
+  });
+
+  it("should reject a tablet choice inside competing workspace columns", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "choose",
+          attributes: { device: "tablet" },
+          children: [
+            element({
+              name: "Row",
+              children: [
+                choiceGroup(),
+                element({
+                  name: "Panel",
+                  children: [
+                    element({
+                      name: "Text",
+                      attributes: { text: "Competing detail" },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+        selectedChoiceScreen("purchase"),
+        selectedChoiceScreen("loan"),
+      ],
+    });
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.message).toContain(
+      "the decision must dominate one centered column",
+    );
   });
 
   it("should hold centered content to a measure", () => {

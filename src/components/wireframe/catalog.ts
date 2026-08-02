@@ -170,6 +170,14 @@ const LIST_ITEM_SCHEMA = {
   navigateTo: { kind: "string", nonEmpty: true },
 } satisfies ComponentAttributeSchema;
 
+const CHOICE_CARD_SCHEMA = {
+  icon: { kind: "string", required: true, nonEmpty: true },
+  title: { kind: "string", required: true, nonEmpty: true },
+  description: { kind: "string", required: true, nonEmpty: true },
+  selected: { kind: "booleanShorthand" },
+  navigateTo: { kind: "string", nonEmpty: true },
+} satisfies ComponentAttributeSchema;
+
 const MESSAGE_KINDS = ["customer", "agent", "internal"] as const;
 
 const MESSAGE_SCHEMA = {
@@ -731,6 +739,59 @@ const CATALOG = {
         schema: EMPTY_SCHEMA,
       });
       return { element: "List", children };
+    },
+  },
+  ChoiceGroup: {
+    category: "surface",
+    acceptsChildren: true,
+    allowedChildren: ["ChoiceCard"],
+    summary:
+      "Two to five simple alternatives as one dominant touch decision; each option supplies an icon, title, and one-line consequence.",
+    example:
+      '<ChoiceGroup><ChoiceCard icon="⚽" title="Ask about a purchase" description="See how much money I would have left" /></ChoiceGroup>',
+    compile: ({ attributes, children, position, diagnostics }) => {
+      validateComponentAttributes({
+        component: "ChoiceGroup",
+        attributes,
+        position,
+        diagnostics,
+        schema: EMPTY_SCHEMA,
+      });
+      if (children.length < 2 || children.length > 5) {
+        diagnostics.add({
+          message: `ChoiceGroup needs 2–5 ChoiceCard options; it found ${children.length}. Use a focused choice surface for a small decision and another pattern for a larger collection.`,
+          position,
+        });
+      }
+      return { element: "ChoiceGroup", children };
+    },
+  },
+  ChoiceCard: {
+    category: "content",
+    acceptsChildren: false,
+    allowedParents: ["ChoiceGroup"],
+    summary:
+      "One whole-surface touch option. selected adds radio, check, border, and fill signals; navigateTo may reveal the deliberate selected state.",
+    example:
+      '<ChoiceCard icon="⚽" title="Ask about a purchase" description="See how much money I would have left" navigateTo="purchase-selected" />',
+    compile: ({ attributes, position, diagnostics }) => {
+      const validated = validateComponentAttributes({
+        component: "ChoiceCard",
+        attributes,
+        position,
+        diagnostics,
+        schema: CHOICE_CARD_SCHEMA,
+      });
+      return {
+        element: "ChoiceCard",
+        icon: validated.icon ?? "",
+        title: validated.title ?? "",
+        description: validated.description ?? "",
+        selected: validated.selected === true,
+        ...(validated.navigateTo === undefined
+          ? {}
+          : { navigateTo: validated.navigateTo }),
+      };
     },
   },
   ListItem: {

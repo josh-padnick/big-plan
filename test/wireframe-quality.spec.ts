@@ -130,7 +130,7 @@ test("should render every proof at its native device geometry", async ({
       await expect(screen.locator(".wireframe-tablet-handle")).toHaveCount(1);
       const targets = await screen
         .locator(
-          ".wireframe-button, .wireframe-nav-item, .wireframe-list-item, .wireframe-input",
+          ".wireframe-button, .wireframe-nav-item, .wireframe-list-item, .wireframe-choice-card, .wireframe-input",
         )
         .evaluateAll((nodes) =>
           nodes.map((node) =>
@@ -151,6 +151,77 @@ test("should render every proof at its native device geometry", async ({
         `completed step marks: ${completedStepMarks.join(", ")}`,
       ).toBe(true);
     }
+  });
+
+  await test.step("tablet simple choices dominate, start empty, and reveal continuation after tap", async () => {
+    const wireframe = page.locator('[data-wireframe="quality-tablet"]');
+    await wireframe
+      .locator('[data-wireframe-switch]:has-text("Tablet · Choose")')
+      .click();
+    const initial = wireframe.locator(
+      '[data-wireframe-screen="quality-tablet-choose"]:visible',
+    );
+    const choiceGroup = initial.locator(".wireframe-choice-group");
+    const initialCards = choiceGroup.locator(".wireframe-choice-card");
+
+    await expect(initialCards).toHaveCount(3);
+    await expect(
+      choiceGroup.locator(".wireframe-choice-card[data-wireframe-selected]"),
+    ).toHaveCount(0);
+    await expect(
+      initial.locator('.wireframe-button[data-wireframe-emphasis="primary"]'),
+    ).toHaveCount(0);
+    const choiceGroupBox = await boxOf(choiceGroup);
+    const tabletArtboardBox = await boxOf(
+      initial.locator(".wireframe-artboard"),
+    );
+    expect(choiceGroupBox.width / tabletArtboardBox.width).toBeGreaterThan(0.7);
+    const cardHeights = await initialCards.evaluateAll((nodes) =>
+      nodes.map((node) =>
+        node instanceof HTMLElement ? node.offsetHeight : 0,
+      ),
+    );
+    expect(
+      cardHeights.every((height) => height >= 96),
+      `choice-card heights: ${cardHeights.join(", ")}`,
+    ).toBe(true);
+    const competingRows = initial.locator(
+      ".wireframe-row:has(.wireframe-choice-group)",
+    );
+    await expect(competingRows).toHaveCount(0);
+    const groupBackground = await choiceGroup.evaluate(
+      (node) => getComputedStyle(node).backgroundColor,
+    );
+    const artboardBackground = await initial
+      .locator(".wireframe-artboard")
+      .evaluate((node) => getComputedStyle(node).backgroundColor);
+    expect(groupBackground).not.toBe(artboardBackground);
+
+    await initialCards.first().click();
+    const selectedScreen = wireframe.locator(
+      '[data-wireframe-screen="quality-tablet-purchase-selected"]:visible',
+    );
+    const selected = selectedScreen.locator(
+      ".wireframe-choice-card[data-wireframe-selected]",
+    );
+    await expect(selected).toHaveCount(1);
+    const selectedPaint = await selected.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return {
+        borderWidth: style.borderTopWidth,
+        background: style.backgroundColor,
+        boxShadow: style.boxShadow,
+      };
+    });
+    expect(Number.parseFloat(selectedPaint.borderWidth)).toBeGreaterThan(2.8);
+    expect(selectedPaint.boxShadow).not.toBe("none");
+    await expect(selected.locator(".wireframe-choice-check")).toHaveText("✓");
+    await expect(
+      selectedScreen.getByRole("button", { name: "Continue" }),
+    ).toBeVisible();
+    await expect(
+      selectedScreen.getByRole("button", { name: "Back to my wallet" }),
+    ).toBeVisible();
   });
 
   await test.step("phone is single-column native chrome with touch targets", async () => {

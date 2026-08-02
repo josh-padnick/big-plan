@@ -6,21 +6,28 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 
 **CLEAR groups the standard; it does not compress it.** Ask the five questions in order, then follow every relevant rule beneath that letter.
 
-- **C · Clear job.** Does one task, pane, action owner, and escape path make the job obvious?
-- **L · Layout follows attention.** Do visual order, groups, anchors, and toolbars match decision order?
-- **E · Explicit change.** Is every selection, lifecycle, destructive edit, focus move, and mode change visible?
-- **A · Audience language.** Does one audience hear concrete terms, exact outcomes, and unconfusable live state?
-- **R · Real device.** Does the device or expanded mode keep truthful viewport, navigation, zoom, and interaction behavior?
+- **C · Clear job.** Did decision complexity select the right composition before placement began?
+- **L · Layout follows attention.** Does the task itself—not a convenient container pattern—dominate?
+- **E · Explicit change.** Does deliberate action visibly unlock selection and continuation?
+- **A · Audience language.** Do identity, terms, consequences, and next actions sound natural to this person?
+- **R · Real device.** Is this the native interaction pattern for this device and task complexity?
 
 **LOOP** is only the render-and-review workflow. **CRAP** remains the separate standard for the plan page around the artboard.
 
 ## C · Clear job
 
-**Implementation principles**
+**Pattern before placement**
+
+- Match interaction complexity to decision complexity. Two to five simple alternatives use one dominant `ChoiceGroup` of large `ChoiceCard`s; record comparison may use list/detail; dense operations may use a workspace.
+- Never turn a small tablet choice into a miniature list-and-inspector workspace.
+- A choice detail must add genuine reassurance or consequence that cannot fit inside the selected card; keep it beneath the choice, not in a second column.
+- Let the heading ask once. Put reversibility or reassurance in the subtitle instead of repeating the instruction in a panel title or helper.
+
+**Flow and ownership**
 
 - Give one screen one job and one step one decision. Split choosing, telling, checking, handing off, authenticating, reviewing, approving, and completing when each asks a different question.
 - Make the title name the present task—not the next step, a system state, or another actor's future work.
-- Make every action and control label describe its immediate outcome: `Check my request`, `Unlock to review`, or `Email assignees when tickets are assigned`, never vague `Continue`, technology names, premature `Approve`, or `Done`.
+- Make every action and control label describe its immediate outcome. When nearby context already makes that outcome obvious, keep the next action short: `Continue` or `Next: tell us about it`.
 - In a sequence, provide one nearby route back and one prominent route forward. A branch may instead offer parallel alternatives.
 - Close a learning loop concretely: lead with achievement, answer the original question, show specific evidence, say what remains true in the real world, then offer a purposeful next action.
 - Use one achievement headline; a completion badge is metadata, not a second headline. When a concept changes over time, reinforce memory with one compact visual sequence before reassurance.
@@ -34,7 +41,7 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 - Give each review action one owner: whole-screen comments belong to the screen or slide; element comments belong to selected elements in expanded mode. Never duplicate whole-figure commenting as a floating action.
 - State whether visual variations configure one component or represent different components. One concept gets one named owner.
 
-**Reject:** mixed jobs; future-facing titles; actions that exit instead of advance; duplicate routes; redundant panes; doubled completion headlines; receipt-like endings; inescapable temporary surfaces; duplicate comment routes; ambiguous component ownership; list/preview pairs that repeat the same facts.
+**Reject:** small choices drawn as list/detail; repeated instructions; unearned detail panes; mixed jobs; future-facing titles; actions that exit instead of advance; duplicate routes; redundant panes; doubled completion headlines; receipt-like endings; inescapable temporary surfaces; duplicate comment routes; ambiguous component ownership; list/preview pairs that repeat the same facts.
 
 **Mechanics:** compilation blocks multiple page headers and multiple filled work actions. Wording still requires review.
 
@@ -59,6 +66,13 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 - Spend the strongest border, fill, badge, type, and color only on the most important content or action.
 - Give facts, recommendations with provenance, and side effects at the final action visibly different treatments.
 
+**Simple touch decisions**
+
+- Make the tablet decision itself the focal surface: one centered column of complete option cards, never a left list competing with a right inspector.
+- Make the whole option look touchable with border or fill, comfortable padding, hand-drawn icon, title, one-line consequence, and a clear state target.
+- Use the iPad canvas through larger type, taller cards, grouped spacing, and decisive contrast; never shrink a desktop form and float it in the frame.
+- Quiet graph paper behind the interactive region with a light surface so the grid never competes with the words.
+
 **Anchors and operational surfaces**
 
 - Align comment input, cards, and outcome chips with their source in a quiet side gutter. The highlight carries context, so cards do not repeat selected text or block paths; long bodies collapse behind `… more`.
@@ -74,7 +88,7 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 - Optimize for a five-second scan before careful reading.
 - Use decoration only to identify content, communicate state, reinforce the emotional goal, or explain an unfinished visual decision.
 
-**Reject:** equal-weight or squeezed panes; card walls; floating metadata or actions; cramped matrix headers; criteria styled like option titles; definitions that read as answers; comment borders crossing text; repeated anchored context; detached tray actions; unrelated dependencies; recommendation/value ambiguity; oversized empty panels; biased choices; decorative filler; anything louder than its importance.
+**Reject:** a tablet decision split into columns; thin-row pseudo-selection; graph paper louder than the task; a shrunken desktop form floating in an iPad; equal-weight or squeezed panes; card walls; floating metadata or actions; cramped matrix headers; criteria styled like option titles; definitions that read as answers; comment borders crossing text; repeated anchored context; detached tray actions; unrelated dependencies; recommendation/value ambiguity; oversized empty panels; biased choices; decorative filler; anything louder than its importance.
 
 **Mechanics:** plain panels, dominant derived panes, and `Rail` encode the default hierarchy. Compilation blocks equal desktop thirds and four-or-more outlined siblings; geometry tests block cramped panes, overlap, and dead bands.
 
@@ -90,6 +104,12 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 - Give actor and mode changes a visible boundary: a new screen, actor-specific heading, simplified content, lock cue, and different treatment.
 - Treat authentication as identity proof, never consent: handoff → authenticate → review → approve or decline. `Unlock to review` cannot buy or approve.
 - Preserve the first actor's exit before handoff; once authentication starts, the next actor may enter a focused gate.
+
+**Deliberate choice**
+
+- Never preselect a consequential choice. The initial decision screen starts unselected; a deliberate tap reveals the selected state and only then reveals or enables continuation.
+- Give every unselected choice its own selected-state destination. The destination selects the same title and consequence; polished options may never collapse into one generic outcome.
+- Make selected touch state unmistakable with several signals together: filled radio, stronger border, changed background, and checkmark or an equally explicit mark. Tint or a thin left line is insufficient.
 
 **Risk and persistence**
 
@@ -117,7 +137,7 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 - Show required-field errors beside fields before submit. Name the person, address, and event for notification consent; never enable it silently. Preserve a draft or warn on Cancel.
 - Settings show visible `On`/`Off` text as well as position and contrast. Keep dependencies visible-but-disabled under parents, show `Connected` or `Connect Slack`, and offer a safe test action.
 
-**Reject:** generic summaries after specific choices; faint selection; premature summaries; ambiguous progress; single-signal dangerous modes; duplicate state owners; invisible comment anchors; comment clutter; highlights that cover text; stale counts; ambiguous alerts; unconfirmed deletion; silent destructive edits; awkward or stranded focus; lost scroll or selection; invalid load-state controls; unlabeled recommendations; silent persistence; scope-free settings; heading-only handoffs; mixed audiences; Face ID or PIN labeled as approval.
+**Reject:** preselected consequential choices; premature continuation; generic summaries after specific choices; faint or single-signal selection; premature summaries; ambiguous progress; single-signal dangerous modes; duplicate state owners; invisible comment anchors; comment clutter; highlights that cover text; stale counts; ambiguous alerts; unconfirmed deletion; silent destructive edits; awkward or stranded focus; lost scroll or selection; invalid load-state controls; unlabeled recommendations; silent persistence; scope-free settings; heading-only handoffs; mixed audiences; Face ID or PIN labeled as approval.
 
 **Mechanics:** compilation requires one selected record beside visible detail, checks navigation targets and Stepper state, and rejects authored progress numbering. State primitives own interaction paint; viewer primitives own comment lifecycle, focus return, and context preservation.
 
@@ -127,6 +147,9 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 
 - Use concrete words, outcomes, amounts, and time from the audience's mental model: `$27.50 to go`, `two Friday payments left`, or `Nothing will be bought yet`.
 - Use one term per concept and one label per destination.
+- Preserve the user's words after selection: `Ask about a purchase` becomes `You chose: Ask about a purchase`, never `Purchase request` before a request exists.
+- Prefer natural copy: `See how much money I would have left` beats `See what money stays in my wallet`.
+- Keep identity and escape visible in a quiet tablet header—`Eddy's Wallet` and `Back to my wallet`—so the child is never trapped.
 - Make one screen speak to one audience; change mode and heading before addressing the next actor.
 - Name the current branch—a purchase request, loan question, or confusing topic—not a generic summary.
 - Make reassurance name the actual risk and what remains unchanged: `Unlocking does not approve or buy anything`; `This was practice—no money moved`.
@@ -147,7 +170,7 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 - Keep saved views—reusable queues such as `All`, `Mine`, and `Unassigned`—separate from temporary filters such as `Waiting ×`, `SLA risk ×`, and `+ Add filter`.
 - Prefer time-to-act over arithmetic: `First response due in 4m`, `Breached by 6m`, or `Waiting 2h`; never require elapsed/target calculation or color alone.
 
-**Reject:** terminology drift; abstract labels where plain language exists; mixed audiences; branchless summaries; repeated comment excerpts or block paths; stale or ambiguous count labels; ordinary-action styling for state toggles; inconsistent definition treatments; saved-view/filter ambiguity; elapsed/target arithmetic; generic reassurance; technical badges; unverified praise.
+**Reject:** terminology drift after selection; naming an unsubmitted choice a request; unnatural outcome copy; a trapped flow without identity or escape; abstract labels where plain language exists; mixed audiences; branchless summaries; repeated comment excerpts or block paths; stale or ambiguous count labels; ordinary-action styling for state toggles; inconsistent definition treatments; saved-view/filter ambiguity; elapsed/target arithmetic; generic reassurance; technical badges; unverified praise.
 
 **Mechanics:** lint keeps agent-process copy outside the artboard. Audience fit, terminology, and risk wording require review.
 
@@ -168,15 +191,15 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 
 **Desktop rejects:** equal thirds; whole-page scrolling while answering; app-wide horizontal scroll; four squeezed screens; a sidebar taking a third; floating tablet navigation; two large settings cards; inflated chrome; oversized iPad sheets.
 
-**Tablet passes:** fixed 1180 × 820 or 820 × 1180 iPad frame, about 1.44:1, with internal overflow; no browser bar; touch-first type and 44px controls; wider gutters; intentional master/detail or focused steps; card grouping only where useful.
+**Tablet passes:** fixed 1180 × 820 or 820 × 1180 iPad frame, about 1.44:1, with internal overflow; no browser bar; quiet identity/escape header; touch-first type and 44px controls; wider gutters; and composition chosen by task complexity. Two to five simple choices use one dominant centered `ChoiceGroup` of tall `ChoiceCard`s, start unselected, and reveal explicit continuation only after tap. Master/detail is reserved for a real collection whose persistent detail adds useful context. A light interaction surface quiets the grid instead of shrinking content.
 
-**Tablet rejects:** a stretched near-square bezel; compressed desktop density; browser chrome; squeezed desktop sidebars; tiny text; desktop task flows.
+**Tablet rejects:** a simple decision as list/detail or `Rail`; preselection; faint row selection; a stretched near-square bezel; compressed desktop density; browser chrome; squeezed desktop sidebars; tiny text; desktop task flows.
 
 **Phone passes:** 390 × 720 minimum; compact top bar; one column; 44px controls and 52–64px rows; bottom destinations; fewer fields; progressive disclosure; list → detail push navigation.
 
 **Phone rejects:** desktop shells; side-by-side properties; a vertical iPad; height-only tablet cards; desktop copy squeezed narrow.
 
-**Mechanics:** device presets own widths, fixed tablet ratio, shell availability, type roles, flexible pane widths, independent overflow, anchored conversation chrome, touch floors, contrast, and state paint. Viewer primitives own fit, centered expansion, below-100% zoom, fixed-size markers, expanded navigation, toolbar placement, focus return, and scroll preservation. Browser geometry checks fence app-wide overflow, primary dominance, independent panes, anchored header/composer, 1.39–1.44 tablet ratio, shells, readable panes, overlap, unjustified dead bands, and target sizes.
+**Mechanics:** device presets own widths, fixed tablet ratio, shell availability, type roles, flexible pane widths, independent overflow, anchored conversation chrome, touch floors, contrast, and state paint. `ChoiceGroup` and `ChoiceCard` own simple-decision dominance, touch surfaces, and multi-signal selection; compilation blocks initial preselection, premature continuation, nonmatching option outcomes, and competing tablet columns. Viewer primitives own fit, centered expansion, below-100% zoom, fixed-size markers, expanded navigation, toolbar placement, focus return, and scroll preservation. Browser geometry checks fence app-wide overflow, primary dominance, independent panes, anchored header/composer, 1.39–1.44 tablet ratio, shells, readable panes, overlap, unjustified dead bands, and target sizes.
 
 ## What the curation absorbed
 
@@ -195,6 +218,7 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 - **Decision rounds 4–5 → CLEAR.** Option-name rules, smaller bold-colon criteria labels with regular values, readable matrix headers, centered collapsed actions, idiomatic focus, exit paths, separated one-sentence dashed-underlined definitions, and explicit component ownership remain explicit.
 - **Diagram rounds 5–6 → CLEAR.** Valid load state, visible deletion diffs, anchor markers, distinct tray chrome with contained footer, toolbar-owned actions, no redundant whole-diagram button, no meaningless footer hover, fixed-size zoom markers, stable flush-left note action, and safe focus return remain explicit.
 - **Desktop workspace round → CLEAR.** Verified complete: viewport fit; flexible bounded columns; independent pane scrolling; anchored header/composer; primary dominance; multi-signal modes; one state owner; scannable lists; speaker differentiation; observable auto-save; progressive inspector; keyboard support; compare-versus-judge panes; saved views versus filters; time-to-act; sticky toolbar; selection/open clarity; side-effect confirmation; customer identity; duplicate evidence/actions; recommendation provenance; grouped routing; specific consent; validation/draft safety; explicit setting scope/effect/dependency/state; nested controls; outcome labels; visible On/Off; persistent save; consistent dependencies/sizing; integration readiness; and no horizontal overflow.
+- **CLEAR gold-gap critique → CLEAR.** All twelve corrections remain explicit: composition follows decision complexity; touch surfaces look touchable; selection uses several signals; consequential choices start unselected; child vocabulary survives selection; details earn their place; instructions are not repeated; identity and escape stay visible; tablet space enlarges rather than shrinks; the grid quiets behind interaction; copy sounds natural; and next actions stay short. The governing tablet rule is now primitive-owned: the decision dominates, never a miniature workspace.
 
 **Prior standards and mechanics**
 
@@ -356,145 +380,418 @@ The fixed-ratio iPad flow gives each decision its own screen, makes progress mea
   title="Eddy asks a grown-up"
   initialScreen="quality-tablet-choose"
 >
+  <Screen id="quality-tablet-home" name="Tablet · Wallet" device="tablet">
+    <Stack>
+      <TopBar title="Eddy's Wallet" />
+      <Center measure="wide">
+        <PageHeader
+          title="Hi, Eddy!"
+          description="Your money, goal, and next steps."
+        />
+        <Panel title="My money" surface="filled">
+          <Metric label="You have" value="$42.50" />
+          <Text text="Headphones goal · $27.50 to go" />
+        </Panel>
+        <Button
+          label="Ask a grown-up"
+          emphasis="primary"
+          navigateTo="quality-tablet-choose"
+        />
+      </Center>
+    </Stack>
+  </Screen>
+
   <Screen id="quality-tablet-choose" name="Tablet · Choose" device="tablet">
-    <Center measure="wide">
-      <Stepper>
-        <Step label="Choose" state="current" />
-        <Step label="Tell us" state="todo" />
-        <Step label="Check" state="todo" />
-        <Step label="Handoff" state="todo" />
-      </Stepper>
-      <PageHeader
-        title="What do you want help with?"
-        description="Choose one. You can change it later."
-      />
-      <Row gap="md">
-        <Panel title="Choose one">
-          <List>
-            <ListItem
-              label="Ask about a purchase"
-              meta="See what money stays in my wallet"
-              selected
-            />
-            <ListItem
-              label="Ask about my loan"
-              meta="See what I owe and ask a question"
-            />
-            <ListItem
-              label="Ask about something confusing"
-              meta="Explain what I want help understanding"
-            />
-          </List>
-        </Panel>
-        <Panel title="Purchase request" surface="filled">
-          <Text text="Next, tell us the item and price." />
-          <Text text="We will show how much money you would have afterward." />
-          <Button
-            label="Tell us about the purchase"
-            emphasis="primary"
-            navigateTo="quality-tablet-prepare"
+    <Stack>
+      <TopBar title="Eddy's Wallet">
+        <Button
+          label="Back to my wallet"
+          emphasis="tertiary"
+          navigateTo="quality-tablet-home"
+        />
+      </TopBar>
+      <Center measure="wide">
+        <Stepper>
+          <Step label="Choose" state="current" />
+          <Step label="Tell us" state="todo" />
+          <Step label="Check" state="todo" />
+          <Step label="Handoff" state="todo" />
+        </Stepper>
+        <PageHeader
+          title="What do you want help with?"
+          description="Tap one. You can change it later."
+        />
+        <ChoiceGroup>
+          <ChoiceCard
+            icon="⚽"
+            title="Ask about a purchase"
+            description="See how much money I would have left"
+            navigateTo="quality-tablet-purchase-selected"
           />
-        </Panel>
-      </Row>
-    </Center>
+          <ChoiceCard
+            icon="💵"
+            title="Ask about my loan"
+            description="See what I owe and ask a question"
+            navigateTo="quality-tablet-loan-selected"
+          />
+          <ChoiceCard
+            icon="💬"
+            title="Ask about something I don't understand"
+            description="Explain what is confusing me"
+            navigateTo="quality-tablet-help-selected"
+          />
+        </ChoiceGroup>
+      </Center>
+    </Stack>
+  </Screen>
+
+  <Screen
+    id="quality-tablet-purchase-selected"
+    name="Tablet · Choice selected"
+    device="tablet"
+  >
+    <Stack>
+      <TopBar title="Eddy's Wallet">
+        <Button
+          label="Back to my wallet"
+          emphasis="tertiary"
+          navigateTo="quality-tablet-home"
+        />
+      </TopBar>
+      <Center measure="wide">
+        <Stepper>
+          <Step label="Choose" state="current" />
+          <Step label="Tell us" state="todo" />
+          <Step label="Check" state="todo" />
+          <Step label="Handoff" state="todo" />
+        </Stepper>
+        <PageHeader
+          title="What do you want help with?"
+          description="You can change your choice."
+        />
+        <ChoiceGroup>
+          <ChoiceCard
+            icon="⚽"
+            title="Ask about a purchase"
+            description="See how much money I would have left"
+            selected
+          />
+          <ChoiceCard
+            icon="💵"
+            title="Ask about my loan"
+            description="See what I owe and ask a question"
+            navigateTo="quality-tablet-loan-selected"
+          />
+          <ChoiceCard
+            icon="💬"
+            title="Ask about something I don't understand"
+            description="Explain what is confusing me"
+            navigateTo="quality-tablet-help-selected"
+          />
+        </ChoiceGroup>
+        <Text
+          text="Next, tell us the item and price. Nothing will be bought yet."
+          role="helper"
+        />
+        <Button
+          label="Continue"
+          emphasis="primary"
+          navigateTo="quality-tablet-prepare"
+        />
+      </Center>
+    </Stack>
+  </Screen>
+
+  <Screen
+    id="quality-tablet-loan-selected"
+    name="Tablet · Loan selected"
+    device="tablet"
+  >
+    <Stack>
+      <TopBar title="Eddy's Wallet">
+        <Button
+          label="Back to my wallet"
+          emphasis="tertiary"
+          navigateTo="quality-tablet-home"
+        />
+      </TopBar>
+      <Center measure="wide">
+        <Stepper>
+          <Step label="Choose" state="current" />
+          <Step label="Tell us" state="todo" />
+          <Step label="Check" state="todo" />
+          <Step label="Handoff" state="todo" />
+        </Stepper>
+        <PageHeader
+          title="What do you want help with?"
+          description="You can change your choice."
+        />
+        <ChoiceGroup>
+          <ChoiceCard
+            icon="⚽"
+            title="Ask about a purchase"
+            description="See how much money I would have left"
+            navigateTo="quality-tablet-purchase-selected"
+          />
+          <ChoiceCard
+            icon="💵"
+            title="Ask about my loan"
+            description="See what I owe and ask a question"
+            selected
+          />
+          <ChoiceCard
+            icon="💬"
+            title="Ask about something I don't understand"
+            description="Explain what is confusing me"
+            navigateTo="quality-tablet-help-selected"
+          />
+        </ChoiceGroup>
+        <Text
+          text="Next, tell us your loan question. Your balance will not change."
+          role="helper"
+        />
+        <Button
+          label="Continue"
+          emphasis="primary"
+          navigateTo="quality-tablet-loan-question"
+        />
+      </Center>
+    </Stack>
+  </Screen>
+
+  <Screen
+    id="quality-tablet-help-selected"
+    name="Tablet · Help selected"
+    device="tablet"
+  >
+    <Stack>
+      <TopBar title="Eddy's Wallet">
+        <Button
+          label="Back to my wallet"
+          emphasis="tertiary"
+          navigateTo="quality-tablet-home"
+        />
+      </TopBar>
+      <Center measure="wide">
+        <Stepper>
+          <Step label="Choose" state="current" />
+          <Step label="Tell us" state="todo" />
+          <Step label="Check" state="todo" />
+          <Step label="Handoff" state="todo" />
+        </Stepper>
+        <PageHeader
+          title="What do you want help with?"
+          description="You can change your choice."
+        />
+        <ChoiceGroup>
+          <ChoiceCard
+            icon="⚽"
+            title="Ask about a purchase"
+            description="See how much money I would have left"
+            navigateTo="quality-tablet-purchase-selected"
+          />
+          <ChoiceCard
+            icon="💵"
+            title="Ask about my loan"
+            description="See what I owe and ask a question"
+            navigateTo="quality-tablet-loan-selected"
+          />
+          <ChoiceCard
+            icon="💬"
+            title="Ask about something I don't understand"
+            description="Explain what is confusing me"
+            selected
+          />
+        </ChoiceGroup>
+        <Text
+          text="Next, tell us what is confusing. You can use your own words."
+          role="helper"
+        />
+        <Button
+          label="Continue"
+          emphasis="primary"
+          navigateTo="quality-tablet-explain"
+        />
+      </Center>
+    </Stack>
+  </Screen>
+
+  <Screen
+    id="quality-tablet-loan-question"
+    name="Tablet · Loan question"
+    device="tablet"
+  >
+    <Stack>
+      <TopBar title="Eddy's Wallet">
+        <Button
+          label="Back to my wallet"
+          emphasis="tertiary"
+          navigateTo="quality-tablet-home"
+        />
+      </TopBar>
+      <Center measure="prose">
+        <PageHeader
+          title="What do you want to know about your loan?"
+          description="Write one question. Your balance will not change."
+        />
+        <TextArea
+          label="My loan question"
+          placeholder="I want to know…"
+          value="Why are there two Friday payments left?"
+        />
+      </Center>
+    </Stack>
+  </Screen>
+
+  <Screen
+    id="quality-tablet-explain"
+    name="Tablet · Explain"
+    device="tablet"
+  >
+    <Stack>
+      <TopBar title="Eddy's Wallet">
+        <Button
+          label="Back to my wallet"
+          emphasis="tertiary"
+          navigateTo="quality-tablet-home"
+        />
+      </TopBar>
+      <Center measure="prose">
+        <PageHeader
+          title="What feels confusing?"
+          description="Explain it in your own words."
+        />
+        <TextArea
+          label="I want help understanding"
+          placeholder="I don't understand…"
+        />
+      </Center>
+    </Stack>
   </Screen>
 
   <Screen id="quality-tablet-prepare" name="Tablet · Prepare" device="tablet">
-    <Center measure="prose">
-      <Stepper>
-        <Step label="Choose" state="done" />
-        <Step label="Tell us" state="current" />
-        <Step label="Check" state="todo" />
-        <Step label="Handoff" state="todo" />
-      </Stepper>
-      <PageHeader
-        title="Tell us about the purchase"
-        description="Tell us what you know. Your grown-up can help with the rest."
-      />
-      <Panel surface="filled">
-        <TextField label="Item" value="Soccer ball" />
-        <TextField label="Price" kind="number" value="$18" />
-        <Text text="You have $42.50. You would have $24.50 afterward." />
-      </Panel>
-      <Row justify="between">
+    <Stack>
+      <TopBar title="Eddy's Wallet">
         <Button
-          label="Change my choice"
+          label="Back to my wallet"
           emphasis="tertiary"
-          navigateTo="quality-tablet-choose"
+          navigateTo="quality-tablet-home"
         />
-        <Button
-          label="Check my request"
-          emphasis="primary"
-          navigateTo="quality-tablet-check"
+      </TopBar>
+      <Center measure="prose">
+        <Stepper>
+          <Step label="Choose" state="done" />
+          <Step label="Tell us" state="current" />
+          <Step label="Check" state="todo" />
+          <Step label="Handoff" state="todo" />
+        </Stepper>
+        <PageHeader
+          title="Tell us about the purchase"
+          description="Your grown-up can help with anything you do not know."
         />
-      </Row>
-    </Center>
+        <Panel surface="filled">
+          <TextField label="Item" value="Soccer ball" />
+          <TextField label="Price" kind="number" value="$18" />
+          <Text text="You have $42.50. You would have $24.50 left." />
+        </Panel>
+        <Row justify="between">
+          <Button
+            label="Change my choice"
+            emphasis="tertiary"
+            navigateTo="quality-tablet-choose"
+          />
+          <Button
+            label="Check my question"
+            emphasis="primary"
+            navigateTo="quality-tablet-check"
+          />
+        </Row>
+      </Center>
+    </Stack>
   </Screen>
 
   <Screen id="quality-tablet-check" name="Tablet · Check" device="tablet">
-    <Center measure="prose">
-      <Stepper>
-        <Step label="Choose" state="done" />
-        <Step label="Tell us" state="done" />
-        <Step label="Check" state="current" />
-        <Step label="Handoff" state="todo" />
-      </Stepper>
-      <PageHeader
-        title="Check your purchase request"
-        description="This is what your grown-up will see."
-      />
-      <Panel title="Soccer ball" surface="filled">
-        <Metric label="Price" value="$18" />
-        <Text text="Money now: $42.50" />
-        <Text text="Money afterward: $24.50" />
-        <Text text="Nothing will be bought yet." role="helper" />
-      </Panel>
-      <Row justify="between">
+    <Stack>
+      <TopBar title="Eddy's Wallet">
         <Button
-          label="Edit my request"
+          label="Back to my wallet"
           emphasis="tertiary"
-          navigateTo="quality-tablet-prepare"
+          navigateTo="quality-tablet-home"
         />
-        <Button
-          label="Hand the iPad to my grown-up"
-          emphasis="primary"
-          navigateTo="quality-tablet-handoff"
+      </TopBar>
+      <Center measure="prose">
+        <Stepper>
+          <Step label="Choose" state="done" />
+          <Step label="Tell us" state="done" />
+          <Step label="Check" state="current" />
+          <Step label="Handoff" state="todo" />
+        </Stepper>
+        <PageHeader
+          title="Check your question"
+          description="This is what your grown-up will see."
         />
-      </Row>
-    </Center>
+        <Panel surface="outlined">
+          <Text text="MY QUESTION" role="section" />
+          <Heading text="“Can I buy a soccer ball for $18?”" level="2" />
+          <Divider />
+          <Text text="$42.50 now · $24.50 would be left" />
+          <Text text="Nothing will be bought yet." role="helper" />
+        </Panel>
+        <Row justify="between">
+          <Button
+            label="Edit question"
+            emphasis="tertiary"
+            navigateTo="quality-tablet-prepare"
+          />
+          <Button
+            label="Looks good"
+            emphasis="primary"
+            navigateTo="quality-tablet-handoff"
+          />
+        </Row>
+      </Center>
+    </Stack>
   </Screen>
 
   <Screen id="quality-tablet-handoff" name="Tablet · Handoff" device="tablet">
-    <Center measure="prose">
-      <Stepper>
-        <Step label="Choose" state="done" />
-        <Step label="Tell us" state="done" />
-        <Step label="Check" state="done" />
-        <Step label="Handoff" state="current" />
-      </Stepper>
-      <PageHeader
-        title="Time for your grown-up"
-        description="Hand them the iPad. They will unlock it before reviewing your request."
-        badge="Grown-up handoff"
-      />
-      <Panel title="Eddy's purchase request" surface="filled">
-        <Badge label="Request locked" tone="info" />
-        <Text text="Give the iPad to your grown-up before continuing." />
-        <Text text="Nothing will be bought yet. Your grown-up will review the request first." />
-      </Panel>
-      <Row justify="between">
+    <Stack>
+      <TopBar title="Eddy's Wallet">
         <Button
-          label="Go back"
+          label="Back to my wallet"
           emphasis="tertiary"
-          navigateTo="quality-tablet-check"
+          navigateTo="quality-tablet-home"
         />
-        <Button
-          label="I'm the grown-up"
-          emphasis="primary"
-          navigateTo="quality-tablet-unlock"
+      </TopBar>
+      <Center measure="prose">
+        <Stepper>
+          <Step label="Choose" state="done" />
+          <Step label="Tell us" state="done" />
+          <Step label="Check" state="done" />
+          <Step label="Handoff" state="current" />
+        </Stepper>
+        <PageHeader
+          title="Time for your grown-up"
+          description="Hand them the iPad."
+          badge="Grown-up handoff"
         />
-      </Row>
-    </Center>
+        <Panel title="Eddy's question" surface="filled">
+          <Badge label="Question locked" tone="info" />
+          <Text text="Nothing will be bought yet. Your grown-up will review your question first." />
+        </Panel>
+        <Row justify="between">
+          <Button
+            label="Go back"
+            emphasis="tertiary"
+            navigateTo="quality-tablet-check"
+          />
+          <Button
+            label="I'm the grown-up"
+            emphasis="primary"
+            navigateTo="quality-tablet-unlock"
+          />
+        </Row>
+      </Center>
+    </Stack>
   </Screen>
 
   <Screen
@@ -502,26 +799,29 @@ The fixed-ratio iPad flow gives each decision its own screen, makes progress mea
     name="Tablet · Grown-up"
     device="tablet"
   >
-    <Center measure="prose">
-      <PageHeader
-        title="Unlock Eddy's purchase request"
-        description="Use Face ID or your PIN to enter grown-up mode."
-        badge="Grown-up mode"
-      />
-      <Panel title="Identity check" surface="filled">
-        <Badge label="Face ID ready" tone="info" />
-        <Text text="Look at the iPad or enter your PIN." />
-        <Text text="Unlocking does not approve or buy anything." role="helper" />
-      </Panel>
-      <Row justify="between">
-        <Button
-          label="Not now"
-          emphasis="tertiary"
-          navigateTo="quality-tablet-handoff"
+    <Stack>
+      <TopBar title="Grown-up check" />
+      <Center measure="prose">
+        <PageHeader
+          title="Unlock Eddy's question"
+          description="Use Face ID or your PIN to review it."
+          badge="Grown-up mode"
         />
-        <Button label="Unlock to review" emphasis="primary" />
-      </Row>
-    </Center>
+        <Panel title="Identity check" surface="filled">
+          <Badge label="Face ID ready" tone="info" />
+          <Text text="Look at the iPad or enter your PIN." />
+          <Text text="Unlocking does not approve or buy anything." role="helper" />
+        </Panel>
+        <Row justify="between">
+          <Button
+            label="Not now"
+            emphasis="tertiary"
+            navigateTo="quality-tablet-handoff"
+          />
+          <Button label="Unlock to review" emphasis="primary" />
+        </Row>
+      </Center>
+    </Stack>
   </Screen>
 </Wireframe>
 
