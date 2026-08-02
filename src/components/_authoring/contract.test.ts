@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { createDiagnosticCollector } from "./diagnostics.js";
 import {
   createComponentIdAllocator,
+  slugForComponentId,
   validateComponentAttributes,
 } from "./contract.js";
 
@@ -114,6 +115,10 @@ describe("validateComponentAttributes", () => {
 });
 
 describe("createComponentIdAllocator", () => {
+  it("should share one slug format with component-owned ids", () => {
+    expect(slugForComponentId("  Review: Phase #2  ")).toBe("review-phase-2");
+  });
+
   it("should avoid collisions between duplicate suffixes and authored slugs", () => {
     const ids = createComponentIdAllocator();
     const allocate = (label: string) =>

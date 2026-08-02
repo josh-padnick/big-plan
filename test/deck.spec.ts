@@ -297,6 +297,24 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     ).toHaveCount(0);
   });
 
+  await test.step("desktop bulk controls sit flush with the sidebar edge in both themes", async () => {
+    const desktopToc = page.locator(
+      'nav[aria-label="Contents"]:not([data-mobile-toc])',
+    );
+    const header = desktopToc.locator("[data-toc-header]");
+    const controls = header.locator("[data-collapse-all-controls]");
+    for (const theme of ["light", "dark"]) {
+      await page.locator("html").evaluate((root, nextTheme) => {
+        root.setAttribute("data-theme", nextTheme);
+      }, theme);
+      const tocBox = await boxOf(desktopToc);
+      const controlsBox = await boxOf(controls);
+      expect(
+        Math.abs(tocBox.x + tocBox.width - (controlsBox.x + controlsBox.width)),
+      ).toBeLessThan(0.5);
+    }
+  });
+
   // A bulk run applies state to every region and corrects the viewport once,
   // so per-region behaviour has to survive it untouched.
   await test.step("a bulk run leaves geometry stable and toggles independent", async () => {

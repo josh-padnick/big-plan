@@ -83,6 +83,7 @@ An MDX syntax error can stop parsing before component validation begins, so fix 
 
 ## The HTML review document is self-contained
 
-The rendered document embeds everything it needs: styles, branding, favicons, and the shell's small viewer script for enhanced affordances.
+The rendered document embeds everything it needs: styles, branding, favicons, and the shell's viewer script for enhanced affordances.
+That script also zooms promoted diagrams and paints a reviewer's comments and proposals over them without touching the plan source.
 Plan content never contributes executable code, the document makes no external requests and works offline, and every reading and navigation feature remains usable with scripts disabled.
 Nothing about rendering or reviewing a plan touches a server, an account, or anyone else's machine.

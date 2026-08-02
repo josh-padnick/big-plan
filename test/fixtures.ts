@@ -46,6 +46,7 @@ type WorkerFixtures = {
   readonly dataTableViewerUrl: string;
   readonly deckViewerUrl: string;
   readonly flowDiagramViewerUrl: string;
+  readonly slideCraftViewerUrl: string;
   readonly nestedDecisionViewerUrl: string;
   readonly planIdCollisionViewerUrls: {
     readonly empty: string;
@@ -299,6 +300,20 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const outputPath = join(outputDir, "flow-diagram.html");
       await renderThroughCli({
         inputPath: join(repoRoot, "examples", "flow-diagram.mdx"),
+        outputPath,
+        outputDir,
+      });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  slideCraftViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-slide-craft-"));
+      const outputPath = join(outputDir, "slide-craft.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "slide-craft.mdx"),
         outputPath,
         outputDir,
       });

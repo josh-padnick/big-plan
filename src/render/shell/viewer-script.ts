@@ -5,8 +5,8 @@
 // collapse toggles for deck parts, slides, and sub-slides, table-schema column
 // state, a document comment draft, DataTable sorting, filtering, text fit,
 // column layout and grouping, and one maximize behavior shared by every figure
-// family. Plan content never contributes script, and every affordance keeps a
-// no-JS fallback.
+// family, plus the diagram leg in ./diagram-script.ts. Plan content never
+// contributes script, and every affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
@@ -24,6 +24,7 @@
 // template and cannot import it, so a change to those attribute spellings
 // changes the strings here too.
 import { compareDataTableValues } from "../../components/data-table/sort-values.js";
+import { DIAGRAM_SCRIPT } from "./diagram-script.js";
 
 const COMPARE_DATA_TABLE_VALUES_SOURCE = compareDataTableValues.toString();
 
@@ -1219,6 +1220,10 @@ export const VIEWER_SCRIPT = `<script>
   let dialogAttributes = null;
   const subjectOf = (frame) =>
     frame.getAttribute("data-figure-maximizable") || "figure";
+  const requestRestore = (frame) =>
+    frame.dispatchEvent(
+      new CustomEvent("figure-restore-request", { cancelable: true }),
+    );
   const isolate = (frame) => {
     let branch = frame;
     while (branch.parentElement !== null) {
@@ -1342,6 +1347,32 @@ export const VIEWER_SCRIPT = `<script>
     trigger.setAttribute("aria-label", label);
     trigger.setAttribute("data-tooltip", label);
   };
+  const finishRestore = (frame, keyboard, returnFocus) => {
+    setMaximized(frame, false);
+    if (returnFocus) {
+      const trigger = frame.querySelector("[data-figure-maximize]");
+      if (trigger !== null) {
+        // A diagram is already its own keyboard entry point. Returning there
+        // keeps Escape from highlighting a toolbar action the reader did not
+        // ask to use again; other figure families retain trigger restoration.
+        const diagramTarget = frame.matches("[data-flow-diagram]");
+        const target = diagramTarget ? frame : trigger;
+        // A restored diagram is deliberately quiet for every modality. It
+        // keeps keyboard position without repainting the whole canvas as a
+        // selected object.
+        target.focus({ focusVisible: diagramTarget ? false : keyboard });
+        // Install the fallback after focus: focusing fires blur on the old
+        // trigger, and the shared cleanup listener spends quiet markers on
+        // blur by design.
+        if (diagramTarget || !keyboard) {
+          target.setAttribute("data-figure-focus-quiet", "");
+        }
+      }
+    }
+    // Component-specific interaction state clears only after focus has
+    // settled, so a focusin handler cannot immediately select it again.
+    frame.dispatchEvent(new CustomEvent("figure-restored"));
+  };
   for (const frame of frames) {
     const trigger = frame.querySelector("[data-figure-maximize]");
     if (trigger === null) continue;
@@ -1351,10 +1382,24 @@ export const VIEWER_SCRIPT = `<script>
       // click carries a click count. That is the activation modality, and it
       // decides whether the restored focus is visible.
       openedByKeyboard = event.detail === 0;
+      const maximized = frame.hasAttribute("data-figure-maximized");
+      if (maximized) {
+        if (!requestRestore(frame)) return;
+        finishRestore(frame, openedByKeyboard, false);
+        return;
+      }
       // Only one figure occupies the viewport at a time; promoting a second
-      // one restores the first rather than stacking two fixed panels.
-      if (open !== null && open !== frame) setMaximized(open, false);
-      setMaximized(frame, !frame.hasAttribute("data-figure-maximized"));
+      // one restores the first rather than stacking two fixed panels. That is
+      // still an exit attempt, so component-owned unsaved state may block it.
+      if (open !== null && open !== frame) {
+        if (!requestRestore(open)) return;
+        finishRestore(open, false, false);
+      }
+      setMaximized(frame, true);
+    });
+    frame.addEventListener("figure-restore-confirmed", () => {
+      if (!frame.hasAttribute("data-figure-maximized")) return;
+      finishRestore(frame, openedByKeyboard, true);
     });
   }
   document.addEventListener("keydown", (event) => {
@@ -1384,23 +1429,23 @@ export const VIEWER_SCRIPT = `<script>
       return;
     const frame = open;
     const keyboard = openedByKeyboard;
-    setMaximized(frame, false);
+    if (!requestRestore(frame)) return;
     // Focus returns to the control the reader pressed, so Escape lands them
     // where they were rather than at the top of the document. It returns
     // quietly after a pointer-opened panel: a mouse user who never saw a ring
     // should not be handed one, and the tooltip keys off :focus-visible too,
     // so one decision settles both.
-    const trigger = frame.querySelector("[data-figure-maximize]");
-    if (trigger === null) return;
-    if (!keyboard) trigger.setAttribute("data-figure-focus-quiet", "");
-    trigger.focus({ focusVisible: keyboard });
+    finishRestore(frame, keyboard, true);
   });
   // focusVisible is not honoured everywhere; the attribute is the fallback and
   // is spent the moment the reader does anything else.
   for (const type of ["keydown", "pointerdown", "blur"]) {
     document.addEventListener(
       type,
-      () => {
+      (event) => {
+        // This same Escape may just have installed the quiet-restoration
+        // marker. Leave it for the next interaction to spend.
+        if (event.type === "keydown" && event.key === "Escape") return;
         for (const quiet of document.querySelectorAll(
           "[data-figure-focus-quiet]",
         )) {
@@ -1411,4 +1456,5 @@ export const VIEWER_SCRIPT = `<script>
     );
   }
 })();
+${DIAGRAM_SCRIPT}
 </script>`;
