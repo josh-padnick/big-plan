@@ -2,7 +2,7 @@
 // remain faithful, canvas state survives reader interactions, and the review
 // chrome occupies the correct place in each view.
 
-import { expect, test } from "./fixtures";
+import { boxOf, expect, test } from "./fixtures";
 
 test("should render cleared node text as a struck-through edit", async ({
   page,
@@ -615,6 +615,8 @@ test("should keep review chrome stable through zoom and maximize in both themes"
       const tray = diagram.locator(".flow-collector");
       const head = tray.locator(".flow-collector-head");
       const list = tray.locator(".flow-collector-list");
+      const foot = tray.locator(".flow-collector-foot");
+      const firstRow = tray.locator(".flow-collector-item").first();
       await expect(tray).toBeVisible();
       expect(
         await head.evaluate(
@@ -625,6 +627,15 @@ test("should keep review chrome stable through zoom and maximize in both themes"
           (element) => getComputedStyle(element).backgroundColor,
         ),
       );
+      const insets = await Promise.all(
+        [head, list, foot].map((region) =>
+          region.evaluate((element) => getComputedStyle(element).paddingLeft),
+        ),
+      );
+      expect(new Set(insets).size).toBe(1);
+      const listBox = await boxOf(list);
+      const rowBox = await boxOf(firstRow);
+      expect(rowBox.x).toBeCloseTo(listBox.x + Number.parseFloat(insets[1]));
 
       await footer.hover();
       await expect

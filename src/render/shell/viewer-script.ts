@@ -1920,8 +1920,14 @@ ${DIAGRAM_SCRIPT}
   };
   const fit = (screen) => {
     const stage = screen.querySelector(":scope > .wireframe-frame-stage");
+    const viewport =
+      stage === null
+        ? null
+        : stage.querySelector(":scope > .wireframe-frame-viewport");
     const frame =
-      stage === null ? null : stage.querySelector(":scope > .wireframe-frame");
+      viewport === null
+        ? null
+        : viewport.querySelector(":scope > .wireframe-frame");
     if (frame === null || screen.clientWidth === 0) return;
     // offsetWidth stays in the frame's unscaled coordinate space. Writing a
     // numeric zoom avoids relying on unsupported length division in CSS.
@@ -1929,23 +1935,24 @@ ${DIAGRAM_SCRIPT}
     const maximized = screen
       .closest("[data-wireframe]")
       ?.hasAttribute("data-figure-maximized");
-    const stageStyle = stage === null ? null : getComputedStyle(stage);
+    const viewportStyle =
+      viewport === null ? null : getComputedStyle(viewport);
     const horizontalPadding =
-      stageStyle === null
+      viewportStyle === null
         ? 0
-        : parseFloat(stageStyle.paddingLeft) +
-          parseFloat(stageStyle.paddingRight);
+        : parseFloat(viewportStyle.paddingLeft) +
+          parseFloat(viewportStyle.paddingRight);
     const verticalPadding =
-      stageStyle === null
+      viewportStyle === null
         ? 0
-        : parseFloat(stageStyle.paddingTop) +
-          parseFloat(stageStyle.paddingBottom);
+        : parseFloat(viewportStyle.paddingTop) +
+          parseFloat(viewportStyle.paddingBottom);
     const widthScale =
-      ((stage?.clientWidth ?? screen.clientWidth) - horizontalPadding) /
+      ((viewport?.clientWidth ?? screen.clientWidth) - horizontalPadding) /
       frame.offsetWidth;
     const heightScale =
-      maximized && stage !== null
-        ? (stage.clientHeight - verticalPadding) / frame.offsetHeight
+      maximized && viewport !== null
+        ? (viewport.clientHeight - verticalPadding) / frame.offsetHeight
         : 1;
     const fitScale = Math.max(0.1, Math.min(1, widthScale, heightScale));
     const multiplier = zoomOf(screen);

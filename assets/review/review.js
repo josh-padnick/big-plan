@@ -1061,7 +1061,7 @@
   // Wireframes keep whole-screen comments in the page runtime. Element
   // comments deliberately borrow the landed diagram runtime's selection,
   // nearby action bar, inline composer, collector, and feedback handoff.
-  // This loop owns only the maximize-only Use/Comment mode that decides
+  // This loop owns only the maximize-only Comment Mode switch that decides
   // whether clicks operate the prototype or choose a review target.
   for (const wireframe of document.querySelectorAll("[data-wireframe]")) {
     const tabState = new Map();
@@ -1075,25 +1075,29 @@
         if (screen !== null) openCompose(targetForBlock(screen));
       });
     }
-    const modeToggle = el("div", {
-      "data-wireframe-review-mode": "",
-      role: "group",
-      "aria-label": "Wireframe interaction mode",
+    const modeToggle = el("button", {
+      type: "button",
+      "data-wireframe-comment-mode-toggle": "",
+      role: "switch",
+      "aria-checked": "false",
+      "aria-label": "Comment Mode, off",
       hidden: true,
     });
-    const useButton = el("button", {
-      type: "button",
-      "data-wireframe-review-use": "",
-      "aria-pressed": "true",
-      text: "Use",
+    const modeLabel = el("span", {
+      "data-wireframe-comment-mode-label": "",
+      text: "Comment Mode",
     });
-    const commentButton = el("button", {
-      type: "button",
-      "data-wireframe-review-comment": "",
-      "aria-pressed": "false",
-      text: "Comment",
+    const modeTrack = el("span", {
+      "data-wireframe-comment-mode-track": "",
+      "aria-hidden": "true",
     });
-    modeToggle.append(useButton, commentButton);
+    modeTrack.append(el("span", { "data-wireframe-comment-mode-thumb": "" }));
+    const modeState = el("span", {
+      "data-wireframe-comment-mode-state": "",
+      "aria-hidden": "true",
+      text: "Off",
+    });
+    modeToggle.append(modeLabel, modeTrack, modeState);
     const placeModeToggle = () => {
       const toolbar = wireframe.querySelector(
         "[data-wireframe-screen][data-wireframe-current] " +
@@ -1120,11 +1124,14 @@
       }
       tabState.clear();
     };
-    const setMode = (mode) => {
-      const commenting = mode === "comment";
+    const setMode = (commenting) => {
       wireframe.toggleAttribute("data-wireframe-comment-mode", commenting);
-      useButton.setAttribute("aria-pressed", commenting ? "false" : "true");
-      commentButton.setAttribute("aria-pressed", commenting ? "true" : "false");
+      modeToggle.setAttribute("aria-checked", commenting ? "true" : "false");
+      modeToggle.setAttribute(
+        "aria-label",
+        "Comment Mode, " + (commenting ? "on" : "off"),
+      );
+      modeState.textContent = commenting ? "On" : "Off";
       restoreTabStops();
       wireframe.dispatchEvent(new CustomEvent("flow-review-clear"));
       if (!commenting) return;
@@ -1134,8 +1141,9 @@
         element.setAttribute("tabindex", "0");
       }
     };
-    useButton.addEventListener("click", () => setMode("use"));
-    commentButton.addEventListener("click", () => setMode("comment"));
+    modeToggle.addEventListener("click", () => {
+      setMode(!wireframe.hasAttribute("data-wireframe-comment-mode"));
+    });
     const targetFrom = (event) =>
       event.target instanceof Element
         ? event.target.closest("[data-wireframe-element][data-block-id]")
@@ -1188,7 +1196,7 @@
       // opening its composer will bring the established rail back on demand.
       if (maximized && railIsOpen()) setRailOpen(false);
       if (!maximized) {
-        setMode("use");
+        setMode(false);
       }
     });
     wireframe.addEventListener("click", () =>

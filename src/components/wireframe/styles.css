@@ -144,8 +144,8 @@ marks and a plan diff never jitters.
   }
   .wireframe-screen-comment-area {
     display: flex;
-    justify-content: flex-end;
-    margin-bottom: 0.375rem;
+    flex: 1 1 auto;
+    justify-content: flex-start;
   }
   .wireframe-screen-comment-area:has(
     > .wireframe-screen-comment-button[hidden]
@@ -171,53 +171,106 @@ marks and a plan diff never jitters.
     outline-offset: 2px;
   }
   .wireframe-frame-toolbar {
-    position: absolute;
-    top: 0.3rem;
-    right: 0.3rem;
-    z-index: 5;
+    position: relative;
+    z-index: 6;
     display: flex;
+    flex: none;
     align-items: center;
     justify-content: flex-end;
+    width: 100%;
+    min-height: 3rem;
     gap: 0.5rem;
-  }
-  [data-wireframe-review-mode] {
-    display: inline-flex;
-    padding: 0.15rem;
+    padding: 0.4rem 0.5rem;
     border: 1px solid var(--edge-c);
-    border-radius: 0.55rem;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--bg) 96%, var(--surface-c));
+    box-shadow: var(--shadow-sm);
+  }
+  [data-wireframe-comment-mode-toggle] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2.25rem;
+    padding: 0.3rem 0.55rem;
+    border: 1px solid var(--edge-c);
+    border-radius: var(--radius-md);
     background: var(--bg);
-    box-shadow: 0 2px 10px rgb(0 0 0 / 0.12);
-  }
-  [data-wireframe-review-mode][hidden] {
-    display: none;
-  }
-  [data-wireframe-review-mode] button {
-    min-height: 2rem;
-    padding: 0.3rem 0.65rem;
-    border: 0;
-    border-radius: 0.38rem;
-    background: transparent;
-    color: var(--color-muted);
+    color: var(--color-ink);
     font: 600 0.8125rem/1 var(--font-sans);
     cursor: pointer;
   }
-  [data-wireframe-review-mode] button:hover {
-    color: var(--color-ink);
+  [data-wireframe-comment-mode-toggle][hidden] {
+    display: none;
+  }
+  [data-wireframe-comment-mode-toggle]:hover {
+    border-color: color-mix(in srgb, var(--color-ink) 38%, var(--edge-c));
+    background: var(--wf-fill);
+  }
+  [data-wireframe-comment-mode-toggle]:active {
     background: var(--surface-c);
   }
-  [data-wireframe-review-mode] button[aria-pressed="true"] {
-    color: var(--bg);
-    background: var(--color-ink);
-  }
-  [data-wireframe-review-mode] button:focus-visible {
+  [data-wireframe-comment-mode-toggle]:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
+  }
+  [data-wireframe-comment-mode-track] {
+    position: relative;
+    flex: none;
+    width: 2rem;
+    height: 1.125rem;
+    border: 1px solid var(--edge-c);
+    border-radius: 999px;
+    background: var(--surface-c);
+    transition:
+      border-color 120ms ease,
+      background 120ms ease;
+  }
+  [data-wireframe-comment-mode-thumb] {
+    position: absolute;
+    top: 0.125rem;
+    left: 0.125rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 50%;
+    background: var(--color-muted);
+    transition:
+      translate 120ms ease,
+      background 120ms ease;
+  }
+  [data-wireframe-comment-mode-toggle][aria-checked="true"]
+    [data-wireframe-comment-mode-track] {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 28%, var(--bg));
+  }
+  [data-wireframe-comment-mode-toggle][aria-checked="true"]
+    [data-wireframe-comment-mode-thumb] {
+    translate: 0.875rem 0;
+    background: var(--color-accent);
+  }
+  [data-wireframe-comment-mode-state] {
+    min-width: 1.35rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    text-align: left;
+  }
+  [data-wireframe-comment-mode-toggle][aria-checked="true"]
+    [data-wireframe-comment-mode-state] {
+    color: var(--color-accent);
   }
   .wireframe-frame-stage {
     position: relative;
     display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
     min-width: 0;
-    padding-top: 2rem;
+  }
+  .wireframe-frame-viewport {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
   }
   .wireframe-frame-toolbar:not(
     :has(
@@ -267,14 +320,12 @@ marks and a plan diff never jitters.
     color: var(--color-muted);
   }
   .wireframe[data-figure-maximized] .wireframe-frame-toolbar {
-    top: 0.5rem;
-    right: 0.5rem;
-    left: auto;
-    padding: 0.3rem;
-    border: 1px solid var(--edge-c);
-    border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--bg) 94%, transparent);
-    box-shadow: var(--shadow-sm);
+    position: sticky;
+    top: 0;
+    border-width: 0 0 1px;
+    border-radius: 0;
+    background: color-mix(in srgb, var(--bg) 97%, var(--surface-c));
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--edge-c) 70%, transparent);
   }
 
   /* Lay out at the device's true width, then scale the whole drawing to fit.
@@ -319,11 +370,14 @@ marks and a plan diff never jitters.
   }
   .wireframe[data-figure-maximized] .wireframe-frame-stage {
     flex: 1 1 auto;
-    align-items: center;
-    justify-content: center;
     min-height: 0;
-    padding: 3rem 1rem;
-    overflow: auto;
+    gap: 0;
+    overflow: hidden;
+  }
+  .wireframe[data-figure-maximized] .wireframe-frame-viewport {
+    flex: 1 1 auto;
+    width: 100%;
+    padding: 1rem;
   }
   .wireframe[data-figure-maximized] .wireframe-frame {
     flex: none;
@@ -2827,8 +2881,8 @@ marks and a plan diff never jitters.
     flex-direction: column;
   }
   article .wireframe[data-figure-maximized] .wireframe-screen-comment-area {
-    flex: none;
-    padding: 0 0.75rem;
+    flex: 1 1 auto;
+    padding: 0;
   }
   @media (width < 760px) {
     article .wireframe[data-figure-maximized] {

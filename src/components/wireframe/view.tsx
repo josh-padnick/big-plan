@@ -799,18 +799,18 @@ const Screen = ({
               : "minimum height · grows with content"}
         </span>
       </div>
-      <div className="wireframe-screen-comment-area">
-        <button
-          type="button"
-          className="wireframe-screen-comment-button"
-          data-wireframe-comment-screen=""
-          hidden
-        >
-          Comment on this screen
-        </button>
-      </div>
       <div className="wireframe-frame-stage">
         <div className="wireframe-frame-toolbar">
+          <div className="wireframe-screen-comment-area">
+            <button
+              type="button"
+              className="wireframe-screen-comment-button"
+              data-wireframe-comment-screen=""
+              hidden
+            >
+              Comment on this screen
+            </button>
+          </div>
           <div
             className="wireframe-zoom-controls"
             aria-label="Wireframe zoom"
@@ -839,44 +839,49 @@ const Screen = ({
           </div>
           <MaximizeButton subject="wireframe" />
         </div>
-        <div className="wireframe-frame" data-wireframe-device={screen.device}>
-          {desktop ? (
-            <div className="wireframe-browser-bar">
-              <span className="wireframe-browser-dots" aria-hidden="true" />
-              <span className="wireframe-browser-address">
-                {screen.url ?? " "}
-              </span>
-            </div>
-          ) : null}
-          {tablet ? (
-            <span className="wireframe-tablet-camera" aria-hidden="true" />
-          ) : null}
-          {phone ? (
-            <span className="wireframe-phone-notch" aria-hidden="true" />
-          ) : null}
+        <div className="wireframe-frame-viewport">
           <div
-            className="wireframe-artboard"
+            className="wireframe-frame"
             data-wireframe-device={screen.device}
-            {...(screen.pattern === undefined
-              ? {}
-              : { "data-wireframe-pattern": screen.pattern })}
           >
-            <div className="wireframe-canvas flex flex-col gap-4">
-              <WireframeElements
-                nodes={screen.children}
-                context={{
-                  prefix: safeTargetSegment(screen.id),
-                  path: "root",
-                }}
-              />
+            {desktop ? (
+              <div className="wireframe-browser-bar">
+                <span className="wireframe-browser-dots" aria-hidden="true" />
+                <span className="wireframe-browser-address">
+                  {screen.url ?? " "}
+                </span>
+              </div>
+            ) : null}
+            {tablet ? (
+              <span className="wireframe-tablet-camera" aria-hidden="true" />
+            ) : null}
+            {phone ? (
+              <span className="wireframe-phone-notch" aria-hidden="true" />
+            ) : null}
+            <div
+              className="wireframe-artboard"
+              data-wireframe-device={screen.device}
+              {...(screen.pattern === undefined
+                ? {}
+                : { "data-wireframe-pattern": screen.pattern })}
+            >
+              <div className="wireframe-canvas flex flex-col gap-4">
+                <WireframeElements
+                  nodes={screen.children}
+                  context={{
+                    prefix: safeTargetSegment(screen.id),
+                    path: "root",
+                  }}
+                />
+              </div>
             </div>
+            {tablet ? (
+              <span
+                className="wireframe-tablet-home-indicator"
+                aria-hidden="true"
+              />
+            ) : null}
           </div>
-          {tablet ? (
-            <span
-              className="wireframe-tablet-home-indicator"
-              aria-hidden="true"
-            />
-          ) : null}
         </div>
       </div>
     </section>

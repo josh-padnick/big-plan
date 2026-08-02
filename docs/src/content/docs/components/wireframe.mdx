@@ -83,6 +83,9 @@ Tablet primitives also inherit a presentation-aware type scale: 26 px body, 20 p
 At the normal reduced fit this makes body copy read at approximately the iPadOS 17 pt baseline, with generous headings that also suit child-oriented interfaces.
 Desktop primitives use the same presentation-aware model: 28 px body, 22 px supporting copy, 32 px section titles, and 42 px page titles on the 1440 px artboard, which paint like a conventionally zoomed desktop app after fitting.
 Primary desktop navigation earns readable width: allow roughly 200-240 px for labels and comfortable padding, then collapse deliberately to icons at narrower sizes instead of crowding or truncating destinations.
+Persistent viewer tools belong in fixed chrome at a stable edge, with the canvas reserving space for the bar instead of letting controls overlap the work.
+Name a binary mode as one explicit switch with a visible state—for example **Comment Mode: On/Off**—rather than opposing labels such as **Use / Comment**.
+Within a card, align the header, repeated rows, and footer to one shared horizontal inset and one compact vertical rhythm.
 Viewer resize and visual-viewport changes refit the whole artboard, while the wireframe's own zoom controls enlarge frame and type together inside the maximized surface.
 At rest, the frame exposes its maximize icon and one dedicated whole-screen comment area.
 Maximized mode fits the artboard in the viewport, lists sibling screen names on the left, supports Arrow Up/Down, Home, and End navigation in that list, and keeps element commenting behind Select element.

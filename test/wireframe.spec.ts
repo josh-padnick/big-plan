@@ -779,13 +779,18 @@ test("should comment on a whole wireframe screen and one specific element", asyn
   await test.step("Comment mode reuses the diagram selection and inline composer", async () => {
     await screen.locator("[data-figure-maximize]").click();
     await expect(commentsToggle).toBeHidden();
-    const mode = screen.locator("[data-wireframe-review-mode]");
-    const use = mode.getByRole("button", { name: "Use" });
-    const comment = mode.getByRole("button", { name: "Comment" });
+    const toolbar = screen.locator(".wireframe-frame-toolbar");
+    const frameViewport = screen.locator(".wireframe-frame-viewport");
+    const mode = screen.locator("[data-wireframe-comment-mode-toggle]");
+    await expect(toolbar).toBeVisible();
     await expect(mode).toBeVisible();
-    await expect(use).toHaveAttribute("aria-pressed", "true");
-    await comment.click();
-    await expect(comment).toHaveAttribute("aria-pressed", "true");
+    await expect(mode).toHaveAttribute("aria-checked", "false");
+    const toolbarBox = await boxOf(toolbar);
+    const viewportBox = await boxOf(frameViewport);
+    expect(toolbarBox.y + toolbarBox.height).toBeLessThanOrEqual(viewportBox.y);
+    await mode.click();
+    await expect(mode).toHaveAttribute("aria-checked", "true");
+    await expect(mode).toHaveAccessibleName("Comment Mode, on");
     const action = screen.getByRole("button", {
       name: "✋ Ask a grown-up",
       exact: true,
@@ -817,6 +822,20 @@ test("should comment on a whole wireframe screen and one specific element", asyn
     const collector = wireframe.locator(".flow-collector");
     await expect(collector).toBeVisible();
     await expect(collector).toContainText("Keep this action welcoming.");
+    const collectorInsets = await Promise.all(
+      [
+        collector.locator(".flow-collector-head"),
+        collector.locator(".flow-collector-list"),
+        collector.locator(".flow-collector-foot"),
+      ].map((region) =>
+        region.evaluate((element) => getComputedStyle(element).paddingLeft),
+      ),
+    );
+    expect(new Set(collectorInsets).size).toBe(1);
+    await expect(collector.locator(".flow-collector-item")).toHaveCSS(
+      "margin",
+      "0px",
+    );
     await collector
       .getByRole("button", { name: "Add 1 note to plan feedback" })
       .click();
@@ -826,8 +845,8 @@ test("should comment on a whole wireframe screen and one specific element", asyn
       .evaluateAll((nodes) => nodes.map((node) => node.dataset.blockId));
     expect(new Set(ids).size).toBe(2);
     await expect(affordance).toBeHidden();
-    await use.click();
-    await expect(use).toHaveAttribute("aria-pressed", "true");
+    await mode.click();
+    await expect(mode).toHaveAttribute("aria-checked", "false");
     await expect(action).not.toHaveAttribute("data-flow-selected");
   });
 });
