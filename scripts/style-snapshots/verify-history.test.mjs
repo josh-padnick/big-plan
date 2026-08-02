@@ -72,6 +72,16 @@ const artifactPath = ({ repoRoot, name }) =>
 
 const createMinimalRepository = async ({
   stylingFilePatterns = ["^irrelevant\\.txt$"],
+  documents = [
+    {
+      captures: [
+        {
+          themes: ["light"],
+          viewports: [{}],
+        },
+      ],
+    },
+  ],
 } = {}) => {
   const repoRoot = await mkdtemp(join(tmpdir(), "style-history-test-"));
   await git({ repoRoot, arguments_: ["init", "-b", "main"] });
@@ -104,6 +114,7 @@ await writeFile(join(output, "state.png"), Buffer.from(${JSON.stringify(capture.
     stylingFilePatterns,
     manifestDirectory: ".style-snapshots/manifests",
     captureCommand: ["node", "{harnessRoot}/capture.mjs"],
+    documents,
   };
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
   const base = await commit({ repoRoot, subject: "test: establish fixture" });
@@ -168,6 +179,16 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
           stylingFilePatterns: ["^style\\.txt$"],
           manifestDirectory: ".style-snapshots/manifests",
           captureCommand: ["node", "{harnessRoot}/capture.mjs"],
+          documents: [
+            {
+              captures: [
+                {
+                  themes: ["light"],
+                  viewports: [{}],
+                },
+              ],
+            },
+          ],
         },
         null,
         2,
@@ -675,6 +696,122 @@ test("should validate final HEAD capture completeness unconditionally", async ()
         }),
       }),
       /Final style fixture produced 1 of 2 configured captures/,
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should reject empty capture configuration dimensions", async () => {
+  const { repoRoot, configPath, config, base } =
+    await createMinimalRepository();
+  try {
+    const invalidConfigs = [
+      {
+        name: "documents",
+        config: { ...config, documents: [] },
+      },
+      {
+        name: "captures",
+        config: { ...config, documents: [{ captures: [] }] },
+      },
+      {
+        name: "themes",
+        config: {
+          ...config,
+          documents: [{ captures: [{ themes: [], viewports: [{}] }] }],
+        },
+      },
+      {
+        name: "viewports",
+        config: {
+          ...config,
+          documents: [{ captures: [{ themes: ["light"], viewports: [] }] }],
+        },
+      },
+    ];
+
+    for (const invalid of invalidConfigs) {
+      await writeFile(
+        configPath,
+        `${JSON.stringify(invalid.config, null, 2)}\n`,
+        "utf8",
+      );
+      await assert.rejects(
+        verifyHistory({
+          repoRoot,
+          base,
+          configPath,
+          artifactRoot: artifactPath({
+            repoRoot,
+            name: `empty-${invalid.name}`,
+          }),
+        }),
+        new RegExp(`requires non-empty ${invalid.name}`),
+      );
+    }
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should reject capture coverage narrowed within the verified range", async () => {
+  const expandedDocuments = [
+    {
+      name: "fixture",
+      source: "fixture.txt",
+      captures: [
+        {
+          name: "first",
+          selector: "article",
+          themes: ["light"],
+          viewports: [{ name: "desktop", width: 1440, height: 900 }],
+          actions: [],
+        },
+        {
+          name: "second",
+          selector: "header",
+          themes: ["light", "dark"],
+          viewports: [{ name: "phone", width: 390, height: 844 }],
+          actions: [],
+        },
+      ],
+    },
+  ];
+  const { repoRoot, configPath, config, base } = await createMinimalRepository({
+    documents: expandedDocuments,
+  });
+  try {
+    const narrowedConfig = {
+      ...config,
+      documents: [
+        {
+          ...expandedDocuments[0],
+          captures: [expandedDocuments[0].captures[0]],
+        },
+      ],
+    };
+    await writeFile(
+      configPath,
+      `${JSON.stringify(narrowedConfig, null, 2)}\n`,
+      "utf8",
+    );
+    await commit({
+      repoRoot,
+      subject: "test: narrow capture coverage [visual:empty]",
+    });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({
+          repoRoot,
+          name: "narrowed-capture-coverage",
+        }),
+      }),
+      /coverage may be added but not narrowed/,
     );
   } finally {
     await rm(repoRoot, { recursive: true, force: true });

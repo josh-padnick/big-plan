@@ -62,9 +62,26 @@ const parseConfig = (source) => {
     "fixturePaths",
     "stylingFilePatterns",
     "captureCommand",
+    "documents",
   ]) {
     if (!Array.isArray(config[field]) || config[field].length === 0) {
       throw new Error(`Style screenshot config requires non-empty ${field}.`);
+    }
+  }
+  for (const [documentIndex, document] of config.documents.entries()) {
+    if (!Array.isArray(document.captures) || document.captures.length === 0) {
+      throw new Error(
+        `Style screenshot config document ${documentIndex + 1} requires non-empty captures.`,
+      );
+    }
+    for (const [captureIndex, capture] of document.captures.entries()) {
+      for (const field of ["themes", "viewports"]) {
+        if (!Array.isArray(capture[field]) || capture[field].length === 0) {
+          throw new Error(
+            `Style screenshot config document ${documentIndex + 1} capture ${captureIndex + 1} requires non-empty ${field}.`,
+          );
+        }
+      }
     }
   }
   if (
@@ -74,6 +91,35 @@ const parseConfig = (source) => {
     throw new Error("Style screenshot config requires manifestDirectory.");
   }
   return config;
+};
+
+/** Expands one config into the logical keys its PNG filenames represent. */
+const captureKeys = (config) =>
+  config.documents.flatMap((document) =>
+    document.captures.flatMap((capture) =>
+      capture.themes.flatMap((theme) =>
+        capture.viewports.map((viewport) =>
+          JSON.stringify([document.name, capture.name, viewport.name, theme]),
+        ),
+      ),
+    ),
+  );
+
+/** Prevents a branch from silently dropping capture keys present on its base. */
+const assertCaptureCoverage = ({ config, baselineConfig }) => {
+  if (baselineConfig === null) {
+    return;
+  }
+  const activeCaptureKeys = new Set(captureKeys(config));
+  const requiredCaptureKeys = new Set(captureKeys(baselineConfig));
+  const missingCaptureCount = [...requiredCaptureKeys].filter(
+    (key) => !activeCaptureKeys.has(key),
+  ).length;
+  if (missingCaptureCount > 0) {
+    throw new Error(
+      `Style screenshot config removes ${missingCaptureCount} merge-base capture key(s); coverage may be added but not narrowed.`,
+    );
+  }
 };
 
 /** Reads the active screenshot configuration from the harness checkout. */
@@ -504,6 +550,10 @@ export const verifyHistory = async ({
       readConfigAtCommit({ repoRoot, commit, configRepoPath }),
     ),
   );
+  assertCaptureCoverage({
+    config,
+    baselineConfig: historicalConfigs[0],
+  });
   const relevanceConfigs = [
     RELEVANCE_FLOOR,
     ...historicalConfigs.filter((candidate) => candidate !== null),
@@ -617,7 +667,7 @@ export const verifyHistory = async ({
           STYLE_SNAPSHOT_HARNESS_ROOT: harnessRoot,
         },
       });
-      if (commit === head && Array.isArray(config.documents)) {
+      if (commit === head) {
         const expectedCaptureCount = config.documents.reduce(
           (documentTotal, document) =>
             documentTotal +

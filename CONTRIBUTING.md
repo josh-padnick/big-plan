@@ -11,7 +11,7 @@ The workflow is intentionally light:
 
 ## Styling commits
 
-CI replays every relevant single-parent commit and compares its Chrome screenshots with its parent.
+CI replays every relevant single-parent commit and compares its pinned Chromium screenshots with its parent.
 Because replay installs and executes historical revisions, it runs only in the disposable GitHub-hosted `style-history` job with read-only repository permissions and no persisted checkout credential; do not run the history verifier on a persistent development or CI host.
 The active styling files, fixtures, and captured states live in [.style-snapshots/config.json](.style-snapshots/config.json); the verifier unions that configuration with its mandatory coverage floor and every configuration revision in the verification range so a commit cannot narrow its own relevance.
 Merge commits that resolve a configured styling conflict are rejected because their visual delta cannot be isolated from the merged branch; record the resolution in a single-parent styling commit instead.

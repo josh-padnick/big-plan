@@ -114,7 +114,6 @@ const temporaryDirectory = await mkdtemp(
 );
 // Exact RGBA evidence requires one stable rasterizer and color space in CI.
 const browser = await chromium.launch({
-  channel: "chrome",
   headless: true,
   args: ["--disable-gpu", "--force-color-profile=srgb"],
 });
