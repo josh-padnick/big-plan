@@ -73,27 +73,15 @@ elements exist and the document is exactly the document it always was.
   font-weight: 600;
   text-align: center;
 }
+[data-review-toggle-count]:empty {
+  display: none;
+}
 [data-review-toggle][data-review-has-pending="true"] {
   color: var(--accent-c);
 }
 [data-review-toggle][data-review-has-pending="true"]
   [data-review-toggle-count] {
   color: var(--accent-c);
-}
-
-/* Nothing pending, but the agent is doing something with what was already
-   sent: the entry point carries that tone, so the wait is never silent. */
-[data-review-toggle][data-review-has-pending="false"][data-review-agent-tone="working"]
-  [data-review-toggle-count] {
-  color: var(--callout-note-c);
-}
-[data-review-toggle][data-review-has-pending="false"][data-review-agent-tone="ready"]
-  [data-review-toggle-count] {
-  color: var(--diff-add-c);
-}
-[data-review-toggle][data-review-has-pending="false"][data-review-agent-tone="failed"]
-  [data-review-toggle-count] {
-  color: var(--callout-danger-c);
 }
 
 /* ------------------------------------------------------------------- rail */
@@ -386,12 +374,21 @@ button[data-review-row-target]:active {
 [data-review-sent] {
   margin-top: 0.9rem;
   padding-top: 0.7rem;
-  border-top: 1px dashed var(--edge-c);
+  border-top: 1px solid var(--edge-c);
 }
 [data-review-sent][hidden] {
   display: none;
 }
-[data-review-sent] h3 {
+[data-review-round-summary] {
+  margin: 0 0 0.7rem;
+  color: var(--muted-c);
+  font-size: 0.6875rem;
+  line-height: 1.45;
+}
+[data-review-outcome-group] + [data-review-outcome-group] {
+  margin-top: 0.75rem;
+}
+[data-review-outcome-group] h3 {
   margin: 0 0 0.45rem;
   color: var(--muted-c);
   font-size: 0.6875rem;
@@ -399,9 +396,21 @@ button[data-review-row-target]:active {
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
+[data-review-outcome-group] ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
 [data-review-sent-row] {
   background: transparent;
-  border-style: dashed;
+  border-left-width: 2px;
+}
+[data-review-sent-row] [data-review-row-body] {
+  overflow: hidden;
+  color: var(--muted-c);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 [data-review-send-bar] {
@@ -501,7 +510,8 @@ button[data-review-row-target]:active {
 [data-review-agent-input],
 [data-review-compose-input],
 [data-review-row-input],
-[data-review-thread-input] {
+[data-review-thread-input],
+[data-review-thread-reply] {
   display: block;
   width: 100%;
   padding: 0.4rem 0.5rem;
@@ -517,7 +527,8 @@ button[data-review-row-target]:active {
 [data-review-agent-input]:focus-visible,
 [data-review-compose-input]:focus-visible,
 [data-review-row-input]:focus-visible,
-[data-review-thread-input]:focus-visible {
+[data-review-thread-input]:focus-visible,
+[data-review-thread-reply]:focus-visible {
   outline: 1px solid var(--accent-c);
   outline-offset: 2px;
 }
@@ -552,44 +563,40 @@ button[data-review-row-target]:active {
 [data-review-agent-save]:active {
   background: var(--review-control-active);
 }
-
-[data-review-outcome-preview] {
-  margin-top: 0.8rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--edge-c);
+[data-review-chat-note] {
+  margin: -0.15rem 0 0.65rem;
+  color: var(--muted-c);
+  font-size: 0.6875rem;
+  line-height: 1.45;
 }
-[data-review-preview-head] {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
+[data-review-plan-chat] {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0 0 0.7rem;
+  padding: 0;
+  list-style: none;
 }
-[data-review-preview-head] h3 {
-  margin: 0;
-  color: var(--ink-c);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-[data-review-preview-chip] {
-  padding: 0.05rem 0.35rem;
-  border-radius: 999px;
-  background: var(--callout-note-bg);
-  color: var(--callout-note-c);
-  font-size: 0.625rem;
-  font-weight: 700;
-}
-[data-review-preview-note] {
-  margin: 0.35rem 0 0;
+[data-review-chat-empty] {
   color: var(--muted-c);
   font-size: 0.75rem;
   line-height: 1.45;
 }
-[data-review-outcome-list] {
-  display: grid;
-  gap: 0.4rem;
-  margin: 0.6rem 0 0;
-  padding: 0;
-  list-style: none;
+[data-review-chat-message] {
+  padding: 0.5rem 0.55rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.45rem;
+  background: var(--bg);
 }
+[data-review-chat-message="agent"] {
+  background: color-mix(in srgb, var(--callout-note-bg) 46%, var(--bg));
+}
+[data-review-chat-message] p {
+  margin: 0.25rem 0 0;
+  color: var(--ink-c);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
 [data-review-outcome] {
   display: grid;
   gap: 0.18rem;
@@ -697,7 +704,71 @@ button[data-review-row-target]:active {
   display: none;
 }
 [data-review-thread-state="sent"] {
-  border-style: dashed;
+  padding: 0.28rem;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.1);
+}
+[data-review-thread-state="sent"][data-review-thread-expanded] {
+  padding: 0.65rem;
+  box-shadow: 0 10px 32px rgb(0 0 0 / 0.16);
+}
+[data-review-thread-summary] {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.18rem 0.22rem;
+  border: 0;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--ink-c);
+  cursor: pointer;
+  text-align: left;
+}
+[data-review-thread-summary]:hover {
+  background: var(--review-control-hover);
+}
+[data-review-thread-summary]:active {
+  background: var(--review-control-active);
+}
+[data-review-thread-summary] [data-review-outcome-state] {
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+}
+[data-review-thread-summary] [data-review-outcome-state="changed"] {
+  background: var(--diff-add-bg);
+  color: var(--diff-add-c);
+}
+[data-review-thread-summary] [data-review-outcome-state="question"] {
+  background: var(--callout-warning-bg);
+  color: var(--callout-warning-c);
+}
+[data-review-thread-summary] [data-review-outcome-state="declined"] {
+  background: var(--surface-c);
+  color: var(--muted-c);
+}
+[data-review-thread-echo] {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-review-simulated] {
+  color: var(--muted-c);
+  font-size: 0.5625rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+[data-review-thread-expanded] [data-review-thread-summary] {
+  margin-bottom: 0.55rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--edge-c);
+  border-radius: 0;
 }
 [data-review-thread-head] {
   display: flex;
@@ -733,6 +804,94 @@ button[data-review-row-target]:active {
   line-height: 1.5;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+[data-review-thread-turn] {
+  margin-top: 0.45rem;
+  padding: 0.48rem 0.52rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.45rem;
+}
+[data-review-thread-turn="agent"] {
+  background: color-mix(in srgb, var(--callout-note-bg) 46%, var(--bg));
+}
+[data-review-turn-meta] {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted-c);
+  font-size: 0.625rem;
+}
+[data-review-turn-meta] strong {
+  color: var(--ink-c);
+  font-size: 0.6875rem;
+}
+[data-review-turn-meta] time {
+  margin-left: auto;
+}
+[data-review-thread-turn] p {
+  margin: 0.25rem 0 0;
+  color: var(--ink-c);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+[data-review-see-change] {
+  margin-top: 0.45rem;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.3rem;
+  background: var(--bg);
+  color: var(--accent-c);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+[data-review-see-change]:hover {
+  background: var(--review-control-hover);
+  border-color: var(--accent-c);
+}
+[data-review-see-change]:active {
+  background: var(--review-control-active);
+}
+[data-review-thread-reply-box] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+[data-review-thread-reply-box] label {
+  grid-column: 1 / -1;
+  color: var(--muted-c);
+  font-size: 0.6875rem;
+  font-weight: 650;
+}
+[data-review-thread-reply] {
+  min-height: 3.25rem;
+  resize: vertical;
+}
+[data-review-thread-reply-send] {
+  align-self: end;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--accent-c);
+  border-radius: 0.35rem;
+  background: var(--accent-c);
+  color: var(--bg);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+[data-review-thread-reply-send]:hover:not([disabled]) {
+  filter: brightness(1.08);
+}
+[data-review-thread-reply-send]:active:not([disabled]) {
+  filter: brightness(0.94);
+}
+[data-review-thread-reply-send][disabled] {
+  border-color: var(--edge-c);
+  background: var(--surface-c);
+  color: var(--muted-c);
+  cursor: default;
 }
 [data-review-thread-more] {
   display: inline;
@@ -786,6 +945,14 @@ button[data-review-row-target]:active {
 @media (width < 80rem) {
   [data-review-thread-layer] {
     display: none;
+  }
+  [data-review-thread-inline] {
+    position: relative;
+    right: auto;
+    z-index: 2;
+    display: block;
+    width: 100%;
+    margin: 0.65rem 0 1rem;
   }
 }
 
@@ -953,12 +1120,13 @@ button[data-review-row-target]:active {
 
 [data-review-comment-highlight] {
   background: color-mix(in srgb, var(--annotation-bg) 48%, transparent);
-  box-shadow: inset 3px 0
-    color-mix(in srgb, var(--annotation-c) 58%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--annotation-c) 52%, transparent);
+  outline-offset: 3px;
 }
 [data-review-active-highlight] {
   background: var(--annotation-bg);
-  box-shadow: inset 3px 0 var(--accent-c);
+  outline: 2px solid var(--accent-c);
+  outline-offset: 3px;
 }
 
 [data-review-marker] {
@@ -1004,14 +1172,26 @@ button[data-review-row-target]:active {
   background: var(--accent-c);
   color: var(--bg);
 }
-[data-review-marker-tone="sent"] {
+[data-review-marker-tone="changed"],
+[data-review-marker-tone="declined"] {
   color: var(--muted-c);
 }
-[data-review-marker-tone="sent"]::after {
+[data-review-marker-tone="changed"]::after,
+[data-review-marker-tone="declined"]::after {
   content: "✓";
   background: var(--surface-c);
   color: var(--muted-c);
   border: 1px solid var(--edge-c);
+}
+[data-review-marker-tone="question"] {
+  border-color: var(--callout-warning-c);
+  color: var(--callout-warning-c);
+}
+[data-review-marker-tone="question"]::after {
+  content: "!";
+  border: 1px solid var(--callout-warning-c);
+  background: var(--callout-warning-bg);
+  color: var(--callout-warning-c);
 }
 [data-review-marker]:hover {
   background: var(--review-control-hover);

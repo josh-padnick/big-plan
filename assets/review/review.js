@@ -36,6 +36,7 @@
   const BODY_LIMIT = 4000;
   const LONG_COMMENT_LIMIT = 180;
   const PROGRESS_INTERVAL_MS = 1500;
+  const MESSAGE_LIMIT = 200;
 
   // ---------------------------------------------------------------- elements
 
@@ -144,11 +145,14 @@
   let cursorBlock = null;
   let pendingSelection = null;
   let activeDraft = "";
+  let threadReplies = {};
+  let planChatMessages = [];
   let progressSeq = 0;
   let progressTimer = null;
   let runtimeConfirmed = false;
   let deleteCandidateId = null;
   const expandedCommentIds = new Set();
+  const expandedThreadIds = new Set();
 
   const newId = () => {
     const bytes = new Uint8Array(8);
@@ -164,7 +168,13 @@
   // plan text, so a collision would leak one plan's content into another's.
   const storageKey = planId === "" ? null : "big-plan:review:drafts:" + planId;
 
-  const emptyStoredState = () => ({ drafts: [], sent: [], activeDraft: "" });
+  const emptyStoredState = () => ({
+    drafts: [],
+    sent: [],
+    activeDraft: "",
+    threadReplies: {},
+    planChatMessages: [],
+  });
 
   const isStoredState = (value) =>
     value !== null &&
@@ -173,12 +183,46 @@
     Array.isArray(value.sent) &&
     typeof value.activeDraft === "string";
 
+  const isStoredMessage = (value) =>
+    value !== null &&
+    typeof value === "object" &&
+    (value.role === "user" || value.role === "agent") &&
+    typeof value.body === "string" &&
+    value.body.trim() !== "" &&
+    value.body.length <= BODY_LIMIT &&
+    typeof value.createdAt === "string" &&
+    !Number.isNaN(Date.parse(value.createdAt));
+
+  const checkedMessages = (value) =>
+    (Array.isArray(value) ? value : [])
+      .filter(isStoredMessage)
+      .slice(0, MESSAGE_LIMIT)
+      .map((message) => ({
+        role: message.role,
+        body: message.body,
+        createdAt: new Date(message.createdAt).toISOString(),
+      }));
+
+  const checkedThreadReplies = (value) => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      return {};
+    }
+    const checked = {};
+    for (const [id, messages] of Object.entries(value)) {
+      if (!/^[a-f0-9]{4,64}$/.test(id)) continue;
+      checked[id] = checkedMessages(messages);
+    }
+    return checked;
+  };
+
   const checkedStoredState = (value) => {
     if (!isStoredState(value)) return emptyStoredState();
     return {
       drafts: value.drafts.filter(isComment),
       sent: value.sent.filter(isComment),
       activeDraft: value.activeDraft.slice(0, BODY_LIMIT),
+      threadReplies: checkedThreadReplies(value.threadReplies),
+      planChatMessages: checkedMessages(value.planChatMessages),
     };
   };
 
@@ -197,7 +241,13 @@
     try {
       localStorage.setItem(
         storageKey,
-        JSON.stringify({ drafts, sent, activeDraft }),
+        JSON.stringify({
+          drafts,
+          sent,
+          activeDraft,
+          threadReplies,
+          planChatMessages,
+        }),
       );
     } catch {
       // A full or blocked store costs persistence, never the session.
@@ -237,6 +287,8 @@
     browserState.activeDraft !== ""
       ? browserState.activeDraft
       : diskState.activeDraft;
+  threadReplies = browserState.threadReplies;
+  planChatMessages = browserState.planChatMessages;
 
   // ---------------------------------------------------------------- transport
 
@@ -332,9 +384,10 @@
     "data-review-empty": true,
     text: "Hover a block and press Comment, or highlight any text, to start.",
   });
-  const sentList = el("ol", { "data-review-sent-list": true });
+  const responseSummary = el("p", { "data-review-round-summary": true });
+  const sentList = el("div", { "data-review-sent-list": true });
   const sentGroup = el("section", { "data-review-sent": true, hidden: true }, [
-    el("h3", { text: "Sent" }),
+    responseSummary,
     sentList,
   ]);
 
@@ -355,7 +408,7 @@
     "data-review-agent-input": true,
     id: "big-plan-review-agent-note",
     rows: "3",
-    placeholder: "Type a note about the whole plan…",
+    placeholder: "Ask about the plan as a whole…",
     maxlength: String(BODY_LIMIT),
     value: activeDraft,
   });
@@ -378,68 +431,33 @@
   const agentSave = el("button", {
     type: "button",
     "data-review-agent-save": true,
-    text: "Add to feedback",
+    text: "Send",
   });
   const progressList = el("ol", { "data-review-progress": true, hidden: true });
-
-  const outcomePreview = el(
-    "section",
-    {
-      "data-review-outcome-preview": true,
-      "aria-label": "Simulated agent response states",
-    },
-    [
-      el("div", { "data-review-preview-head": true }, [
-        el("h3", { text: "Response preview" }),
-        el("span", { "data-review-preview-chip": true, text: "Simulated" }),
-      ]),
-      el("p", {
-        "data-review-preview-note": true,
-        text:
-          "Package delivery is real. Agent replies are not connected yet; " +
-          "these are the outcome states the tray will use.",
-      }),
-      el("ol", { "data-review-outcome-list": true }, [
-        el("li", { "data-review-outcome": "changed" }, [
-          el("span", {
-            "data-review-outcome-state": true,
-            text: "Changed",
-          }),
-          el("span", { text: "The plan was revised." }),
-        ]),
-        el("li", { "data-review-outcome": "question" }, [
-          el("span", {
-            "data-review-outcome-state": true,
-            text: "Needs your answer",
-          }),
-          el("span", { text: "The agent needs a decision." }),
-        ]),
-        el("li", { "data-review-outcome": "declined" }, [
-          el("span", {
-            "data-review-outcome-state": true,
-            text: "Outside this plan",
-          }),
-          el("span", { text: "The request is beyond plan revision." }),
-        ]),
-      ]),
-    ],
-  );
+  const planChatList = el("ol", {
+    "data-review-plan-chat": true,
+    "aria-label": "Plan-wide conversation",
+  });
 
   const agentPanel = el("section", { "data-review-agent": true }, [
     el("div", { "data-review-agent-head": true }, [
-      el("h3", { text: "Runtime status" }),
+      el("h3", { text: "Plan-wide chat" }),
       agentState,
     ]),
+    el("p", {
+      "data-review-chat-note": true,
+      text: "Simulated agent turns · feedback package delivery remains real.",
+    }),
+    planChatList,
     el("label", {
       for: "big-plan-review-agent-note",
       "data-review-field-label": true,
-      text: "Note on the whole plan",
+      text: "Message",
     }),
     agentInput,
     attachLabel,
     agentSave,
     progressList,
-    outcomePreview,
   ]);
 
   const commentsTab = el("button", {
@@ -730,11 +748,16 @@
       const comment =
         draft || sent.find((item) => item.target.blockId === blockId);
       if (!comment) return;
-      editingId = draft ? draft.id : null;
       setActiveTab("comments");
-      setRailOpen(true);
-      renderTray();
-      focusTarget(comment);
+      if (draft) {
+        editingId = draft.id;
+        setRailOpen(true);
+        renderTray();
+        focusTarget(comment);
+      } else {
+        if (window.innerWidth < 1280) setRailOpen(true);
+        openThreadAt(comment);
+      }
     });
     markerLayer.appendChild(marker);
     markerByBlock.set(block, marker);
@@ -746,36 +769,42 @@
   // is the direct entry point, avoiding duplicate chrome around the plan.
   const paintChips = () => {
     const counts = chipCounts();
-    const sentBlocks = new Set(
-      sent.map((comment) => comment.target.blockId).filter(Boolean),
-    );
+    const sentBlocks = new Map();
+    for (const comment of sent) {
+      if (!comment.target.blockId) continue;
+      sentBlocks.set(comment.target.blockId, outcomeFor(comment));
+    }
     for (const block of blocks) {
       const id = block.getAttribute("data-block-id");
       const pending = counts.get(id) || 0;
+      const outcome = sentBlocks.get(id);
       if (pending > 0) {
         block.setAttribute("data-review-annotated", String(pending));
         block.setAttribute("data-review-chip-tone", "draft");
-      } else if (sentBlocks.has(id)) {
-        block.setAttribute("data-review-annotated", "✓");
-        block.setAttribute("data-review-chip-tone", "sent");
+      } else if (outcome) {
+        block.setAttribute(
+          "data-review-annotated",
+          outcome.key === "question" ? "!" : "✓",
+        );
+        block.setAttribute("data-review-chip-tone", outcome.key);
       } else {
         block.removeAttribute("data-review-annotated");
         block.removeAttribute("data-review-chip-tone");
       }
       const marker = markerFor(block);
-      const hasComment = pending > 0 || sentBlocks.has(id);
+      const hasComment = pending > 0 || Boolean(outcome);
       marker.hidden = !hasComment;
       if (hasComment) marker.setAttribute("data-review-marker-active", "");
       else marker.removeAttribute("data-review-marker-active");
       marker.setAttribute(
         "data-review-marker-tone",
-        pending > 0 ? "draft" : "sent",
+        pending > 0 ? "draft" : outcome?.key || "sent",
       );
       marker.setAttribute(
         "aria-label",
         pending > 0
           ? `Edit ${pending} comment${pending === 1 ? "" : "s"} on ${labelFor(block)}`
-          : `Open the sent comment on ${labelFor(block)}`,
+          : `Open the ${outcome?.label || "sent"} thread on ${labelFor(block)}`,
       );
       marker.setAttribute("data-review-marker-count", String(pending));
     }
@@ -931,6 +960,52 @@
     }).format(new Date(time));
   };
 
+  const THREAD_OUTCOMES = [
+    {
+      key: "changed",
+      label: "Changed",
+      reply:
+        "I revised this part of the plan to address your comment. The highlighted source is the change to review.",
+    },
+    {
+      key: "question",
+      label: "Needs your answer",
+      reply:
+        "I need one decision before I can revise this safely. Which direction should the plan take?",
+    },
+    {
+      key: "declined",
+      label: "Outside this plan",
+      reply:
+        "This asks for work beyond revising this plan, so I left the plan unchanged and kept the request in this thread.",
+    },
+  ];
+
+  // Until the agent round-trip owns response payloads, sent comments receive
+  // deterministic simulated outcomes in reading order. This makes every
+  // adopted thread state genuinely operable without presenting demo prose as
+  // an agent-authored result.
+  const outcomeFor = (comment) => {
+    const index = Math.max(
+      0,
+      sent.findIndex((item) => item.id === comment.id),
+    );
+    return THREAD_OUTCOMES[index % THREAD_OUTCOMES.length];
+  };
+
+  const outcomeCounts = () => {
+    const counts = { changed: 0, question: 0, declined: 0 };
+    for (const comment of sent) {
+      counts[outcomeFor(comment).key] += 1;
+    }
+    return counts;
+  };
+
+  const needsAnswerCount = () => outcomeCounts().question;
+
+  const shortEcho = (body, limit = 88) =>
+    body.length <= limit ? body : body.slice(0, limit - 1).trimEnd() + "…";
+
   const openDeleteDialog = (comment) => {
     deleteCandidateId = comment.id;
     deleteDescription.textContent =
@@ -1028,24 +1103,165 @@
     return row;
   };
 
+  const openThreadAt = (comment) => {
+    expandedThreadIds.add(comment.id);
+    editingId = null;
+    setRailOpen(false);
+    renderTray();
+    requestAnimationFrame(() => {
+      focusTarget(comment);
+      positionThreadCards();
+    });
+  };
+
+  const sendThreadReply = (comment, field) => {
+    const body = field.value.trim();
+    if (body === "") return;
+    const createdAt = new Date().toISOString();
+    const existing = threadReplies[comment.id] || [];
+    threadReplies[comment.id] = existing.concat([
+      { role: "user", body, createdAt },
+      {
+        role: "agent",
+        body:
+          "Thanks — this simulated turn shows how the anchored conversation grows. " +
+          "A live agent reply is not connected yet.",
+        createdAt: new Date(Date.now() + 1).toISOString(),
+      },
+    ]);
+    expandedThreadIds.add(comment.id);
+    writeLocalState();
+    announce("Reply added to this comment thread.");
+    renderTray();
+  };
+
+  const conversationNodes = (comment) => {
+    const outcome = outcomeFor(comment);
+    const nodes = [
+      el("div", { "data-review-thread-turn": "user" }, [
+        el("div", { "data-review-turn-meta": true }, [
+          el("strong", { text: "You" }),
+          el("time", {
+            datetime: comment.createdAt,
+            text: relativeCommentTime(comment.createdAt),
+          }),
+        ]),
+        el("p", { text: comment.body }),
+      ]),
+      el("div", { "data-review-thread-turn": "agent" }, [
+        el("div", { "data-review-turn-meta": true }, [
+          el("strong", { text: "Agent" }),
+          el("span", { "data-review-simulated": true, text: "Simulated" }),
+        ]),
+        el("p", { text: outcome.reply }),
+      ]),
+    ];
+
+    if (outcome.key === "changed") {
+      const seeChange = el("button", {
+        type: "button",
+        "data-review-see-change": true,
+        text: "See the change",
+      });
+      seeChange.addEventListener("click", () => focusTarget(comment));
+      nodes.push(seeChange);
+    }
+
+    for (const message of threadReplies[comment.id] || []) {
+      nodes.push(
+        el("div", { "data-review-thread-turn": message.role }, [
+          el("div", { "data-review-turn-meta": true }, [
+            el("strong", {
+              text: message.role === "user" ? "You" : "Agent",
+            }),
+            message.role === "agent"
+              ? el("span", {
+                  "data-review-simulated": true,
+                  text: "Simulated",
+                })
+              : el("time", {
+                  datetime: message.createdAt,
+                  text: relativeCommentTime(message.createdAt),
+                }),
+          ]),
+          el("p", { text: message.body }),
+        ]),
+      );
+    }
+
+    const field = el("textarea", {
+      "data-review-thread-reply": true,
+      rows: "3",
+      maxlength: String(BODY_LIMIT),
+      placeholder:
+        outcome.key === "question"
+          ? "Answer the agent…"
+          : "Reply to the agent…",
+      "aria-label":
+        outcome.key === "question"
+          ? "Your answer on this comment"
+          : "Reply on this comment",
+    });
+    const sendReply = el("button", {
+      type: "button",
+      "data-review-thread-reply-send": true,
+      disabled: true,
+      text: outcome.key === "question" ? "Send answer" : "Reply",
+    });
+    const syncReply = () => {
+      sendReply.disabled = field.value.trim() === "";
+    };
+    field.addEventListener("input", syncReply);
+    field.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        sendThreadReply(comment, field);
+      }
+    });
+    sendReply.addEventListener("click", () => sendThreadReply(comment, field));
+    nodes.push(
+      el("div", { "data-review-thread-reply-box": true }, [
+        el("label", {
+          text: outcome.key === "question" ? "Your answer" : "Reply",
+        }),
+        field,
+        sendReply,
+      ]),
+    );
+    return nodes;
+  };
+
   const sentRow = (comment) => {
+    const outcome = outcomeFor(comment);
     const jump = el("button", {
       type: "button",
       "data-review-row-target": true,
       text: slideTitleFor(comment.target),
-      title: "Jump to this target",
+      title: "Jump to and expand this thread",
     });
-    jump.addEventListener("click", () => focusTarget(comment));
-    return el("li", { "data-review-row": true, "data-review-sent-row": true }, [
+    jump.addEventListener("click", () => openThreadAt(comment));
+    const children = [
       el("div", { "data-review-row-head": true }, [
         jump,
         el("span", {
-          "data-review-comment-state": "sent",
-          text: "Sent",
+          "data-review-outcome-state": outcome.key,
+          text: outcome.label,
         }),
       ]),
-      el("p", { "data-review-row-body": true, text: comment.body }),
-    ]);
+      el("p", {
+        "data-review-row-body": true,
+        text: shortEcho(comment.body),
+      }),
+    ];
+    return el(
+      "li",
+      {
+        "data-review-row": true,
+        "data-review-sent-row": true,
+        "data-review-outcome": outcome.key,
+      },
+      children,
+    );
   };
 
   const threadCard = ({ comment, state }) => {
@@ -1067,6 +1283,56 @@
         text: state === "staged" ? "Staged" : "Sent",
       }),
     ]);
+    if (state === "sent") {
+      const outcome = outcomeFor(comment);
+      const expanded = expandedThreadIds.has(comment.id);
+      const summary = el(
+        "button",
+        {
+          type: "button",
+          "data-review-thread-summary": true,
+          "aria-expanded": expanded ? "true" : "false",
+          "aria-label":
+            (expanded ? "Collapse" : "Open") +
+            " " +
+            outcome.label +
+            " thread: " +
+            shortEcho(comment.body),
+        },
+        [
+          el("span", {
+            "data-review-outcome-state": outcome.key,
+            text: outcome.label,
+          }),
+          el("span", {
+            "data-review-thread-echo": true,
+            text: shortEcho(comment.body),
+          }),
+          el("span", { "data-review-simulated": true, text: "Simulated" }),
+        ],
+      );
+      summary.addEventListener("click", () => {
+        if (expanded) expandedThreadIds.delete(comment.id);
+        else expandedThreadIds.add(comment.id);
+        renderTray();
+        requestAnimationFrame(() => {
+          threadLayer
+            .querySelector(
+              '[data-review-comment-id="' +
+                comment.id +
+                '"] [data-review-thread-summary]',
+            )
+            ?.focus();
+        });
+      });
+      card.appendChild(summary);
+      if (expanded) {
+        card.setAttribute("data-review-thread-expanded", "");
+        card.append(...conversationNodes(comment));
+      }
+      return card;
+    }
+
     card.appendChild(head);
 
     if (isEditing) {
@@ -1213,6 +1479,9 @@
   };
 
   const renderThreads = () => {
+    document
+      .querySelectorAll("[data-review-thread-inline]")
+      .forEach((card) => card.remove());
     const entries = threadEntries().sort((left, right) => {
       const leftTop =
         blockForTarget(left.comment.target)?.getBoundingClientRect().top ?? 0;
@@ -1220,28 +1489,106 @@
         blockForTarget(right.comment.target)?.getBoundingClientRect().top ?? 0;
       return leftTop - rightTop;
     });
-    threadLayer.replaceChildren(...entries.map(threadCard));
+    const cards = entries.map(threadCard);
+    threadLayer.replaceChildren(...cards);
+    if (window.innerWidth < 1280) {
+      for (const card of cards) {
+        const id = card.getAttribute("data-review-comment-id");
+        if (!id || !expandedThreadIds.has(id)) continue;
+        const comment = sent.find((candidate) => candidate.id === id);
+        const block = comment ? blockForTarget(comment.target) : null;
+        if (!block) continue;
+        const anchor =
+          block.tagName === "TR"
+            ? block.closest("[data-table-scroll-container]") || block
+            : block;
+        card.setAttribute("data-review-thread-inline", "");
+        card.hidden = false;
+        card.removeAttribute("style");
+        anchor.after(card);
+      }
+    }
     positionThreadCards();
+  };
+
+  const renderSentIndex = () => {
+    const counts = outcomeCounts();
+    responseSummary.textContent =
+      "Latest round · " +
+      counts.changed +
+      " changed · " +
+      counts.question +
+      " needs your answer · " +
+      counts.declined +
+      " outside this plan";
+    const groups = [
+      { key: "question", label: "Needs your answer" },
+      { key: "changed", label: "Changed" },
+      { key: "declined", label: "Outside this plan" },
+    ];
+    sentList.replaceChildren(
+      ...groups
+        .map(({ key, label }) => {
+          const comments = sent.filter(
+            (comment) => outcomeFor(comment).key === key,
+          );
+          if (comments.length === 0) return null;
+          return el("section", { "data-review-outcome-group": key }, [
+            el("h3", { text: label }),
+            el("ol", {}, comments.map(sentRow)),
+          ]);
+        })
+        .filter(Boolean),
+    );
   };
 
   const renderTray = () => {
     draftList.replaceChildren(...drafts.map(draftRow));
     emptyNote.hidden = drafts.length > 0;
     const pending = drafts.length;
+    const needs = needsAnswerCount();
     countLabel.textContent =
-      pending === 0 ? "0" : pending + (pending === 1 ? " pending" : " pending");
-    toggleCount.textContent = String(pending);
+      pending > 0
+        ? pending + " pending"
+        : needs > 0
+          ? needs + " needs your answer"
+          : "No action needed";
+    toggleCount.textContent = needs > 0 ? String(needs) : "";
     toggle.setAttribute(
       "data-review-has-pending",
-      pending > 0 ? "true" : "false",
+      needs > 0 ? "true" : "false",
+    );
+    toggle.setAttribute("data-review-needs-answer", String(needs));
+    toggle.setAttribute(
+      "aria-label",
+      (railIsOpen() ? "Close" : "Open") +
+        " comments sidebar" +
+        (needs > 0 ? ", " + needs + " needs your answer" : ""),
     );
     sendButton.disabled = pending === 0;
     sentGroup.hidden = sent.length === 0;
-    sentList.replaceChildren(...sent.map(sentRow));
+    renderSentIndex();
+    renderPlanChat();
+    syncPlanChatValidity();
     paintChips();
     paintTargetHighlights();
     renderThreads();
   };
+
+  document.addEventListener("pointerdown", (event) => {
+    if (expandedThreadIds.size === 0) return;
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      (target.closest("[data-review-thread-card]") ||
+        target.closest("[data-review-row]") ||
+        target.closest("[data-review-marker]"))
+    ) {
+      return;
+    }
+    expandedThreadIds.clear();
+    renderTray();
+  });
 
   deleteCancel.addEventListener("click", () => deleteDialog.close());
   deleteConfirm.addEventListener("click", async () => {
@@ -1595,28 +1942,86 @@
     }, 0);
   });
 
-  // ---------------------------------------------------------- whole-plan note
+  // --------------------------------------------------------- plan-wide chat
 
-  const saveAgentNote = async () => {
+  const renderPlanChat = () => {
+    if (planChatMessages.length === 0) {
+      planChatList.replaceChildren(
+        el("li", {
+          "data-review-chat-empty": true,
+          text: "Ask about the plan as a whole. Anchored comment threads stay beside their source.",
+        }),
+      );
+      return;
+    }
+    planChatList.replaceChildren(
+      ...planChatMessages.map((message) =>
+        el("li", { "data-review-chat-message": message.role }, [
+          el("div", { "data-review-turn-meta": true }, [
+            el("strong", {
+              text: message.role === "user" ? "You" : "Agent",
+            }),
+            message.role === "agent"
+              ? el("span", {
+                  "data-review-simulated": true,
+                  text: "Simulated",
+                })
+              : el("time", {
+                  datetime: message.createdAt,
+                  text: relativeCommentTime(message.createdAt),
+                }),
+          ]),
+          el("p", { text: message.body }),
+        ]),
+      ),
+    );
+  };
+
+  const syncPlanChatValidity = () => {
+    agentSave.disabled = agentInput.value.trim() === "";
+  };
+
+  const sendPlanChat = async () => {
     const body = agentInput.value.trim();
     if (body === "") return;
-    const target =
-      attachInput.checked && pendingSelection
-        ? pendingSelection
-        : { type: "document" };
-    addDraft(target, body);
+    if (attachInput.checked && pendingSelection) {
+      addDraft(pendingSelection, body);
+      announce("Draft saved on " + describeTarget(pendingSelection) + ".");
+      attachInput.checked = false;
+      agentInput.value = "";
+      activeDraft = "";
+      syncPlanChatValidity();
+      renderTray();
+      await save();
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    planChatMessages = planChatMessages.concat([
+      { role: "user", body, createdAt },
+      {
+        role: "agent",
+        body:
+          "This simulated whole-plan reply shows the separate chat scope. " +
+          "A live plan-wide agent round-trip is not connected yet.",
+        createdAt: new Date(Date.now() + 1).toISOString(),
+      },
+    ]);
     agentInput.value = "";
     activeDraft = "";
     attachInput.checked = false;
-    announce("Draft saved on " + describeTarget(target) + ".");
-    renderTray();
+    syncPlanChatValidity();
+    writeLocalState();
+    renderPlanChat();
+    announce("Plan-wide chat message sent.");
     await save();
   };
 
-  agentSave.addEventListener("click", saveAgentNote);
+  agentSave.addEventListener("click", sendPlanChat);
   let activeDraftTimer = null;
   agentInput.addEventListener("input", () => {
     activeDraft = agentInput.value;
+    syncPlanChatValidity();
     writeLocalState();
     if (activeDraftTimer !== null) window.clearTimeout(activeDraftTimer);
     activeDraftTimer = window.setTimeout(() => {
@@ -1627,7 +2032,7 @@
   agentInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
-      saveAgentNote();
+      sendPlanChat();
     }
   });
 
@@ -1640,10 +2045,7 @@
     agentState.textContent = text;
     agentState.setAttribute("data-tone", tone);
     toggle.setAttribute("data-review-agent-tone", tone);
-    toggle.title =
-      tone === "idle" ? "Open comments sidebar (Alt+C)" : "Agent: " + text;
-    if (drafts.length === 0)
-      toggleCount.textContent = tone === "idle" ? "0" : "·";
+    toggle.title = "Open comments sidebar (Alt+C)";
   };
 
   // One intentional send of everything pending, with no confirmation dialog:
@@ -1678,7 +2080,8 @@
         answer.packageId +
         ".";
       announce("Feedback sent to the agent.");
-      setActiveTab("chat");
+      setActiveTab("comments");
+      setRailOpen(false);
       startProgress();
     } catch (error) {
       sendNote.textContent = describeError(error);
@@ -1807,7 +2210,7 @@
     if (!compose.hidden && composeTarget) positionCompose(composeTarget);
     affordance.hidden = true;
     syncFloatingMode();
-    positionThreadCards();
+    renderThreads();
     positionMarkers();
   });
   window.addEventListener(
@@ -1846,6 +2249,8 @@
         carried.drafts.filter((draft) => !known.has(draft.id)),
       );
       sent = answer.sent || [];
+      threadReplies = carried.threadReplies;
+      planChatMessages = carried.planChatMessages;
       activeDraft =
         carried.activeDraft !== ""
           ? carried.activeDraft
@@ -1864,6 +2269,8 @@
       const carried = readLocalState();
       drafts = carried.drafts;
       sent = carried.sent;
+      threadReplies = carried.threadReplies;
+      planChatMessages = carried.planChatMessages;
       activeDraft = carried.activeDraft;
       agentInput.value = activeDraft;
       renderTray();

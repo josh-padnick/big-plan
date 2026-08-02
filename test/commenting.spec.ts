@@ -40,7 +40,7 @@ test("should comment on a block and a passage, then revise before sending", asyn
     await expect(page.locator("[data-review-thread-card]")).toBeVisible();
     await expect(rows).toHaveCount(1);
     await expect(page.locator("[data-review-annotated]")).toHaveCount(1);
-    await expect(page.locator("[data-review-toggle-count]")).toHaveText("1");
+    await expect(page.locator("[data-review-toggle-count]")).toBeHidden();
   });
 
   await test.step("highlighting a passage offers to comment on the selection", async () => {
@@ -100,10 +100,10 @@ test("should comment on a block and a passage, then revise before sending", asyn
     await expect(page.locator("[data-review-annotated]")).toHaveCount(1);
   });
 
-  await test.step("the tray hides on demand and keeps the pending count", async () => {
+  await test.step("the tray hides on demand without making drafts a persistent signal", async () => {
     await page.locator("[data-review-hide]").click();
     await expect(tray).toBeHidden();
-    await expect(page.locator("[data-review-toggle-count]")).toHaveText("1");
+    await expect(page.locator("[data-review-toggle-count]")).toBeHidden();
     await page.locator("[data-review-toggle]").click();
     await expect(tray).toBeVisible();
   });

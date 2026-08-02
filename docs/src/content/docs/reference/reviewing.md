@@ -20,7 +20,7 @@ A rendered plan carries a stable address for every commentable unit: each headin
 - **Comment on a block.** Hover or focus a block and press the **Comment** control that appears at its right edge.
 - **Comment on a passage.** Highlight any span of text - including a whole paragraph - and press the same **Comment** control. The highlight stays on the source, so the editor does not repeat it.
 - **Comment on lines.** Highlighting inside a code figure produces a line-range comment, the same shape an authored `Annotation` uses.
-- **Comment on the whole plan.** Type in the **Chat** panel's compose field; with no selection attached, the note applies to the plan as a whole.
+- **Discuss the whole plan.** Use the separate **Chat** tab for questions that are not anchored to one passage.
 
 Keyboard users reach the same targets without a mouse: `Alt+↓` and `Alt+↑` move a review cursor block by block and announce each one, and `Alt+C` opens a comment on the block under the cursor.
 Inside a compose card, `Escape` cancels and `Cmd/Ctrl+Enter` saves.
@@ -31,7 +31,8 @@ On desktop, the editor and saved comment card float to the right of their highli
 Long comments stay compact behind an **… more** control.
 Below 1280 px, the editor moves into the plan flow instead, so it never covers the text being reviewed.
 
-The sticky **Comments** toggle shows the pending count and opens the complete lifecycle in the tray.
+The sticky **Comments** toggle opens the complete lifecycle in the tray.
+After the agent responds, it shows a count only when a thread **Needs your answer**; completed activity does not become a permanent notification.
 On desktop the reading column makes room for the tray.
 Below 1280 px the tray becomes an overlay drawer, so opening and closing it cannot move the place you were reading.
 
@@ -52,9 +53,15 @@ Sending writes two files beside the plan, under `.big-plan/feedback/`:
 - A versioned JSON package holding each comment, its target, and the session it belongs to.
 - A short Markdown brief the agent can read directly.
 
-Sent comments move to a **Sent** group, remain beside their highlighted source, and the **Chat** tab begins reporting runtime progress.
+Sent comments remain anchored beside their highlighted source.
+Each response collapses to a one-line outcome chip: **Changed**, **Needs your answer**, or **Outside this plan**.
+Press a chip to expand the original comment, agent response, and reply box in place; press elsewhere to collapse it again.
+At narrow widths, an expanded thread moves into the document flow below its source.
+The Comments tray groups the same outcomes as a compact lifecycle index, and each row jumps back to the expanded anchored thread.
+
 Package delivery is real.
-Until an agent round-trip is connected, the response-state examples in that tab are explicitly labelled **Simulated**.
+The current agent responses, per-thread replies, and plan-wide Chat replies are local simulations and are labelled **Simulated** wherever they appear.
+They make the intended conversation model usable while the live agent round-trip is not connected.
 
 ## What the agent may do with it
 
