@@ -93,34 +93,100 @@ const parseConfig = (source) => {
   return config;
 };
 
-/** Expands one config into the logical keys its PNG filenames represent. */
-const captureKeys = (config) =>
-  config.documents.flatMap((document) =>
-    document.captures.flatMap((capture) =>
-      capture.themes.flatMap((theme) =>
-        capture.viewports.map((viewport) =>
-          JSON.stringify([document.name, capture.name, viewport.name, theme]),
-        ),
-      ),
-    ),
-  );
+/** Produces stable JSON while preserving order where configuration order matters. */
+const canonicalize = (value) => {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonicalize(entry)]),
+    );
+  }
+  return value;
+};
 
-/** Prevents a branch from silently dropping capture keys present on its base. */
+/** Indexes the complete rendering contract for each named capture. */
+const captureDefinitions = (config) => {
+  const definitions = new Map();
+  for (const document of config.documents) {
+    for (const capture of document.captures) {
+      const key = JSON.stringify([document.name, capture.name]);
+      if (definitions.has(key)) {
+        throw new Error(
+          `Style screenshot config contains duplicate capture key ${key}.`,
+        );
+      }
+      const { themes, viewports, ...orderedCapture } = capture;
+      const normalizedViewports = viewports
+        .map((viewport) => canonicalize(viewport))
+        .sort((left, right) =>
+          JSON.stringify(left).localeCompare(JSON.stringify(right)),
+        );
+      definitions.set(
+        key,
+        JSON.stringify(
+          canonicalize({
+            documentSource: document.source,
+            capture: {
+              ...orderedCapture,
+              themes: [...themes].sort(),
+              viewports: normalizedViewports,
+            },
+          }),
+        ),
+      );
+    }
+  }
+  return definitions;
+};
+
+/** Prevents a branch from reinterpreting capture keys present on its base. */
 const assertCaptureCoverage = ({ config, baselineConfig }) => {
   if (baselineConfig === null) {
     return;
   }
-  const activeCaptureKeys = new Set(captureKeys(config));
-  const requiredCaptureKeys = new Set(captureKeys(baselineConfig));
-  const missingCaptureCount = [...requiredCaptureKeys].filter(
-    (key) => !activeCaptureKeys.has(key),
+  const activeDefinitions = captureDefinitions(config);
+  const baselineDefinitions = captureDefinitions(baselineConfig);
+  const changedCaptureCount = [...baselineDefinitions].filter(
+    ([key, definition]) => activeDefinitions.get(key) !== definition,
   ).length;
-  if (missingCaptureCount > 0) {
+  if (changedCaptureCount > 0) {
     throw new Error(
-      `Style screenshot config removes ${missingCaptureCount} merge-base capture key(s); coverage may be added but not narrowed.`,
+      `Style screenshot config changes or removes ${changedCaptureCount} merge-base capture definition(s); existing definitions are immutable and additions require new capture keys.`,
     );
   }
 };
+
+/** Enforces additive capture coverage across every configuration revision. */
+const assertCaptureCoverageHistory = (configs) => {
+  let establishedConfig = null;
+  for (const config of configs) {
+    if (config === null) {
+      if (establishedConfig !== null) {
+        throw new Error(
+          "Style screenshot config cannot be removed after capture coverage is established.",
+        );
+      }
+      continue;
+    }
+    assertCaptureCoverage({
+      config,
+      baselineConfig: establishedConfig,
+    });
+    establishedConfig = config;
+  }
+};
+
+/** Includes document sources in relevance without duplicating config entries. */
+const fixturePathsForConfig = (config) => [
+  ...config.fixturePaths,
+  ...(config.documents ?? [])
+    .map((document) => document.source)
+    .filter((source) => typeof source === "string"),
+];
 
 /** Reads the active screenshot configuration from the harness checkout. */
 const readConfig = async (configPath) =>
@@ -550,18 +616,13 @@ export const verifyHistory = async ({
       readConfigAtCommit({ repoRoot, commit, configRepoPath }),
     ),
   );
-  assertCaptureCoverage({
-    config,
-    baselineConfig: historicalConfigs[0],
-  });
+  assertCaptureCoverageHistory([...historicalConfigs, config]);
   const relevanceConfigs = [
     RELEVANCE_FLOOR,
     ...historicalConfigs.filter((candidate) => candidate !== null),
     config,
   ];
-  const fixturePaths = new Set(
-    relevanceConfigs.flatMap((candidate) => candidate.fixturePaths),
-  );
+  const fixturePaths = new Set(relevanceConfigs.flatMap(fixturePathsForConfig));
   const patterns = [
     ...new Set(
       relevanceConfigs.flatMap((candidate) => candidate.stylingFilePatterns),
@@ -596,7 +657,7 @@ export const verifyHistory = async ({
           })
         : await run({
             command: "git",
-            args: ["diff", "--name-only", parent, commit],
+            args: ["diff", "--name-only", "--no-renames", parent, commit],
             cwd: repoRoot,
           })
     )

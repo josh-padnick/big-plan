@@ -532,6 +532,100 @@ test("should retain relevance from every config revision", async () => {
   }
 });
 
+test("should derive fixture relevance from every document source", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository({
+    documents: [
+      {
+        name: "derived-fixture",
+        source: "derived-fixture.txt",
+        captures: [
+          {
+            name: "document",
+            selector: "article",
+            themes: ["light"],
+            viewports: [{ name: "desktop", width: 1440, height: 900 }],
+            actions: [],
+          },
+        ],
+      },
+    ],
+  });
+  try {
+    await writeFile(
+      join(repoRoot, "derived-fixture.txt"),
+      "initial fixture\n",
+      "utf8",
+    );
+    await commit({
+      repoRoot,
+      subject: "test: establish derived fixture [visual:empty]",
+    });
+    await writeFile(
+      join(repoRoot, "derived-fixture.txt"),
+      "changed fixture\n",
+      "utf8",
+    );
+    await commit({ repoRoot, subject: "test: omit the visual contract" });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({
+          repoRoot,
+          name: "derived-fixture-relevance",
+        }),
+      }),
+      /styling commits must end with \[visual:empty\] or \[visual:approved\]/,
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should retain relevance when a covered source is renamed", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository();
+  try {
+    const componentDirectory = join(repoRoot, "src", "components", "example");
+    const coveredPath = join(componentDirectory, "view.tsx");
+    await mkdir(componentDirectory, { recursive: true });
+    await writeFile(coveredPath, "export const view = true;\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "test: establish covered view [visual:empty]",
+    });
+    await git({
+      repoRoot,
+      arguments_: ["config", "diff.renames", "true"],
+    });
+    await git({
+      repoRoot,
+      arguments_: [
+        "mv",
+        "src/components/example/view.tsx",
+        "src/components/example/presenter.tsx",
+      ],
+    });
+    await commit({ repoRoot, subject: "test: omit the visual contract" });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({
+          repoRoot,
+          name: "renamed-source-relevance",
+        }),
+      }),
+      /styling commits must end with \[visual:empty\] or \[visual:approved\]/,
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test("should classify every direct pixel-producing input as relevant", async () => {
   const { repoRoot, configPath, base } = await createMinimalRepository();
   try {
@@ -664,10 +758,15 @@ test("should validate final HEAD capture completeness unconditionally", async ()
           ...config,
           documents: [
             {
+              ...config.documents[0],
               captures: [
+                config.documents[0].captures[0],
                 {
-                  themes: ["light", "dark"],
+                  name: "additional",
+                  selector: "article",
+                  themes: ["light"],
                   viewports: [{}],
+                  actions: [],
                 },
               ],
             },
@@ -755,7 +854,7 @@ test("should reject empty capture configuration dimensions", async () => {
   }
 });
 
-test("should reject capture coverage narrowed within the verified range", async () => {
+test("should reject changed merge-base capture definitions", async () => {
   const expandedDocuments = [
     {
       name: "fixture",
@@ -764,14 +863,24 @@ test("should reject capture coverage narrowed within the verified range", async 
         {
           name: "first",
           selector: "article",
-          themes: ["light"],
-          viewports: [{ name: "desktop", width: 1440, height: 900 }],
-          actions: [],
+          themes: ["light", "dark"],
+          viewports: [
+            {
+              name: "desktop",
+              width: 1440,
+              height: 900,
+              deviceScaleFactor: 1,
+            },
+          ],
+          actions: [
+            { type: "click", selector: "[data-first]" },
+            { type: "click", selector: "[data-second]" },
+          ],
         },
         {
           name: "second",
           selector: "header",
-          themes: ["light", "dark"],
+          themes: ["light"],
           viewports: [{ name: "phone", width: 390, height: 844 }],
           actions: [],
         },
@@ -782,23 +891,119 @@ test("should reject capture coverage narrowed within the verified range", async 
     documents: expandedDocuments,
   });
   try {
-    const narrowedConfig = {
-      ...config,
-      documents: [
+    const mutations = [
+      {
+        name: "document-source",
+        apply: (documents) => {
+          documents[0].source = "replacement-fixture.txt";
+        },
+      },
+      {
+        name: "selector",
+        apply: (documents) => {
+          documents[0].captures[0].selector = "header";
+        },
+      },
+      {
+        name: "ordered-actions",
+        apply: (documents) => {
+          documents[0].captures[0].actions.reverse();
+        },
+      },
+      {
+        name: "themes",
+        apply: (documents) => {
+          documents[0].captures[0].themes = ["light"];
+        },
+      },
+      {
+        name: "complete-viewport",
+        apply: (documents) => {
+          documents[0].captures[0].viewports[0].deviceScaleFactor = 2;
+        },
+      },
+      {
+        name: "removed-capture",
+        apply: (documents) => {
+          documents[0].captures = [documents[0].captures[0]];
+        },
+      },
+    ];
+
+    for (const mutation of mutations) {
+      await git({
+        repoRoot,
+        arguments_: ["reset", "--hard", base],
+      });
+      const documents = structuredClone(expandedDocuments);
+      mutation.apply(documents);
+      await writeFile(
+        configPath,
+        `${JSON.stringify({ ...config, documents }, null, 2)}\n`,
+        "utf8",
+      );
+      await commit({
+        repoRoot,
+        subject: `test: change ${mutation.name} [visual:empty]`,
+      });
+
+      await assert.rejects(
+        verifyHistory({
+          repoRoot,
+          base,
+          configPath,
+          artifactRoot: artifactPath({
+            repoRoot,
+            name: `changed-capture-${mutation.name}`,
+          }),
+        }),
+        /existing definitions are immutable and additions require new capture keys/,
+      );
+    }
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should reject transient capture definition changes", async () => {
+  const documents = [
+    {
+      name: "fixture",
+      source: "fixture.txt",
+      captures: [
         {
-          ...expandedDocuments[0],
-          captures: [expandedDocuments[0].captures[0]],
+          name: "document",
+          selector: "article",
+          themes: ["light"],
+          viewports: [{ name: "desktop", width: 1440, height: 900 }],
+          actions: [],
         },
       ],
-    };
+    },
+  ];
+  const { repoRoot, configPath, config, base } = await createMinimalRepository({
+    documents,
+  });
+  try {
+    const changedDocuments = structuredClone(documents);
+    changedDocuments[0].captures[0].selector = "header";
     await writeFile(
       configPath,
-      `${JSON.stringify(narrowedConfig, null, 2)}\n`,
+      `${JSON.stringify(
+        { ...config, documents: changedDocuments },
+        null,
+        2,
+      )}\n`,
       "utf8",
     );
     await commit({
       repoRoot,
-      subject: "test: narrow capture coverage [visual:empty]",
+      subject: "test: transiently change capture [visual:empty]",
+    });
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    await commit({
+      repoRoot,
+      subject: "test: restore capture definition [visual:empty]",
     });
 
     await assert.rejects(
@@ -808,11 +1013,44 @@ test("should reject capture coverage narrowed within the verified range", async 
         configPath,
         artifactRoot: artifactPath({
           repoRoot,
-          name: "narrowed-capture-coverage",
+          name: "transient-capture-definition",
         }),
       }),
-      /coverage may be added but not narrowed/,
+      /existing definitions are immutable and additions require new capture keys/,
     );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should allow initial capture configuration after the merge base", async () => {
+  const { repoRoot, configPath, config } = await createMinimalRepository();
+  try {
+    await git({
+      repoRoot,
+      arguments_: ["rm", ".style-snapshots/config.json"],
+    });
+    const base = await commit({
+      repoRoot,
+      subject: "test: establish config-free merge base",
+    });
+    await mkdir(dirname(configPath), { recursive: true });
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    await commit({
+      repoRoot,
+      subject: "test: introduce capture config [visual:empty]",
+    });
+
+    const results = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "initial-capture-config",
+      }),
+    });
+    assert.equal(results.length, 1);
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
   }
