@@ -10,7 +10,7 @@ Big Plan makes reviewing agent plans a first-class experience.
 Big Plan is built around one question: **what is the best way to review a plan and reach agreement on it, before an agent acts?**
 
 An agent writes its plan as structured MDX, and Big Plan renders it into a rich local review document.
-The static authoring contract combines Markdown with validated components for decisions, code, schemas, file trees, and API contracts.
+The static authoring contract combines Markdown with validated components for decisions, code, reference data, schemas, file trees, and API contracts.
 The [features](docs/src/content/docs/intro/features.md) and [components](docs/src/content/docs/components/index.md) pages describe the capabilities that ship today.
 
 Big Plan focuses exclusively on that upfront moment of agreement - not code review, not project management.

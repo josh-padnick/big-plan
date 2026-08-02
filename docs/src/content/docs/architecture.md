@@ -49,7 +49,7 @@ The full contract lives in [Authoring plans](/for-agents/authoring-plans/) and [
 
 ## Each component supports both output modes
 
-[`ComplexDecision`](/components/complex-decision/), [`Callout`](/components/callout/), [`CodeDiff`](/components/code-diff/), [`CodeSnippet`](/components/code-snippet/), [`DatabaseTableSchema`](/components/database-table-schema/), [`FileTree`](/components/file-tree/), [`FileTreeDiff`](/components/file-tree-diff/), [`GraphqlOperation`](/components/graphql-operation/), [`GrpcMethod`](/components/grpc-method/), [`HttpEndpoint`](/components/http-endpoint/), and [`SimpleDecisionSet`](/components/simple-decision-set/) come from a closed, built-in registry.
+The [built-in components](/components/) come from a closed registry.
 When `compileMarkdownTree()` reaches a registered component, its definition validates the authored input and returns two things: plain validated data and a React presentation function closed over that data.
 The component is compiled once during that command invocation; the selected output mode determines what happens next:
 

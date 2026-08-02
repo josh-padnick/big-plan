@@ -10,7 +10,7 @@ Everything on this page is shipped and works today.
 - One reading column with warm, paper-like light and dark palettes.
 - A palette that follows your OS preference through CSS alone.
 - A sticky branding bar whose logo follows the active theme.
-- In-document `Maximize` controls for fenced code, code snippets and diffs, tree diffs, complex decisions, and database schemas, with Escape restoring the reading view.
+- In-document `Maximize` controls for fenced code, code snippets and diffs, tree diffs, complex decisions, data tables, and database schemas, with Escape restoring the reading view.
 
 ## Navigation
 
@@ -32,6 +32,7 @@ Everything on this page is shipped and works today.
 - `Callout` components for notes, tips, warnings, and dangers.
 - `CodeDiff` components with optional line numbers and change counts, a unified view, and scoped line annotations.
 - `CodeSnippet` components for excerpts with optional file identity, file-absolute line numbers, and scoped annotations.
+- `DataTable` components for reference datasets with sorting, optional search, selectable and reorderable columns, grouping, and text-fit controls.
 - `DatabaseTableSchema` components for one table's schema: a psql-style columns grid with key badges, foreign keys, indexes, checks, and titled verbatim-DDL bands.
 - `FileTree` components for plain hierarchies with optional per-entry notes.
 - `FileTreeDiff` components with entry-level change status, summaries, and a combined change tree.

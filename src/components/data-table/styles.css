@@ -1,0 +1,333 @@
+/* DataTable chrome and grid geometry: the header band, the three text-fit
+   modes, sort and drag affordances on the header row, the menu surface, and
+   the grid's maximized-state edge. Colocated with the component that emits
+   them; the shared figure-controls stylesheet owns the maximized panel.
+
+   FIT MODEL - the one idea the rest of this file serves.
+   A grid too wide for the reading column must give something up. `wrap` keeps
+   every character and spends vertical space; `truncate` keeps one line per row
+   and clamps the overflow; `scroll` keeps one line and pushes the remainder
+   past the right edge. The default is wrap, so a plan never grows a horizontal
+   scrollbar the author did not ask for. Per-column overrides win over the
+   table's mode, and the narrow breakpoint wins over both. */
+
+@layer components {
+  article [data-data-table] {
+    background: var(--diff-content-bg);
+  }
+  article .data-table-header {
+    background: var(--diff-header-bg);
+    border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0;
+  }
+  /* Inline code in a cell is content, not a chip: the prose chrome would make
+     every identifier a boxed pill and shred the row rhythm. */
+  article [data-data-table] code {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    font-size: 0.9em;
+  }
+
+  /* SIZING
+     A table sizes to its contents and reaches for the reading column's full
+     width only when the content needs it. Three narrow columns stretched to
+     the breakout width read as a layout accident, not a table, and the extra
+     whitespace between cells is real reading cost. `width: auto` lets the
+     table shrink-to-fit; `max-width: 100%` keeps it inside its container so
+     wide content still meets the fit rules below rather than the page. */
+  article .data-table-grid {
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+  article .data-table-grid th,
+  article .data-table-grid td {
+    padding: 0.35rem 0.6rem;
+    border-bottom: 1px solid var(--edge-c);
+    vertical-align: top;
+    text-align: left;
+  }
+  article .data-table-grid tbody:last-child tr:last-child td {
+    border-bottom: 0;
+  }
+  article .data-table-grid tbody tr:hover td {
+    background: var(--surface-c);
+  }
+  article .data-table-grid td[data-table-align="right"],
+  article .data-table-grid th[data-table-align="right"] {
+    text-align: right;
+  }
+  article .data-table-grid td[data-table-align="center"],
+  article .data-table-grid th[data-table-align="center"] {
+    text-align: center;
+  }
+  article .data-table-head {
+    background: transparent;
+    padding-top: 0.3rem;
+    padding-bottom: 0.3rem;
+    color: var(--color-muted);
+    font-size: 0.625rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    user-select: none;
+  }
+  article .data-table-head[data-table-sorted] {
+    color: var(--color-ink);
+  }
+
+  /* The whole header label is the sort control, so the hit target matches the
+     affordance instead of being a glyph beside it. */
+  article .data-table-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+  }
+  article .data-table-sort:hover {
+    color: var(--color-ink);
+  }
+  /* The button ships disabled, so without the viewer script the header reads
+     and behaves as a plain label: no pointer, no hover shift, no glyph. */
+  article .data-table-sort:disabled,
+  article .data-table-sort:disabled:hover {
+    cursor: default;
+    color: inherit;
+  }
+  article .data-table-sort-glyph svg {
+    width: 0.7rem;
+    height: 0.7rem;
+    opacity: 0;
+  }
+  article
+    [data-table-interactive]
+    .data-table-head[data-table-sorted]
+    .data-table-sort-glyph
+    svg,
+  article [data-table-interactive] thead:hover .data-table-sort-glyph svg,
+  article .data-table-sort:focus-visible .data-table-sort-glyph svg {
+    opacity: 1;
+  }
+
+  /* Reorderable headers advertise the drag; the drop target draws an accent
+     insertion edge. Both exist only once the script enables them. */
+  article [data-table-reorderable] .data-table-head {
+    cursor: grab;
+  }
+  article .data-table-head [data-lucide="grip-vertical"] {
+    width: 0.7rem;
+    height: 0.7rem;
+    margin-left: 0.25rem;
+    vertical-align: -0.12rem;
+    display: inline-block;
+    opacity: 0;
+  }
+  article [data-table-reorderable] thead:hover [data-lucide="grip-vertical"] {
+    opacity: 0.65;
+  }
+  article .data-table-head-drop-before {
+    box-shadow: inset 2px 0 0 var(--color-accent);
+  }
+  article .data-table-head-drop-after {
+    box-shadow: inset -2px 0 0 var(--color-accent);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    article .data-table-head [data-lucide="grip-vertical"],
+    article .data-table-sort-glyph svg {
+      transition: opacity 0.15s ease;
+    }
+  }
+
+  /* Fit modes. Wrap is the default; truncate clamps against a fixed layout;
+     only scroll is meant to move sideways. Wrap still keeps `auto` on the
+     container as a backstop, because a pathological grid must overflow inside
+     its own box rather than widening the page. */
+  article [data-table-fit="wrap"] .data-table-scroll {
+    overflow-x: auto;
+  }
+  article [data-table-fit="wrap"] .data-table-grid td {
+    white-space: normal;
+    overflow-wrap: break-word;
+  }
+  article [data-table-fit="truncate"] .data-table-grid {
+    table-layout: fixed;
+  }
+  article [data-table-fit="truncate"] .data-table-grid td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  article [data-table-fit="scroll"] .data-table-scroll {
+    overflow-x: auto;
+  }
+  article [data-table-fit="scroll"] .data-table-grid {
+    width: max-content;
+    min-width: 100%;
+  }
+  article [data-table-fit="scroll"] .data-table-grid td {
+    white-space: nowrap;
+  }
+  /* A column override wins over the table's mode in every direction. */
+  article .data-table-grid td[data-table-cell-fit="wrap"] {
+    white-space: normal;
+    overflow-wrap: break-word;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  article .data-table-grid td[data-table-cell-fit="truncate"] {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 18rem;
+  }
+  article .data-table-grid td[data-table-cell-fit="scroll"] {
+    white-space: nowrap;
+  }
+  /* On a narrow screen a horizontal scrollbar nested in a vertically
+     scrolling document is a trap, so wrapping wins whatever anyone chose.
+     Fixed layout is what makes that a guarantee rather than a hope: automatic
+     layout sizes columns by their min-content width, which four columns of
+     identifiers can push past any phone. `anywhere` is the wrap mode that
+     actually lowers min-content, so a long unbroken path yields instead of
+     widening the page. */
+  @media (width < 56rem) {
+    article [data-data-table] .data-table-scroll {
+      overflow-x: visible;
+    }
+    article [data-data-table] .data-table-grid {
+      width: 100%;
+      min-width: 0;
+      table-layout: fixed;
+    }
+    article [data-data-table] .data-table-grid th,
+    article [data-data-table] .data-table-grid td {
+      white-space: normal;
+      overflow: visible;
+      overflow-wrap: anywhere;
+      text-overflow: clip;
+      max-width: none;
+    }
+  }
+
+  /* A subheading row is a band across the grid, not another data row: it
+     carries the group's name at label weight and repeats nothing, because the
+     value that names the group has been lifted out of every row beneath it.
+     A band stays exactly as tall as its label needs. The generous separation
+     before each later group is whitespace under the preceding group's last
+     visible row, never padding inside the band, so adding air never fattens
+     the tinted strip or leaves a trailing gap after the final group. */
+  article .data-table-grid tbody tr[data-table-group-end] td {
+    border-bottom: 1px solid var(--edge-c);
+    padding-bottom: 2.5rem;
+  }
+  article .data-table-grid tbody tr[data-table-group-last] td {
+    border-bottom: 0;
+  }
+  article .data-table-group-row > th {
+    background: var(--surface-c);
+    border-bottom: 1px solid var(--edge-c);
+    padding: 0.3rem 0.6rem;
+    color: var(--color-ink);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  article .data-table-grid tbody[data-table-row-group][hidden] {
+    display: none;
+  }
+  article .data-table-group-row:hover > th {
+    background: var(--surface-c);
+  }
+  /* A grouped table indents its first column under the band so the hierarchy
+     is visible without a second border. */
+  article [data-table-grouped] .data-table-grid td[data-table-column="0"] {
+    padding-left: 1.15rem;
+  }
+
+  /* Menu and chrome surfaces mirror the schema figure so the two read as one
+     family rather than two products. */
+  article .data-table-menu-list {
+    background: var(--diff-header-bg);
+    box-shadow: 0 6px 18px rgb(12 10 8 / 0.18);
+  }
+  article .data-table-menu-list[hidden],
+  article .data-table-button[hidden],
+  article [data-table-fit-list][hidden],
+  article .data-table-filter[hidden],
+  article .data-table-empty[hidden] {
+    display: none;
+  }
+  article .data-table-menu-separator {
+    background: var(--color-edge);
+  }
+  article .data-table-menu-item[aria-checked="false"] [data-lucide="check"] {
+    visibility: hidden;
+  }
+  article .data-table-menu-item:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+  article .data-table-button[aria-pressed="true"] {
+    background: var(--color-edge);
+    color: var(--color-ink);
+  }
+  article .data-table-filter-input::-webkit-search-cancel-button {
+    appearance: none;
+  }
+
+  /* The maximized panel itself is owned by _shared/figure-controls; the grid
+     only says how its bottom edge behaves inside one. */
+  article [data-data-table][data-figure-maximized] .data-table-grid {
+    border-bottom: 1px solid var(--edge-c);
+  }
+  article
+    [data-data-table][data-figure-maximized]
+    .data-table-grid
+    tbody:last-child
+    tr:last-child
+    td {
+    border-bottom: 0;
+  }
+}
+
+/* Focus must outrank resting Tailwind utilities such as `border-edge-strong`
+   and `bg-transparent`. A dedicated late layer settles that cascade once
+   instead of escalating selectors or adding `!important`. */
+@layer control-focus {
+  /* Chrome focus uses one quiet visual language. Text input focus is visible
+     after either a pointer click or Tab because the caret is active; buttons
+     and menu items reserve the halo for keyboard focus. A low-opacity outer
+     halo avoids the thick double-ring effect of a strong border plus outline. */
+  article .data-table-filter-input:focus {
+    border-color: var(--accent-c);
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
+  }
+  article .data-table-button:focus-visible,
+  article .data-table-menu-item:focus-visible,
+  article .data-table-sort:focus-visible {
+    outline: none;
+    background: var(--edge-c);
+    color: var(--color-ink);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
+  }
+  article .data-table-sort:focus-visible {
+    border-radius: 0.2rem;
+  }
+}

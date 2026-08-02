@@ -2,19 +2,36 @@
 // a scroll-spy that marks the section being read with aria-current on its TOC
 // links (falling back to the overview links above the first section), hover
 // popovers that float [data-info-popover] disclosures beside their triggers,
-// collapse toggles for deck parts, slides, and sub-slides, and one maximize
-// behavior shared by every figure family. Plan content never contributes
-// script, and every affordance keeps a no-JS fallback.
+// collapse toggles for deck parts, slides, and sub-slides, DataTable sorting,
+// filtering, text fit, column layout and grouping, and one maximize behavior
+// shared by every figure family. Plan content never contributes script, and
+// every affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
 // sibling. Every collapse query here is a direct-child lookup relying on that
 // shape, so read those invariants before changing this or the deck transform.
 //
+// The DataTable leg reads the contract owned by components/data-table/view.tsx,
+// and the maximize leg the one owned by
+// components/_model/figure-controls/figure-controls.ts. This file is a string
+// template and cannot import either, so a change to those attribute spellings
+// changes the strings here too.
+//
+// The DataTable leg reads the contract owned by components/data-table/view.tsx:
+// [data-data-table] wraps one scroll container holding one table whose head
+// cells carry data-table-column indices matching every body cell's index, and
+// whose rows carry data-table-row in authored order. Group subheadings live in
+// the same tbody but are chrome, so they never count, sort, or match a filter.
+//
 // The maximize leg reads the contract owned by
 // components/_model/figure-controls/figure-controls.ts. This file is a string
 // template and cannot import it, so a change to those attribute spellings
 // changes the strings here too.
+import { compareDataTableValues } from "../../components/data-table/sort-values.js";
+
+const COMPARE_DATA_TABLE_VALUES_SOURCE = compareDataTableValues.toString();
+
 export const VIEWER_SCRIPT = `<script>
 (() => {
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
@@ -149,7 +166,9 @@ export const VIEWER_SCRIPT = `<script>
       else open();
     });
     summary.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") close();
+      if (event.key !== "Escape" || !info.open) return;
+      event.bigPlanEscapeHandled = true;
+      close();
     });
     document.addEventListener(
       "scroll",
@@ -345,9 +364,664 @@ export const VIEWER_SCRIPT = `<script>
   });
 })();
 (() => {
-  // One maximize behavior for every figure family: tables, code snippets,
-  // diffs, and the plain fenced blocks the code-figure transform wrapped.
-  // The vocabulary is owned by components/_model/figure-controls.ts; this leg
+  const tables = Array.from(document.querySelectorAll("[data-data-table]"));
+  if (tables.length === 0) return;
+  const docKey =
+    document.documentElement.getAttribute("data-plan-id") ||
+    location.pathname ||
+    document.title;
+  const FITS = ["wrap", "truncate", "scroll"];
+  const read = (key) => {
+    try {
+      return JSON.parse(localStorage.getItem(key) || "null");
+    } catch (_) {
+      return null;
+    }
+  };
+  const write = (key, value) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (_) {}
+  };
+  const compareDataTableValues = ${COMPARE_DATA_TABLE_VALUES_SOURCE};
+  let activeColumnDrag = null;
+
+  for (const figure of tables) {
+    const grid = figure.querySelector("table");
+    if (grid === null) continue;
+    const headRow = grid.querySelector("thead tr");
+    const authoredBody = grid.querySelector("tbody");
+    if (headRow === null || authoredBody === null) continue;
+    const heads = Array.from(headRow.children);
+    const rows = Array.from(authoredBody.querySelectorAll("[data-table-row]"));
+    const authoredRows = rows.slice().sort(
+      (a, b) =>
+        Number(a.getAttribute("data-table-row")) -
+        Number(b.getAttribute("data-table-row")),
+    );
+    const columnCount = heads.length;
+    const authoredFit = figure.getAttribute("data-table-fit") || "wrap";
+    const storageKey =
+      "big-plan:datatable:" +
+      docKey +
+      ":" +
+      (figure.getAttribute("data-table-id") || "table");
+    const countLabel = figure.querySelector("[data-table-count]");
+    const empty = figure.querySelector("[data-table-empty]");
+    const filterInput = figure.querySelector("[data-table-filter-input]");
+    const fitButton = figure.querySelector("[data-table-fit-button]");
+    const fitList = figure.querySelector("[data-table-fit-list]");
+    const resetButton = figure.querySelector("[data-table-reset]");
+    let groupBodies = [];
+    const authoredGroupColumn = Number(
+      figure.getAttribute("data-table-group-column") || "-1",
+    );
+    let groupColumn = Number.NaN;
+    const menuButton = figure.querySelector("[data-table-menu-button]");
+    const menuList = figure.querySelector("[data-table-menu-list]");
+    // Sorting and filtering read a cell's complete text, never what the
+    // current fit lets the reader see, so a clamped cell still compares and
+    // still matches on everything the author wrote.
+    const cellOf = (row, column) =>
+      Array.from(row.children).find(
+        (cell) =>
+          Number(cell.getAttribute("data-table-column")) === column,
+      );
+    const textOf = (row, column) => {
+      const cell = cellOf(row, column);
+      return cell === undefined ? "" : (cell.textContent || "").trim();
+    };
+    let authoredSortColumn = -1;
+    let authoredSortDirection = 0;
+    for (const head of heads) {
+      const declared = head.getAttribute("data-table-authored-sort");
+      if (declared !== null) {
+        authoredSortColumn = Number(head.getAttribute("data-table-column"));
+        authoredSortDirection = declared === "desc" ? -1 : 1;
+      }
+    }
+    let sortColumn = authoredSortColumn;
+    let sortDirection = authoredSortDirection;
+
+    const currentOrder = () =>
+      Array.from(headRow.children).map((head) =>
+        Number(head.getAttribute("data-table-column")),
+      );
+    const hiddenColumns = () =>
+      Array.from(headRow.children)
+        .filter((head) => head.hidden)
+        .map((head) => Number(head.getAttribute("data-table-column")));
+    const authoredHidden =
+      authoredGroupColumn < 0 ? [] : [authoredGroupColumn];
+    const syncGroupSpans = () => {
+      const visible = columnCount - hiddenColumns().length;
+      for (const body of groupBodies) {
+        const cell = body.querySelector("[data-table-group-heading] > th");
+        if (cell !== null) cell.colSpan = visible;
+      }
+    };
+
+    const persist = () => {
+      write(storageKey, {
+        order: currentOrder(),
+        hidden: hiddenColumns(),
+        fit: figure.getAttribute("data-table-fit"),
+        group: groupColumn,
+      });
+    };
+
+    const setFit = (fit, save) => {
+      if (FITS.indexOf(fit) === -1) return;
+      figure.setAttribute("data-table-fit", fit);
+      const choices = figure.querySelectorAll("[data-table-fit-choice]");
+      for (const choice of choices) {
+        choice.setAttribute(
+          "aria-checked",
+          choice.getAttribute("data-table-fit-choice") === fit
+            ? "true"
+            : "false",
+        );
+      }
+      if (save !== false) persist();
+    };
+
+    const setColumnHidden = (column, hidden, save) => {
+      // The first authored column carries row identity; hiding it would leave
+      // every remaining cell unattributable. The grouping column is exempt,
+      // because its band states the value the column would have shown - and
+      // it may itself be the first column.
+      if (column === 0 && column !== groupColumn) return;
+      for (const head of headRow.children) {
+        if (Number(head.getAttribute("data-table-column")) !== column) continue;
+        head.hidden = hidden;
+      }
+      for (const row of rows) {
+        for (const cell of row.children) {
+          if (Number(cell.getAttribute("data-table-column")) !== column)
+            continue;
+          cell.hidden = hidden;
+        }
+      }
+      const toggle = figure.querySelector(
+        '[data-table-column-toggle="' + column + '"]',
+      );
+      if (toggle !== null) {
+        toggle.setAttribute("aria-checked", hidden ? "false" : "true");
+      }
+      // A subheading spans the grid, so its span has to follow the grid.
+      syncGroupSpans();
+      if (save !== false) persist();
+    };
+    const applyHiddenColumns = (hidden) => {
+      for (let column = 0; column < columnCount; column += 1) {
+        setColumnHidden(column, hidden.indexOf(column) !== -1, false);
+      }
+    };
+
+    const moveColumn = (from, to, save) => {
+      if (from === to || to < 0 || to >= columnCount) return;
+      const moveWithin = (parent) => {
+        const items = Array.from(parent.children);
+        const moving = items[from];
+        const reference = from < to ? items[to].nextSibling : items[to];
+        parent.insertBefore(moving, reference);
+      };
+      moveWithin(headRow);
+      for (const row of rows) moveWithin(row);
+      if (save !== false) persist();
+    };
+
+    const applyOrder = (order) => {
+      for (let target = 0; target < order.length; target += 1) {
+        const positions = currentOrder();
+        const from = positions.indexOf(order[target]);
+        if (from === -1 || from === target) continue;
+        moveColumn(from, target, false);
+      }
+    };
+
+    const applyFilter = () => {
+      const query = (filterInput === null ? "" : filterInput.value || "")
+        .trim()
+        .toLowerCase();
+      let shown = 0;
+      for (const row of rows) {
+        row.removeAttribute("data-table-group-end");
+        row.removeAttribute("data-table-group-last");
+        const match =
+          query === "" ||
+          currentOrder().some((column) => {
+            const cell = cellOf(row, column);
+            return (
+              cell !== undefined &&
+              !cell.hidden &&
+              (cell.textContent || "").toLowerCase().indexOf(query) !== -1
+            );
+          });
+        row.hidden = !match;
+        if (match) shown += 1;
+      }
+      const visibleGroups = [];
+      for (const groupBody of groupBodies) {
+        const label = groupBody.getAttribute("data-table-row-group");
+        const visibleRows = rows.filter(
+          (row) => !row.hidden && row.getAttribute("data-table-group") === label,
+        );
+        groupBody.hidden = visibleRows.length === 0;
+        if (visibleRows.length !== 0) visibleGroups.push(visibleRows);
+      }
+      // Only groups with another visible band after them earn the separator.
+      // Filtering may hide a whole group or leave just one, so marking every
+      // group's last row would turn inter-group breathing room into dead space
+      // at the bottom of the table.
+      for (const visibleRows of visibleGroups.slice(0, -1)) {
+        visibleRows[visibleRows.length - 1].setAttribute(
+          "data-table-group-end",
+          "",
+        );
+      }
+      const lastVisibleGroup = visibleGroups[visibleGroups.length - 1];
+      if (lastVisibleGroup !== undefined) {
+        lastVisibleGroup[lastVisibleGroup.length - 1].setAttribute(
+          "data-table-group-last",
+          "",
+        );
+      }
+      if (countLabel !== null) {
+        countLabel.textContent =
+          query === ""
+            ? rows.length + " rows"
+            : shown + " of " + rows.length + " rows";
+      }
+      if (empty !== null) {
+        empty.hidden = shown !== 0;
+        if (shown === 0) empty.textContent = 'No rows match "' + query + '".';
+      }
+    };
+
+    const applySort = () => {
+      for (const head of headRow.children) {
+        const index = Number(head.getAttribute("data-table-column"));
+        const active = index === sortColumn && sortDirection !== 0;
+        if (active) {
+          head.setAttribute(
+            "aria-sort",
+            sortDirection === 1 ? "ascending" : "descending",
+          );
+          head.setAttribute(
+            "data-table-sorted",
+            sortDirection === 1 ? "asc" : "desc",
+          );
+        } else {
+          head.setAttribute("aria-sort", "none");
+          head.removeAttribute("data-table-sorted");
+        }
+        const glyph = head.querySelector("[data-lucide=chevrons-up-down]");
+        const up = head.querySelector("[data-lucide=arrow-up]");
+        const down = head.querySelector("[data-lucide=arrow-down]");
+        if (glyph !== null) glyph.hidden = active;
+        if (up !== null) up.hidden = !(active && sortDirection === 1);
+        if (down !== null) down.hidden = !(active && sortDirection === -1);
+      }
+      const ordered = rows.slice();
+      if (sortDirection !== 0 && sortColumn >= 0) {
+        const activeHead = heads.find(
+          (head) =>
+            Number(head.getAttribute("data-table-column")) === sortColumn,
+        );
+        const type = activeHead?.getAttribute("data-table-type") || "text";
+        // Sorting is stable, so a second sort keeps the previous answer as the
+        // tiebreaker and two clicks build a two-key view.
+        const positions = new Map();
+        ordered.forEach((row, index) => positions.set(row, index));
+        ordered.sort((a, b) => {
+          const verdict = compareDataTableValues({
+            left: textOf(a, sortColumn),
+            right: textOf(b, sortColumn),
+            type,
+            direction: sortDirection,
+          });
+          return verdict === 0 ? positions.get(a) - positions.get(b) : verdict;
+        });
+        if (groupBodies.length !== 0) {
+          // Re-append below restores group order; this keeps the array the
+          // script reasons about in the same order the reader will see.
+          const groupOrder = groupBodies.map((body) =>
+            body.getAttribute("data-table-row-group"),
+          );
+          ordered.sort(
+            (a, b) =>
+              groupOrder.indexOf(a.getAttribute("data-table-group")) -
+              groupOrder.indexOf(b.getAttribute("data-table-group")),
+          );
+        }
+      } else {
+        ordered.sort(
+          (a, b) =>
+            Number(a.getAttribute("data-table-row")) -
+            Number(b.getAttribute("data-table-row")),
+        );
+      }
+      // On a grouped table the subheadings are the outer order, so sorting
+      // rearranges rows inside a group and never across one.
+      if (groupBodies.length === 0) {
+        for (const row of ordered) authoredBody.appendChild(row);
+      } else {
+        for (const groupBody of groupBodies) {
+          const label = groupBody.getAttribute("data-table-row-group");
+          for (const row of ordered) {
+            if (row.getAttribute("data-table-group") === label)
+              groupBody.appendChild(row);
+          }
+        }
+      }
+      rows.length = 0;
+      for (const row of ordered) rows.push(row);
+    };
+
+    // Grouping is a setting, so the reader can move it to another column.
+    // This is the one place the script builds markup rather than toggling it;
+    // every selected value becomes one body containing its band and rows.
+    const buildGroupBody = (label) => {
+      const body = document.createElement("tbody");
+      body.setAttribute("data-table-row-group", label);
+      const row = document.createElement("tr");
+      row.className = "data-table-group-row";
+      row.setAttribute("data-table-group-heading", label);
+      const cell = document.createElement("th");
+      cell.setAttribute("scope", "rowgroup");
+      cell.textContent = label;
+      row.appendChild(cell);
+      body.appendChild(row);
+      return body;
+    };
+    const setGroupColumn = (next, save) => {
+      if (next === groupColumn) return;
+      for (const body of groupBodies) body.remove();
+      groupBodies = [];
+      // The old grouping column goes back to being an ordinary visible column;
+      // the new one hides, because its band now says what it said.
+      if (groupColumn >= 0) setColumnHidden(groupColumn, false, false);
+      groupColumn = next;
+      if (groupColumn >= 0) setColumnHidden(groupColumn, true, false);
+      for (const row of rows) {
+        if (groupColumn < 0) {
+          row.removeAttribute("data-table-group");
+          continue;
+        }
+        row.setAttribute("data-table-group", textOf(row, groupColumn));
+      }
+      if (groupColumn >= 0) {
+        const seen = [];
+        for (const row of authoredRows) {
+          const label = row.getAttribute("data-table-group");
+          if (seen.indexOf(label) === -1) seen.push(label);
+        }
+        authoredBody.remove();
+        for (const label of seen) {
+          const body = buildGroupBody(label);
+          groupBodies.push(body);
+          grid.appendChild(body);
+        }
+      } else {
+        grid.appendChild(authoredBody);
+      }
+      figure.toggleAttribute("data-table-grouped", groupColumn >= 0);
+      // Column 0 is only lockable while it is not the one supplying bands.
+      const firstToggle = figure.querySelector('[data-table-column-toggle="0"]');
+      if (firstToggle !== null) firstToggle.disabled = groupColumn !== 0;
+      for (const choice of figure.querySelectorAll("[data-table-group-choice]")) {
+        choice.setAttribute(
+          "aria-checked",
+          Number(choice.getAttribute("data-table-group-choice")) === groupColumn
+            ? "true"
+            : "false",
+        );
+      }
+      applySort();
+      syncGroupSpans();
+      applyFilter();
+      if (save !== false) persist();
+    };
+
+    // Restore the reader's saved layout before wiring controls, so the first
+    // paint after a reload already matches what they left.
+    const saved = read(storageKey);
+    let restoredGroupColumn = authoredGroupColumn;
+    if (saved !== null && typeof saved === "object") {
+      if (Array.isArray(saved.order) && saved.order.length === columnCount) {
+        applyOrder(saved.order);
+      }
+      if (typeof saved.fit === "string") setFit(saved.fit, false);
+      if (
+        typeof saved.group === "number" &&
+        saved.group >= -1 &&
+        saved.group < columnCount
+      ) {
+        restoredGroupColumn = saved.group;
+      }
+    }
+    setGroupColumn(restoredGroupColumn, false);
+    if (
+      saved !== null &&
+      typeof saved === "object" &&
+      Array.isArray(saved.hidden)
+    ) {
+      applyHiddenColumns(saved.hidden);
+    }
+    // Every control ships dormant so a document read without scripts shows no
+    // affordance that cannot act. Enabling them is the last thing this leg
+    // does for a table, after its state is already restored.
+    figure.setAttribute("data-table-reorderable", "");
+    figure.setAttribute("data-table-interactive", "");
+    for (const control of figure.querySelectorAll(
+      "[data-table-filter],[data-table-fit-button],[data-table-menu-button],[data-table-reset]",
+    )) {
+      control.hidden = false;
+    }
+
+    for (const head of headRow.children) {
+      head.setAttribute("draggable", "true");
+      const button = head.querySelector("[data-table-sort]");
+      if (button !== null) {
+        button.disabled = false;
+        button.addEventListener("click", () => {
+          const index = Number(head.getAttribute("data-table-column"));
+          if (index === sortColumn) {
+            // Three states, because the author's order is information and a
+            // table that cannot return to it loses that on the first click.
+            sortDirection =
+              sortDirection === 1 ? -1 : sortDirection === -1 ? 0 : 1;
+            if (sortDirection === 0) sortColumn = -1;
+          } else {
+            sortColumn = index;
+            sortDirection = 1;
+          }
+          applySort();
+          applyFilter();
+        });
+        button.addEventListener("keydown", (event) => {
+          if (!event.altKey) return;
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          const positions = Array.from(headRow.children);
+          const from = positions.indexOf(head);
+          moveColumn(from, from + (event.key === "ArrowLeft" ? -1 : 1));
+          button.focus();
+        });
+      }
+      head.addEventListener("dragstart", (event) => {
+        const positions = Array.from(headRow.children);
+        const from = positions.indexOf(head);
+        activeColumnDrag = { figure, from };
+        event.dataTransfer.effectAllowed = "move";
+      });
+      let dropAfter = false;
+      const clear = () => {
+        head.classList.remove("data-table-head-drop-before");
+        head.classList.remove("data-table-head-drop-after");
+        dropAfter = false;
+      };
+      head.addEventListener("dragover", (event) => {
+        const from = activeColumnDrag?.from;
+        if (
+          activeColumnDrag?.figure !== figure ||
+          !Number.isInteger(from) ||
+          from < 0 ||
+          from >= columnCount
+        ) {
+          clear();
+          return;
+        }
+        event.preventDefault();
+        const box = head.getBoundingClientRect();
+        dropAfter = event.clientX > box.left + box.width / 2;
+        head.classList.toggle("data-table-head-drop-before", !dropAfter);
+        head.classList.toggle("data-table-head-drop-after", dropAfter);
+      });
+      head.addEventListener("dragleave", clear);
+      head.addEventListener("dragend", () => {
+        clear();
+        if (activeColumnDrag?.figure === figure) activeColumnDrag = null;
+      });
+      head.addEventListener("drop", (event) => {
+        const drag = activeColumnDrag;
+        const after = dropAfter;
+        clear();
+        if (
+          drag?.figure !== figure ||
+          !Number.isInteger(drag.from) ||
+          drag.from < 0 ||
+          drag.from >= columnCount
+        )
+          return;
+        event.preventDefault();
+        activeColumnDrag = null;
+        const from = drag.from;
+        const positions = Array.from(headRow.children);
+        const to = positions.indexOf(head);
+        const boundary = to + (after ? 1 : 0);
+        const insertion = boundary - (from < boundary ? 1 : 0);
+        moveColumn(from, insertion);
+      });
+    }
+
+    if (filterInput !== null) {
+      filterInput.addEventListener("input", applyFilter);
+      filterInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape" || filterInput.value === "") return;
+        event.bigPlanEscapeHandled = true;
+        filterInput.value = "";
+        applyFilter();
+      });
+    }
+
+    const resetLayout = () => {
+      applyOrder(Array.from({ length: columnCount }, (_, index) => index));
+      setGroupColumn(-1, false);
+      sortColumn = authoredSortColumn;
+      sortDirection = authoredSortDirection;
+      applySort();
+      setGroupColumn(authoredGroupColumn, false);
+      applyHiddenColumns(authoredHidden);
+      setFit(authoredFit, false);
+      persist();
+      applyFilter();
+    };
+    if (resetButton !== null) {
+      resetButton.addEventListener("click", resetLayout);
+    }
+
+    // Both popovers behave identically, so they share one wiring pass; only
+    // one may be open at a time, because two overlapping menus in a figure
+    // header is chrome fighting itself.
+    const popovers = [
+      { button: menuButton, list: menuList },
+      { button: fitButton, list: fitList },
+    ].filter((entry) => entry.button !== null && entry.list !== null);
+    const closeMenus = (restoreFocus) => {
+      let trigger = null;
+      for (const entry of popovers) {
+        if (!entry.list.hidden) trigger = entry.button;
+        entry.list.hidden = true;
+        entry.button.setAttribute("aria-expanded", "false");
+      }
+      if (restoreFocus === true && trigger !== null) trigger.focus();
+    };
+    const focusMenuItem = (entry, item) => {
+      const items = Array.from(
+        entry.list.querySelectorAll(
+          '[role="menuitemcheckbox"]:not(:disabled),[role="menuitemradio"]:not(:disabled)',
+        ),
+      );
+      if (items.length === 0) return;
+      const target = item || items.find(
+        (candidate) => candidate.getAttribute("aria-checked") === "true",
+      ) || items[0];
+      for (const candidate of items) candidate.tabIndex = -1;
+      target.tabIndex = 0;
+      target.focus();
+    };
+    for (const entry of popovers) {
+      entry.button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const open = entry.list.hidden;
+        closeMenus(false);
+        entry.list.hidden = !open;
+        entry.button.setAttribute("aria-expanded", open ? "true" : "false");
+        if (open) focusMenuItem(entry);
+      });
+      // A menu stays open across consecutive choices, because choosing
+      // columns is a comparison rather than a single answer.
+      entry.list.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const toggle = event.target.closest("[data-table-column-toggle]");
+        if (toggle !== null) {
+          const column = Number(
+            toggle.getAttribute("data-table-column-toggle"),
+          );
+          setColumnHidden(
+            column,
+            toggle.getAttribute("aria-checked") === "true",
+          );
+          applyFilter();
+          return;
+        }
+        const choice = event.target.closest("[data-table-fit-choice]");
+        if (choice !== null) {
+          setFit(choice.getAttribute("data-table-fit-choice"));
+          return;
+        }
+        const group = event.target.closest("[data-table-group-choice]");
+        if (group !== null) {
+          setGroupColumn(Number(group.getAttribute("data-table-group-choice")));
+        }
+      });
+      entry.list.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          event.bigPlanEscapeHandled = true;
+          closeMenus(true);
+          return;
+        }
+        if (
+          event.key !== "ArrowDown" &&
+          event.key !== "ArrowUp" &&
+          event.key !== "Home" &&
+          event.key !== "End"
+        ) {
+          return;
+        }
+        event.preventDefault();
+        const items = Array.from(
+          entry.list.querySelectorAll(
+            '[role="menuitemcheckbox"]:not(:disabled),[role="menuitemradio"]:not(:disabled)',
+          ),
+        );
+        if (items.length === 0) return;
+        const current = items.indexOf(document.activeElement);
+        const index =
+          event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? items.length - 1
+              : event.key === "ArrowDown"
+                ? current < 0
+                  ? 0
+                  : (current + 1) % items.length
+                : current < 0
+                  ? items.length - 1
+                  : (current - 1 + items.length) % items.length;
+        focusMenuItem(entry, items[index]);
+      });
+    }
+    if (popovers.length !== 0) {
+      document.addEventListener("click", (event) => {
+        // A click inside either of this figure's popovers is the reader still
+        // using it; anything else dismisses.
+        const inside =
+          event.target instanceof Element &&
+          figure.contains(event.target) &&
+          event.target.closest("[data-table-menu]") !== null;
+        if (!inside) closeMenus(false);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        const openMenu = popovers.some((entry) => !entry.list.hidden);
+        if (!openMenu) return;
+        event.bigPlanEscapeHandled = true;
+        closeMenus(true);
+      });
+    }
+
+    applySort();
+    applyFilter();
+  }
+})();
+(() => {
+  // One maximize behavior for every supported figure family. The vocabulary
+  // is owned by components/_model/figure-controls/figure-controls.ts; this leg
   // is a string template and cannot import it, so any change there changes
   // these three attribute names too.
   const frames = Array.from(
@@ -359,12 +1033,114 @@ export const VIEWER_SCRIPT = `<script>
   // a keyboard reader must land back on the control they pressed - but the
   // ring and its tooltip should only reappear for the reader who needs them.
   let openedByKeyboard = false;
+  let isolatedElements = [];
+  let dialogAttributes = null;
   const subjectOf = (frame) =>
     frame.getAttribute("data-figure-maximizable") || "figure";
+  const isolate = (frame) => {
+    let branch = frame;
+    while (branch.parentElement !== null) {
+      const parent = branch.parentElement;
+      for (const sibling of parent.children) {
+        if (
+          sibling !== branch &&
+          sibling instanceof HTMLElement &&
+          !sibling.inert
+        ) {
+          sibling.inert = true;
+          isolatedElements.push(sibling);
+        }
+      }
+      if (parent === document.body) break;
+      branch = parent;
+    }
+  };
+  const restoreIsolation = () => {
+    for (const element of isolatedElements) element.inert = false;
+    isolatedElements = [];
+  };
+  const restoreAttribute = (element, name, value) => {
+    if (value === null) element.removeAttribute(name);
+    else element.setAttribute(name, value);
+  };
+  const isRendered = (element) =>
+    element.getClientRects().length !== 0 &&
+    getComputedStyle(element).visibility === "visible";
+  const isRenderedArea = (area) => {
+    const map = area.closest("map[name]");
+    const name = map?.getAttribute("name");
+    if (name === null || name === undefined || name === "") return false;
+    const useMap = "#" + name;
+    const owner = Array.from(
+      document.querySelectorAll("img[usemap],object[usemap]"),
+    ).find((candidate) => candidate.getAttribute("usemap") === useMap);
+    return owner !== undefined && isRendered(owner);
+  };
+  const isTabbable = (element) => {
+    if (
+      !(element instanceof HTMLElement || element instanceof SVGElement) ||
+      element.tabIndex < 0 ||
+      element.matches(":disabled") ||
+      element.closest("[hidden]") !== null ||
+      element.closest("[inert]") !== null
+    )
+      return false;
+    if (element.localName === "summary") {
+      const details = element.parentElement;
+      if (
+        !(details instanceof HTMLDetailsElement) ||
+        details.querySelector(":scope > summary") !== element
+      )
+        return false;
+    }
+    const closedDetails = element.closest("details:not([open])");
+    if (closedDetails !== null) {
+      const summary = closedDetails.querySelector(":scope > summary");
+      if (summary === null || !summary.contains(element)) return false;
+    }
+    return element instanceof HTMLAreaElement
+      ? isRenderedArea(element)
+      : isRendered(element);
+  };
+  const tabbableElements = (frame) =>
+    Array.from(
+      frame.querySelectorAll(
+        'details > summary,a[href],area[href],button,input,select,textarea,iframe,audio[controls],video[controls],[contenteditable]:not([contenteditable="false"]),[tabindex]:not([tabindex="-1"])',
+      ),
+    )
+      .filter(isTabbable)
+      .map((element, index) => ({ element, index, tabIndex: element.tabIndex }))
+      .sort((left, right) => {
+        if (left.tabIndex === right.tabIndex) return left.index - right.index;
+        if (left.tabIndex === 0) return 1;
+        if (right.tabIndex === 0) return -1;
+        return left.tabIndex - right.tabIndex;
+      })
+      .map((entry) => entry.element);
   const setMaximized = (frame, maximized) => {
     const trigger = frame.querySelector("[data-figure-maximize]");
-    if (maximized) frame.setAttribute("data-figure-maximized", "");
-    else frame.removeAttribute("data-figure-maximized");
+    if (maximized) {
+      dialogAttributes = {
+        frame,
+        role: frame.getAttribute("role"),
+        ariaModal: frame.getAttribute("aria-modal"),
+        ariaLabel: frame.getAttribute("aria-label"),
+      };
+      frame.setAttribute("data-figure-maximized", "");
+      frame.setAttribute("role", "dialog");
+      frame.setAttribute("aria-modal", "true");
+      frame.setAttribute("aria-label", "Maximized " + subjectOf(frame));
+      isolate(frame);
+    } else {
+      frame.removeAttribute("data-figure-maximized");
+      restoreIsolation();
+      if (dialogAttributes?.frame === frame) {
+        restoreAttribute(frame, "role", dialogAttributes.role);
+        restoreAttribute(frame, "aria-modal", dialogAttributes.ariaModal);
+        restoreAttribute(frame, "aria-label", dialogAttributes.ariaLabel);
+        dialogAttributes = null;
+      }
+    }
     open = maximized ? frame : null;
     // The backdrop lives on the root so no ancestor of the figure can clip it.
     document.documentElement.toggleAttribute(
@@ -400,7 +1176,30 @@ export const VIEWER_SCRIPT = `<script>
     });
   }
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || open === null) return;
+    if (event.key === "Tab" && open !== null) {
+      const tabbable = tabbableElements(open);
+      if (tabbable.length !== 0) {
+        const current = document.activeElement;
+        const currentIndex = tabbable.indexOf(current);
+        const outside = currentIndex === -1;
+        const atStart = currentIndex === 0;
+        const atEnd = currentIndex === tabbable.length - 1;
+        if (outside || (event.shiftKey && atStart) || (!event.shiftKey && atEnd)) {
+          event.preventDefault();
+          const target = event.shiftKey
+            ? tabbable[tabbable.length - 1]
+            : tabbable[0];
+          target.focus();
+        }
+      }
+      return;
+    }
+    if (
+      event.key !== "Escape" ||
+      event.bigPlanEscapeHandled === true ||
+      open === null
+    )
+      return;
     const frame = open;
     const keyboard = openedByKeyboard;
     setMaximized(frame, false);

@@ -6,6 +6,7 @@ import { COMPLEX_DECISION_COMPONENT_DEFINITION } from "../complex-decision/defin
 import { CALLOUT_COMPONENT_DEFINITION } from "../callout/definition.js";
 import { CODE_DIFF_COMPONENT_DEFINITION } from "../code-diff/definition.js";
 import { CODE_SNIPPET_COMPONENT_DEFINITION } from "../code-snippet/definition.js";
+import { DATA_TABLE_COMPONENT_DEFINITION } from "../data-table/definition.js";
 import { DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION } from "../database-table-schema/definition.js";
 import { DECISION_COMPONENT_DEFINITION } from "../decision/definition.js";
 import { FILE_TREE_DIFF_COMPONENT_DEFINITION } from "../file-tree-diff/definition.js";
@@ -26,6 +27,7 @@ export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
     Callout: CALLOUT_COMPONENT_DEFINITION,
     CodeDiff: CODE_DIFF_COMPONENT_DEFINITION,
     CodeSnippet: CODE_SNIPPET_COMPONENT_DEFINITION,
+    DataTable: DATA_TABLE_COMPONENT_DEFINITION,
     DatabaseTableSchema: DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION,
     Decision: DECISION_COMPONENT_DEFINITION,
     FileTree: FILE_TREE_COMPONENT_DEFINITION,

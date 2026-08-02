@@ -78,8 +78,14 @@ test("should maximize and restore every supported figure family in both themes",
 
         await trigger.click();
         await expect(frame).toHaveAttribute("data-figure-maximized", "");
+        await expect(frame).toHaveAttribute("role", "dialog");
+        await expect(frame).toHaveAttribute("aria-modal", "true");
         await expect(page.locator("html")).toHaveAttribute(
           "data-figure-maximized-open",
+          "",
+        );
+        await expect(page.locator("body > header")).toHaveAttribute(
+          "inert",
           "",
         );
         await expect(trigger).toHaveAccessibleName(figureCase.restoreLabel);
@@ -128,15 +134,104 @@ test("should maximize and restore every supported figure family in both themes",
           expect(presentation.bodyOverflow).toBeNull();
         }
 
-        await page.keyboard.press("Escape");
+        await page.keyboard.press("Shift+Tab");
+        await expect
+          .poll(() =>
+            frame.evaluate((element) =>
+              element.contains(document.activeElement),
+            ),
+          )
+          .toBe(true);
+
+        const info = frame.locator("details[data-info-popover]").first();
+        if ((await info.count()) !== 0) {
+          const summary = info.locator("summary");
+          await summary.focus();
+          await info.evaluate((element) => {
+            if (element instanceof HTMLDetailsElement) element.open = false;
+          });
+          await summary.press("Escape");
+        } else {
+          await page.keyboard.press("Escape");
+        }
         await expect(frame).not.toHaveAttribute("data-figure-maximized");
+        await expect(frame).not.toHaveAttribute("role");
+        await expect(frame).not.toHaveAttribute("aria-modal");
         await expect(page.locator("html")).not.toHaveAttribute(
           "data-figure-maximized-open",
+        );
+        await expect(page.locator("body > header")).not.toHaveAttribute(
+          "inert",
         );
         await expect(trigger).toHaveAccessibleName(figureCase.maximizeLabel);
         await expect(trigger).toBeFocused();
       });
     }
+  }
+});
+
+test("should traverse disclosures and wrap within maximized figures", async ({
+  page,
+  componentsViewerUrl,
+}) => {
+  await page.goto(componentsViewerUrl);
+  const cases = [
+    {
+      name: "ComplexDecision",
+      selector: "[data-complex-decision]",
+    },
+    {
+      name: "FileTreeDiff",
+      selector: ".file-tree-diff",
+    },
+  ];
+
+  for (const focusCase of cases) {
+    await test.step(focusCase.name, async () => {
+      const frame = page.locator(focusCase.selector).first();
+      const trigger = frame.locator("[data-figure-maximize]");
+      const disclosure = frame
+        .locator("details[data-info-popover] > summary:visible")
+        .last();
+      await trigger.click();
+      await expect(disclosure).toBeVisible();
+
+      let reachedDisclosure = false;
+      for (let step = 0; step < 80; step += 1) {
+        const previous = await page.evaluateHandle(
+          () => document.activeElement,
+        );
+        await page.keyboard.press("Tab");
+        if (
+          await disclosure.evaluate(
+            (element) => element === document.activeElement,
+          )
+        ) {
+          await page.keyboard.press("Shift+Tab");
+          expect(
+            await previous.evaluate(
+              (element) => element === document.activeElement,
+            ),
+          ).toBe(true);
+          await page.keyboard.press("Tab");
+          await expect(disclosure).toBeFocused();
+          reachedDisclosure = true;
+          await previous.dispose();
+          break;
+        }
+        await previous.dispose();
+      }
+      expect(reachedDisclosure).toBe(true);
+
+      await disclosure.focus();
+      await page.keyboard.press("Tab");
+      await expect(trigger).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(disclosure).toBeFocused();
+
+      await trigger.click();
+      await expect(frame).not.toHaveAttribute("data-figure-maximized");
+    });
   }
 });
 

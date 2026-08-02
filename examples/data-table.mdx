@@ -1,0 +1,78 @@
+# DataTable Showcase
+
+Every shape the `DataTable` component renders appears here, from the default wrapping grid to per-column overrides.
+
+## The default table
+
+No attributes beyond a title: every column is text, sortable, and wraps rather than scrolling.
+The delimiter row's colons still set alignment, exactly as they would in a markdown table.
+
+<DataTable title="Retry outcomes">
+
+```table
+| Failure | Attempts | Outcome |
+| --- | ---: | --- |
+| Card declined | 3 | Give up and notify |
+| Processor timeout | 5 | Retry with backoff |
+| Network reset | 5 | Retry immediately |
+```
+
+</DataTable>
+
+## Filter, typed columns, and an opening order
+
+A long reference table earns its search box.
+`type="number"` gives the attempt column a numeric comparator, and `sort="desc"` opens the table on the busiest rows.
+
+<DataTable title="Queue depth by processor" filter>
+
+<Column name="Attempts" type="number" align="right" sort="desc" />
+<Column name="Last seen" type="date" />
+
+```table
+| Processor | Attempts | Last seen | Note |
+| --- | --- | --- | --- |
+| `stripe-eu` | 12 | 2026-07-30 | Backlog cleared overnight. |
+| `stripe-us` | 140 | 2026-07-29 | Rate limited twice this week. |
+| `adyen` | 7 | 2026-07-12 | Low volume; watch the timeout budget. |
+| `braintree` | 63 | 2026-07-28 | Retries dominated by soft declines. |
+```
+
+</DataTable>
+
+## Truncating a column of identifiers
+
+Wrapping a long path into a stack of fragments is unreadable, so the identifier column clamps to one line while the prose beside it wraps.
+
+<DataTable title="Files under review" fit="wrap">
+
+<Column name="Path" fit="truncate" />
+
+```table
+| Path | Why it changes |
+| --- | --- |
+| `src/render/markdown/component-pipeline/deliver.ts` | Delivery collects one more component model. |
+| `src/components/_registration/registry.ts` | One new registry entry. |
+| `src/render/shell/viewer-script.ts` | Gains the behavior leg the grid needs. |
+```
+
+</DataTable>
+
+## Grouping rows under subheadings
+
+`groupBy` lifts one column out of the grid and turns its values into subheading bands, so a set of tables differing only by that value becomes one table with one header row, one filter, and one maximize.
+Sorting then reorders rows inside a group and never across one.
+
+<DataTable title="Retry policy by tier" groupBy="Tier" filter>
+
+```table
+| Tier | Failure | Attempts | Outcome |
+| --- | --- | ---: | --- |
+| Enterprise | Card declined | 3 | Give up and notify |
+| Enterprise | Processor timeout | 8 | Retry with backoff |
+| Standard | Card declined | 2 | Give up and notify |
+| Standard | Processor timeout | 5 | Retry with backoff |
+| Standard | Network reset | 5 | Retry immediately |
+```
+
+</DataTable>

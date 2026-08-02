@@ -118,6 +118,7 @@ Big Plan ships components that present specific kinds of information better than
 - `FlowDiagram` for genuinely relational content - a flow, dependency, or fan-out - drawn as staged cards with directed connectors.
 - `CodeDiff` and `CodeSnippet` for concrete code the reviewer should see.
 - `FileTree` and `FileTreeDiff` for layout and placement changes.
+- `DataTable` for a reference dataset the reviewer needs to sort, filter, or reshape.
 - `DatabaseTableSchema`, `HttpEndpoint`, `GraphqlOperation`, and `GrpcMethod` for structured contracts.
 - `Callout` to make one decision, warning, or note impossible to miss.
 

@@ -21,6 +21,7 @@ Light and dark follow the reader's OS in inert exports.
 @import "../components/code-diff/styles.css";
 @import "../components/code-snippet/styles.css";
 @import "../components/complex-decision/styles.css";
+@import "../components/data-table/styles.css";
 @import "../components/database-table-schema/styles.css";
 @import "../components/decision/styles.css";
 @import "../components/file-tree-diff/styles.css";
@@ -41,6 +42,9 @@ Light and dark follow the reader's OS in inert exports.
   --ink-c: #211e1a;
   --muted-c: #6f695c;
   --edge-c: #e2ddd1;
+  /* One step of contrast above --edge-c, for a control that has to read as an
+     input against the chrome band rather than as a hairline on the page. */
+  --edge-strong-c: #c9c1ae;
   --surface-c: #efece3;
   --accent-c: #166534;
   --callout-note-c: #426b82;
@@ -74,6 +78,7 @@ Light and dark follow the reader's OS in inert exports.
     --ink-c: #ebe6da;
     --muted-c: #a49c8b;
     --edge-c: #35312a;
+    --edge-strong-c: #4f4a3f;
     --surface-c: #242119;
     --accent-c: #82c99a;
     --callout-note-c: #87b5ca;
@@ -111,6 +116,7 @@ Light and dark follow the reader's OS in inert exports.
   --ink-c: #ebe6da;
   --muted-c: #a49c8b;
   --edge-c: #35312a;
+  --edge-strong-c: #4f4a3f;
   --surface-c: #242119;
   --accent-c: #82c99a;
   --callout-note-c: #87b5ca;
@@ -164,6 +170,7 @@ Light and dark follow the reader's OS in inert exports.
   --color-ink: var(--ink-c);
   --color-muted: var(--muted-c);
   --color-edge: var(--edge-c);
+  --color-edge-strong: var(--edge-strong-c);
   --color-surface: var(--surface-c);
   --color-header: var(--header-bg);
   --color-accent: var(--accent-c);
