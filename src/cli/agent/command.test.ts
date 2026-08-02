@@ -15,6 +15,7 @@ import {
 } from "../../review/agent-exchange.js";
 import { startReviewRuntime } from "../../review/server.js";
 import type { ReviewRuntime } from "../../review/server.js";
+import { readProgress } from "../../review/store.js";
 import { renderDocument } from "../../render/render-document.js";
 import { agentCommand } from "./command.js";
 
@@ -105,6 +106,20 @@ describe("agent command", () => {
       throw new Error("The agent command did not provide a response path");
     }
     responseFile = result.response_file;
+    await expect(
+      readProgress({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          step: "Coding agent reviewing feedback",
+          state: "live",
+          detail: "1 comment",
+        }),
+      ]),
+    );
   });
 
   it("should publish a complete question outcome without editing the plan", async () => {

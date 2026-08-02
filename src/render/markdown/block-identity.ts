@@ -24,6 +24,9 @@ export type BlockDescriptor = {
   readonly kind: string;
   readonly label: string;
   readonly section: string;
+  // Plain authored presentation text is retained for revision alignment and
+  // diffing. It never enters an id or path and is not exposed as markup.
+  readonly text: string;
 };
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
@@ -291,6 +294,7 @@ const stampTableRows = ({
         kind: "table-row",
         label: label.length > 0 ? label : "Table row",
         section,
+        text: textOf(candidate),
       });
     },
   });
@@ -338,7 +342,7 @@ const stampScope = ({
     child.properties["data-block-kind"] = kind;
     child.properties["data-block-label"] = label;
     child.properties["data-block-section"] = section;
-    blocks.push({ id, kind, label, section });
+    blocks.push({ id, kind, label, section, text: textOf(child) });
     if (kind === "code" || kind.startsWith("code-")) {
       stampCodeLines(child);
     } else if (kind === "table") {

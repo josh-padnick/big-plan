@@ -6,7 +6,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { BlockMapEntry, ReviewComment } from "./comment.js";
+import type { ReviewComment } from "./comment.js";
 import {
   AgentExchangeRejected,
   commentsFromExchange,
@@ -44,18 +44,6 @@ const comment: ReviewComment = {
   },
 };
 
-const blocks = new Map<string, BlockMapEntry>([
-  [
-    blockId,
-    {
-      id: blockId,
-      kind: "paragraph",
-      label: "Use the revised version.",
-      section: "Approach",
-    },
-  ],
-]);
-
 const feedback = buildFeedbackPackage({
   sessionId,
   packageId,
@@ -82,7 +70,7 @@ describe("agent exchange response contract", () => {
         value: { requestId: packageId, outcomes: [] },
         request,
         commentsById: new Map([[commentId, comment]]),
-        currentBlocks: blocks,
+        changedBlocks: new Set([blockId]),
         currentRevision: deriveSourceRevision(after),
         now: "2026-08-02T12:01:00.000Z",
       }),
@@ -99,13 +87,13 @@ describe("agent exchange response contract", () => {
               commentId,
               state: "changed",
               message: "Revised the approach.",
-              changeTarget: blockId,
+              changeTargets: [blockId],
             },
           ],
         },
         request,
         commentsById: new Map([[commentId, comment]]),
-        currentBlocks: blocks,
+        changedBlocks: new Set([blockId]),
         currentRevision: deriveSourceRevision(before),
         now: "2026-08-02T12:01:00.000Z",
       }),
@@ -122,13 +110,13 @@ describe("agent exchange response contract", () => {
               commentId,
               state: "changed",
               message: "Revised the approach.",
-              changeTarget: blockId,
+              changeTargets: [blockId],
             },
           ],
         },
         request,
         commentsById: new Map([[commentId, comment]]),
-        currentBlocks: blocks,
+        changedBlocks: new Set([blockId]),
         currentRevision: deriveSourceRevision(after),
         now: "2026-08-02T12:01:00.000Z",
       }),
@@ -140,10 +128,57 @@ describe("agent exchange response contract", () => {
         {
           commentId,
           state: "changed",
-          changeTarget: blockId,
+          changeTargets: [blockId],
         },
       ],
     });
+  });
+
+  it("should reject an unchanged block attributed as a change target", () => {
+    expect(() =>
+      validateAgentResponseDraft({
+        value: {
+          requestId: packageId,
+          outcomes: [
+            {
+              commentId,
+              state: "changed",
+              message: "Revised the approach.",
+              changeTargets: ["section/approach/paragraph-2"],
+            },
+          ],
+        },
+        request,
+        commentsById: new Map([[commentId, comment]]),
+        changedBlocks: new Set([blockId]),
+        currentRevision: deriveSourceRevision(after),
+        now: "2026-08-02T12:01:00.000Z",
+      }),
+    ).toThrow(/block changed by this revision/);
+  });
+
+  it("should preserve several attributed changes in presentation order", () => {
+    const secondBlock = "section/approach/paragraph-2";
+    expect(
+      validateAgentResponseDraft({
+        value: {
+          requestId: packageId,
+          outcomes: [
+            {
+              commentId,
+              state: "changed",
+              message: "Revised both places.",
+              changeTargets: [blockId, secondBlock],
+            },
+          ],
+        },
+        request,
+        commentsById: new Map([[commentId, comment]]),
+        changedBlocks: new Set([blockId, secondBlock]),
+        currentRevision: deriveSourceRevision(after),
+        now: "2026-08-02T12:01:00.000Z",
+      }).outcomes[0],
+    ).toMatchObject({ changeTargets: [blockId, secondBlock] });
   });
 
   it("should make a reviewer reply the next pending request", () => {
@@ -174,7 +209,7 @@ describe("agent exchange response contract", () => {
                 commentId,
                 state: "changed",
                 message: "Revised the approach.",
-                changeTarget: blockId,
+                changeTargets: [blockId],
               },
             ],
           },
@@ -204,18 +239,24 @@ describe("agent exchange filesystem", () => {
             commentId,
             state: "changed",
             message: "Revised the approach.",
-            changeTarget: blockId,
+            changeTargets: [blockId],
           },
         ],
       },
       request,
       commentsById: new Map([[commentId, comment]]),
-      currentBlocks: blocks,
+      changedBlocks: new Set([blockId]),
       currentRevision: deriveSourceRevision(after),
       now: "2026-08-02T12:01:00.000Z",
     });
     await writeAgentResponse({ store, response });
-    expect(await readAgentExchange({ store, sessionId, planId })).toEqual({
+    expect(
+      await readAgentExchange({
+        store,
+        sessionId: "bbbbbbbbbbbbbbbb",
+        planId,
+      }),
+    ).toEqual({
       requests: [request],
       responses: [response],
     });

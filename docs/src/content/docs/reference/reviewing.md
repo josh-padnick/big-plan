@@ -23,7 +23,8 @@ A rendered plan carries a stable address for every commentable unit: each headin
 - **Discuss the whole plan.** Use the separate **Chat** tab for questions that are not anchored to one passage.
 
 Keyboard users reach the same targets without a mouse: `Alt+↓` and `Alt+↑` move a review cursor block by block and announce each one, and `Alt+C` opens a comment on the block under the cursor.
-Inside a compose card, `Escape` cancels and `Cmd/Ctrl+Enter` saves.
+Inside a compose card, **Add Comment** stages the comment for the batch, `Escape` cancels, and `Cmd/Ctrl+Enter` adds.
+Turn on **Submit right away** when new comments should go straight to the agent instead; that preference carries into every future composer until you change it.
 
 ## The Comments tray
 
@@ -38,7 +39,8 @@ Below 1280 px the tray becomes an overlay drawer, so opening and closing it cann
 
 Until you send, every comment is yours:
 
-- Each row is headed by its slide title and jumps to the exact highlighted target when clicked.
+- Each row is headed by its slide number and title and jumps to the exact highlighted target when clicked.
+- **Submit Now** sends one staged comment without sending the rest of the batch.
 - **Edit** rewrites a comment in place; **Remove** opens a confirmation dialog before deleting it.
 - At narrow widths, a block that carries a comment also shows a compact conversation marker that opens its lifecycle.
 - Drafts and the unfinished whole-plan field survive closing the tab, reloading, and reopening the plan.
@@ -57,11 +59,34 @@ Sent comments remain anchored beside their highlighted source.
 Each response collapses to a one-line outcome chip: **Changed**, **Needs your answer**, or **Outside this plan**.
 Press a chip to expand the original comment, agent response, and reply box in place; press elsewhere to collapse it again.
 At narrow widths, an expanded thread moves into the document flow below its source.
-The Comments tray groups the same outcomes as a compact lifecycle index, and each row jumps back to the expanded anchored thread.
+The Comments tray groups the same outcomes as a compact lifecycle index.
+Clicking a row keeps the tray open, scrolls to its source, and expands the conversation inside that row.
+
+An expanded thread also carries its lifecycle actions:
+
+- **Minimize** returns it to its one-line outcome chip.
+- **Resolve** retires a concern you no longer need to see. Resolved threads stay
+  findable in the tray after reload.
+- **Revert** appears after a changed outcome. Its confirmation sends the same coding-agent session a request to revert all plan changes made for that thread.
+
+A **Changed** response lists every plan location attributed to that comment.
+Use **See the change** for one location or **See changes (N)** for several.
+The selected block temporarily becomes an old/new diff in the document, and a
+floating stepper moves through the locations. **Show current text** or `Escape`
+exits without changing the authoritative plan.
+
+Selection anchors never move onto merely similar text. After a revision, Big
+Plan silently re-finds the exact selected quote when it still exists. If the
+quote is gone, the highlight degrades to an outline on the changed block and
+the expanded thread preserves the original quote as context. The old side of
+**See the change** marks the reviewer's original selection. Reverting the text
+restores the precise anchor automatically.
 
 Package delivery and agent conversation are real.
 Until the coding-agent session responds, a sent thread says **With agent** and
-does not invent an outcome.
+shows a loading indicator without inventing an outcome.
+The waiting turn shows the latest validated activity, such as the coding agent
+reviewing feedback or a plan-wide question, rather than an event-history list.
 When the agent publishes its response, the chip becomes **Changed**,
 **Needs your answer**, or **Outside this plan** and the real agent message
 appears in the expanded thread.
