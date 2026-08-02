@@ -1,4 +1,5 @@
-/* DataTable chrome and grid geometry: the header band, the three text-fit
+/* CSS escape hatch: selector relationships express DataTable chrome and grid
+   geometry: the header band, the three text-fit
    modes, sort and drag affordances on the header row, the menu surface, and
    the grid's maximized-state edge. Colocated with the component that emits
    them; the shared figure-controls stylesheet owns the maximized panel.
@@ -309,16 +310,18 @@
 /* Focus must outrank resting Tailwind utilities such as `border-edge-strong`
    and `bg-transparent`. A dedicated late layer settles that cascade once
    instead of escalating selectors or adding `!important`. */
-@layer control-focus {
+@layer bp-state {
   /* Chrome focus uses one quiet visual language. Text input focus is visible
      after either a pointer click or Tab because the caret is active; buttons
      and menu items reserve the halo for keyboard focus. A low-opacity outer
-     halo avoids the thick double-ring effect of a strong border plus outline. */
+     halo avoids the thick double-ring effect of a strong border plus outline.
+     Override invariant: input focus beats resting border utilities. */
   article .data-table-filter-input:focus {
     border-color: var(--accent-c);
     outline: none;
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
   }
+  /* Override invariant: keyboard focus beats resting chrome color utilities. */
   article .data-table-button:focus-visible,
   article .data-table-menu-item:focus-visible,
   article .data-table-sort:focus-visible {
@@ -327,6 +330,7 @@
     color: var(--color-ink);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
   }
+  /* Override invariant: sort focus rounding beats the resting square edge. */
   article .data-table-sort:focus-visible {
     border-radius: 0.2rem;
   }
