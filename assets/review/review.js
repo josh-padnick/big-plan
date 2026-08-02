@@ -34,6 +34,7 @@
   const TOKEN_HEADER = "x-big-plan-review-token";
   const QUOTE_LIMIT = 400;
   const BODY_LIMIT = 4000;
+  const LONG_COMMENT_LIMIT = 180;
   const PROGRESS_INTERVAL_MS = 1500;
 
   // ---------------------------------------------------------------- elements
@@ -116,6 +117,13 @@
     return location + " · " + kind;
   };
 
+  // Comment chrome names the slide, not the renderer's full structural path.
+  // The source highlight carries the exact paragraph, row, line, or passage.
+  const slideTitleFor = (target) => {
+    if (target.type === "document") return "Overview";
+    return target.section || target.label || "Plan";
+  };
+
   const readableKind = (kind) =>
     kind
       .split("-")
@@ -139,6 +147,8 @@
   let progressSeq = 0;
   let progressTimer = null;
   let runtimeConfirmed = false;
+  let deleteCandidateId = null;
+  const expandedCommentIds = new Set();
 
   const newId = () => {
     const bytes = new Uint8Array(8);
@@ -293,8 +303,8 @@
     type: "button",
     "data-review-toggle": true,
     "aria-expanded": "false",
-    "aria-label": "Show comments",
-    title: "Show comments (Alt+C)",
+    "aria-label": "Open comments sidebar",
+    title: "Open comments sidebar (Alt+C)",
   });
   const toggleCount = el("span", {
     "data-review-toggle-count": true,
@@ -453,7 +463,7 @@
   });
   chatTab.append(
     el("span", { text: "Chat" }),
-    el("span", { "data-review-tab-preview": true, text: "Preview" }),
+    el("span", { "data-review-tab-preview": true, text: "Simulated" }),
   );
   const tabList = el("div", { "data-review-tabs": true, role: "tablist" }, [
     commentsTab,
@@ -495,11 +505,6 @@
   });
   affordance.append(icon(ICON_COMMENT), el("span", { text: "Comment" }));
 
-  const composeTargetLabel = el("p", { "data-review-compose-target": true });
-  const composeQuote = el("blockquote", {
-    "data-review-compose-quote": true,
-    hidden: true,
-  });
   const composeInput = el("textarea", {
     "data-review-compose-input": true,
     id: "big-plan-review-compose",
@@ -523,16 +528,14 @@
     {
       "data-review-compose": true,
       role: "dialog",
-      "aria-label": "Comment on this block",
+      "aria-label": "Add a comment",
       hidden: true,
     },
     [
-      composeTargetLabel,
-      composeQuote,
       el("label", {
         for: "big-plan-review-compose",
         "data-review-field-label": true,
-        text: "Your note",
+        text: "Add a comment",
       }),
       composeInput,
       el("p", {
@@ -546,6 +549,10 @@
     ],
   );
 
+  const threadLayer = el("div", {
+    "data-review-thread-layer": true,
+    "aria-label": "Comments beside the plan",
+  });
   const markerLayer = el("div", {
     "data-review-marker-layer": true,
     "aria-label": "Existing comments",
@@ -557,17 +564,73 @@
     "aria-label": "Close comments and return to the plan",
     hidden: true,
   });
+  const deleteTitle = el("h2", {
+    id: "big-plan-review-delete-title",
+    text: "Delete comment?",
+  });
+  const deleteDescription = el("p", {
+    id: "big-plan-review-delete-description",
+    text: "This permanently removes your staged comment.",
+  });
+  const deleteCancel = el("button", {
+    type: "button",
+    "data-review-delete-cancel": true,
+    text: "Cancel",
+  });
+  const deleteConfirm = el("button", {
+    type: "button",
+    "data-review-delete-confirm": true,
+    text: "Delete",
+  });
+  const deleteDialog = el(
+    "dialog",
+    {
+      "data-review-delete-dialog": true,
+      "aria-labelledby": "big-plan-review-delete-title",
+      "aria-describedby": "big-plan-review-delete-description",
+    },
+    [
+      el("div", { "data-review-delete-content": true }, [
+        deleteTitle,
+        deleteDescription,
+        el("div", { "data-review-delete-actions": true }, [
+          deleteCancel,
+          deleteConfirm,
+        ]),
+      ]),
+    ],
+  );
 
   const surface = el("div", { "data-review-root": true }, [
     backdrop,
     toggle,
     rail,
     affordance,
+    threadLayer,
     compose,
     markerLayer,
+    deleteDialog,
     live,
   ]);
   document.body.appendChild(surface);
+  // Tailwind's delivery optimizer does not yet parse the standardized
+  // ::highlight() pseudo-element, so these two rules live with the browser
+  // behavior that creates their named Highlight ranges.
+  document.head.appendChild(
+    el("style", {
+      text:
+        "::highlight(big-plan-review-comments){" +
+        "background-color:var(--annotation-bg);" +
+        "text-decoration:underline;" +
+        "text-decoration-color:var(--annotation-c);" +
+        "text-decoration-thickness:1px}" +
+        "::highlight(big-plan-review-active){" +
+        "background-color:var(--annotation-bg);" +
+        "text-decoration:underline;" +
+        "text-decoration-color:var(--accent-c);" +
+        "text-decoration-thickness:2px}",
+    }),
+  );
 
   const announce = (message) => {
     live.textContent = message;
@@ -587,16 +650,26 @@
     rail.hidden = !open;
     backdrop.hidden = !open;
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
-    toggle.setAttribute("aria-label", open ? "Hide comments" : "Show comments");
+    toggle.setAttribute(
+      "aria-label",
+      open ? "Close comments sidebar" : "Open comments sidebar",
+    );
     if (open) {
       root.setAttribute("data-review-open", "");
     } else {
       root.removeAttribute("data-review-open");
     }
+    syncFloatingMode();
+    if (!compose.hidden && composeTarget) positionCompose(composeTarget);
+    positionThreadCards();
     // The drawer never navigates the document. Re-applying the captured
     // position defeats scroll anchoring caused by the desktop width change
     // and makes the below-1280 overlay reversible by construction.
-    requestAnimationFrame(() => window.scrollTo(0, readingPosition));
+    requestAnimationFrame(() => {
+      window.scrollTo(0, readingPosition);
+      if (!compose.hidden && composeTarget) positionCompose(composeTarget);
+      positionThreadCards();
+    });
   };
 
   const railIsOpen = () => !rail.hidden;
@@ -632,6 +705,7 @@
     for (const [block, marker] of markerByBlock) {
       const rect = block.getBoundingClientRect();
       const visible =
+        window.innerWidth < 1280 &&
         marker.hasAttribute("data-review-marker-active") &&
         rect.bottom >= 0 &&
         rect.top <= window.innerHeight;
@@ -667,9 +741,9 @@
     return marker;
   };
 
-  // Attributes keep the rendered block's state machine-readable; the visible
-  // marker is a real button, so an existing comment is directly editable
-  // rather than a decorative pseudo-element.
+  // Attributes keep the rendered block's state machine-readable. On narrow
+  // screens the marker remains a real button; the desktop floating card itself
+  // is the direct entry point, avoiding duplicate chrome around the plan.
   const paintChips = () => {
     const counts = chipCounts();
     const sentBlocks = new Set(
@@ -714,10 +788,18 @@
       ? document.querySelector('[data-block-id="' + cssEscape(id) + '"]')
       : null;
     const destination = block || document.body;
-    destination.scrollIntoView({ behavior: "smooth", block: "center" });
-    if (!block) return;
-    block.setAttribute("data-review-flash", "");
-    setTimeout(() => block.removeAttribute("data-review-flash"), 1400);
+    const scroll = () => {
+      destination.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (!block) return;
+      block.setAttribute("data-review-flash", "");
+      setTimeout(() => block.removeAttribute("data-review-flash"), 1400);
+    };
+    if (window.innerWidth < 1280 && railIsOpen()) {
+      setRailOpen(false);
+      requestAnimationFrame(scroll);
+    } else {
+      scroll();
+    }
   };
 
   // Block ids come from the renderer with a restricted character set, so this
@@ -727,15 +809,158 @@
       ? CSS.escape(value)
       : value.replace(/["\\]/g, "\\$&");
 
+  const blockForTarget = (target) => {
+    const id = target && target.blockId;
+    return id
+      ? document.querySelector('[data-block-id="' + cssEscape(id) + '"]')
+      : null;
+  };
+
+  // Turns a renderer-relative character offset back into a DOM boundary. The
+  // review chrome never enters a block, so these offsets remain stable while
+  // comments and the sidebar are mounted around the document.
+  const textBoundary = (block, offset) => {
+    const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    let remaining = Math.max(0, offset);
+    let node = walker.nextNode();
+    let last = null;
+    while (node) {
+      last = node;
+      if (remaining <= node.data.length) {
+        return { node, offset: remaining };
+      }
+      remaining -= node.data.length;
+      node = walker.nextNode();
+    }
+    return last === null ? null : { node: last, offset: last.data.length };
+  };
+
+  const rangeForTarget = (target) => {
+    const block = blockForTarget(target);
+    if (!block) return null;
+    if (target.type === "selection") {
+      const start = textBoundary(block, target.start);
+      const end = textBoundary(block, target.end);
+      if (!start || !end) return null;
+      const range = document.createRange();
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
+      return range;
+    }
+    if (target.type === "lines") {
+      const rows = Array.from(
+        block.querySelectorAll("[data-block-line]"),
+      ).filter((row) => {
+        const line = Number(row.getAttribute("data-block-line"));
+        return line >= target.start && line <= target.end;
+      });
+      if (rows.length === 0) return null;
+      const range = document.createRange();
+      range.setStartBefore(rows[0]);
+      range.setEndAfter(rows[rows.length - 1]);
+      return range;
+    }
+    return null;
+  };
+
+  const setNamedHighlight = (name, ranges) => {
+    if (
+      typeof CSS === "undefined" ||
+      !CSS.highlights ||
+      typeof Highlight === "undefined"
+    ) {
+      return false;
+    }
+    CSS.highlights.set(name, new Highlight(...ranges));
+    return true;
+  };
+
+  // Selection comments use the browser's Highlight API so the authored DOM is
+  // never wrapped or rewritten. Whole-block comments use attributes because
+  // an element box, rather than a text run, is the thing the reviewer chose.
+  const paintTargetHighlights = () => {
+    for (const block of blocks) {
+      block.removeAttribute("data-review-comment-highlight");
+      block.removeAttribute("data-review-active-highlight");
+    }
+    const commentRanges = [];
+    for (const comment of drafts.concat(sent)) {
+      const range = rangeForTarget(comment.target);
+      if (range) {
+        commentRanges.push(range);
+      } else {
+        blockForTarget(comment.target)?.setAttribute(
+          "data-review-comment-highlight",
+          "",
+        );
+      }
+    }
+    const activeTarget = composeTarget || pendingSelection;
+    const activeRange = activeTarget ? rangeForTarget(activeTarget) : null;
+    if (activeTarget && !activeRange) {
+      blockForTarget(activeTarget)?.setAttribute(
+        "data-review-active-highlight",
+        "",
+      );
+    }
+    root.setAttribute(
+      "data-review-selection-highlight-count",
+      String(commentRanges.length),
+    );
+    root.setAttribute(
+      "data-review-active-selection-highlight",
+      activeRange === null ? "false" : "true",
+    );
+    setNamedHighlight("big-plan-review-comments", commentRanges);
+    setNamedHighlight(
+      "big-plan-review-active",
+      activeRange === null ? [] : [activeRange],
+    );
+  };
+
+  const relativeCommentTime = (createdAt) => {
+    const time = Date.parse(createdAt);
+    if (Number.isNaN(time)) return "Just now";
+    const elapsed = Date.now() - time;
+    if (elapsed < 60_000) return "Just now";
+    if (elapsed < 3_600_000)
+      return Math.max(1, Math.floor(elapsed / 60_000)) + "m";
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(time));
+  };
+
+  const openDeleteDialog = (comment) => {
+    deleteCandidateId = comment.id;
+    deleteDescription.textContent =
+      "This permanently removes your staged comment. This action cannot be undone.";
+    deleteDialog.showModal();
+  };
+
+  const commitDraftEdit = async (comment, field) => {
+    const body = field.value.trim();
+    if (body === "") return;
+    comment.body = body;
+    editingId = null;
+    announce("Comment updated.");
+    renderTray();
+    await save();
+  };
+
   const draftRow = (comment) => {
     const isEditing = comment.id === editingId;
     const jump = el("button", {
       type: "button",
       "data-review-row-target": true,
-      text: describeTarget(comment.target),
+      text: slideTitleFor(comment.target),
       title: "Jump to this target",
     });
     jump.addEventListener("click", () => focusTarget(comment));
+    const state = el("span", {
+      "data-review-comment-state": "staged",
+      text: "Staged",
+    });
 
     if (!isEditing) {
       const edit = el("button", {
@@ -750,16 +975,11 @@
       const remove = el("button", {
         type: "button",
         "data-review-row-delete": true,
-        text: "Delete",
+        text: "Remove",
       });
-      remove.addEventListener("click", async () => {
-        drafts = drafts.filter((item) => item.id !== comment.id);
-        announce("Draft deleted. " + drafts.length + " pending.");
-        renderTray();
-        await save();
-      });
+      remove.addEventListener("click", () => openDeleteDialog(comment));
       return el("li", { "data-review-row": true }, [
-        jump,
+        el("div", { "data-review-row-head": true }, [jump, state]),
         el("p", { "data-review-row-body": true, text: comment.body }),
         el("div", { "data-review-row-actions": true }, [edit, remove]),
       ]);
@@ -786,15 +1006,7 @@
       "data-review-row-save": true,
       text: "Save",
     });
-    const commit = async () => {
-      const body = field.value.trim();
-      if (body === "") return;
-      comment.body = body;
-      editingId = null;
-      announce("Draft updated.");
-      renderTray();
-      await save();
-    };
+    const commit = () => commitDraftEdit(comment, field);
     confirm.addEventListener("click", commit);
     field.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
@@ -807,13 +1019,209 @@
       "li",
       { "data-review-row": true, "data-review-editing": true },
       [
-        jump,
+        el("div", { "data-review-row-head": true }, [jump, state]),
         field,
         el("div", { "data-review-row-actions": true }, [cancel, confirm]),
       ],
     );
-    setTimeout(() => field.focus(), 0);
+    if (railIsOpen()) setTimeout(() => field.focus(), 0);
     return row;
+  };
+
+  const sentRow = (comment) => {
+    const jump = el("button", {
+      type: "button",
+      "data-review-row-target": true,
+      text: slideTitleFor(comment.target),
+      title: "Jump to this target",
+    });
+    jump.addEventListener("click", () => focusTarget(comment));
+    return el("li", { "data-review-row": true, "data-review-sent-row": true }, [
+      el("div", { "data-review-row-head": true }, [
+        jump,
+        el("span", {
+          "data-review-comment-state": "sent",
+          text: "Sent",
+        }),
+      ]),
+      el("p", { "data-review-row-body": true, text: comment.body }),
+    ]);
+  };
+
+  const threadCard = ({ comment, state }) => {
+    const isEditing = state === "staged" && comment.id === editingId;
+    const card = el("article", {
+      "data-review-thread-card": true,
+      "data-review-thread-state": state,
+      "data-review-comment-id": comment.id,
+    });
+    const head = el("div", { "data-review-thread-head": true }, [
+      el("span", { "data-review-thread-avatar": true, text: "Y" }),
+      el("strong", { text: "You" }),
+      el("time", {
+        datetime: comment.createdAt,
+        text: relativeCommentTime(comment.createdAt),
+      }),
+      el("span", {
+        "data-review-comment-state": state,
+        text: state === "staged" ? "Staged" : "Sent",
+      }),
+    ]);
+    card.appendChild(head);
+
+    if (isEditing) {
+      const field = el("textarea", {
+        "data-review-thread-input": true,
+        rows: "4",
+        value: comment.body,
+        maxlength: String(BODY_LIMIT),
+        "aria-label": "Edit your comment",
+      });
+      const cancel = el("button", {
+        type: "button",
+        "data-review-thread-cancel": true,
+        text: "Cancel",
+      });
+      cancel.addEventListener("click", () => {
+        editingId = null;
+        renderTray();
+      });
+      const confirm = el("button", {
+        type: "button",
+        "data-review-thread-save": true,
+        text: "Save",
+      });
+      confirm.addEventListener("click", () => commitDraftEdit(comment, field));
+      field.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          editingId = null;
+          renderTray();
+        }
+        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          commitDraftEdit(comment, field);
+        }
+      });
+      card.append(
+        field,
+        el("div", { "data-review-thread-actions": true }, [cancel, confirm]),
+      );
+      setTimeout(() => field.focus(), 0);
+      return card;
+    }
+
+    const isLong = comment.body.length > LONG_COMMENT_LIMIT;
+    const expanded = expandedCommentIds.has(comment.id);
+    const body = el("p", {
+      "data-review-thread-body": true,
+    });
+    if (isLong && !expanded) {
+      body.appendChild(
+        document.createTextNode(
+          comment.body.slice(0, LONG_COMMENT_LIMIT).trimEnd() + " ",
+        ),
+      );
+      const more = el("button", {
+        type: "button",
+        "data-review-thread-more": true,
+        text: "… more",
+      });
+      more.addEventListener("click", () => {
+        expandedCommentIds.add(comment.id);
+        renderTray();
+      });
+      body.appendChild(more);
+    } else {
+      body.textContent = comment.body;
+    }
+    card.appendChild(body);
+    if (state === "staged") {
+      const edit = el("button", {
+        type: "button",
+        "data-review-thread-edit": true,
+        text: "Edit",
+      });
+      edit.addEventListener("click", () => {
+        editingId = comment.id;
+        renderTray();
+      });
+      const remove = el("button", {
+        type: "button",
+        "data-review-thread-delete": true,
+        text: "Remove",
+      });
+      remove.addEventListener("click", () => openDeleteDialog(comment));
+      card.appendChild(
+        el("div", { "data-review-thread-actions": true }, [edit, remove]),
+      );
+    }
+    return card;
+  };
+
+  const threadEntries = () =>
+    drafts
+      .map((comment) => ({ comment, state: "staged" }))
+      .concat(sent.map((comment) => ({ comment, state: "sent" })));
+
+  const syncFloatingMode = () => {
+    const shouldFloat =
+      window.innerWidth >= 1280 &&
+      !railIsOpen() &&
+      (!compose.hidden || drafts.length + sent.length > 0);
+    root.toggleAttribute("data-review-floating", shouldFloat);
+  };
+
+  const positionThreadCards = () => {
+    syncFloatingMode();
+    const canFloat =
+      window.innerWidth >= 1280 &&
+      !railIsOpen() &&
+      root.hasAttribute("data-review-floating");
+    const cards = Array.from(
+      threadLayer.querySelectorAll("[data-review-thread-card]"),
+    );
+    const composeBottom =
+      canFloat &&
+      !compose.hidden &&
+      compose.hasAttribute("data-review-compose-floating")
+        ? compose.getBoundingClientRect().bottom
+        : 44;
+    let previousBottom = Math.max(44, composeBottom);
+    for (const card of cards) {
+      const id = card.getAttribute("data-review-comment-id");
+      const comment = drafts
+        .concat(sent)
+        .find((candidate) => candidate.id === id);
+      const block = comment ? blockForTarget(comment.target) : null;
+      const rect = block?.getBoundingClientRect();
+      const visible =
+        canFloat &&
+        (rect === undefined ||
+          rect === null ||
+          (rect.bottom >= 44 && rect.top <= window.innerHeight));
+      card.hidden = !visible;
+      if (!visible) continue;
+      const preferredTop = rect ? Math.max(52, rect.top) : 52;
+      const top = Math.max(preferredTop, previousBottom + 8);
+      card.style.top =
+        Math.min(
+          top,
+          Math.max(52, window.innerHeight - card.offsetHeight - 12),
+        ) + "px";
+      previousBottom = Number.parseFloat(card.style.top) + card.offsetHeight;
+    }
+  };
+
+  const renderThreads = () => {
+    const entries = threadEntries().sort((left, right) => {
+      const leftTop =
+        blockForTarget(left.comment.target)?.getBoundingClientRect().top ?? 0;
+      const rightTop =
+        blockForTarget(right.comment.target)?.getBoundingClientRect().top ?? 0;
+      return leftTop - rightTop;
+    });
+    threadLayer.replaceChildren(...entries.map(threadCard));
+    positionThreadCards();
   };
 
   const renderTray = () => {
@@ -829,19 +1237,26 @@
     );
     sendButton.disabled = pending === 0;
     sentGroup.hidden = sent.length === 0;
-    sentList.replaceChildren(
-      ...sent.map((comment) =>
-        el("li", { "data-review-row": true, "data-review-sent-row": true }, [
-          el("span", {
-            "data-review-row-target": true,
-            text: describeTarget(comment.target),
-          }),
-          el("p", { "data-review-row-body": true, text: comment.body }),
-        ]),
-      ),
-    );
+    sentList.replaceChildren(...sent.map(sentRow));
     paintChips();
+    paintTargetHighlights();
+    renderThreads();
   };
+
+  deleteCancel.addEventListener("click", () => deleteDialog.close());
+  deleteConfirm.addEventListener("click", async () => {
+    if (deleteCandidateId === null) return;
+    drafts = drafts.filter((comment) => comment.id !== deleteCandidateId);
+    expandedCommentIds.delete(deleteCandidateId);
+    deleteCandidateId = null;
+    deleteDialog.close();
+    announce("Comment removed. " + drafts.length + " staged.");
+    renderTray();
+    await save();
+  });
+  deleteDialog.addEventListener("close", () => {
+    deleteCandidateId = null;
+  });
 
   const save = async () => {
     try {
@@ -870,44 +1285,58 @@
 
   const openCompose = (target) => {
     composeTarget = target;
-    composeTargetLabel.textContent = describeTarget(target);
-    composeTargetLabel.title = describeTarget(target);
+    pendingSelection = null;
+    attachLabel.hidden = true;
     // The affordance did its job; leaving it up would float a second control
     // over the card the reviewer is now typing in.
     affordance.hidden = true;
-    if (target.quote) {
-      composeQuote.hidden = false;
-      composeQuote.textContent = target.quote;
-    } else {
-      composeQuote.hidden = true;
-      composeQuote.textContent = "";
-    }
     composeInput.value = "";
     composeSave.disabled = true;
     compose.hidden = false;
+    const before = window.scrollY;
+    syncFloatingMode();
+    paintTargetHighlights();
     positionCompose(target);
-    // The tray opens with the first comment: the reviewer should see where a
-    // draft is about to land before they have written it.
-    if (!railIsOpen() && window.innerWidth >= 1280) setRailOpen(true);
-    setTimeout(() => composeInput.focus(), 0);
+    positionThreadCards();
+    requestAnimationFrame(() => {
+      window.scrollTo(0, before);
+      positionCompose(target);
+      positionThreadCards();
+      composeInput.focus();
+    });
   };
 
   const closeCompose = () => {
     compose.hidden = true;
     composeTarget = null;
     compose.removeAttribute("data-review-compose-inline");
+    compose.removeAttribute("data-review-compose-floating");
+    compose.removeAttribute("data-review-compose-centered");
+    compose.removeAttribute("style");
     if (compose.parentElement !== surface) surface.appendChild(compose);
+    paintTargetHighlights();
+    syncFloatingMode();
+    positionThreadCards();
   };
 
   const positionCompose = (target) => {
-    const block = target.blockId
-      ? document.querySelector(
-          '[data-block-id="' + cssEscape(target.blockId) + '"]',
-        )
-      : null;
+    const block = blockForTarget(target);
     if (!block) {
       compose.removeAttribute("style");
       compose.setAttribute("data-review-compose-centered", "");
+      return;
+    }
+    if (window.innerWidth >= 1280 && !railIsOpen()) {
+      if (compose.parentElement !== surface) surface.appendChild(compose);
+      compose.removeAttribute("data-review-compose-inline");
+      compose.removeAttribute("data-review-compose-centered");
+      compose.setAttribute("data-review-compose-floating", "");
+      const rect = block.getBoundingClientRect();
+      compose.style.top =
+        Math.max(
+          52,
+          Math.min(rect.top, window.innerHeight - compose.offsetHeight - 12),
+        ) + "px";
       return;
     }
     // A table row cannot legally own a div sibling inside tbody, so its
@@ -920,6 +1349,7 @@
         : block;
     compose.removeAttribute("style");
     compose.removeAttribute("data-review-compose-centered");
+    compose.removeAttribute("data-review-compose-floating");
     compose.setAttribute("data-review-compose-inline", "");
     anchor.after(compose);
   };
@@ -992,24 +1422,47 @@
       Math.min(rect.right + 8, rightLimit() - width - 12) + "px";
   };
 
+  let affordanceDismissTimer = null;
+
+  const cancelAffordanceDismiss = () => {
+    if (affordanceDismissTimer === null) return;
+    window.clearTimeout(affordanceDismissTimer);
+    affordanceDismissTimer = null;
+  };
+
   const hideAffordance = () => {
+    cancelAffordanceDismiss();
     if (document.activeElement === affordance) return;
     affordance.hidden = true;
+    if (!pendingSelection) cursorBlock = null;
+  };
+
+  const scheduleAffordanceDismiss = () => {
+    cancelAffordanceDismiss();
+    affordanceDismissTimer = window.setTimeout(() => {
+      affordanceDismissTimer = null;
+      if (!affordance.matches(":hover")) hideAffordance();
+    }, 100);
   };
 
   for (const block of blocks) {
     block.addEventListener("pointerenter", (event) => {
       if (event.pointerType === "touch") return;
       if (pendingSelection) return;
+      cancelAffordanceDismiss();
       showAffordance(block);
     });
+    block.addEventListener("pointerleave", () => {
+      if (!pendingSelection) scheduleAffordanceDismiss();
+    });
   }
+  affordance.addEventListener("pointerenter", cancelAffordanceDismiss);
+  affordance.addEventListener("pointerleave", scheduleAffordanceDismiss);
   document.addEventListener("pointerleave", hideAffordance);
 
   affordance.addEventListener("click", () => {
     if (pendingSelection) {
       openCompose(pendingSelection);
-      pendingSelection = null;
       return;
     }
     if (cursorBlock) openCompose(targetForBlock(cursorBlock));
@@ -1027,18 +1480,41 @@
       return null;
     }
     const range = selection.getRangeAt(0);
-    const quote = selection.toString().trim();
+    const selectedText = selection.toString();
+    const quote = selectedText.trim();
     if (quote === "") return null;
-    const block = blockOf(range.commonAncestorContainer);
+    const startBlock = blockOf(range.startContainer);
+    const endBlock = blockOf(range.endContainer);
+    const block =
+      startBlock ||
+      endBlock ||
+      blocks.find((candidate) => {
+        try {
+          return range.intersectsNode(candidate);
+        } catch {
+          return false;
+        }
+      });
     if (!block || surface.contains(block)) return null;
 
     const lineTarget = lineRangeFor(range, block);
     if (lineTarget) return lineTarget;
 
-    const prefix = document.createRange();
-    prefix.selectNodeContents(block);
-    prefix.setEnd(range.startContainer, range.startOffset);
-    const start = prefix.toString().length;
+    const blockLength = block.textContent?.length || 0;
+    let start = 0;
+    if (block.contains(range.startContainer)) {
+      const prefix = document.createRange();
+      prefix.selectNodeContents(block);
+      prefix.setEnd(range.startContainer, range.startOffset);
+      start = prefix.toString().length;
+    }
+    let end = blockLength;
+    if (block.contains(range.endContainer)) {
+      const throughEnd = document.createRange();
+      throughEnd.selectNodeContents(block);
+      throughEnd.setEnd(range.endContainer, range.endOffset);
+      end = throughEnd.toString().length;
+    }
     return {
       type: "selection",
       blockId: block.getAttribute("data-block-id"),
@@ -1046,7 +1522,7 @@
       label: labelFor(block),
       section: block.getAttribute("data-block-section") || "",
       start: start,
-      end: start + quote.length,
+      end: Math.max(start, end),
       quote: quote.slice(0, QUOTE_LIMIT),
     };
   };
@@ -1083,6 +1559,7 @@
       if (pendingSelection) {
         pendingSelection = null;
         affordance.hidden = true;
+        paintTargetHighlights();
       }
       attachLabel.hidden = true;
       return;
@@ -1090,6 +1567,7 @@
     pendingSelection = anchor;
     attachLabel.hidden = false;
     attachInput.checked = false;
+    paintTargetHighlights();
     if (!compose.hidden) return;
     const selection = window.getSelection();
     const rect = selection.getRangeAt(0).getBoundingClientRect();
@@ -1104,6 +1582,17 @@
   document.addEventListener("mouseup", () => setTimeout(offerSelection, 0));
   document.addEventListener("keyup", (event) => {
     if (event.shiftKey || event.key === "Shift") setTimeout(offerSelection, 0);
+  });
+  let selectionOfferTimer = null;
+  document.addEventListener("selectionchange", () => {
+    if (selectionOfferTimer !== null) {
+      window.clearTimeout(selectionOfferTimer);
+    }
+    selectionOfferTimer = window.setTimeout(() => {
+      selectionOfferTimer = null;
+      if (!compose.hidden || document.activeElement === affordance) return;
+      offerSelection();
+    }, 0);
   });
 
   // ---------------------------------------------------------- whole-plan note
@@ -1151,7 +1640,8 @@
     agentState.textContent = text;
     agentState.setAttribute("data-tone", tone);
     toggle.setAttribute("data-review-agent-tone", tone);
-    toggle.title = tone === "idle" ? "Show comments (Alt+C)" : "Agent: " + text;
+    toggle.title =
+      tone === "idle" ? "Open comments sidebar (Alt+C)" : "Agent: " + text;
     if (drafts.length === 0)
       toggleCount.textContent = tone === "idle" ? "0" : "·";
   };
@@ -1316,6 +1806,8 @@
   window.addEventListener("resize", () => {
     if (!compose.hidden && composeTarget) positionCompose(composeTarget);
     affordance.hidden = true;
+    syncFloatingMode();
+    positionThreadCards();
     positionMarkers();
   });
   window.addEventListener(
@@ -1325,6 +1817,7 @@
       if (!affordance.hidden && cursorBlock && !pendingSelection) {
         showAffordance(cursorBlock);
       }
+      positionThreadCards();
       positionMarkers();
     },
     { passive: true },

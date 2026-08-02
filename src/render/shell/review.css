@@ -32,20 +32,20 @@ elements exist and the document is exactly the document it always was.
   outline-offset: 2px;
 }
 
-/* The tray's entry point docks into the branding bar rather than floating
-   over the page: a plan has no persistent "Add note" button by design. */
+/* The tray's entry point reads as toolbar chrome, not a pill-shaped action.
+   It stays a real button for keyboard and screen-reader semantics. */
 [data-review-toggle] {
   position: fixed;
-  top: 0.3rem;
+  top: 0.22rem;
   right: 1rem;
   z-index: 45;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.3rem 0.7rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 999px;
-  background: var(--bg);
+  padding: 0.32rem 0.4rem;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
   color: var(--muted-c);
   font-size: 0.8125rem;
   line-height: 1.2;
@@ -54,49 +54,45 @@ elements exist and the document is exactly the document it always was.
 [data-review-toggle]:hover {
   background: var(--review-control-hover);
   color: var(--ink-c);
-  border-color: var(--muted-c);
 }
 [data-review-toggle]:active {
   background: var(--review-control-active);
+}
+[data-review-toggle][aria-expanded="true"] {
+  box-shadow: inset 0 -2px 0 var(--accent-c);
+  color: var(--ink-c);
 }
 [data-review-toggle] svg {
   width: 0.95rem;
   height: 0.95rem;
 }
 [data-review-toggle-count] {
-  min-width: 1.2rem;
-  padding: 0 0.3rem;
-  border-radius: 999px;
-  background: var(--surface-c);
+  min-width: 0.8rem;
+  padding-left: 0.1rem;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   text-align: center;
 }
 [data-review-toggle][data-review-has-pending="true"] {
   color: var(--accent-c);
-  border-color: var(--accent-c);
 }
 [data-review-toggle][data-review-has-pending="true"]
   [data-review-toggle-count] {
-  background: var(--accent-c);
-  color: var(--bg);
+  color: var(--accent-c);
 }
 
 /* Nothing pending, but the agent is doing something with what was already
    sent: the entry point carries that tone, so the wait is never silent. */
 [data-review-toggle][data-review-has-pending="false"][data-review-agent-tone="working"]
   [data-review-toggle-count] {
-  background: var(--callout-note-bg);
   color: var(--callout-note-c);
 }
 [data-review-toggle][data-review-has-pending="false"][data-review-agent-tone="ready"]
   [data-review-toggle-count] {
-  background: var(--diff-add-bg);
   color: var(--diff-add-c);
 }
 [data-review-toggle][data-review-has-pending="false"][data-review-agent-tone="failed"]
   [data-review-toggle-count] {
-  background: var(--callout-danger-bg);
   color: var(--callout-danger-c);
 }
 
@@ -111,6 +107,7 @@ elements exist and the document is exactly the document it always was.
   display: flex;
   width: min(22rem, 100vw);
   flex-direction: column;
+  border-top: 1px solid var(--edge-c);
   border-left: 1px solid var(--edge-c);
   background: var(--bg);
   box-shadow: -8px 0 24px rgb(0 0 0 / 0.06);
@@ -126,6 +123,9 @@ elements exist and the document is exactly the document it always was.
 @media (width >= 80rem) {
   :root[data-review-open] body {
     padding-right: 22rem;
+  }
+  :root[data-review-floating]:not([data-review-open]) body {
+    padding-right: 18rem;
   }
 }
 
@@ -293,12 +293,19 @@ elements exist and the document is exactly the document it always was.
   border-radius: 0.5rem;
   background: var(--surface-c);
 }
-/* A target label is a whole block's words, so it is held to one line and
-   ellipsized; the full label stays available as the control's title. */
+[data-review-row-head] {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+/* The title is deliberately only the slide name. The source highlight
+   identifies the exact block or passage without duplicating a path here. */
 [data-review-row-target] {
   display: block;
-  width: 100%;
-  margin-bottom: 0.25rem;
+  min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   color: var(--accent-c);
   font-size: 0.6875rem;
@@ -308,6 +315,21 @@ elements exist and the document is exactly the document it always was.
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
+}
+[data-review-comment-state] {
+  flex: 0 0 auto;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 999px;
+  color: var(--muted-c);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+[data-review-comment-state="staged"] {
+  border-color: color-mix(in srgb, var(--accent-c) 50%, var(--edge-c));
+  color: var(--accent-c);
 }
 button[data-review-row-target] {
   cursor: pointer;
@@ -380,7 +402,6 @@ button[data-review-row-target]:active {
 [data-review-sent-row] {
   background: transparent;
   border-style: dashed;
-  opacity: 0.75;
 }
 
 [data-review-send-bar] {
@@ -479,7 +500,8 @@ button[data-review-row-target]:active {
 
 [data-review-agent-input],
 [data-review-compose-input],
-[data-review-row-input] {
+[data-review-row-input],
+[data-review-thread-input] {
   display: block;
   width: 100%;
   padding: 0.4rem 0.5rem;
@@ -494,7 +516,8 @@ button[data-review-row-target]:active {
 }
 [data-review-agent-input]:focus-visible,
 [data-review-compose-input]:focus-visible,
-[data-review-row-input]:focus-visible {
+[data-review-row-input]:focus-visible,
+[data-review-thread-input]:focus-visible {
   outline: 1px solid var(--accent-c);
   outline-offset: 2px;
 }
@@ -651,6 +674,121 @@ button[data-review-row-target]:active {
   color: var(--muted-c);
 }
 
+/* ------------------------------------------------------- floating threads */
+
+[data-review-thread-layer] {
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  pointer-events: none;
+}
+[data-review-thread-card] {
+  position: fixed;
+  right: 0.75rem;
+  width: 17rem;
+  padding: 0.7rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.6rem;
+  background: var(--bg);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.14);
+  pointer-events: auto;
+}
+[data-review-thread-card][hidden] {
+  display: none;
+}
+[data-review-thread-state="sent"] {
+  border-style: dashed;
+}
+[data-review-thread-head] {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+  color: var(--muted-c);
+  font-size: 0.6875rem;
+}
+[data-review-thread-head] strong {
+  color: var(--ink-c);
+  font-weight: 650;
+}
+[data-review-thread-head] time {
+  margin-right: auto;
+}
+[data-review-thread-avatar] {
+  display: inline-flex;
+  width: 1.35rem;
+  height: 1.35rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent-c);
+  color: var(--bg);
+  font-size: 0.625rem;
+  font-weight: 750;
+}
+[data-review-thread-body] {
+  margin: 0;
+  color: var(--ink-c);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+[data-review-thread-more] {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted-c);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+[data-review-thread-more]:hover {
+  color: var(--accent-c);
+  text-decoration: underline;
+}
+[data-review-thread-more]:active {
+  color: var(--ink-c);
+}
+[data-review-thread-actions] {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+[data-review-thread-actions] button {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.3rem;
+  background: var(--bg);
+  color: var(--muted-c);
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+[data-review-thread-actions] button:hover {
+  border-color: var(--muted-c);
+  background: var(--review-control-hover);
+  color: var(--ink-c);
+}
+[data-review-thread-actions] button:active {
+  background: var(--review-control-active);
+}
+[data-review-thread-delete]:hover {
+  border-color: var(--diff-remove-c) !important;
+  color: var(--diff-remove-c) !important;
+}
+[data-review-thread-save] {
+  border-color: var(--accent-c) !important;
+  background: var(--accent-c) !important;
+  color: var(--bg) !important;
+}
+@media (width < 80rem) {
+  [data-review-thread-layer] {
+    display: none;
+  }
+}
+
 /* ------------------------------------------------------------- affordance */
 
 [data-review-affordance] {
@@ -689,7 +827,9 @@ button[data-review-row-target]:active {
 
 [data-review-compose] {
   position: fixed;
+  right: 0.75rem;
   z-index: 47;
+  width: 17rem;
   padding: 0.75rem;
   border: 1px solid var(--edge-c);
   border-radius: 0.6rem;
@@ -701,6 +841,7 @@ button[data-review-row-target]:active {
 }
 [data-review-compose][data-review-compose-inline] {
   position: relative;
+  right: auto;
   z-index: 2;
   width: 100%;
   margin: 0.65rem 0 1rem;
@@ -708,35 +849,10 @@ button[data-review-row-target]:active {
 }
 [data-review-compose][data-review-compose-centered] {
   top: 50%;
+  right: auto;
   left: 50%;
   width: min(24rem, calc(100vw - 2rem));
   transform: translate(-50%, -50%);
-}
-[data-review-compose-target] {
-  margin: 0 0 0.4rem;
-  overflow: hidden;
-  color: var(--accent-c);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-[data-review-compose-quote] {
-  margin: 0 0 0.5rem;
-  padding: 0.3rem 0.55rem;
-  border-left: 2px solid var(--edge-c);
-  color: var(--muted-c);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  max-height: 5rem;
-  overflow: hidden;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-[data-review-compose-quote][hidden] {
-  display: none;
 }
 [data-review-compose-hint] {
   margin: 0.35rem 0 0;
@@ -777,7 +893,73 @@ button[data-review-row-target]:active {
   cursor: default;
 }
 
+/* The repo ships inert HTML rather than a React runtime, so deletion uses the
+   native dialog element with shadcn/ui's alert-dialog hierarchy and actions. */
+[data-review-delete-dialog] {
+  position: fixed;
+  width: min(26rem, calc(100vw - 2rem));
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.65rem;
+  background: var(--bg);
+  color: var(--ink-c);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.24);
+}
+[data-review-delete-dialog]::backdrop {
+  background: rgb(0 0 0 / 0.46);
+}
+[data-review-delete-content] {
+  padding: 1.1rem;
+}
+[data-review-delete-content] h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+}
+[data-review-delete-content] p {
+  margin: 0.4rem 0 0;
+  color: var(--muted-c);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+[data-review-delete-actions] {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+[data-review-delete-actions] button {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+[data-review-delete-actions] button:hover {
+  background: var(--review-control-hover);
+}
+[data-review-delete-actions] button:active {
+  background: var(--review-control-active);
+}
+[data-review-delete-confirm] {
+  border-color: var(--diff-remove-c) !important;
+  background: var(--diff-remove-c) !important;
+  color: var(--bg) !important;
+}
+
 /* ------------------------------------------------------- chips and flashes */
+
+[data-review-comment-highlight] {
+  background: color-mix(in srgb, var(--annotation-bg) 48%, transparent);
+  box-shadow: inset 3px 0
+    color-mix(in srgb, var(--annotation-c) 58%, transparent);
+}
+[data-review-active-highlight] {
+  background: var(--annotation-bg);
+  box-shadow: inset 3px 0 var(--accent-c);
+}
 
 [data-review-marker] {
   position: fixed;

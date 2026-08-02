@@ -1,13 +1,12 @@
-// Critical browser journey for the live `big-plan review` surface: state
-// restores before its first interactive paint, the narrow tray is reachable
-// without moving the plan, concrete row targets remain distinguishable,
-// keyboard and shortcut contracts agree, semantic outcomes keep their tones,
-// and Send writes the real feedback package the CLI promises.
+// Critical browser journey for the live `big-plan review` surface: the
+// Notion-style source highlight, floating composer and comment cards, staged
+// lifecycle, confirmed deletion, persistence, responsive fallback, and real
+// feedback package all work together without losing the reader's position.
 
 import { readFile, stat } from "node:fs/promises";
 import { expect, test } from "./fixtures";
 
-test("should preserve and send a real review across reload and viewport changes", async ({
+test("should preserve and send a floating review across reload and viewport changes", async ({
   page,
   reviewRuntimeUrl,
 }) => {
@@ -37,9 +36,157 @@ test("should preserve and send a real review across reload and viewport changes"
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(reviewRuntimeUrl);
   const tray = page.locator("[data-review-rail]");
+  const toggle = page.locator("[data-review-toggle]");
   const affordance = page.locator("[data-review-affordance]");
+  const compose = page.locator("[data-review-compose]");
 
-  await test.step("adjacent rows keep concrete labels in the tray", async () => {
+  await test.step("the toolbar entry reads as a toggle rather than a pill", async () => {
+    await expect(toggle).toBeVisible();
+    await expect
+      .poll(() =>
+        toggle.evaluate((node) => {
+          const style = getComputedStyle(node);
+          return {
+            border: style.borderTopWidth,
+            radius: style.borderTopLeftRadius,
+            background: style.backgroundColor,
+          };
+        }),
+      )
+      .toEqual({
+        border: "0px",
+        radius: "4px",
+        background: "rgba(0, 0, 0, 0)",
+      });
+  });
+
+  await test.step("toolbar hover, focus, and active states stay distinct in both themes", async () => {
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await toggle.hover();
+      const hover = await toggle.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      );
+      await toggle.focus();
+      await expect(toggle).toBeFocused();
+      await expect
+        .poll(() => toggle.evaluate((node) => node.matches(":focus-visible")))
+        .toBe(true);
+      const box = await toggle.boundingBox();
+      if (box === null) {
+        throw new Error("The Comments toggle has no pointer target");
+      }
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      const active = await toggle.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      );
+      await page.mouse.up();
+      expect(active).not.toBe(hover);
+    }
+    await page.evaluate(() =>
+      document.documentElement.removeAttribute("data-theme"),
+    );
+  });
+
+  await test.step("the hover Comment control dismisses when its trigger is left", async () => {
+    await page.locator("[data-block-kind='paragraph']").first().hover();
+    await expect(affordance).toBeVisible();
+    await toggle.hover();
+    await expect(affordance).toBeHidden();
+  });
+
+  await test.step("a whole-paragraph selection always offers the same floating composer", async () => {
+    const paragraph = page.locator("[data-block-kind='paragraph']").first();
+    await paragraph.click({ clickCount: 3 });
+    await expect(affordance).toHaveAttribute(
+      "aria-label",
+      "Comment on the selected text",
+    );
+    await affordance.click();
+    await expect(compose).toHaveAttribute("data-review-compose-floating", "");
+    await expect(page.locator("[data-review-compose-target]")).toHaveCount(0);
+    await expect(page.locator("[data-review-compose-quote]")).toHaveCount(0);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-active-selection-highlight",
+      "true",
+    );
+    const geometry = await compose.evaluate((node) => {
+      const card = node.getBoundingClientRect();
+      const source = document
+        .querySelector("[data-block-kind='paragraph']")
+        ?.getBoundingClientRect();
+      return {
+        sourceRight: source?.right ?? 0,
+        cardLeft: card.left,
+        cardRight: card.right,
+        viewport: window.innerWidth,
+      };
+    });
+    expect(geometry.cardLeft).toBeGreaterThanOrEqual(geometry.sourceRight);
+    expect(geometry.cardRight).toBeLessThanOrEqual(geometry.viewport);
+
+    const longBody =
+      "This deliberately long comment proves that the floating thread stays compact until the reviewer asks for the rest. " +
+      "It includes enough detail to pass the collapse threshold while remaining plain reviewer text that can be edited or removed safely.";
+    await page.locator("[data-review-compose-input]").fill(longBody);
+    await page.locator("[data-review-compose-save]").click();
+    const card = page.locator("[data-review-thread-card]").first();
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("You");
+    await expect(card.locator("time")).not.toHaveText("");
+    await expect(card.locator("[data-review-thread-more]")).toHaveText(
+      "… more",
+    );
+    const collapsedText = await card
+      .locator("[data-review-thread-body]")
+      .textContent();
+    expect(collapsedText).toMatch(/ … more$/);
+    expect(collapsedText).not.toContain("…… more");
+    expect(collapsedText?.length ?? 0).toBeLessThan(longBody.length);
+    await card.locator("[data-review-thread-more]").click();
+    await expect(card.locator("[data-review-thread-body]")).toHaveText(
+      longBody,
+    );
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-selection-highlight-count",
+      "1",
+    );
+  });
+
+  await test.step("floating comments are easy to edit and require confirmation to remove", async () => {
+    const card = page.locator("[data-review-thread-card]").first();
+    await card.locator("[data-review-thread-edit]").click();
+    const field = page.locator("[data-review-thread-input]");
+    await expect(field).toBeFocused();
+    await field.fill("A shorter revision before sending.");
+    await page.locator("[data-review-thread-save]").click();
+    await expect(page.locator("[data-review-thread-body]").first()).toHaveText(
+      "A shorter revision before sending.",
+    );
+
+    await page.locator("[data-review-thread-delete]").click();
+    const dialog = page.locator("[data-review-delete-dialog]");
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText("Delete comment?");
+    await page.locator("[data-review-delete-cancel]").click();
+    await expect(page.locator("[data-review-drafts] li")).toHaveCount(1);
+
+    await page.locator("[data-review-thread-delete]").click();
+    await page.locator("[data-review-delete-confirm]").click();
+    await expect(page.locator("[data-review-drafts] li")).toHaveCount(0);
+    await expect(page.locator("[data-review-thread-card]")).toHaveCount(0);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-selection-highlight-count",
+      "0",
+    );
+  });
+
+  await test.step("right-hand Comment buttons select their blocks and enter the same flow", async () => {
     for (const [label, body] of [
       ["versionId", "Explain why the content hash is stable."],
       ["number", "Say whether numbering starts at one."],
@@ -51,41 +198,52 @@ test("should preserve and send a real review across reload and viewport changes"
         new RegExp(`${label}$`),
       );
       await affordance.click();
-      const compose = page.locator("[data-review-compose]");
-      await expect(compose).toHaveAttribute("data-review-compose-inline", "");
-      await expect
-        .poll(() =>
-          compose.evaluate((node) => {
-            const box = node.getBoundingClientRect();
-            const targets = Array.from(
-              document.querySelectorAll("[data-block-id]"),
-            ).filter((candidate) => candidate !== node.previousElementSibling);
-            return targets.some((target) => {
-              const other = target.getBoundingClientRect();
-              return (
-                box.left < other.right &&
-                box.right > other.left &&
-                box.top < other.bottom &&
-                box.bottom > other.top
-              );
-            });
-          }),
-        )
-        .toBe(false);
+      await expect(compose).toHaveAttribute("data-review-compose-floating", "");
+      await expect(row).toHaveAttribute("data-review-active-highlight", "");
       await page.locator("[data-review-compose-input]").fill(body);
       await page.locator("[data-review-compose-save]").click();
     }
     await expect(page.locator("[data-review-drafts] li")).toHaveCount(2);
-    const labels = await page
-      .locator("[data-review-row-target]")
-      .allTextContents();
-    expect(labels).toEqual([
-      "Details / versionId · Table row",
-      "Details / number · Table row",
-    ]);
+    await expect(
+      page.locator('[data-review-comment-state="staged"]'),
+    ).toHaveCount(4);
+    await expect(page.locator("[data-review-thread-card]")).toHaveCount(2);
   });
 
-  await test.step("the active whole-plan field restores before first paint", async () => {
+  await test.step("the sidebar has a top edge and complete clickable staged lifecycle", async () => {
+    await toggle.click();
+    await expect(tray).toBeVisible();
+    await expect
+      .poll(() =>
+        tray.evaluate((node) => getComputedStyle(node).borderTopWidth),
+      )
+      .toBe("1px");
+    const titles = page.locator(
+      "[data-review-drafts] [data-review-row-target]",
+    );
+    await expect(titles).toHaveCount(2);
+    expect(await titles.allTextContents()).toEqual(["Details", "Details"]);
+    await expect(
+      page.locator('[data-review-drafts] [data-review-comment-state="staged"]'),
+    ).toHaveCount(2);
+
+    await page.setViewportSize({ width: 1440, height: 500 });
+    await page.locator("#delivery").scrollIntoViewIfNeeded();
+    const before = await page.evaluate(() => window.scrollY);
+    await titles.first().click();
+    await expect(
+      page.locator('[data-block-label="versionId"]'),
+    ).toBeInViewport();
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .not.toBeCloseTo(before, 0);
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
+  await test.step("the active whole-plan field and staged comments restore before first paint", async () => {
+    await expect(page.locator('[data-review-tab="chat"]')).toContainText(
+      "Simulated",
+    );
     await page.locator('[data-review-tab="chat"]').click();
     const input = page.locator("[data-review-agent-input]");
     const saved = page.waitForResponse(
@@ -107,15 +265,12 @@ test("should preserve and send a real review across reload and viewport changes"
     await expect(page.locator("[data-review-agent-input]")).toHaveValue(
       "Unsaved reload draft must survive.",
     );
-    await expect(page.locator("[data-review-marker]")).toHaveCount(
-      await page.locator("[data-block-id]").count(),
-    );
     await expect(
       page.locator("[data-review-marker][data-review-marker-active]"),
     ).toHaveCount(2);
   });
 
-  await test.step("every textarea context has a visible keyboard focus ring", async () => {
+  await test.step("every edited textarea has a visible keyboard focus ring", async () => {
     await page.locator('[data-review-tab="chat"]').click();
     const wholePlan = page.locator("[data-review-agent-input]");
     await wholePlan.click();
@@ -145,12 +300,12 @@ test("should preserve and send a real review across reload and viewport changes"
     await page.locator("[data-review-row-cancel]").click();
   });
 
-  await test.step("the below-1280 drawer is reachable and reversible in place", async () => {
+  await test.step("the below-1280 drawer and inline composer preserve reading position", async () => {
     await page.locator("[data-review-hide]").click();
     await page.locator("#delivery").scrollIntoViewIfNeeded();
     await page.setViewportSize({ width: 1024, height: 900 });
     const before = await page.evaluate(() => window.scrollY);
-    await page.locator("[data-review-toggle]").click();
+    await toggle.click();
     await expect(tray).toBeVisible();
     await expect(page.locator("[data-review-backdrop]")).toBeVisible();
     const geometry = await tray.evaluate((node) => {
@@ -159,30 +314,36 @@ test("should preserve and send a real review across reload and viewport changes"
     });
     expect(geometry.top).toBeGreaterThanOrEqual(0);
     expect(geometry.bottom).toBeLessThanOrEqual(geometry.height);
-    await expect
-      .poll(() => page.evaluate(() => window.scrollY))
-      .toBeCloseTo(before, 0);
     await page.locator("[data-review-backdrop]").click();
-    await expect(tray).toBeHidden();
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
       .toBeCloseTo(before, 0);
+
+    const heading = page.locator("[data-block-kind='heading']").last();
+    await heading.hover();
+    await affordance.click();
+    await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+    await expect(page.locator("[data-review-thread-card]:visible")).toHaveCount(
+      0,
+    );
+    await page.locator("[data-review-compose-cancel]").click();
   });
 
   await test.step("Ctrl+Enter cannot bypass empty-comment validation", async () => {
     const before = await page.locator("[data-review-drafts] li").count();
-    await page.locator("[data-block-kind='heading']").first().hover();
+    const heading = page.locator("[data-block-kind='heading']").last();
+    await heading.hover();
     await affordance.click();
     await expect(page.locator("[data-review-compose-save]")).toBeDisabled();
     await page.locator("[data-review-compose-input]").press("Control+Enter");
-    await expect(page.locator("[data-review-compose]")).toBeVisible();
+    await expect(compose).toBeVisible();
     await expect(page.locator("[data-review-drafts] li")).toHaveCount(before);
     await page.locator("[data-review-compose-cancel]").click();
   });
 
   await test.step("outcome labels and borders share semantic tones in both themes", async () => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.locator("[data-review-toggle]").click();
+    await toggle.click();
     await page.locator('[data-review-tab="chat"]').click();
     for (const theme of ["light", "dark"]) {
       await page.evaluate(
@@ -204,7 +365,7 @@ test("should preserve and send a real review across reload and viewport changes"
     }
   });
 
-  await test.step("Send writes the real package and submitted state also restores", async () => {
+  await test.step("Send writes the real package and the sent lifecycle also restores", async () => {
     await page.locator('[data-review-tab="comments"]').click();
     const before = await page.evaluate(() => window.scrollY);
     const responsePromise = page.waitForResponse(
@@ -235,6 +396,18 @@ test("should preserve and send a real review across reload and viewport changes"
     const brief = await readFile(answer.brief, "utf8");
     expect(brief).toContain("versionId");
     expect(brief).toContain("number");
+
+    await page.locator('[data-review-tab="comments"]').click();
+    await expect(
+      page.locator(
+        '[data-review-sent-list] [data-review-comment-state="sent"]',
+      ),
+    ).toHaveCount(2);
+    expect(
+      await page
+        .locator("[data-review-sent-list] [data-review-row-target]")
+        .allTextContents(),
+    ).toEqual(["Details", "Details"]);
 
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute(

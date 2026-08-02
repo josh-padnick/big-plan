@@ -18,26 +18,28 @@ Open that address, review the plan, and stop the runtime with `Ctrl+C` when you 
 A rendered plan carries a stable address for every commentable unit: each heading, paragraph, list, table, code figure, and component.
 
 - **Comment on a block.** Hover or focus a block and press the **Comment** control that appears at its right edge.
-- **Comment on a passage.** Highlight any span of text; the same control offers to comment on the selection, and the comment carries the text you highlighted.
+- **Comment on a passage.** Highlight any span of text - including a whole paragraph - and press the same **Comment** control. The highlight stays on the source, so the editor does not repeat it.
 - **Comment on lines.** Highlighting inside a code figure produces a line-range comment, the same shape an authored `Annotation` uses.
-- **Comment on the whole plan.** Type in the **Agent** panel's compose field; with no selection attached, the note applies to the plan as a whole.
+- **Comment on the whole plan.** Type in the **Chat** panel's compose field; with no selection attached, the note applies to the plan as a whole.
 
 Keyboard users reach the same targets without a mouse: `Alt+↓` and `Alt+↑` move a review cursor block by block and announce each one, and `Alt+C` opens a comment on the block under the cursor.
 Inside a compose card, `Escape` cancels and `Cmd/Ctrl+Enter` saves.
 
 ## The Comments tray
 
-Comments collect in the **Comments** tray, which opens with your first comment and hides whenever you want the reading column back.
-The sticky **Comments** control keeps the pending count and reopens the tray.
+On desktop, the editor and saved comment card float to the right of their highlighted source.
+Long comments stay compact behind an **… more** control.
+Below 1280 px, the editor moves into the plan flow instead, so it never covers the text being reviewed.
+
+The sticky **Comments** toggle shows the pending count and opens the complete lifecycle in the tray.
 On desktop the reading column makes room for the tray.
-Below 1280 px it becomes an overlay drawer, so opening and closing it cannot move the place you were reading.
+Below 1280 px the tray becomes an overlay drawer, so opening and closing it cannot move the place you were reading.
 
 Until you send, every comment is yours:
 
-- Each row shows the target it points at and jumps to it when clicked.
-- Repeated targets include their concrete authored label, so adjacent table rows such as `versionId` and `number` remain distinct.
-- **Edit** rewrites a comment in place; **Delete** removes it.
-- A block that carries a draft shows a conversation marker; pressing it opens that comment for editing.
+- Each row is headed by its slide title and jumps to the exact highlighted target when clicked.
+- **Edit** rewrites a comment in place; **Remove** opens a confirmation dialog before deleting it.
+- At narrow widths, a block that carries a comment also shows a compact conversation marker that opens its lifecycle.
 - Drafts and the unfinished whole-plan field survive closing the tab, reloading, and reopening the plan.
 
 ## Sending feedback
@@ -50,7 +52,7 @@ Sending writes two files beside the plan, under `.big-plan/feedback/`:
 - A versioned JSON package holding each comment, its target, and the session it belongs to.
 - A short Markdown brief the agent can read directly.
 
-Sent comments move to a **Sent** group, their markers fade, and the **Chat** tab begins reporting runtime progress.
+Sent comments move to a **Sent** group, remain beside their highlighted source, and the **Chat** tab begins reporting runtime progress.
 Package delivery is real.
 Until an agent round-trip is connected, the response-state examples in that tab are explicitly labelled **Simulated**.
 
