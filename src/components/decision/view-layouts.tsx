@@ -359,20 +359,22 @@ export const BriefLayout = ({
           </li>
         ))}
       </ul>
-      <details className="decision-brief-compare px-5">
-        <summary className="decision-details-summary flex min-h-12 w-fit cursor-pointer items-center gap-1.5 rounded-sm text-sm font-semibold">
-          <span className="decision-details-chevron inline-flex size-3.5 shrink-0">
-            {lucideIconToReact({
-              icon: CHEVRON_RIGHT_ICON,
-              hidden: false,
-            })}
-          </span>
-          <span>{"Compare all three"}</span>
-        </summary>
-        <div className="decision-brief-compare-body mb-4">
-          <ReadOnlyComparison model={model} />
-        </div>
-      </details>
+      {model.discriminating.length === 0 ? null : (
+        <details className="decision-brief-compare px-5">
+          <summary className="decision-details-summary flex min-h-12 w-fit cursor-pointer items-center gap-1.5 rounded-sm text-sm font-semibold">
+            <span className="decision-details-chevron inline-flex size-3.5 shrink-0">
+              {lucideIconToReact({
+                icon: CHEVRON_RIGHT_ICON,
+                hidden: false,
+              })}
+            </span>
+            <span>{"Compare all three"}</span>
+          </summary>
+          <div className="decision-brief-compare-body mb-4">
+            <ReadOnlyComparison model={model} />
+          </div>
+        </details>
+      )}
     </div>
   );
 };

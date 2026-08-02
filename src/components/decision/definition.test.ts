@@ -197,6 +197,38 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     expect(rendered).not.toContain("data-decision-definition");
   });
 
+  it("should omit brief comparison when no criterion distinguishes the options", () => {
+    const sameVerdict = [
+      criterion("Needs deeper comparison"),
+      option({
+        title: "Enable",
+        summary: "Use the safer rollout.",
+        recommended: true,
+        considerations: [
+          consideration("Needs deeper comparison", "No", "neutral"),
+        ],
+      }),
+      option({
+        title: "Disable",
+        summary: "Use the direct rollout.",
+        considerations: [
+          consideration("Needs deeper comparison", "No", "neutral"),
+        ],
+      }),
+    ];
+    const { element, diagnostics } = render(
+      sameVerdict,
+      undefined,
+      "brief",
+    );
+    expect(diagnostics).toEqual([]);
+    const rendered = JSON.stringify(element);
+    expect(rendered).toContain("decision-brief-lead");
+    expect(rendered).toContain("decision-brief-list");
+    expect(rendered).not.toContain("decision-brief-compare");
+    expect(rendered).not.toContain("Compare all three");
+  });
+
   it("should drop a criterion every option scores the same", () => {
     const children = [
       criterion("Cost"),
