@@ -175,8 +175,9 @@ Apply these review conventions by judgment:
 
 ### Styling owned markup
 
-Agents should put presentation beside the markup they edit.
-Apply these three tests to every declaration:
+This section governs how agents implement styles in Big Plan.
+The default is Tailwind utility classes colocated with the markup an agent edits.
+Before using CSS, apply these three tests to every declaration:
 
 1. **Owned.** Does the view own the element that would carry the class?
    Generated Markdown and syntax-highlighter tokens fail this test because their elements are emitted downstream.
@@ -187,10 +188,11 @@ Apply these three tests to every declaration:
    Short variants such as `before:block`, `has-[img]:p-4`, `print:hidden`, `motion-reduce:transition-none`, and `@sm:grid` can pass.
    Framework support alone does not make a long arbitrary variant maintainable.
 
-A rule that passes all three tests should normally be a utility.
+A rule that passes all three tests should normally be implemented with Tailwind utility classes.
 Runtime state is not a reason by itself to use CSS: prefer semantic `aria-*` and `data-*` attributes while keeping every complete candidate static.
 
-CSS is the escape hatch for externally owned or generated markup, document-wide behavior, token or keyframe definitions, a selector relationship that is clearer as a selector, a shared visual primitive with no authored element of its own, or a case where utilities make the local markup materially less legible.
+CSS is the fallback.
+Use it only as an escape hatch for externally owned or generated markup, document-wide behavior, token or keyframe definitions, a selector relationship that is clearer as a selector, a shared visual primitive with no authored element of its own, or a case where utilities make the local markup materially less legible.
 Component CSS therefore requires a concrete ownership, selector, primitive-definition, document-wide, or readability reason—not merely that the rule uses state, a pseudo-element, `:has()`, print, motion, or a container query.
 State the reason in the stylesheet's file-level `CSS escape hatch:` comment.
 Ordinary escape-hatch rules belong to `components` and yield to utilities; only a state invariant that must beat resting utilities belongs to `bp-state`, with an adjacent `Override invariant:` comment naming what it must override.
