@@ -54,10 +54,12 @@ export type ReviewStore = {
   readonly agentResponseDirectory: string;
   readonly agentDraftDirectory: string;
   readonly agentPromptPath: string;
+  readonly revisionDirectory: string;
   readonly draftsPath: string;
   readonly activeDraftPath: string;
   readonly sentPath: string;
   readonly progressPath: string;
+  readonly resolvedPath: string;
   readonly sessionPath: string;
   readonly heartbeatPath: string;
 };
@@ -125,6 +127,10 @@ export const reviewStoreFor = ({
       base: agentDirectory,
       leaf: "agent-prompt.md",
     }),
+    revisionDirectory: inside({
+      base: reviewDirectory,
+      leaf: "revisions",
+    }),
     draftsPath: inside({ base: reviewDirectory, leaf: "drafts.json" }),
     activeDraftPath: inside({
       base: reviewDirectory,
@@ -132,6 +138,7 @@ export const reviewStoreFor = ({
     }),
     sentPath: inside({ base: reviewDirectory, leaf: "sent.json" }),
     progressPath: inside({ base: reviewDirectory, leaf: "progress.jsonl" }),
+    resolvedPath: inside({ base: reviewDirectory, leaf: "resolved.json" }),
     sessionPath: inside({ base: root, leaf: "session.json" }),
     heartbeatPath: inside({ base: root, leaf: "session-heartbeat.json" }),
   };
@@ -156,6 +163,10 @@ export const prepareStore = async (store: ReviewStore): Promise<void> => {
     mode: DIRECTORY_MODE,
   });
   await mkdir(store.agentDraftDirectory, {
+    recursive: true,
+    mode: DIRECTORY_MODE,
+  });
+  await mkdir(store.revisionDirectory, {
     recursive: true,
     mode: DIRECTORY_MODE,
   });
@@ -247,6 +258,86 @@ export const writeActiveDraft = async ({
   readonly value: string;
 }): Promise<void> => {
   await writeJson({ path, value });
+};
+
+const revisionPath = ({
+  store,
+  revision,
+}: {
+  readonly store: ReviewStore;
+  readonly revision: string;
+}): string => {
+  if (!/^[a-f0-9]{16,64}$/.test(revision)) {
+    throw new Error("A source revision must be a hexadecimal digest");
+  }
+  return inside({
+    base: store.revisionDirectory,
+    leaf: `${revision}.mdx`,
+  });
+};
+
+/** Retains the authoritative source the first time a revision is observed. */
+export const writeRevisionSnapshot = async ({
+  store,
+  revision,
+  source,
+}: {
+  readonly store: ReviewStore;
+  readonly revision: string;
+  readonly source: string;
+}): Promise<void> => {
+  const path = revisionPath({ store, revision });
+  try {
+    await readFile(path, "utf8");
+  } catch {
+    await writeFile(path, source, { mode: FILE_MODE, flag: "wx" }).catch(
+      async (error: unknown) => {
+        // Two request paths may observe the same digest concurrently. A file
+        // that now exists is the same immutable revision, not a conflict.
+        try {
+          await readFile(path, "utf8");
+        } catch {
+          throw error;
+        }
+      },
+    );
+  }
+};
+
+/** Reads one immutable source snapshot after validating its digest filename. */
+export const readRevisionSnapshot = async ({
+  store,
+  revision,
+}: {
+  readonly store: ReviewStore;
+  readonly revision: string;
+}): Promise<string> => readFile(revisionPath({ store, revision }), "utf8");
+
+/** Reads the durable set of locally resolved thread ids. */
+export const readResolvedCommentIds = async ({
+  store,
+  validate,
+}: {
+  readonly store: ReviewStore;
+  readonly validate: (value: unknown) => ReadonlyArray<string>;
+}): Promise<ReadonlyArray<string>> => {
+  const value = await readJson(store.resolvedPath);
+  try {
+    return validate(value);
+  } catch {
+    return [];
+  }
+};
+
+/** Replaces the durable resolved-thread set. */
+export const writeResolvedCommentIds = async ({
+  store,
+  ids,
+}: {
+  readonly store: ReviewStore;
+  readonly ids: ReadonlyArray<string>;
+}): Promise<void> => {
+  await writeJson({ path: store.resolvedPath, value: ids });
 };
 
 /**

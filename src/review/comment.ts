@@ -112,6 +112,22 @@ export const validateActiveDraft = (value: unknown): string =>
     limit: BODY_LIMIT,
   });
 
+/** Validates the durable set of resolved thread ids stored beside comments. */
+export const validateResolvedCommentIds = (
+  value: unknown,
+): ReadonlyArray<string> => {
+  if (!Array.isArray(value)) {
+    throw new CommentRejected("Resolved comment ids must arrive as a list");
+  }
+  const ids = value.map(asId);
+  if (ids.length > COMMENT_LIMIT || new Set(ids).size !== ids.length) {
+    throw new CommentRejected(
+      "Resolved comment ids must be unique and bounded",
+    );
+  }
+  return ids;
+};
+
 // Ids are the document's own, so they may only be what the document mints:
 // hexadecimal, and short. Anything else is a caller that did not come from a
 // document this runtime rendered.

@@ -4,7 +4,7 @@
 // filenames, replay rules, response completeness, or source-revision checks.
 
 import { createHash } from "node:crypto";
-import type { BlockMapEntry, CommentTarget, ReviewComment } from "./comment.js";
+import type { CommentTarget, ReviewComment } from "./comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import {
   readAgentRequestValues,
@@ -55,7 +55,7 @@ export type AgentOutcome = {
   readonly commentId: string;
   readonly state: AgentOutcomeState;
   readonly message: string;
-  readonly changeTarget?: string;
+  readonly changeTargets?: ReadonlyArray<string>;
 };
 
 type AgentResponseBase = {
@@ -318,14 +318,12 @@ const expectedCommentIds = ({
 const outcome = ({
   value,
   request,
-  commentsById,
-  currentBlocks,
+  changedBlocks,
   currentRevision,
 }: {
   readonly value: unknown;
   readonly request: AgentFeedbackRequest | AgentReplyRequest;
-  readonly commentsById: ReadonlyMap<string, ReviewComment>;
-  readonly currentBlocks: ReadonlyMap<string, BlockMapEntry>;
+  readonly changedBlocks: ReadonlySet<string>;
   readonly currentRevision: string;
 }): AgentOutcome => {
   if (!isRecord(value)) {
@@ -351,19 +349,34 @@ const outcome = ({
       'A "changed" outcome requires a revision to the plan source',
     );
   }
-  const original = commentsById.get(checkedCommentId);
-  const fallbackTarget =
-    original?.target.type === "document" ? undefined : original?.target.blockId;
-  const changeTarget =
-    typeof value.changeTarget === "string" && value.changeTarget !== ""
-      ? value.changeTarget
-      : fallbackTarget;
-  if (changeTarget === undefined || !currentBlocks.has(changeTarget)) {
+  if (
+    !Array.isArray(value.changeTargets) ||
+    value.changeTargets.length === 0 ||
+    value.changeTargets.length > MESSAGE_LIMIT
+  ) {
     throw new AgentExchangeRejected(
-      'A "changed" outcome must point to a block in the revised plan',
+      'A "changed" outcome must list at least one changed block',
     );
   }
-  return { ...result, changeTarget };
+  const changeTargets = value.changeTargets.map((entry) => {
+    const changeTarget = text({
+      value: entry,
+      field: "changeTargets",
+      limit: 300,
+    });
+    if (!BLOCK_ID.test(changeTarget) || !changedBlocks.has(changeTarget)) {
+      throw new AgentExchangeRejected(
+        'Every "changeTargets" entry must name a block changed by this revision',
+      );
+    }
+    return changeTarget;
+  });
+  if (new Set(changeTargets).size !== changeTargets.length) {
+    throw new AgentExchangeRejected(
+      '"changeTargets" cannot contain duplicates',
+    );
+  }
+  return { ...result, changeTargets };
 };
 
 /** Validates an agent-authored draft and fills trusted session metadata. */
@@ -371,14 +384,14 @@ export const validateAgentResponseDraft = ({
   value,
   request,
   commentsById,
-  currentBlocks,
+  changedBlocks,
   currentRevision,
   now,
 }: {
   readonly value: unknown;
   readonly request: AgentRequest;
   readonly commentsById: ReadonlyMap<string, ReviewComment>;
-  readonly currentBlocks: ReadonlyMap<string, BlockMapEntry>;
+  readonly changedBlocks: ReadonlySet<string>;
   readonly currentRevision: string;
   readonly now: string;
 }): AgentResponse => {
@@ -406,8 +419,7 @@ export const validateAgentResponseDraft = ({
     outcome({
       value: entry,
       request,
-      commentsById,
-      currentBlocks,
+      changedBlocks,
       currentRevision,
     }),
   );
@@ -486,12 +498,15 @@ const validateStoredResponse = ({
       return result;
     }
     if (
-      typeof entry.changeTarget !== "string" ||
-      !BLOCK_ID.test(entry.changeTarget)
+      !Array.isArray(entry.changeTargets) ||
+      entry.changeTargets.length === 0 ||
+      entry.changeTargets.some(
+        (target) => typeof target !== "string" || !BLOCK_ID.test(target),
+      )
     ) {
-      throw new AgentExchangeRejected("A stored change target is invalid");
+      throw new AgentExchangeRejected("Stored change targets are invalid");
     }
-    return { ...result, changeTarget: entry.changeTarget };
+    return { ...result, changeTargets: entry.changeTargets };
   });
   const actual = outcomes.map((entry) => entry.commentId);
   if (
@@ -599,8 +614,10 @@ export const writeAgentResponse = async ({
 };
 
 /**
- * Reads the whole exchange through the contract. Invalid, foreign, duplicate,
- * and orphaned files disappear instead of reaching either the agent or viewer.
+ * Reads the whole plan exchange through the contract. A review-server restart
+ * creates a new transport session, but the plan identity continues to own its
+ * threads and outcomes. Invalid, foreign-plan, duplicate, and orphaned files
+ * disappear instead of reaching either the agent or viewer.
  */
 export const readAgentExchange = async ({
   store,
@@ -619,7 +636,6 @@ export const readAgentExchange = async ({
     try {
       const request = validateAgentRequest(value);
       if (
-        request.sessionId === sessionId &&
         request.planId === planId &&
         !requests.some((entry) => entry.requestId === request.requestId)
       ) {
@@ -629,7 +645,14 @@ export const readAgentExchange = async ({
       // A hand-edited exchange file is ignored, never trusted or fatal.
     }
   }
-  requests.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  requests.sort((left, right) => {
+    const chronological = left.createdAt.localeCompare(right.createdAt);
+    if (chronological !== 0) return chronological;
+    return (
+      Number(right.sessionId === sessionId) -
+      Number(left.sessionId === sessionId)
+    );
+  });
   const commentsById = new Map<string, ReviewComment>();
   for (const request of requests) {
     if (request.kind === "feedback") {
@@ -717,6 +740,7 @@ export const responseTemplateFor = (
       commentId,
       state: "changed",
       message: "Explain the concrete revision or why another outcome applies.",
+      changeTargets: ["replace-with-each-changed-block-id"],
     })),
   };
 };

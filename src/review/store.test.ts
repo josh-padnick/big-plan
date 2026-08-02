@@ -15,9 +15,13 @@ import {
   prepareStore,
   readActiveDraft,
   readProgress,
+  readResolvedCommentIds,
+  readRevisionSnapshot,
   reviewStoreFor,
   sessionHeartbeatIsFresh,
   writeActiveDraft,
+  writeResolvedCommentIds,
+  writeRevisionSnapshot,
   writeSessionHeartbeat,
 } from "./store.js";
 
@@ -56,10 +60,12 @@ describe("review store placement", () => {
       store.agentResponseDirectory,
       store.agentDraftDirectory,
       store.agentPromptPath,
+      store.revisionDirectory,
       store.draftsPath,
       store.activeDraftPath,
       store.sentPath,
       store.progressPath,
+      store.resolvedPath,
       store.sessionPath,
       store.heartbeatPath,
     ]) {
@@ -79,6 +85,39 @@ describe("review store placement", () => {
     expect(() =>
       reviewStoreFor({ planPath, planId: "../../../../etc" }),
     ).toThrow(/outside/);
+  });
+});
+
+describe("review store revision history", () => {
+  it("should retain an immutable source snapshot by revision digest", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const revision = "1111111111111111";
+    await writeRevisionSnapshot({ store, revision, source: "# First\n" });
+    await writeRevisionSnapshot({ store, revision, source: "# Second\n" });
+    await expect(readRevisionSnapshot({ store, revision })).resolves.toBe(
+      "# First\n",
+    );
+  });
+
+  it("should persist resolved threads independently of browser storage", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeResolvedCommentIds({
+      store,
+      ids: ["aabbccdd", "11223344"],
+    });
+    await expect(
+      readResolvedCommentIds({
+        store,
+        validate: (value) =>
+          Array.isArray(value)
+            ? value.filter((entry) => typeof entry === "string")
+            : [],
+      }),
+    ).resolves.toEqual(["aabbccdd", "11223344"]);
   });
 });
 

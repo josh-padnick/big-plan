@@ -27,11 +27,14 @@ import {
   prepareStore,
   readProgress,
   readSessionDescriptor,
+  readRevisionSnapshot,
   reviewStoreFor,
   sessionHeartbeatIsFresh,
   writeAgentPrompt,
+  writeRevisionSnapshot,
 } from "../../review/store.js";
 import { renderDocument } from "../../render/render-document.js";
+import { diffRevisions } from "../../review/revision-diff.js";
 
 const USAGE = [
   "Usage:",
@@ -237,7 +240,7 @@ ${nextCommand}
 For each returned work item:
 1. Read the current plan source and the request plus its conversation history.
 2. For every anchored comment, choose exactly one outcome:
-   - changed: revise the plan source, explain the revision, and name the revised render's block id as changeTarget.
+   - changed: revise the plan source, explain the revision, and list every changed render block id in changeTargets, in presentation order.
    - question: do not guess; ask the precise question the reviewer must answer.
    - outside: explain why the request is beyond revising this plan.
 3. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
@@ -303,6 +306,33 @@ const nextWork = async ({
       help: ["Run again with --wait to wait for the reviewer's next message"],
     };
   }
+  const progress = await readProgress({
+    store: session.store,
+    sessionId: session.sessionId,
+  });
+  await appendProgress({
+    store: session.store,
+    event: {
+      sessionId: session.sessionId,
+      seq:
+        progress.reduce((highest, event) => Math.max(highest, event.seq), 0) +
+        1,
+      step:
+        request.kind === "chat"
+          ? "Coding agent reviewing plan question"
+          : request.kind === "reply"
+            ? "Coding agent reviewing thread reply"
+            : "Coding agent reviewing feedback",
+      state: "live",
+      ...(request.kind === "feedback"
+        ? {
+            detail: `${request.comments.length} comment${
+              request.comments.length === 1 ? "" : "s"
+            }`,
+          }
+        : {}),
+    },
+  });
   const responseFile = agentResponseDraftPath({
     store: session.store,
     requestId: request.requestId,
@@ -363,13 +393,38 @@ const respond = async ({
     fallbackTitle: basename(session.planPath, extname(session.planPath)),
     identity: {},
   });
+  const currentRevision = deriveSourceRevision(markdown);
+  await writeRevisionSnapshot({
+    store: session.store,
+    revision: currentRevision,
+    source: markdown,
+  });
+  const previousMarkdown = await readRevisionSnapshot({
+    store: session.store,
+    revision: request.sourceRevision,
+  });
+  const previousRendered = renderDocument({
+    markdown: previousMarkdown,
+    fallbackTitle: basename(session.planPath, extname(session.planPath)),
+    identity: {},
+  });
+  const changedBlocks = new Set(
+    diffRevisions({
+      before: previousRendered.blocks,
+      after: rendered.blocks,
+    }).flatMap((location) =>
+      [location.newBlockId, location.oldBlockId].filter(
+        (blockId): blockId is string => blockId !== undefined,
+      ),
+    ),
+  );
   assertPlanPassesLint({ markdown });
   const response = validateAgentResponseDraft({
     value: responseDraft,
     request,
     commentsById: commentsFromExchange(snapshot),
-    currentBlocks: new Map(rendered.blocks.map((block) => [block.id, block])),
-    currentRevision: deriveSourceRevision(markdown),
+    changedBlocks,
+    currentRevision,
     now: new Date().toISOString(),
   });
   await writeAgentResponse({ store: session.store, response });

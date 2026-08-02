@@ -8,11 +8,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  deriveSourceRevision,
   nextPendingAgentRequest,
   readAgentExchange,
 } from "./agent-exchange.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
+import { writeRevisionSnapshot } from "./store.js";
 
 const PLAN = `# Review runtime plan
 
@@ -209,8 +211,13 @@ describe("review runtime feedback", () => {
       },
     ];
     expect(
-      (await call({ path: "/api/drafts", method: "PUT", body: { drafts } }))
-        .status,
+      (
+        await call({
+          path: "/api/drafts",
+          method: "PUT",
+          body: { drafts, activeDraft: "", resolvedCommentIds: [] },
+        })
+      ).status,
     ).toBe(200);
     const answer: unknown = await (await call({ path: "/api/drafts" })).json();
     expect(answer).toMatchObject({ drafts: [{ id: "aabbccdd" }] });
@@ -347,6 +354,51 @@ describe("review runtime feedback", () => {
           )
         : [],
     ).toHaveLength(1);
+  });
+
+  it("should serve a deterministic diff between retained revisions", async () => {
+    const revised = PLAN.replace(
+      "feedback does not reach the agent",
+      "feedback reaches the coding agent",
+    );
+    const from = deriveSourceRevision(PLAN);
+    const to = deriveSourceRevision(revised);
+    await writeRevisionSnapshot({
+      store: runtime.store,
+      revision: from,
+      source: PLAN,
+    });
+    await writeRevisionSnapshot({
+      store: runtime.store,
+      revision: to,
+      source: revised,
+    });
+
+    const response = await call({
+      path: `/api/revision-diff?from=${from}&to=${to}`,
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      from,
+      to,
+      locations: [
+        {
+          status: "changed",
+          oldText: "Today's reality is that feedback does not reach the agent.",
+          newText: "Today's reality is that feedback reaches the coding agent.",
+        },
+      ],
+    });
+  });
+
+  it("should reject malformed revision names at the diff boundary", async () => {
+    expect(
+      (
+        await call({
+          path: "/api/revision-diff?from=../../etc/passwd&to=1111111111111111",
+        })
+      ).status,
+    ).toBe(400);
   });
 
   it("should report having received the package on its own progress channel", async () => {
