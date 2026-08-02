@@ -24,9 +24,9 @@ This note records the stage-1 review of the captain-verdict revision. The approv
 
 ### Weighted DecisionAnalysis
 
-1. Vertically stacking weights and totals hid the score result below the fold. Fixed by placing impact controls and composite scores in two desktop columns while retaining a single-column narrow layout.
-2. A percentage alone could make the weighting feel opaque. Fixed by printing every multiplication, numerator, denominator, and normalized percentage for each option.
-3. Custom weight controls could regress the already-approved focus treatment. Fixed by using native range inputs with one idiomatic focus halo and an always-visible exact `n / 5` output.
+1. A separate weight panel forced the reader to cross-reference criteria, while five ordinary tab stops per row would make the replacement tedious by keyboard. Fixed by matching ComplexDecision's criterion-local priority squares directly below every criterion name and giving each group one roving tab stop.
+2. Totals below the matrix felt like a detached calculator. Fixed by ending the matrix itself with a live Total score row aligned under option keys A, B, and C.
+3. Always-visible arithmetic overwhelmed the comparison. Fixed by moving each exact formula, numerator, and denominator behind one “Show score calculation” disclosure immediately below the totals.
 
 ### QuickDecision
 
@@ -40,7 +40,7 @@ This note records the stage-1 review of the captain-verdict revision. The approv
 - DecisionAnalysis audit: tapped a dashed criterion definition in both themes; the matching one-sentence explanation opened, all option controls remained disabled, and the decided status remained intact.
 - DecisionAnalysis interactive: selected “Cover the entire app,” confirmed it, and used Change to reopen it in both themes; the same radio remained selected and regained focus.
 - Seven-criterion analysis: selected an option, confirmed it, and used Change in both themes; all seven criteria remained present and the same option regained focus.
-- Weighted analysis: changed Build simplicity with a real click and arrow-key gesture in both themes, asserted all three formulas and normalized scores changed, then selected, confirmed, and changed an answer.
+- Weighted analysis: changed a criterion-local impact with a real square click and arrow-key gesture in both themes, asserted all three matrix-foot totals changed, opened the score-calculation disclosure, and verified the formulas matched those totals.
 - QuickDecision: completed an independent select–confirm–Change cycle on each of the three briefs in both themes.
 - QuickDecision structure: asserted three authored options, one proposal choice, and no `.decision-brief-compare` element on every call.
 - Layout: the document width equaled the 1440 px viewport in both themes; no visible element crossed either horizontal edge.

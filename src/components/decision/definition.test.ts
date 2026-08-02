@@ -202,7 +202,7 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     expect(rendered).not.toContain("data-decision-definition");
   });
 
-  it("should render transparent weighted scoring inputs and formulas", () => {
+  it("should render direct criterion weights, matrix totals, and optional formulas", () => {
     const weighted = [
       criterion("Reach", "How many readers benefit.", "5"),
       criterion("Effort", "How much work the option requires.", "2"),
@@ -254,8 +254,13 @@ describe("DECISION_COMPONENT_DEFINITION", () => {
     );
     expect(diagnostics).toEqual([]);
     const rendered = JSON.stringify(element);
-    expect(rendered).toContain("decision-weight-input");
+    expect(rendered).toContain("decision-weight-step");
+    expect(rendered).toContain("data-decision-weight-group");
+    expect(rendered).toContain('"tabIndex":0');
+    expect(rendered).toContain('"tabIndex":-1');
     expect(rendered).toContain("data-decision-composite");
+    expect(rendered).toContain("decision-score-row");
+    expect(rendered).toContain("Show score calculation");
     expect(rendered).toContain('"value":"5/5 · High"');
     expect(rendered).toContain('"value":"5×5 + 2×3"');
     expect(rendered).toContain('"value":"31"');

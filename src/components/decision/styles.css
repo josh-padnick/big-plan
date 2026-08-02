@@ -222,34 +222,69 @@
     white-space: normal;
   }
 
-  /* Weighted analysis is a transparent calculator, not a magic rank. Each
-     impact keeps a native 1–5 range control, and every option prints the exact
-     multiplication, numerator, denominator, and normalized percentage. */
-  article .decision-weight-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  article .decision-weight-input {
-    grid-column: 1 / -1;
-    width: 100%;
-    accent-color: var(--color-accent);
+  /* Weighted analysis inherits ComplexDecision's direct-manipulation
+     hierarchy: compact filled squares sit below each criterion, totals finish
+     the matrix, and arithmetic stays behind a secondary disclosure. */
+  article .decision-weight-step {
+    width: 0.625rem;
+    height: 0.625rem;
+    padding: 0;
     cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--color-muted) 35%, transparent);
+    border-radius: 0.125rem;
+    background: transparent;
   }
-  article .decision-weight-input:focus-visible {
+  article .decision-weight-step[data-weight-filled] {
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 30%, var(--bg));
+  }
+  article .decision-weight-step:focus-visible {
     outline: none;
-    border-radius: 999px;
+    border-color: var(--color-accent);
     box-shadow: 0 0 0 3px
       color-mix(in srgb, var(--color-accent) 22%, transparent);
   }
-  article .decision-composite-option[data-column-selected] {
-    border-color: color-mix(in srgb, var(--color-accent) 42%, var(--edge-c));
-    background: color-mix(in srgb, var(--color-accent) 10%, var(--bg));
-    box-shadow: inset 3px 0 0 var(--color-accent);
+  article .decision-score-row > th,
+  article .decision-score-row > td {
+    border-top: 2px solid var(--edge-c);
+    font-weight: 600;
+  }
+  article .decision-score-breakdown-row > td {
+    border-top: 1px solid var(--edge-c);
+  }
+  article .decision-score-breakdown-link {
+    display: inline;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    list-style: none;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  article .decision-score-breakdown-link::-webkit-details-marker {
+    display: none;
+  }
+  article [data-score-breakdown-open] {
+    display: none;
   }
   article
-    .decision-composite-option[data-column-selected][data-column-settled] {
-    border-color: var(--decision-pro-c);
-    background: var(--decision-pro-bg);
-    box-shadow: inset 3px 0 0 var(--decision-pro-c);
+    .decision-score-breakdown[open]
+    .decision-score-breakdown-link
+    [data-score-breakdown-closed] {
+    display: none;
+  }
+  article
+    .decision-score-breakdown[open]
+    .decision-score-breakdown-link
+    [data-score-breakdown-open] {
+    display: inline;
+  }
+  article .decision-score-breakdown[open] > .decision-score-breakdown-link {
+    color: var(--color-ink);
   }
 
   /* The authored term is the affordance: dashed underlines work equally for
@@ -491,22 +526,6 @@
   }
   article .decision-matrix {
     min-width: 34rem;
-  }
-}
-
-@media (width >= 56rem) {
-  article .decision-scoring {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 1rem 1.25rem;
-    align-items: start;
-  }
-  article .decision-scoring-intro {
-    grid-column: 1 / -1;
-  }
-  article .decision-weight-list,
-  article .decision-composite {
-    margin-top: 0;
   }
 }
 

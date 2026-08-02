@@ -1519,7 +1519,7 @@ export const VIEWER_SCRIPT = `<script>
     const columnHeaders = ownAll(".decision-column");
     const compareZones = ownAll("[data-decision-compare]");
     const explainZone = own("[data-decision-explain]");
-    const scoringPanel = own("section[data-decision-scoring]");
+    const weighting = own("[data-decision-weighting]");
     const picked = () => choices.find((choice) => choice.checked) || null;
     const proposes = (choice) =>
       choice instanceof Element &&
@@ -1535,30 +1535,25 @@ export const VIEWER_SCRIPT = `<script>
     const defaultIndex =
       rationale === null ? "0" : rationale.getAttribute("data-default-index");
 
-    // Weighted analysis keeps every number inspectable. The authored values
-    // render a complete no-script formula; sliders only replace criterion
-    // impacts, then recompute the same numerator and denominator in place.
-    if (scoringPanel !== null) {
-      const weightInputs = Array.from(
-        scoringPanel.querySelectorAll("[data-decision-weight]"),
+    // Weighted analysis follows ComplexDecision's direct-manipulation
+    // treatment: compact priority squares live below each criterion, the
+    // matrix foot shows live totals, and exact arithmetic stays available in
+    // one optional disclosure.
+    if (weighting !== null) {
+      const weightGroups = Array.from(
+        weighting.querySelectorAll("[data-decision-weight-group]"),
       );
       const compositeRows = Array.from(
-        scoringPanel.querySelectorAll("[data-decision-composite]"),
+        weighting.querySelectorAll("[data-decision-composite]"),
       );
       const syncScoring = () => {
-        const weights = weightInputs.map((input) => Number(input.value));
+        const weights = weightGroups.map((group) =>
+          Number(group.getAttribute("data-decision-weight-value") || "0"),
+        );
         const denominator = weights.reduce(
           (sum, weight) => sum + weight * 5,
           0,
         );
-        for (const input of weightInputs) {
-          const row = input.closest(".decision-weight-row");
-          const output =
-            row === null
-              ? null
-              : row.querySelector("[data-decision-weight-output]");
-          if (output !== null) output.textContent = input.value;
-        }
         for (const row of compositeRows) {
           const scores = (row.getAttribute("data-score-values") || "")
             .split(",")
@@ -1597,8 +1592,49 @@ export const VIEWER_SCRIPT = `<script>
           }
         }
       };
-      for (const input of weightInputs) {
-        input.addEventListener("input", syncScoring);
+      const applyWeight = (group, value) => {
+        group.setAttribute("data-decision-weight-value", String(value));
+        const output = group.querySelector("[data-decision-weight-output]");
+        if (output !== null) output.textContent = String(value) + "/5";
+        for (const step of group.querySelectorAll("[data-decision-weight]")) {
+          const stepValue = Number(step.getAttribute("data-weight-value"));
+          step.setAttribute(
+            "aria-checked",
+            stepValue === value ? "true" : "false",
+          );
+          step.tabIndex = stepValue === value ? 0 : -1;
+          if (stepValue <= value) step.setAttribute("data-weight-filled", "");
+          else step.removeAttribute("data-weight-filled");
+        }
+        syncScoring();
+      };
+      for (const group of weightGroups) {
+        for (const step of group.querySelectorAll("[data-decision-weight]")) {
+          step.addEventListener("click", () => {
+            applyWeight(group, Number(step.getAttribute("data-weight-value")));
+          });
+          step.addEventListener("keydown", (event) => {
+            const current = Number(
+              group.getAttribute("data-decision-weight-value") || "1",
+            );
+            const next =
+              event.key === "ArrowRight" || event.key === "ArrowUp"
+                ? Math.min(5, current + 1)
+                : event.key === "ArrowLeft" || event.key === "ArrowDown"
+                  ? Math.max(1, current - 1)
+                  : event.key === "Home"
+                    ? 1
+                    : event.key === "End"
+                      ? 5
+                      : null;
+            if (next === null) return;
+            event.preventDefault();
+            applyWeight(group, next);
+            group
+              .querySelector('[data-weight-value="' + String(next) + '"]')
+              ?.focus();
+          });
+        }
       }
       syncScoring();
     }

@@ -13,11 +13,16 @@ import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 const RADIO_CLASSES =
   "decision-radio mt-0.5 size-5 shrink-0 appearance-none rounded-full border";
 
-const criteriaOf = (model: CompiledDecision) =>
-  model.discriminating.flatMap((row) => {
+const criteriaOf = (model: CompiledDecision) => {
+  const rows =
+    model.scoring === "weighted"
+      ? model.criteria.map((_, index) => index)
+      : model.discriminating;
+  return rows.flatMap((row) => {
     const criterion = model.criteria[row];
     return criterion === undefined ? [] : [{ row, criterion }];
   });
+};
 
 const Radio = ({
   option,
@@ -162,107 +167,160 @@ const weightedTotal = ({
   return { weights, scores, numerator, denominator, percent };
 };
 
-// The full-scoring variation exposes the arithmetic instead of hiding it
-// behind a rank. Authored 1–5 impacts and scores provide the readable default;
-// the shell keeps these totals live when a reviewer changes any impact.
-export const WeightedScorePanel = ({
+// ComplexDecision established the compact priority-control grammar: weight
+// squares belong directly below the criterion they qualify. Weighted Decision
+// keeps that placement while extending the control to its explicit 1–5 scale.
+const WeightControl = ({
+  title,
+  impact,
+  criterionIndex,
+}: {
+  readonly title: string;
+  readonly impact: number;
+  readonly criterionIndex: number;
+}) => (
+  <div
+    className="decision-weight-group mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1"
+    role="radiogroup"
+    aria-label={`Impact of ${title}`}
+    data-decision-weight-group=""
+    data-criterion-index={criterionIndex}
+    data-decision-weight-value={impact}
+  >
+    <span className="inline-flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((value) => (
+        <button
+          className="decision-weight-step"
+          type="button"
+          role="radio"
+          key={value}
+          aria-label={`Set impact to ${value} of 5 for ${title}`}
+          aria-checked={value === impact}
+          tabIndex={value === impact ? 0 : -1}
+          title={`Impact: ${value} of 5`}
+          data-decision-weight=""
+          data-weight-value={value}
+          {...(value <= impact ? { "data-weight-filled": "" } : {})}
+        />
+      ))}
+    </span>
+    <output
+      className="text-[0.6875rem] leading-4 font-semibold text-muted tabular-nums"
+      data-decision-weight-output=""
+    >
+      {`${impact}/5`}
+    </output>
+  </div>
+);
+
+const Formula = ({
+  model,
+  option,
+  optionIndex,
+}: {
+  readonly model: CompiledDecision;
+  readonly option: CompiledDecisionOption;
+  readonly optionIndex: number;
+}) => {
+  const total = weightedTotal({ model, option });
+  const formula = total.weights
+    .map(
+      (weight, criterionIndex) =>
+        `${weight}×${total.scores[criterionIndex] ?? 0}`,
+    )
+    .join(" + ");
+  return (
+    <div
+      className="decision-score-formula min-w-0 rounded-md border border-edge bg-paper px-3 py-2.5"
+      data-decision-composite=""
+      data-option-index={optionIndex}
+      data-score-values={total.scores.join(",")}
+    >
+      <div className="flex min-w-0 items-baseline gap-2">
+        <span className="decision-key inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-xs font-bold">
+          {optionKey(optionIndex)}
+        </span>
+        <span className="min-w-0 flex-1 text-sm font-semibold text-ink">
+          {option.title}
+        </span>
+      </div>
+      <p className="mt-1.5 mb-0 break-words font-mono text-xs leading-5 text-muted">
+        <span data-decision-formula="">{formula}</span>
+        {" = "}
+        <span data-decision-numerator="">{total.numerator}</span>
+        {" / "}
+        <span data-decision-denominator="">{total.denominator}</span>
+      </p>
+    </div>
+  );
+};
+
+// Totals sit at the foot of the same matrix they summarize. Exact arithmetic
+// remains available, but only behind one secondary disclosure so the default
+// comparison ends with the answer rather than a separate calculator panel.
+const WeightedScoreFooter = ({
   model,
 }: {
   readonly model: CompiledDecision;
 }) => (
-  <section
-    className="decision-scoring border-t border-edge bg-surface px-5 py-4"
-    data-decision-scoring=""
-  >
-    <div className="decision-scoring-intro">
-      <h4 className="m-0 text-base font-semibold text-ink">
-        {"Impact weights"}
-      </h4>
-      <p className="mt-1 mb-0 text-sm text-muted">
-        {
-          "Set how much each criterion matters. Every composite updates as Σ(impact × option score) ÷ Σ(impact × 5)."
-        }
-      </p>
-    </div>
-    <div className="decision-weight-list mt-4 grid gap-3">
-      {model.criteria.map((criterion, index) => (
-        <label
-          className="decision-weight-row grid min-w-0 items-center gap-x-3 gap-y-1"
-          key={criterion.id}
-        >
-          <span className="min-w-0 text-sm font-medium text-ink">
-            {criterion.title}
-          </span>
-          <span className="decision-weight-value text-right text-xs font-semibold text-muted tabular-nums">
-            <output data-decision-weight-output="">{criterion.impact}</output>
-            {" / 5"}
-          </span>
-          <input
-            className="decision-weight-input"
-            type="range"
-            min="1"
-            max="5"
-            step="1"
-            defaultValue={criterion.impact}
-            aria-label={`${criterion.title} impact`}
-            data-decision-weight=""
-            data-criterion-index={index}
-          />
-        </label>
-      ))}
-    </div>
-    <div className="decision-composite mt-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h4 className="m-0 text-base font-semibold text-ink">
-          {"Composite scores"}
-        </h4>
-        <span className="text-xs text-muted">{"Transparent 1–5 scale"}</span>
-      </div>
-      <ol className="decision-composite-list mt-3 grid list-none gap-2 p-0">
-        {model.options.map((option, optionIndex) => {
-          const total = weightedTotal({ model, option });
-          const formula = total.weights
-            .map(
-              (weight, criterionIndex) =>
-                `${weight}×${total.scores[criterionIndex] ?? 0}`,
-            )
-            .join(" + ");
-          return (
-            <li
-              className="decision-composite-option min-w-0 rounded-md border border-edge bg-paper px-3 py-2.5"
-              key={option.id}
-              data-decision-composite=""
-              data-option-index={optionIndex}
-              data-decision-column={optionIndex}
-              data-score-values={total.scores.join(",")}
+  <tfoot>
+    <tr className="comparison-matrix-row decision-score-row">
+      <th
+        className="decision-criterion px-4 py-3 text-left text-sm leading-5 font-semibold text-ink"
+        scope="row"
+      >
+        {"Total score"}
+      </th>
+      {model.options.map((option, optionIndex) => {
+        const total = weightedTotal({ model, option });
+        return (
+          <td
+            className="decision-score-total px-4 py-3 text-center"
+            key={option.id}
+            data-decision-column={optionIndex}
+            data-decision-composite=""
+            data-option-index={optionIndex}
+            data-score-values={total.scores.join(",")}
+          >
+            <strong
+              className="text-base text-ink tabular-nums"
+              data-decision-percent=""
             >
-              <div className="flex min-w-0 items-baseline gap-2">
-                <span className="decision-key inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-xs font-bold">
-                  {optionKey(optionIndex)}
-                </span>
-                <span className="min-w-0 flex-1 text-sm font-semibold text-ink">
-                  {option.title}
-                </span>
-                <strong
-                  className="text-base text-ink tabular-nums"
-                  data-decision-percent=""
-                >
-                  {`${total.percent}%`}
-                </strong>
-              </div>
-              <p className="mt-1.5 mb-0 break-words font-mono text-xs leading-5 text-muted">
-                <span data-decision-formula="">{formula}</span>
-                {" = "}
-                <span data-decision-numerator="">{total.numerator}</span>
-                {" / "}
-                <span data-decision-denominator="">{total.denominator}</span>
-              </p>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
-  </section>
+              {`${total.percent}%`}
+            </strong>
+            <span className="sr-only">{` for ${option.title}`}</span>
+          </td>
+        );
+      })}
+    </tr>
+    <tr className="decision-score-breakdown-row">
+      <td className="px-4 py-3" colSpan={model.options.length + 1}>
+        <details className="decision-score-breakdown">
+          <summary className="decision-score-breakdown-link">
+            <span data-score-breakdown-closed="">
+              {"Show score calculation"}
+            </span>
+            <span data-score-breakdown-open="">{"Hide score calculation"}</span>
+          </summary>
+          <div className="mt-3 grid gap-2">
+            {model.options.map((option, optionIndex) => (
+              <Formula
+                key={option.id}
+                model={model}
+                option={option}
+                optionIndex={optionIndex}
+              />
+            ))}
+          </div>
+          <p className="mt-2.5 mb-0 text-xs text-muted">
+            {
+              "Each total is Σ(impact × option score) ÷ Σ(impact × 5), normalized to 100%."
+            }
+          </p>
+        </details>
+      </td>
+    </tr>
+  </tfoot>
 );
 
 // The chosen matrix: full option names live in the chooser rail, while stable
@@ -277,7 +335,12 @@ export const MatrixLayout = ({
 }) => {
   const criteria = criteriaOf(model);
   return (
-    <div className="decision-keyed">
+    <div
+      className="decision-keyed"
+      {...(model.scoring === "weighted"
+        ? { "data-decision-weighting": "" }
+        : {})}
+    >
       <ol className="decision-keyed-chooser m-0 grid list-none gap-0 p-0">
         {model.options.map((option, index) => (
           <li
@@ -352,6 +415,14 @@ export const MatrixLayout = ({
                   detail={criterion.detail}
                   kind="criterion"
                 />
+                {model.scoring === "weighted" &&
+                criterion.impact !== undefined ? (
+                  <WeightControl
+                    title={criterion.title}
+                    impact={criterion.impact}
+                    criterionIndex={row}
+                  />
+                ) : null}
               </th>
               {model.options.map((option, index) => {
                 const consideration = option.considerations[row];
@@ -381,6 +452,9 @@ export const MatrixLayout = ({
             </tr>
           ))}
         </tbody>
+        {model.scoring === "weighted" ? (
+          <WeightedScoreFooter model={model} />
+        ) : null}
       </ComparisonMatrix>
     </div>
   );
