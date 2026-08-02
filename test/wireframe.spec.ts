@@ -684,7 +684,7 @@ test("should maximize and restore a wireframe in both themes", async ({
       name: "Wallet",
       exact: true,
     });
-    await currentChoice.focus();
+    await expect(currentChoice).toBeFocused();
     await page.keyboard.press("ArrowDown");
     await expect(
       screenList.getByRole("button", { name: "Ask · choose" }),
@@ -697,6 +697,18 @@ test("should maximize and restore a wireframe in both themes", async ({
     await expect(
       page.locator('[data-wireframe-screen="child-home"]'),
     ).toBeVisible();
+    await page.keyboard.press("ArrowRight");
+    await expect(
+      screenList.getByRole("button", { name: "Ask · choose" }),
+    ).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(currentChoice).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(
+      screenList.getByRole("button", { name: "Lesson · done" }),
+    ).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(currentChoice).toBeFocused();
     await zoomControls
       .getByRole("button", { name: "Zoom wireframe out" })
       .click();

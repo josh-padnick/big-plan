@@ -2012,6 +2012,11 @@ ${DIAGRAM_SCRIPT}
     root.addEventListener("figuremaximizechange", (event) => {
       if (event.detail.maximized) {
         fitAll();
+        const currentChoice = root.querySelector(
+          "[data-wireframe-switch][aria-current=true]",
+        );
+        if (currentChoice instanceof HTMLElement)
+          currentChoice.focus({ preventScroll: true });
         return;
       }
       for (const screen of screens)
@@ -2054,7 +2059,14 @@ ${DIAGRAM_SCRIPT}
           !root.hasAttribute("data-figure-maximized") ||
           !(event.target instanceof Element) ||
           !event.target.matches("[data-wireframe-switch]") ||
-          !["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)
+          ![
+            "ArrowUp",
+            "ArrowDown",
+            "ArrowLeft",
+            "ArrowRight",
+            "Home",
+            "End",
+          ].includes(event.key)
         )
           return;
         const choices = Array.from(
@@ -2068,13 +2080,10 @@ ${DIAGRAM_SCRIPT}
             ? 0
             : event.key === "End"
               ? choices.length - 1
-              : Math.max(
-                  0,
-                  Math.min(
-                    choices.length - 1,
-                    current + (event.key === "ArrowDown" ? 1 : -1),
-                  ),
-                );
+              : (current +
+                  (["ArrowDown", "ArrowRight"].includes(event.key) ? 1 : -1) +
+                  choices.length) %
+                choices.length;
         const choice = choices[next];
         const id = choice.getAttribute("data-wireframe-navigate");
         if (id !== null) show(id);
