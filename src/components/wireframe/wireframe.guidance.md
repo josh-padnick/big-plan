@@ -6,7 +6,7 @@ A hand-drawn sketch of a product screen, drawn from a fixed vocabulary so a revi
 - Deliberately low fidelity is the point. Draw the regions, the copy that carries meaning, and the actions - not the polish.
 - Every screen needs `id`, `name`, and `device`. Add a second `Screen` and a `Button` with `navigateTo` to turn a sketch into a walkable prototype, and keep prototypes short: two or three screens along one path.
 - All copy is written as attributes: `<Text text="..." />`, `<Metric label="..." value="..." />`, `<Button label="..." />`. A wireframe holds no prose, and the explanation belongs in the paragraphs around it.
-- Draw **product UI**, not a design review of the product UI. Keyboard cheatsheets, "sticky header", "remembered width", and process notes belong outside the artboard - never as on-screen helper copy a customer would not see.
+- Draw **product UI**, not a design review of the product UI. "Sticky header", "remembered width", and process notes belong outside the artboard. Show keyboard shortcuts only where the real product would visibly teach them.
 - Before drawing a desktop screen, name a real SaaS reference pattern (Linear, GitHub, Stripe, Front, Notion). Prefer that pattern over inventing a novel layout.
 - Draw as few boxes as you can. A region groups by its heading and the space around it, so `Panel` draws nothing by default: use `surface="filled"` for a workspace pane and `surface="outlined"` only where something behaves like a card. Outlining everything makes every part of the screen shout equally.
 - Keep three text levels and no more: the page title, the content, and its metadata. Anything else is a fourth level competing with the title.
@@ -15,7 +15,7 @@ A hand-drawn sketch of a product screen, drawn from a fixed vocabulary so a revi
 - Give every screen one `device`: `desktop`, `tablet`, `tablet-portrait`, or `phone`. It chooses both the true layout width and the matching desktop browser, native iPad, or phone frame, so contradictory combinations are impossible. Add `url` only to `device="desktop"` when the web route matters.
 - The artboard lays out at its true device width and scales as one unit to fit the plan; it never reflows into the reading column. Desktop and phone keep realistic minimum silhouettes and may grow. Tablet is different: landscape holds a fixed 1180 × 820 viewport (portrait 820 × 1180), and content that does not fit compacts or scrolls inside the app surface instead of stretching the iPad bezel.
 - The frame-level maximize icon is review chrome, not product UI. It opens the current screen fitted and centered in the viewport; use the artboard zoom controls to go below or above that fit while frame and type continue to scale together.
-- Every wireframe screen and each meaningful element is already a target in Big Plan's shared commenting model. Reviewers can comment on the whole screen or point at a panel, label, field, or action; do not draw comment pins, notes, or review controls inside the product UI.
+- Every wireframe screen and each meaningful element is already a target in Big Plan's shared commenting model. The inline viewer offers one calm whole-screen comment area. Element comments are deliberate: maximize, choose **Select element**, pick a panel, label, field, or action, then add the comment. Do not draw comment pins, notes, or review controls inside the product UI.
 - Use `pattern="list-detail|triage|create|settings"` only when one of those proven layouts fits. `triage` consumes three direct `Panel` slots; the others consume two, and the compiler expands them into ordinary `Row`, `Panel`, and `Rail` nodes at the right widths. Omit `pattern` and use the full vocabulary for dashboards, canvas + inspector, wizards, onboarding, and every other layout.
 
 For how slides, headings, and components sit on the **plan page** (Contrast, Repetition, Alignment, Proximity), follow plan-writing guidance CRAP via `big-plan guidance` section "Lay out slides with CRAP".
@@ -131,6 +131,17 @@ Desktop shell and density specifics:
 - Secondary panes are rails, not equal thirds with the primary surface.
 - Settings: Linear-style sub-nav + one dense field column; label/control rows; sticky save; show unsaved / disabled save when idle.
 - Create/edit: full-page routes or true modals; main form for input; right rail for intelligence (duplicates, related, routing rationale) - not prototype meta copy inside the UI.
+
+Workspace behavior is part of the layout, not a later implementation detail:
+
+- Hold triage and ticket work to one viewport-height workspace. Global nav, queue, conversation, and inspector scroll independently; keep the record header and composer visible. A horizontal scrollbar is a failed workspace.
+- Give flexible width to the primary conversation. Collapse global nav to icons and secondary inspectors to drawers before squeezing the main task.
+- Make Reply and Internal note unmistakable modes. Change several cues together—mode label, surface, icon, placeholder, action, and an explicit audience statement such as **Only your team will see this**.
+- Give each state one owner. If status is editable in Properties, a header Resolve action must clearly be a synchronized shortcut rather than a second source of truth.
+- Design inbox rows for comparison by aligning the same attributes in the same places. A persistent preview earns its width with new judgment context and a recommended next action; otherwise collapse it.
+- Keep saved views separate from temporary filter chips. Describe SLA as a decision (**due in 4m**, **breached by 6m**), never as arithmetic the operator must perform.
+- In create flows, separate facts, recommendations, and side effects. Duplicate suggestions carry evidence and consequence-naming actions; routing suggestions explain provenance; the final action states what will be created and who will be notified.
+- Settings state scope, effect, dependency, and current state before editing. Put dependent controls directly beneath and indented under their parent, label outcomes rather than technologies, show **On/Off** in words, and keep one persistent unsaved-changes bar.
 
 ### Mobile
 

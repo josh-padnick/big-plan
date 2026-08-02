@@ -4,11 +4,13 @@ description: True-size product screens with honest device viewports, shared comm
 ---
 
 `Wireframe` draws low-fidelity product UI inside a device-appropriate frame.
-Each screen lays out at its device's true width and scales as one unit to fit the review document; wireframes use all available review width up to a 920 px desktop cap, and the frame-level maximize icon opens the current screen fitted and centered with 50%, 75%, fit, 125%, 150%, and 200% artboard zoom.
+Each screen lays out at its device's true width and scales as one unit to fit the review document; wireframes use all available review width up to a 920 px desktop cap, while phone drawings stop at a calmer 340 px painted width without changing their 390 × 844 source geometry.
+The frame-level maximize icon opens the current screen fitted and centered with a keyboard-navigable screen list and 50%, 75%, fit, 125%, 150%, and 200% artboard zoom.
 Desktop and phone frames use realistic minimum proportions and may grow with content.
 Tablet frames are fixed device viewports: content compacts or scrolls inside the native app surface rather than stretching the iPad bezel.
 Multiple screens can link to one another without adding executable plan-authored code, while the complete storyboard remains readable when scripts are disabled.
-The shared plan commenting surface treats each screen and each meaningful wireframe element as a stable target, so reviewers can comment on a whole screen or point directly at its copy, control, or region.
+The shared plan commenting surface treats each screen and each meaningful wireframe element as a stable target.
+One dedicated action comments on the whole screen; maximized mode adds an explicit Select element action, so element comments never spray controls across ordinary reading.
 
 ## When to use it
 
@@ -81,7 +83,10 @@ Tablet primitives also inherit a presentation-aware type scale: 26 px body, 20 p
 At the normal reduced fit this makes body copy read at approximately the iPadOS 17 pt baseline, with generous headings that also suit child-oriented interfaces.
 Desktop primitives use the same presentation-aware model: 28 px body, 22 px supporting copy, 32 px section titles, and 42 px page titles on the 1440 px artboard, which paint like a conventionally zoomed desktop app after fitting.
 Viewer resize and visual-viewport changes refit the whole artboard, while the wireframe's own zoom controls enlarge frame and type together inside the maximized surface.
-At rest, only the maximize icon appears beside the frame. The comments affordance is supplied by Big Plan's shared review surface on hover or focus; never author comment pins or review instructions inside a `Screen`.
+At rest, the frame exposes its maximize icon and one dedicated whole-screen comment area.
+Maximized mode fits the artboard in the viewport, lists sibling screen names on the left, supports Arrow Up/Down, Home, and End navigation in that list, and keeps element commenting behind Select element.
+Leaving maximize restores the document's prior scroll position.
+Never author comment pins or review instructions inside a `Screen`.
 
 `navigateTo` on `Button`, `NavItem`, `ListItem`, or `Crumb` must name another screen in the same wireframe.
 The compiler also diagnoses ambiguous record-detail selection and more than one filled work action per screen.
@@ -152,7 +157,7 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `TextArea`  | Required `label`; optional `placeholder`, `value`, `hint`, and `disabled`.                                                   |
 | `Select`    | Required `label` and `value`; optional `hint` and `disabled`.                                                                |
 | `Checkbox`  | Required `label`; optional `checked` and `hint`.                                                                             |
-| `Switch`    | Required `label`; optional `on` and `hint`.                                                                                  |
+| `Switch`    | Required `label`; optional `on` and `hint`; rendered state also says On or Off.                                               |
 | `Stepper`   | Holds only `Step`.                                                                                                           |
 | `Step`      | Required `label`; optional `state="done|current|todo"`; valid only in `Stepper`.                                            |
 | `Connector` | Optional `direction="right|down"` and `label`.                                                                             |

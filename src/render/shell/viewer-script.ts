@@ -1243,6 +1243,7 @@ export const VIEWER_SCRIPT = `<script>
   let openedByKeyboard = false;
   let isolatedElements = [];
   let dialogAttributes = null;
+  let pageScroll = null;
   const subjectOf = (frame) =>
     frame.getAttribute("data-figure-maximizable") || "figure";
   const requestRestore = (frame) =>
@@ -1257,6 +1258,7 @@ export const VIEWER_SCRIPT = `<script>
         if (
           sibling !== branch &&
           sibling instanceof HTMLElement &&
+          !sibling.hasAttribute("data-review-root") &&
           !sibling.inert
         ) {
           sibling.inert = true;
@@ -1334,6 +1336,7 @@ export const VIEWER_SCRIPT = `<script>
       frame.querySelectorAll("[data-figure-maximize]"),
     );
     if (maximized) {
+      pageScroll = { x: window.scrollX, y: window.scrollY };
       dialogAttributes = {
         frame,
         role: frame.getAttribute("role"),
@@ -1353,6 +1356,13 @@ export const VIEWER_SCRIPT = `<script>
         restoreAttribute(frame, "aria-modal", dialogAttributes.ariaModal);
         restoreAttribute(frame, "aria-label", dialogAttributes.ariaLabel);
         dialogAttributes = null;
+      }
+      const restoreScroll = pageScroll;
+      pageScroll = null;
+      if (restoreScroll !== null) {
+        requestAnimationFrame(() => {
+          window.scrollTo(restoreScroll.x, restoreScroll.y);
+        });
       }
     }
     open = maximized ? frame : null;
@@ -2037,6 +2047,40 @@ ${DIAGRAM_SCRIPT}
       )
         show(id);
     });
+    const switcher = root.querySelector(".wireframe-switcher");
+    if (switcher !== null) {
+      switcher.addEventListener("keydown", (event) => {
+        if (
+          !root.hasAttribute("data-figure-maximized") ||
+          !(event.target instanceof Element) ||
+          !event.target.matches("[data-wireframe-switch]") ||
+          !["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)
+        )
+          return;
+        const choices = Array.from(
+          switcher.querySelectorAll("[data-wireframe-switch]"),
+        );
+        const current = choices.indexOf(event.target);
+        if (current < 0 || choices.length === 0) return;
+        event.preventDefault();
+        const next =
+          event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? choices.length - 1
+              : Math.max(
+                  0,
+                  Math.min(
+                    choices.length - 1,
+                    current + (event.key === "ArrowDown" ? 1 : -1),
+                  ),
+                );
+        const choice = choices[next];
+        const id = choice.getAttribute("data-wireframe-navigate");
+        if (id !== null) show(id);
+        choice.focus();
+      });
+    }
   }
   addEventListener(
     "resize",

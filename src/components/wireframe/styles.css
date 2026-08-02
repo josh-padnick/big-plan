@@ -115,6 +115,10 @@ marks and a plan diff never jitters.
     color: var(--color-ink);
     font-weight: 600;
   }
+  .wireframe-switch:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
 
   .wireframe-screens {
     display: flex;
@@ -137,6 +141,37 @@ marks and a plan diff never jitters.
   .wireframe-screen-name {
     font-weight: 600;
     letter-spacing: 0.02em;
+  }
+  .wireframe-screen-comment-area {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.375rem;
+  }
+  .wireframe-screen-comment-area:has(
+    > .wireframe-screen-comment-button[hidden]
+  ) {
+    display: none;
+  }
+  .wireframe-screen-comment-button,
+  .wireframe-element-comment-button {
+    min-height: 2.25rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--edge-c);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+  .wireframe-screen-comment-button:hover,
+  .wireframe-element-comment-button:hover {
+    background: var(--wf-fill);
+    color: var(--color-ink);
+  }
+  .wireframe-screen-comment-button:focus-visible,
+  .wireframe-element-comment-button:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
   .wireframe-frame-toolbar {
     position: absolute;
@@ -203,8 +238,8 @@ marks and a plan diff never jitters.
   }
   .wireframe[data-figure-maximized] .wireframe-frame-toolbar {
     top: 0.5rem;
-    right: auto;
-    left: 0.5rem;
+    right: 0.5rem;
+    left: auto;
     padding: 0.3rem;
     border: 1px solid var(--edge-c);
     border-radius: var(--radius-md);
@@ -243,7 +278,9 @@ marks and a plan diff never jitters.
   .wireframe-screen[data-wireframe-device="phone"] {
     --wf-width: 390px;
     --wf-min-height: 844px;
-    max-width: calc(390px + 12px + 0.8rem);
+    /* Preserve the 390×844 source geometry while painting the device a little
+       smaller in the reading column. */
+    max-width: 340px;
   }
   .wireframe[data-figure-maximized] .wireframe-screen {
     max-width: none;
@@ -2164,6 +2201,33 @@ marks and a plan diff never jitters.
     background: var(--color-ink);
     border-color: var(--color-ink);
   }
+  .wireframe-switch-state {
+    min-width: 2.2rem;
+    color: var(--color-muted);
+    font-size: 0.8125em;
+    text-align: right;
+  }
+  .wireframe-switch-control:not(:checked)
+    + .wireframe-switch-state
+    [data-wireframe-switch-on],
+  .wireframe-switch-control:checked
+    + .wireframe-switch-state
+    [data-wireframe-switch-off] {
+    display: none;
+  }
+
+  /* Element comments are an intentional inspection mode. Inline reading never
+     sprays hover controls across the drawing; maximize lets the reviewer pick
+     one target, see one calm outline, and use the shared Add-comment flow. */
+  .wireframe[data-figure-maximized][data-wireframe-comment-selecting]
+    [data-wireframe-element][data-block-id] {
+    cursor: crosshair;
+  }
+  .wireframe[data-figure-maximized]
+    [data-wireframe-element][data-wireframe-comment-selected] {
+    outline: 3px solid var(--color-accent);
+    outline-offset: 3px;
+  }
 
   /* Where the user is in a multi-step flow. The numbers are drawn by a
      counter so an author never has to keep them in sync by hand. */
@@ -2405,6 +2469,253 @@ marks and a plan diff never jitters.
   }
   .wireframe-table tbody tr[data-wireframe-selected] td:first-child {
     box-shadow: inset 3px 0 0 0 var(--color-ink);
+    padding-left: 0.75rem;
+  }
+
+  /* Harbor's desktop showcase is a bounded SaaS workspace. The browser
+     viewport never scrolls sideways; panes own their vertical overflow and
+     the primary conversation absorbs every flexible pixel. These selectors
+     describe the reusable workspace contract with the showcase ids making the
+     demonstration unambiguous. */
+  .wireframe-screen:is(
+      [data-wireframe-screen="d-ticket"],
+      [data-wireframe-screen="d-inbox"],
+      [data-wireframe-screen="d-compose"],
+      [data-wireframe-screen="d-settings"]
+    )
+    .wireframe-artboard {
+    height: 900px;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .wireframe-screen:is(
+      [data-wireframe-screen="d-ticket"],
+      [data-wireframe-screen="d-inbox"],
+      [data-wireframe-screen="d-compose"],
+      [data-wireframe-screen="d-settings"]
+    )
+    .wireframe-canvas,
+  .wireframe-screen:is(
+      [data-wireframe-screen="d-ticket"],
+      [data-wireframe-screen="d-inbox"],
+      [data-wireframe-screen="d-compose"],
+      [data-wireframe-screen="d-settings"]
+    )
+    .wireframe-app-shell {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .wireframe-screen:is(
+      [data-wireframe-screen="d-ticket"],
+      [data-wireframe-screen="d-inbox"],
+      [data-wireframe-screen="d-compose"],
+      [data-wireframe-screen="d-settings"]
+    )
+    .wireframe-app-content {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .wireframe-screen:is(
+      [data-wireframe-screen="d-ticket"],
+      [data-wireframe-screen="d-inbox"],
+      [data-wireframe-screen="d-compose"],
+      [data-wireframe-screen="d-settings"]
+    )
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span]) {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .wireframe-screen:is(
+      [data-wireframe-screen="d-ticket"],
+      [data-wireframe-screen="d-inbox"],
+      [data-wireframe-screen="d-compose"]
+    )
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span])
+    > :is(.wireframe-panel, .wireframe-stack) {
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .wireframe-screen[data-wireframe-screen="d-ticket"]
+    .wireframe-app-content
+    > .wireframe-row
+    > [data-wireframe-span="list"] {
+    flex-basis: 18rem;
+    min-width: 18rem;
+    max-width: 20rem;
+  }
+  .wireframe-screen[data-wireframe-screen="d-ticket"]
+    .wireframe-app-content
+    > .wireframe-row
+    > [data-wireframe-span="rail"] {
+    flex-basis: 18rem;
+    min-width: 18rem;
+    max-width: 20rem;
+  }
+  .wireframe-screen[data-wireframe-screen="d-ticket"]
+    .wireframe-app-content
+    > .wireframe-row
+    > [data-wireframe-span="main"] {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .wireframe-screen[data-wireframe-screen="d-ticket"]
+    [data-wireframe-span="main"]
+    > .wireframe-panel-body {
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .wireframe-screen[data-wireframe-screen="d-ticket"]
+    [data-wireframe-span="main"]
+    > .wireframe-panel-body
+    > .wireframe-panel:last-child {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-top: 1rem;
+    border-top: 2px solid var(--wf-stroke);
+    background: var(--color-paper);
+  }
+  .wireframe-screen[data-wireframe-screen="d-ticket"] [data-wireframe-message] {
+    max-width: 86%;
+  }
+  .wireframe-screen[data-wireframe-screen="d-ticket"]
+    [data-wireframe-message="agent"] {
+    margin-left: auto;
+  }
+  .wireframe-screen[data-wireframe-screen="d-ticket"]
+    [data-wireframe-message="internal"] {
+    margin-inline: 1rem;
+    border-style: dashed;
+    background: color-mix(in srgb, var(--callout-warning-c) 8%, transparent);
+  }
+  .wireframe-screen[data-wireframe-screen="d-inbox"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span]) {
+    flex: 1 1 auto;
+  }
+  .wireframe-screen[data-wireframe-screen="d-inbox"]
+    .wireframe-app-content
+    > .wireframe-row:not(:has([data-wireframe-span])) {
+    flex: 0 0 auto;
+  }
+  .wireframe-screen[data-wireframe-screen="d-inbox"]
+    .wireframe-app-content
+    > .wireframe-row:has(.wireframe-segmented-control) {
+    padding-bottom: 1rem;
+  }
+  .wireframe-screen[data-wireframe-screen="d-inbox"]
+    .wireframe-app-content
+    > .wireframe-row
+    > [data-wireframe-span="rail"] {
+    flex-basis: 20rem;
+    min-width: 19rem;
+    max-width: 21rem;
+  }
+  .wireframe-screen[data-wireframe-screen="d-inbox"]
+    [data-wireframe-span="main"]
+    .wireframe-table {
+    min-width: 100%;
+    table-layout: fixed;
+  }
+  .wireframe-screen[data-wireframe-screen="d-inbox"]
+    [data-wireframe-span="main"]
+    .wireframe-table
+    :is(th, td):first-child {
+    width: 50%;
+  }
+  .wireframe-screen[data-wireframe-screen="d-inbox"]
+    [data-wireframe-span="main"]
+    .wireframe-table
+    :is(th, td):nth-child(2) {
+    width: 16%;
+  }
+  .wireframe-screen[data-wireframe-screen="d-inbox"]
+    [data-wireframe-span="main"]
+    .wireframe-table
+    :is(th, td):nth-child(3) {
+    width: 20%;
+  }
+  .wireframe-screen[data-wireframe-screen="d-inbox"]
+    [data-wireframe-span="main"]
+    .wireframe-table
+    :is(th, td):nth-child(4) {
+    width: 14%;
+  }
+  .wireframe-screen[data-wireframe-screen="d-inbox"]
+    [data-wireframe-span="main"]
+    .wireframe-table
+    :is(th, td) {
+    overflow-wrap: anywhere;
+  }
+  .wireframe-screen[data-wireframe-screen="d-compose"]
+    [data-wireframe-span="main"]
+    > .wireframe-panel-body
+    > .wireframe-panel:last-child {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-top: 1rem;
+    border-top: 2px solid var(--wf-stroke);
+    background: var(--color-paper);
+  }
+  .wireframe-screen[data-wireframe-screen="d-compose"]
+    .wireframe-app-content
+    > .wireframe-row
+    > [data-wireframe-span="rail"] {
+    flex-basis: 21rem;
+    min-width: 20rem;
+    max-width: 22rem;
+  }
+  .wireframe-screen[data-wireframe-screen="d-compose"]
+    [data-wireframe-span="main"] {
+    max-width: 47.5rem;
+  }
+  .wireframe-screen[data-wireframe-screen="d-compose"]
+    [data-wireframe-span="main"]
+    .wireframe-textarea {
+    min-height: 5rem;
+  }
+  .wireframe-screen[data-wireframe-screen="d-settings"]
+    .wireframe-app-content
+    > .wireframe-row:has([data-wireframe-span]) {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  .wireframe-screen[data-wireframe-screen="d-settings"]
+    [data-wireframe-span="main"] {
+    max-width: 50rem;
+    padding-bottom: 6rem;
+  }
+  .wireframe-screen[data-wireframe-screen="d-settings"]
+    [data-wireframe-span="main"]
+    > .wireframe-panel:last-child {
+    position: sticky;
+    bottom: 0.5rem;
+    z-index: 2;
+    background: var(--color-paper);
+    box-shadow: 0 -8px 18px
+      color-mix(in srgb, var(--color-paper) 90%, transparent);
+  }
+  .wireframe-screen[data-wireframe-screen="d-settings"]
+    [data-wireframe-span="main"]
+    .wireframe-panel
+    > .wireframe-panel-body
+    > .wireframe-stack {
+    margin-left: 2rem;
+    padding-left: 1rem;
+    border-left: 2px dashed var(--wf-stroke-soft);
   }
 
   /* Paper beats interaction: printing a plan shows every screen. */
@@ -2420,23 +2731,55 @@ marks and a plan diff never jitters.
 }
 
 @layer figure-maximized {
-  /* Wireframes benefit more than text figures from every available viewport
-     pixel. Their own toolbar supplies restore and zoom, so promotion can use
-     a tighter shell than the shared reading-oriented figure default. */
+  /* Promotion uses nearly the full viewport. A stable screen-name rail owns
+     the left edge while the active artboard fits and centers in the remainder. */
   article .wireframe[data-figure-maximized] {
     inset: 0.5rem;
+    display: grid;
+    grid-template-columns: 14rem minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
   }
-  article .wireframe[data-figure-maximized] > .wireframe-caption,
-  article .wireframe[data-figure-maximized] > .wireframe-switcher,
-  article .wireframe[data-figure-maximized] .wireframe-screen-caption {
+  article .wireframe[data-figure-maximized]:not(:has(> .wireframe-switcher)) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  article .wireframe[data-figure-maximized] > .wireframe-caption {
     display: none;
   }
+  article .wireframe[data-figure-maximized] > .wireframe-switcher {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    align-content: flex-start;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 0.3rem;
+    min-height: 0;
+    margin: 0;
+    padding: 1rem 0.75rem;
+    overflow-y: auto;
+    border-right: 1px solid var(--edge-c);
+    background: color-mix(in srgb, var(--bg) 94%, var(--surface-c));
+  }
+  article .wireframe[data-figure-maximized] .wireframe-switch {
+    width: 100%;
+    min-height: 2.5rem;
+    padding: 0.45rem 0.65rem;
+    text-align: left;
+  }
   article .wireframe[data-figure-maximized] > [data-figure-body] {
+    grid-column: 2;
+    grid-row: 1 / -1;
     display: flex;
     align-items: stretch;
     justify-content: stretch;
-    padding: 0.5rem 0.75rem 0.75rem;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
     overflow: hidden;
+  }
+  article
+    .wireframe[data-figure-maximized]:not(:has(> .wireframe-switcher))
+    > [data-figure-body] {
+    grid-column: 1;
   }
   article
     .wireframe[data-figure-maximized]
@@ -2444,5 +2787,19 @@ marks and a plan diff never jitters.
     > .wireframe-screen[data-wireframe-current] {
     display: flex;
     flex-direction: column;
+  }
+  article .wireframe[data-figure-maximized] .wireframe-screen-comment-area {
+    flex: none;
+    padding: 0 0.75rem;
+  }
+  article
+    .wireframe[data-figure-maximized]
+    .wireframe-element-comment-button[hidden] {
+    display: none;
+  }
+  @media (width < 760px) {
+    article .wireframe[data-figure-maximized] {
+      grid-template-columns: 10rem minmax(0, 1fr);
+    }
   }
 }

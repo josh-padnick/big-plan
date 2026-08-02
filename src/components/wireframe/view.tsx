@@ -553,12 +553,18 @@ const WireframeElement = ({
           inline
           commentTarget={commentTarget}
         >
-          <input
-            className="wireframe-switch-control"
-            type="checkbox"
-            role="switch"
-            defaultChecked={node.on}
-          />
+          <>
+            <input
+              className="wireframe-switch-control"
+              type="checkbox"
+              role="switch"
+              defaultChecked={node.on}
+            />
+            <span className="wireframe-switch-state" aria-hidden="true">
+              <span data-wireframe-switch-on="">On</span>
+              <span data-wireframe-switch-off="">Off</span>
+            </span>
+          </>
         </Field>
       );
     case "Stepper":
@@ -785,8 +791,20 @@ const Screen = ({
           {preset.label} · {preset.width}×{preset.height}px ·{" "}
           {preset.heightMode === "viewport"
             ? "fixed viewport · content scrolls inside"
-            : "minimum height · grows with content"}
+            : screen.device === "desktop"
+              ? "viewport reference · workspace may scroll inside"
+              : "minimum height · grows with content"}
         </span>
+      </div>
+      <div className="wireframe-screen-comment-area">
+        <button
+          type="button"
+          className="wireframe-screen-comment-button"
+          data-wireframe-comment-screen=""
+          hidden
+        >
+          Comment on this screen
+        </button>
       </div>
       <div className="wireframe-frame-stage">
         <div className="wireframe-frame-toolbar">
@@ -816,6 +834,14 @@ const Screen = ({
               +
             </button>
           </div>
+          <button
+            type="button"
+            className="wireframe-element-comment-button"
+            data-wireframe-comment-element=""
+            hidden
+          >
+            Select element
+          </button>
           <MaximizeButton subject="wireframe" />
         </div>
         <div className="wireframe-frame" data-wireframe-device={screen.device}>

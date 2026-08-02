@@ -690,6 +690,22 @@
       }
       const marker = markerFor(block);
       const hasComment = pending > 0 || sentBlocks.has(id);
+      if (block.closest("[data-wireframe]") !== null) {
+        marker.hidden = true;
+        marker.removeAttribute("data-review-marker-active");
+        if (block.matches("[data-wireframe-screen]")) {
+          const button = block.querySelector("[data-wireframe-comment-screen]");
+          if (button !== null) {
+            button.textContent =
+              pending > 0
+                ? `Screen comments (${pending})`
+                : sentBlocks.has(id)
+                  ? "Screen comment sent"
+                  : "Comment on this screen";
+          }
+        }
+        continue;
+      }
       marker.hidden = !hasComment;
       if (hasComment) marker.setAttribute("data-review-marker-active", "");
       else marker.removeAttribute("data-review-marker-active");
@@ -868,7 +884,22 @@
     ]);
   };
 
+  const sameComposeTarget = (left, right) =>
+    left !== null &&
+    right !== null &&
+    left.type === right.type &&
+    left.blockId === right.blockId &&
+    left.start === right.start &&
+    left.end === right.end;
+
   const openCompose = (target) => {
+    // Pointer selection can settle after its click handler. If that late
+    // browser event offers the same target again, preserve the reviewer's
+    // in-progress words instead of treating it as a fresh composer.
+    if (!compose.hidden && sameComposeTarget(composeTarget, target)) {
+      composeInput.focus();
+      return;
+    }
     composeTarget = target;
     composeTargetLabel.textContent = describeTarget(target);
     composeTargetLabel.title = describeTarget(target);
@@ -972,6 +1003,153 @@
     section: block.getAttribute("data-block-section") || "",
   });
 
+  // Wireframes deliberately use the same stable block identities and Add
+  // composer as every other plan surface, but discovery is calmer. A screen
+  // gets one dedicated action at rest. Element targeting is an explicit
+  // maximize-only inspect mode, so ordinary scrolling never sprays controls
+  // across the product drawing.
+  for (const wireframe of document.querySelectorAll("[data-wireframe]")) {
+    let selectedElement = null;
+    let selecting = false;
+    const tabState = new Map();
+    const screenButtons = Array.from(
+      wireframe.querySelectorAll("[data-wireframe-comment-screen]"),
+    );
+    const elementButtons = Array.from(
+      wireframe.querySelectorAll("[data-wireframe-comment-element]"),
+    );
+    for (const button of screenButtons) {
+      button.hidden = false;
+      button.addEventListener("click", () => {
+        const screen = button.closest("[data-wireframe-screen][data-block-id]");
+        if (screen !== null) openCompose(targetForBlock(screen));
+      });
+    }
+    const currentElementButton = () =>
+      wireframe.querySelector(
+        "[data-wireframe-screen][data-wireframe-current] " +
+          "[data-wireframe-comment-element]",
+      );
+    const selectableElements = () => {
+      const screen = wireframe.querySelector(
+        "[data-wireframe-screen][data-wireframe-current]",
+      );
+      return screen === null
+        ? []
+        : Array.from(
+            screen.querySelectorAll("[data-wireframe-element][data-block-id]"),
+          );
+    };
+    const restoreTabStops = () => {
+      for (const [element, value] of tabState) {
+        if (value === null) element.removeAttribute("tabindex");
+        else element.setAttribute("tabindex", value);
+      }
+      tabState.clear();
+    };
+    const stopSelecting = () => {
+      selecting = false;
+      wireframe.removeAttribute("data-wireframe-comment-selecting");
+      restoreTabStops();
+      const button = currentElementButton();
+      if (button !== null) button.setAttribute("aria-pressed", "false");
+    };
+    const clearSelection = () => {
+      if (selectedElement !== null)
+        selectedElement.removeAttribute("data-wireframe-comment-selected");
+      selectedElement = null;
+      const button = currentElementButton();
+      if (button !== null) button.textContent = "Select element";
+    };
+    const choose = (element) => {
+      clearSelection();
+      selectedElement = element;
+      element.setAttribute("data-wireframe-comment-selected", "");
+      stopSelecting();
+      const button = currentElementButton();
+      if (button !== null) {
+        button.textContent = "Comment on " + labelFor(element);
+        button.focus();
+      }
+    };
+    const beginSelecting = () => {
+      clearSelection();
+      selecting = true;
+      wireframe.setAttribute("data-wireframe-comment-selecting", "");
+      const button = currentElementButton();
+      if (button !== null) {
+        button.setAttribute("aria-pressed", "true");
+        button.textContent = "Choose an element…";
+      }
+      const elements = selectableElements();
+      for (const element of elements) {
+        tabState.set(element, element.getAttribute("tabindex"));
+        element.setAttribute("tabindex", "0");
+      }
+      if (elements[0] !== undefined) elements[0].focus();
+    };
+    for (const button of elementButtons) {
+      button.addEventListener("click", () => {
+        if (selectedElement !== null) {
+          const target = targetForBlock(selectedElement);
+          clearSelection();
+          openCompose(target);
+          return;
+        }
+        if (selecting) stopSelecting();
+        else beginSelecting();
+      });
+    }
+    const targetFrom = (event) =>
+      event.target instanceof Element
+        ? event.target.closest("[data-wireframe-element][data-block-id]")
+        : null;
+    wireframe.addEventListener(
+      "click",
+      (event) => {
+        if (!selecting || !wireframe.hasAttribute("data-figure-maximized"))
+          return;
+        const target = targetFrom(event);
+        if (target === null || !wireframe.contains(target)) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        choose(target);
+      },
+      true,
+    );
+    wireframe.addEventListener(
+      "keydown",
+      (event) => {
+        if (
+          !selecting ||
+          !wireframe.hasAttribute("data-figure-maximized") ||
+          !["Enter", " "].includes(event.key)
+        )
+          return;
+        const target = targetFrom(event);
+        if (target === null || !wireframe.contains(target)) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        choose(target);
+      },
+      true,
+    );
+    wireframe.addEventListener("figuremaximizechange", (event) => {
+      const maximized = event.detail.maximized === true;
+      for (const button of elementButtons) button.hidden = !maximized;
+      affordance.hidden = true;
+      if (maximized) cursorBlock = null;
+      // The review rail occupies the same edge as the maximize-only element
+      // picker. Start the focused canvas clean; selecting an element and
+      // opening its composer will bring the established rail back on demand.
+      if (maximized && railIsOpen()) setRailOpen(false);
+      if (!maximized) {
+        stopSelecting();
+        clearSelection();
+      }
+    });
+  }
+
   // The right edge the floating chrome may reach: the window, or the tray's
   // own left edge while the tray is open, so a control never lands under it.
   const rightLimit = () =>
@@ -1003,6 +1181,7 @@
   };
 
   for (const block of blocks) {
+    if (block.closest("[data-wireframe]") !== null) continue;
     block.addEventListener("pointerenter", (event) => {
       if (event.pointerType === "touch") return;
       if (pendingSelection) return;
@@ -1083,6 +1262,7 @@
   };
 
   const offerSelection = () => {
+    if (!compose.hidden) return;
     const anchor = anchorFromSelection();
     if (!anchor) {
       if (pendingSelection) {
@@ -1095,7 +1275,6 @@
     pendingSelection = anchor;
     attachLabel.hidden = false;
     attachInput.checked = false;
-    if (!compose.hidden) return;
     const selection = window.getSelection();
     const rect = selection.getRangeAt(0).getBoundingClientRect();
     affordance.hidden = false;

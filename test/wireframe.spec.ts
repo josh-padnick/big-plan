@@ -440,7 +440,7 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
     expect(type?.paintedBody).toBeGreaterThanOrEqual(17);
   });
 
-  await test.step("selection does not indent Ticket or Inbox queue rows", async () => {
+  await test.step("selection does not indent Ticket or overlap Inbox row text", async () => {
     const assertAlignedSelection = async (screenId: string): Promise<void> => {
       const desktop = page.locator(`[data-wireframe-screen="${screenId}"]`);
       const selected = desktop.locator(
@@ -468,7 +468,70 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
       .first()
       .getByRole("button", { name: "Desktop · Inbox" })
       .click();
-    await assertAlignedSelection("d-inbox");
+    const selectedInboxRow = page.locator(
+      '[data-wireframe-screen="d-inbox"] .wireframe-table tr[data-wireframe-selected]',
+    );
+    const firstCell = selectedInboxRow.locator("td").first();
+    expect(
+      await firstCell.evaluate((cell) =>
+        Number.parseFloat(getComputedStyle(cell).paddingLeft),
+      ),
+    ).toBeGreaterThanOrEqual(10);
+    expect(
+      await selectedInboxRow.evaluate(
+        (row) => row.scrollWidth - row.clientWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+  });
+
+  await test.step("desktop workspaces stay bounded, scroll by pane, and never overflow sideways", async () => {
+    const desktopSwitcher = page
+      .getByRole("navigation", { name: "Prototype screens" })
+      .first();
+    const screens = [
+      ["d-ticket", "Desktop · Ticket"],
+      ["d-inbox", "Desktop · Inbox"],
+      ["d-compose", "Desktop · New ticket"],
+      ["d-settings", "Desktop · Settings"],
+    ] as const;
+
+    for (const [id, name] of screens) {
+      await desktopSwitcher.getByRole("button", { name }).click();
+      const screen = page.locator(`[data-wireframe-screen="${id}"]`);
+      const artboard = screen.locator(".wireframe-artboard");
+      await expect(screen).toBeVisible();
+      expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(900);
+      expect(
+        await artboard.evaluate((node) => node.scrollWidth - node.clientWidth),
+      ).toBeLessThanOrEqual(1);
+    }
+
+    const ticket = page.locator('[data-wireframe-screen="d-ticket"]');
+    await desktopSwitcher
+      .getByRole("button", { name: "Desktop · Ticket" })
+      .click();
+    const queueWidth = (
+      await boxOf(ticket.locator('[data-wireframe-span="list"]'))
+    ).width;
+    const conversationWidth = (
+      await boxOf(ticket.locator('[data-wireframe-span="main"]'))
+    ).width;
+    expect(conversationWidth).toBeGreaterThan(queueWidth);
+    await expect(ticket).toContainText("Reply to Maya");
+    await expect(ticket).toContainText("Internal note · team only");
+    await expect(ticket).toContainText("Customer-visible");
+    await expect(ticket).toContainText("⌘↵ send");
+
+    await desktopSwitcher
+      .getByRole("button", { name: "Desktop · Settings" })
+      .click();
+    const settings = page.locator('[data-wireframe-screen="d-settings"]');
+    await expect(settings).toContainText("Applies to everyone");
+    await expect(settings).toContainText("Applies only to your account");
+    await expect(
+      settings.locator(".wireframe-switch-state").first(),
+    ).toContainText(/On|Off/);
+    await expect(settings).toContainText("3 unsaved changes");
   });
 
   const phoneSwitcher = page
@@ -479,21 +542,30 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
     await phoneSwitcher.getByRole("button", { name: "Phone · Inbox" }).click();
     const phone = page.locator('[data-wireframe-screen="m-inbox"]');
     await expect(phone).toBeVisible();
+    const paintedScale = await phone
+      .locator(".wireframe-frame")
+      .evaluate(
+        (node) =>
+          node.getBoundingClientRect().width /
+          (node instanceof HTMLElement ? node.offsetWidth : 1),
+      );
     expect(
       (await boxOf(phone.locator(".wireframe-list-item").first())).height,
-    ).toBeGreaterThanOrEqual(52);
+    ).toBeGreaterThanOrEqual(52 * paintedScale - 0.5);
     expect(
       (await boxOf(phone.getByRole("button", { name: "Filter" }))).height,
-    ).toBe(44);
+    ).toBeCloseTo(44 * paintedScale, 0);
     const tabHeights = await phone
       .locator(".wireframe-bottom-bar .wireframe-button")
       .evaluateAll((nodes) =>
         nodes.map((node) => node.getBoundingClientRect().height),
       );
-    expect(tabHeights).toEqual([60, 60, 60]);
-    expect((await boxOf(phone.locator(".wireframe-bottom-bar"))).height).toBe(
-      65,
-    );
+    for (const height of tabHeights) {
+      expect(height).toBeCloseTo(60 * paintedScale, 0);
+    }
+    expect(
+      (await boxOf(phone.locator(".wireframe-bottom-bar"))).height,
+    ).toBeCloseTo(65 * paintedScale, 0);
     await expect(phone.locator(".wireframe-app-shell")).toHaveCount(0);
   });
 
@@ -578,6 +650,8 @@ test("should maximize and restore a wireframe in both themes", async ({
     await expect(trigger).toHaveAccessibleName("Maximize wireframe");
     await expect(trigger).toHaveText("");
     const before = await boxOf(wireframe.locator(".wireframe-frame:visible"));
+    await trigger.scrollIntoViewIfNeeded();
+    const scrollBeforeMaximize = await page.evaluate(() => window.scrollY);
 
     await trigger.click();
     await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
@@ -593,13 +667,36 @@ test("should maximize and restore a wireframe in both themes", async ({
     );
     await expect(zoomControls).toBeVisible();
     const fitted = await boxOf(wireframe.locator(".wireframe-frame:visible"));
-    const viewport = page.viewportSize();
-    expect(viewport).not.toBeNull();
-    if (viewport !== null) {
-      expect(
-        Math.abs(fitted.x + fitted.width / 2 - viewport.width / 2),
-      ).toBeLessThanOrEqual(2);
-    }
+    const stage = await boxOf(
+      wireframe.locator(
+        "[data-wireframe-screen]:visible .wireframe-frame-stage",
+      ),
+    );
+    expect(
+      Math.abs(fitted.x + fitted.width / 2 - (stage.x + stage.width / 2)),
+    ).toBeLessThanOrEqual(2);
+
+    const screenList = wireframe.getByRole("navigation", {
+      name: "Prototype screens",
+    });
+    await expect(screenList).toBeVisible();
+    const currentChoice = screenList.getByRole("button", {
+      name: "Wallet",
+      exact: true,
+    });
+    await currentChoice.focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(
+      screenList.getByRole("button", { name: "Ask · choose" }),
+    ).toBeFocused();
+    await expect(
+      page.locator('[data-wireframe-screen="grown-up-help"]'),
+    ).toBeVisible();
+    await page.keyboard.press("ArrowUp");
+    await expect(currentChoice).toBeFocused();
+    await expect(
+      page.locator('[data-wireframe-screen="child-home"]'),
+    ).toBeVisible();
     await zoomControls
       .getByRole("button", { name: "Zoom wireframe out" })
       .click();
@@ -630,6 +727,9 @@ test("should maximize and restore a wireframe in both themes", async ({
     await page.keyboard.press("Escape");
     await expect(wireframe).not.toHaveAttribute("data-figure-maximized");
     await expect(trigger).toHaveAccessibleName("Maximize wireframe");
+    await expect
+      .poll(async () => page.evaluate(() => window.scrollY))
+      .toBe(scrollBeforeMaximize);
   }
 });
 
@@ -644,12 +744,10 @@ test("should comment on a whole wireframe screen and one specific element", asyn
 
   await test.step("the screen is a registered shared block target", async () => {
     await screen.locator(".wireframe-screen-caption").hover();
-    await expect(affordance).toBeVisible();
-    await expect(affordance).toHaveAttribute(
-      "aria-label",
-      /^Comment on wireframe-screen:/,
-    );
-    await affordance.click();
+    await expect(affordance).toBeHidden();
+    await screen
+      .getByRole("button", { name: "Comment on this screen" })
+      .click();
     await page
       .locator("[data-review-compose-input]")
       .fill("Keep the whole wallet screen calm.");
@@ -657,14 +755,20 @@ test("should comment on a whole wireframe screen and one specific element", asyn
     await expect(page.locator("[data-review-drafts] li")).toHaveCount(1);
   });
 
-  await test.step("a product element uses the same tray and package", async () => {
-    const action = screen.getByRole("button", { name: "✋ Ask a grown-up" });
-    await action.hover();
-    await expect(affordance).toHaveAttribute(
-      "aria-label",
-      /^Comment on wireframe-button:/,
-    );
-    await affordance.click();
+  await test.step("an element is selected before using the same tray and package", async () => {
+    await screen.locator("[data-figure-maximize]").click();
+    const elementComment = screen.locator("[data-wireframe-comment-element]");
+    await expect(elementComment).toBeVisible();
+    await expect(elementComment).toHaveAccessibleName("Select element");
+    await elementComment.click();
+    const action = screen.getByRole("button", {
+      name: "✋ Ask a grown-up",
+      exact: true,
+    });
+    await action.click();
+    await expect(action).toHaveAttribute("data-wireframe-comment-selected", "");
+    await expect(elementComment).toHaveText("Comment on ✋ Ask a grown-up");
+    await elementComment.click();
     await page
       .locator("[data-review-compose-input]")
       .fill("Keep this action welcoming.");
@@ -674,5 +778,6 @@ test("should comment on a whole wireframe screen and one specific element", asyn
       .locator("[data-review-annotated]")
       .evaluateAll((nodes) => nodes.map((node) => node.dataset.blockId));
     expect(new Set(ids).size).toBe(2);
+    await expect(affordance).toBeHidden();
   });
 });
