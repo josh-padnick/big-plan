@@ -23,6 +23,16 @@ import type {
   DecisionCardStatus,
   DecisionCardTone,
 } from "../_model/decision-card.js";
+import {
+  decisionCellAnchor,
+  decisionCriterionAnchor,
+  decisionFigureAnchor,
+  decisionOptionAnchor,
+  decisionRecommendationAnchor,
+  decisionReversibilityAnchor,
+  duplicateExplicitDecisionIds,
+  resolveDecisionElementIds,
+} from "../_model/decision-card-anchors.js";
 
 export type DecisionAnalysisState = "proposed" | "decided" | "deferred";
 export type DecisionAnalysisInteraction = "audit" | "choose";
@@ -62,11 +72,13 @@ const DECISION_SCHEMA = {
 } satisfies ComponentAttributeSchema;
 
 const CRITERION_SCHEMA = {
+  id: { kind: "string", nonEmpty: true },
   title: { kind: "string", required: true, nonEmpty: true },
   impact: { kind: "string" },
 } satisfies ComponentAttributeSchema;
 
 const OPTION_SCHEMA = {
+  id: { kind: "string", nonEmpty: true },
   title: { kind: "string", required: true, nonEmpty: true },
   recommended: { kind: "booleanShorthand" },
   chosen: { kind: "booleanShorthand" },
@@ -170,11 +182,13 @@ const compileCriterion = ({
   diagnostics,
   idPrefix,
   ids,
+  anchor,
 }: {
   readonly child: ScopedChild;
   readonly diagnostics: DiagnosticCollector;
   readonly idPrefix: string;
   readonly ids: ComponentIdAllocator;
+  readonly anchor: string;
 }): CompiledDecisionCardCriterion => {
   const validated = validateComponentAttributes({
     component: "Criterion",
@@ -190,6 +204,7 @@ const compileCriterion = ({
       label: title,
       fallbackId: `${idPrefix}-criterion`,
     }),
+    anchor,
     title,
     detail: validateOneSentenceBody({
       child,
@@ -212,7 +227,7 @@ const compileCriterion = ({
 type ScoreEntry = {
   readonly child: ScopedChild;
   readonly criterion: string;
-  readonly scoreEntry: CompiledDecisionCardConsideration;
+  readonly scoreEntry: Omit<CompiledDecisionCardConsideration, "anchor">;
 };
 
 const compileScore = ({
@@ -267,15 +282,24 @@ const alignScores = ({
   entries,
   criteria,
   diagnostics,
+  figureAnchor,
+  optionAnchorId,
+  criterionAnchorIds,
 }: {
   readonly child: ScopedChild;
   readonly optionTitle: string;
   readonly entries: ReadonlyArray<ScoreEntry>;
   readonly criteria: ReadonlyArray<CompiledDecisionCardCriterion>;
   readonly diagnostics: DiagnosticCollector;
+  readonly figureAnchor: string;
+  readonly optionAnchorId: string;
+  readonly criterionAnchorIds: ReadonlyArray<string>;
 }): ReadonlyArray<CompiledDecisionCardConsideration | undefined> => {
   const titles = new Set(criteria.map(({ title }) => title));
-  const byCriterion = new Map<string, CompiledDecisionCardConsideration>();
+  const byCriterion = new Map<
+    string,
+    Omit<CompiledDecisionCardConsideration, "anchor">
+  >();
   for (const entry of entries) {
     if (entry.criterion === "") continue;
     if (!titles.has(entry.criterion)) {
@@ -302,7 +326,18 @@ const alignScores = ({
       });
     }
   }
-  return criteria.map(({ title }) => byCriterion.get(title));
+  return criteria.map(({ title }, index) => {
+    const entry = byCriterion.get(title);
+    if (entry === undefined) return undefined;
+    return {
+      ...entry,
+      anchor: decisionCellAnchor({
+        figure: figureAnchor,
+        optionId: optionAnchorId,
+        criterionId: criterionAnchorIds[index] ?? `criterion-${index + 1}`,
+      }),
+    };
+  });
 };
 
 const compileOption = ({
@@ -311,12 +346,20 @@ const compileOption = ({
   idPrefix,
   ids,
   criteria,
+  anchor,
+  anchorId,
+  figureAnchor,
+  criterionAnchorIds,
 }: {
   readonly child: ScopedChild;
   readonly diagnostics: DiagnosticCollector;
   readonly idPrefix: string;
   readonly ids: ComponentIdAllocator;
   readonly criteria: ReadonlyArray<CompiledDecisionCardCriterion>;
+  readonly anchor: string;
+  readonly anchorId: string;
+  readonly figureAnchor: string;
+  readonly criterionAnchorIds: ReadonlyArray<string>;
 }): CompiledDecisionCardOption => {
   const validated = validateComponentAttributes({
     component: "Option",
@@ -343,6 +386,7 @@ const compileOption = ({
     .map((nested) => compileScore({ child: nested, diagnostics }));
   return {
     id,
+    anchor,
     titleId: `${id}-title`,
     title,
     recommended: validated.recommended === true,
@@ -354,6 +398,9 @@ const compileOption = ({
       entries,
       criteria,
       diagnostics,
+      figureAnchor,
+      optionAnchorId: anchorId,
+      criterionAnchorIds,
     }),
     detail: [],
   };
@@ -381,6 +428,29 @@ const validateUniqueTitles = ({
       });
     }
     titles.add(title);
+  }
+};
+
+const diagnoseDuplicateIds = ({
+  entries,
+  kind,
+  diagnostics,
+}: {
+  readonly entries: ReadonlyArray<ScopedChild>;
+  readonly kind: "Criterion" | "Option";
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  for (const duplicate of duplicateExplicitDecisionIds(
+    entries.map((entry) => ({
+      ...(typeof entry.attributes["id"] === "string"
+        ? { id: entry.attributes["id"] }
+        : {}),
+    })),
+  )) {
+    diagnostics.add({
+      message: `Duplicate explicit ${kind} id "${duplicate.id}" in DecisionAnalysis`,
+      position: entries[duplicate.index]?.position,
+    });
   }
 };
 
@@ -510,9 +580,11 @@ const compileDetails = ({
 const compileReversibility = ({
   children,
   diagnostics,
+  anchor,
 }: {
   readonly children: ReadonlyArray<ScopedChild>;
   readonly diagnostics: DiagnosticCollector;
+  readonly anchor: string;
 }): CompiledDecisionCardReversibility | undefined => {
   if (children.length !== 1) {
     diagnostics.add({
@@ -531,6 +603,7 @@ const compileReversibility = ({
   });
   if (validated.rating === undefined) return undefined;
   return {
+    anchor,
     rating: validated.rating,
     detail: meaningfulChildren(child.children),
   };
@@ -553,6 +626,10 @@ export const compileDecisionAnalysisComponent = ({
     schema: DECISION_SCHEMA,
   });
   const question = validated.question ?? "";
+  const anchor = decisionFigureAnchor({
+    component: "DecisionAnalysis",
+    ordinal: ids.nextOrdinal({ component: "DecisionAnalysis" }),
+  });
   const state = validated.state ?? "proposed";
   const interaction = validated.interaction ?? "audit";
   const status = state === "proposed" ? "open" : state;
@@ -565,8 +642,29 @@ export const compileDecisionAnalysisComponent = ({
   const criterionChildren = scopedChildren.filter(
     (child) => child.name === "Criterion",
   );
-  const criteria = criterionChildren.map((child) =>
-    compileCriterion({ child, diagnostics, idPrefix: id, ids }),
+  const criterionAnchorIds = resolveDecisionElementIds(
+    criterionChildren.map((child) => ({
+      ...(typeof child.attributes["id"] === "string"
+        ? { id: child.attributes["id"] }
+        : {}),
+      label:
+        typeof child.attributes["title"] === "string"
+          ? child.attributes["title"]
+          : "",
+      fallback: "criterion",
+    })),
+  );
+  const criteria = criterionChildren.map((child, index) =>
+    compileCriterion({
+      child,
+      diagnostics,
+      idPrefix: id,
+      ids,
+      anchor: decisionCriterionAnchor({
+        figure: anchor,
+        criterionId: criterionAnchorIds[index] ?? `criterion-${index + 1}`,
+      }),
+    }),
   );
   if (criteria.length === 0) {
     diagnostics.add({
@@ -579,11 +677,41 @@ export const compileDecisionAnalysisComponent = ({
     kind: "Criterion",
     diagnostics,
   });
+  diagnoseDuplicateIds({
+    entries: criterionChildren,
+    kind: "Criterion",
+    diagnostics,
+  });
   const optionChildren = scopedChildren.filter(
     (child) => child.name === "Option",
   );
-  const options = optionChildren.map((child) =>
-    compileOption({ child, diagnostics, idPrefix: id, ids, criteria }),
+  const optionAnchorIds = resolveDecisionElementIds(
+    optionChildren.map((child) => ({
+      ...(typeof child.attributes["id"] === "string"
+        ? { id: child.attributes["id"] }
+        : {}),
+      label:
+        typeof child.attributes["title"] === "string"
+          ? child.attributes["title"]
+          : "",
+      fallback: "option",
+    })),
+  );
+  const options = optionChildren.map((child, index) =>
+    compileOption({
+      child,
+      diagnostics,
+      idPrefix: id,
+      ids,
+      criteria,
+      anchor: decisionOptionAnchor({
+        figure: anchor,
+        optionId: optionAnchorIds[index] ?? `option-${index + 1}`,
+      }),
+      anchorId: optionAnchorIds[index] ?? `option-${index + 1}`,
+      figureAnchor: anchor,
+      criterionAnchorIds,
+    }),
   );
   const detail = compileDetails({
     children: scopedChildren.filter((child) => child.name === "Details"),
@@ -592,6 +720,7 @@ export const compileDecisionAnalysisComponent = ({
   const reversibility = compileReversibility({
     children: scopedChildren.filter((child) => child.name === "Reversibility"),
     diagnostics,
+    anchor: decisionReversibilityAnchor({ figure: anchor }),
   });
   if (options.length < 2) {
     diagnostics.add({
@@ -600,6 +729,11 @@ export const compileDecisionAnalysisComponent = ({
     });
   }
   validateUniqueTitles({
+    entries: optionChildren,
+    kind: "Option",
+    diagnostics,
+  });
+  diagnoseDuplicateIds({
     entries: optionChildren,
     kind: "Option",
     diagnostics,
@@ -629,7 +763,10 @@ export const compileDecisionAnalysisComponent = ({
         .size > 1,
   );
   return {
+    component: "DecisionAnalysis",
     id,
+    anchor,
+    recommendationAnchor: decisionRecommendationAnchor({ figure: anchor }),
     questionId: `${id}-question`,
     question,
     status,

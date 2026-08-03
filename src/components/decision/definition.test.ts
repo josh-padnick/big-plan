@@ -55,4 +55,38 @@ Hidden prose.
 </Decision>`),
     ).toThrow(MarkdownDiagnosticsError);
   });
+
+  it("should inventory stable authored review anchors and reject duplicates", () => {
+    const source = (optionTitle: string) => `<Decision question="Which path?">
+
+<Option id="canary" title="${optionTitle}" recommended>
+<Consideration id="risk" label="Risk" verdict="Low">
+
+Contained.
+
+</Consideration>
+</Option>
+<Option id="global" title="Global">
+<Consideration id="risk" label="Risk" verdict="High">
+
+Broad.
+
+</Consideration>
+</Option>
+</Decision>`;
+    for (const html of [render(source("Canary")), render(source("Pilot"))]) {
+      expect(html).toContain(
+        'data-decision-anchor="component/Decision#1/option/canary"',
+      );
+      expect(html).toContain(
+        'data-decision-anchor="component/Decision#1/option/canary/consideration/risk"',
+      );
+      expect(html).toContain(
+        'data-decision-anchor="component/Decision#1/recommendation"',
+      );
+    }
+    expect(() =>
+      render(source("Canary").replace('id="global"', 'id="canary"')),
+    ).toThrow(MarkdownDiagnosticsError);
+  });
 });

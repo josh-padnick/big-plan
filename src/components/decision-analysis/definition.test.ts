@@ -115,4 +115,38 @@ describe("DecisionAnalysis", () => {
       ),
     ).toThrow(MarkdownDiagnosticsError);
   });
+
+  it("should inventory criterion, option, cell, recommendation, and reversibility anchors", () => {
+    const html = render(
+      analysis({ interaction: "audit" })
+        .replace(
+          '<Criterion title="Integrity"',
+          '<Criterion id="integrity" title="Integrity"',
+        )
+        .replace(
+          '<Option title="PostgreSQL"',
+          '<Option id="postgresql" title="PostgreSQL"',
+        )
+        .replace(
+          '<Option title="SQLite"',
+          '<Option id="sqlite" title="SQLite"',
+        ),
+    );
+
+    expect(html).toContain(
+      'data-decision-anchor="component/DecisionAnalysis#1/criterion/integrity"',
+    );
+    expect(html).toContain(
+      'data-decision-anchor="component/DecisionAnalysis#1/option/postgresql"',
+    );
+    expect(html).toContain(
+      'data-decision-anchor="component/DecisionAnalysis#1/cell/postgresql/integrity"',
+    );
+    expect(html).toContain(
+      'data-decision-anchor="component/DecisionAnalysis#1/recommendation"',
+    );
+    expect(html).toContain(
+      'data-decision-anchor="component/DecisionAnalysis#1/reversibility"',
+    );
+  });
 });

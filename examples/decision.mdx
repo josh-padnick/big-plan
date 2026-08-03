@@ -6,15 +6,15 @@ Choose the delivery channel before implementing the installer.
 
 The repository copy remains canonical either way.
 
-<Option title="Embed it in the CLI" recommended summary="A command prints the version-matched skill.">
+<Option id="embed" title="Embed it in the CLI" recommended summary="A command prints the version-matched skill.">
 
-<Consideration label="Version fidelity" verdict="Exact" tone="good">
+<Consideration id="version-fidelity" label="Version fidelity" verdict="Exact" tone="good">
 
 The installed package contains the matching skill text.
 
 </Consideration>
 
-<Consideration label="Offline setup" verdict="Yes" tone="good">
+<Consideration id="offline-setup" label="Offline setup" verdict="Yes" tone="good">
 
 Installation never needs the network.
 
@@ -22,15 +22,15 @@ Installation never needs the network.
 
 </Option>
 
-<Option title="Download it from the docs site" summary="Setup fetches the published skill.">
+<Option id="download" title="Download it from the docs site" summary="Setup fetches the published skill.">
 
-<Consideration label="Version fidelity" verdict="May drift" tone="bad">
+<Consideration id="version-fidelity" label="Version fidelity" verdict="May drift" tone="bad">
 
 The site can move ahead of an older CLI.
 
 </Consideration>
 
-<Consideration label="Offline setup" verdict="No" tone="bad">
+<Consideration id="offline-setup" label="Offline setup" verdict="No" tone="bad">
 
 Setup must reach the documentation host.
 

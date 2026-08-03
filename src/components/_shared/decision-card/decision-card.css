@@ -660,3 +660,71 @@
     }
   }
 }
+
+/* Decision-family review state is introduced after Tailwind's layers because
+   selection must outrank resting border utilities without moving those
+   presentation choices out of the component markup. */
+@layer decision-review {
+  article .decision [data-decision-element] {
+    position: relative;
+  }
+
+  article .decision[data-decision-hovered],
+  article .decision [data-decision-hovered] {
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--accent-c) 42%, transparent);
+  }
+
+  article .decision[data-decision-selected],
+  article .decision [data-decision-selected] {
+    z-index: 2;
+    box-shadow:
+      inset 0 0 0 2px var(--accent-c),
+      0 0 0 2px color-mix(in srgb, var(--accent-c) 20%, transparent);
+  }
+
+  article .decision:focus-visible,
+  article .decision [data-decision-element]:focus-visible {
+    outline: 2px solid var(--accent-c);
+    outline-offset: 2px;
+  }
+
+  article .decision-comment-marker {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
+    z-index: 4;
+    display: inline-flex;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.12rem;
+    padding: 0 0.25rem;
+    border: 2px solid var(--bg);
+    border-radius: 999px;
+    background: var(--accent-c);
+    color: var(--bg);
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
+    font-size: 0.5625rem;
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  article .decision-comment-marker svg {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+
+  article .decision > .flow-collector {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    width: 100%;
+    max-height: none;
+    border-width: 1px 0 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}

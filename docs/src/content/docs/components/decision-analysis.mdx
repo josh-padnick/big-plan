@@ -22,4 +22,8 @@ Set `scoring="weighted"` to add editable 1–5 impacts directly below criterion 
 </DecisionAnalysis>
 ```
 
+`Criterion` and `Option` accept explicit `id` attributes. Use them when review
+comments on criteria and matrix cells must retain stable addresses across
+wording changes; duplicate explicit ids are rejected.
+
 `state` is `proposed`, `decided`, or `deferred`; `interaction` is `audit` or `choose`, and choosing is valid only while proposed. Every option must score every criterion. A decided analysis marks exactly one option `chosen`. `Reversibility` is required and `Details` is optional.

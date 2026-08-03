@@ -1,6 +1,6 @@
-// The diagram leg of the viewer script: the canvas a FlowDiagram becomes, the
-// selection model a reviewer works through, and the proposal layer their edits
-// paint.
+// The anchored-review leg of the viewer script: the canvas a FlowDiagram
+// becomes, the shared selection/comment model used by diagrams and decisions,
+// and the diagram-only proposal layer that paints direct edits.
 //
 // WHY IT LIVES BESIDE viewer-script.ts RATHER THAN INSIDE IT
 // The shared maximize behavior is small enough to read in place; this leg is
@@ -21,11 +21,10 @@
 //     needs a compose surface, because only a comment has nowhere to be typed.
 //
 // WHAT IT MAY AND MAY NOT ASSUME
-// It reads two contracts it cannot import, because a string template has no
-// imports: the maximize vocabulary owned by
-// components/_model/figure-controls/figure-controls.ts, and the element-anchor
-// attributes owned by components/flow-diagram/anchors.ts. A change to either
-// spelling changes the strings here too.
+// The maximize vocabulary is owned by
+// components/_model/figure-controls/figure-controls.ts. Decision attribute
+// spellings are imported from the family's anchor owner. Flow spellings remain
+// compile-time inventoried by its view and tests.
 //
 // It never promotes or restores a figure itself. The shared leg owns that
 // toggle; this one watches for the attribute and refits the canvas.
@@ -33,6 +32,11 @@
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { X_ICON } from "../../icons/lucide/x.js";
+import {
+  DECISION_ANCHOR_ATTRIBUTE,
+  DECISION_ELEMENT_ATTRIBUTE,
+  DECISION_NAME_ATTRIBUTE,
+} from "../../components/_model/decision-card-anchors.js";
 import { lucideIconToMarkup } from "./lucide-icon-markup.js";
 
 const ICON_COMMENT = lucideIconToMarkup(MESSAGE_SQUARE_ICON);
@@ -42,7 +46,9 @@ const ICON_CLOSE = lucideIconToMarkup(X_ICON);
 export const DIAGRAM_SCRIPT = `
 (() => {
   const diagrams = Array.from(document.querySelectorAll("[data-flow-diagram]"));
-  if (diagrams.length === 0) return;
+  const decisions = Array.from(document.querySelectorAll("[data-decision][${DECISION_ANCHOR_ATTRIBUTE}]"));
+  const reviewScopes = diagrams.concat(decisions);
+  if (reviewScopes.length === 0) return;
 
   const ICON = {
     comment: '${ICON_COMMENT}',
@@ -99,12 +105,27 @@ export const DIAGRAM_SCRIPT = `
   };
 
   // --- Reading the diagram out of the DOM -------------------------------
-  const kindOf = (n) => n.getAttribute("data-flow-element");
-  const nameOf = (n) => n.getAttribute("data-flow-name") || "element";
-  const anchorOf = (n) => n.getAttribute("data-flow-anchor") || "";
-  const elementsIn = (diagram) =>
-    Array.from(diagram.querySelectorAll("[data-flow-element]"));
-  const targetsIn = (diagram) => [diagram].concat(elementsIn(diagram));
+  const isDecision = (n) => n.hasAttribute("${DECISION_ANCHOR_ATTRIBUTE}");
+  const scopeOf = (n) =>
+    n.closest("[data-flow-diagram], [data-decision][${DECISION_ANCHOR_ATTRIBUTE}]") || n;
+  const kindOf = (n) =>
+    n.getAttribute("data-flow-element") ||
+    n.getAttribute("${DECISION_ELEMENT_ATTRIBUTE}");
+  const nameOf = (n) =>
+    n.getAttribute("data-flow-name") ||
+    n.getAttribute("${DECISION_NAME_ATTRIBUTE}") ||
+    "element";
+  const anchorOf = (n) =>
+    n.getAttribute("data-flow-anchor") ||
+    n.getAttribute("${DECISION_ANCHOR_ATTRIBUTE}") ||
+    "";
+  const elementsIn = (scope) =>
+    Array.from(
+      scope.querySelectorAll(
+        "[data-flow-element], [${DECISION_ELEMENT_ATTRIBUTE}]",
+      ),
+    ).filter((node) => scopeOf(node) === scope);
+  const targetsIn = (scope) => [scope].concat(elementsIn(scope));
   const fieldsIn = (node) => {
     const own = [];
     for (const field of node.querySelectorAll("[data-flow-field]")) {
@@ -410,17 +431,24 @@ export const DIAGRAM_SCRIPT = `
   // --- Selection ----------------------------------------------------------
   let selected = null;
   let editing = null;
+  const clearSelectedState = (node) => {
+    node.removeAttribute("data-flow-selected");
+    node.removeAttribute("data-decision-selected");
+  };
 
   const select = (node) => {
     if (selected === node) { reanchor(); return; }
-    if (selected) selected.removeAttribute("data-flow-selected");
+    if (selected) clearSelectedState(selected);
     selected = node;
     if (selected) {
       // The figure is a keyboard entry point, not an authored target. Keep it
       // in the roving-selection model so Arrow keys can enter the diagram,
       // but do not paint a whole-canvas selection ring after Escape.
-      if (kindOf(selected) !== "figure") {
-        selected.setAttribute("data-flow-selected", "");
+      if (kindOf(selected) !== "figure" || isDecision(selected)) {
+        selected.setAttribute(
+          isDecision(selected) ? "data-decision-selected" : "data-flow-selected",
+          "",
+        );
       }
       announce("Selected " + nameOf(selected));
     }
@@ -428,7 +456,7 @@ export const DIAGRAM_SCRIPT = `
   };
   const deselect = () => {
     stopEditing(false);
-    if (selected) selected.removeAttribute("data-flow-selected");
+    if (selected) clearSelectedState(selected);
     selected = null;
     buildActionBar();
   };
@@ -461,6 +489,30 @@ export const DIAGRAM_SCRIPT = `
       if (event.target === diagram) select(diagram);
     });
     diagram.addEventListener("figure-restored", () => clearDiagramChrome(diagram));
+  }
+  for (const decision of decisions) {
+    let hovered = null;
+    decision.addEventListener("pointerover", (event) => {
+      const node = event.target.closest("[${DECISION_ELEMENT_ATTRIBUTE}]");
+      if (!node || scopeOf(node) !== decision || node === hovered) return;
+      if (hovered) hovered.removeAttribute("data-decision-hovered");
+      hovered = node;
+      hovered.setAttribute("data-decision-hovered", "");
+    });
+    decision.addEventListener("pointerout", (event) => {
+      if (!hovered || decision.contains(event.relatedTarget)) return;
+      hovered.removeAttribute("data-decision-hovered");
+      hovered = null;
+    });
+    decision.addEventListener("click", (event) => {
+      if (event.target.closest(".flow-diagram-compose, .flow-collector")) return;
+      const node = event.target.closest("[${DECISION_ELEMENT_ATTRIBUTE}]");
+      if (node && scopeOf(node) === decision) select(node);
+    });
+    decision.addEventListener("focusin", (event) => {
+      const node = event.target.closest("[${DECISION_ELEMENT_ATTRIBUTE}]");
+      if (node && scopeOf(node) === decision) select(node);
+    });
   }
 
   // --- Editing in place ---------------------------------------------------
@@ -544,7 +596,7 @@ export const DIAGRAM_SCRIPT = `
     const active = document.activeElement;
     if (active && active.closest && active.closest(".flow-diagram-compose, .flow-collector")) return;
     if (event.key === "Escape") {
-      const diagram = selected.closest("[data-flow-diagram]") || selected;
+      const diagram = scopeOf(selected);
       // A promoted diagram is one interaction surface. Let the shared
       // maximize leg restore it on the first Escape; selection can follow the
       // focus that leg returns to the diagram container.
@@ -554,7 +606,7 @@ export const DIAGRAM_SCRIPT = `
       return;
     }
     if (event.key === "Delete" || event.key === "Backspace") {
-      if (kindOf(selected) === "figure") return;
+      if (kindOf(selected) === "figure" || isDecision(selected)) return;
       event.preventDefault();
       toggleRemoval(selected);
       return;
@@ -580,7 +632,7 @@ export const DIAGRAM_SCRIPT = `
       }
     }
     if (event.key.indexOf("Arrow") === 0) {
-      const diagram = selected.closest("[data-flow-diagram]") || selected;
+      const diagram = scopeOf(selected);
       const order = targetsIn(diagram);
       const index = order.indexOf(selected);
       const next = event.key === "ArrowRight" || event.key === "ArrowDown" ? index + 1 : index - 1;
@@ -681,6 +733,11 @@ export const DIAGRAM_SCRIPT = `
   const showingOriginal = (diagram) => diagram.hasAttribute("data-flow-original");
 
   const clearLayer = () => {
+    for (const scope of reviewScopes) {
+      for (const marker of scope.querySelectorAll("[data-decision-comment-marker]")) {
+        marker.remove();
+      }
+    }
     for (const diagram of diagrams) {
       diagram.removeAttribute("data-flow-proposed");
       for (const marker of diagram.querySelectorAll("[data-flow-comment-marker]")) {
@@ -708,8 +765,8 @@ export const DIAGRAM_SCRIPT = `
     node.setAttribute("aria-label", (node.getAttribute("aria-label") || "") + suffix);
   };
   const resetNames = () => {
-    for (const diagram of diagrams) {
-      for (const node of targetsIn(diagram)) {
+    for (const scope of reviewScopes) {
+      for (const node of targetsIn(scope)) {
         if (baseName.has(node)) node.setAttribute("aria-label", baseName.get(node));
       }
     }
@@ -776,8 +833,18 @@ export const DIAGRAM_SCRIPT = `
       // The document already uses MessageSquare for comments. Repeating that
       // glyph at the subject makes the saved comment visible without making
       // every untouched element carry permanent review chrome.
-      const marker = el("span", "flow-diagram-comment-marker");
-      marker.setAttribute("data-flow-comment-marker", "");
+      const marker = el(
+        "span",
+        isDecision(subject)
+          ? "decision-comment-marker"
+          : "flow-diagram-comment-marker",
+      );
+      marker.setAttribute(
+        isDecision(subject)
+          ? "data-decision-comment-marker"
+          : "data-flow-comment-marker",
+        "",
+      );
       marker.setAttribute("aria-hidden", "true");
       marker.innerHTML = ICON.comment;
       if (count > 1) marker.appendChild(el("span", "", String(count)));
@@ -802,6 +869,12 @@ export const DIAGRAM_SCRIPT = `
         diagram.removeAttribute("data-flow-original");
         diagram.dispatchEvent(new CustomEvent("flow-original-reset"));
       }
+    }
+    for (const decision of decisions) {
+      decision.toggleAttribute(
+        "data-decision-has-feedback",
+        drafts.some((draft) => draft.diagram === decision),
+      );
     }
     renderTray();
     for (const diagram of diagrams) refitIfUntouched(diagram);
@@ -875,8 +948,9 @@ export const DIAGRAM_SCRIPT = `
   actionBar.hidden = true;
   // Re-parented to whichever diagram owns the current selection.
   const hostFor = (node) => {
-    const diagram = node && node.closest ? node.closest("[data-flow-diagram]") : null;
-    return diagram || document.body;
+    if (!node || !node.closest) return document.body;
+    const scope = scopeOf(node);
+    return scope.hasAttribute("data-flow-diagram") ? scope : document.body;
   };
   const adopt = (element, node) => {
     const host = hostFor(node);
@@ -907,7 +981,7 @@ export const DIAGRAM_SCRIPT = `
     // and Revert, which only exists once there is something to revert. The
     // figure is only the diagram's keyboard entry point: slide-level comments
     // own feedback about the whole diagram, so it offers no floating action.
-    if (kindOf(selected) !== "figure") {
+    if (kindOf(selected) !== "figure" || isDecision(selected)) {
       addAction("comment", ICON.comment, "Comment", () => openCompose(selected));
     }
     const mine = drafts.filter((d) => d.element === selected);
@@ -918,7 +992,7 @@ export const DIAGRAM_SCRIPT = `
     if (editing) {
       actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
         "Enter to save \u00b7 Esc to cancel"));
-    } else if (kindOf(selected) !== "figure") {
+    } else if (kindOf(selected) !== "figure" && !isDecision(selected)) {
       const removed = removalOn(selected);
       const canType = fieldsIn(selected).length > 0 && !removed;
       actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
@@ -945,7 +1019,7 @@ export const DIAGRAM_SCRIPT = `
 
   const positionActionBar = () => {
     if (!selected || actionBar.hidden) return;
-    const diagram = selected.closest("[data-flow-diagram]") || selected;
+    const diagram = scopeOf(selected);
     const c = canvas.get(diagram);
     const canvasSelection = c && c.viewport.contains(selected);
     const subject = selected.getBoundingClientRect();
@@ -989,7 +1063,7 @@ export const DIAGRAM_SCRIPT = `
   const dismissOrphanedChrome = () => {
     if (selected && !onScreen(selected)) {
       if (editing) stopEditing(false);
-      selected.removeAttribute("data-flow-selected");
+      clearSelectedState(selected);
       selected = null;
       actionBar.hidden = true;
       actionBar.textContent = "";
@@ -1053,8 +1127,7 @@ export const DIAGRAM_SCRIPT = `
 
   const commitCompose = (diagram) => {
     if (!composeSubject) return false;
-    const owner =
-      composeSubject.closest("[data-flow-diagram]") || composeSubject;
+    const owner = scopeOf(composeSubject);
     if (diagram && owner !== diagram) return false;
     const value = composeText();
     if (!value) return false;
@@ -1073,17 +1146,17 @@ export const DIAGRAM_SCRIPT = `
 
   const clearDiagramChrome = (diagram) => {
     if (composeSubject) {
-      const owner = composeSubject.closest("[data-flow-diagram]") || composeSubject;
+      const owner = scopeOf(composeSubject);
       if (owner === diagram) closeCompose();
     }
     if (editing) {
-      const owner = editing.node.closest("[data-flow-diagram]") || editing.node;
+      const owner = scopeOf(editing.node);
       if (owner === diagram) stopEditing(false);
     }
     if (selected) {
-      const owner = selected.closest("[data-flow-diagram]") || selected;
+      const owner = scopeOf(selected);
       if (owner === diagram) {
-        selected.removeAttribute("data-flow-selected");
+        clearSelectedState(selected);
         selected = null;
         buildActionBar();
       }
@@ -1092,12 +1165,12 @@ export const DIAGRAM_SCRIPT = `
 
   const pendingCountFor = (diagram) => {
     if (editing) {
-      const owner = editing.node.closest("[data-flow-diagram]") || editing.node;
+      const owner = scopeOf(editing.node);
       if (owner === diagram) stopEditing(false);
     }
     const saved = drafts.filter((draft) => draft.diagram === diagram).length;
     if (!composeSubject) return saved;
-    const owner = composeSubject.closest("[data-flow-diagram]") || composeSubject;
+    const owner = scopeOf(composeSubject);
     if (owner !== diagram) return saved;
     const textarea = compose.querySelector("textarea");
     return saved + (textarea && textarea.value.trim() ? 1 : 0);
@@ -1294,15 +1367,19 @@ export const DIAGRAM_SCRIPT = `
     (window.bigPlan && window.bigPlan.feedback) || null;
 
   const buildCollector = (diagram) => {
+    const decision = diagram.hasAttribute("data-decision");
+    const subjectLabel = decision ? "decision" : "diagram";
     const root = el("aside", "flow-collector");
     root.hidden = true;
-    root.setAttribute("aria-label", "Feedback on this diagram");
+    root.setAttribute("aria-label", "Feedback on this " + subjectLabel);
 
     const head = el("div", "flow-collector-head");
     const title = el("div", "");
-    title.appendChild(el("span", "", "Feedback on this diagram"));
+    title.appendChild(el("span", "", "Feedback on this " + subjectLabel));
     const scope = el("span", "flow-collector-scope",
-      diagram.getAttribute("data-flow-scope") || "This diagram");
+      diagram.getAttribute("data-flow-scope") ||
+      diagram.getAttribute("${DECISION_NAME_ATTRIBUTE}") ||
+      "This " + subjectLabel);
     title.appendChild(scope);
     head.appendChild(title);
     const count = el("span", "flow-collector-count", "0");
@@ -1363,8 +1440,11 @@ export const DIAGRAM_SCRIPT = `
       return;
     }
     target.add({
-      source: "flow-diagram",
-      anchor: diagram.getAttribute("data-flow-anchor"),
+      source: diagram.hasAttribute("data-decision")
+        ? "decision-family"
+        : "flow-diagram",
+      anchor: anchorOf(diagram),
+      component: diagram.getAttribute("data-decision-component") || undefined,
       items: mine.map((d) => ({
         kind: d.kind, anchor: d.anchor, field: d.fieldName,
         before: d.before, after: d.after, body: d.body,
@@ -1393,7 +1473,12 @@ export const DIAGRAM_SCRIPT = `
     for (const draft of mine) {
       const item = el("li", "flow-collector-item");
       const line = el("div", "flow-collector-item-head");
-      const target = el("button", "flow-collector-target", "Flow: " + nameOf(draft.element));
+      const target = el(
+        "button",
+        "flow-collector-target",
+        (diagram.hasAttribute("data-decision") ? "Decision: " : "Flow: ") +
+          nameOf(draft.element),
+      );
       target.type = "button";
       target.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -1441,7 +1526,9 @@ export const DIAGRAM_SCRIPT = `
       add.hidden = mine.length === 0;
       if (add.inert) add.inert = false;
     }
-    c.root.hidden = mine.length === 0 || !maximized;
+    c.root.hidden =
+      mine.length === 0 ||
+      (diagram.hasAttribute("data-flow-diagram") && !maximized);
     // The status describes one attempt at one batch. Once the batch changes it
     // is describing something that no longer exists, so it goes.
     if (c.statusFor !== mine.length) {
@@ -1453,7 +1540,7 @@ export const DIAGRAM_SCRIPT = `
   };
 
   const renderTray = () => {
-    for (const diagram of diagrams) renderCollector(diagram);
+    for (const diagram of reviewScopes) renderCollector(diagram);
   };
 
   // --- Figure-level proposal chrome --------------------------------------
@@ -1498,7 +1585,7 @@ export const DIAGRAM_SCRIPT = `
   document.addEventListener("pointerdown", (event) => {
     if (compose.contains(event.target) || actionBar.contains(event.target)) return;
     if (event.target.closest && event.target.closest(".flow-collector, .flow-collector-add")) return;
-    if (event.target.closest("[data-flow-diagram]")) return;
+    if (event.target.closest("[data-flow-diagram], [data-decision]")) return;
     // Pointerdown precedes the field's focusout, so commit explicitly before
     // deselection. Keep non-empty comment text open for an intentional
     // Comment/Cancel choice; an outside click is never a silent discard.
@@ -1508,8 +1595,8 @@ export const DIAGRAM_SCRIPT = `
   });
   diagrams.forEach((diagram, index) => {
     buildExitAlert(diagram, index);
-    buildCollector(diagram);
   });
+  reviewScopes.forEach((scope) => buildCollector(scope));
 
   // First layout runs last: fitting the canvas re-anchors the action bar, so
   // it has to exist before anything is fitted.
@@ -1534,7 +1621,7 @@ export const DIAGRAM_SCRIPT = `
       }
       reanchor();
     });
-    for (const diagram of diagrams) sizes.observe(diagram);
+    for (const scope of reviewScopes) sizes.observe(scope);
   }
 
   addEventListener("scroll", reanchor, { passive: true, capture: true });

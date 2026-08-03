@@ -23,6 +23,7 @@ import { BriefLayout, MatrixLayout, RowsLayout } from "./view-layouts.js";
 import { hastContentToReact } from "../hast-content/hast-content.js";
 import { lucideIconToReact } from "../lucide-icon/lucide-icon.js";
 import { BadgePill } from "../badge-pill/badge-pill.js";
+import { decisionReviewTarget } from "./review-target.js";
 
 // Decision's tones are the shared matrix vocabulary; the alias fails the
 // build if the two ever diverge.
@@ -208,7 +209,14 @@ const Reversibility = ({ model }: { readonly model: CompiledDecisionCard }) => {
   const reversibility = model.reversibility;
   if (reversibility === undefined) return null;
   return (
-    <div className="decision-reversibility border-t border-edge px-5 py-4">
+    <div
+      className="decision-reversibility border-t border-edge px-5 py-4"
+      {...decisionReviewTarget({
+        anchor: reversibility.anchor,
+        kind: "reversibility",
+        name: `Reversibility: ${reversibility.rating.replace("-", " ")}`,
+      })}
+    >
       <p className="m-0 text-xs font-semibold tracking-wide text-muted uppercase">
         {`Reversibility · ${reversibility.rating.replace("-", " ")}`}
       </p>
@@ -243,6 +251,13 @@ export const DecisionCard = ({
       id={model.id}
       className="decision mb-5 min-w-0 overflow-hidden rounded-md border border-edge bg-paper"
       data-decision=""
+      data-decision-component={model.component}
+      {...decisionReviewTarget({
+        anchor: model.anchor,
+        kind: "figure",
+        name: `${model.component}: ${model.question}`,
+        entry: true,
+      })}
       data-decision-status={model.status}
       data-decision-layout={model.layout}
       data-decision-scoring={model.scoring}

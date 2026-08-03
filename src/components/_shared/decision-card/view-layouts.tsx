@@ -13,6 +13,7 @@ import { CHEVRON_RIGHT_ICON } from "../../../icons/lucide/chevron-right.js";
 import { STAR_ICON } from "../../../icons/lucide/star.js";
 import { hastContentToReact } from "../hast-content/hast-content.js";
 import { lucideIconToReact } from "../lucide-icon/lucide-icon.js";
+import { decisionReviewTarget } from "./review-target.js";
 
 const RADIO_CLASSES =
   "decision-radio mt-0.5 size-5 shrink-0 appearance-none rounded-full border";
@@ -49,8 +50,17 @@ const Radio = ({
   />
 );
 
-const Recommended = () => (
-  <BadgePill label="Recommended" classNames={["badge-pill-quiet"]} />
+const Recommended = ({ model }: { readonly model: CompiledDecisionCard }) => (
+  <span
+    className="inline-flex"
+    {...decisionReviewTarget({
+      anchor: model.recommendationAnchor,
+      kind: "recommendation",
+      name: "Recommendation",
+    })}
+  >
+    <BadgePill label="Recommended" classNames={["badge-pill-quiet"]} />
+  </span>
 );
 
 const Chosen = () => (
@@ -113,6 +123,11 @@ export const RowsLayout = ({
           key={option.id}
           data-decision-option=""
           data-decision-column={index}
+          {...decisionReviewTarget({
+            anchor: option.anchor,
+            kind: "option",
+            name: `Option: ${option.title}`,
+          })}
           {...(option.recommended ? { "data-option-recommended": "" } : {})}
           {...(option.chosen ? { "data-option-chosen": "" } : {})}
         >
@@ -134,7 +149,7 @@ export const RowsLayout = ({
               >
                 {option.title}
               </span>
-              {option.recommended ? <Recommended /> : null}
+              {option.recommended ? <Recommended model={model} /> : null}
             </span>
             <span className="decision-row-lines mt-2 grid gap-1">
               {option.summary === undefined ? null : (
@@ -145,7 +160,15 @@ export const RowsLayout = ({
                 return consideration === undefined
                   ? []
                   : [
-                      <span className="decision-row-line" key={row}>
+                      <span
+                        className="decision-row-line"
+                        key={row}
+                        {...decisionReviewTarget({
+                          anchor: consideration.anchor,
+                          kind: "consideration",
+                          name: `${option.title} on ${criterion.title}`,
+                        })}
+                      >
                         <span className="decision-row-dimension font-semibold text-ink">
                           {`${criterion.title}:`}
                         </span>
@@ -466,6 +489,11 @@ export const MatrixLayout = ({
             key={option.id}
             {...(model.interaction === "audit" ? { id: option.id } : {})}
             data-decision-column={index}
+            {...decisionReviewTarget({
+              anchor: option.anchor,
+              kind: "option",
+              name: `Option: ${option.title}`,
+            })}
             {...(option.recommended ? { "data-option-recommended": "" } : {})}
             {...(option.chosen ? { "data-option-chosen": "" } : {})}
           >
@@ -494,7 +522,7 @@ export const MatrixLayout = ({
               {option.chosen || option.recommended ? (
                 <span className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
                   {option.chosen ? <Chosen /> : null}
-                  {option.recommended ? <Recommended /> : null}
+                  {option.recommended ? <Recommended model={model} /> : null}
                 </span>
               ) : null}
             </label>
@@ -532,6 +560,11 @@ export const MatrixLayout = ({
               <th
                 className="decision-criterion px-4 py-3 text-left text-sm leading-5 font-medium text-muted"
                 scope="row"
+                {...decisionReviewTarget({
+                  anchor: criterion.anchor,
+                  kind: "criterion",
+                  name: `Criterion: ${criterion.title}`,
+                })}
               >
                 <DefinitionDisclosure
                   label={criterion.title}
@@ -554,6 +587,13 @@ export const MatrixLayout = ({
                     className="decision-cell px-4 py-3 text-center"
                     key={option.id}
                     data-decision-column={index}
+                    {...(consideration === undefined
+                      ? {}
+                      : decisionReviewTarget({
+                          anchor: consideration.anchor,
+                          kind: "cell",
+                          name: `${option.title} on ${criterion.title}`,
+                        }))}
                     {...(option.chosen ? { "data-option-chosen": "" } : {})}
                   >
                     {consideration === undefined ? (
@@ -666,6 +706,11 @@ export const BriefLayout = ({
             key={option.id}
             data-decision-option=""
             data-decision-column={index}
+            {...decisionReviewTarget({
+              anchor: option.anchor,
+              kind: "option",
+              name: `Option: ${option.title}`,
+            })}
             {...(option.recommended ? { "data-option-recommended": "" } : {})}
             {...(option.chosen ? { "data-option-chosen": "" } : {})}
           >
@@ -686,7 +731,7 @@ export const BriefLayout = ({
               >
                 {option.title}
               </span>
-              {option.recommended ? <Recommended /> : null}
+              {option.recommended ? <Recommended model={model} /> : null}
             </label>
           </li>
         ))}

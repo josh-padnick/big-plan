@@ -18,6 +18,10 @@ description: A compact option-by-option choice with inline considerations.
 </Decision>
 ```
 
+Give an `Option` and its `Consideration` children explicit `id` attributes
+when comments on them must keep the same address after their visible wording
+changes. Duplicate explicit ids are rejected.
+
 `question` is required. Add at least two uniquely titled options and at most one `recommended` option. A `Consideration` requires `label` and `verdict`; its optional `tone` is `good`, `bad`, `mixed`, or `neutral`.
 
 The reader can choose an option, propose another approach, confirm, and later change the reading-session answer.

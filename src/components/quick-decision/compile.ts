@@ -15,12 +15,20 @@ import type {
   CompiledDecisionCard,
   CompiledDecisionCardOption,
 } from "../_model/decision-card.js";
+import {
+  decisionFigureAnchor,
+  decisionOptionAnchor,
+  decisionRecommendationAnchor,
+  duplicateExplicitDecisionIds,
+  resolveDecisionElementIds,
+} from "../_model/decision-card-anchors.js";
 
 const QUICK_DECISION_SCHEMA = {
   question: { kind: "string", required: true, nonEmpty: true },
   context: { kind: "string" },
 } satisfies ComponentAttributeSchema;
 const OPTION_SCHEMA = {
+  id: { kind: "string", nonEmpty: true },
   title: { kind: "string", required: true, nonEmpty: true },
   recommended: { kind: "booleanShorthand" },
   summary: { kind: "string" },
@@ -38,11 +46,13 @@ const compileOption = ({
   diagnostics,
   ids,
   idPrefix,
+  anchor,
 }: {
   readonly child: ScopedChild;
   readonly diagnostics: DiagnosticCollector;
   readonly ids: ComponentIdAllocator;
   readonly idPrefix: string;
+  readonly anchor: string;
 }): CompiledDecisionCardOption => {
   const validated = validateComponentAttributes({
     component: "Option",
@@ -65,6 +75,7 @@ const compileOption = ({
   });
   return {
     id,
+    anchor,
     titleId: `${id}-title`,
     title,
     recommended: validated.recommended === true,
@@ -100,6 +111,10 @@ export const compileQuickDecisionComponent = ({
     });
   }
   const question = validated.question ?? "";
+  const anchor = decisionFigureAnchor({
+    component: "QuickDecision",
+    ordinal: ids.nextOrdinal({ component: "QuickDecision" }),
+  });
   const id = ids.allocate({
     prefix: "quick-decision",
     label: question,
@@ -126,6 +141,18 @@ export const compileQuickDecisionComponent = ({
     }
     seen.add(title.trim());
   }
+  for (const duplicate of duplicateExplicitDecisionIds(
+    optionChildren.map((child) => ({
+      ...(typeof child.attributes["id"] === "string"
+        ? { id: child.attributes["id"] }
+        : {}),
+    })),
+  )) {
+    diagnostics.add({
+      message: `Duplicate explicit Option id "${duplicate.id}" in QuickDecision`,
+      position: optionChildren[duplicate.index]?.position,
+    });
+  }
   const recommended = optionChildren.filter(
     (child) => child.attributes["recommended"] === true,
   );
@@ -135,11 +162,35 @@ export const compileQuickDecisionComponent = ({
       position: duplicate.position,
     });
   }
-  const options = optionChildren.map((child) =>
-    compileOption({ child, diagnostics, ids, idPrefix: id }),
+  const optionAnchorIds = resolveDecisionElementIds(
+    optionChildren.map((child) => ({
+      ...(typeof child.attributes["id"] === "string"
+        ? { id: child.attributes["id"] }
+        : {}),
+      label:
+        typeof child.attributes["title"] === "string"
+          ? child.attributes["title"]
+          : "",
+      fallback: "option",
+    })),
+  );
+  const options = optionChildren.map((child, index) =>
+    compileOption({
+      child,
+      diagnostics,
+      ids,
+      idPrefix: id,
+      anchor: decisionOptionAnchor({
+        figure: anchor,
+        optionId: optionAnchorIds[index] ?? `option-${index + 1}`,
+      }),
+    }),
   );
   return {
+    component: "QuickDecision",
     id,
+    anchor,
+    recommendationAnchor: decisionRecommendationAnchor({ figure: anchor }),
     questionId: `${id}-question`,
     question,
     status: "open",

@@ -6,25 +6,25 @@ Audit the evidence behind the recommended persistence layer.
 
 The first release is local, but the model should not block shared review later.
 
-<Criterion title="Anchor integrity">
+<Criterion id="anchor-integrity" title="Anchor integrity">
 
 Threads and selection anchors must survive crashes together.
 
 </Criterion>
 
-<Criterion title="Local setup">
+<Criterion id="local-setup" title="Local setup">
 
 The store should stay easy to start on one machine.
 
 </Criterion>
 
-<Criterion title="Shared review">
+<Criterion id="shared-review" title="Shared review">
 
 The model should admit concurrent reviewers later.
 
 </Criterion>
 
-<Option title="PostgreSQL" recommended summary="Use the relational store the team already operates.">
+<Option id="postgresql" title="PostgreSQL" recommended summary="Use the relational store the team already operates.">
 
 <Score criterion="Anchor integrity" verdict="Strong" tone="good">
 
@@ -46,7 +46,7 @@ Concurrent readers and writers are native.
 
 </Option>
 
-<Option title="SQLite" summary="Keep one embedded database beside the local server.">
+<Option id="sqlite" title="SQLite" summary="Keep one embedded database beside the local server.">
 
 <Score criterion="Anchor integrity" verdict="Strong" tone="good">
 

@@ -168,3 +168,186 @@ test("should isolate nested weighted DecisionAnalysis calculations", async ({
   ).toHaveText("120 max");
   await expect(innerPercent).toHaveText(innerBefore ?? "");
 });
+
+test("should comment on each Decision-family component and a meaningful child", async ({
+  page,
+  decisionViewerUrl,
+  quickDecisionViewerUrl,
+  decisionAnalysisViewerUrl,
+}) => {
+  const commentOn = async ({
+    target,
+    body,
+  }: {
+    readonly target: ReturnType<typeof page.locator>;
+    readonly body: string;
+  }) => {
+    await target.click();
+    await page
+      .locator('.flow-diagram-actionbar [data-flow-action="comment"]')
+      .click();
+    const compose = page.locator(".flow-diagram-compose");
+    await compose.locator("textarea").fill(body);
+    await compose.getByRole("button", { name: "Comment", exact: true }).click();
+    await expect(
+      target.locator("[data-decision-comment-marker]"),
+    ).toBeVisible();
+  };
+
+  await test.step("comment on a Decision and one option", async () => {
+    await page.goto(decisionViewerUrl);
+    const card = page.locator("[data-decision-component=Decision]").first();
+    const option = card.locator('[data-decision-element="option"]').first();
+    await commentOn({ target: card, body: "Clarify the whole decision." });
+    await commentOn({ target: option, body: "Prefer this rollout option." });
+    await expect(card.locator(".flow-collector")).toBeVisible();
+    await expect(card.locator(".flow-collector-item")).toHaveCount(2);
+  });
+
+  await test.step("comment on a QuickDecision and one option", async () => {
+    await page.goto(quickDecisionViewerUrl);
+    const card = page
+      .locator("[data-decision-component=QuickDecision]")
+      .first();
+    const option = card.locator('[data-decision-element="option"]').first();
+    await commentOn({ target: card, body: "State the deadline." });
+    await commentOn({ target: option, body: "Explain the rollback path." });
+    await expect(card.locator(".flow-collector-item")).toHaveCount(2);
+  });
+
+  await test.step("comment on an analysis criterion and matrix cell", async () => {
+    await page.goto(decisionAnalysisViewerUrl);
+    const card = page
+      .locator("[data-decision-component=DecisionAnalysis]")
+      .first();
+    const criterion = card
+      .locator('[data-decision-element="criterion"]')
+      .first();
+    const cell = card.locator('[data-decision-element="cell"]').first();
+    await commentOn({ target: criterion, body: "Define this criterion." });
+    await commentOn({ target: cell, body: "Recheck this comparison." });
+    await expect(card.locator(".flow-collector-item")).toHaveCount(2);
+  });
+});
+
+test("should preserve Decision drafts across retarget and collapse and hand off stable addresses", async ({
+  page,
+  decisionViewerUrl,
+}) => {
+  await page.goto(decisionViewerUrl);
+  const card = page.locator("[data-decision-component=Decision]").first();
+  const options = card.locator('[data-decision-element="option"]');
+  const first = options.first();
+  const second = options.nth(1);
+  const firstAnchor = await first.getAttribute("data-decision-anchor");
+
+  await first.click();
+  await page
+    .locator('.flow-diagram-actionbar [data-flow-action="comment"]')
+    .click();
+  await page
+    .locator(".flow-diagram-compose textarea")
+    .fill("Keep this unfinished note when retargeting.");
+  await second.click();
+  await page
+    .locator('.flow-diagram-actionbar [data-flow-action="comment"]')
+    .click();
+  await expect(first.locator("[data-decision-comment-marker]")).toBeVisible();
+
+  await page
+    .locator(".flow-diagram-compose textarea")
+    .fill("Keep this unfinished note when collapsing.");
+  await card.evaluate((element) => {
+    element.hidden = true;
+  });
+  await expect(card).toBeHidden();
+  await expect(page.locator(".flow-diagram-compose")).toBeHidden();
+  await card.evaluate((element) => {
+    element.hidden = false;
+  });
+  await expect(second.locator("[data-decision-comment-marker]")).toBeVisible();
+
+  await page.evaluate(() => {
+    const batches: Array<unknown> = [];
+    Reflect.set(globalThis, "__decisionFeedbackBatches", batches);
+    Reflect.set(globalThis, "bigPlan", {
+      feedback: {
+        add: (batch: unknown) => batches.push(batch),
+      },
+    });
+  });
+  await card.locator(".flow-collector-add").last().click();
+  const batches = await page.evaluate(() =>
+    Reflect.get(globalThis, "__decisionFeedbackBatches"),
+  );
+  expect(batches).toEqual([
+    expect.objectContaining({
+      source: "decision-family",
+      component: "Decision",
+      anchor: "component/Decision#1",
+      items: [
+        expect.objectContaining({
+          anchor: firstAnchor,
+          body: "Keep this unfinished note when retargeting.",
+        }),
+        expect.objectContaining({
+          body: "Keep this unfinished note when collapsing.",
+        }),
+      ],
+    }),
+  ]);
+
+  await page.reload();
+  await expect(
+    page
+      .locator("[data-decision-component=Decision]")
+      .first()
+      .locator('[data-decision-element="option"]')
+      .first(),
+  ).toHaveAttribute("data-decision-anchor", firstAnchor ?? "");
+});
+
+test("should expose Decision review hover, focus, active, and comment presence in light and dark", async ({
+  page,
+  quickDecisionViewerUrl,
+}) => {
+  await page.goto(quickDecisionViewerUrl);
+  const card = page.locator("[data-decision-component=QuickDecision]").first();
+  const option = card.locator('[data-decision-element="option"]').first();
+
+  for (const theme of ["light", "dark"]) {
+    await test.step(`${theme} review states`, async () => {
+      await page.evaluate((value) => {
+        document.documentElement.dataset["theme"] = value;
+      }, theme);
+      await option.hover();
+      await expect(option).toHaveAttribute("data-decision-hovered", "");
+      expect(
+        await option.evaluate((element) => getComputedStyle(element).boxShadow),
+      ).not.toBe("none");
+
+      await option.click();
+      await expect(option).toHaveAttribute("data-decision-selected", "");
+      const comment = page.locator(
+        '.flow-diagram-actionbar [data-flow-action="comment"]',
+      );
+      await comment.focus();
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Shift+Tab");
+      await expect(comment).toBeFocused();
+      await expect(comment).toHaveCSS("outline-style", "solid");
+      await comment.hover();
+      await comment.click();
+      await page
+        .locator(".flow-diagram-compose textarea")
+        .fill(`${theme} comment presence`);
+      await page
+        .locator(".flow-diagram-compose")
+        .getByRole("button", { name: "Comment", exact: true })
+        .click();
+      await expect(
+        option.locator("[data-decision-comment-marker]"),
+      ).toBeVisible();
+    });
+  }
+});

@@ -27,4 +27,22 @@ describe("QuickDecision", () => {
       ),
     ).toThrow(MarkdownDiagnosticsError);
   });
+
+  it("should expose stable option and recommendation review anchors", () => {
+    const html = render(
+      '<QuickDecision question="Ship?">\n\n<Option id="yes" title="Yes" recommended />\n\n<Option id="no" title="No" />\n\n</QuickDecision>',
+    );
+
+    expect(html).toContain(
+      'data-decision-anchor="component/QuickDecision#1/option/yes"',
+    );
+    expect(html).toContain(
+      'data-decision-anchor="component/QuickDecision#1/recommendation"',
+    );
+    expect(() =>
+      render(
+        '<QuickDecision question="Ship?">\n\n<Option id="same" title="Yes" />\n\n<Option id="same" title="No" />\n\n</QuickDecision>',
+      ),
+    ).toThrow(MarkdownDiagnosticsError);
+  });
 });

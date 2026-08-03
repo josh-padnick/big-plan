@@ -11,12 +11,14 @@ export type DecisionCardReversibilityRating = "easy" | "somewhat-hard" | "hard";
 
 export type CompiledDecisionCardCriterion = {
   readonly id: string;
+  readonly anchor: string;
   readonly title: string;
   readonly detail: ReadonlyArray<ElementContent>;
   readonly impact?: number;
 };
 
 export type CompiledDecisionCardConsideration = {
+  readonly anchor: string;
   readonly verdict: string;
   readonly tone: DecisionCardTone;
   readonly detail: ReadonlyArray<ElementContent>;
@@ -25,6 +27,7 @@ export type CompiledDecisionCardConsideration = {
 
 export type CompiledDecisionCardOption = {
   readonly id: string;
+  readonly anchor: string;
   readonly titleId: string;
   readonly title: string;
   readonly recommended: boolean;
@@ -37,12 +40,16 @@ export type CompiledDecisionCardOption = {
 };
 
 export type CompiledDecisionCardReversibility = {
+  readonly anchor: string;
   readonly rating: DecisionCardReversibilityRating;
   readonly detail: ReadonlyArray<ElementContent>;
 };
 
 export type CompiledDecisionCard = {
+  readonly component: "Decision" | "QuickDecision" | "DecisionAnalysis";
   readonly id: string;
+  readonly anchor: string;
+  readonly recommendationAnchor: string;
   readonly questionId: string;
   readonly question: string;
   readonly status: DecisionCardStatus;

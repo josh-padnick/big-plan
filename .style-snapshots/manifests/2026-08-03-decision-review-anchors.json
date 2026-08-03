@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "feat(decision): add anchored review comments [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "src/components/_shared/decision-card/decision-card.css",
+      "propertyDeltas": [
+        {
+          "property": "position (review targets inside .decision)",
+          "from": "static",
+          "to": "relative"
+        },
+        {
+          "property": "box-shadow (hover/selected review states, new @layer decision-review)",
+          "from": "none",
+          "to": "inset accent outline"
+        }
+      ]
+    },
+    {
+      "path": "src/components/_shared/decision-card/decision-card.tsx",
+      "propertyDeltas": [
+        {
+          "property": "review target attributes (data-decision-anchor/element/name, tabindex)",
+          "from": "absent",
+          "to": "present"
+        }
+      ]
+    },
+    {
+      "path": "src/components/_shared/decision-card/view-layouts.tsx",
+      "propertyDeltas": [
+        {
+          "property": "review target attributes on options, criteria, cells",
+          "from": "absent",
+          "to": "present"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "embedded stylesheet",
+          "from": "without decision-review layer",
+          "to": "with decision-review layer"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/diagram-script.ts",
+      "propertyDeltas": [
+        {
+          "property": "review runtime scope",
+          "from": "diagram-only",
+          "to": "diagram and decision"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__document__desktop__dark.png",
+      "changedPixels": 435,
+      "before": {
+        "width": 872,
+        "height": 11468,
+        "sha256": "fc8ff9277e206acc64d07bb2dbe3d920a11f6801802600f62e592913685659ee"
+      },
+      "after": {
+        "width": 872,
+        "height": 11468,
+        "sha256": "c1a2a458d6e7d98f9d94ead19d0b9cd8d65f03520dcf984afc94a24d065425e9"
+      },
+      "propertyDeltas": [
+        {
+          "property": "sub-pixel text rasterization of decision-card option, consideration, and reversibility rows",
+          "from": "painted without a positioned stacking context",
+          "to": "painted inside position:relative review targets (no perceptible change; max per-channel delta 8/255)"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__light.png",
+      "changedPixels": 556,
+      "before": {
+        "width": 872,
+        "height": 11468,
+        "sha256": "7a0fcc7e899d8a45c7f8cf7619f51fd2ec210d1dc3e1c97ae2ca6a84694e9d89"
+      },
+      "after": {
+        "width": 872,
+        "height": 11468,
+        "sha256": "876d807646a29407fe6ed2ecc7848055fac09727707824edade9415b0e530bf6"
+      },
+      "propertyDeltas": [
+        {
+          "property": "sub-pixel text rasterization of decision-card option, consideration, and reversibility rows",
+          "from": "painted without a positioned stacking context",
+          "to": "painted inside position:relative review targets (no perceptible change; max per-channel delta 8/255)"
+        }
+      ]
+    }
+  ]
+}

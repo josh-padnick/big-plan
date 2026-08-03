@@ -18,6 +18,15 @@ import type {
   CompiledDecisionCardOption,
   DecisionCardTone,
 } from "../_model/decision-card.js";
+import {
+  decisionConsiderationAnchor,
+  decisionCriterionAnchor,
+  decisionFigureAnchor,
+  decisionOptionAnchor,
+  decisionRecommendationAnchor,
+  duplicateExplicitDecisionIds,
+  resolveDecisionElementIds,
+} from "../_model/decision-card-anchors.js";
 
 const TONES: ReadonlyArray<DecisionCardTone> = [
   "good",
@@ -29,11 +38,13 @@ const DECISION_SCHEMA = {
   question: { kind: "string", required: true, nonEmpty: true },
 } satisfies ComponentAttributeSchema;
 const OPTION_SCHEMA = {
+  id: { kind: "string", nonEmpty: true },
   title: { kind: "string", required: true, nonEmpty: true },
   recommended: { kind: "booleanShorthand" },
   summary: { kind: "string" },
 } satisfies ComponentAttributeSchema;
 const CONSIDERATION_SCHEMA = {
+  id: { kind: "string", nonEmpty: true },
   label: { kind: "string", required: true, nonEmpty: true },
   verdict: { kind: "string", required: true, nonEmpty: true },
   tone: { kind: "enum", values: TONES },
@@ -48,9 +59,11 @@ type ConsiderationEntry = {
 const compileEntry = ({
   child,
   diagnostics,
+  anchor,
 }: {
   readonly child: ScopedChild;
   readonly diagnostics: DiagnosticCollector;
+  readonly anchor: string;
 }): ConsiderationEntry => {
   const validated = validateComponentAttributes({
     component: "Consideration",
@@ -63,6 +76,7 @@ const compileEntry = ({
     child,
     label: validated.label ?? "",
     value: {
+      anchor,
       verdict: validated.verdict ?? "",
       tone: validated.tone ?? "neutral",
       detail: meaningfulChildren(child.children),
@@ -94,18 +108,42 @@ const uniqueTitles = ({
   }
 };
 
+const diagnoseDuplicateIds = ({
+  children,
+  kind,
+  diagnostics,
+}: {
+  readonly children: ReadonlyArray<ScopedChild>;
+  readonly kind: "Option" | "Consideration";
+  readonly diagnostics: DiagnosticCollector;
+}): void => {
+  const entries = children.map((child) => ({
+    ...(typeof child.attributes["id"] === "string"
+      ? { id: child.attributes["id"] }
+      : {}),
+  }));
+  for (const duplicate of duplicateExplicitDecisionIds(entries)) {
+    diagnostics.add({
+      message: `Duplicate explicit ${kind} id "${duplicate.id}" in Decision`,
+      position: children[duplicate.index]?.position,
+    });
+  }
+};
+
 const compileOption = ({
   child,
   criteria,
   diagnostics,
   ids,
   idPrefix,
+  anchor,
 }: {
   readonly child: ScopedChild;
   readonly criteria: ReadonlyArray<CompiledDecisionCardCriterion>;
   readonly diagnostics: DiagnosticCollector;
   readonly ids: ComponentIdAllocator;
   readonly idPrefix: string;
+  readonly anchor: string;
 }): CompiledDecisionCardOption => {
   const validated = validateComponentAttributes({
     component: "Option",
@@ -130,12 +168,34 @@ const compileOption = ({
     (entry) => entry.name === "Consideration",
   );
   uniqueTitles({ children, kind: "Consideration", diagnostics });
-  const entries = children.map((entry) =>
-    compileEntry({ child: entry, diagnostics }),
+  diagnoseDuplicateIds({ children, kind: "Consideration", diagnostics });
+  const considerationIds = resolveDecisionElementIds(
+    children.map((entry) => ({
+      ...(typeof entry.attributes["id"] === "string"
+        ? { id: entry.attributes["id"] }
+        : {}),
+      label:
+        typeof entry.attributes["label"] === "string"
+          ? entry.attributes["label"]
+          : "",
+      fallback: "consideration",
+    })),
+  );
+  const entries = children.map((entry, index) =>
+    compileEntry({
+      child: entry,
+      diagnostics,
+      anchor: decisionConsiderationAnchor({
+        option: anchor,
+        considerationId:
+          considerationIds[index] ?? `consideration-${index + 1}`,
+      }),
+    }),
   );
   const byLabel = new Map(entries.map((entry) => [entry.label, entry.value]));
   return {
     id,
+    anchor,
     titleId: `${id}-title`,
     title,
     recommended: validated.recommended === true,
@@ -163,6 +223,10 @@ export const compileDecisionComponent = ({
     schema: DECISION_SCHEMA,
   });
   const question = validated.question ?? "";
+  const anchor = decisionFigureAnchor({
+    component: "Decision",
+    ordinal: ids.nextOrdinal({ component: "Decision" }),
+  });
   const id = ids.allocate({
     prefix: "decision",
     label: question,
@@ -178,6 +242,23 @@ export const compileDecisionComponent = ({
     });
   }
   uniqueTitles({ children: optionChildren, kind: "Option", diagnostics });
+  diagnoseDuplicateIds({
+    children: optionChildren,
+    kind: "Option",
+    diagnostics,
+  });
+  const optionAnchorIds = resolveDecisionElementIds(
+    optionChildren.map((child) => ({
+      ...(typeof child.attributes["id"] === "string"
+        ? { id: child.attributes["id"] }
+        : {}),
+      label:
+        typeof child.attributes["title"] === "string"
+          ? child.attributes["title"]
+          : "",
+      fallback: "option",
+    })),
+  );
   const recommended = optionChildren.filter(
     (child) => child.attributes["recommended"] === true,
   );
@@ -198,20 +279,40 @@ export const compileDecisionComponent = ({
       labelDetails.set(label, meaningfulChildren(child.children));
     }
   }
-  const criteria = labels.map((title) => ({
+  const criterionAnchorIds = resolveDecisionElementIds(
+    labels.map((title) => ({ label: title, fallback: "criterion" })),
+  );
+  const criteria = labels.map((title, index) => ({
     id: ids.allocate({
       prefix: `${id}-criterion`,
       label: title,
       fallbackId: `${id}-criterion`,
     }),
+    anchor: decisionCriterionAnchor({
+      figure: anchor,
+      criterionId: criterionAnchorIds[index] ?? `criterion-${index + 1}`,
+    }),
     title,
     detail: labelDetails.get(title) ?? [],
   }));
-  const options = optionChildren.map((child) =>
-    compileOption({ child, criteria, diagnostics, ids, idPrefix: id }),
+  const options = optionChildren.map((child, index) =>
+    compileOption({
+      child,
+      criteria,
+      diagnostics,
+      ids,
+      idPrefix: id,
+      anchor: decisionOptionAnchor({
+        figure: anchor,
+        optionId: optionAnchorIds[index] ?? `option-${index + 1}`,
+      }),
+    }),
   );
   return {
+    component: "Decision",
     id,
+    anchor,
+    recommendationAnchor: decisionRecommendationAnchor({ figure: anchor }),
     questionId: `${id}-question`,
     question,
     status: "open",
