@@ -29,8 +29,8 @@ jobs:
       # difference means a source changed without its generated output.
       - name: Generated files must not drift from their sources
         run: |
-          if [ -n "$(git status --porcelain -- '*.generated.ts')" ]; then
-            git status --porcelain -- '*.generated.ts'
+          if [ -n "$(git status --porcelain -- '*.generated.ts' '*.generated.css')" ]; then
+            git status --porcelain -- '*.generated.ts' '*.generated.css'
             echo "::error::Generated files drifted from their sources. Run 'bun run gen' and commit the result."
             exit 1
           fi
