@@ -47,6 +47,7 @@ test("should batch three independent QuickDecisions without comparison", async (
 test("should audit, choose, and recalculate DecisionAnalysis", async ({
   page,
   decisionAnalysisViewerUrl,
+  weightedAuditDecisionAnalysisViewerUrl,
 }) => {
   await page.goto(decisionAnalysisViewerUrl);
   const analyses = page.locator("[data-decision-layout=matrix]");
@@ -86,4 +87,56 @@ test("should audit, choose, and recalculate DecisionAnalysis", async ({
     .click();
   await weighted.locator(".decision-score-breakdown > summary").click();
   await expect(weighted.locator(".decision-calculation-matrix")).toBeVisible();
+
+  await page.goto(weightedAuditDecisionAnalysisViewerUrl);
+  const weightedAudit = page
+    .locator('[data-decision-scoring="weighted"]')
+    .first();
+  await expect(weightedAudit).toHaveAttribute(
+    "data-decision-interaction",
+    "audit",
+  );
+  await expect(weightedAudit.locator("[data-decision-choice]")).toHaveCount(0);
+  const auditTotal = weightedAudit.locator("[data-decision-percent]").first();
+  const auditBefore = await auditTotal.textContent();
+  await weightedAudit
+    .locator("[data-decision-score-group]")
+    .first()
+    .locator('[data-score-value="1"]')
+    .click();
+  await expect(auditTotal).not.toHaveText(auditBefore ?? "");
+});
+
+test("should isolate nested weighted DecisionAnalysis calculations", async ({
+  page,
+  nestedWeightedDecisionAnalysisViewerUrl,
+}) => {
+  await page.goto(nestedWeightedDecisionAnalysisViewerUrl);
+  const analyses = page.locator('[data-decision-scoring="weighted"]');
+  await expect(analyses).toHaveCount(2);
+
+  const outer = analyses.first();
+  const inner = analyses.last();
+  const innerPercent = inner
+    .locator(":scope > .decision-fieldset [data-decision-percent]")
+    .first();
+  const innerBefore = await innerPercent.textContent();
+
+  await outer
+    .locator(":scope > .decision-fieldset [data-decision-weight-group]")
+    .first()
+    .locator('[data-weight-value="1"]')
+    .click();
+
+  await expect(
+    outer
+      .locator(":scope > .decision-fieldset [data-decision-max-total]")
+      .first(),
+  ).toHaveText("100 max");
+  await expect(
+    inner
+      .locator(":scope > .decision-fieldset [data-decision-max-total]")
+      .first(),
+  ).toHaveText("120 max");
+  await expect(innerPercent).toHaveText(innerBefore ?? "");
 });

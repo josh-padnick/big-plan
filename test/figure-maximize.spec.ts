@@ -14,13 +14,6 @@ type FigureCase = {
 
 const FIGURE_CASES: ReadonlyArray<FigureCase> = [
   {
-    name: "ComplexDecision",
-    selector: "[data-complex-decision]",
-    maximizeLabel: "Maximize decision",
-    restoreLabel: "Restore decision size",
-    bodyScrolls: false,
-  },
-  {
     name: "FileTreeDiff",
     selector: ".file-tree-diff",
     maximizeLabel: "Maximize tree",
@@ -176,10 +169,6 @@ test("should traverse disclosures and wrap within maximized figures", async ({
 }) => {
   await page.goto(componentsViewerUrl);
   const cases = [
-    {
-      name: "ComplexDecision",
-      selector: "[data-complex-decision]",
-    },
     {
       name: "FileTreeDiff",
       selector: ".file-tree-diff",

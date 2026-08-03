@@ -44,6 +44,7 @@ type WorkerFixtures = {
   readonly apiEndpointsViewerUrl: string;
   readonly dataTableViewerUrl: string;
   readonly decisionAnalysisViewerUrl: string;
+  readonly nestedWeightedDecisionAnalysisViewerUrl: string;
   readonly deckViewerUrl: string;
   readonly decisionViewerUrl: string;
   readonly nestedDecisionMatrixViewerUrl: string;
@@ -59,6 +60,7 @@ type WorkerFixtures = {
   readonly quickDecisionViewerUrl: string;
   readonly sampleViewerUrl: string;
   readonly tableSchemaViewerUrl: string;
+  readonly weightedAuditDecisionAnalysisViewerUrl: string;
 };
 
 const ANNOTATION_CODE_MDX = `# Annotation code
@@ -318,6 +320,62 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         outputPath,
         outputDir,
       });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  nestedWeightedDecisionAnalysisViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-nested-weighted-decision-analysis-"),
+      );
+      const outputPath = join(outputDir, "nested-weighted-analysis.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "decision-analysis.mdx"),
+        outputPath,
+        outputDir,
+      });
+      const html = await readFile(outputPath, "utf8");
+      const weighted = (
+        html.match(/<figure id="decision-analysis-[\s\S]*?<\/figure>/g) ?? []
+      ).find((figure) => figure.includes('data-decision-scoring="weighted"'));
+      if (weighted === undefined) {
+        throw new Error("expected the DecisionAnalysis example to be weighted");
+      }
+      await writeFile(
+        outputPath,
+        html.replace(
+          weighted,
+          weighted.replace("</figcaption>", `</figcaption>${weighted}`),
+        ),
+        "utf8",
+      );
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  weightedAuditDecisionAnalysisViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-weighted-audit-decision-analysis-"),
+      );
+      const inputPath = join(outputDir, "weighted-audit-analysis.mdx");
+      const outputPath = join(outputDir, "weighted-audit-analysis.html");
+      const source = await readFile(
+        join(repoRoot, "examples", "decision-analysis.mdx"),
+        "utf8",
+      );
+      await writeFile(
+        inputPath,
+        source.replace(
+          'question="Which review store best fits the next two years?" state="proposed" interaction="choose" scoring="weighted"',
+          'question="Which review store best fits the next two years?" state="proposed" interaction="audit" scoring="weighted"',
+        ),
+        "utf8",
+      );
+      await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },

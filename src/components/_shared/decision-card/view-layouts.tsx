@@ -53,6 +53,10 @@ const Recommended = () => (
   <BadgePill label="Recommended" classNames={["badge-pill-quiet"]} />
 );
 
+const Chosen = () => (
+  <BadgePill label="Chosen" classNames={["decision-chosen-pill"]} />
+);
+
 // The same native disclosure powers pointer hover, keyboard focus, and tap.
 // It remains readable without the viewer script; the shell upgrades it into
 // the floating popover already shared with DecisionAnalysis.
@@ -486,9 +490,10 @@ export const MatrixLayout = ({
               >
                 {option.title}
               </span>
-              {option.recommended ? (
-                <span className="ml-auto">
-                  <Recommended />
+              {option.chosen || option.recommended ? (
+                <span className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+                  {option.chosen ? <Chosen /> : null}
+                  {option.recommended ? <Recommended /> : null}
                 </span>
               ) : null}
             </label>
@@ -510,6 +515,7 @@ export const MatrixLayout = ({
                 key={option.id}
                 scope="col"
                 data-decision-column={index}
+                {...(option.chosen ? { "data-option-chosen": "" } : {})}
               >
                 <span className="text-sm font-bold text-ink" aria-hidden="true">
                   {optionKey(index)}
@@ -547,6 +553,7 @@ export const MatrixLayout = ({
                     className="decision-cell px-4 py-3 text-center"
                     key={option.id}
                     data-decision-column={index}
+                    {...(option.chosen ? { "data-option-chosen": "" } : {})}
                   >
                     {consideration === undefined ? (
                       "-"

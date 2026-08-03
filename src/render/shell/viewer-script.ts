@@ -1484,20 +1484,15 @@ export const VIEWER_SCRIPT = `<script>
   // selected column header, so this leg adds only what markup cannot express:
   // highlighting the whole column, swapping the rationale panel without
   // moving the page, gating the confirm action, and the answered state.
-  for (const decision of document.querySelectorAll(
-    "[data-decision-selector]",
-  )) {
+  for (const decision of document.querySelectorAll("[data-decision]")) {
     // A Decision may sit inside another Decision's context, so every lookup
-    // is scoped to the nearest owning selector. Without this an outer
-    // Decision binds the inner one's controls and the two corrupt each other.
+    // is scoped to the nearest owning card. Without this an outer Decision
+    // binds the inner one's controls and the two corrupt each other.
     const mine = (node) =>
-      node !== null && node.closest("[data-decision-selector]") === decision;
-    const own = (selector) => {
-      const found = decision.querySelector(selector);
-      return mine(found) ? found : null;
-    };
+      node !== null && node.closest("[data-decision]") === decision;
     const ownAll = (selector) =>
       Array.from(decision.querySelectorAll(selector)).filter(mine);
+    const own = (selector) => ownAll(selector)[0] || null;
 
     const confirm = own("[data-decision-confirm]");
     const change = own("[data-decision-change]");
@@ -1512,7 +1507,6 @@ export const VIEWER_SCRIPT = `<script>
     const proposalCancel = own("[data-decision-proposal-cancel]");
     const proposalLink = own(".decision-propose-link");
     const propose = own("[data-option-proposal]");
-    if (confirm === null || change === null || answer === null) continue;
     const choices = ownAll("[data-decision-choice]");
     const panels = ownAll("[data-rationale-panel]");
     const cells = ownAll("[data-decision-column]");
@@ -1531,9 +1525,18 @@ export const VIEWER_SCRIPT = `<script>
 
     // Overlapping the panels freezes the region at the tallest one, so from
     // here on swapping the visible panel cannot move anything below it.
-    if (rationale !== null) rationale.setAttribute("data-rationale-live", "");
     const defaultIndex =
       rationale === null ? "0" : rationale.getAttribute("data-default-index");
+    if (rationale !== null) {
+      rationale.setAttribute("data-rationale-live", "");
+      for (const panel of panels) {
+        if (panel.getAttribute("data-option-index") === defaultIndex) {
+          panel.setAttribute("data-rationale-shown", "");
+        } else {
+          panel.removeAttribute("data-rationale-shown");
+        }
+      }
+    }
 
     // Weighted analysis follows DecisionAnalysis's direct-manipulation
     // treatment: priority squares live below criteria, star ratings keep
@@ -1722,6 +1725,7 @@ export const VIEWER_SCRIPT = `<script>
       }
       syncScoring();
     }
+    if (confirm === null || change === null || answer === null) continue;
 
     const showPanel = (index) => {
       for (const panel of panels) {

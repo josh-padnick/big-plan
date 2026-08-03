@@ -84,6 +84,18 @@ describe("DecisionAnalysis", () => {
     expect(html).toContain("decision-calculation-matrix");
   });
 
+  it("should identify and explain the chosen option in a decided audit", () => {
+    const html = render(
+      analysis({ interaction: "audit" })
+        .replace('state="proposed"', 'state="decided"')
+        .replace('<Option title="SQLite">', '<Option title="SQLite" chosen>'),
+    );
+
+    expect(html).toContain("Chosen");
+    expect(html).toContain('data-default-index="1"');
+    expect(html).toContain('data-option-chosen=""');
+  });
+
   it("should reject choose mode after a decision is settled", () => {
     expect(() =>
       render(

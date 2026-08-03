@@ -10,7 +10,7 @@ Everything on this page is shipped and works today.
 - One reading column with warm, paper-like light and dark palettes.
 - A palette that follows your OS preference through CSS alone.
 - A sticky branding bar whose logo follows the active theme.
-- In-document `Maximize` controls for fenced code, code snippets and diffs, tree diffs, complex decisions, data tables, database schemas, and [flow diagrams](/components/flow-diagram/), with Escape restoring the reading view after any pending-feedback prompt is resolved.
+- In-document `Maximize` controls for fenced code, code snippets and diffs, tree diffs, data tables, database schemas, and [flow diagrams](/components/flow-diagram/), with Escape restoring the reading view after any pending-feedback prompt is resolved.
 
 ## Navigation
 

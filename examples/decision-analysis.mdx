@@ -78,6 +78,8 @@ The repository boundary contains the change, but stored data still needs migrati
 
 ## Enabled choice
 
+Choose mode lets the reviewer settle a proposed decision and revise it in place.
+
 <DecisionAnalysis question="Which rollout shape should we approve?" state="proposed" interaction="choose">
   <Criterion title="Risk">
 
@@ -121,6 +123,8 @@ The feature flag can restore the prior path immediately.
 </DecisionAnalysis>
 
 ## Seven-criterion weighted choice
+
+Weighted analysis keeps priorities, scores, and normalized totals in one inspectable matrix.
 
 <DecisionAnalysis question="Which review store best fits the next two years?" state="proposed" interaction="choose" scoring="weighted">
   <Criterion title="Integrity" impact="5">

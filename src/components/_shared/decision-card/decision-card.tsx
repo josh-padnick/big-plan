@@ -44,10 +44,11 @@ const statusLabel = (model: CompiledDecisionCard): string =>
 const isAnswerable = (model: CompiledDecisionCard): boolean =>
   model.status === "open" && model.interaction === "choose";
 
-// The panel a reader meets before choosing anything. Explaining the agent's
-// own pick is the most useful default, and it commits the reader to nothing -
-// every radio stays unchecked until they choose.
+// A settled record explains its outcome; an open question begins with the
+// agent's recommendation without preselecting any radio.
 const defaultPanelIndex = (model: CompiledDecisionCard): number => {
+  const chosen = model.options.findIndex((option) => option.chosen);
+  if (chosen !== -1) return chosen;
   const recommended = model.options.findIndex((option) => option.recommended);
   return recommended === -1 ? 0 : recommended;
 };
