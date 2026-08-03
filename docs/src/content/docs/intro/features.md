@@ -29,7 +29,7 @@ Everything on this page is shipped and works today.
 
 - An MDX plan format made of standard Markdown, GFM, and built-in components; imports, exports, expressions, and inline JSX are rejected and never executed.
 - Positional diagnostics that aggregate recoverable unsupported syntax, unknown components, invalid attributes, and malformed component content after MDX parses.
-- `ComplexDecision` components for weighty choices, rendered as scored criteria matrices or substantive option lists with lifecycle state, recommendations, optional reversibility, and outcomes.
+- `DecisionAnalysis` components for weighty choices, rendered as scored criteria matrices or substantive option lists with lifecycle state, recommendations, optional reversibility, and outcomes.
 - `Callout` components for notes, tips, warnings, and dangers.
 - `CodeDiff` components with optional line numbers and change counts, a unified view, and scoped line annotations.
 - `CodeSnippet` components for excerpts with optional file identity, file-absolute line numbers, and scoped annotations.
@@ -40,7 +40,7 @@ Everything on this page is shipped and works today.
 - `HttpEndpoint` components for HTTP contracts with location-grouped parameters, request examples, and status-coded responses.
 - `GraphqlOperation` components for queries, mutations, and subscriptions with literal argument types, one-level input and payload fields, and grouped executable examples with repeatable labeled responses.
 - `GrpcMethod` components for streaming-aware proto signatures, message-typed request and response fields, gRPC status codes, grouped examples, and proto source.
-- `SimpleDecisionSet` components for compact numbered lists of briefly explained options, with recommendations marked inline.
+- `QuickDecision` components for compact numbered lists of briefly explained options, with recommendations marked inline.
 
 ## Output
 

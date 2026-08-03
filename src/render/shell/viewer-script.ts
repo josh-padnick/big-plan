@@ -1535,7 +1535,7 @@ export const VIEWER_SCRIPT = `<script>
     const defaultIndex =
       rationale === null ? "0" : rationale.getAttribute("data-default-index");
 
-    // Weighted analysis follows ComplexDecision's direct-manipulation
+    // Weighted analysis follows DecisionAnalysis's direct-manipulation
     // treatment: priority squares live below criteria, star ratings keep
     // option scores compact, and the optional arithmetic matrix stays in sync.
     if (weighting !== null) {
@@ -1826,9 +1826,7 @@ export const VIEWER_SCRIPT = `<script>
       if (proposalText !== null) proposalText.readOnly = proposing;
       decision.setAttribute("data-decision-answered", "");
       compress(true);
-      // The transport carrying an answer back to the agent belongs to the
-      // review commenting runtime. Until it lands, the answer is announced on
-      // the document and queued where that runtime can drain it.
+       // Announce and queue the reading-session answer for an embedding host.
       const record = {
         decision: decision.id,
         question: question === null ? "" : question.textContent,

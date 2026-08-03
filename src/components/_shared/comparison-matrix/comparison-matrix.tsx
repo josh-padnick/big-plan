@@ -1,7 +1,7 @@
 // Owns the comparison-matrix presentation the two decision components share:
 // the horizontal scroll shell, the table skeleton, and the tone vocabulary.
 //
-// Decision and ComplexDecision are deliberately two components with two
+// Decision and DecisionAnalysis are deliberately two components with two
 // purposes - one asks a question and ends in a confirmed answer, the other
 // records an analysis already made - but they present the same shape, options
 // across and criteria down. Sharing the shape here is what stops the two from
@@ -10,7 +10,7 @@
 // What is shared is the skeleton and the meaning of a tone, not where a tone
 // is painted: `matrix-tone-*` sets `--matrix-tone` and each component decides
 // what takes that colour. Decision tints the whole verdict, because three
-// short rows scan better in colour; ComplexDecision tints only the glyph,
+// short rows scan better in colour; DecisionAnalysis tints only the glyph,
 // because its denser matrix would turn into a paint chart.
 
 import type { ReactNode } from "react";

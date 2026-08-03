@@ -1,4 +1,4 @@
-/* Decision's comparison matrix and its stable rationale panel.
+/* Shared decision-card comparison, selection, proposal, and answer styles.
 
    Two invariants drive most of the rules below.
 
@@ -222,7 +222,7 @@
     white-space: normal;
   }
 
-  /* Weighted analysis inherits ComplexDecision's direct-manipulation
+  /* Weighted analysis inherits DecisionAnalysis's direct-manipulation
      hierarchy: compact filled squares sit below each criterion, totals finish
      the matrix, and arithmetic stays behind a secondary disclosure. */
   article .decision-weight-step {

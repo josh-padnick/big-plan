@@ -1,0 +1,25 @@
+---
+title: DecisionAnalysis
+description: A keyed criteria matrix for auditing or interactively choosing a weighty decision.
+---
+
+**Purpose: make the evidence and arithmetic behind a recommendation inspectable.**
+
+`DecisionAnalysis` uses the approved keyed chooser rail. Every criterion and value has a dashed definition affordance. `interaction="audit"` is the qualitative default; `interaction="choose"` enables a proposed decision to be selected, confirmed, and changed.
+
+Set `scoring="weighted"` to add 1–5 impacts directly below criterion names, editable 1–5 star ratings in option cells, composite totals in the matrix foot, and a disclosure containing the full calculation matrix.
+
+```mdx
+<DecisionAnalysis question="Which store?" state="proposed" interaction="choose" scoring="weighted">
+  <Criterion title="Reliability" impact="5">How safely the store preserves review state.</Criterion>
+  <Option title="PostgreSQL" recommended>
+    <Score criterion="Reliability" verdict="Strong" tone="good" score="5">Transactions preserve related state atomically.</Score>
+  </Option>
+  <Option title="SQLite">
+    <Score criterion="Reliability" verdict="Good" tone="good" score="4">A local transaction protects each write.</Score>
+  </Option>
+  <Reversibility rating="somewhat-hard">Changing stores requires a data migration.</Reversibility>
+</DecisionAnalysis>
+```
+
+`state` is `proposed`, `decided`, or `deferred`; `interaction` is `audit` or `choose`, and choosing is valid only while proposed. Every option must score every criterion. A decided analysis marks exactly one option `chosen`. `Reversibility` is required and `Details` is optional.

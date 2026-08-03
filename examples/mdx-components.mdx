@@ -32,29 +32,47 @@ It already has regional concurrency controls and the required service account.
 
 The queue boundary is the remaining architectural choice in this excerpt, so its options stay grouped with the tradeoffs the reviewer must judge.
 
-<ComplexDecision question="Where should refresh-job deduplication live?" status="open">
+<DecisionAnalysis question="Where should refresh-job deduplication live?" state="proposed" interaction="audit">
 
 The enqueue path must collapse repeated refreshes for the same cache key without coupling request handlers to worker internals.
 
-<Criterion title="Idempotency guarantee" />
+<Criterion title="Idempotency guarantee">
 
-<Criterion title="Queue stays transport-only" />
+Every producer must receive the same duplicate-suppression promise.
 
-<Criterion title="Telemetry" />
+</Criterion>
+
+<Criterion title="Queue stays transport-only">
+
+The queue should avoid owning application policy where possible.
+
+</Criterion>
+
+<Criterion title="Telemetry">
+
+Operators need to distinguish enqueues from suppressed duplicates.
+
+</Criterion>
 
 <Option title="Queue adapter" recommended summary="Deduplication joins the enqueue contract.">
 
-<Score criterion="Idempotency guarantee" verdict="Every producer" tone="good" />
+<Score criterion="Idempotency guarantee" verdict="Every producer" tone="good">
 
-<Score criterion="Queue stays transport-only" verdict="No" tone="bad" />
+The adapter applies the guarantee at the shared boundary.
+
+</Score>
+
+<Score criterion="Queue stays transport-only" verdict="No" tone="bad">
+
+The adapter now owns duplicate-suppression policy.
+
+</Score>
 
 <Score criterion="Telemetry" verdict="Needs new events" tone="mixed">
 
 The adapter must distinguish a new job from a suppressed duplicate.
 
 </Score>
-
-Keep the deduplication key scoped by region so one deployment cannot suppress another's refresh.
 
 </Option>
 
@@ -66,9 +84,17 @@ Every producer must reproduce the same race-prone check-and-publish sequence.
 
 </Score>
 
-<Score criterion="Queue stays transport-only" verdict="Yes" tone="good" />
+<Score criterion="Queue stays transport-only" verdict="Yes" tone="good">
 
-<Score criterion="Telemetry" verdict="Existing logs" tone="good" />
+The transport remains unaware of refresh semantics.
+
+</Score>
+
+<Score criterion="Telemetry" verdict="Existing logs" tone="good">
+
+Request logs already expose each decision point.
+
+</Score>
 
 </Option>
 
@@ -78,47 +104,31 @@ Moving the check later means re-teaching every producer, so pick the boundary no
 
 </Reversibility>
 
-</ComplexDecision>
+</DecisionAnalysis>
 
 ## Remaining questions
 
 The smaller calls do not need tradeoff cards; they collect at the end as a compact question list.
 
-<SimpleDecisionSet title="Open questions">
 
-<SimpleDecision question="Should the refresh queue name include the region?">
 
-<Option title="Yes" recommended>
+<QuickDecision question="Should the refresh queue name include the region?">
 
-Keeps queue dashboards separable per deployment from day one.
+<Option title="Yes" recommended summary="Keeps queue dashboards separable per deployment from day one." />
 
-</Option>
+<Option title="No" summary="One name is simpler until a second region actually ships." />
 
-<Option title="No">
+</QuickDecision>
 
-One name is simpler until a second region actually ships.
+<QuickDecision question="Backfill the cold cache before or after the cutover?">
 
-</Option>
+<Option title="Before" summary="The first production reads hit a warm cache." />
 
-</SimpleDecision>
+<Option title="After" recommended summary="Avoids double-writing entries the cutover would invalidate anyway." />
 
-<SimpleDecision question="Backfill the cold cache before or after the cutover?">
+</QuickDecision>
 
-<Option title="Before">
 
-The first production reads hit a warm cache.
-
-</Option>
-
-<Option title="After" recommended>
-
-Avoids double-writing entries the cutover would invalidate anyway.
-
-</Option>
-
-</SimpleDecision>
-
-</SimpleDecisionSet>
 
 ## Planned file changes
 

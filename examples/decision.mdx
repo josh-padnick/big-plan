@@ -1,120 +1,38 @@
-# Skill Distribution Decision Plan
+# Skill Distribution Decision
 
-The skill's delivery channel gets decided with the `Decision` component, one option at a time.
+Choose the delivery channel before implementing the installer.
 
-<Decision question="How does the skill reach the end user's agent?">
+<Decision question="How does the skill reach the user's agent?">
 
-The authored skill file in the repository is canonical either way; this decision is only about the delivery channel.
+The repository copy remains canonical either way.
 
-<Criterion title="Version fidelity">
+<Option title="Embed it in the CLI" recommended summary="A command prints the version-matched skill.">
 
-Whether the delivered skill exactly matches the installed CLI version.
+<Consideration label="Version fidelity" verdict="Exact" tone="good">
 
-</Criterion>
-
-<Criterion title="Single source of truth">
-
-Whether authors maintain the skill text in only one place.
-
-</Criterion>
-
-<Criterion title="Works offline">
-
-Whether installation succeeds without network access.
-
-</Criterion>
-
-<Option title="Embedded in the CLI, printed by a new command" recommended summary="A skill command prints the file verbatim; the agent redirects it into place.">
-
-<Consideration criterion="Version fidelity" verdict="Exact" tone="good">
-
-The skill is compiled into the package, so its text cannot disagree with the installed CLI.
+The installed package contains the matching skill text.
 
 </Consideration>
 
-<Consideration criterion="Single source of truth" verdict="One file" tone="good">
+<Consideration label="Offline setup" verdict="Yes" tone="good">
 
-The repository copy is the only authored source.
-
-</Consideration>
-
-<Consideration criterion="Works offline" verdict="Yes" tone="good">
-
-The installed package already contains the skill text.
-
-</Consideration>
-
-Re-running the command after an upgrade refreshes the installed skill.
-
-</Option>
-
-<Option title="Docs-site download" summary="Setup tells the agent to fetch the skill from the docs site.">
-
-<Consideration criterion="Version fidelity" verdict="Drifts" tone="bad">
-
-The site can serve newer text than an older installed CLI expects.
-
-</Consideration>
-
-<Consideration criterion="Single source of truth" verdict="One file" tone="good">
-
-The repository copy still generates the published download.
-
-</Consideration>
-
-<Consideration criterion="Works offline" verdict="No" tone="bad">
-
-Setup must reach the documentation site.
+Installation never needs the network.
 
 </Consideration>
 
 </Option>
 
-</Decision>
+<Option title="Download it from the docs site" summary="Setup fetches the published skill.">
 
-## Settled earlier
+<Consideration label="Version fidelity" verdict="May drift" tone="bad">
 
-<Decision question="Where does the authored skill file live?" status="decided">
-
-<Criterion title="Review path">
-
-Where reviewers must go to approve a change.
-
-</Criterion>
-
-<Criterion title="Drift risk">
-
-Whether separate source copies can disagree.
-
-</Criterion>
-
-<Option title="In this repository" chosen summary="The skill ships beside the code it teaches.">
-
-<Consideration criterion="Review path" verdict="Normal PR" tone="good">
-
-The skill change follows the product's normal pull request.
+The site can move ahead of an older CLI.
 
 </Consideration>
 
-<Consideration criterion="Drift risk" verdict="None" tone="good">
+<Consideration label="Offline setup" verdict="No" tone="bad">
 
-There is no second authored copy to synchronize.
-
-</Consideration>
-
-</Option>
-
-<Option title="In a separate skills repository" summary="A shared home for every published skill.">
-
-<Consideration criterion="Review path" verdict="Second repo" tone="mixed">
-
-Reviewers must follow the change into another repository.
-
-</Consideration>
-
-<Consideration criterion="Drift risk" verdict="Real" tone="bad">
-
-The product and skill can merge or release independently.
+Setup must reach the documentation host.
 
 </Consideration>
 

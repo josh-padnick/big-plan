@@ -1,24 +1,24 @@
-// Decision's three approved reading depths. Rows explain each option in
+// Shared decision-card reading depths. Rows explain each option in
 // place, matrix separates a full-title chooser rail from a keyed comparison,
 // and brief keeps the comparison collapsed until the reader asks for it.
 
 import type { ElementContent } from "hast";
-import type { CompiledDecision, CompiledDecisionOption } from "./compile.js";
-import { ComparisonMatrix } from "../_shared/comparison-matrix/comparison-matrix.js";
-import { BadgePill } from "../_shared/badge-pill/badge-pill.js";
-import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
-import { STAR_ICON } from "../../icons/lucide/star.js";
-import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
-import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
+import type {
+  CompiledDecisionCard,
+  CompiledDecisionCardOption,
+} from "../../_model/decision-card.js";
+import { ComparisonMatrix } from "../comparison-matrix/comparison-matrix.js";
+import { BadgePill } from "../badge-pill/badge-pill.js";
+import { CHEVRON_RIGHT_ICON } from "../../../icons/lucide/chevron-right.js";
+import { STAR_ICON } from "../../../icons/lucide/star.js";
+import { hastContentToReact } from "../hast-content/hast-content.js";
+import { lucideIconToReact } from "../lucide-icon/lucide-icon.js";
 
 const RADIO_CLASSES =
   "decision-radio mt-0.5 size-5 shrink-0 appearance-none rounded-full border";
 
-const criteriaOf = (model: CompiledDecision) => {
-  const rows =
-    model.scoring === "weighted"
-      ? model.criteria.map((_, index) => index)
-      : model.discriminating;
+const criteriaOf = (model: CompiledDecisionCard) => {
+  const rows = model.criteria.map((_, index) => index);
   return rows.flatMap((row) => {
     const criterion = model.criteria[row];
     return criterion === undefined ? [] : [{ row, criterion }];
@@ -31,7 +31,7 @@ const Radio = ({
   groupName,
   answerable,
 }: {
-  readonly option: CompiledDecisionOption;
+  readonly option: CompiledDecisionCardOption;
   readonly index: number;
   readonly groupName: string;
   readonly answerable: boolean;
@@ -55,7 +55,7 @@ const Recommended = () => (
 
 // The same native disclosure powers pointer hover, keyboard focus, and tap.
 // It remains readable without the viewer script; the shell upgrades it into
-// the floating popover already shared with ComplexDecision.
+// the floating popover already shared with DecisionAnalysis.
 const DefinitionDisclosure = ({
   label,
   detail,
@@ -94,7 +94,7 @@ export const RowsLayout = ({
   model,
   answerable,
 }: {
-  readonly model: CompiledDecision;
+  readonly model: CompiledDecisionCard;
   readonly answerable: boolean;
 }) => {
   const criteria = criteriaOf(model);
@@ -133,16 +133,24 @@ export const RowsLayout = ({
               {option.recommended ? <Recommended /> : null}
             </span>
             <span className="decision-row-lines mt-2 grid gap-1">
-              {criteria.map(({ row, criterion }) => (
-                <span className="decision-row-line" key={row}>
-                  <span className="decision-row-dimension font-semibold text-ink">
-                    {`${criterion.title}:`}
-                  </span>
-                  <span className="decision-verdict font-normal text-ink">
-                    {option.considerations[row]?.verdict ?? "-"}
-                  </span>
-                </span>
-              ))}
+              {option.summary === undefined ? null : (
+                <span className="text-sm text-muted">{option.summary}</span>
+              )}
+              {criteria.flatMap(({ row, criterion }) => {
+                const consideration = option.considerations[row];
+                return consideration === undefined
+                  ? []
+                  : [
+                      <span className="decision-row-line" key={row}>
+                        <span className="decision-row-dimension font-semibold text-ink">
+                          {`${criterion.title}:`}
+                        </span>
+                        <span className="decision-verdict font-normal text-ink">
+                          {consideration.verdict}
+                        </span>
+                      </span>,
+                    ];
+              })}
             </span>
           </label>
         </li>
@@ -158,8 +166,8 @@ const weightedTotal = ({
   model,
   option,
 }: {
-  readonly model: CompiledDecision;
-  readonly option: CompiledDecisionOption;
+  readonly model: CompiledDecisionCard;
+  readonly option: CompiledDecisionCardOption;
 }) => {
   const weights = model.criteria.map((criterion) => criterion.impact ?? 0);
   const scores = option.considerations.map(
@@ -175,7 +183,7 @@ const weightedTotal = ({
   return { weights, scores, numerator, denominator, percent };
 };
 
-// ComplexDecision established the compact priority-control grammar: weight
+// DecisionAnalysis established the compact priority-control grammar: weight
 // squares belong directly below the criterion they qualify. Weighted Decision
 // keeps that placement while extending the control to its explicit 1–5 scale.
 const WeightControl = ({
@@ -282,7 +290,7 @@ const ScoreControl = ({
 const ScoreCalculationMatrix = ({
   model,
 }: {
-  readonly model: CompiledDecision;
+  readonly model: CompiledDecisionCard;
 }) => {
   const criteria = criteriaOf(model);
   const totals = model.options.map((option) =>
@@ -375,7 +383,7 @@ const ScoreCalculationMatrix = ({
 const WeightedScoreFooter = ({
   model,
 }: {
-  readonly model: CompiledDecision;
+  readonly model: CompiledDecisionCard;
 }) => (
   <tfoot>
     <tr className="comparison-matrix-row decision-score-row">
@@ -435,7 +443,7 @@ export const MatrixLayout = ({
   model,
   answerable,
 }: {
-  readonly model: CompiledDecision;
+  readonly model: CompiledDecisionCard;
   readonly answerable: boolean;
 }) => {
   const criteria = criteriaOf(model);
@@ -451,6 +459,7 @@ export const MatrixLayout = ({
           <li
             className="decision-keyed-option"
             key={option.id}
+            {...(model.interaction === "audit" ? { id: option.id } : {})}
             data-decision-column={index}
             {...(option.recommended ? { "data-option-recommended": "" } : {})}
             {...(option.chosen ? { "data-option-chosen": "" } : {})}
@@ -459,12 +468,14 @@ export const MatrixLayout = ({
               className="decision-keyed-head flex cursor-pointer items-center gap-3 px-4 py-3"
               htmlFor={option.id}
             >
-              <Radio
-                option={option}
-                index={index}
-                groupName={model.id}
-                answerable={answerable}
-              />
+              {model.interaction === "choose" ? (
+                <Radio
+                  option={option}
+                  index={index}
+                  groupName={model.id}
+                  answerable={answerable}
+                />
+              ) : null}
               <span className="decision-key inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-xs font-bold">
                 {optionKey(index)}
               </span>
@@ -575,7 +586,7 @@ export const MatrixLayout = ({
 const ReadOnlyComparison = ({
   model,
 }: {
-  readonly model: CompiledDecision;
+  readonly model: CompiledDecisionCard;
 }) => {
   const criteria = criteriaOf(model);
   return (
@@ -625,7 +636,7 @@ export const BriefLayout = ({
   model,
   answerable,
 }: {
-  readonly model: CompiledDecision;
+  readonly model: CompiledDecisionCard;
   readonly answerable: boolean;
 }) => {
   const lead =

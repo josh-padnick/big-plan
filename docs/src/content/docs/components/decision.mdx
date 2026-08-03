@@ -1,84 +1,23 @@
 ---
 title: Decision
-description: A compact choice with rows, a keyed comparison matrix, or a disclosure-first brief.
+description: A compact option-by-option choice with inline considerations.
 ---
 
-**Purpose: ask the reviewer one question and end with their confirmed answer.**
+**Purpose: ask one lightweight question and end with a confirmed answer.**
 
-`Decision` supports three reading depths over one component model. The default keyed matrix keeps full option names in a chooser rail and compares them with compact letter keys; `layout="rows"` repeats short criteria under each option, while `layout="brief"` keeps the comparison collapsed.
-Escalate to [ComplexDecision](/components/complex-decision/) when the call needs weighted scoring or a reversibility record, and drop to [SimpleDecisionSet](/components/simple-decision-set/) for quick calls.
-
-## Authoring
+`Decision` renders distinct option rows. Use a short `summary` and option-local `Consideration` values when the tradeoffs do not need a full matrix.
 
 ```mdx
-<Decision question="How does the skill reach the end user's agent?">
-
-Context the reviewer needs before the options.
-
-<Criterion title="Version fidelity">
-
-Whether the delivered skill exactly matches the installed CLI version.
-
-</Criterion>
-
-<Criterion title="Works offline">
-
-Whether installation succeeds without network access.
-
-</Criterion>
-
-<Option title="Embedded in the CLI" recommended summary="A skill command prints the file verbatim.">
-
-<Consideration criterion="Version fidelity" verdict="Exact" tone="good">
-
-The skill is compiled into the package, so it cannot disagree with the installed CLI.
-
-</Consideration>
-
-<Consideration criterion="Works offline" verdict="Yes" tone="good">
-
-The installed package already contains the skill.
-
-</Consideration>
-
-</Option>
-
-<Option title="Docs-site download" summary="Setup fetches the skill from the docs site.">
-
-<Consideration criterion="Version fidelity" verdict="Drifts" tone="bad">
-
-The site can change independently of an installed CLI.
-
-</Consideration>
-
-<Consideration criterion="Works offline" verdict="No" tone="bad">
-
-Setup must reach the documentation site.
-
-</Consideration>
-
-</Option>
-
+<Decision question="How should the skill ship?">
+  <Option title="Embed it" recommended summary="Print the version-matched skill.">
+    <Consideration label="Offline" verdict="Yes" tone="good">The package already contains the skill.</Consideration>
+  </Option>
+  <Option title="Download it">
+    <Consideration label="Offline" verdict="No" tone="bad">Setup must reach the docs site.</Consideration>
+  </Option>
 </Decision>
 ```
 
-## The contract
+`question` is required. Add at least two uniquely titled options and at most one `recommended` option. A `Consideration` requires `label` and `verdict`; its optional `tone` is `good`, `bad`, `mixed`, or `neutral`.
 
-- `question` is required; `status` is `open`, `decided`, or `deferred` (default `open`), and `layout` is `matrix`, `rows`, or `brief` (default `matrix`).
-- Define at least one `Criterion`; its body is the one-sentence-maximum explanation of what the criterion means.
-- Add at least two `Option` children, with at most one marked `recommended`.
-- Every `Option` has one `Consideration` for every Criterion, linked by the required `criterion` attribute.
-- A Consideration's body explains in one sentence at most why its required `verdict` holds; `tone` is `good`, `bad`, `mixed`, or `neutral`.
-- A `verdict` is at most 24 characters: it is a value to compare, not a sentence to read.
-- `status="decided"` requires exactly one `Option` marked `chosen`, and a `chosen` Option requires `status="decided"`.
-
-Each violation fails `validate` and `render` with a positional diagnostic.
-Run `big-plan guidance Decision` for judgment-level usage guidance.
-
-## What the reader gets
-
-The default matrix separates choosing from comparing. Full option titles stay readable in the keyed chooser rail, and the table below uses A, B, and C so criterion columns have room.
-Each criterion and value carries a dashed underline: hover, keyboard focus, or tap reveals its one-sentence meaning or reason.
-
-Rows preserve a faster per-option scan, while brief presents the recommended framing first and keeps **Compare all three** collapsed.
-All layouts use a native radio group, and an open Decision also offers **Propose another approach** with an explicit Cancel action.
+The reader can choose an option, propose another approach, confirm, and later change the reading-session answer.

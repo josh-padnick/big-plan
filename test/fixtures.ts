@@ -42,8 +42,8 @@ type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
   readonly componentsViewerUrl: string;
   readonly apiEndpointsViewerUrl: string;
-  readonly complexDecisionViewerUrl: string;
   readonly dataTableViewerUrl: string;
+  readonly decisionAnalysisViewerUrl: string;
   readonly deckViewerUrl: string;
   readonly decisionViewerUrl: string;
   readonly nestedDecisionMatrixViewerUrl: string;
@@ -56,7 +56,7 @@ type WorkerFixtures = {
     readonly second: string;
     readonly unidentified: string;
   };
-  readonly simpleDecisionSetViewerUrl: string;
+  readonly quickDecisionViewerUrl: string;
   readonly sampleViewerUrl: string;
   readonly tableSchemaViewerUrl: string;
 };
@@ -92,14 +92,8 @@ const NESTED_DECISION_MATRIX_MDX = `# Nested decision matrices
 
 <Decision question="Which inner channel?">
 
-<Criterion title="Cost">
-
-The relative implementation cost.
-
-</Criterion>
-
 <Option title="Inner A" recommended summary="First inner option.">
-<Consideration criterion="Cost" verdict="Low" tone="good">
+<Consideration label="Cost" verdict="Low" tone="good">
 
 It reuses the existing inner path.
 
@@ -107,7 +101,7 @@ It reuses the existing inner path.
 </Option>
 
 <Option title="Inner B" summary="Second inner option.">
-<Consideration criterion="Cost" verdict="High" tone="bad">
+<Consideration label="Cost" verdict="High" tone="bad">
 
 It requires a separate inner path.
 
@@ -116,14 +110,8 @@ It requires a separate inner path.
 
 </Decision>
 
-<Criterion title="Cost">
-
-The relative implementation cost.
-
-</Criterion>
-
 <Option title="Outer A" recommended summary="First outer option.">
-<Consideration criterion="Cost" verdict="Low" tone="good">
+<Consideration label="Cost" verdict="Low" tone="good">
 
 It reuses the existing outer path.
 
@@ -131,7 +119,7 @@ It reuses the existing outer path.
 </Option>
 
 <Option title="Outer B" summary="Second outer option.">
-<Consideration criterion="Cost" verdict="High" tone="bad">
+<Consideration label="Cost" verdict="High" tone="bad">
 
 It requires a separate outer path.
 
@@ -143,35 +131,19 @@ It requires a separate outer path.
 
 const NESTED_DECISION_MDX = `# Nested decisions
 
-<ComplexDecision question="Which outer option should win?" status="open">
+<Decision question="Which outer option should win?">
 
 The outer context introduces a complete decision.
 
-<ComplexDecision question="Which inner option should win?" status="open">
+<Decision question="Which inner option should win?">
+  <Option title="Inner A" recommended summary="First inner option." />
+  <Option title="Inner B" summary="Second inner option." />
+</Decision>
 
-<Criterion title="Inner criterion" />
+<Option title="Outer A" recommended summary="First outer option." />
+<Option title="Outer B" summary="Second outer option." />
 
-<Option title="Inner A" recommended summary="First inner option.">
-<Score criterion="Inner criterion" verdict="Strong" tone="good" />
-</Option>
-
-<Option title="Inner B" summary="Second inner option.">
-<Score criterion="Inner criterion" verdict="Weak" tone="bad" />
-</Option>
-
-</ComplexDecision>
-
-<Criterion title="Outer criterion" />
-
-<Option title="Outer A" recommended summary="First outer option.">
-<Score criterion="Outer criterion" verdict="Strong" tone="good" />
-</Option>
-
-<Option title="Outer B" summary="Second outer option.">
-<Score criterion="Outer criterion" verdict="Weak" tone="bad" />
-</Option>
-
-</ComplexDecision>
+</Decision>
 `;
 
 const PLAN_ID_COLLISION_FIRST_MDX = `# Shared title
@@ -335,14 +307,14 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     },
     { scope: "worker" },
   ],
-  complexDecisionViewerUrl: [
+  decisionAnalysisViewerUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(
-        join(tmpdir(), "big-plan-complex-decision-"),
+        join(tmpdir(), "big-plan-decision-analysis-"),
       );
-      const outputPath = join(outputDir, "complex-decision.html");
+      const outputPath = join(outputDir, "decision-analysis.html");
       await renderThroughCli({
-        inputPath: join(repoRoot, "examples", "complex-decision.mdx"),
+        inputPath: join(repoRoot, "examples", "decision-analysis.mdx"),
         outputPath,
         outputDir,
       });
@@ -467,14 +439,14 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     },
     { scope: "worker" },
   ],
-  simpleDecisionSetViewerUrl: [
+  quickDecisionViewerUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(
-        join(tmpdir(), "big-plan-simple-decision-set-"),
+        join(tmpdir(), "big-plan-quick-decision-"),
       );
-      const outputPath = join(outputDir, "simple-decision-set.html");
+      const outputPath = join(outputDir, "quick-decision.html");
       await renderThroughCli({
-        inputPath: join(repoRoot, "examples", "simple-decision-set.mdx"),
+        inputPath: join(repoRoot, "examples", "quick-decision.mdx"),
         outputPath,
         outputDir,
       });

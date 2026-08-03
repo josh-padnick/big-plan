@@ -1,0 +1,17 @@
+---
+title: QuickDecision
+description: One small brief-format question without a comparison expander.
+---
+
+**Purpose: batch several independent plan calls without making them one component.**
+
+Each `QuickDecision` is a standalone brief: recommendation framing, radio options, **Propose another approach**, and **Confirm choice**. It deliberately has no compare expander.
+
+```mdx
+<QuickDecision question="Ship behind a feature flag?" context="The first week carries the rollout risk.">
+  <Option title="Yes" recommended summary="Rollback stays one toggle away." />
+  <Option title="No" />
+</QuickDecision>
+```
+
+`question` is required and `context` is optional. Add at least two uniquely titled options and at most one `recommended` option. Render several `QuickDecision` components in sequence when a plan has a batch of small questions.

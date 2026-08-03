@@ -120,7 +120,7 @@ README.md [modified]
 </FileTreeDiff>
 `;
 
-const COMPLEX_DECISION_FIXTURE = `<ComplexDecision question="Which persistence layer should back review comments?" status="open">
+const DECISION_ANALYSIS_FIXTURE = `<DecisionAnalysis question="Which persistence layer should back review state?" state="proposed" interaction="audit">
 
 Comments need durable identities and ordered replies without blocking a later multi-reviewer workflow.
 
@@ -130,9 +130,17 @@ Selection anchors and their threads must stay consistent through crashes.
 
 </Criterion>
 
-<Criterion title="Local-first setup" />
+<Criterion title="Local-first setup">
 
-<Criterion title="Concurrent reviewers" />
+How much local setup the store requires.
+
+</Criterion>
+
+<Criterion title="Concurrent reviewers">
+
+How well the store admits shared review later.
+
+</Criterion>
 
 <Option title="PostgreSQL" recommended summary="The relational store the team already operates.">
 
@@ -142,19 +150,39 @@ Transactions keep a thread and its anchor in one atomic write.
 
 </Score>
 
-<Score criterion="Local-first setup" verdict="Needs a server" tone="bad" />
+<Score criterion="Local-first setup" verdict="Needs a server" tone="bad">
 
-<Score criterion="Concurrent reviewers" verdict="Ready" tone="good" />
+A database service must be running.
+
+</Score>
+
+<Score criterion="Concurrent reviewers" verdict="Ready" tone="good">
+
+Concurrent readers and writers are native.
+
+</Score>
 
 </Option>
 
 <Option title="SQLite" summary="One embedded database beside the local server.">
 
-<Score criterion="Anchor integrity" verdict="Strong" tone="good" />
+<Score criterion="Anchor integrity" verdict="Strong" tone="good">
 
-<Score criterion="Local-first setup" verdict="Zero setup" tone="good" />
+Transactions protect related records in one file.
 
-<Score criterion="Concurrent reviewers" verdict="Single writer" tone="mixed" />
+</Score>
+
+<Score criterion="Local-first setup" verdict="Zero setup" tone="good">
+
+The process opens the file directly.
+
+</Score>
+
+<Score criterion="Concurrent reviewers" verdict="Single writer" tone="mixed">
+
+Write concurrency becomes the migration boundary.
+
+</Score>
 
 </Option>
 
@@ -164,40 +192,16 @@ The repository layer isolates SQL, so swapping engines later costs a data migrat
 
 </Reversibility>
 
-</ComplexDecision>
+</DecisionAnalysis>
 `;
 
-const SIMPLE_DECISION_SET_FIXTURE = `<SimpleDecisionSet title="Open questions">
+const QUICK_DECISION_FIXTURE = `<QuickDecision question="Should the first release ship behind a feature flag?" context="The first week carries the rollout risk.">
 
-<SimpleDecision question="Should the first release ship behind a feature flag?">
+<Option title="Yes" recommended summary="Rollback stays one toggle away." />
 
-<Option title="Yes" recommended>
+<Option title="No" />
 
-Keeps rollback one toggle away during the risky window.
-
-</Option>
-
-<Option title="No">
-
-Avoids the flag-cleanup follow-up task.
-
-</Option>
-
-</SimpleDecision>
-
-<SimpleDecision question="When do we remove the legacy endpoint?">
-
-<Option title="Same release" />
-
-<Option title="One release later" recommended>
-
-Gives integrators one cycle of overlap.
-
-</Option>
-
-</SimpleDecision>
-
-</SimpleDecisionSet>
+</QuickDecision>
 `;
 
 /** Renders an MDX fixture through the CLI and returns the output HTML path. */
@@ -268,14 +272,16 @@ const shootFileTreeDiff = async (page, path) => {
   await page.locator("figure[data-file-tree-diff]").screenshot({ path });
 };
 
-/** Screenshots the ComplexDecision figure element. */
-const shootComplexDecision = async (page, path) => {
-  await page.locator("figure[data-complex-decision]").screenshot({ path });
+/** Screenshots the DecisionAnalysis figure element. */
+const shootDecisionAnalysis = async (page, path) => {
+  await page
+    .locator("figure[data-decision-layout=matrix]")
+    .screenshot({ path });
 };
 
-/** Screenshots the SimpleDecisionSet figure element. */
-const shootSimpleDecisionSet = async (page, path) => {
-  await page.locator("figure[data-simple-decision-set]").screenshot({ path });
+/** Screenshots the QuickDecision figure element. */
+const shootQuickDecision = async (page, path) => {
+  await page.locator("figure[data-decision-layout=brief]").screenshot({ path });
 };
 
 /** Screenshots a square crop beginning at the review document's article. */
@@ -330,16 +336,16 @@ const SHOTS = [
     shoot: shootFigure,
   },
   {
-    name: "complex-decision",
-    mdx: COMPLEX_DECISION_FIXTURE,
-    base: "complex-decision",
-    shoot: shootComplexDecision,
+    name: "decision-analysis",
+    mdx: DECISION_ANALYSIS_FIXTURE,
+    base: "decision-analysis",
+    shoot: shootDecisionAnalysis,
   },
   {
-    name: "simple-decision-set",
-    mdx: SIMPLE_DECISION_SET_FIXTURE,
-    base: "simple-decision-set",
-    shoot: shootSimpleDecisionSet,
+    name: "quick-decision",
+    mdx: QUICK_DECISION_FIXTURE,
+    base: "quick-decision",
+    shoot: shootQuickDecision,
   },
   {
     name: "snippet",

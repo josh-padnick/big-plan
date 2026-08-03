@@ -71,13 +71,13 @@ describe("compileMarkdown sections", () => {
 describe("compileMarkdown component ids", () => {
   it("should preserve heading ids when a decision would use the same id", () => {
     const { elementIds, sections } = compileMarkdown({
-      markdown: `<ComplexDecision question="Foo">
+      markdown: `<Decision question="Foo">
 
 <Option title="A" />
 
 <Option title="B" />
 
-</ComplexDecision>
+</Decision>
 
 ## Decision Foo
 `,
@@ -90,7 +90,7 @@ describe("compileMarkdown component ids", () => {
 
   it("should preserve heading ids nested inside decision components", () => {
     const { elementIds, sections } = compileMarkdown({
-      markdown: `<ComplexDecision question="Foo">
+      markdown: `<Decision question="Foo">
 
 ## Decision Foo
 
@@ -98,73 +98,60 @@ describe("compileMarkdown component ids", () => {
 
 <Option title="B" />
 
-</ComplexDecision>
+</Decision>
 
-<SimpleDecisionSet title="Foo">
+<Decision question="Bar?">
 
-## Simple Decision Set Foo
-
-<SimpleDecision question="Bar?">
+## Decision Bar
 
 <Option title="A" />
 
 <Option title="B" />
 
-</SimpleDecision>
-
-</SimpleDecisionSet>
+</Decision>
 `,
     });
 
     expect(sections).toEqual([
       { id: "decision-foo", text: "Decision Foo" },
-      { id: "simple-decision-set-foo", text: "Simple Decision Set Foo" },
+      { id: "decision-bar", text: "Decision Bar" },
     ]);
     expect(elementIds).toContain("decision-foo-2");
-    expect(elementIds).toContain("simple-decision-set-foo-2");
+    expect(elementIds).toContain("decision-bar-2");
     expect(new Set(elementIds).size).toBe(elementIds.length);
   });
 
   it("should namespace repeated decision components across one document", () => {
-    const repeatedDecisions = `<ComplexDecision question="Same?">
+    const repeatedDecisions = `<Decision question="Same?">
 
 <Option title="A" />
 
 <Option title="B" />
 
-</ComplexDecision>
+</Decision>
 
-<ComplexDecision question="Same?">
-
-<Option title="A" />
-
-<Option title="B" />
-
-</ComplexDecision>
-
-<SimpleDecisionSet title="Same">
-
-<SimpleDecision question="Same?">
+<Decision question="Same?">
 
 <Option title="A" />
 
 <Option title="B" />
 
-</SimpleDecision>
+</Decision>
 
-</SimpleDecisionSet>
-
-<SimpleDecisionSet title="Same">
-
-<SimpleDecision question="Same?">
+<QuickDecision question="Same?">
 
 <Option title="A" />
 
 <Option title="B" />
 
-</SimpleDecision>
+</QuickDecision>
 
-</SimpleDecisionSet>
+<QuickDecision question="Same?">
+<Option title="A" />
+
+<Option title="B" />
+
+</QuickDecision>
 `;
     const { elementIds } = compileMarkdown({ markdown: repeatedDecisions });
 
@@ -172,14 +159,10 @@ describe("compileMarkdown component ids", () => {
     expect(elementIds).toContain("decision-same-option-a");
     expect(elementIds).toContain("decision-same-2");
     expect(elementIds).toContain("decision-same-2-option-a");
-    expect(elementIds).toContain("simple-decision-set-same");
-    expect(elementIds).toContain(
-      "simple-decision-set-same-question-same-option-a",
-    );
-    expect(elementIds).toContain("simple-decision-set-same-2");
-    expect(elementIds).toContain(
-      "simple-decision-set-same-2-question-same-option-a",
-    );
+    expect(elementIds).toContain("quick-decision-same");
+    expect(elementIds).toContain("quick-decision-same-option-a");
+    expect(elementIds).toContain("quick-decision-same-2");
+    expect(elementIds).toContain("quick-decision-same-2-option-a");
     expect(new Set(elementIds).size).toBe(elementIds.length);
   });
 });

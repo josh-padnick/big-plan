@@ -1,0 +1,13 @@
+# Using QuickDecision well
+
+Use `QuickDecision` for one small, independently answerable question in a batch. It intentionally omits comparison criteria and the compare expander.
+
+```mdx
+<QuickDecision
+  question="Which package manager?"
+  context="The repository needs one lockfile."
+>
+  <Option title="pnpm" recommended summary="Matches the workspace setup." />
+  <Option title="npm" />
+</QuickDecision>
+```
