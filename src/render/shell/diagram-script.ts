@@ -510,6 +510,7 @@ export const DIAGRAM_SCRIPT = `
       if (node && scopeOf(node) === decision) select(node);
     });
     decision.addEventListener("focusin", (event) => {
+      if (event.target.closest(".flow-diagram-compose, .flow-collector")) return;
       const node = event.target.closest("[${DECISION_ELEMENT_ATTRIBUTE}]");
       if (node && scopeOf(node) === decision) select(node);
     });
