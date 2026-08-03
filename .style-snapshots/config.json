@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "fixturePaths": ["examples/mdx-components.mdx", "examples/deck.mdx"],
+  "stylingFilePatterns": [
+    "^\\.style-snapshots/config\\.json$",
+    "^bun\\.lock$",
+    "^package\\.json$",
+    "^assets/(?:logo-(?:light|dark)\\.svg|favicon-(?:light|dark)\\.ico)$",
+    "^scripts/gen-assets\\.mjs$",
+    "^scripts/gen-css\\.mjs$",
+    "^src/.*\\.css$",
+    "^src/components/(?:.*/)?view[^/]*\\.tsx$",
+    "^src/components/_shared/.*\\.tsx$",
+    "^src/icons/lucide/.*\\.ts$",
+    "^src/render/branding\\.generated\\.ts$",
+    "^src/render/global\\.generated\\.ts$",
+    "^src/render/page\\.ts$",
+    "^src/render/render-document\\.ts$",
+    "^src/render/serialize-html\\.ts$",
+    "^src/render/(?:markdown|shell)/.*\\.ts$"
+  ],
+  "manifestDirectory": ".style-snapshots/manifests",
+  "captureCommand": [
+    "node",
+    "{harnessRoot}/scripts/style-snapshots/capture.mjs"
+  ],
+  "documents": [
+    {
+      "name": "components",
+      "source": "examples/mdx-components.mdx",
+      "captures": [
+        {
+          "name": "document",
+          "selector": "article",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            },
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": []
+        },
+        {
+          "name": "shell-header",
+          "selector": "body > header",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            },
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": []
+        },
+        {
+          "name": "desktop-navigation",
+          "selector": "nav[aria-label=\"Contents\"]:not([data-mobile-toc])",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            }
+          ],
+          "actions": []
+        },
+        {
+          "name": "mobile-navigation",
+          "selector": "[data-mobile-toc]",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": []
+        },
+        {
+          "name": "maximized-code",
+          "selector": "[data-code-snippet][data-figure-maximized]",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            }
+          ],
+          "actions": [
+            {
+              "type": "click",
+              "selector": "[data-code-snippet] [data-figure-maximize]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "deck",
+      "source": "examples/deck.mdx",
+      "captures": [
+        {
+          "name": "document",
+          "selector": "article",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            },
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": []
+        },
+        {
+          "name": "collapsed-desktop",
+          "selector": "article",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            }
+          ],
+          "actions": [
+            {
+              "type": "click",
+              "selector": "nav[aria-label=\"Contents\"]:not([data-mobile-toc]) [data-collapse-all]"
+            }
+          ]
+        },
+        {
+          "name": "collapsed-phone",
+          "selector": "article",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": [
+            {
+              "type": "click",
+              "selector": "[data-mobile-toc] summary"
+            },
+            {
+              "type": "click",
+              "selector": "[data-mobile-toc] [data-collapse-all]"
+            }
+          ]
+        },
+        {
+          "name": "mobile-navigation-open",
+          "selector": "[data-mobile-toc] details[open] > div",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": [
+            {
+              "type": "click",
+              "selector": "[data-mobile-toc] summary"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

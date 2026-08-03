@@ -168,16 +168,35 @@ Apply these review conventions by judgment:
 - Start every authored source file with a file-level comment saying what it owns or why it exists.
   Give every non-trivial function a concise description; comments explain why, not what.
 - Use Lucide for icons and keep framework-neutral glyph data in `src/icons/lucide/`; components never define icon paths locally.
-- Author component markup with Tailwind utilities where practical.
-  Reserve stylesheets for variants, state, pseudo-elements, live-application-created elements, and plain generated markup that cannot carry utility classes.
-  A colocated stylesheet writes into `@layer components`, which loses to every Tailwind utility on the same element no matter how specific the selector.
-  When a state rule must override a property a resting utility sets, declare that state in its own `@layer` rather than moving the resting utility into a stylesheet or hunting for a more specific selector.
-  Layer order follows first appearance, so a layer introduced after Tailwind's is the last one and outranks `utilities` by construction; `_shared/figure-controls/figure-controls.css` is the precedent.
-  The `hidden` attribute is a separate reliable way to script a region's visibility because its preflight rule is `!important`.
 - Keep logic in pure modules and unit-test it there.
   Reserve Playwright for critical user journeys.
 - Write focused, user-oriented tests with `should ... when ...` descriptions and coverage of degenerate and boundary cases.
 - Structure long browser journeys as named `test.step` phases so the test reads as a story and a failure names its phase.
+
+### Styling owned markup
+
+This section governs how agents implement styles in Big Plan.
+The default is Tailwind utility classes colocated with the markup an agent edits.
+Before using CSS, apply these three tests to every declaration:
+
+1. **Owned.** Does the view own the element that would carry the class?
+   Generated Markdown and syntax-highlighter tokens fail this test because their elements are emitted downstream.
+2. **Discoverable.** Does the complete Tailwind candidate appear statically in source?
+   Semantic runtime variants such as `data-[collapsed]:hidden` pass; dynamically constructed candidates such as `` `opacity-${value}` `` fail.
+   For a finite choice, use a lookup whose values contain complete candidate strings.
+3. **Local and legible.** Does the class explain this element and its condition without making a reviewer execute DOM traversal or a selector program?
+   Short variants such as `before:block`, `has-[img]:p-4`, `print:hidden`, `motion-reduce:transition-none`, and `@sm:grid` can pass.
+   Framework support alone does not make a long arbitrary variant maintainable.
+
+A rule that passes all three tests should normally be implemented with Tailwind utility classes.
+Runtime state is not a reason by itself to use CSS: prefer semantic `aria-*` and `data-*` attributes while keeping every complete candidate static.
+
+CSS is the fallback.
+Use it only as an escape hatch for externally owned or generated markup, document-wide behavior, token or keyframe definitions, a selector relationship that is clearer as a selector, a shared visual primitive with no authored element of its own, or a case where utilities make the local markup materially less legible.
+Component CSS therefore requires a concrete ownership, selector, primitive-definition, document-wide, or readability reason—not merely that the rule uses state, a pseudo-element, `:has()`, print, motion, or a container query.
+State the reason in the stylesheet's file-level `CSS escape hatch:` comment.
+Ordinary escape-hatch rules belong to `components` and yield to utilities; only a state invariant that must beat resting utilities belongs to `bp-state`, with an adjacent `Override invariant:` comment naming what it must override.
+The stylesheet-contract check owns the exact enforced syntax and allowed layer exceptions.
 
 ## Gold-standard plan-quality testing
 

@@ -1,4 +1,5 @@
-/* The shared annotation card look: tinted border, wash, glyph, and badge on
+/* CSS escape hatch: shared visual primitive and selector relationships.
+   The shared annotation card look: tinted border, wash, glyph, and badge on
    the annotation tokens, so reviewer notes read identically in every
    component that anchors them. */
 

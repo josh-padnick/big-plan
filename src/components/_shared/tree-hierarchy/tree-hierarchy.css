@@ -1,4 +1,5 @@
-/* Tree-hierarchy row, connector, icon, folding, summary, and status
+/* CSS escape hatch: selector relationships over nested shared tree markup.
+   Tree-hierarchy row, connector, icon, folding, summary, and status
    variants, colocated with the shared component that emits this markup for
    FileTree and every FileTreeDiff view. */
 

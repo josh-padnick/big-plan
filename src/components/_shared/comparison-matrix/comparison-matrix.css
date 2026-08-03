@@ -1,8 +1,9 @@
-/* The comparison-matrix skeleton and tone vocabulary shared by Decision and
-   DecisionAnalysis. Keeping the table chrome and the meaning of a tone in one
-   place is what stops two components with the same shape from drifting into
-   two dialects; where a tone is painted stays with each component, which the
-   module comment beside this file explains. */
+/* CSS escape hatch: this shared visual primitive owns the comparison-matrix
+   skeleton and tone vocabulary used by Decision and DecisionAnalysis. Keeping
+   the table chrome and the meaning of a tone in one place is what stops two
+   components with the same shape from drifting into two dialects; where a
+   tone is painted stays with each component, which the module comment beside
+   this file explains. */
 
 @layer components {
   /* The prose stylesheet tints and borders markdown-table cells; a comparison

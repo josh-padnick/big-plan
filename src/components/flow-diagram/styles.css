@@ -1,4 +1,5 @@
 /*
+CSS escape hatch: selector relationships and pseudo-elements define connector geometry.
 FlowDiagram diagram drawing: card tones, badge tints, and the connector geometry -
 lines, arrowheads, and the one-to-many fork - that utility classes cannot
 express because they live in pseudo-elements and data-attribute variants.
@@ -882,7 +883,9 @@ classes.
   }
 }
 
-@layer flow-diagram-maximized {
+@layer bp-state {
+  /* Override invariant: the diagram's zoom surface must beat the shared
+     maximized figure body's resting padding and overflow state. */
   .flow-diagram[data-flow-canvas][data-figure-maximized]
     > .flow-diagram-viewport {
     overflow: hidden;
@@ -892,48 +895,52 @@ classes.
 
 /* A proposal repaints an element the author already styled with resting
    utilities - a card's border, a body line's muted colour - so these rules
-   live in their own layer, declared after Tailwind's and therefore last.
-   The alternative is the cascade-chasing that `_shared/figure-controls`
-   documents and deletes: dragging resting utilities into stylesheets, or
-   re-pointing the token a utility happens to read. Both only relocate the
-   fragility. See AGENTS.md under Engineering rules. */
-@layer flow-proposed {
-  /* Removed, never vanished: the element keeps its place and its content goes
-     red and struck through. Ghosting it to a low opacity said "removed" only
-     to someone who already knew; red and a strike say it outright, and the
-     content stays legible enough to see what you are removing. */
+   live in the state layer declared after Tailwind utilities. The alternative
+   is the cascade-chasing that `_shared/figure-controls` documents and
+   deletes: dragging resting utilities into stylesheets, or re-pointing the
+   token a utility happens to read. Both only relocate the fragility. See
+   AGENTS.md under Engineering rules. */
+@layer bp-state {
+  /* Override invariant: proposed removal paint beats resting text-color
+     utilities. Removed, never vanished: the element keeps its place and its
+     content goes red and struck through. Ghosting it to a low opacity said
+     "removed" only to someone who already knew; red and a strike say it
+     outright, and the content stays legible enough to see what you are
+     removing. */
   [data-flow-proposed~="removed"] :is(strong, code, [data-flow-field]) {
     color: var(--diff-remove-c);
     text-decoration: line-through;
     text-decoration-thickness: 1.5px;
   }
-  /* A dashed border says "proposed" at a glance in a way a tint alone cannot,
-     and the layer is what lets a state rule outrank the card's resting
-     `border` utility. */
+  /* Override invariant: proposed border and background paint beat the card's
+     resting border and background utilities. A dashed border says "proposed"
+     at a glance in a way a tint alone cannot. */
   [data-flow-proposed~="removed"].flow-diagram-node {
     border-style: dashed;
     background: color-mix(in srgb, var(--diff-remove-c) 9%, transparent);
     border-color: color-mix(in srgb, var(--diff-remove-c) 55%, var(--edge-c));
   }
-  /* An edge touching a removed element ghosts with it, so a reviewer can see
-     what re-wiring their proposal implies. */
+  /* Override invariant: proposed edge paint beats the resting connector
+     token. An edge touching a removed element ghosts with it, so a reviewer
+     can see what re-wiring their proposal implies. */
   [data-flow-proposed~="removed"][data-flow-element="edge"],
   [data-flow-proposed~="removed-incident"][data-flow-element="edge"],
   [data-flow-proposed~="removed-incident"].flow-diagram-fork-stub {
     --flow-line-c: color-mix(in srgb, var(--muted-c) 35%, transparent);
   }
-  /* An element only implied by someone else's removal is ghosted rather than
-     reddened: it says "this goes too" without claiming the reviewer asked
-     for it. */
+  /* Override invariant: implied-removal opacity beats resting content
+     utilities. An element only implied by someone else's removal is ghosted
+     rather than reddened: it says "this goes too" without claiming the
+     reviewer asked for it. */
   [data-flow-proposed~="removed-incident"]
     :is(strong, code, [data-flow-field]) {
     opacity: 0.45;
   }
 
-  /* Edited in place, on a wash that clears AA in both themes, with the
-     original still available. Proposed text reads at full ink: a muted code
-     or body line on the wash is only 3.4:1, and this layer can simply say so
-     rather than working around the `text-muted` utility underneath. */
+  /* Override invariant: proposed edit paint beats resting spacing and
+     text-color utilities. Edited in place, on a wash that clears AA in both
+     themes, with the original still available. Proposed text reads at full
+     ink: a muted code or body line on the wash is only 3.4:1. */
   [data-flow-field][data-flow-edited] {
     border-radius: 0.2rem;
     padding: 0 0.15rem;
@@ -941,14 +948,17 @@ classes.
     box-shadow: inset 0 -1px 0 var(--flow-edit-edge);
     color: var(--ink-c);
   }
-  /* Clearing a field has no replacement glyph to highlight. Leave only the
-     struck authored text: an empty tinted stub looks like a rendering error,
-     and spacing reserved for a missing replacement makes it look detached. */
+  /* Override invariant: empty edited fields suppress the proposed edit's
+     state spacing and paint. Clearing a field has no replacement glyph to
+     highlight. Leave only the struck authored text: an empty tinted stub
+     looks like a rendering error. */
   [data-flow-field][data-flow-edited]:empty {
     padding: 0;
     background: transparent;
     box-shadow: none;
   }
+  /* Override invariant: an empty edit removes the original field's resting
+     sibling spacing so the retained authored text stays attached. */
   [data-flow-field][data-flow-edited]:empty + .flow-diagram-original {
     margin-left: 0;
   }

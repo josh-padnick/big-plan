@@ -1,5 +1,5 @@
-/* GraphqlOperation kind and deprecation palette variants, colocated with the
-   component that emits those stable selector contracts. */
+/* CSS escape hatch: local readability keeps the finite operation-kind and
+   deprecation palette map together beside its stable selectors. */
 
 @layer components {
   article .graphql-operation-kind-query {

@@ -1,4 +1,5 @@
-/* Owns the maximize control and the maximized panel, shared by every figure
+/* CSS escape hatch: shared visual primitive with state and pseudo-elements.
+   Owns the maximize control and the maximized panel, shared by every figure
    family a reader can promote to the viewport.
 
    THE PANEL
@@ -59,7 +60,8 @@
 
 /* This late layer outranks the resting Tailwind utilities on the shared
    button. See the DataTable focus rules for the same chrome vocabulary. */
-@layer control-focus {
+@layer bp-state {
+  /* Override invariant: keyboard focus beats resting button color utilities. */
   article .figure-control:focus-visible {
     outline: none;
     background: var(--edge-c);
@@ -69,13 +71,15 @@
   /* A pointer reader who never saw a focus ring should not be handed one when
      Escape returns focus to the trigger. Focus still lands, so the next Tab
      continues from here; only the visible treatment is withheld, and the
-     tooltip keys off :focus-visible so it goes quiet with it. */
+     tooltip keys off :focus-visible so it goes quiet with it.
+     Override invariant: quiet focus beats the visible focus treatment. */
   article [data-figure-focus-quiet]:focus-visible {
     outline: none;
     background: transparent;
     color: var(--muted-c);
     box-shadow: none;
   }
+  /* Override invariant: quiet focus suppresses the resting focus tooltip. */
   article [data-figure-focus-quiet]:focus-visible::after {
     content: none;
   }
@@ -93,9 +97,10 @@
    Tailwind-first convention and only relocates the fragility. A layer that
    sits above `utilities` ends the argument once: a figure keeps its ordinary
    resting utilities, and promotion always wins. */
-@layer figure-maximized {
+@layer bp-state {
   /* Keep the complete promoted-frame geometry together in the layer that
-     outranks every resting utility and per-family rule. */
+     outranks every resting utility and per-family rule.
+     Override invariant: promoted geometry beats every resting figure utility. */
   article [data-figure-maximizable][data-figure-maximized] {
     position: fixed;
     inset: 1.5rem;
@@ -116,7 +121,8 @@
     background: var(--bg);
     box-shadow: 0 18px 56px rgb(0 0 0 / 0.45);
   }
-  /* The backdrop is a pseudo-element on the body rather than a spread shadow
+  /* Override invariant: the open-state backdrop beats its inert resting state.
+     The backdrop is a pseudo-element on the body rather than a spread shadow
        on the panel. A shadow is clipped by any ancestor that bounds the figure -
        a slide card, a scroll container - which leaves undimmed strips wherever
        the clip falls. The body is above all of them and owns no such clip, and
@@ -131,11 +137,13 @@
     pointer-events: none;
     visibility: hidden;
   }
+  /* Override invariant: the open root state reveals the inert body backdrop. */
   :root[data-figure-maximized-open] body::after {
     opacity: 1;
     visibility: visible;
   }
   @media (prefers-reduced-motion: no-preference) {
+    /* Override invariant: backdrop motion applies only to the promoted state. */
     body::after {
       transition:
         opacity 0.16s ease,
@@ -143,11 +151,13 @@
     }
   }
   /* The header band, whatever the family calls it, stays put while the body
-       scrolls beneath it. */
+       scrolls beneath it.
+       Override invariant: promoted headers must not inherit flexible body growth. */
   article [data-figure-maximized] > figcaption,
   article [data-figure-maximized] > .figure-control-bar {
     flex: none;
   }
+  /* Override invariant: the promoted body beats resting overflow and spacing utilities. */
   article [data-figure-maximized] > [data-figure-body] {
     flex: 1 1 auto;
     min-height: 0;
@@ -155,13 +165,15 @@
     padding: 1.5rem 1.75rem 3rem;
   }
   /* A family whose content is several siblings after its caption marks no
-       body; the panel then scrolls as a whole and pads its own floor. */
+       body; the panel then scrolls as a whole and pads its own floor.
+       Override invariant: the promoted fallback beats resting frame overflow. */
   article [data-figure-maximized]:not(:has(> [data-figure-body])) {
     overflow: auto;
     padding-bottom: 3rem;
   }
   /* Promoted, the code bar stops floating over the code and becomes a real
-       band, because a maximized block is being read rather than skimmed past. */
+       band, because a maximized block is being read rather than skimmed past.
+       Override invariant: promoted code chrome beats resting absolute positioning. */
   article .code-figure[data-figure-maximized] > .figure-control-bar {
     position: static;
     opacity: 1;
@@ -169,6 +181,7 @@
     background: var(--diff-header-bg);
     padding: 0.3rem 0.5rem;
   }
+  /* Override invariant: promoted code content beats its resting frame decoration. */
   article .code-figure[data-figure-maximized] > pre {
     border: 0;
     border-radius: 0;

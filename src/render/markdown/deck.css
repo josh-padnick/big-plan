@@ -1,4 +1,5 @@
 /*
+CSS escape hatch: selector relationships over generated deck markup and document-wide behavior.
 Deck geometry: the single owner of every card box and every vertical gap in
 the collapsible deck. deck-collapse.ts owns the DOM shape this relies on and
 documents the invariants; read it first.
@@ -214,18 +215,23 @@ stability follow from the layout instead of from hand-tuned insets.
   }
 }
 
-/* Unlayered: the collapsed state must win over any utility display value. */
-article [data-collapsible][data-collapsed] > [data-collapse-body] {
-  display: none;
+@layer bp-state {
+  /* Override invariant: collapsed display must beat any resting display
+     utility on the generated body. */
+  article [data-collapsible][data-collapsed] > [data-collapse-body] {
+    display: none;
+  }
 }
 
-article .plan-collapse-chrome > h2,
-article .plan-collapse-chrome > [data-slide-kicker] {
-  scroll-margin-top: 8rem;
-}
-@media (width < 56rem) {
+@layer components {
   article .plan-collapse-chrome > h2,
   article .plan-collapse-chrome > [data-slide-kicker] {
-    scroll-margin-top: 10.75rem;
+    scroll-margin-top: 8rem;
+  }
+  @media (width < 56rem) {
+    article .plan-collapse-chrome > h2,
+    article .plan-collapse-chrome > [data-slide-kicker] {
+      scroll-margin-top: 10.75rem;
+    }
   }
 }

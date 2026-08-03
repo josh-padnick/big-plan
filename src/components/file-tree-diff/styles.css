@@ -1,5 +1,5 @@
-/* FileTreeDiff surface, header, view-toggle, and before/after pane
-   variants, colocated with the component that owns these stable selector
+/* CSS escape hatch: selector relationships express view, change-visibility,
+   and before/after pane state. FileTreeDiff variants use stable selector
    contracts; the shared row and status styling lives with the
    tree-hierarchy building block. */
 
