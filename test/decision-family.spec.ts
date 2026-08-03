@@ -320,7 +320,10 @@ test("should preserve Decision drafts across retarget and collapse and hand off 
   await page
     .locator(".flow-diagram-compose textarea")
     .fill("Keep this unfinished note when retargeting.");
-  await second.click();
+  // When the document is short enough to need no scroll, the compose panel
+  // floats directly below the first option and covers the second option's
+  // left half; a reviewer retargets by clicking the half still in view.
+  await second.click({ position: { x: 620, y: 30 } });
   await page
     .locator('.flow-diagram-actionbar [data-flow-action="comment"]')
     .click();
