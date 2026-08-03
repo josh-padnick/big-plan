@@ -99,6 +99,13 @@ const isElement = (node: RootContent): node is Element =>
 // attribute is the stable behavior-bearing interface used by browser tests.
 const TABLE_WRAPPER_CLASSES = [
   "mb-5",
+  // The container carries the card - border, corners, the scroll box - so it
+  // has to end where the columns end. Left block-level it stretched to the
+  // reading width and drew a rule across empty space beside a narrow table.
+  // fit-content still resolves to the available width when the table is wider
+  // than the page, which is what keeps the scroll box working.
+  "w-fit",
+  "max-w-full",
   "overflow-x-auto",
   "rounded-md",
   "border",

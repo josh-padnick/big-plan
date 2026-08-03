@@ -59,7 +59,7 @@ export const TableOfContents = ({
             <a
               data-table-of-contents-row
               href={section?.id === undefined ? "#" : `#${section.id}`}
-              className="table-of-contents-row group -mx-2 grid grid-cols-[2rem_minmax(0,1fr)] items-baseline gap-x-[0.9rem] rounded-md px-2 py-1.5 no-underline"
+              className="table-of-contents-row group -mx-2 grid w-fit max-w-full grid-cols-[2rem_minmax(0,max-content)] items-baseline gap-x-[0.9rem] rounded-md px-2 py-1.5 no-underline"
             >
               <span
                 data-table-of-contents-num

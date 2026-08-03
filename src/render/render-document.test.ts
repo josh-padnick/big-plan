@@ -120,6 +120,46 @@ describe("renderDocument affordances", () => {
     }
     expect(html).not.toMatch(/<script\s+[^>]*src=/);
     expect(html).not.toContain("@import");
+    // The embedded stylesheet fetches too: a bundled typeface reaches the
+    // reader through a data URI in @font-face, never through a URL.
+    const styleValues = [...html.matchAll(/url\(([^)]*)\)/g)].map(
+      (match) => match[1],
+    );
+    expect(styleValues.length).toBeGreaterThan(0);
+    for (const value of styleValues) {
+      expect(value).toMatch(/^data:/);
+    }
+  });
+
+  it("should hold a standard desktop wireframe inside its slide", () => {
+    // The content column and figure card account for nested card chrome, so
+    // the standard screen stays inside the card without a margin escape.
+    const deckWireframe = `# Deck
+
+The lede.
+
+<Part title="Context" />
+
+## A screen
+
+<Wireframe id="wf" initialScreen="one">
+  <Screen id="one" name="One" device="desktop">
+    <Text text="Drawn inside a collapsible slide." />
+  </Screen>
+</Wireframe>
+`;
+    const { html: deckHtml } = renderDocument({
+      markdown: deckWireframe,
+      fallbackTitle: "Deck",
+    });
+    expect(deckHtml).toContain("data-collapsible");
+    expect(deckHtml).toContain("data-wireframe=");
+    expect(deckHtml).toContain("data-wireframe-desktop");
+    expect(deckHtml).toContain("--card-figure:54.5rem");
+    expect(deckHtml).toContain("[data-slide]:has(.wireframe)");
+    // The true 1440px layout scales into the shared desktop review cap.
+    expect(deckHtml).toContain("max-width:48rem");
+    expect(deckHtml).not.toContain("--reading-free-inline");
   });
 
   it("should inline one stylesheet and one viewer script when rendering", () => {
@@ -129,6 +169,29 @@ describe("renderDocument affordances", () => {
     expect(html.match(/<script>/g)).toHaveLength(1);
     expect(html).toContain("data-section-link");
     expect(html).not.toContain('src="http');
+  });
+
+  it("should name the plan quietly in the bar so a deep reader keeps its title", () => {
+    expect(html).toContain("data-plan-title");
+    expect(html).toMatch(/<p class="[^"]*truncate[^"]*"[^>]*data-plan-title/);
+    // The bar repeats the h1, so it is chrome for the eye only; a screen
+    // reader already has the title from the document and the page head.
+    expect(html).toMatch(/data-plan-title[^>]*aria-hidden="true"/);
+    // Truncation needs the full text reachable on hover.
+    expect(html).toMatch(/data-plan-title title="Plan title"/);
+  });
+
+  it("should escape a plan title before putting it in the bar", () => {
+    // The title lands in an attribute as well as in text, so a quote that
+    // survived would close the attribute early.
+    const { html: quoted } = renderDocument({
+      markdown: '# Ship "A & B" plans\n\nBody.\n',
+      fallbackTitle: "Fallback",
+    });
+    expect(quoted).toContain(
+      'data-plan-title title="Ship &quot;A &amp; B&quot; plans"',
+    );
+    expect(quoted).not.toContain('title="Ship "A');
   });
 
   it("should emit theme-aware favicon links as embedded data URIs when rendering", () => {
@@ -255,8 +318,8 @@ describe("renderDocument shell", () => {
     expect(html).not.toContain("<nav");
     expect(html).toMatch(/data-comment-draft-control hidden/);
     expect(html).toContain("<script>");
-    // The reading column keeps its ~74ch measure even without a sidebar.
-    expect(html).toContain("wide:grid-cols-[minmax(0,74ch)]");
+    // The no-TOC shell keeps the same figure-safe content column.
+    expect(html).toContain("wide:grid-cols-[minmax(0,54.5rem)]");
   });
 
   it("should omit the TOC when the document has headings but no h2s", () => {

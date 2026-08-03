@@ -1,0 +1,588 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "feat(wireframe): add declarative product prototypes [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "package.json",
+      "propertyDeltas": [
+        {
+          "property": "build inputs",
+          "from": "base stylesheet toolchain",
+          "to": "bundled Wireframe font generation included"
+        }
+      ]
+    },
+    {
+      "path": "src/components/code-snippet/styles.css",
+      "propertyDeltas": [
+        {
+          "property": "code header spacing",
+          "from": "header sits flush to content",
+          "to": "header leaves a deliberate breathing gap"
+        }
+      ]
+    },
+    {
+      "path": "src/components/code-snippet/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "code figure markup",
+          "from": "generic figure spacing",
+          "to": "code-specific header spacing hook"
+        }
+      ]
+    },
+    {
+      "path": "src/components/table-of-contents/styles.css",
+      "propertyDeltas": [
+        {
+          "property": "contents-row geometry",
+          "from": "container-width hover wash",
+          "to": "text-hugging hover wash and aligned hierarchy"
+        }
+      ]
+    },
+    {
+      "path": "src/components/table-of-contents/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "contents-row sizing",
+          "from": "full-width row",
+          "to": "row sized to the wider authored line"
+        }
+      ]
+    },
+    {
+      "path": "src/components/wireframe/font.generated.css",
+      "propertyDeltas": [
+        {
+          "property": "Wireframe type",
+          "from": "no component-owned sketch face",
+          "to": "self-contained Patrick Hand @font-face"
+        }
+      ]
+    },
+    {
+      "path": "src/components/wireframe/styles.css",
+      "propertyDeltas": [
+        {
+          "property": "Wireframe presentation",
+          "from": "component absent",
+          "to": "hand-drawn device, layout, state, and control vocabulary"
+        }
+      ]
+    },
+    {
+      "path": "src/components/wireframe/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "Wireframe markup",
+          "from": "component absent",
+          "to": "semantic screen and product-shell rendering"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.css",
+      "propertyDeltas": [
+        {
+          "property": "document composition",
+          "from": "prose-width reading column",
+          "to": "wider figure-capable column with measured prose and Wireframe import"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "embedded stylesheet",
+          "from": "base generated CSS",
+          "to": "regenerated CSS containing the consolidated visual system"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/compile-markdown.ts",
+      "propertyDeltas": [
+        {
+          "property": "rendered component flow",
+          "from": "base component presentation",
+          "to": "Wireframe-aware rendered figure flow"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/prose.css",
+      "propertyDeltas": [
+        {
+          "property": "reading measure",
+          "from": "prose inherits the narrow document column",
+          "to": "prose holds a shared measure inside a wider figure-capable column"
+        }
+      ]
+    },
+    {
+      "path": "src/render/render-document.ts",
+      "propertyDeltas": [
+        {
+          "property": "document rendering",
+          "from": "base document component set",
+          "to": "Wireframe component included in the rendered document"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/shell.test.ts",
+      "propertyDeltas": [
+        {
+          "property": "shell visual contract",
+          "from": "base header and reading-column assertions",
+          "to": "plan-title and wider-column assertions"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/shell.ts",
+      "propertyDeltas": [
+        {
+          "property": "shell geometry",
+          "from": "narrow reading grid and logo-only brand",
+          "to": "wider review grid and quiet plan title"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/viewer-script.ts",
+      "propertyDeltas": [
+        {
+          "property": "viewer behavior",
+          "from": "base figure controls",
+          "to": "Wireframe navigation plus shared figure behavior"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__desktop-navigation__desktop__dark.png",
+      "changedPixels": 1134,
+      "before": {
+        "width": 241,
+        "height": 303,
+        "sha256": "fbed24d6b5eeea426f3666bcad657d51baa6ad57edea418326a4933872baa875"
+      },
+      "after": {
+        "width": 240,
+        "height": 303,
+        "sha256": "954e8c248cb4b4264af1edcce85d066554c9e68882f9061d5571df2e536d61ea"
+      },
+      "propertyDeltas": [
+        {
+          "property": "navigation geometry",
+          "from": "241px × 303px",
+          "to": "240px × 303px with content-hugging rows"
+        }
+      ]
+    },
+    {
+      "capture": "components__desktop-navigation__desktop__light.png",
+      "changedPixels": 1147,
+      "before": {
+        "width": 241,
+        "height": 303,
+        "sha256": "6de8b6c0d223cad563232569c3e823d79f7a359fdd5810c03755630fc7477f6a"
+      },
+      "after": {
+        "width": 240,
+        "height": 303,
+        "sha256": "4eabbc60a57e976f21e24d13848e688518722f3ff2a4cf39ae365aa98557ea26"
+      },
+      "propertyDeltas": [
+        {
+          "property": "navigation geometry",
+          "from": "241px × 303px",
+          "to": "240px × 303px with content-hugging rows"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__dark.png",
+      "changedPixels": 5251366,
+      "before": {
+        "width": 710,
+        "height": 11603,
+        "sha256": "705887f08d1e52f27388a1ad7ef557962768d604d17fa6c1e35ea0cd91a5f1c2"
+      },
+      "after": {
+        "width": 872,
+        "height": 11468,
+        "sha256": "fc8ff9277e206acc64d07bb2dbe3d920a11f6801802600f62e592913685659ee"
+      },
+      "propertyDeltas": [
+        {
+          "property": "component document canvas",
+          "from": "710px × 11603px",
+          "to": "872px × 11468px with the wider review column and measured prose"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__light.png",
+      "changedPixels": 5360280,
+      "before": {
+        "width": 710,
+        "height": 11603,
+        "sha256": "928c198939518dc6601bf6e0ddb02d7ffa104e32be9ad5099d0a87833f0b0e87"
+      },
+      "after": {
+        "width": 872,
+        "height": 11468,
+        "sha256": "7a0fcc7e899d8a45c7f8cf7619f51fd2ec210d1dc3e1c97ae2ca6a84694e9d89"
+      },
+      "propertyDeltas": [
+        {
+          "property": "component document canvas",
+          "from": "710px × 11603px",
+          "to": "872px × 11468px with the wider review column and measured prose"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__dark.png",
+      "changedPixels": 599209,
+      "before": {
+        "width": 350,
+        "height": 14167,
+        "sha256": "766e6d7d2382f4518799511fa51bd10a078ceac9ec72664494c6170fdaa0ac38"
+      },
+      "after": {
+        "width": 350,
+        "height": 14186,
+        "sha256": "65dfbafeb2944df3f71259acff789921caac3346ab9bd1538f6bd70d0b3f9cd5"
+      },
+      "propertyDeltas": [
+        {
+          "property": "component document flow",
+          "from": "350px × 14167px",
+          "to": "350px × 14186px with consolidated prose and component rhythm"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__light.png",
+      "changedPixels": 605111,
+      "before": {
+        "width": 350,
+        "height": 14167,
+        "sha256": "36a67235a15e5bddafe763662a55c2c753f7224183ae5cc81cd5f2dda89570d1"
+      },
+      "after": {
+        "width": 350,
+        "height": 14186,
+        "sha256": "12e62fe013cfbda4d3189f389ad1054b8b3a2437180c931779ce7b25d8db6844"
+      },
+      "propertyDeltas": [
+        {
+          "property": "component document flow",
+          "from": "350px × 14167px",
+          "to": "350px × 14186px with consolidated prose and component rhythm"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__dark.png",
+      "changedPixels": 37843,
+      "before": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "645e61cc0e6bebf8e050786aff7efceffb8eeb0a1968af346c5a032cb66e7874"
+      },
+      "after": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "c5a55f65d5ea18b6a50658ed6336fc2619d02f890eb0968959e379431b0941b8"
+      },
+      "propertyDeltas": [
+        {
+          "property": "maximized code chrome",
+          "from": "base header-to-content spacing",
+          "to": "deliberate header breathing room in shared figure chrome"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__light.png",
+      "changedPixels": 37846,
+      "before": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "d12d9024fb60f1ea38ff8ad45649b9b161d7224debb6e980d4646e0c96d35994"
+      },
+      "after": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "112c8b99c90e816c14ce868c3e37f2daf0ca0a9114fb6ad535bd7005d92b1d46"
+      },
+      "propertyDeltas": [
+        {
+          "property": "maximized code chrome",
+          "from": "base header-to-content spacing",
+          "to": "deliberate header breathing room in shared figure chrome"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__desktop__dark.png",
+      "changedPixels": 989,
+      "before": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "9b5c536a60890c648589adb4a4cba1691a7509138bd90b3dcb61fb50c9d447c8"
+      },
+      "after": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "f9d40a1420d516cb690cba15c12f8d938b11ae82021ce50de23bf0a32621e79f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "branding content",
+          "from": "logo-only header",
+          "to": "logo plus quiet plan title"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__desktop__light.png",
+      "changedPixels": 1011,
+      "before": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "177342d9930a08054862e67b13da3588ebaa292434efe0da3201aa07cb6fda22"
+      },
+      "after": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "554521fda35065b00bf1a4e81cd7799bf25d70341eee354aeb8c4966bd0e5168"
+      },
+      "propertyDeltas": [
+        {
+          "property": "branding content",
+          "from": "logo-only header",
+          "to": "logo plus quiet plan title"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__phone__dark.png",
+      "changedPixels": 571,
+      "before": {
+        "width": 390,
+        "height": 44,
+        "sha256": "8096ccf4e923b8b7b05cafa464907c2de461637451c39e6aefdc6ff9ccdf4744"
+      },
+      "after": {
+        "width": 390,
+        "height": 44,
+        "sha256": "f83f1c71f6855cb36a48efa088e778f5daa9fc0dd14b5dda6b42d80a4f0efe4f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "branding content",
+          "from": "logo-only header",
+          "to": "logo plus quiet plan title"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__phone__light.png",
+      "changedPixels": 588,
+      "before": {
+        "width": 390,
+        "height": 44,
+        "sha256": "fed71e0dc61814b6eb2a72309837cba84f7ccccb82e98fe544a9cada0616a818"
+      },
+      "after": {
+        "width": 390,
+        "height": 44,
+        "sha256": "adb5f18653856d255712559f3e395d266fbbd588d1b83b7602a6fe372b6ef222"
+      },
+      "propertyDeltas": [
+        {
+          "property": "branding content",
+          "from": "logo-only header",
+          "to": "logo plus quiet plan title"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-desktop__desktop__dark.png",
+      "changedPixels": 227382,
+      "before": {
+        "width": 710,
+        "height": 1281,
+        "sha256": "4935f855a81ce08ecf6579bbdb63cd8f52a23cd0d8726154c80686a83f5cbe0d"
+      },
+      "after": {
+        "width": 872,
+        "height": 1281,
+        "sha256": "706e9ccc4ef881dd823a9896ba45198e8ca004478fcd968c9a85098fbf641cc4"
+      },
+      "propertyDeltas": [
+        {
+          "property": "collapsed deck canvas",
+          "from": "710px × 1281px",
+          "to": "872px × 1281px aligned to the wider review column"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-desktop__desktop__light.png",
+      "changedPixels": 227487,
+      "before": {
+        "width": 710,
+        "height": 1281,
+        "sha256": "08c9f865d90ce08a70d3c2556aae0457727e76ea34fd62b28f467a8512e12dd7"
+      },
+      "after": {
+        "width": 872,
+        "height": 1281,
+        "sha256": "873bb5743082c1bd1fc3e72421a731401bdd463cdb8eeb5c5afdfbfcd03651d0"
+      },
+      "propertyDeltas": [
+        {
+          "property": "collapsed deck canvas",
+          "from": "710px × 1281px",
+          "to": "872px × 1281px aligned to the wider review column"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-phone__phone__dark.png",
+      "changedPixels": 1454,
+      "before": {
+        "width": 350,
+        "height": 1608,
+        "sha256": "8faedfe0ac0d8fe1e4b90100b1c0a26b649dc0cb04a2f8d5780c1673ac764611"
+      },
+      "after": {
+        "width": 350,
+        "height": 1608,
+        "sha256": "008efc95c9dee613926106497bc31cad66b451416263cad57bc40150068c863f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "collapsed deck chrome",
+          "from": "base compact deck pixels",
+          "to": "aligned Contents hierarchy and plan-title pixels"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-phone__phone__light.png",
+      "changedPixels": 1472,
+      "before": {
+        "width": 350,
+        "height": 1608,
+        "sha256": "b2fa591806a71465d532a43d753ce4f1f9f4c05d2f4008069f1b39b1ff541cfc"
+      },
+      "after": {
+        "width": 350,
+        "height": 1608,
+        "sha256": "f63ba4bc72f3995e706c1d3c26f71fe79d71bb03b3f5e8e37f95413c3d421fe7"
+      },
+      "propertyDeltas": [
+        {
+          "property": "collapsed deck chrome",
+          "from": "base compact deck pixels",
+          "to": "aligned Contents hierarchy and plan-title pixels"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__dark.png",
+      "changedPixels": 467977,
+      "before": {
+        "width": 710,
+        "height": 2711,
+        "sha256": "90da97d1ab66efe0dbfd5244b392fcd9b632935a1fb3a1f66b31edeb2be3f0ee"
+      },
+      "after": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "8a7f3f9258a1bdcaec2c0da3b446908a1ac5fe893c2f3598bb50a77055b473a0"
+      },
+      "propertyDeltas": [
+        {
+          "property": "deck document canvas",
+          "from": "710px × 2711px",
+          "to": "872px × 2711px aligned to the wider review column"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__light.png",
+      "changedPixels": 468175,
+      "before": {
+        "width": 710,
+        "height": 2711,
+        "sha256": "6fe7c63834891738e48616a59722a9195172aa0411c002f5bace136913a30bd3"
+      },
+      "after": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "7ed5a0d06a43b0197364005962d8922bde9f0203c3ddf84cfaef1cd051afbed5"
+      },
+      "propertyDeltas": [
+        {
+          "property": "deck document canvas",
+          "from": "710px × 2711px",
+          "to": "872px × 2711px aligned to the wider review column"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__dark.png",
+      "changedPixels": 1454,
+      "before": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "1fe7d0303962904774d294aec5636d817ce306d1ef1a5a7441b3cdfde474d9a3"
+      },
+      "after": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "fb1f61c86a0ad418644c0cc713a5c7b56a04fcf84eb8d5bd3bfc78197f2a56ef"
+      },
+      "propertyDeltas": [
+        {
+          "property": "deck document chrome",
+          "from": "base compact deck pixels",
+          "to": "aligned Contents hierarchy and plan-title pixels"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__light.png",
+      "changedPixels": 1472,
+      "before": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "5ecab17a7be4e3c8afec2503b54c1bdc8ae4e58ee1b1184c61e2098f85b99d42"
+      },
+      "after": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "61201bb1f302929b59904a19afa9e87f663ac3bceec58c3357f9559ffab5721d"
+      },
+      "propertyDeltas": [
+        {
+          "property": "deck document chrome",
+          "from": "base compact deck pixels",
+          "to": "aligned Contents hierarchy and plan-title pixels"
+        }
+      ]
+    }
+  ]
+}
