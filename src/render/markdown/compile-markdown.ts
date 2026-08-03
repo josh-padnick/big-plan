@@ -118,6 +118,12 @@ const TABLE_WRAPPER_CLASSES = [
 // a scroll container keeps it: components that ship their own figure-styled
 // container must not gain a second, chrome-bearing wrapper here.
 const wrapTables = (node: Root | Element): void => {
+  if (
+    node.type === "element" &&
+    node.properties["data-wireframe"] !== undefined
+  ) {
+    return;
+  }
   const nodeIsScrollContainer =
     node.type === "element" &&
     node.properties["data-table-scroll-container"] !== undefined;
