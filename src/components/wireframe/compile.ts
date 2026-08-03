@@ -353,6 +353,25 @@ const containsRecordCollection = (node: WireframeNode): boolean =>
       candidate.element === "List" || candidate.element === "Table",
   );
 
+/** Returns authored buttons that perform work, excluding navigation and mode state. */
+const workActionButtons = (
+  nodes: ReadonlyArray<WireframeNode>,
+): ReadonlyArray<WireframeNode> => {
+  const all = flatten(nodes);
+  const stateButtons = new Set(
+    all
+      .filter(
+        (node) =>
+          node.element === "BottomBar" || node.element === "SegmentedControl",
+      )
+      .flatMap((node) => flatten(node.children))
+      .filter((node) => node.element === "Button"),
+  );
+  return all.filter(
+    (node) => node.element === "Button" && !stateButtons.has(node),
+  );
+};
+
 /** A detail pane that shows content must name the selected record beside it. */
 const checkSelection = ({
   screen,
@@ -369,9 +388,10 @@ const checkSelection = ({
         const source = node.children.find(containsRecordCollection);
         const sourceIndex =
           source === undefined ? -1 : node.children.indexOf(source);
-        const dependent = node.children
-          .slice(sourceIndex + 1)
-          .find((child) => child.element !== "Rail");
+        const following = node.children.slice(sourceIndex + 1);
+        const dependent =
+          following.find((child) => child.element !== "Rail") ??
+          following.find((child) => child.element === "Rail");
         if (
           source !== undefined &&
           dependent !== undefined &&
@@ -502,7 +522,7 @@ const checkChoiceComposition = ({
       position,
     });
   }
-  const primaryActions = all.filter(
+  const primaryActions = workActionButtons(screen.children).filter(
     (node) => node.element === "Button" && node.emphasis === "primary",
   );
   if (selected.length === 0 && primaryActions.length > 0) {
@@ -701,43 +721,49 @@ const checkOneFilledAction = ({
   readonly position: ScopedChild["position"];
   readonly diagnostics: DiagnosticCollector;
 }): void => {
-  const all = flatten(screen.children);
   const filled = new Set<WireframeNode>(
-    all.filter(
+    workActionButtons(screen.children).filter(
       (node) => node.element === "Button" && node.emphasis === "primary",
     ),
   );
-  // BottomBar and SegmentedControl use emphasis="primary" to mark current
-  // navigation or mode state. Those buttons are not filled work actions.
-  const stateButtons = all
-    .filter(
+  const sendActions = (
+    nodes: ReadonlyArray<WireframeNode>,
+  ): ReadonlyArray<WireframeNode> =>
+    workActionButtons(nodes).filter(
       (node) =>
-        node.element === "BottomBar" || node.element === "SegmentedControl",
-    )
-    .flatMap((node) => flatten(node.children))
-    .filter((node) => node.element === "Button");
-  stateButtons.forEach((node) => filled.delete(node));
-  const markComposerSends = (nodes: ReadonlyArray<WireframeNode>): void => {
-    const descendants = flatten(nodes);
-    if (descendants.some((candidate) => candidate.element === "TextArea")) {
-      descendants.forEach((candidate) => {
-        if (
-          candidate.element === "Button" &&
-          /^send(?:\s|$)/iu.test(candidate.label)
-        ) {
-          filled.add(candidate);
-        }
-      });
+        node.element === "Button" && /^send(?:\s|$)/iu.test(node.label),
+    );
+  const markComposerSends = ({
+    nodes,
+    ancestors,
+  }: {
+    readonly nodes: ReadonlyArray<WireframeNode>;
+    readonly ancestors: ReadonlyArray<ReadonlyArray<WireframeNode>>;
+  }): void => {
+    if (nodes.some((candidate) => candidate.element === "TextArea")) {
+      const container = [nodes, ...ancestors].find(
+        (candidate) => sendActions(candidate).length > 0,
+      );
+      sendActions(container ?? []).forEach((candidate) =>
+        filled.add(candidate),
+      );
     }
     for (const node of nodes) {
       const children = childNodes(node);
       if (children.length > 0) {
-        markComposerSends(children);
+        markComposerSends({ nodes: children, ancestors: [nodes, ...ancestors] });
       }
     }
   };
-  markComposerSends(screen.children);
-  stateButtons.forEach((node) => filled.delete(node));
+  if (screen.children.some((candidate) => candidate.element === "TextArea")) {
+    sendActions(screen.children).forEach((candidate) => filled.add(candidate));
+  }
+  screen.children.forEach((node) => {
+    const children = childNodes(node);
+    if (children.length > 0) {
+      markComposerSends({ nodes: children, ancestors: [] });
+    }
+  });
   if (filled.size > 1) {
     const labels = [...filled].flatMap((node) =>
       node.element === "Button" ? [node.label] : [],

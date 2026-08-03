@@ -1445,6 +1445,49 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     ]);
   });
 
+  it("should treat a rail as detail when no primary pane follows a record list", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "ticket",
+          children: [
+            element({
+              name: "Row",
+              children: [
+                element({
+                  name: "Panel",
+                  children: [
+                    element({
+                      name: "List",
+                      children: [
+                        element({
+                          name: "ListItem",
+                          attributes: { label: "Checkout freeze" },
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                element({
+                  name: "Rail",
+                  children: [
+                    element({
+                      name: "Text",
+                      attributes: { text: "Ticket properties" },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toEqual([
+      'Screen "ticket" shows detail beside a record list, but no ListItem or Table row is selected',
+    ]);
+  });
+
   it("should reject a desktop shell on a phone screen", () => {
     const { diagnostics } = compile({
       scopedChildren: [
@@ -1594,8 +1637,13 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
                   attributes: { label: "Reply" },
                 }),
                 element({
-                  name: "Button",
-                  attributes: { label: "Send reply" },
+                  name: "Row",
+                  children: [
+                    element({
+                      name: "Button",
+                      attributes: { label: "Send reply" },
+                    }),
+                  ],
                 }),
               ],
             }),
@@ -1637,6 +1685,36 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(diagnostics.map((entry) => entry.message)).toEqual([
       'Screen "reply" draws 2 filled actions (Resolve, Send reply); keep one primary action, counting a composer\'s Send button',
     ]);
+  });
+
+  it("should not count a send action outside the text area's container", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "invite",
+          children: [
+            element({
+              name: "Panel",
+              children: [
+                element({
+                  name: "TextArea",
+                  attributes: { label: "Notes" },
+                }),
+              ],
+            }),
+            element({
+              name: "Button",
+              attributes: { label: "Save", emphasis: "primary" },
+            }),
+            element({
+              name: "Button",
+              attributes: { label: "Send invite" },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
   });
 
   it("should read a fenced table into columns and rows", () => {
@@ -1943,6 +2021,67 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]?.message).toContain(
       "shows a primary continuation before any ChoiceCard is selected",
+    );
+  });
+
+  it("should ignore selected navigation state before a deliberate choice", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "choose",
+          attributes: { device: "tablet" },
+          children: [
+            choiceGroup(),
+            element({
+              name: "BottomBar",
+              children: [
+                element({
+                  name: "Button",
+                  attributes: { label: "Ask", emphasis: "primary" },
+                }),
+              ],
+            }),
+          ],
+        }),
+        selectedChoiceScreen("purchase"),
+        selectedChoiceScreen("loan"),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+  });
+
+  it("should require a work action after a deliberate choice", () => {
+    const selectedWithoutContinuation = screen({
+      id: "purchase-selected",
+      name: "purchase selected",
+      attributes: { device: "tablet" },
+      children: [
+        choiceGroup("purchase"),
+        element({
+          name: "SegmentedControl",
+          children: [
+            element({
+              name: "Button",
+              attributes: { label: "Details", emphasis: "primary" },
+            }),
+          ],
+        }),
+      ],
+    });
+    const { diagnostics } = compile({
+      attributes: { id: "choice", initialScreen: "choose" },
+      scopedChildren: [
+        screen({
+          id: "choose",
+          attributes: { device: "tablet" },
+          children: [choiceGroup()],
+        }),
+        selectedWithoutContinuation,
+        selectedChoiceScreen("loan"),
+      ],
+    });
+    expect(diagnostics.map((entry) => entry.message)).toContain(
+      'Screen "purchase-selected" selects a ChoiceCard but offers no primary continuation; add one short next action after the deliberate choice',
     );
   });
 
