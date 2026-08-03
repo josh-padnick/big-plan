@@ -119,6 +119,7 @@ Skip any "momentum / enjoyment" framing - clarity and speed are enough.
 Viewer and surface discipline:
 
 - Persistent tools live in fixed chrome. Reserve a stable top or edge bar for modes, zoom, and other ongoing controls, and let the canvas make room for it; never float persistent controls over the work they affect.
+- Chrome frames its content. In an inline or minimized view, draw one containing border around the toolbar and the canvas it controls, with the toolbar as an internal edge; never leave screen chrome hovering as a detached strip above its content.
 - Name the mode, not the halves. Express a binary capability as one explicit switch with a named state—such as **Comment Mode: On/Off**—instead of presenting competing nouns such as **Use / Comment** that ask the user to infer what changed.
 - Card interiors share one inset. Align headers, comment rows, and footers to the same horizontal inset, and repeat one compact vertical rhythm so related rows read as a single ordered group rather than independently placed fragments.
 

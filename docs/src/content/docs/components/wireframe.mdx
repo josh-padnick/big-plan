@@ -84,6 +84,7 @@ At the normal reduced fit this makes body copy read at approximately the iPadOS 
 Desktop primitives use the same presentation-aware model: 28 px body, 22 px supporting copy, 32 px section titles, and 42 px page titles on the 1440 px artboard, which paint like a conventionally zoomed desktop app after fitting.
 Primary desktop navigation earns readable width: allow roughly 200-240 px for labels and comfortable padding, then collapse deliberately to icons at narrower sizes instead of crowding or truncating destinations.
 Persistent viewer tools belong in fixed chrome at a stable edge, with the canvas reserving space for the bar instead of letting controls overlap the work.
+In inline and minimized views, chrome frames its content: one containing border owns the toolbar and canvas, and the toolbar reads as an internal edge rather than a detached strip.
 Name a binary mode as one explicit switch with a visible state—for example **Comment Mode: On/Off**—rather than opposing labels such as **Use / Comment**.
 Within a card, align the header, repeated rows, and footer to one shared horizontal inset and one compact vertical rhythm.
 Viewer resize and visual-viewport changes refit the whole artboard, while the wireframe's own zoom controls enlarge frame and type together inside the maximized surface.

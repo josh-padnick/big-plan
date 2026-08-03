@@ -656,12 +656,35 @@ test("should maximize and restore a wireframe in both themes", async ({
     await expect(trigger).toBeVisible();
     await expect(trigger).toHaveAccessibleName("Maximize wireframe");
     await expect(trigger).toHaveText("");
+    const stageLocator = wireframe.locator(
+      "[data-wireframe-screen]:visible .wireframe-frame-stage",
+    );
+    const toolbarLocator = wireframe.locator(
+      "[data-wireframe-screen]:visible .wireframe-frame-toolbar",
+    );
+    const viewportLocator = wireframe.locator(
+      "[data-wireframe-screen]:visible .wireframe-frame-viewport",
+    );
+    await expect(stageLocator).toHaveCSS("overflow", "hidden");
+    await expect(stageLocator).not.toHaveCSS("box-shadow", "none");
+    await expect(toolbarLocator).toHaveCSS("border-bottom-width", "1px");
+    const boundedStage = await boxOf(stageLocator);
+    const toolbarBox = await boxOf(toolbarLocator);
+    const viewportBox = await boxOf(viewportLocator);
+    for (const box of [toolbarBox, viewportBox]) {
+      expect(box.x).toBeGreaterThanOrEqual(boundedStage.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(
+        boundedStage.x + boundedStage.width,
+      );
+    }
+    expect(Math.abs(toolbarBox.y + toolbarBox.height - viewportBox.y)).toBe(0);
     const before = await boxOf(wireframe.locator(".wireframe-frame:visible"));
     await trigger.scrollIntoViewIfNeeded();
     const scrollBeforeMaximize = await page.evaluate(() => window.scrollY);
 
     await trigger.click();
     await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
+    await expect(stageLocator).toHaveCSS("box-shadow", "none");
     await expect(trigger).toHaveAccessibleName("Restore wireframe size");
     await expect
       .poll(
