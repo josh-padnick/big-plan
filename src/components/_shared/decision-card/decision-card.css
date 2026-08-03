@@ -446,8 +446,8 @@
     margin-bottom: 0;
   }
 
-  /* C - the brief. The comparison is available, not imposed - and separated
-     from the options so it never reads as a fourth one. */
+  /* C - the brief. These fallback comparison styles remain separate from the
+     options; QuickDecision's criteria-free model never activates them. */
   article .decision-brief-compare {
     border-top: 1px solid var(--edge-c);
   }

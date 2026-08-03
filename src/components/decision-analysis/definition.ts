@@ -15,7 +15,7 @@ const bodyPolicy = (name: string): ScopedChildDefinition["markdownBody"] => ({
   },
 });
 
-/** Declares Decision's renderer and option-child contract blocks. */
+/** Declares DecisionAnalysis's renderer and scoped-child contract blocks. */
 export const DECISION_ANALYSIS_COMPONENT_DEFINITION = defineComponent({
   compile: compileDecisionAnalysisComponent,
   view: DecisionAnalysis,

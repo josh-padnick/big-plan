@@ -536,7 +536,7 @@ const compileReversibility = ({
   };
 };
 
-/** Compiles one Decision component into the model consumed by rendering. */
+/** Compiles one DecisionAnalysis into the model consumed by rendering. */
 export const compileDecisionAnalysisComponent = ({
   attributes,
   children,

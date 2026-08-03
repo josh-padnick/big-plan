@@ -1,6 +1,6 @@
-// Shared decision-card reading depths. Rows explain each option in
-// place, matrix separates a full-title chooser rail from a keyed comparison,
-// and brief keeps the comparison collapsed until the reader asks for it.
+// Shared decision-card reading depths. Rows explain each option in place,
+// matrix separates a full-title chooser rail from a keyed comparison, and
+// brief presents a standalone low-depth question without comparison criteria.
 
 import type { ElementContent } from "hast";
 import type {
@@ -187,9 +187,9 @@ const weightedTotal = ({
   return { weights, scores, numerator, denominator, percent };
 };
 
-// DecisionAnalysis established the compact priority-control grammar: weight
-// squares belong directly below the criterion they qualify. Weighted Decision
-// keeps that placement while extending the control to its explicit 1–5 scale.
+// Weighted analysis uses a compact priority-control grammar: weight squares
+// belong directly below the criterion they qualify and expose the full 1–5
+// scale.
 const WeightControl = ({
   title,
   impact,
@@ -589,8 +589,8 @@ export const MatrixLayout = ({
   );
 };
 
-// Brief's expanded comparison is deliberately plain: this approved low-depth
-// form reveals the evidence in one action and does not add nested disclosures.
+// A criteria-bearing internal brief model gets one plain fallback comparison.
+// QuickDecision supplies no criteria, so its public surface never renders it.
 const ReadOnlyComparison = ({
   model,
 }: {
@@ -639,7 +639,7 @@ const ReadOnlyComparison = ({
 };
 
 // The question, the choices, and the one sentence that frames the decision.
-// The comparison starts closed because agreement should not require a grid.
+// QuickDecision's empty criteria set keeps the comparison branch absent.
 export const BriefLayout = ({
   model,
   answerable,
