@@ -22,8 +22,11 @@ Set `scoring="weighted"` to add editable 1–5 impacts directly below criterion 
 </DecisionAnalysis>
 ```
 
-`Criterion` and `Option` accept explicit `id` attributes. Use them when review
-comments on criteria and matrix cells must retain stable addresses across
-wording changes; duplicate explicit ids are rejected.
+The card, its options, criteria, populated matrix cells, recommendation, and
+reversibility are comment targets. `Criterion` and `Option` accept explicit
+`id` attributes so their addresses, including the address of their matrix-cell
+intersection, can survive wording changes. See the shared
+[Decision-family review contract](/components/#decision-family-review) for
+comment behavior and id allocation.
 
 `state` is `proposed`, `decided`, or `deferred`; `interaction` is `audit` or `choose`, and choosing is valid only while proposed. Every option must score every criterion. A decided analysis marks exactly one option `chosen`. `Reversibility` is required and `Details` is optional.

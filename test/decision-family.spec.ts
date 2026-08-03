@@ -197,7 +197,9 @@ test("should comment on each Decision-family component and a meaningful child", 
       marker.boundingBox(),
     ]);
     if (targetBox === null || markerBox === null) {
-      throw new Error("Expected the comment marker and its anchor to be laid out");
+      throw new Error(
+        "Expected the comment marker and its anchor to be laid out",
+      );
     }
     const topInset = markerBox.y - targetBox.y;
     const rightInset =

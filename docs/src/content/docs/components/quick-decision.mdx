@@ -16,5 +16,7 @@ Each `QuickDecision` is a standalone brief: recommendation framing, radio option
 
 `question` is required and `context` is optional. Add at least two uniquely titled options and at most one `recommended` option. Render several `QuickDecision` components in sequence when a plan has a batch of small questions.
 
-An `Option` may carry an explicit `id` so comments on it keep the same address
-when its title changes. Duplicate explicit ids are rejected.
+The card, its options, and its recommendation are comment targets. An `Option`
+may carry an explicit `id` so its address survives a title change. See the
+shared [Decision-family review contract](/components/#decision-family-review)
+for comment behavior and id allocation.
