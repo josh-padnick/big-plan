@@ -69,6 +69,8 @@ export default tseslint.config(
           "src/components/data-table/sort-values*.ts",
           "src/components/database-table-schema/derive-index-participation*.ts",
           "src/components/database-table-schema/parse-table-schema*.ts",
+          "src/components/wireframe/catalog*.ts",
+          "src/components/wireframe/model*.ts",
         ],
         imports: [
           "**/components/_authoring/**",
@@ -81,6 +83,8 @@ export default tseslint.config(
           "**/components/data-table/sort-values.js",
           "**/components/database-table-schema/derive-index-participation.js",
           "**/components/database-table-schema/parse-table-schema.js",
+          "**/components/wireframe/catalog.js",
+          "**/components/wireframe/model.js",
         ],
         mayImport: [],
       },

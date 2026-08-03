@@ -9,6 +9,33 @@ is styled by its owning module, not here.
 */
 
 @layer components {
+  /* The content column is wide so that tables, diagrams, and drawings have
+     room. Prose does not want that room: a line much past seventy characters
+     is tiring to track back from. So text holds its own measure inside the
+     column and everything else breaks out to fill it - the classic breakout,
+     with the constraint on the text rather than on its container.
+
+     It applies wherever prose ends up, including inside a component, because
+     a wider column lengthened those lines too. A table cell and a wireframe
+     are the exceptions: both are drawings of a layout, not passages to read.
+
+     Anything that reads like a passage joins it: a callout and a quick
+     summary are prose wearing chrome, and a code block is read line by line
+     the same way. Tables are the one breakout left. */
+  article :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6, pre),
+  article .callout,
+  article [data-quick-summary] {
+    /* One width, and the same one for a bare paragraph as for a block
+       wearing chrome, so their edges line up down the column rather than a
+       callout sitting inset from the prose beside it. */
+    max-width: var(--measure);
+  }
+  article
+    :is(td, th, .wireframe)
+    :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6, pre) {
+    max-width: none;
+  }
+
   article h1,
   article h2,
   article h3,
@@ -175,10 +202,13 @@ is styled by its owning module, not here.
     top: 0.4em;
   }
 
+  /* A table is as wide as its columns need and no wider. Stretching a narrow
+     one to fill the column spreads three cells across the page and makes them
+     harder to compare, not easier. A table wider than the space still runs to
+     its natural width and scrolls inside its container. */
   article table {
     border-collapse: collapse;
     width: max-content;
-    min-width: 100%;
     font-size: 0.9375rem;
   }
   article th,

@@ -64,3 +64,7 @@ The diagnostic points to the row that should be the delimiter:
 
 The rule ignores valid GFM tables, ordinary prose containing pipes, rows presented wholly as inline-code examples, fenced code blocks, blockquotes, and isolated table-like rows.
 Inline code inside a table cell does not hide an otherwise table-shaped row.
+
+`wireframe-product-copy` keeps implementation and review notes out of product artboards.
+Within a `Wireframe`, literal attributes containing `sticky`, `remembered`, `Cmd+K`, or `J/K` are rejected; move that rationale to the surrounding plan prose and leave only language the intended product user sees inside the drawing.
+The same words in prose outside a `Wireframe` are left alone.

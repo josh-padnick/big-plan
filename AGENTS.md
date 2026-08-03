@@ -245,6 +245,7 @@ Use this loop to make durable product improvements and prove them with a clean g
 
 1. Backport every durable improvement from the refined reference plan into the **Big Plan product** wherever that behavior is owned.
    Owners may include authoring guidance, lint rules, components, examples, install or setup docs, agent-facing prompts, and related surfaces under the [documentation map](#documentation-map) and [source ownership](#source-ownership-and-placement).
+   Push each fix down to the strongest product layer that can own it: prefer a primitive default, then a compile diagnostic, then lint, and leave only irreducible judgment in guidance.
 2. Run **context-free plan generation again** with the updated tool: a clean agent, the same scenario intent, and no carrying over of the hand-refined plan text.
 3. Compare the newly generated plan against the refined reference and the plan-quality standards (pleasant to read, and understandable), using the latest acceptance criteria for the scenario.
 4. If the new plan still falls short, either refine the reference further (return to Part A as needed) or continue product changes.
@@ -269,6 +270,7 @@ Generated files carry `.generated.` in their name and are committed beside the s
 
 - `src/render/global.css` and its imported styles are authored inputs to the generated embedded stylesheet.
 - Logos and favicons under `assets/` are authored inputs to the generated embedded branding module.
+- Font binaries under `assets/fonts/` are authored inputs to the generated embedded `@font-face` stylesheet; [`assets/fonts/README.md`](assets/fonts/README.md) owns their licensing record.
 
 The root README owns generation commands; CI detects drift.
 

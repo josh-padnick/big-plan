@@ -1,0 +1,1147 @@
+# Harbor across three form factors
+
+Sketch the Harbor support inbox natively for desktop, tablet, and phone.
+
+Each form factor is a parallel prototype so reviewers compare real device layouts rather than one layout with different captions.
+
+## Desktop web SaaS
+
+One consistent pane model: fixed global nav, then workspace panes (list, main, details).
+Content hierarchy comes from type and layout; major panes use dividers rather than competing card outlines.
+
+### Ticket - design rationale (priority 1)
+
+- **Pattern:** Front / Zendesk **three-pane** - compact queue | conversation timeline | properties rail.
+- **Structure:** Properties and Related sit in a **right rail**, not under the queue. Conversation is the widest column. Composer is pinned under the timeline.
+- **State:** Current ticket is selected in the queue; titles match the inbox subject line.
+- **Messages:** Timeline with customer / agent / internal kinds, not table rows.
+- **Actions:** Segmented Reply vs Internal note; **Send reply** primary.
+
+### Inbox - design rationale
+
+- **Pattern:** Front / Intercom **list + inspector**.
+- **Scanning:** Rows use stable columns (subject, status·assignee, age·id); selected row is tinted with an edge accent.
+- **Views vs filters:** saved views (All / Mine / Unassigned) separate from filter chips (Waiting, SLA risk), with counts.
+- **Inspector:** no generic "Selected" heading; slightly wider preview; **View ticket** (not external-arrow language).
+- **Tools:** search and sort near the header.
+
+### New ticket - design rationale
+
+- **Pattern:** Linear / GitHub **create form + routing rail**.
+- **Order:** Customer → Subject → Description.
+- **Duplicates:** only after subject text exists; actions Open / Link / Dismiss.
+- **Routing:** "Suggested from similar tickets" explanation.
+- **Actions:** **Create ticket**, **Send a confirmation email** with destination address.
+
+### Settings - design rationale
+
+- **Pattern:** Linear / Stripe **settings nav + form**.
+- **Dependencies:** Digest hour disabled while digest is off; Slack channel note when Slack alerts off; hints under the affected control.
+- **Sections:** Notifications, Channels, Digest (named, not a lone divider).
+- **Save model:** explicit Save/Discard with an unsaved-changes bar (not only a tiny badge).
+- **Measure:** form column capped for readability.
+
+<Wireframe
+  id="harbor-desktop"
+  title="Harbor on desktop"
+  initialScreen="d-ticket"
+>
+  <Screen
+    id="d-ticket"
+    name="Desktop · Ticket"
+    device="desktop"
+
+    url="app.harbor.team/inbox?ticket=4821"
+  >
+    <AppShell>
+      <Sidebar brand="Harbor" mode="Acme Support">
+        <Nav label="Global">
+          <NavItem label="Inbox" active />
+          <NavItem label="Customers" />
+          <NavItem label="Reports" />
+          <NavItem label="Settings" navigateTo="d-settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="Cannot complete checkout"
+          description="#4821 · Maya Chen · Northwind"
+        />
+        <Row gap="none">
+          <Panel>
+            <List>
+              <ListItem
+                label="Cannot complete checkout"
+                meta="Open · Alex Rivera"
+                value="Due in 4m · #4821"
+                selected
+              />
+              <ListItem
+                label="SSO session expires early"
+                meta="Waiting · Lee"
+                value="Waiting 2h · #4818"
+              />
+              <ListItem
+                label="Invoice PDF missing line items"
+                meta="Open · Alex Rivera"
+                value="Due tomorrow · #4802"
+              />
+              <ListItem
+                label="Webhook retries exhausting"
+                meta="Unassigned · Payments"
+                value="Breached by 6m · #4790"
+              />
+              <ListItem
+                label="Export CSV truncates rows"
+                meta="Open · Alex Rivera"
+                value="Due Friday · #4788"
+              />
+            </List>
+          </Panel>
+          <Panel>
+            <Message
+              author="Maya"
+              time="14m"
+              kind="customer"
+              text="Card form freezes on submit in Chrome."
+            />
+            <Message
+              author="Alex"
+              time="8m"
+              kind="agent"
+              text="Thanks - can you share the cart id and browser version?"
+            />
+            <Message
+              author="Maya"
+              time="2m"
+              kind="customer"
+              text="Chrome 128 · cart_9f2a"
+            />
+            <Message
+              author="Alex"
+              time="1m"
+              kind="internal"
+              text="Linked prior freeze #4410. Do not promise an ETA."
+            />
+            <Message
+              author="Priya"
+              time="1m"
+              kind="internal"
+              text="PAY-218 is healthy in canary."
+            />
+            <Message
+              author="Alex"
+              time="Now"
+              kind="agent"
+              text="The rollback is complete. Please retry checkout."
+            />
+            <Message
+              author="Maya"
+              time="Now"
+              kind="customer"
+              text="The form submitted this time."
+            />
+            <Message
+              author="Alex"
+              time="Now"
+              kind="agent"
+              text="Great—I can see the order in processing."
+            />
+            <Message
+              author="Priya"
+              time="Now"
+              kind="internal"
+              text="Keep this open until the order confirms."
+            />
+            <Message
+              author="Alex"
+              time="Now"
+              kind="agent"
+              text="I will watch it through confirmation."
+            />
+            <Message
+              author="Maya"
+              time="Now"
+              kind="customer"
+              text="Thank you."
+            />
+            <Divider />
+            <SegmentedControl>
+              <Button label="Reply" />
+              <Button label="Internal note" emphasis="primary" />
+            </SegmentedControl>
+            <Text
+              text="Internal note · Only your team will see this"
+              role="section"
+            />
+            <TextArea
+              label="Internal note"
+              placeholder="Write an internal note…"
+            />
+            <Button label="Add internal note" emphasis="primary" />
+          </Panel>
+          <Rail>
+            <Stack gap="sm">
+              <Heading text="Properties" level="3" />
+              <Select label="Status" value="Open" />
+              <Select label="Assignee" value="Alex Rivera" />
+              <Select label="Team" value="Payments" />
+              <TextField label="Customer" value="Northwind Labs" />
+              <Text text="Saved just now · Undo" role="helper" />
+            </Stack>
+            <Stack gap="sm">
+              <Heading text="Related" level="3" />
+              <List>
+                <ListItem
+                  label="Prior checkout freeze"
+                  meta="Resolved"
+                  value="#4410"
+                />
+                <ListItem
+                  label="Stripe outage note"
+                  meta="Internal"
+                  value="Doc"
+                />
+              </List>
+            </Stack>
+          </Rail>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="d-inbox"
+    name="Desktop · Inbox"
+    device="desktop"
+
+    url="app.harbor.team/inbox"
+  >
+    <AppShell>
+      <Sidebar brand="Harbor" mode="Acme Support">
+        <Nav label="Global">
+          <NavItem label="Inbox" active />
+          <NavItem label="Customers" />
+          <NavItem label="Reports" />
+          <NavItem label="Settings" navigateTo="d-settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader title="Inbox">
+          <Button
+            label="New ticket"
+            emphasis="primary"
+            navigateTo="d-compose"
+          />
+        </PageHeader>
+        <Row gap="sm" justify="between">
+          <TextField
+            label="Search"
+            kind="search"
+            placeholder="Search tickets"
+          />
+          <Select label="Sort" value="Newest activity" />
+        </Row>
+        <Row gap="sm" justify="between">
+          <Stack gap="xs">
+            <Text text="Saved views" role="section" />
+            <SegmentedControl>
+              <Button label="All 12" emphasis="primary" />
+              <Button label="Mine 4" />
+              <Button label="Unassigned 3" />
+            </SegmentedControl>
+          </Stack>
+          <Row gap="sm">
+            <Text text="Filters" role="section" />
+            <Button label="Waiting ×" emphasis="tertiary" />
+            <Button label="SLA risk ×" emphasis="tertiary" />
+            <Button label="+ Add filter" emphasis="tertiary" />
+          </Row>
+        </Row>
+        <Row gap="none">
+          <Panel>
+            <List>
+              <ListItem
+                label="Cannot complete checkout"
+                meta="Open · Alex Rivera"
+                value="Due in 4m · #4821"
+                selected
+              />
+              <ListItem
+                label="SSO session expires early"
+                meta="Waiting · Lee"
+                value="Waiting 2h · #4818"
+              />
+              <ListItem
+                label="Invoice PDF missing line items"
+                meta="Open · Alex"
+                value="1d · #4802"
+              />
+              <ListItem
+                label="Webhook retries exhausting"
+                meta="Unassigned"
+                value="Breached by 6m · #4790"
+              />
+              <ListItem
+                label="Export CSV truncates rows"
+                meta="Open · Alex"
+                value="4d · #4788"
+              />
+              <ListItem
+                label="Refund double-charged"
+                meta="Priority · Sam"
+                value="5d · #4771"
+              />
+              <ListItem
+                label="API key rotation failed"
+                meta="Waiting"
+                value="6d · #4760"
+              />
+              <ListItem
+                label="Seat limit block"
+                meta="Unassigned"
+                value="1w · #4755"
+              />
+            </List>
+          </Panel>
+          <Rail>
+            <Panel title="Ticket preview">
+              <Badge label="#4821 · Priority" />
+              <Heading text="Cannot complete checkout" level="2" />
+              <Text text="Open · Alex Rivera · Payments" role="helper" />
+              <Text
+                text="Maya Chen · Northwind · Enterprise checkout"
+                role="helper"
+              />
+              <Text
+                text="Latest · Card form freezes on submit in Chrome 128."
+              />
+              <Metric
+                label="First response"
+                value="Due in 4m"
+                note="Enterprise SLA"
+              />
+              <Text text="Recommended next action" role="section" />
+              <Text text="Confirm the rollback, then ask Maya to retry." />
+              <Text
+                text="Suggested from incident PAY-218 and ticket #4410"
+                role="helper"
+              />
+              <Button
+                label="Open conversation"
+                emphasis="secondary"
+                navigateTo="d-ticket"
+              />
+            </Panel>
+          </Rail>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="d-compose"
+    name="Desktop · New ticket"
+    device="desktop"
+
+    url="app.harbor.team/tickets/new"
+  >
+    <AppShell>
+      <Sidebar brand="Harbor" mode="Acme Support">
+        <Nav label="Global">
+          <NavItem label="Inbox" navigateTo="d-inbox" />
+          <NavItem label="Customers" />
+          <NavItem label="Reports" />
+          <NavItem label="Settings" navigateTo="d-settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader title="New ticket">
+          <Button label="Cancel" emphasis="tertiary" navigateTo="d-inbox" />
+        </PageHeader>
+        <Row gap="none">
+          <Panel>
+            <Text text="Ticket facts" role="section" />
+            <Select
+              label="Customer"
+              value="Maya Chen · maya@northwind.example · Northwind Labs"
+            />
+            <TextField
+              label="Subject"
+              value="Cannot complete checkout"
+              placeholder="Short summary the team will scan"
+            />
+            <TextArea
+              label="Description"
+              placeholder="What happened, who is affected, error text…"
+            />
+            <Checkbox
+              label="Email Maya when this ticket is created"
+              checked
+              hint="Sends to maya@northwind.example after creation."
+            />
+          </Panel>
+          <Rail>
+            <Stack gap="sm">
+              <Heading text="Possible duplicates" level="3" />
+              <Text
+                text="86% title match · same checkout symptom · resolved 12 days ago"
+                role="helper"
+              />
+              <List>
+                <ListItem
+                  label="Prior checkout freeze"
+                  meta="Close match"
+                  value="#4410"
+                />
+              </List>
+              <Row gap="sm">
+                <Button label="Review ticket" emphasis="tertiary" />
+                <Button label="Create and link" emphasis="tertiary" />
+                <Button label="Not a duplicate" emphasis="tertiary" />
+              </Row>
+            </Stack>
+            <Stack gap="sm">
+              <Heading text="Recommended routing" level="3" />
+              <Text
+                text="Suggested from ticket #4410 and Payments ownership"
+                role="helper"
+              />
+              <Select label="Priority" value="Normal" />
+              <Select label="Team" value="Payments" />
+              <Select label="Assignee" value="Unassigned" />
+              <Switch label="Watch this ticket" on />
+            </Stack>
+          </Rail>
+        </Row>
+        <Panel surface="filled">
+          <Row gap="sm" align="center" justify="between">
+            <Text
+              text="Creates #4822 and emails maya@northwind.example."
+              role="helper"
+            />
+            <Button
+              label="Create ticket and email Maya"
+              emphasis="primary"
+              navigateTo="d-ticket"
+            />
+          </Row>
+        </Panel>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="d-settings"
+    name="Desktop · Settings"
+    device="desktop"
+
+    url="app.harbor.team/settings/notifications"
+  >
+    <AppShell>
+      <Sidebar brand="Harbor" mode="Acme Support">
+        <Nav label="Global">
+          <NavItem label="Inbox" navigateTo="d-inbox" />
+          <NavItem label="Customers" />
+          <NavItem label="Reports" />
+          <NavItem label="Settings" active />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="Workspace notifications"
+          description="Applies to everyone in Acme Support"
+        />
+        <Panel surface="filled">
+          <Row gap="sm" align="center" justify="between">
+            <Text text="3 unsaved changes" role="section" />
+            <Row gap="sm">
+              <Button label="Discard" emphasis="tertiary" />
+              <Button label="Save notification changes" emphasis="primary" />
+            </Row>
+          </Row>
+        </Panel>
+        <Row gap="none">
+          <Rail>
+            <Panel>
+              <Nav label="Settings">
+                <NavItem label="Notify the team" active />
+                <NavItem label="Set support hours" />
+                <NavItem label="Connect tools" />
+                <NavItem label="Manage teammates" />
+              </Nav>
+            </Panel>
+          </Rail>
+          <Stack gap="md">
+            <Heading text="Notify the team" level="2" />
+            <Text
+              text="Choose which workspace events reach teammates outside Harbor."
+              role="helper"
+            />
+            <Panel surface="filled">
+              <Switch
+                label="Email assignees when tickets are assigned"
+                on
+                hint="On · Emails the newly assigned teammate."
+              />
+            </Panel>
+            <Panel surface="filled">
+              <Switch
+                label="Post to Slack before an SLA breach"
+                on
+                hint="On · Posts 10 minutes before breach. Requires Slack."
+              />
+              <Select
+                label="Post SLA warnings in"
+                value="#support-alerts"
+                hint="Connected · Harbor can post in this channel."
+              />
+            </Panel>
+            <Panel surface="filled">
+              <Switch
+                label="Email a daily ticket summary"
+                hint="Off · No daily email is sent."
+              />
+              <TextField
+                label="Send the daily summary at"
+                value="—"
+                hint="Unavailable until daily summary is on."
+                disabled
+              />
+            </Panel>
+          </Stack>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+</Wireframe>
+
+## Tablet
+
+Same product on landscape tablet.
+Master/detail keeps the queue and ticket context nearby without stretching either across the full canvas.
+
+<Wireframe
+  id="harbor-tablet"
+  title="Harbor on tablet"
+  initialScreen="t-inbox"
+>
+  <Screen
+    id="t-inbox"
+    name="Tablet · Inbox"
+    device="tablet"
+  >
+    <AppShell>
+      <Sidebar brand="Harbor" mode="Acme">
+        <Nav label="Global">
+          <NavItem label="Inbox" active />
+          <NavItem label="Compose" navigateTo="t-compose" />
+          <NavItem label="Settings" navigateTo="t-settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader title="Inbox" description="12 open tickets">
+          <Button
+            label="New ticket"
+            emphasis="primary"
+            navigateTo="t-compose"
+          />
+        </PageHeader>
+        <Row gap="md">
+          <Panel title="Open" surface="filled">
+            <List>
+              <ListItem
+                label="Checkout freeze"
+                meta="Priority · Maya"
+                value="14m"
+                selected
+                navigateTo="t-ticket"
+              />
+              <ListItem
+                label="SSO timeout"
+                meta="Waiting · Lee"
+                value="2h"
+              />
+              <ListItem
+                label="Invoice PDF"
+                meta="Open · Alex"
+                value="1d"
+              />
+              <ListItem
+                label="Webhook retries"
+                meta="Unassigned"
+                value="3d"
+              />
+              <ListItem
+                label="CSV rows missing"
+                meta="Open · Alex"
+                value="4d"
+              />
+            </List>
+          </Panel>
+          <Panel title="Selected ticket">
+            <Badge label="Priority · 14m" tone="warning" />
+            <Heading text="Cannot complete checkout" level="2" />
+            <Text text="Maya Chen · Northwind" role="helper" />
+            <Text text="Card form freezes on submit in Chrome." />
+            <Metric label="First response" value="11m" note="Target: 15m" />
+            <Divider label="Latest exchange" />
+            <Message
+              author="Maya"
+              time="14m"
+              kind="customer"
+              text="The card form freezes as soon as I press submit."
+            />
+            <Message
+              author="Alex"
+              time="8m"
+              kind="agent"
+              text="Please send the cart ID and browser version."
+            />
+            <Button
+              label="Open full ticket"
+              emphasis="secondary"
+              navigateTo="t-ticket"
+            />
+          </Panel>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="t-ticket"
+    name="Tablet · Ticket"
+    device="tablet"
+  >
+    <AppShell>
+      <Sidebar brand="Harbor" mode="Acme">
+        <Nav label="Global">
+          <NavItem label="Inbox" navigateTo="t-inbox" />
+          <NavItem label="Compose" navigateTo="t-compose" />
+          <NavItem label="Settings" navigateTo="t-settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="Cannot complete checkout"
+          description="#4821 · Maya Chen · Northwind"
+          badge="Priority"
+        >
+          <Button label="Back to inbox" emphasis="tertiary" navigateTo="t-inbox" />
+          <Button label="Resolve" emphasis="secondary" />
+        </PageHeader>
+        <Row gap="md">
+          <Panel title="Conversation" surface="filled">
+            <Message
+              author="Maya"
+              time="14m"
+              kind="customer"
+              text="Card form freezes when I submit the checkout page."
+            />
+            <Message
+              author="Alex"
+              time="8m"
+              kind="agent"
+              text="Could you share the cart ID and browser version?"
+            />
+            <Message
+              author="Maya"
+              time="2m"
+              kind="customer"
+              text="cart_9f2a · Chrome 128"
+            />
+            <Divider />
+            <SegmentedControl>
+              <Button label="Reply" emphasis="primary" />
+              <Button label="Internal note" />
+            </SegmentedControl>
+            <TextArea label="Message" placeholder="Write a reply…" />
+            <Button label="Send reply" emphasis="primary" />
+          </Panel>
+          <Rail>
+            <Panel title="Ticket details" surface="outlined">
+              <Select label="Status" value="Open" />
+              <Select label="Assignee" value="Alex Rivera" />
+              <Select label="Team" value="Payments" />
+            </Panel>
+            <Panel title="Related" surface="filled">
+              <List>
+                <ListItem
+                  label="Prior checkout freeze"
+                  meta="Resolved"
+                  value="#4410"
+                />
+              </List>
+            </Panel>
+          </Rail>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="t-compose"
+    name="Tablet · New ticket"
+    device="tablet"
+  >
+    <AppShell>
+      <Sidebar brand="Harbor" mode="Acme">
+        <Nav label="Global">
+          <NavItem label="Inbox" navigateTo="t-inbox" />
+          <NavItem label="Compose" active />
+          <NavItem label="Settings" navigateTo="t-settings" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="New ticket"
+          description="Capture the issue, then route it."
+        >
+          <Button
+            label="Cancel"
+            emphasis="tertiary"
+            navigateTo="t-inbox"
+          />
+        </PageHeader>
+        <Row gap="lg">
+          <Panel title="Ticket details">
+            <Select label="Customer" value="Northwind Labs" />
+            <TextField
+              label="Subject"
+              value="Cannot complete checkout"
+              placeholder="Short summary"
+            />
+            <TextArea
+              label="Description"
+              placeholder="What happened, who is affected, error text…"
+            />
+            <Checkbox
+              label="Send a confirmation email"
+              checked
+              hint="To maya@northwind.example"
+            />
+            <Button
+              label="Create ticket"
+              emphasis="primary"
+              navigateTo="t-ticket"
+            />
+          </Panel>
+          <Rail>
+            <Panel title="Possible match" surface="filled">
+              <List>
+                <ListItem
+                  label="Prior checkout freeze"
+                  meta="Close match"
+                  value="#4410"
+                />
+              </List>
+              <Text
+                text="Review this match before creating the ticket."
+                role="helper"
+              />
+            </Panel>
+            <Panel title="Routing" surface="plain">
+              <Text
+                text="Suggested from similar tickets"
+                role="helper"
+              />
+              <Select label="Team" value="Payments" />
+              <Select label="Assignee" value="Unassigned" />
+            </Panel>
+          </Rail>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="t-settings"
+    name="Tablet · Settings"
+    device="tablet"
+  >
+    <AppShell>
+      <Sidebar brand="Harbor" mode="Acme">
+        <Nav label="Global">
+          <NavItem label="Inbox" navigateTo="t-inbox" />
+          <NavItem label="Settings" active />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="Notification settings"
+          description="Choose when Harbor should interrupt you."
+        >
+          <Button label="Save changes" emphasis="primary" navigateTo="t-inbox" />
+        </PageHeader>
+        <Row gap="lg">
+          <Panel title="Settings" surface="filled">
+            <Nav label="Settings sections">
+              <NavItem label="Notifications" active />
+              <NavItem label="Business hours" />
+              <NavItem label="Integrations" />
+              <NavItem label="Members" />
+            </Nav>
+          </Panel>
+          <Stack gap="lg">
+            <Panel title="Alerts" surface="outlined">
+              <Switch label="Email when a ticket is assigned to me" on />
+              <Switch label="Slack when an SLA is at risk" on />
+              <Text
+                text="Slack alerts go to #support-alerts."
+                role="helper"
+              />
+            </Panel>
+            <Panel title="Morning digest" surface="filled">
+              <Switch label="Send a daily summary" />
+              <TextField
+                label="Digest hour"
+                value="—"
+                hint="Turn on the daily summary to choose a time."
+                disabled
+              />
+            </Panel>
+          </Stack>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+</Wireframe>
+
+## Phone
+
+Triage, reply, and capture - not a compressed desktop.
+Whole-row opens, vertical message timeline, light tab bar with active states, and recovery without permanent explanatory chrome.
+
+### Ticket - design rationale (priority 1)
+
+- **Timeline:** stacked `Message` blocks (customer / agent / internal), body under sender+time.
+- **Composer:** Reply | Internal note segment; **Send reply** / sticky above safe area; attachment affordance; internal mode stays tinted.
+- **Chrome:** `‹ Inbox` back, overflow for resolve/status; **Inbox tab stays active** (came from inbox).
+- **No permanent** undo/draft process copy - snackbar only after send (not drawn as standing helper text).
+
+### Inbox / New / Settings
+
+- Inbox titled **Inbox** with open count; saved views and the active filter share one control group; two-line rows; row is the action.
+- New ticket: sticky **Create ticket**, Cancel, draft on New tab, and separate form, attachment, possible-match, and additional-detail groups.
+- Settings: grouped overview with current values; blocked notifications open an actionable detail; account and workspace actions are distinct.
+
+<Wireframe
+  id="harbor-phone"
+  title="Harbor on phone"
+  initialScreen="m-ticket"
+>
+  <Screen
+    id="m-ticket"
+    name="Phone · Ticket"
+    device="phone"
+
+  >
+    <Stack gap="sm">
+      <TopBar title="#4821">
+        <Button label="‹ Inbox" emphasis="tertiary" navigateTo="m-inbox" />
+        <Button label="•••" emphasis="tertiary" />
+      </TopBar>
+      <Heading text="Cannot complete checkout" level="2" />
+      <Text text="Northwind · Priority · Open" role="helper" />
+      <Message
+        author="Maya"
+        time="14m"
+        kind="customer"
+        text="Card form freezes when I submit the checkout page."
+      />
+      <Message
+        author="Alex"
+        time="8m"
+        kind="agent"
+        text="Could you send the cart ID and browser version?"
+      />
+      <Message
+        author="Maya"
+        time="2m"
+        kind="customer"
+        text="cart_9f2a · Chrome 128"
+      />
+      <Message
+        author="Alex"
+        time="1m"
+        kind="internal"
+        text="Linked prior freeze #4410. Do not promise an ETA."
+      />
+      <Divider />
+      <SegmentedControl>
+        <Button label="Reply" emphasis="primary" />
+        <Button label="Internal note" />
+      </SegmentedControl>
+      <TextArea label="Message" placeholder="Write a reply…" />
+      <Row gap="sm" justify="between">
+        <Button label="Attach" emphasis="tertiary" />
+        <Button label="Send reply" emphasis="primary" />
+      </Row>
+      <BottomBar>
+        <Button label="▤ Inbox" emphasis="primary" navigateTo="m-inbox" />
+        <Button label="＋ New" navigateTo="m-compose" />
+        <Button label="⚙ Settings" navigateTo="m-settings" />
+      </BottomBar>
+    </Stack>
+  </Screen>
+
+  <Screen
+    id="m-inbox"
+    name="Phone · Inbox"
+    device="phone"
+
+  >
+    <Stack gap="sm">
+      <TopBar title="Inbox">
+        <Text text="12 open" role="helper" />
+        <Button label="Avatar" emphasis="tertiary" />
+      </TopBar>
+      <Row gap="sm">
+        <TextField
+          label="Search"
+          kind="search"
+          placeholder="Search tickets"
+        />
+        <Button label="Filter" emphasis="tertiary" />
+      </Row>
+      <Stack gap="xs">
+        <Text text="Saved views" role="section" />
+        <SegmentedControl>
+          <Button label="All 12" emphasis="primary" />
+          <Button label="Mine 4" />
+          <Button label="Unassigned 3" />
+        </SegmentedControl>
+        <Row gap="xs" justify="between">
+          <Text text="Active filter" role="helper" />
+          <Button label="SLA risk · 2 ×" emphasis="tertiary" />
+        </Row>
+      </Stack>
+      <List>
+        <ListItem
+          label="Cannot complete checkout"
+          meta="Northwind · Priority"
+          value="14m · #4821"
+          navigateTo="m-ticket"
+        />
+        <ListItem
+          label="SSO session expires early"
+          meta="Waiting · Lee"
+          value="2h · #4818"
+          navigateTo="m-ticket"
+        />
+        <ListItem
+          label="Invoice PDF missing line items"
+          meta="Mine · Alex"
+          value="1d · #4802"
+          navigateTo="m-ticket"
+        />
+        <ListItem
+          label="Webhook retries exhausting"
+          meta="Unassigned"
+          value="3d · #4790"
+          navigateTo="m-ticket"
+        />
+        <ListItem
+          label="Export CSV truncates rows"
+          meta="Mine · Alex"
+          value="4d · #4788"
+          navigateTo="m-ticket"
+        />
+        <ListItem
+          label="Refund double-charged"
+          meta="Priority · Sam"
+          value="5d · #4771"
+          navigateTo="m-ticket"
+        />
+        <ListItem
+          label="API key rotation failed"
+          meta="Waiting"
+          value="6d · #4760"
+          navigateTo="m-ticket"
+        />
+      </List>
+      <BottomBar>
+        <Button label="▤ Inbox" emphasis="primary" />
+        <Button label="＋ New" navigateTo="m-compose" />
+        <Button label="⚙ Settings" navigateTo="m-settings" />
+      </BottomBar>
+    </Stack>
+  </Screen>
+
+  <Screen
+    id="m-compose"
+    name="Phone · New ticket"
+    device="phone"
+
+  >
+    <Stack gap="xs">
+      <TopBar title="New ticket">
+        <Button label="Cancel" emphasis="tertiary" navigateTo="m-inbox" />
+      </TopBar>
+      <Stack gap="md">
+        <TextField
+          label="Subject"
+          value="Cannot complete checkout"
+          placeholder="What is this about?"
+        />
+        <Select label="Customer" value="Northwind Labs" />
+        <TextArea
+          label="Description"
+          placeholder="What happened?"
+        />
+      </Stack>
+      <Stack gap="md">
+        <Stack gap="xs">
+          <Text text="Attachments" role="section" />
+          <Row gap="sm">
+            <Button label="Attach file" emphasis="tertiary" />
+            <Button label="Use camera" emphasis="tertiary" />
+          </Row>
+        </Stack>
+        <Panel title="Possible match">
+          <List>
+            <ListItem
+              label="Prior checkout freeze"
+              meta="#4410"
+              value="Closed"
+            />
+          </List>
+          <Row gap="sm">
+            <Button label="View" emphasis="tertiary" />
+            <Button label="Link" emphasis="tertiary" />
+            <Button label="Dismiss" emphasis="tertiary" />
+          </Row>
+        </Panel>
+        <Stack gap="xs">
+          <Text text="Additional details" role="section" />
+          <List>
+            <ListItem label="Priority" meta="Normal" value="›" />
+          </List>
+        </Stack>
+      </Stack>
+      <Button
+        label="Create ticket"
+        emphasis="primary"
+        navigateTo="m-ticket"
+      />
+      <BottomBar>
+        <Button label="▤ Inbox" navigateTo="m-inbox" />
+        <Button label="＋ New · draft" emphasis="primary" />
+        <Button label="⚙ Settings" navigateTo="m-settings" />
+      </BottomBar>
+    </Stack>
+  </Screen>
+
+  <Screen
+    id="m-settings"
+    name="Phone · Settings"
+    device="phone"
+
+  >
+    <Stack gap="xs">
+      <TopBar title="Settings" />
+      <Text text="Account" role="section" />
+      <List>
+        <ListItem label="Alex Rivera" meta="alex@acme.com" value="›" />
+        <ListItem
+          label="Switch workspace"
+          meta="Acme Support"
+          value="›"
+        />
+      </List>
+      <Text text="Notifications" role="section" />
+      <Stack gap="xs">
+        <List>
+          <ListItem
+            label="Notifications"
+            meta="Blocked"
+            value="›"
+            navigateTo="m-notifications"
+          />
+        </List>
+        <Text
+          text="Enabled in Harbor; disabled in system Settings."
+          role="helper"
+        />
+      </Stack>
+      <List>
+        <ListItem label="Quiet hours" meta="Off" value="›" />
+      </List>
+      <Text text="Personalization" role="section" />
+      <List>
+        <ListItem label="Appearance" meta="System" value="›" />
+      </List>
+      <Text text="Support" role="section" />
+      <List>
+        <ListItem label="Help and feedback" value="›" />
+      </List>
+      <Text text="About" role="section" />
+      <List>
+        <ListItem
+          label="About Harbor"
+          meta="Version 1.4.0"
+          value="›"
+        />
+      </List>
+      <Stack gap="sm">
+        <Button label="Sign out of Alex Rivera" emphasis="destructive" />
+        <Text
+          text="2 unsent drafts will remain securely on this device."
+          role="helper"
+        />
+      </Stack>
+      <BottomBar>
+        <Button label="▤ Inbox" navigateTo="m-inbox" />
+        <Button label="＋ New" navigateTo="m-compose" />
+        <Button label="⚙ Settings" emphasis="primary" />
+      </BottomBar>
+    </Stack>
+  </Screen>
+
+  <Screen
+    id="m-notifications"
+    name="Phone · Notifications"
+    device="phone"
+
+  >
+    <Stack gap="md">
+      <TopBar title="Notifications">
+        <Button
+          label="‹ Settings"
+          emphasis="tertiary"
+          navigateTo="m-settings"
+        />
+      </TopBar>
+      <Stack gap="xs">
+        <Text text="Delivery status" role="section" />
+        <List>
+          <ListItem
+            label="Push notifications"
+            meta="Blocked by system Settings"
+          />
+        </List>
+        <Text
+          text="Enabled in Harbor; disabled in system Settings. SLA alerts cannot arrive on this phone."
+          role="helper"
+        />
+        <Button label="Open system settings" emphasis="primary" />
+      </Stack>
+      <Stack gap="xs">
+        <Text text="Schedule" role="section" />
+        <List>
+          <ListItem label="Quiet hours" meta="Off" value="›" />
+        </List>
+      </Stack>
+      <BottomBar>
+        <Button label="▤ Inbox" navigateTo="m-inbox" />
+        <Button label="＋ New" navigateTo="m-compose" />
+        <Button
+          label="⚙ Settings"
+          emphasis="primary"
+          navigateTo="m-settings"
+        />
+      </BottomBar>
+    </Stack>
+  </Screen>
+</Wireframe>

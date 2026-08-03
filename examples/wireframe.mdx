@@ -1,0 +1,188 @@
+# Eddy's Wallet Child Experience
+
+A kid-safe wallet gets its own screens, sketched here with `Wireframe` so the shape of the experience is arguable before any of it is built.
+
+## The wallet home
+
+A child opens the app to one question: how much do I have, and how close am I to the thing I am saving for.
+
+Everything else on the screen is secondary, so balance and goal own the widest region and the lesson prompt sits beside them.
+
+<Wireframe
+  id="eddys-wallet"
+  title="Child mode, four screens"
+  initialScreen="child-home"
+>
+  <Screen id="child-home" name="My wallet" device="tablet">
+    <AppShell>
+      <Sidebar brand="Eddy's Wallet" mode="Child mode">
+        <Nav label="Main">
+          <NavItem label="My wallet" active />
+          <NavItem label="Activity" navigateTo="activity" />
+          <NavItem label="My loan" />
+          <NavItem label="Learn" navigateTo="loan-lesson" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader title="Hi, Eddy!">
+          <Button
+            label="✋ Ask a grown-up"
+            emphasis="tertiary"
+            navigateTo="grown-up-help"
+          />
+        </PageHeader>
+        <Row gap="md">
+          <Panel title="Balance & goal" surface="outlined">
+            <Metric
+              label="You have"
+              value="$42.50"
+              note="Next allowance: $5 on Friday"
+            />
+            <Progress
+              label="🎧 Headphones goal"
+              value="61"
+              valueLabel="Only $27.50 to go"
+              detail="$42.50 of $70"
+            />
+          </Panel>
+          <Rail>
+            <Panel title="Recent activity" surface="outlined">
+              <List>
+                <ListItem label="+ $5.00  Weekly allowance" meta="Today" />
+                <ListItem label="− $8.50  Book fair" meta="Friday" />
+                <ListItem label="− $2.00  Headphones goal" meta="Friday" />
+              </List>
+              <Button label="See all" navigateTo="activity" />
+            </Panel>
+            <Panel title="My loan" surface="outlined">
+              <Metric
+                label="Left to repay"
+                value="$12"
+                note="Two Friday payments left"
+              />
+            </Panel>
+            <Panel title="Next lesson" surface="filled">
+              <Text text="Learn how borrowing works →" role="helper" />
+              <Heading text="Borrow now, repay later" level="3" />
+              <Button
+                label="Start lesson"
+                emphasis="primary"
+                navigateTo="loan-lesson"
+              />
+            </Panel>
+          </Rail>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="grown-up-help" name="Ask a grown-up" device="tablet">
+    <Center measure="narrow">
+      <Stack gap="lg" align="center">
+        <Heading text="Let's ask a grown-up" />
+        <Text
+          text="They can help with a purchase, your loan, or anything that feels confusing."
+        />
+        <Panel title="Show them this screen" surface="outlined">
+          <Text text="Eddy has $42.50 available." />
+          <Text text="$12 is left to repay on the current loan." />
+          <Text text="No money moves until a grown-up approves it." />
+        </Panel>
+        <Button
+          label="Back to my wallet"
+          emphasis="primary"
+          navigateTo="child-home"
+        />
+      </Stack>
+    </Center>
+  </Screen>
+
+  <Screen id="activity" name="Activity" device="tablet">
+    <AppShell>
+      <Sidebar brand="Eddy's Wallet" mode="Child mode">
+        <Nav label="Main">
+          <NavItem label="My wallet" navigateTo="child-home" />
+          <NavItem label="Activity" active />
+          <NavItem label="My loan" />
+          <NavItem label="Learn" navigateTo="loan-lesson" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="Activity"
+          description="What came in, what went out, and what you saved."
+        >
+          <Button
+            label="Back to my wallet"
+            emphasis="tertiary"
+            navigateTo="child-home"
+          />
+        </PageHeader>
+        <Row gap="lg">
+          <Panel title="This week">
+            <List>
+              <ListItem label="+ $5.00  Weekly allowance" meta="Today" />
+              <ListItem label="− $8.50  Book fair" meta="Friday" />
+              <ListItem
+                label="− $2.00  Headphones goal"
+                meta="Friday"
+                selected
+              />
+              <ListItem label="− $6.00  Loan payment" meta="Last Friday" />
+              <ListItem label="+ $5.00  Weekly allowance" meta="Last Friday" />
+            </List>
+            <Divider label="Earlier" />
+            <Text text="Nothing else this month." role="muted" />
+          </Panel>
+          <Rail>
+            <Panel title="Headphones goal" surface="filled">
+              <Progress
+                label="$42.50 of $70"
+                value="61"
+                valueLabel="$27.50 to go"
+                detail="You're more than halfway there"
+              />
+            </Panel>
+          </Rail>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen id="loan-lesson" name="Loan lesson" device="tablet">
+    <Center measure="narrow">
+      <Stack gap="md">
+        <Stepper>
+          <Step label="Meet loans" state="done" />
+          <Step label="Borrow & repay" state="current" />
+          <Step label="Try it" />
+        </Stepper>
+        <Text text="Lesson 3 of 6" role="helper" />
+        <Heading text="Borrow now, repay later" />
+        <Panel title="What a loan is" surface="outlined">
+          <ImagePlaceholder
+            label="Doodle: two kids and a skateboard"
+            shape="wide"
+          />
+          <Text text="Someone helps you buy something now." />
+          <Text text="You pay them back a little at a time." />
+          <Text text="Your $12 loan takes two more Fridays to repay." />
+        </Panel>
+        <Row gap="sm" justify="between">
+          <Button label="Back to my wallet" emphasis="tertiary" navigateTo="child-home" />
+          <Button
+            label="I understand"
+            emphasis="primary"
+            navigateTo="child-home"
+          />
+        </Row>
+      </Stack>
+    </Center>
+  </Screen>
+</Wireframe>
+
+## Why four screens
+
+The lesson and grown-up handoff are the two places the child leaves the wallet, so the prototype walks both paths and returns.
+
+A reviewer can click through it here rather than imagining it, which is the whole point of drawing it at all.

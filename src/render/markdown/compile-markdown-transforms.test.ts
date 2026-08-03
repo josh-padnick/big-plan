@@ -31,6 +31,38 @@ describe("compileMarkdown tables", () => {
     const wrappers = bodyHtml.match(/data-table-scroll-container/g) ?? [];
     expect(wrappers).toHaveLength(1);
   });
+
+  it("should keep Wireframe tables inside the artboard while wrapping document tables", () => {
+    const bodyHtml = compileAndSerialize(`
+| Document |
+| -------- |
+| Row      |
+
+<Wireframe id="table">
+  <Screen id="home" name="Home" device="desktop">
+    <Table>
+
+\`\`\`text
+Run | Result
+#1042 | Failed
+\`\`\`
+
+    </Table>
+  </Screen>
+</Wireframe>
+`);
+    const tables = bodyHtml.match(/<table(?:\s|>)/g) ?? [];
+    const wireframeStart = bodyHtml.indexOf('<figure class="wireframe"');
+    expect(tables).toHaveLength(2);
+    expect(wireframeStart).toBeGreaterThan(0);
+    expect(bodyHtml.slice(0, wireframeStart)).toContain(
+      "data-table-scroll-container",
+    );
+    expect(bodyHtml.slice(wireframeStart)).not.toContain(
+      "data-table-scroll-container",
+    );
+    expect(bodyHtml.slice(wireframeStart)).toContain('class="wireframe-table"');
+  });
 });
 
 describe("compileMarkdown code highlighting", () => {

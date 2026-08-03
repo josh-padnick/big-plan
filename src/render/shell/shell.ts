@@ -43,22 +43,26 @@ export type ShellResult = {
 const BODY_CLASSES =
   "bg-paper font-sans text-base leading-[1.65] text-ink antialiased";
 
-// Stacked reading layout below the wide breakpoint; sidebar plus one reading
-// column (~74ch) above it. The no-TOC variant is always a single column.
+// Stacked reading layout below the wide breakpoint; sidebar plus one content
+// column above it. The wide column contains a standard desktop wireframe
+// through nested card chrome, while prose holds its own narrower measure.
 const LAYOUT_CLASSES =
   "grid grid-cols-[minmax(0,1fr)] justify-center gap-8 px-5 pt-16 pb-16 wide:gap-14 wide:px-6 wide:pt-12 wide:pb-20";
-const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,74ch)]`;
-const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,74ch)]`;
+const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,54.5rem)]`;
+const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,54.5rem)]`;
 
 // Active links change color and border only, never weight, so highlighting
-// can never re-wrap a label. Entries grouped under a part header indent one
-// step so the header reads as their parent.
+// can never re-wrap a label. Entries grouped under a part header carry the
+// rule and the inset that make them read as its children.
 const TOC_LINK_CLASSES =
   "block border-l-2 border-edge px-3 py-[0.3rem] leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
 const TOC_GROUPED_LINK_CLASSES =
-  "block border-l-2 border-edge py-[0.3rem] pr-3 pl-5 leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
+  "block border-l-2 border-edge py-[0.3rem] pr-3 pl-3.5 leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
+// A part header is a heading over the entries beneath it, not one of them, so
+// it sits flush with the Contents label rather than sharing the rule and inset
+// its section links use.
 const TOC_PART_HEADER_CLASSES =
-  "mt-3 mb-1 block border-l-2 border-transparent px-3 text-[0.6875rem] font-bold tracking-[0.1em] uppercase text-accent hover:text-ink";
+  "mt-3 mb-1 block pr-3 text-[0.6875rem] font-bold tracking-[0.1em] uppercase text-accent hover:text-ink";
 const MOBILE_TOC_LINK_CLASSES =
   "block border-l-2 border-transparent px-5 py-2.5 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
 const MOBILE_TOC_GROUPED_LINK_CLASSES =
@@ -217,26 +221,31 @@ ${items}
  */
 export const renderShell = ({
   nav,
+  title,
   contentIds,
   contentHtml,
 }: {
   readonly nav: ReadonlyArray<NavEntry>;
+  // The plan's own title, shown quietly in the bar so a reader deep in a long
+  // document can still see which plan they are in.
+  readonly title: string;
   readonly contentIds: ReadonlyArray<string>;
   readonly contentHtml: string;
 }): ShellResult => {
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
-<div class="flex h-full items-center px-5 wide:px-6">
+<div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-5 wide:px-6">
 <a class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
+<p class="truncate text-center text-sm leading-none text-muted" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</p>
 ${renderCommentDraftControl()}
 </div>
 </header>
 ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
-<div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}">
+<div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
 ${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
 <main class="min-w-0" id="${overviewId}">
 <article>

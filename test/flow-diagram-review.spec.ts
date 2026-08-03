@@ -177,11 +177,22 @@ test("should preserve a panned canvas when feedback repaints it", async ({
 
   await diagram.locator("[data-figure-maximize]").click();
   await expect(diagram).toHaveAttribute("data-figure-maximized", "");
+  // Maximizing schedules fit-to-viewport on the next frame. Let that product
+  // transition settle before synthesizing the user's later pan gesture.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  const fittedTransform = await sizer.evaluate(
+    (element) => (element as HTMLElement).style.transform,
+  );
   await viewport.dispatchEvent("wheel", { deltaX: 40, deltaY: 30 });
   const pannedTransform = await sizer.evaluate(
     (element) => (element as HTMLElement).style.transform,
   );
-  expect(pannedTransform).not.toBe(initialTransform);
+  expect(pannedTransform).not.toBe(fittedTransform);
 
   await node.click();
   await diagram.locator('[data-flow-action="comment"]').click();
