@@ -58,6 +58,19 @@ const findStylesheets = async (sourceRoot) => {
   return stylesheets.sort();
 };
 
+/** Distinguishes an escaped quote from one after a literal backslash pair. */
+const isEscaped = ({ value, index }) => {
+  let backslashCount = 0;
+  for (
+    let previous = index - 1;
+    previous >= 0 && value[previous] === "\\";
+    previous -= 1
+  ) {
+    backslashCount += 1;
+  }
+  return backslashCount % 2 === 1;
+};
+
 /** Consumes one balanced attribute or functional-pseudo segment. */
 const consumeBalanced = ({ selector, start, open, close }) => {
   let depth = 0;
@@ -65,7 +78,7 @@ const consumeBalanced = ({ selector, start, open, close }) => {
   for (let index = start; index < selector.length; index += 1) {
     const character = selector[index];
     if (quote !== undefined) {
-      if (character === quote && selector[index - 1] !== "\\") {
+      if (character === quote && !isEscaped({ value: selector, index })) {
         quote = undefined;
       }
       continue;
@@ -135,9 +148,11 @@ const isRootPrimitiveRule = (rule) => {
   ) {
     return false;
   }
-  const declarations = rule.nodes?.filter((node) => node.type === "decl");
+  const declarations = [];
+  rule.walkDecls((declaration) => {
+    declarations.push(declaration);
+  });
   return (
-    declarations !== undefined &&
     declarations.length > 0 &&
     declarations.every(
       (declaration) =>

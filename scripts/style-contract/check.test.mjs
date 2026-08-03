@@ -33,6 +33,7 @@ test("should accept ordinary, primitive, and explained override rules", async ()
 @layer theme, base, components, utilities, bp-state;
 :root { --color-example: red; color-scheme: light dark; }
 :root[data-theme="dark"]:not([data-print]) { --color-example: blue; }
+:root[data-value="\\\\"] { --color-example: green; }
 @layer components { .generated-child { color: var(--color-example); } }
 @layer bp-state {
   /* Override invariant: collapsed display beats the resting display utility. */
@@ -41,6 +42,21 @@ test("should accept ordinary, primitive, and explained override rules", async ()
 `,
   });
   assert.deepEqual(failures, []);
+});
+
+test("should reject presentation nested below a root primitive rule", async () => {
+  const failures = await checkSource({
+    "render/global.css": `${HEADER}
+@layer theme, base, components, utilities, bp-state;
+:root {
+  --color-example: red;
+  @media (width > 1px) {
+    color: red;
+  }
+}
+`,
+  });
+  assert.match(failures.join("\n"), /presentation rule is unlayered/);
 });
 
 test("should report missing reasons, unlayered rules, unknown layers, and unexplained overrides", async () => {
