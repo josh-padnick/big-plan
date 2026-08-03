@@ -169,6 +169,45 @@ test("should isolate nested weighted DecisionAnalysis calculations", async ({
   await expect(innerPercent).toHaveText(innerBefore ?? "");
 });
 
+test("should preserve native listitem and rowheader roles on review targets", async ({
+  page,
+  decisionViewerUrl,
+  quickDecisionViewerUrl,
+  decisionAnalysisViewerUrl,
+}) => {
+  await page.goto(decisionViewerUrl);
+  const decisionRows = page.locator("[data-decision-rows]").first();
+  await expect(decisionRows.getByRole("listitem")).toHaveCount(2);
+  await expect(
+    decisionRows
+      .getByRole("listitem")
+      .first()
+      .locator('[data-decision-element="consideration"]'),
+  ).toHaveCount(2);
+
+  await page.goto(quickDecisionViewerUrl);
+  const quickOptions = page
+    .locator("[data-decision-component=QuickDecision]")
+    .first()
+    .locator(".decision-brief-list");
+  await expect(quickOptions.getByRole("listitem")).toHaveCount(2);
+
+  await page.goto(decisionAnalysisViewerUrl);
+  const matrix = page
+    .locator("[data-decision-component=DecisionAnalysis]")
+    .first()
+    .locator(".decision-matrix-keyed");
+  const rowHeader = matrix
+    .getByRole("rowheader", {
+      name: "Criterion: Anchor integrity. Review target.",
+    })
+    .first();
+  await expect(rowHeader).toHaveAttribute(
+    "data-decision-anchor",
+    "component/DecisionAnalysis#1/criterion/anchor-integrity",
+  );
+});
+
 test("should comment on each Decision-family component and a meaningful child", async ({
   page,
   decisionViewerUrl,

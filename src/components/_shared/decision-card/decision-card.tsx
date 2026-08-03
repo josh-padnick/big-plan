@@ -215,6 +215,7 @@ const Reversibility = ({ model }: { readonly model: CompiledDecisionCard }) => {
         anchor: reversibility.anchor,
         kind: "reversibility",
         name: `Reversibility: ${reversibility.rating.replace("-", " ")}`,
+        reviewRole: "group",
       })}
     >
       <p className="m-0 text-xs font-semibold tracking-wide text-muted uppercase">

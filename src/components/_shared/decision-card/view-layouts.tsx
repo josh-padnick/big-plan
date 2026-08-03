@@ -57,6 +57,7 @@ const Recommended = ({ model }: { readonly model: CompiledDecisionCard }) => (
       anchor: model.recommendationAnchor,
       kind: "recommendation",
       name: "Recommendation",
+      reviewRole: "group",
     })}
   >
     <BadgePill label="Recommended" classNames={["badge-pill-quiet"]} />
@@ -167,6 +168,7 @@ export const RowsLayout = ({
                           anchor: consideration.anchor,
                           kind: "consideration",
                           name: `${option.title} on ${criterion.title}`,
+                          reviewRole: "group",
                         })}
                       >
                         <span className="decision-row-dimension font-semibold text-ink">

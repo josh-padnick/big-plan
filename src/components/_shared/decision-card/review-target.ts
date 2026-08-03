@@ -14,16 +14,18 @@ export const decisionReviewTarget = ({
   kind,
   name,
   entry = false,
+  reviewRole,
 }: {
   readonly anchor: string;
   readonly kind: DecisionElementKind;
   readonly name: string;
   readonly entry?: boolean;
+  readonly reviewRole?: "group";
 }) => ({
   [DECISION_ANCHOR_ATTRIBUTE]: anchor,
   [DECISION_ELEMENT_ATTRIBUTE]: kind,
   [DECISION_NAME_ATTRIBUTE]: name,
-  role: "group",
+  ...(reviewRole === undefined ? {} : { role: reviewRole }),
   tabIndex: entry ? 0 : -1,
   "aria-label": `${name}. Review target.`,
 });
