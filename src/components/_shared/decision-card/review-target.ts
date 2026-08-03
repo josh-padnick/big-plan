@@ -27,5 +27,5 @@ export const decisionReviewTarget = ({
   [DECISION_NAME_ATTRIBUTE]: name,
   ...(reviewRole === undefined ? {} : { role: reviewRole }),
   tabIndex: entry ? 0 : -1,
-  "aria-label": `${name}. Review target.`,
+  "aria-description": "Review target.",
 });

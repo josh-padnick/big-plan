@@ -152,6 +152,10 @@ const renderFlowElement = ({
     });
   }
   const attributes = normalizeAttributes({ node, diagnostics });
+  const ordinal =
+    definition === undefined || name === null
+      ? undefined
+      : ids.nextOrdinal({ component: name });
   const scopedChildren = renderChildren({
     parent: node,
     scopedDefinitions: definition?.scopedChildren,
@@ -174,6 +178,7 @@ const renderFlowElement = ({
     position: node.position,
     diagnostics,
     ids,
+    ...(ordinal === undefined ? {} : { ordinal }),
   });
   if (name !== null && delivery.collected !== undefined) {
     delivery.collected.push({

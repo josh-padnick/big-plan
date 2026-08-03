@@ -169,7 +169,7 @@ test("should isolate nested weighted DecisionAnalysis calculations", async ({
   await expect(innerPercent).toHaveText(innerBefore ?? "");
 });
 
-test("should preserve native listitem and rowheader roles on review targets", async ({
+test("should preserve native roles and names while describing review targets", async ({
   page,
   decisionViewerUrl,
   quickDecisionViewerUrl,
@@ -198,14 +198,28 @@ test("should preserve native listitem and rowheader roles on review targets", as
     .first()
     .locator(".decision-matrix-keyed");
   const rowHeader = matrix
-    .getByRole("rowheader", {
-      name: "Criterion: Anchor integrity. Review target.",
-    })
+    .locator('[data-decision-element="criterion"]')
     .first();
   await expect(rowHeader).toHaveAttribute(
     "data-decision-anchor",
     "component/DecisionAnalysis#1/criterion/anchor-integrity",
   );
+  await expect(rowHeader).toHaveRole("rowheader");
+  await expect(rowHeader).toMatchAriaSnapshot(`
+    - rowheader:
+      - group: Anchor integrity
+  `);
+  await expect(rowHeader).not.toHaveAttribute("aria-label", /.+/u);
+  await expect(rowHeader).toHaveAccessibleDescription("Review target.");
+
+  const cell = matrix.locator('[data-decision-element="cell"]').first();
+  await expect(cell).toHaveRole("cell");
+  await expect(cell).toMatchAriaSnapshot(`
+    - cell:
+      - group: Strong
+  `);
+  await expect(cell).not.toHaveAttribute("aria-label", /.+/u);
+  await expect(cell).toHaveAccessibleDescription("Review target.");
 });
 
 test("should comment on each Decision-family component and a meaningful child", async ({
@@ -231,6 +245,9 @@ test("should comment on each Decision-family component and a meaningful child", 
     await compose.getByRole("button", { name: "Comment", exact: true }).click();
     const marker = target.locator(":scope > [data-decision-comment-marker]");
     await expect(marker).toBeVisible();
+    await expect(target).toHaveAccessibleDescription(
+      "Review target. 1 comment.",
+    );
     const [targetBox, markerBox] = await Promise.all([
       target.boundingBox(),
       marker.boundingBox(),

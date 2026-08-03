@@ -617,6 +617,7 @@ export const compileDecisionAnalysisComponent = ({
   position,
   diagnostics,
   ids = createComponentIdAllocator(),
+  ordinal,
 }: ComponentCompilerInput): CompiledDecisionCard => {
   const validated = validateComponentAttributes({
     component: "DecisionAnalysis",
@@ -628,7 +629,7 @@ export const compileDecisionAnalysisComponent = ({
   const question = validated.question ?? "";
   const anchor = decisionFigureAnchor({
     component: "DecisionAnalysis",
-    ordinal: ids.nextOrdinal({ component: "DecisionAnalysis" }),
+    ordinal: ordinal ?? ids.nextOrdinal({ component: "DecisionAnalysis" }),
   });
   const state = validated.state ?? "proposed";
   const interaction = validated.interaction ?? "audit";

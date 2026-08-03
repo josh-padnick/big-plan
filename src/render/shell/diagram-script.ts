@@ -759,34 +759,41 @@ export const DIAGRAM_SCRIPT = `
     node.setAttribute("data-flow-proposed", current.join(" "));
   };
 
-  const baseName = new WeakMap();
-  const restateName = (node, suffix) => {
-    if (!baseName.has(node)) baseName.set(node, node.getAttribute("aria-label") || "");
-    node.setAttribute("aria-label", (node.getAttribute("aria-label") || "") + suffix);
+  const baseAccessibleText = new WeakMap();
+  const accessibleTextAttribute = (node) =>
+    isDecision(node) ? "aria-description" : "aria-label";
+  const restateAccessibleText = (node, suffix) => {
+    const attribute = accessibleTextAttribute(node);
+    if (!baseAccessibleText.has(node)) {
+      baseAccessibleText.set(node, node.getAttribute(attribute) || "");
+    }
+    node.setAttribute(attribute, (node.getAttribute(attribute) || "") + suffix);
   };
-  const resetNames = () => {
+  const resetAccessibleText = () => {
     for (const scope of reviewScopes) {
       for (const node of targetsIn(scope)) {
-        if (baseName.has(node)) node.setAttribute("aria-label", baseName.get(node));
+        if (baseAccessibleText.has(node)) {
+          node.setAttribute(accessibleTextAttribute(node), baseAccessibleText.get(node));
+        }
       }
     }
   };
 
   const paint = () => {
     clearLayer();
-    resetNames();
+    resetAccessibleText();
     for (const draft of drafts) {
       if (draft.kind !== "remove-element") continue;
       if (showingOriginal(draft.diagram)) continue;
       const node = draft.element;
       addProposedState(node, "removed");
-      restateName(node, ", proposed for removal");
+      restateAccessibleText(node, ", proposed for removal");
       const diagram = node.closest("[data-flow-diagram]");
       const gone = removedNodeIdsFor(node);
       if (kindOf(node) !== "edge" && diagram) {
         for (const edge of incidentEdges(diagram, gone)) {
           addProposedState(edge, "removed-incident");
-          restateName(edge, ", touches an element proposed for removal");
+          restateAccessibleText(edge, ", touches an element proposed for removal");
         }
         for (const stub of diagram.querySelectorAll("[data-flow-stub-from]")) {
           if (gone.indexOf(stub.getAttribute("data-flow-stub-from")) !== -1) {
@@ -809,7 +816,7 @@ export const DIAGRAM_SCRIPT = `
       if (!field) continue;
       field.textContent = draft.after;
       field.setAttribute("data-flow-edited", "");
-      restateName(draft.element, ", edited from " + quote(draft.before));
+      restateAccessibleText(draft.element, ", edited from " + quote(draft.before));
       // The original is a clone of the field's own tag and classes, so it
       // renders in the same face and size as the text it sits beside - a
       // monospace identifier's original stays monospace. It is always shown,
@@ -829,7 +836,12 @@ export const DIAGRAM_SCRIPT = `
     for (const entry of counts) {
       const subject = entry[0];
       const count = entry[1];
-      restateName(subject, count === 1 ? ", 1 comment" : ", " + count + " comments");
+      restateAccessibleText(
+        subject,
+        isDecision(subject)
+          ? count === 1 ? " 1 comment." : " " + count + " comments."
+          : count === 1 ? ", 1 comment" : ", " + count + " comments",
+      );
       // The document already uses MessageSquare for comments. Repeating that
       // glyph at the subject makes the saved comment visible without making
       // every untouched element carry permanent review chrome.

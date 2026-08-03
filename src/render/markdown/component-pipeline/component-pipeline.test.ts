@@ -189,6 +189,43 @@ describe("scoped child dispatch", () => {
     expect(serializeHtml({ root })).toBe("<section>React outer</section>");
   });
 
+  it("should reserve component ordinals in authored preorder", () => {
+    type OrdinalFixtureModel = {
+      readonly ordinal: number | undefined;
+      readonly children: ReadonlyArray<ElementContent>;
+    };
+    const compile = ({ ordinal, children }: ComponentCompilerInput) => ({
+      ordinal,
+      children,
+    });
+    const OrdinalFixture = ({
+      model,
+    }: {
+      readonly model: OrdinalFixtureModel;
+    }) =>
+      createElement(
+        "section",
+        { "data-ordinal": model.ordinal },
+        hastContentToReact(model.children),
+      );
+    const registry = {
+      OrdinalFixture: defineComponent({
+        compile,
+        view: OrdinalFixture,
+      }),
+    } satisfies ComponentRegistry;
+
+    const { root, diagnostics } = compileWithRegistry({
+      markdown: "<OrdinalFixture>\n<OrdinalFixture />\n</OrdinalFixture>\n",
+      registry,
+    });
+
+    expect(diagnostics).toEqual([]);
+    expect(serializeHtml({ root })).toBe(
+      '<section data-ordinal="1"><section data-ordinal="2"></section></section>',
+    );
+  });
+
   it("should compile once without adapting React for model delivery", () => {
     const compile = vi.fn(() => ({ value: "compiled" }));
     const View = () => createElement("section", null, "React view");

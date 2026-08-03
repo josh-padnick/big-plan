@@ -129,6 +129,8 @@ export type ComponentCompilerInput = {
   readonly position: NodePosition;
   readonly diagnostics: DiagnosticCollector;
   readonly ids?: ComponentIdAllocator;
+  /** The component's 1-based authored position among components of its name. */
+  readonly ordinal?: number;
 };
 
 /** Compiles one authored component into a framework-free plan model. */

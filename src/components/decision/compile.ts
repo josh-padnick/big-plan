@@ -214,6 +214,7 @@ export const compileDecisionComponent = ({
   position,
   diagnostics,
   ids = createComponentIdAllocator(),
+  ordinal,
 }: ComponentCompilerInput): CompiledDecisionCard => {
   const validated = validateComponentAttributes({
     component: "Decision",
@@ -225,7 +226,7 @@ export const compileDecisionComponent = ({
   const question = validated.question ?? "";
   const anchor = decisionFigureAnchor({
     component: "Decision",
-    ordinal: ids.nextOrdinal({ component: "Decision" }),
+    ordinal: ordinal ?? ids.nextOrdinal({ component: "Decision" }),
   });
   const id = ids.allocate({
     prefix: "decision",

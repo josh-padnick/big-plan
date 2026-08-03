@@ -94,6 +94,7 @@ export const compileQuickDecisionComponent = ({
   position,
   diagnostics,
   ids = createComponentIdAllocator(),
+  ordinal,
 }: ComponentCompilerInput): CompiledDecisionCard => {
   const validated = validateComponentAttributes({
     component: "QuickDecision",
@@ -113,7 +114,7 @@ export const compileQuickDecisionComponent = ({
   const question = validated.question ?? "";
   const anchor = decisionFigureAnchor({
     component: "QuickDecision",
-    ordinal: ids.nextOrdinal({ component: "QuickDecision" }),
+    ordinal: ordinal ?? ids.nextOrdinal({ component: "QuickDecision" }),
   });
   const id = ids.allocate({
     prefix: "quick-decision",

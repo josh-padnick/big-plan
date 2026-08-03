@@ -89,4 +89,24 @@ Broad.
       render(source("Canary").replace('id="global"', 'id="canary"')),
     ).toThrow(MarkdownDiagnosticsError);
   });
+
+  it("should address nested Decisions in authored preorder", () => {
+    const html = render(`<Decision question="Outer?">
+
+<Decision question="Inner?">
+<Option title="Inner A" />
+<Option title="Inner B" />
+</Decision>
+
+<Option title="Outer A" />
+<Option title="Outer B" />
+</Decision>`);
+
+    expect(
+      html.match(/data-decision-anchor="component\/Decision#\d+"/gu),
+    ).toEqual([
+      'data-decision-anchor="component/Decision#1"',
+      'data-decision-anchor="component/Decision#2"',
+    ]);
+  });
 });
