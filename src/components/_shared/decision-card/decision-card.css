@@ -1,4 +1,5 @@
-/* Shared decision-card comparison, selection, proposal, and answer styles.
+/* CSS escape hatch: this shared visual primitive owns decision-card
+   comparison, selection, proposal, and answer styles.
 
    Two invariants drive most of the rules below.
 
@@ -634,26 +635,28 @@
   }
 }
 
-/* The matrix earns its horizontal scroll below the reading breakpoint, where
-   three option columns cannot fit; the hint appears exactly there. */
-@media (width < 56rem) {
-  article .decision-scroll-note {
-    display: block;
+@layer components {
+  /* The matrix earns its horizontal scroll below the reading breakpoint, where
+     three option columns cannot fit; the hint appears exactly there. */
+  @media (width < 56rem) {
+    article .decision-scroll-note {
+      display: block;
+    }
+    article .decision-matrix {
+      min-width: 34rem;
+    }
   }
-  article .decision-matrix {
-    min-width: 34rem;
-  }
-}
 
-/* A row keeps its two-column scan line while the option has enough room.
-   Below phone width, stacking the verdict under its label preserves every
-   word instead of squeezing or clipping the value beside the radio gutter. */
-@media (width < 36rem) {
-  article .decision-row-line {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
-  article .decision-row-line .decision-verdict {
-    padding-left: 0.75rem;
+  /* A row keeps its two-column scan line while the option has enough room.
+     Below phone width, stacking the verdict under its label preserves every
+     word instead of squeezing or clipping the value beside the radio gutter. */
+  @media (width < 36rem) {
+    article .decision-row-line {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+    article .decision-row-line .decision-verdict {
+      padding-left: 0.75rem;
+    }
   }
 }

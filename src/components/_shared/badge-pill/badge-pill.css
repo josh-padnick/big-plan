@@ -1,7 +1,8 @@
-/* Shared badge-pill variants. A palette variant belongs to whichever card
-   uses it, except this one: every decision card marks its recommendation the
-   same way, and that way has to be the same everywhere or the family teaches
-   two different meanings for one word. */
+/* CSS escape hatch: this shared visual primitive keeps recommendation badges
+   consistent across decision cards. A palette variant belongs to whichever
+   card uses it, except this one: every decision card marks its recommendation
+   the same way, and that way has to be the same everywhere or the family
+   teaches two different meanings for one word. */
 
 @layer components {
   /* The quiet chip states a suggestion without competing with a selection.
