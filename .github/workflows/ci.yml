@@ -1,5 +1,5 @@
-# CI: lint, build, and unit-test every pushed branch, including main and
-# same-repository PR heads.
+# CI: lint, build, unit-test, and browser-test every pushed branch, including
+# main and same-repository PR heads.
 name: CI
 
 # Runs on every push to every branch; the run on a PR's head commit shows up

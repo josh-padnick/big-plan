@@ -269,9 +269,8 @@ Edit authored inputs, run their generator, and never hand-edit generated output.
 Generated files carry `.generated.` in their name and are committed beside the source change so the repository remains scannable without a build.
 
 - `src/render/global.css` and its imported styles are authored inputs to the generated embedded stylesheet.
-- [`assets/fonts/README.md`](assets/fonts/README.md) owns bundled typeface inputs, licensing, and their generated stylesheet.
 - Logos and favicons under `assets/` are authored inputs to the generated embedded branding module.
-- Typefaces under `assets/fonts/` are authored inputs to the generated embedded `@font-face` stylesheet; that directory's local map owns the licensing record every bundled face needs.
+- Font binaries under `assets/fonts/` are authored inputs to the generated embedded `@font-face` stylesheet; [`assets/fonts/README.md`](assets/fonts/README.md) owns their licensing record.
 
 The root README owns generation commands; CI detects drift.
 

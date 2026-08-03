@@ -29,5 +29,5 @@ The verifier's diagnostics own the manifest's enforced schema.
 See [AGENTS.md](AGENTS.md) for architecture and engineering rules, and [README.md](README.md) for development commands.
 
 Wireframe changes must also pass the rendered geometry fence in `test/wireframe-quality.spec.ts`.
-That browser check renders the proof document at each declared device size and rejects cramped panes, overlapping regions, dead layout bands, and device-shell mismatches.
+That browser check renders the proof and form-factor showcase documents at their declared device sizes and rejects cramped panes, overlapping regions, dead layout bands, and device-shell mismatches.
 Run it alone with `bun run test:e2e -- test/wireframe-quality.spec.ts`.

@@ -113,8 +113,8 @@ Tablet screens reject `url`.
 Phone screens reject `url`, `AppShell`, and `Sidebar`; use `TopBar`, a single content column, and `BottomBar` instead.
 
 `navigateTo` on `Button`, `NavItem`, `ListItem`, or `Crumb` must name another screen in the same wireframe.
-The compiler blocks multiple page-level jobs, equal flexible thirds on desktop, ambiguous record-detail selection, four or more outlined sibling panels, phone desktop-shell primitives, more than one filled work action per screen, and ambiguous Stepper progress.
-A `ChoiceGroup` is the mechanically owned simple-decision path: it holds two to five `ChoiceCard`s, starts unselected on the initial screen, gives every option its own destination that visibly selects the same title and consequence, reveals a short primary continuation only after selection, and cannot share a tablet row with a competing region.
+The compiler blocks multiple `PageHeader`s on one screen, equal flexible thirds on desktop, ambiguous record-detail selection, four or more outlined sibling panels, phone desktop-shell primitives, more than one filled work action per screen, and ambiguous Stepper progress.
+A `ChoiceGroup` is the mechanically owned simple-decision path: it holds two to five `ChoiceCard`s, starts unselected on the initial screen, gives every option its own destination that visibly selects the same title and consequence, reveals a primary continuation only after selection, and cannot share a tablet row with a competing region.
 A Stepper must contain exactly one current step in `done` → `current` → `todo` order, while each Step label names only the task because the primitive draws its own number or completion mark.
 A composer's Send button counts as a filled action even when it omits `emphasis="primary"`; selected buttons inside `SegmentedControl` and `BottomBar` are mode or navigation state and do not count as filled work actions.
 On desktop, a direct workspace `Row` derives flexible minmax-style columns: a record collection becomes the bounded comparison pane, `Rail` owns secondary width, and the remaining surface becomes dominant.

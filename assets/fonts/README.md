@@ -4,7 +4,7 @@ Start with the [agent guide](../../AGENTS.md); the root [README](../../README.md
 
 This directory owns the bundled typefaces a rendered document embeds.
 A rendered document makes zero external requests, so any typeface it uses ships inside it.
-Every file here is an authored input to `scripts/gen-fonts.mjs`; the generated stylesheet is a derived output.
+Each bundled font binary is an authored input to `scripts/gen-fonts.mjs`; the generated stylesheet is a derived output.
 
 Add a typeface only when a component's visual language genuinely needs letterforms the reader's system cannot supply, and only under a license that permits embedding and redistribution.
 Record it below with its license, its source, and the character range it covers, so the licensing question never has to be re-answered from the binary.

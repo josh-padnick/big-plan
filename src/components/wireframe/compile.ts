@@ -730,8 +730,7 @@ const checkOneFilledAction = ({
     nodes: ReadonlyArray<WireframeNode>,
   ): ReadonlyArray<WireframeNode> =>
     workActionButtons(nodes).filter(
-      (node) =>
-        node.element === "Button" && /^send(?:\s|$)/iu.test(node.label),
+      (node) => node.element === "Button" && /^send(?:\s|$)/iu.test(node.label),
     );
   const markComposerSends = ({
     nodes,
@@ -751,7 +750,10 @@ const checkOneFilledAction = ({
     for (const node of nodes) {
       const children = childNodes(node);
       if (children.length > 0) {
-        markComposerSends({ nodes: children, ancestors: [nodes, ...ancestors] });
+        markComposerSends({
+          nodes: children,
+          ancestors: [nodes, ...ancestors],
+        });
       }
     }
   };
