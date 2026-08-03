@@ -364,6 +364,7 @@ export const compileFlowDiagramComponent = ({
   position,
   diagnostics,
   ids,
+  ordinal,
 }: ComponentCompilerInput): CompiledFlowDiagram => {
   validateComponentAttributes({
     component: "FlowDiagram",
@@ -385,7 +386,7 @@ export const compileFlowDiagramComponent = ({
   // The figure's ordinal among the document's diagrams is what its address is
   // made of; a compile with no document around it is the first diagram.
   const figure = flowFigureAnchor({
-    ordinal: ids?.nextOrdinal({ component: "FlowDiagram" }) ?? 1,
+    ordinal: ordinal ?? ids?.nextOrdinal({ component: "FlowDiagram" }) ?? 1,
   });
   const drafts = stageChildren.map((child) =>
     compileStage({ child, figure, diagnostics }),

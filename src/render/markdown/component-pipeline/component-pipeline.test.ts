@@ -10,6 +10,7 @@ import { unified } from "unified";
 import { describe, expect, it, vi } from "vitest";
 import {
   compileMarkdown,
+  compileMarkdownWithModels,
   MarkdownDiagnosticsError,
 } from "../compile-markdown.js";
 import { serializeHtml } from "../../serialize-html.js";
@@ -224,6 +225,33 @@ describe("scoped child dispatch", () => {
     expect(serializeHtml({ root })).toBe(
       '<section data-ordinal="1"><section data-ordinal="2"></section></section>',
     );
+  });
+
+  it("should deliver FlowDiagram anchors without consuming reserved ordinals twice", () => {
+    const diagram = (prefix: string) => `<FlowDiagram>
+<Stage title="First"><Node id="${prefix}-first" label="First" /></Stage>
+<Stage title="Second"><Node id="${prefix}-second" label="Second" /></Stage>
+<Edge from="${prefix}-first" to="${prefix}-second" />
+</FlowDiagram>`;
+    const { root, components } = compileMarkdownWithModels({
+      markdown: `${diagram("one")}\n${diagram("two")}\n`,
+    });
+
+    expect(
+      serializeHtml({ root }).match(
+        /data-flow-anchor="component\/FlowDiagram#\d+"/gu,
+      ),
+    ).toEqual([
+      'data-flow-anchor="component/FlowDiagram#1"',
+      'data-flow-anchor="component/FlowDiagram#2"',
+    ]);
+    expect(
+      components.map(({ model }) =>
+        typeof model === "object" && model !== null
+          ? Reflect.get(model, "anchor")
+          : undefined,
+      ),
+    ).toEqual(["component/FlowDiagram#1", "component/FlowDiagram#2"]);
   });
 
   it("should compile once without adapting React for model delivery", () => {
