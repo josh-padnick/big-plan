@@ -29,6 +29,29 @@ export type RevisionDiffLocation = {
   readonly afterBlockId?: string;
 };
 
+/** Measures how much text survives a diff, independent of insert/delete size. */
+export const diffRunSimilarity = (runs: ReadonlyArray<DiffRun>): number => {
+  const meaningfulLength = (value: string): number =>
+    value.replace(/\s/g, "").length;
+  let same = 0;
+  let before = 0;
+  let after = 0;
+  for (const run of runs) {
+    const length = meaningfulLength(run.text);
+    if (run.op === "same") {
+      same += length;
+      before += length;
+      after += length;
+    } else if (run.op === "del") {
+      before += length;
+    } else {
+      after += length;
+    }
+  }
+  const length = Math.max(before, after);
+  return length === 0 ? 1 : same / length;
+};
+
 const normalized = (value: string): string =>
   value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 

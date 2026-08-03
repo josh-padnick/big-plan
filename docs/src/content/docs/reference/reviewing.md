@@ -26,13 +26,13 @@ Keyboard users reach the same targets without a mouse: `Alt+↓` and `Alt+↑` m
 Inside a compose card, **Add Comment** stages the comment for the batch, `Escape` cancels, and `Cmd/Ctrl+Enter` adds.
 Turn on **Submit right away** when new comments should go straight to the agent instead; that preference carries into every future composer until you change it.
 
-## The Comments tray
+## The Feedback sidebar
 
 On desktop, the editor and saved comment card float to the right of their highlighted source.
 Long comments stay compact behind an **… more** control.
 Below 1280 px, the editor moves into the plan flow instead, so it never covers the text being reviewed.
 
-The sticky **Comments** toggle opens the complete lifecycle in the tray.
+The sticky **Feedback** toggle opens the complete lifecycle in the sidebar.
 After the agent responds, it shows a count only when a thread **Needs your answer**; completed activity does not become a permanent notification.
 On desktop the reading column makes room for the tray.
 Below 1280 px the tray becomes an overlay drawer, so opening and closing it cannot move the place you were reading.
@@ -42,12 +42,12 @@ Until you send, every comment is yours:
 - Each row is headed by its slide number and title and jumps to the exact highlighted target when clicked.
 - **Submit Now** sends one staged comment without sending the rest of the batch.
 - **Edit** rewrites a comment in place; **Remove** opens a confirmation dialog before deleting it.
-- At narrow widths, a block that carries a comment also shows a compact conversation marker that opens its lifecycle.
+- While reading, every commented block carries an explicit anchored comment marker; at narrow widths it reads **1 comment** (or the current count) beside the block without covering its text.
 - Drafts and the unfinished whole-plan field survive closing the tab, reloading, and reopening the plan.
 
 ## Sending feedback
 
-**Send feedback to agent** submits everything pending as one package.
+**Send all comments to agent** submits everything pending as one package.
 There is no confirmation dialog: the tray already shows the count and every comment about to leave.
 
 Sending writes two files beside the plan, under `.big-plan/feedback/`:
@@ -59,21 +59,35 @@ Sent comments remain anchored beside their highlighted source.
 Each response collapses to a one-line outcome chip: **Changed**, **Needs your answer**, or **Outside this plan**.
 Press a chip to expand the original comment, agent response, and reply box in place; press elsewhere to collapse it again.
 At narrow widths, an expanded thread moves into the document flow below its source.
-The Comments tray groups the same outcomes as a compact lifecycle index.
+The Feedback sidebar groups the same outcomes as a compact lifecycle index.
 Clicking a row keeps the tray open, scrolls to its source, and expands the conversation inside that row.
 
-An expanded thread also carries its lifecycle actions:
+An expanded thread carries a compact icon toolbar in its top bar:
 
 - **Minimize** returns it to its one-line outcome chip.
 - **Resolve** retires a concern you no longer need to see. Resolved threads stay
-  findable in the tray after reload.
+  findable and clickable in the sidebar after reload; **Unresolve** returns one
+  to its prior outcome group and restores its plan anchor.
 - **Revert** appears after a changed outcome. Its confirmation sends the same coding-agent session a request to revert all plan changes made for that thread.
 
-A **Changed** response lists every plan location attributed to that comment.
+A **Changed** response groups contiguous changed blocks into literal places and
+lists every place attributed to that comment.
 Use **See the change** for one location or **See changes (N)** for several.
 The selected block temporarily becomes an old/new diff in the document, and a
-floating stepper moves through the locations. **Show current text** or `Escape`
-exits without changing the authoritative plan.
+floating stepper moves through the places with the current slide in its
+position label. The launching control flips to **Hide changes** while the lens
+is open; that control, **Show current text**, or `Escape` exits without changing
+the authoritative plan. Older diffs say **since revised again** when their
+new side is no longer the plan's current revision.
+
+When a plan-wide Chat response advances the source revision, its agent turn
+gets the same computed change vocabulary without relying on agent-authored
+attribution. The digest says **Changed N places across M slides**, groups rows
+under slide titles, and starts the same guided lens. It expands by default for
+up to three places and stays collapsed above that. A low-similarity contiguous
+rewrite becomes one stacked **Was/Now** place instead of a noisy word diff;
+added content keeps its real rendered structure inside the lens. Chat turns
+with no rendered source change have no digest.
 
 Selection anchors never move onto merely similar text. After a revision, Big
 Plan silently re-finds the exact selected quote when it still exists. If the
@@ -87,6 +101,8 @@ Until the coding-agent session responds, a sent thread says **With agent** and
 shows a loading indicator without inventing an outcome.
 The waiting turn shows the latest validated activity, such as the coding agent
 reviewing feedback or a plan-wide question, rather than an event-history list.
+Each waiting turn can collapse its activity, and the Chat header can hide or
+show activity for all pending turns.
 When the agent publishes its response, the chip becomes **Changed**,
 **Needs your answer**, or **Outside this plan** and the real agent message
 appears in the expanded thread.

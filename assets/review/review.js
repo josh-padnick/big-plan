@@ -17,6 +17,15 @@
 //     the runtime that served this document; a document opened from file://
 //     makes no request at all and keeps drafts locally.
 
+import { CHECK_ICON } from "../../src/icons/lucide/check.js";
+import { MESSAGE_SQUARE_TEXT_ICON } from "../../src/icons/lucide/message-square-text.js";
+import { MESSAGES_SQUARE_ICON } from "../../src/icons/lucide/messages-square.js";
+import { MINIMIZE_2_ICON } from "../../src/icons/lucide/minimize-2.js";
+import { ROTATE_CCW_ICON } from "../../src/icons/lucide/rotate-ccw.js";
+import { UNDO_2_ICON } from "../../src/icons/lucide/undo-2.js";
+import { X_ICON } from "../../src/icons/lucide/x.js";
+import { diffRunSimilarity } from "../../src/review/revision-diff.js";
+
 (() => {
   "use strict";
 
@@ -62,7 +71,7 @@
     return node;
   };
 
-  const icon = (path) => {
+  const icon = (definition) => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("fill", "none");
@@ -71,19 +80,15 @@
     svg.setAttribute("stroke-linecap", "round");
     svg.setAttribute("stroke-linejoin", "round");
     svg.setAttribute("aria-hidden", "true");
-    const shape = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "path",
-    );
-    shape.setAttribute("d", path);
-    svg.appendChild(shape);
+    for (const [tag, attributes] of definition.node) {
+      const shape = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      for (const [name, value] of Object.entries(attributes)) {
+        shape.setAttribute(name, String(value));
+      }
+      svg.appendChild(shape);
+    }
     return svg;
   };
-
-  // Lucide message-square-text and x, the two glyphs this chrome needs.
-  const ICON_COMMENT =
-    "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM7 8h10M7 12h6";
-  const ICON_CLOSE = "M18 6 6 18M6 6l12 12";
 
   // ------------------------------------------------------------------ target
 
@@ -190,7 +195,9 @@
   let deleteCandidateId = null;
   let revertCandidateId = null;
   let submitRightAway = false;
+  let showAgentActivity = true;
   const revisionDiffs = new Map();
+  const chatDigestExpansion = new Map();
   let diffLens = null;
   const expandedCommentIds = new Set();
   const expandedThreadIds = new Set();
@@ -515,7 +522,7 @@
 
   const rail = el("aside", {
     "data-review-rail": true,
-    "aria-label": "Plan review",
+    "aria-label": "Feedback",
     hidden: true,
   });
 
@@ -523,16 +530,16 @@
     type: "button",
     "data-review-toggle": true,
     "aria-expanded": "false",
-    "aria-label": "Open comments sidebar",
-    title: "Open comments sidebar (Alt+C)",
+    "aria-label": "Open feedback sidebar",
+    title: "Open feedback sidebar (Alt+C)",
   });
   const toggleCount = el("span", {
     "data-review-toggle-count": true,
     text: "0",
   });
   toggle.append(
-    icon(ICON_COMMENT),
-    el("span", { text: "Comments" }),
+    icon(MESSAGE_SQUARE_TEXT_ICON),
+    el("span", { text: "Feedback" }),
     toggleCount,
   );
 
@@ -543,9 +550,9 @@
   const hideButton = el("button", {
     type: "button",
     "data-review-hide": true,
-    "aria-label": "Hide the tray",
+    "aria-label": "Hide feedback",
   });
-  hideButton.appendChild(icon(ICON_CLOSE));
+  hideButton.appendChild(icon(X_ICON));
 
   const draftList = el("ol", { "data-review-drafts": true });
   const emptyNote = el("p", {
@@ -563,7 +570,7 @@
     type: "button",
     "data-review-send": true,
     disabled: true,
-    text: "Send feedback to agent",
+    text: "Send all comments to agent",
   });
   const sendNote = el("p", { "data-review-send-note": true });
 
@@ -571,6 +578,12 @@
     "data-review-agent-state": true,
     "data-tone": "idle",
     text: "Waiting for you",
+  });
+  const activityToggle = el("button", {
+    type: "button",
+    "data-review-activity-toggle": true,
+    hidden: true,
+    text: "Hide activity",
   });
   const agentInput = el("textarea", {
     "data-review-agent-input": true,
@@ -609,6 +622,7 @@
   const agentPanel = el("section", { "data-review-agent": true }, [
     el("div", { "data-review-agent-head": true }, [
       el("h3", { text: "Plan-wide chat" }),
+      activityToggle,
       agentState,
     ]),
     el("p", {
@@ -636,7 +650,7 @@
     "aria-controls": "big-plan-review-comments",
   });
   commentsTab.append(
-    icon(ICON_COMMENT),
+    icon(MESSAGE_SQUARE_TEXT_ICON),
     el("span", { text: "Comments" }),
     countLabel,
   );
@@ -647,7 +661,7 @@
     "aria-selected": "false",
     "aria-controls": "big-plan-review-chat",
   });
-  chatTab.append(el("span", { text: "Chat" }));
+  chatTab.append(icon(MESSAGES_SQUARE_ICON), el("span", { text: "Chat" }));
   const tabList = el("div", { "data-review-tabs": true, role: "tablist" }, [
     commentsTab,
     chatTab,
@@ -686,7 +700,10 @@
     "data-review-affordance": true,
     hidden: true,
   });
-  affordance.append(icon(ICON_COMMENT), el("span", { text: "Comment" }));
+  affordance.append(
+    icon(MESSAGE_SQUARE_TEXT_ICON),
+    el("span", { text: "Comment" }),
+  );
 
   const composeInput = el("textarea", {
     "data-review-compose-input": true,
@@ -758,13 +775,13 @@
   });
   const markerLayer = el("div", {
     "data-review-marker-layer": true,
-    "aria-label": "Existing comments",
+    "aria-label": "Comment anchors",
   });
   const live = el("p", { "data-review-live": true, "aria-live": "polite" });
   const backdrop = el("button", {
     type: "button",
     "data-review-backdrop": true,
-    "aria-label": "Close comments and return to the plan",
+    "aria-label": "Close feedback and return to the plan",
     hidden: true,
   });
   const deleteTitle = el("h2", {
@@ -888,7 +905,7 @@
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
     toggle.setAttribute(
       "aria-label",
-      open ? "Close comments sidebar" : "Open comments sidebar",
+      open ? "Close feedback sidebar" : "Open feedback sidebar",
     );
     if (open) {
       root.setAttribute("data-review-open", "");
@@ -948,7 +965,8 @@
       marker.hidden = !visible;
       if (!visible) continue;
       marker.style.top = Math.max(FLOAT_TOP, rect.top) + "px";
-      marker.style.left = Math.max(4, rect.left - 30) + "px";
+      marker.style.left =
+        Math.max(4, rect.left - marker.offsetWidth - 8) + "px";
     }
   };
 
@@ -959,7 +977,10 @@
       type: "button",
       "data-review-marker": true,
     });
-    marker.appendChild(icon(ICON_COMMENT));
+    marker.append(
+      icon(MESSAGE_SQUARE_TEXT_ICON),
+      el("span", { "data-review-marker-label": true }),
+    );
     marker.addEventListener("click", () => {
       const blockId = block.getAttribute("data-block-id");
       const draft = drafts.find(
@@ -1002,12 +1023,18 @@
       const blockId =
         anchorStateFor(comment).block?.getAttribute("data-block-id");
       if (!blockId) continue;
-      sentBlocks.set(blockId, outcomeFor(comment));
+      const current = sentBlocks.get(blockId);
+      sentBlocks.set(blockId, {
+        count: (current?.count || 0) + 1,
+        outcome: outcomeFor(comment),
+      });
     }
     for (const block of blocks) {
       const id = block.getAttribute("data-block-id");
       const pending = counts.get(id) || 0;
-      const outcome = sentBlocks.get(id);
+      const sentPresence = sentBlocks.get(id);
+      const outcome = sentPresence?.outcome;
+      const total = pending + (sentPresence?.count || 0);
       if (pending > 0) {
         block.setAttribute("data-review-annotated", String(pending));
         block.setAttribute("data-review-chip-tone", "draft");
@@ -1022,7 +1049,7 @@
         block.removeAttribute("data-review-chip-tone");
       }
       const marker = markerFor(block);
-      const hasComment = pending > 0 || Boolean(outcome);
+      const hasComment = total > 0;
       marker.hidden = !hasComment;
       if (hasComment) marker.setAttribute("data-review-marker-active", "");
       else marker.removeAttribute("data-review-marker-active");
@@ -1033,10 +1060,14 @@
       marker.setAttribute(
         "aria-label",
         pending > 0
-          ? `Edit ${pending} comment${pending === 1 ? "" : "s"} on ${labelFor(block)}`
-          : `Open the ${outcome?.label || "sent"} thread on ${labelFor(block)}`,
+          ? `Open ${total} comment${total === 1 ? "" : "s"}, including ${pending} staged, on ${labelFor(block)}`
+          : `Open ${total} ${outcome?.label || "sent"} comment${total === 1 ? "" : "s"} on ${labelFor(block)}`,
       );
-      marker.setAttribute("data-review-marker-count", String(pending));
+      marker.setAttribute("data-review-marker-count", String(total));
+      const markerLabel = marker.querySelector("[data-review-marker-label]");
+      if (markerLabel) {
+        markerLabel.textContent = total + " comment" + (total === 1 ? "" : "s");
+      }
     }
     positionMarkers();
   };
@@ -1234,12 +1265,15 @@
       block.removeAttribute("data-review-anchor-changed");
     }
     const commentRanges = [];
+    const lensBlocks = diffLens
+      ? diffLens.hiddenBlocks.concat(diffLens.movedBlocks)
+      : [];
     for (const comment of drafts.concat(sent)) {
       if (resolvedCommentIds.has(comment.id)) continue;
       const anchor = anchorStateFor(comment);
-      if (anchor.kind === "range" && anchor.block !== diffLens?.block) {
+      if (anchor.kind === "range" && !lensBlocks.includes(anchor.block)) {
         commentRanges.push(anchor.range);
-      } else if (anchor.block && anchor.block !== diffLens?.block) {
+      } else if (anchor.block && !lensBlocks.includes(anchor.block)) {
         anchor.block.setAttribute("data-review-comment-highlight", "");
         if (anchor.kind === "changed") {
           anchor.block.setAttribute("data-review-anchor-changed", "");
@@ -1320,10 +1354,52 @@
     );
   };
 
+  const currentActivityEvents = () => {
+    let start = 0;
+    for (let index = progressEvents.length - 1; index >= 0; index -= 1) {
+      if (/agent response ready/i.test(progressEvents[index]?.step || "")) {
+        start = index + 1;
+        break;
+      }
+    }
+    return progressEvents.slice(start).slice(-4);
+  };
+
+  const activityDisclosure = () => {
+    if (!showAgentActivity) {
+      return el("p", { "data-review-thread-waiting": true }, [
+        spinner(),
+        document.createTextNode("Agent activity hidden"),
+      ]);
+    }
+    const events = currentActivityEvents();
+    const items =
+      events.length > 0
+        ? events.map((event) =>
+            el("li", {
+              text: event.step + (event.detail ? " — " + event.detail : ""),
+            }),
+          )
+        : [el("li", { text: currentAgentActivity() })];
+    return el(
+      "details",
+      {
+        "data-review-agent-activity": true,
+        "data-review-thread-waiting": true,
+        open: true,
+      },
+      [
+        el("summary", {}, [
+          spinner(),
+          document.createTextNode("Agent activity"),
+        ]),
+        el("ol", {}, items),
+      ],
+    );
+  };
+
   const waitingLine = () => {
-    const line = el("p", { "data-review-thread-waiting": true });
-    line.append(spinner(), document.createTextNode(currentAgentActivity()));
-    return line;
+    return activityDisclosure();
   };
 
   const outcomeEventsFor = (comment) => {
@@ -1613,18 +1689,119 @@
     return locations;
   };
 
+  const blockOrder = new Map(
+    blocks.map((block, index) => [
+      block.getAttribute("data-block-id") || "",
+      index,
+    ]),
+  );
+
+  // Removed locations borrow a fractional slot from their surviving neighbor,
+  // so all-location chat diffs retain the document's reading order.
+  const locationPosition = (location) => {
+    if (location.newBlockId && blockOrder.has(location.newBlockId)) {
+      return blockOrder.get(location.newBlockId);
+    }
+    if (location.beforeBlockId && blockOrder.has(location.beforeBlockId)) {
+      return blockOrder.get(location.beforeBlockId) - 0.5;
+    }
+    if (location.afterBlockId && blockOrder.has(location.afterBlockId)) {
+      return blockOrder.get(location.afterBlockId) + 0.5;
+    }
+    return Number.MAX_SAFE_INTEGER;
+  };
+
   const locationsForEvent = (event) => {
     const locations = revisionDiffs.get(event.requestId) || [];
-    const ordered = [];
-    for (const target of event.changeTargets || []) {
-      const location = locations.find(
-        (candidate) =>
-          candidate.newBlockId === target || candidate.oldBlockId === target,
-      );
-      if (location && !ordered.includes(location)) ordered.push(location);
-    }
-    return ordered;
+    const targets = event.changeTargets || [];
+    const selected =
+      targets.length === 0
+        ? locations
+        : locations.filter((candidate) =>
+            targets.some(
+              (target) =>
+                candidate.newBlockId === target ||
+                candidate.oldBlockId === target,
+            ),
+          );
+    return [...selected].sort(
+      (left, right) => locationPosition(left) - locationPosition(right),
+    );
   };
+
+  const runSimilarity = (locations) =>
+    diffRunSimilarity(locations.flatMap((location) => location.runs || []));
+
+  const placeKindNote = (locations) => {
+    if (locations.every((location) => location.status === "added")) {
+      return "added";
+    }
+    if (locations.every((location) => location.status === "removed")) {
+      return "removed";
+    }
+    if (locations.length > 1 && runSimilarity(locations) < 0.2) {
+      return "rewritten";
+    }
+    return locations.length === 1 ? diffKindNote(locations[0]) : "reworked";
+  };
+
+  const locationsAreContiguous = ({ previous, next, changedIds }) => {
+    if (previous.section !== next.section) return false;
+    const previousPosition = locationPosition(previous);
+    const nextPosition = locationPosition(next);
+    if (nextPosition - previousPosition <= 1) return true;
+    const first = Math.floor(previousPosition) + 1;
+    const last = Math.ceil(nextPosition);
+    for (let index = first; index < last; index += 1) {
+      const id = blocks[index]?.getAttribute("data-block-id");
+      if (id && !changedIds.has(id)) return false;
+    }
+    return true;
+  };
+
+  // A place is a contiguous run of changed locations within one slide. This
+  // keeps chat and anchored-comment diffs on one calm, literal vocabulary.
+  const groupLocationsIntoPlaces = (locations) => {
+    const changedIds = new Set(
+      locations
+        .map((location) => location.newBlockId)
+        .filter((id) => typeof id === "string"),
+    );
+    const groups = [];
+    for (const location of locations) {
+      const previous = groups.at(-1);
+      const previousLocation = previous?.locations.at(-1);
+      if (
+        previous &&
+        previousLocation &&
+        locationsAreContiguous({
+          previous: previousLocation,
+          next: location,
+          changedIds,
+        })
+      ) {
+        previous.locations.push(location);
+        previous.note = placeKindNote(previous.locations);
+        if (previous.note === "rewritten") previous.label = "Whole section";
+        continue;
+      }
+      groups.push({
+        locations: [location],
+        section: location.section,
+        label: location.label,
+        note: placeKindNote([location]),
+        slideTitle: slideTitleFor({
+          type: "block",
+          section: location.section,
+          label: location.label,
+        }),
+      });
+    }
+    return groups;
+  };
+
+  const placesForEvent = (event) =>
+    groupLocationsIntoPlaces(locationsForEvent(event));
 
   const diffKindNote = (location) => {
     if (location.status === "added") return "added";
@@ -1665,15 +1842,24 @@
   diffStepper.append(diffPrevious, diffPosition, diffNext, diffExit);
   document.body.appendChild(diffStepper);
 
+  // Added content is temporarily moved into the lens so its real formatting
+  // remains visible. Restore it before removing the lens: removing first would
+  // take the authoritative current blocks with it.
+  const restoreMovedBlocksBeforeLens = ({ movedBlocks, container }) => {
+    for (const block of movedBlocks) container.before(block);
+  };
+
   const clearDiffLens = () => {
     if (!diffLens) return;
-    diffLens.block?.removeAttribute("hidden");
-    diffLens.block?.removeAttribute("data-review-diff-hidden");
-    diffLens.container?.remove();
+    restoreMovedBlocksBeforeLens(diffLens);
+    for (const block of diffLens.hiddenBlocks) {
+      block.removeAttribute("hidden");
+      block.removeAttribute("data-review-diff-hidden");
+    }
+    diffLens.container.remove();
     diffLens = null;
     diffStepper.hidden = true;
-    paintTargetHighlights();
-    positionThreadCards();
+    renderTray();
   };
 
   const appendDiffRun = ({ container, run, comment, oldOffset, tagged }) => {
@@ -1696,7 +1882,7 @@
     };
     if (
       run.op !== "del" ||
-      comment.target.type !== "selection" ||
+      comment?.target.type !== "selection" ||
       run.text === ""
     ) {
       container.appendChild(nodeFor(run.text, false));
@@ -1717,33 +1903,53 @@
     container.appendChild(nodeFor(run.text.slice(localEnd), false));
   };
 
-  const renderDiffLocation = ({ comment, event, index }) => {
-    const locations = locationsForEvent(event);
-    const location = locations[index];
-    if (!location) return;
-    clearDiffLens();
-    const blockId = location.newBlockId || location.beforeBlockId;
-    const block = blockId
-      ? document.querySelector('[data-block-id="' + cssEscape(blockId) + '"]')
-      : null;
-    const containerTag =
-      block?.tagName === "TR" || location.kind === "table-row" ? "tr" : "div";
-    const container = el(containerTag, {
-      "data-review-diff-lens": true,
-      "data-review-diff-status": location.status,
-      "data-review-diff-kind": location.kind,
+  const appendWholesalePlace = ({ body, place, comment }) => {
+    const was = el("div", { "data-review-diff-was": true }, [
+      el("strong", { text: "Was" }),
+    ]);
+    place.locations.forEach((location, index) => {
+      if (!location.oldText) return;
+      if (index > 0) was.appendChild(document.createTextNode("\n\n"));
+      if (
+        comment?.target.type === "selection" &&
+        location.oldBlockId === comment.target.blockId
+      ) {
+        appendDiffRun({
+          container: was,
+          run: { op: "del", text: location.oldText },
+          comment,
+          oldOffset: { value: 0 },
+          tagged: { value: false },
+        });
+      } else {
+        was.appendChild(
+          el("span", {
+            "data-review-diff-op": "del",
+            text: location.oldText,
+          }),
+        );
+      }
     });
-    const content =
-      containerTag === "tr" ? el("td", { colspan: "99" }) : container;
-    content.appendChild(
+    const now = el("div", { "data-review-diff-now": true }, [
+      el("strong", { text: "Now" }),
       el("span", {
-        "data-review-diff-label": true,
-        text: "Diff vs. previous version",
+        "data-review-diff-op": "ins",
+        text: place.locations
+          .map((location) => location.newText)
+          .filter(Boolean)
+          .join("\n\n"),
       }),
-    );
-    const body = el(location.kind === "code" ? "pre" : "div", {
-      "data-review-diff-body": true,
-    });
+    ]);
+    body.append(was, now);
+  };
+
+  const appendDiffLocation = ({ body, location, comment }) => {
+    const attributedComment =
+      comment &&
+      (location.oldBlockId === comment.target.blockId ||
+        location.newBlockId === comment.target.blockId)
+        ? comment
+        : null;
     if (location.status === "changed" && location.kind === "table-row") {
       const oldRow = el("div", { "data-review-diff-was": true }, [
         el("strong", { text: "Was" }),
@@ -1751,19 +1957,23 @@
       appendDiffRun({
         container: oldRow,
         run: { op: "del", text: location.oldText },
-        comment,
+        comment: attributedComment,
         oldOffset: { value: 0 },
         tagged: { value: false },
       });
-      const newRow = el("div", { "data-review-diff-now": true }, [
-        el("strong", { text: "Now" }),
-        el("span", {
-          "data-review-diff-op": "ins",
-          text: location.newText,
-        }),
-      ]);
-      body.append(oldRow, newRow);
-    } else if (
+      body.append(
+        oldRow,
+        el("div", { "data-review-diff-now": true }, [
+          el("strong", { text: "Now" }),
+          el("span", {
+            "data-review-diff-op": "ins",
+            text: location.newText,
+          }),
+        ]),
+      );
+      return;
+    }
+    if (
       location.status === "changed" &&
       !["paragraph", "heading", "quote", "list", "table-row", "code"].includes(
         location.kind,
@@ -1779,41 +1989,157 @@
           el("span", { text: location.newText }),
         ]),
       );
-    } else {
-      const oldOffset = { value: 0 };
-      const tagged = { value: false };
-      for (const run of location.runs) {
-        appendDiffRun({ container: body, run, comment, oldOffset, tagged });
-        if (run.op !== "ins") oldOffset.value += run.text.length;
+      return;
+    }
+    const oldOffset = { value: 0 };
+    const tagged = { value: false };
+    for (const run of location.runs) {
+      appendDiffRun({
+        container: body,
+        run,
+        comment: attributedComment,
+        oldOffset,
+        tagged,
+      });
+      if (run.op !== "ins") oldOffset.value += run.text.length;
+    }
+  };
+
+  const anchorBlockForPlace = (place) => {
+    for (const location of place.locations) {
+      for (const id of [
+        location.newBlockId,
+        location.beforeBlockId,
+        location.afterBlockId,
+      ]) {
+        if (!id) continue;
+        const block = document.querySelector(
+          '[data-block-id="' + cssEscape(id) + '"]',
+        );
+        if (block) return block;
       }
     }
-    content.appendChild(body);
+    return null;
+  };
+
+  const renderDiffLocation = ({ comment, event, index }) => {
+    const places = placesForEvent(event);
+    const place = places[index];
+    if (!place) return;
+    clearDiffLens();
+    const anchorBlock = anchorBlockForPlace(place);
+    const containerTag = anchorBlock?.tagName === "TR" ? "tr" : "div";
+    const statuses = new Set(
+      place.locations.map((location) => location.status),
+    );
+    const container = el(containerTag, {
+      "data-review-diff-lens": true,
+      "data-review-diff-status":
+        statuses.size === 1 ? place.locations[0]?.status : "changed",
+      "data-review-diff-kind":
+        place.locations.length === 1 ? place.locations[0]?.kind : "place",
+    });
+    const content =
+      containerTag === "tr" ? el("td", { colspan: "99" }) : container;
+    content.appendChild(
+      el("span", {
+        "data-review-diff-label": true,
+        text:
+          "Diff vs. previous version" +
+          (event.toRevision !== sourceRevision ? " · since revised again" : ""),
+      }),
+    );
+    const body = el(
+      place.locations.length === 1 && place.locations[0]?.kind === "code"
+        ? "pre"
+        : "div",
+      {
+        "data-review-diff-body": true,
+      },
+    );
     if (containerTag === "tr") container.appendChild(content);
-    if (location.status === "removed") {
-      const before = location.beforeBlockId
-        ? document.querySelector(
-            '[data-block-id="' + cssEscape(location.beforeBlockId) + '"]',
-          )
-        : null;
-      const after = location.afterBlockId
-        ? document.querySelector(
-            '[data-block-id="' + cssEscape(location.afterBlockId) + '"]',
-          )
-        : null;
-      if (before) before.before(container);
-      else if (after) after.after(container);
-      else document.querySelector("main")?.appendChild(container);
-    } else if (block) {
-      block.setAttribute("hidden", "");
-      block.setAttribute("data-review-diff-hidden", "");
-      block.before(container);
+    if (anchorBlock) {
+      if (
+        place.locations[0]?.status === "removed" &&
+        place.locations[0]?.beforeBlockId
+      ) {
+        anchorBlock.before(container);
+      } else if (
+        place.locations[0]?.status === "removed" &&
+        place.locations[0]?.afterBlockId
+      ) {
+        anchorBlock.after(container);
+      } else {
+        anchorBlock.before(container);
+      }
+    } else {
+      document.querySelector("main")?.appendChild(container);
     }
-    diffLens = { comment, event, index, locations, block, container };
+
+    const hiddenBlocks = [];
+    const movedBlocks = [];
+    const allAdded = place.locations.every(
+      (location) => location.status === "added",
+    );
+    for (const location of place.locations) {
+      if (!location.newBlockId) continue;
+      const block = document.querySelector(
+        '[data-block-id="' + cssEscape(location.newBlockId) + '"]',
+      );
+      if (!block) continue;
+      if (allAdded && containerTag !== "tr") {
+        movedBlocks.push(block);
+      } else {
+        block.setAttribute("hidden", "");
+        block.setAttribute("data-review-diff-hidden", "");
+        hiddenBlocks.push(block);
+      }
+    }
+
+    if (allAdded && movedBlocks.length > 0) {
+      const added = el("div", { "data-review-diff-added-run": true }, [
+        el("strong", { text: "Added" }),
+      ]);
+      for (const block of movedBlocks) added.appendChild(block);
+      body.appendChild(added);
+    } else if (
+      place.locations.length > 1 &&
+      runSimilarity(place.locations) < 0.2
+    ) {
+      appendWholesalePlace({ body, place, comment });
+    } else {
+      place.locations.forEach((location, locationIndex) => {
+        const locationBody = el("div", {
+          "data-review-diff-location": true,
+        });
+        appendDiffLocation({ body: locationBody, location, comment });
+        body.appendChild(locationBody);
+        if (locationIndex < place.locations.length - 1) {
+          body.appendChild(el("hr", { "data-review-diff-separator": true }));
+        }
+      });
+    }
+    content.appendChild(body);
+    diffLens = {
+      comment,
+      event,
+      index,
+      places,
+      container,
+      hiddenBlocks,
+      movedBlocks,
+    };
     diffPosition.textContent =
-      "Change " + (index + 1) + " of " + locations.length;
+      "Change " +
+      (index + 1) +
+      " of " +
+      places.length +
+      " · " +
+      place.slideTitle;
     diffPrevious.disabled = index === 0;
-    diffNext.disabled = index === locations.length - 1;
+    diffNext.disabled = index === places.length - 1;
     diffStepper.hidden = false;
+    renderTray();
     container.scrollIntoView({ behavior: "smooth", block: "center" });
     paintTargetHighlights();
   };
@@ -1837,7 +2163,7 @@
     });
   });
   diffNext.addEventListener("click", () => {
-    if (!diffLens || diffLens.index >= diffLens.locations.length - 1) return;
+    if (!diffLens || diffLens.index >= diffLens.places.length - 1) return;
     renderDiffLocation({
       comment: diffLens.comment,
       event: diffLens.event,
@@ -1846,8 +2172,35 @@
   });
   diffExit.addEventListener("click", clearDiffLens);
 
+  const chatChangeEvents = () => {
+    const events = [];
+    for (const request of agentRequests) {
+      if (request.kind !== "chat") continue;
+      const response = agentResponses.find(
+        (entry) =>
+          entry.kind === "chat" && entry.requestId === request.requestId,
+      );
+      if (
+        !response ||
+        !request.sourceRevision ||
+        !response.sourceRevision ||
+        request.sourceRevision === response.sourceRevision
+      ) {
+        continue;
+      }
+      events.push({
+        key: "changed",
+        requestId: request.requestId,
+        fromRevision: request.sourceRevision,
+        toRevision: response.sourceRevision,
+        changeTargets: [],
+      });
+    }
+    return events;
+  };
+
   const hydrateRevisionDiffs = async () => {
-    const events = sent.flatMap((comment) =>
+    const commentEvents = sent.flatMap((comment) =>
       outcomeEventsFor(comment)
         .filter(
           (event) =>
@@ -1855,6 +2208,12 @@
         )
         .map((event) => ({ comment, event })),
     );
+    const events = [
+      ...commentEvents,
+      ...chatChangeEvents()
+        .filter((event) => !revisionDiffs.has(event.requestId))
+        .map((event) => ({ comment: null, event })),
+    ];
     if (events.length === 0) return;
     await Promise.all(
       events.map(({ event }) => loadRevisionDiff(event).catch(() => [])),
@@ -1863,50 +2222,59 @@
   };
 
   const changeControls = (comment, event) => {
-    const loaded = locationsForEvent(event);
+    const loaded = placesForEvent(event);
     const rows =
       loaded.length > 0
         ? loaded
-        : (event.changeTargets || []).map((target) => {
-            const block = document.querySelector(
-              '[data-block-id="' + cssEscape(target) + '"]',
-            );
-            return {
-              status: "changed",
-              newBlockId: target,
-              kind: block?.getAttribute("data-block-kind") || "block",
-              label: block?.getAttribute("data-block-label") || "Changed block",
-              section: block?.getAttribute("data-block-section") || "Plan",
-            };
-          });
+        : groupLocationsIntoPlaces(
+            (event.changeTargets || []).map((target) => {
+              const block = document.querySelector(
+                '[data-block-id="' + cssEscape(target) + '"]',
+              );
+              return {
+                status: "changed",
+                newBlockId: target,
+                kind: block?.getAttribute("data-block-kind") || "block",
+                label:
+                  block?.getAttribute("data-block-label") || "Changed block",
+                section: block?.getAttribute("data-block-section") || "Plan",
+                oldText: "",
+                newText: block?.textContent || "",
+                runs: [],
+              };
+            }),
+          );
     if (rows.length === 0) return null;
+    const active =
+      diffLens?.comment?.id === comment.id &&
+      diffLens?.event.requestId === event.requestId;
     const list = el("div", { "data-review-change-list": true }, [
       el("strong", {
         text:
           "Changed " + rows.length + " place" + (rows.length === 1 ? "" : "s"),
       }),
     ]);
-    rows.forEach((location, index) => {
+    rows.forEach((place, index) => {
       const row = el("button", {
         type: "button",
         "data-review-change-row": true,
+        "aria-pressed": active && diffLens.index === index ? "true" : "false",
+        ...(active && diffLens.index === index
+          ? { "aria-current": "true" }
+          : {}),
       });
       row.append(
         el("span", {
           "data-review-change-slide": true,
-          text: slideTitleFor({
-            type: "block",
-            section: location.section,
-            label: location.label,
-          }),
+          text: place.slideTitle,
         }),
         el("span", {
           "data-review-change-label": true,
-          text: location.label,
+          text: place.label,
         }),
         el("span", {
           "data-review-change-kind": true,
-          text: diffKindNote(location),
+          text: place.note,
         }),
       );
       row.addEventListener("click", () => {
@@ -1917,13 +2285,15 @@
     const see = el("button", {
       type: "button",
       "data-review-see-change": true,
-      text:
-        rows.length === 1
+      text: active
+        ? "Hide changes"
+        : rows.length === 1
           ? "See the change"
           : "See changes (" + rows.length + ")",
     });
     see.addEventListener("click", () => {
-      void openDiffLens(comment, event, 0);
+      if (active) clearDiffLens();
+      else void openDiffLens(comment, event, 0);
     });
     return el("div", { "data-review-change-controls": true }, [list, see]);
   };
@@ -2073,44 +2443,87 @@
     resolvedCommentIds.add(comment.id);
     expandedThreadIds.delete(comment.id);
     expandedCommentIds.delete(comment.id);
-    announce("Comment resolved and hidden.");
+    announce("Comment resolved.");
     renderTray();
     await save();
   };
 
-  const threadManagementActions = (comment) => {
-    const actions = [];
-    if (outcomeEventsFor(comment).some((event) => event.key === "changed")) {
-      const revert = el("button", {
-        type: "button",
-        "data-review-thread-revert": true,
-        text: "Revert",
-      });
-      revert.addEventListener("click", () => openRevertDialog(comment));
-      actions.push(revert);
-    }
-    const resolve = el("button", {
-      type: "button",
-      "data-review-thread-resolve": true,
-      text: "Resolve",
-    });
-    resolve.addEventListener("click", () => {
-      void resolveThread(comment);
-    });
-    const minimize = el("button", {
-      type: "button",
-      "data-review-thread-minimize": true,
-      text: "Minimize",
-    });
-    minimize.addEventListener("click", () => {
-      expandedThreadIds.delete(comment.id);
-      renderTray();
-    });
-    actions.push(resolve, minimize);
-    return el("div", { "data-review-thread-actions": true }, actions);
+  const unresolveThread = async (comment) => {
+    resolvedCommentIds.delete(comment.id);
+    expandedThreadIds.add(comment.id);
+    announce("Comment reopened.");
+    renderTray();
+    await save();
   };
 
-  const sentRow = (comment) => {
+  const toolbarButton = ({ attribute, label, glyph, action }) => {
+    const button = el("button", {
+      type: "button",
+      [attribute]: true,
+      "aria-label": label,
+      title: label,
+    });
+    button.appendChild(icon(glyph));
+    button.addEventListener("click", action);
+    return button;
+  };
+
+  const threadToolbar = (comment, options = {}) => {
+    const resolved = options.resolved === true;
+    const revertAction = outcomeEventsFor(comment).some(
+      (event) => event.key === "changed",
+    )
+      ? toolbarButton({
+          attribute: "data-review-thread-revert",
+          label: "Revert agent changes",
+          glyph: ROTATE_CCW_ICON,
+          action: () => openRevertDialog(comment),
+        })
+      : null;
+    const actions = [
+      toolbarButton({
+        attribute: "data-review-thread-minimize",
+        label: "Minimize thread",
+        glyph: MINIMIZE_2_ICON,
+        action: () => {
+          expandedThreadIds.delete(comment.id);
+          renderTray();
+        },
+      }),
+    ];
+    actions.push(
+      resolved
+        ? toolbarButton({
+            attribute: "data-review-thread-unresolve",
+            label: "Unresolve comment",
+            glyph: UNDO_2_ICON,
+            action: () => {
+              void unresolveThread(comment);
+            },
+          })
+        : toolbarButton({
+            attribute: "data-review-thread-resolve",
+            label: "Resolve comment",
+            glyph: CHECK_ICON,
+            action: () => {
+              void resolveThread(comment);
+            },
+          }),
+    );
+    if (revertAction) actions.push(revertAction);
+    return el("div", { "data-review-thread-toolbar": true }, [
+      el("div", { "data-review-thread-toolbar-title": true }, [
+        outcomeBadge(outcomeFor(comment)),
+        el("span", {
+          text: resolved ? "Resolved comment" : shortEcho(comment.body, 52),
+        }),
+      ]),
+      el("div", { "data-review-thread-toolbar-actions": true }, actions),
+    ]);
+  };
+
+  const sentRow = (comment, options = {}) => {
+    const resolved = options.resolved === true;
     const outcome = outcomeFor(comment);
     const jump = el("button", {
       type: "button",
@@ -2118,7 +2531,15 @@
       text: slideTitleFor(comment.target),
       title: "Jump to and expand this thread",
     });
-    jump.addEventListener("click", () => openThreadAt(comment));
+    jump.addEventListener("click", () => {
+      if (!resolved) {
+        openThreadAt(comment);
+        return;
+      }
+      expandedThreadIds.add(comment.id);
+      renderTray();
+    });
+    if (resolved) jump.title = "Open this resolved thread";
     const children = [
       el("div", { "data-review-row-head": true }, [
         jump,
@@ -2132,8 +2553,8 @@
     if (expandedThreadIds.has(comment.id)) {
       children.push(
         el("div", { "data-review-tray-thread": true }, [
+          threadToolbar(comment, { resolved }),
           ...conversationNodes(comment),
-          threadManagementActions(comment),
         ]),
       );
     }
@@ -2206,13 +2627,11 @@
             ?.focus();
         });
       });
-      card.appendChild(summary);
       if (expanded) {
         card.setAttribute("data-review-thread-expanded", "");
-        card.append(
-          ...conversationNodes(comment),
-          threadManagementActions(comment),
-        );
+        card.append(threadToolbar(comment), ...conversationNodes(comment));
+      } else {
+        card.appendChild(summary);
       }
       return card;
     }
@@ -2386,10 +2805,14 @@
   const floatingBlockForTarget = (target) =>
     target?.type === "document" ? blocks[0] || null : blockForTarget(target);
 
-  const floatingBlockForComment = (comment) =>
-    comment.target?.type === "document"
+  const floatingBlockForComment = (comment) => {
+    if (diffLens?.comment?.id === comment.id && diffLens.container) {
+      return diffLens.container;
+    }
+    return comment.target?.type === "document"
       ? blocks[0] || null
       : anchorStateFor(comment).block;
+  };
 
   const floatLeftForBlock = (block, width) => {
     const rect = block?.getBoundingClientRect();
@@ -2533,20 +2956,25 @@
             .map((location) => location.newBlockId || location.oldBlockId)
             .filter(Boolean),
         };
-        locations.forEach((location, index) => {
-          if (
-            attributed.has(location.newBlockId) ||
-            attributed.has(location.oldBlockId)
-          ) {
-            return;
-          }
-          otherChanges.push({
-            comment,
-            event: roundEvent,
-            location,
-            index,
-          });
-        });
+        groupLocationsIntoPlaces(locationsForEvent(roundEvent)).forEach(
+          (place, index) => {
+            if (
+              place.locations.some(
+                (location) =>
+                  attributed.has(location.newBlockId) ||
+                  attributed.has(location.oldBlockId),
+              )
+            ) {
+              return;
+            }
+            otherChanges.push({
+              comment,
+              event: roundEvent,
+              place,
+              index,
+            });
+          },
+        );
       }
     }
     if (otherChanges.length > 0) {
@@ -2556,7 +2984,7 @@
           el(
             "ol",
             {},
-            otherChanges.map(({ comment, event, location, index }) => {
+            otherChanges.map(({ comment, event, place, index }) => {
               const button = el("button", {
                 type: "button",
                 "data-review-change-row": true,
@@ -2566,17 +2994,17 @@
                   "data-review-change-slide": true,
                   text: slideTitleFor({
                     type: "block",
-                    section: location.section,
-                    label: location.label,
+                    section: place.section,
+                    label: place.label,
                   }),
                 }),
                 el("span", {
                   "data-review-change-label": true,
-                  text: location.label,
+                  text: place.label,
                 }),
                 el("span", {
                   "data-review-change-kind": true,
-                  text: diffKindNote(location),
+                  text: place.note,
                 }),
               );
               button.addEventListener("click", () => {
@@ -2593,27 +3021,23 @@
     );
     if (resolved.length > 0) {
       renderedGroups.push(
-        el("details", { "data-review-resolved-group": true }, [
-          el("summary", {
-            text: "Resolved (" + resolved.length + ")",
-          }),
-          el(
-            "ol",
-            {},
-            resolved.map((comment) =>
-              el("li", { "data-review-row": true }, [
-                el("div", { "data-review-row-head": true }, [
-                  el("span", { text: slideTitleFor(comment.target) }),
-                  outcomeBadge(outcomeFor(comment)),
-                ]),
-                el("p", {
-                  "data-review-row-body": true,
-                  text: shortEcho(comment.body),
-                }),
-              ]),
+        el(
+          "details",
+          {
+            "data-review-resolved-group": true,
+            open: resolved.some((comment) => expandedThreadIds.has(comment.id)),
+          },
+          [
+            el("summary", {
+              text: "Resolved (" + resolved.length + ")",
+            }),
+            el(
+              "ol",
+              {},
+              resolved.map((comment) => sentRow(comment, { resolved: true })),
             ),
-          ),
-        ]),
+          ],
+        ),
       );
     }
     sentList.replaceChildren(...renderedGroups);
@@ -2625,11 +3049,19 @@
     const pending = drafts.length;
     const needs = needsAnswerCount();
     countLabel.textContent =
-      pending > 0
-        ? pending + " pending"
-        : needs > 0
-          ? needs + " needs your answer"
-          : "No action needed";
+      needs > 0 ? String(needs) : pending > 0 ? String(pending) : "";
+    countLabel.setAttribute(
+      "data-review-count-tone",
+      needs > 0 ? "needs" : pending > 0 ? "pending" : "idle",
+    );
+    commentsTab.setAttribute(
+      "aria-label",
+      needs > 0
+        ? `Comments, ${needs} needs your answer`
+        : pending > 0
+          ? `Comments, ${pending} staged`
+          : "Comments",
+    );
     toggleCount.textContent = needs > 0 ? String(needs) : "";
     toggle.setAttribute(
       "data-review-has-pending",
@@ -2639,13 +3071,14 @@
     toggle.setAttribute(
       "aria-label",
       (railIsOpen() ? "Close" : "Open") +
-        " comments sidebar" +
+        " feedback sidebar" +
         (needs > 0 ? ", " + needs + " needs your answer" : ""),
     );
     sendButton.disabled = pending === 0;
     sentGroup.hidden = sent.length === 0;
     renderSentIndex();
     renderPlanChat();
+    syncActivityToggle();
     syncPlanChatValidity();
     paintChips();
     paintTargetHighlights();
@@ -3090,6 +3523,91 @@
 
   // --------------------------------------------------------- plan-wide chat
 
+  const chatChangeControls = (event) => {
+    const places = placesForEvent(event);
+    if (places.length === 0) return null;
+    const slideCount = new Set(places.map((place) => place.slideTitle)).size;
+    const expanded = chatDigestExpansion.has(event.requestId)
+      ? chatDigestExpansion.get(event.requestId)
+      : places.length <= 3;
+    const active =
+      diffLens?.comment === null &&
+      diffLens?.event.requestId === event.requestId;
+    const disclosure = el("button", {
+      type: "button",
+      "data-review-chat-change-toggle": true,
+      "aria-expanded": expanded ? "true" : "false",
+      text:
+        "Changed " +
+        places.length +
+        " place" +
+        (places.length === 1 ? "" : "s") +
+        " across " +
+        slideCount +
+        " slide" +
+        (slideCount === 1 ? "" : "s"),
+    });
+    disclosure.addEventListener("click", () => {
+      chatDigestExpansion.set(event.requestId, !expanded);
+      renderPlanChat();
+    });
+    const list = el("div", {
+      "data-review-chat-change-list": true,
+      ...(expanded ? {} : { hidden: true }),
+    });
+    let previousSlide = "";
+    places.forEach((place, index) => {
+      if (place.slideTitle !== previousSlide) {
+        previousSlide = place.slideTitle;
+        list.appendChild(
+          el("strong", {
+            "data-review-change-slide-header": true,
+            text: place.slideTitle,
+          }),
+        );
+      }
+      const row = el("button", {
+        type: "button",
+        "data-review-change-row": true,
+        ...(active && diffLens.index === index
+          ? { "aria-current": "true" }
+          : {}),
+      });
+      row.append(
+        el("span", {
+          "data-review-change-label": true,
+          text: place.label,
+        }),
+        el("span", {
+          "data-review-change-kind": true,
+          text: place.note,
+        }),
+      );
+      row.addEventListener("click", () => {
+        void openDiffLens(null, event, index);
+      });
+      list.appendChild(row);
+    });
+    const see = el("button", {
+      type: "button",
+      "data-review-see-change": true,
+      text: active
+        ? "Hide changes"
+        : places.length === 1
+          ? "See the change"
+          : "See changes (" + places.length + ")",
+    });
+    see.addEventListener("click", () => {
+      if (active) clearDiffLens();
+      else void openDiffLens(null, event, 0);
+    });
+    return el("div", { "data-review-chat-change-digest": true }, [
+      disclosure,
+      list,
+      see,
+    ]);
+  };
+
   const livePlanChatMessages = () => {
     const messages = [];
     for (const request of agentRequests) {
@@ -3107,6 +3625,16 @@
           role: "agent",
           body: response.message,
           createdAt: response.createdAt,
+          event:
+            request.sourceRevision !== response.sourceRevision
+              ? {
+                  key: "changed",
+                  requestId: request.requestId,
+                  fromRevision: request.sourceRevision,
+                  toRevision: response.sourceRevision,
+                  changeTargets: [],
+                }
+              : null,
         });
       } else {
         messages.push({
@@ -3132,28 +3660,33 @@
     }
     planChatList.replaceChildren(
       ...messages.map((message) => {
+        if (message.role === "waiting") {
+          return el("li", { "data-review-chat-message": "waiting" }, [
+            el("div", { "data-review-turn-meta": true }, [
+              el("strong", { text: "Agent status" }),
+            ]),
+            activityDisclosure(),
+          ]);
+        }
         const body = el("p", {});
-        if (message.role === "waiting") body.appendChild(spinner());
         body.appendChild(document.createTextNode(message.body));
-        return el("li", { "data-review-chat-message": message.role }, [
+        const turn = el("li", { "data-review-chat-message": message.role }, [
           el("div", { "data-review-turn-meta": true }, [
             el("strong", {
-              text:
-                message.role === "user"
-                  ? "You"
-                  : message.role === "agent"
-                    ? "Agent"
-                    : "Agent status",
+              text: message.role === "user" ? "You" : "Agent",
             }),
-            message.role !== "waiting"
-              ? el("time", {
-                  datetime: message.createdAt,
-                  text: relativeCommentTime(message.createdAt),
-                })
-              : null,
+            el("time", {
+              datetime: message.createdAt,
+              text: relativeCommentTime(message.createdAt),
+            }),
           ]),
           body,
         ]);
+        if (message.role === "agent" && message.event) {
+          const controls = chatChangeControls(message.event);
+          if (controls) turn.appendChild(controls);
+        }
+        return turn;
       }),
     );
   };
@@ -3197,6 +3730,7 @@
       syncPlanChatValidity();
       writeLocalState();
       renderPlanChat();
+      syncActivityToggle();
       setAgentState("With agent", "working");
       announce("Plan-wide question sent to the coding agent.");
       await save();
@@ -3235,7 +3769,7 @@
     agentState.textContent = text;
     agentState.setAttribute("data-tone", tone);
     toggle.setAttribute("data-review-agent-tone", tone);
-    toggle.title = "Open comments sidebar (Alt+C)";
+    toggle.title = "Open feedback sidebar (Alt+C)";
   };
 
   const submitComments = async ({ comments, closeRailAfter, trigger }) => {
@@ -3293,7 +3827,7 @@
   const submit = () =>
     submitComments({
       comments: drafts,
-      closeRailAfter: true,
+      closeRailAfter: false,
       trigger: sendButton,
     });
 
@@ -3358,6 +3892,24 @@
     return agentRequests.filter((request) => !answered.has(request.requestId))
       .length;
   };
+
+  const syncActivityToggle = () => {
+    activityToggle.hidden = pendingAgentRequestCount() === 0;
+    activityToggle.textContent = showAgentActivity
+      ? "Hide activity"
+      : "Show activity";
+    activityToggle.setAttribute(
+      "aria-pressed",
+      showAgentActivity ? "true" : "false",
+    );
+  };
+
+  activityToggle.addEventListener("click", () => {
+    showAgentActivity = !showAgentActivity;
+    renderPlanChat();
+    renderThreads();
+    syncActivityToggle();
+  });
 
   const renderProgress = (events) => {
     if (events.length === 0) return;

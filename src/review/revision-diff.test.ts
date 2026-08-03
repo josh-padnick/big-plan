@@ -2,7 +2,11 @@
 // when structural ids shift and the viewer asks for old/new word runs.
 
 import { describe, expect, it } from "vitest";
-import { diffRevisions, diffWords } from "./revision-diff.js";
+import {
+  diffRevisions,
+  diffRunSimilarity,
+  diffWords,
+} from "./revision-diff.js";
 
 const block = ({
   id,
@@ -33,6 +37,32 @@ describe("revision word diff", () => {
       { op: "ins", text: "stable" },
       { op: "same", text: " version." },
     ]);
+  });
+
+  it("should identify a wholesale rewrite below the presentation threshold", () => {
+    expect(
+      diffRunSimilarity(
+        diffWords({
+          before: "Retry every request with exponential backoff.",
+          after: "Queue failed operations for a bounded manual replay window.",
+        }),
+      ),
+    ).toBeLessThan(0.2);
+  });
+
+  it("should preserve word-level presentation for a focused rewrite", () => {
+    expect(
+      diffRunSimilarity(
+        diffWords({
+          before: "Keep the first version.",
+          after: "Keep the stable version.",
+        }),
+      ),
+    ).toBeGreaterThan(0.2);
+  });
+
+  it("should treat two empty revisions as identical", () => {
+    expect(diffRunSimilarity([])).toBe(1);
   });
 });
 
@@ -111,5 +141,16 @@ describe("revision block alignment", () => {
       oldText: "Version two.",
       newText: "Version three.",
     });
+  });
+
+  it("should return every place when a large revision adds thirty scopes", () => {
+    const after = Array.from({ length: 30 }, (_, index) =>
+      block({
+        id: `section/slide-${index + 1}/paragraph-1`,
+        text: `Added place ${index + 1}.`,
+      }),
+    );
+
+    expect(diffRevisions({ before: [], after })).toHaveLength(30);
   });
 });

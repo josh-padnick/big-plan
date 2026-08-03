@@ -1,6 +1,6 @@
 // Browser test of the reviewer's commenting journey over a complete rendered
 // document: the quiet reading default, a comment on a block, a comment on a
-// highlighted passage, the Comments sidebar's staged lifecycle, and the guarantee
+// highlighted passage, the Feedback sidebar's staged lifecycle, and the guarantee
 // that a comment body stays literal text wherever it is shown. The runtime's
 // transport and package behavior is covered by its own unit tests; this spec
 // covers the half that only exists in a browser. Render-health failures are

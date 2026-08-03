@@ -20,7 +20,7 @@ test("should preserve and send a floating review across reload and viewport chan
   page,
   reviewRuntimeUrl,
 }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   await page.addInitScript(() => {
     const observer = new MutationObserver(() => {
       const input = document.querySelector("[data-review-agent-input]");
@@ -398,7 +398,64 @@ test("should preserve and send a floating review across reload and viewport chan
     ).toHaveCount(2);
   });
 
+  await test.step("anchored comment presence stays obvious and interactive below 1280 in both themes", async () => {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    const feedbackToggle = page.locator("[data-review-toggle]");
+    if ((await feedbackToggle.getAttribute("aria-expanded")) === "true") {
+      await feedbackToggle.click();
+    }
+    const anchoredBlock = page.locator('[data-block-label="versionId"]');
+    await anchoredBlock.scrollIntoViewIfNeeded();
+    const marker = page.locator("[data-review-marker]:visible").first();
+    await expect(marker).toContainText("comment");
+    const markerBox = await marker.boundingBox();
+    const anchoredBox = await anchoredBlock.boundingBox();
+    if (markerBox === null || anchoredBox === null) {
+      throw new Error("The anchored comment marker has no pointer geometry");
+    }
+    expect(markerBox.width).toBeGreaterThan(40);
+    expect(markerBox.x + markerBox.width).toBeLessThanOrEqual(
+      anchoredBox.x - 7.5,
+    );
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await marker.hover();
+      const hover = await marker.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      );
+      await marker.focus();
+      await page.keyboard.press("Shift+Tab");
+      await page.keyboard.press("Tab");
+      await expect(marker).toBeFocused();
+      await expect
+        .poll(() => marker.evaluate((node) => node.matches(":focus-visible")))
+        .toBe(true);
+      const box = await marker.boundingBox();
+      if (box === null) throw new Error("The marker lost its pointer target");
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      const active = await marker.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      );
+      await page.mouse.move(1, 1);
+      await page.mouse.up();
+      expect(active).not.toBe(hover);
+    }
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("data-theme", "light"),
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
   await test.step("every edited textarea has a visible keyboard focus ring", async () => {
+    const feedbackToggle = page.locator("[data-review-toggle]");
+    if ((await feedbackToggle.getAttribute("aria-expanded")) === "false") {
+      await feedbackToggle.click();
+    }
     await page.locator('[data-review-tab="chat"]').click();
     const wholePlan = page.locator("[data-review-agent-input]");
     await wholePlan.click();
@@ -512,6 +569,9 @@ test("should preserve and send a floating review across reload and viewport chan
   await test.step("Send writes the real package without jumping the reader", async () => {
     await toggle.click();
     await page.locator('[data-review-tab="comments"]').click();
+    await expect(page.locator("[data-review-send]")).toHaveText(
+      "Send all comments to agent",
+    );
     await page
       .locator("[data-review-drafts] [data-review-row-target]")
       .last()
@@ -529,6 +589,10 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
       .toBeCloseTo(before, 0);
+    await expect(tray).toBeVisible();
+    await expect(
+      page.locator('[data-review-outcome-group="waiting"] [data-review-row]'),
+    ).toHaveCount(3);
 
     const answer: unknown = await response.json();
     if (
@@ -547,6 +611,7 @@ test("should preserve and send a floating review across reload and viewport chan
     expect(brief).toContain("versionId");
     expect(brief).toContain("number");
     expect(brief).toContain("delivery note");
+    await page.locator("[data-review-hide]").click();
   });
 
   await test.step("sent comments wait for a real agent instead of inventing outcomes", async () => {
@@ -670,19 +735,18 @@ test("should preserve and send a floating review across reload and viewport chan
         '[data-review-thread-state="sent"]:has([data-review-outcome-state="changed"])',
       )
       .first();
-    const summary = changed.locator("[data-review-thread-summary]");
-    if ((await summary.getAttribute("aria-expanded")) !== "true") {
-      await summary.click();
+    if ((await changed.getAttribute("data-review-thread-expanded")) === null) {
+      await changed.locator("[data-review-thread-summary]").click();
     }
     await expect(changed.locator("[data-review-anchor-context]")).toContainText(
       "this text was revised",
     );
     await expect(
       changed.locator("[data-review-change-list] strong"),
-    ).toHaveText("Changed 2 places");
-    await expect(changed.locator("[data-review-change-row]")).toHaveCount(2);
+    ).toHaveText("Changed 1 place");
+    await expect(changed.locator("[data-review-change-row]")).toHaveCount(1);
     await expect(changed.locator("[data-review-see-change]")).toHaveText(
-      "See changes (2)",
+      "See the change",
     );
     expect(
       await page.locator("[data-review-anchor-changed]").evaluateAll((nodes) =>
@@ -701,11 +765,7 @@ test("should preserve and send a floating review across reload and viewport chan
         '[data-review-thread-state="sent"]:has([data-review-outcome-state="question"])',
       )
       .first();
-    if (
-      (await question
-        .locator("[data-review-thread-summary]")
-        .getAttribute("aria-expanded")) !== "true"
-    ) {
+    if ((await question.getAttribute("data-review-thread-expanded")) === null) {
       await page
         .locator('[data-block-label="number"]')
         .scrollIntoViewIfNeeded();
@@ -742,17 +802,16 @@ test("should preserve and send a floating review across reload and viewport chan
       "your comment",
     );
     await expect(stepper.locator("[data-review-diff-position]")).toHaveText(
-      "Change 1 of 2",
-    );
-    await stepper.locator("[data-review-diff-next]").click();
-    await expect(stepper.locator("[data-review-diff-position]")).toHaveText(
-      "Change 2 of 2",
+      "Change 1 of 1 · 1 · Details",
     );
     await expect(
       lens
         .locator('[data-review-diff-op="ins"]')
         .filter({ hasText: "One-based" }),
     ).toHaveCount(1);
+    expect(
+      await lens.evaluate((node) => getComputedStyle(node).marginTop),
+    ).toBe("0px");
     await page.keyboard.press("Escape");
     await expect(lens).toHaveCount(0);
     await expect(changed).toBeVisible();
@@ -768,7 +827,12 @@ test("should preserve and send a floating review across reload and viewport chan
       )
       .first();
     await expect(rehydratedChanged).toBeVisible();
-    await rehydratedChanged.locator("[data-review-thread-summary]").click();
+    if (
+      (await rehydratedChanged.getAttribute("data-review-thread-expanded")) ===
+      null
+    ) {
+      await rehydratedChanged.locator("[data-review-thread-summary]").click();
+    }
     await rehydratedChanged.locator("[data-review-see-change]").click();
     await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
     await page.keyboard.press("Escape");
@@ -788,9 +852,10 @@ test("should preserve and send a floating review across reload and viewport chan
     await page
       .locator('[data-block-label="versionId"]')
       .scrollIntoViewIfNeeded();
-    const summary = changed.locator("[data-review-thread-summary]");
-    if ((await summary.getAttribute("aria-expanded")) !== "true") {
-      await summary.evaluate((button) => button.click());
+    if ((await changed.getAttribute("data-review-thread-expanded")) === null) {
+      await changed
+        .locator("[data-review-thread-summary]")
+        .evaluate((button) => button.click());
     }
     const reply = changed.locator("[data-review-thread-reply]");
     await reply.fill("Make the stability guarantee explicit.");
@@ -858,21 +923,20 @@ test("should preserve and send a floating review across reload and viewport chan
     const restored = page.locator(
       `[data-review-thread-state="sent"][data-review-comment-id="${commentId}"]`,
     );
-    if (
-      (await restored
-        .locator("[data-review-thread-summary]")
-        .getAttribute("aria-expanded")) !== "true"
-    ) {
+    if ((await restored.getAttribute("data-review-thread-expanded")) === null) {
       await restored.locator("[data-review-thread-summary]").click();
     }
     await expect(restored.locator("[data-review-see-change]")).toHaveCount(2);
     await expect(
       restored.locator("[data-review-see-change]").first(),
-    ).toHaveText("See changes (2)");
+    ).toHaveText("See the change");
     await expect(
       restored.locator("[data-review-see-change]").last(),
     ).toHaveText("See the change");
     await restored.locator("[data-review-see-change]").first().click();
+    await expect(
+      restored.locator("[data-review-see-change]").first(),
+    ).toHaveText("Hide changes");
     await expect(
       page
         .locator('[data-review-diff-op="del"]')
@@ -897,7 +961,7 @@ test("should preserve and send a floating review across reload and viewport chan
 
   await test.step("responses collapse to one-line outcome chips without accumulating", async () => {
     const expanded = page.locator(
-      "[data-review-thread-expanded] [data-review-thread-summary]",
+      "[data-review-thread-expanded] [data-review-thread-minimize]",
     );
     while ((await expanded.count()) > 0) {
       await expanded.first().evaluate((button) => button.click());
@@ -993,7 +1057,23 @@ test("should preserve and send a floating review across reload and viewport chan
   });
 
   await test.step("outcome tones and chip interaction states work in both themes", async () => {
-    const summary = page.locator("[data-review-thread-summary]").first();
+    if (await tray.isVisible())
+      await page.locator("[data-review-hide]").click();
+    const minimize = page.locator(
+      "[data-review-thread-expanded] [data-review-thread-minimize]",
+    );
+    while ((await minimize.count()) > 0) {
+      await minimize.first().click();
+    }
+    await page
+      .locator('[data-block-label="versionId"]')
+      .scrollIntoViewIfNeeded();
+    const summary = page
+      .locator(
+        '[data-review-thread-state="sent"]:has([data-review-outcome-state="changed"]) [data-review-thread-summary]',
+      )
+      .first();
+    await expect(summary).toBeVisible();
     for (const theme of ["light", "dark"]) {
       await page.evaluate(
         (nextTheme) =>
@@ -1030,9 +1110,13 @@ test("should preserve and send a floating review across reload and viewport chan
       const active = await summary.evaluate(
         (node) => getComputedStyle(node).backgroundColor,
       );
+      await page.mouse.move(1, 1);
       await page.mouse.up();
       expect(active).not.toBe(hover);
     }
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("data-theme", "light"),
+    );
   });
 
   await test.step("a chip expands the complete thread in place and a reply stays in that chat", async () => {
@@ -1050,11 +1134,13 @@ test("should preserve and send a floating review across reload and viewport chan
     const question = page.locator(
       `[data-review-thread-state="sent"][data-review-comment-id="${questionId}"]`,
     );
-    await question.locator("[data-review-thread-summary]").click();
+    if ((await question.getAttribute("data-review-thread-expanded")) === null) {
+      await question.locator("[data-review-thread-summary]").click();
+    }
     await expect(question).toHaveAttribute("data-review-thread-expanded", "");
     await expect(
-      question.locator("[data-review-thread-summary]"),
-    ).toBeFocused();
+      question.locator("[data-review-thread-minimize]"),
+    ).toBeVisible();
     await expect(
       question.locator('[data-review-thread-turn="user"]'),
     ).toHaveText(/Say whether numbering starts at one/);
@@ -1077,6 +1163,12 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       question.locator("[data-review-thread-waiting]"),
     ).toBeVisible();
+    const activity = question.locator("[data-review-agent-activity]");
+    await expect(activity).toHaveAttribute("open", "");
+    await activity.locator("summary").click();
+    await expect(activity).not.toHaveAttribute("open", "");
+    await activity.locator("summary").click();
+    await expect(activity).toHaveAttribute("open", "");
     await expect(page.locator("[data-review-agent-state]")).toHaveText(
       "With agent",
     );
@@ -1171,15 +1263,27 @@ test("should preserve and send a floating review across reload and viewport chan
       .locator("[data-review-agent-input]")
       .fill("Which part of the plan carries the most delivery risk?");
     await page.locator("[data-review-agent-save]").click();
-    await expect(page.locator('[data-review-chat-message="user"]')).toHaveText(
-      /most delivery risk/,
-    );
+    await expect(
+      page.locator('[data-review-chat-message="user"]').first(),
+    ).toHaveText(/most delivery risk/);
     await expect(
       page.locator('[data-review-chat-message="waiting"]'),
     ).toBeVisible();
     await expect(
       page.locator(
         '[data-review-chat-message="waiting"] [data-review-spinner]',
+      ),
+    ).toBeVisible();
+    const activityToggle = page.locator("[data-review-activity-toggle]");
+    await expect(activityToggle).toBeVisible();
+    await activityToggle.click();
+    await expect(
+      page.locator('[data-review-chat-message="waiting"]'),
+    ).toContainText("Agent activity hidden");
+    await activityToggle.click();
+    await expect(
+      page.locator(
+        '[data-review-chat-message="waiting"] [data-review-agent-activity]',
       ),
     ).toBeVisible();
     await expect(page.locator("[data-review-progress]")).toHaveCount(0);
@@ -1202,6 +1306,52 @@ test("should preserve and send a floating review across reload and viewport chan
       throw new Error("The plan chat request did not reach the coding agent");
     }
     const source = await readFile(session.plan, "utf8");
+    const revisedChat =
+      source
+        .replace(
+          "Keep every reviewer note safe while the plan is discussed.",
+          "Keep each reviewer note safe while the plan is discussed.",
+        )
+        .replace(
+          "The table has adjacent targets that must remain distinguishable.",
+          "Audit boundaries are documented before implementation.",
+        )
+        .replace(
+          "Immutable content hash of the canonical snapshot",
+          "Encryption boundary with local-only durable custody and explicit reviewer-scoped session isolation",
+        )
+        .replace(
+          "One-based position in this plan's history",
+          "Retry budget and recovery window",
+        )
+        .replace(
+          "Sending writes one real feedback package beside this plan.",
+          "Sending safely writes one real feedback package beside this plan.",
+        ) +
+      `
+
+## Security
+
+Keep the review exchange local to the plan.
+
+## Performance
+
+Watch revision snapshots without blocking reading.
+
+## Accessibility
+
+Keep every change control keyboard reachable.
+
+## Rollout
+
+Ship the live review loop behind the explicit review command.
+`;
+    await writeFile(session.plan, revisedChat);
+    await writeRevisionSnapshot({
+      store,
+      revision: deriveSourceRevision(revisedChat),
+      source: revisedChat,
+    });
     await writeAgentResponse({
       store,
       response: validateAgentResponseDraft({
@@ -1213,7 +1363,7 @@ test("should preserve and send a floating review across reload and viewport chan
         request,
         commentsById: commentsFromExchange(exchange),
         changedBlocks: new Set(),
-        currentRevision: deriveSourceRevision(source),
+        currentRevision: deriveSourceRevision(revisedChat),
         now: new Date().toISOString(),
       }),
     });
@@ -1221,6 +1371,233 @@ test("should preserve and send a floating review across reload and viewport chan
       page.locator('[data-review-chat-message="agent"]'),
     ).toContainText("preserving comment anchors", { timeout: 10_000 });
     await expect(page.locator("[data-review-simulated]")).toHaveCount(0);
+    const chatDiff = await page.evaluate(async () => {
+      const root = document.documentElement;
+      const headers = {
+        "x-big-plan-review-token": root.getAttribute("data-review-token") || "",
+      };
+      const exchange = await fetch("/api/agent", { headers }).then((answer) =>
+        answer.json(),
+      );
+      const request = exchange.requests.find(
+        (entry: { kind?: string }) => entry.kind === "chat",
+      );
+      const response = exchange.responses.find(
+        (entry: { kind?: string }) => entry.kind === "chat",
+      );
+      const answer = await fetch(
+        "/api/revision-diff?from=" +
+          encodeURIComponent(request.sourceRevision) +
+          "&to=" +
+          encodeURIComponent(response.sourceRevision),
+        { headers },
+      );
+      return {
+        requestRevision: request.sourceRevision,
+        responseRevision: response.sourceRevision,
+        diff: await answer.json(),
+      };
+    });
+    expect(chatDiff.responseRevision).not.toBe(chatDiff.requestRevision);
+    expect(chatDiff.diff.locations.length).toBeGreaterThan(0);
+    const digest = page
+      .locator(
+        '[data-review-chat-message="agent"] [data-review-chat-change-digest]',
+      )
+      .first();
+    await expect(
+      digest.locator("[data-review-chat-change-toggle]"),
+    ).toContainText(/Changed \d+ places across \d+ slides/);
+    const chatPlaces = Number(
+      (
+        (await digest
+          .locator("[data-review-chat-change-toggle]")
+          .textContent()) || ""
+      ).match(/Changed (\d+) places/)?.[1],
+    );
+    expect(chatPlaces).toBeGreaterThan(3);
+    await expect(
+      digest.locator("[data-review-chat-change-toggle]"),
+    ).toHaveAttribute("aria-expanded", "false");
+    await expect(digest.locator("[data-review-chat-change-list]")).toBeHidden();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      for (const control of [
+        "[data-review-chat-change-toggle]",
+        "[data-review-see-change]",
+      ]) {
+        const button = digest.locator(control);
+        await button.hover();
+        const hover = await button.evaluate(
+          (node) => getComputedStyle(node).backgroundColor,
+        );
+        await button.focus();
+        await page.keyboard.press("Shift+Tab");
+        await page.keyboard.press("Tab");
+        await expect(button).toBeFocused();
+        await expect
+          .poll(() => button.evaluate((node) => node.matches(":focus-visible")))
+          .toBe(true);
+        const box = await button.boundingBox();
+        if (box === null) throw new Error("The change control has no target");
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        const active = await button.evaluate(
+          (node) => getComputedStyle(node).backgroundColor,
+        );
+        await page.mouse.move(1, 1);
+        await page.mouse.up();
+        expect(active).not.toBe(hover);
+      }
+    }
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("data-theme", "light"),
+    );
+    await digest.locator("[data-review-chat-change-toggle]").click();
+    await expect(digest.locator("[data-review-change-row]")).toHaveCount(
+      chatPlaces,
+    );
+    expect(
+      await digest.locator("[data-review-change-slide-header]").count(),
+    ).toBeGreaterThan(1);
+    await digest.locator("[data-review-see-change]").click();
+    await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
+    await expect(
+      page.locator("[data-review-diff-stepper] [data-review-diff-position]"),
+    ).toContainText(`Change 1 of ${chatPlaces} ·`);
+    await expect(digest.locator("[data-review-see-change]")).toHaveText(
+      "Hide changes",
+    );
+    await expect(tray).toBeVisible();
+    await expect(page.locator('[data-review-tab="chat"]')).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await digest.locator("[data-review-see-change]").click();
+    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+    await expect(page.locator("[data-review-diff-hidden]")).toHaveCount(0);
+
+    const rewrittenRow = digest
+      .locator("[data-review-change-row]")
+      .filter({ hasText: "rewritten" })
+      .first();
+    await expect(rewrittenRow).toBeVisible();
+    await rewrittenRow.click();
+    await expect(page.locator("[data-review-diff-was]")).toBeVisible();
+    await expect(page.locator("[data-review-diff-now]")).toBeVisible();
+    await digest.locator("[data-review-see-change]").click();
+
+    const addedRow = digest
+      .locator("[data-review-change-row]")
+      .filter({ hasText: "added" })
+      .first();
+    await addedRow.click();
+    await expect(page.locator("[data-review-diff-added-run]")).toBeVisible();
+    await digest.locator("[data-review-see-change]").click();
+    await expect(page.locator("[data-review-diff-hidden]")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Security" })).toBeVisible();
+
+    await page
+      .locator("[data-review-agent-input]")
+      .fill("Confirm the formatting-only cleanup.");
+    const formattingSent = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/agent-requests") &&
+        response.request().method() === "POST",
+    );
+    await page.locator("[data-review-agent-save]").click();
+    expect((await formattingSent).ok()).toBe(true);
+    const formattingExchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const formattingRequest = nextPendingAgentRequest(formattingExchange);
+    if (formattingRequest?.kind !== "chat") {
+      throw new Error("The formatting-only chat did not reach the agent");
+    }
+    const formattingSource = revisedChat.replace(
+      "## Security\n",
+      "## Security  \n",
+    );
+    await writeFile(session.plan, formattingSource);
+    await writeRevisionSnapshot({
+      store,
+      revision: deriveSourceRevision(formattingSource),
+      source: formattingSource,
+    });
+    await writeAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: formattingRequest.requestId,
+          message: "Formatting is clean; the rendered plan did not change.",
+        },
+        request: formattingRequest,
+        commentsById: commentsFromExchange(formattingExchange),
+        changedBlocks: new Set(),
+        currentRevision: deriveSourceRevision(formattingSource),
+        now: new Date().toISOString(),
+      }),
+    });
+    await expect(
+      page.locator('[data-review-chat-message="agent"]'),
+    ).toHaveCount(2, { timeout: 10_000 });
+    await expect(page.locator("[data-review-chat-change-digest]")).toHaveCount(
+      1,
+    );
+    const historicalDigest = page
+      .locator("[data-review-chat-change-digest]")
+      .first();
+    await historicalDigest.locator("[data-review-see-change]").click();
+    await expect(page.locator("[data-review-diff-label]")).toContainText(
+      "since revised again",
+    );
+    await historicalDigest.locator("[data-review-see-change]").click();
+
+    await page
+      .locator("[data-review-agent-input]")
+      .fill("Confirm no source edit is needed.");
+    const unchangedSent = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/agent-requests") &&
+        response.request().method() === "POST",
+    );
+    await page.locator("[data-review-agent-save]").click();
+    expect((await unchangedSent).ok()).toBe(true);
+    const unchangedExchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const unchangedRequest = nextPendingAgentRequest(unchangedExchange);
+    if (unchangedRequest?.kind !== "chat") {
+      throw new Error("The unchanged chat did not reach the agent");
+    }
+    await writeAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: unchangedRequest.requestId,
+          message: "No source edit was needed.",
+        },
+        request: unchangedRequest,
+        commentsById: commentsFromExchange(unchangedExchange),
+        changedBlocks: new Set(),
+        currentRevision: deriveSourceRevision(formattingSource),
+        now: new Date().toISOString(),
+      }),
+    });
+    await expect(
+      page.locator('[data-review-chat-message="agent"]'),
+    ).toHaveCount(3, { timeout: 10_000 });
+    await expect(page.locator("[data-review-chat-change-digest]")).toHaveCount(
+      1,
+    );
     await expect(page.locator("[data-review-thread-summary]")).toHaveCount(
       sentCount,
     );
@@ -1242,9 +1619,9 @@ test("should preserve and send a floating review across reload and viewport chan
     );
     await toggle.click();
     await page.locator('[data-review-tab="chat"]').click();
-    await expect(page.locator('[data-review-chat-message="user"]')).toHaveText(
-      /most delivery risk/,
-    );
+    await expect(
+      page.locator('[data-review-chat-message="user"]').first(),
+    ).toHaveText(/most delivery risk/);
     await page.locator('[data-review-tab="comments"]').click();
     await page
       .locator(
@@ -1351,6 +1728,54 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       trayThread.locator("[data-review-thread-resolve]"),
     ).toBeVisible();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      for (const control of [
+        "[data-review-thread-minimize]",
+        "[data-review-thread-resolve]",
+        "[data-review-thread-revert]",
+      ]) {
+        const button = trayThread.locator(control);
+        await button.hover();
+        const hover = await button.evaluate(
+          (node) => getComputedStyle(node).backgroundColor,
+        );
+        await button.focus();
+        await page.keyboard.press("Shift+Tab");
+        await page.keyboard.press("Tab");
+        await expect(button).toBeFocused();
+        await expect
+          .poll(() => button.evaluate((node) => node.matches(":focus-visible")))
+          .toBe(true);
+        const box = await button.boundingBox();
+        if (box === null) throw new Error("The thread action has no target");
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        const active = await button.evaluate(
+          (node) => getComputedStyle(node).backgroundColor,
+        );
+        await page.mouse.move(1, 1);
+        await page.mouse.up();
+        expect(active).not.toBe(hover);
+      }
+    }
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("data-theme", "light"),
+    );
+    const historicalChange = trayThread
+      .locator("[data-review-see-change]")
+      .first();
+    await historicalChange.click();
+    await expect(historicalChange).toHaveText("Hide changes");
+    await expect(page.locator("[data-review-diff-label]")).toContainText(
+      "since revised again",
+    );
+    await historicalChange.click();
+    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
     await trayThread.locator("[data-review-thread-minimize]").click();
     await expect(trayThread).toHaveCount(0);
     await expect(tray).toBeVisible();
@@ -1394,7 +1819,7 @@ test("should preserve and send a floating review across reload and viewport chan
     }
     const current = await readFile(session.plan, "utf8");
     const reverted = current.replace(
-      "Immutable content hash of the canonical snapshot",
+      "Encryption boundary with local-only durable custody and explicit reviewer-scoped session isolation",
       "Content hash of the snapshot",
     );
     const target = commentsFromExchange(exchange).get(commentId)?.target;
@@ -1444,7 +1869,16 @@ test("should preserve and send a floating review across reload and viewport chan
     );
     await trayThread.locator("[data-review-thread-resolve]").click();
     expect((await savedResolve).ok()).toBe(true);
-    await expect(stableRow).toHaveCount(0);
+    await expect(
+      page.locator(
+        `[data-review-outcome-group] [data-review-sent-row][data-review-comment-id="${commentId}"]`,
+      ),
+    ).toHaveCount(0);
+    await expect(
+      page.locator(
+        `[data-review-resolved-group] [data-review-sent-row][data-review-comment-id="${commentId}"]`,
+      ),
+    ).toHaveCount(1);
     await expect(tray).toBeVisible();
   });
 
@@ -1458,16 +1892,47 @@ test("should preserve and send a floating review across reload and viewport chan
       page.locator("[data-review-resolved-group] summary"),
     ).toHaveText("Resolved (1)");
     await page.locator("[data-review-resolved-group] summary").click();
-    await expect(page.locator("[data-review-resolved-group] li")).toHaveCount(
-      1,
+    const resolvedRow = page.locator("[data-review-resolved-group] li");
+    await expect(resolvedRow).toHaveCount(1);
+    await resolvedRow.locator("[data-review-row-target]").click();
+    await expect(
+      resolvedRow.locator("[data-review-thread-unresolve]"),
+    ).toBeVisible();
+    const savedUnresolve = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/drafts") &&
+        response.request().method() === "PUT",
     );
+    await resolvedRow.locator("[data-review-thread-unresolve]").click();
+    expect((await savedUnresolve).ok()).toBe(true);
+    await expect(page.locator("[data-review-resolved-group]")).toHaveCount(0);
+    await expect(
+      page.locator(
+        '[data-review-outcome-group="changed"] [data-review-sent-row]',
+      ),
+    ).toHaveCount(1);
+    const restoredRow = page.locator(
+      '[data-review-outcome-group="changed"] [data-review-sent-row]',
+    );
+    await restoredRow.locator("[data-review-row-target]").click();
+    const savedReresolve = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/drafts") &&
+        response.request().method() === "PUT",
+    );
+    await restoredRow.locator("[data-review-thread-resolve]").click();
+    expect((await savedReresolve).ok()).toBe(true);
+    await expect(page.locator("[data-review-resolved-group]")).toHaveCount(1);
   });
 
   await test.step("staged selection anchors silently re-find exact quotes and degrade when the quote disappears", async () => {
     if (await tray.isVisible()) {
       await page.locator("[data-review-hide]").click();
     }
-    const paragraph = page.locator("[data-block-kind='paragraph']").last();
+    const paragraph = page.locator(
+      '[data-block-section="Delivery"][data-block-kind="paragraph"]',
+    );
+    await paragraph.scrollIntoViewIfNeeded();
     await paragraph.evaluate((block) => {
       const range = document.createRange();
       range.selectNodeContents(block);
@@ -1488,8 +1953,8 @@ test("should preserve and send a floating review across reload and viewport chan
 
     const beforeMove = await readFile(session.plan, "utf8");
     const moved = beforeMove.replace(
-      "Sending writes one real feedback package beside this plan.",
-      "Context: Sending writes one real feedback package beside this plan.",
+      "Sending safely writes one real feedback package beside this plan.",
+      "Context: Sending safely writes one real feedback package beside this plan.",
     );
     await writeFile(session.plan, moved);
     await page.reload();
@@ -1499,12 +1964,14 @@ test("should preserve and send a floating review across reload and viewport chan
     );
     await expect(page.locator("[data-review-draft-stale]")).toHaveCount(0);
     await expect(
-      page.locator("[data-block-kind='paragraph']").last(),
+      page.locator(
+        '[data-block-section="Delivery"][data-block-kind="paragraph"]',
+      ),
     ).not.toHaveAttribute("data-review-anchor-changed");
 
     const changed = moved.replace(
-      "Sending writes one real feedback package",
-      "Submitting writes one real feedback package",
+      "Sending safely writes one real feedback package",
+      "Submitting safely writes one real feedback package",
     );
     await writeFile(session.plan, changed);
     await page.reload();
@@ -1517,7 +1984,9 @@ test("should preserve and send a floating review across reload and viewport chan
       "The text changed since you drafted this.",
     );
     await expect(
-      page.locator("[data-block-kind='paragraph']").last(),
+      page.locator(
+        '[data-block-section="Delivery"][data-block-kind="paragraph"]',
+      ),
     ).toHaveAttribute("data-review-anchor-changed", "");
   });
 });
