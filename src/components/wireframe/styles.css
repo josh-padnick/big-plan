@@ -1,4 +1,7 @@
 /*
+CSS escape hatch: selector relationships isolate the drawing from generated
+prose markup, while local readability keeps its sketch primitives together.
+
 Wireframe's hand-drawn visual language.
 
 Two jobs live here. First, isolation: the reading column styles headings,
