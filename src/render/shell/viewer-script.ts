@@ -6,7 +6,9 @@
 // state, a document comment draft, DataTable sorting, filtering, text fit,
 // column layout and grouping, and one maximize behavior shared by every figure
 // family, a decision matrix's column highlight, rationale swap, and confirm
-// step, plus the diagram leg in ./diagram-script.ts. Plan content never
+// step, wireframe screen navigation driven entirely by renderer-emitted data
+// attributes plus true-width scaling, and the diagram leg in
+// ./diagram-script.ts. Plan content never
 // contributes script, and every affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
@@ -377,6 +379,62 @@ export const VIEWER_SCRIPT = `<script>
       openButton.focus();
     }
   });
+})();
+(() => {
+  const roots = Array.from(document.querySelectorAll("[data-wireframe]"));
+  const fit = (screen) => {
+    const frame = screen.querySelector(":scope > .wireframe-frame");
+    if (frame === null || screen.clientWidth === 0) return;
+    // offsetWidth stays in the frame's unscaled coordinate space. Writing a
+    // numeric zoom avoids relying on unsupported length division in CSS.
+    frame.style.zoom = "1";
+    frame.style.zoom = String(
+      Math.min(1, screen.clientWidth / frame.offsetWidth),
+    );
+  };
+  for (const root of roots) {
+    const screens = Array.from(
+      root.querySelectorAll("[data-wireframe-screen]"),
+    );
+    if (screens.length === 0) continue;
+    // Fit while every screen still participates in layout. Marking the root
+    // interactive then narrows it to one screen; without this script the
+    // complete storyboard remains readable, with true-width frames scrolling.
+    for (const screen of screens) fit(screen);
+    root.setAttribute("data-wireframe-interactive", "");
+    const show = (id) => {
+      let current = null;
+      for (const screen of screens) {
+        const active = screen.getAttribute("data-wireframe-screen") === id;
+        screen.toggleAttribute("data-wireframe-current", active);
+        if (active) current = screen;
+      }
+      for (const tab of root.querySelectorAll("[data-wireframe-switch]")) {
+        if (tab.getAttribute("data-wireframe-navigate") === id)
+          tab.setAttribute("aria-current", "true");
+        else tab.removeAttribute("aria-current");
+      }
+      if (current !== null) requestAnimationFrame(() => fit(current));
+    };
+    root.addEventListener("click", (event) => {
+      const trigger =
+        event.target instanceof Element
+          ? event.target.closest("[data-wireframe-navigate]")
+          : null;
+      if (trigger === null || !root.contains(trigger)) return;
+      const id = trigger.getAttribute("data-wireframe-navigate");
+      if (screens.some((screen) => screen.getAttribute("data-wireframe-screen") === id))
+        show(id);
+    });
+  }
+  addEventListener("resize", () => {
+    for (const root of roots) {
+      const current = root.querySelector(
+        "[data-wireframe-screen][data-wireframe-current]",
+      );
+      if (current !== null) fit(current);
+    }
+  }, { passive: true });
 })();
 (() => {
   const blocks = Array.from(document.querySelectorAll("[data-collapsible]"));

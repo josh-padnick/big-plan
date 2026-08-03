@@ -50,6 +50,7 @@ export const SIDEBAR: readonly SidebarGroup[] = [
       { label: "QuickSummary", slug: "components/quick-summary" },
       { label: "QuickDecision", slug: "components/quick-decision" },
       { label: "TableOfContents", slug: "components/table-of-contents" },
+      { label: "Wireframe", slug: "components/wireframe" },
     ],
   },
   {

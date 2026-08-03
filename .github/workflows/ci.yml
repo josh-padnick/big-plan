@@ -1,5 +1,5 @@
-# CI: lint, build, and unit-test every pushed branch, including main and
-# same-repository PR heads.
+# CI: lint, build, unit-test, and browser-test every pushed branch, including
+# main and same-repository PR heads.
 name: CI
 
 # Runs on every push to every branch; the run on a PR's head commit shows up
@@ -29,12 +29,14 @@ jobs:
       # difference means a source changed without its generated output.
       - name: Generated files must not drift from their sources
         run: |
-          if [ -n "$(git status --porcelain -- '*.generated.ts')" ]; then
-            git status --porcelain -- '*.generated.ts'
+          if [ -n "$(git status --porcelain -- '*.generated.ts' '*.generated.css')" ]; then
+            git status --porcelain -- '*.generated.ts' '*.generated.css'
             echo "::error::Generated files drifted from their sources. Run 'bun run gen' and commit the result."
             exit 1
           fi
       - run: bun run test
+      - run: bunx playwright install chromium
+      - run: bun run test:e2e
 
   style-history:
     # Historical commits execute only in this disposable GitHub-hosted job,

@@ -1,0 +1,623 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "feat(wireframe): enforce the CLEAR quality bar [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "package.json",
+      "propertyDeltas": [
+        {
+          "property": "gen pipeline (embedded font input)",
+          "from": "gen:css, gen:assets, gen:guidance",
+          "to": "gen:fonts first, so the wireframe @font-face stylesheet exists before gen:css embeds it"
+        }
+      ]
+    },
+    {
+      "path": "src/components/code-snippet/styles.css",
+      "propertyDeltas": [
+        {
+          "property": "padding-block (.code-snippet-body)",
+          "from": "0",
+          "to": "0.6rem"
+        }
+      ]
+    },
+    {
+      "path": "src/components/code-snippet/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "padding-inline (.code-snippet-line-content)",
+          "from": "0.75rem",
+          "to": "1rem"
+        }
+      ]
+    },
+    {
+      "path": "src/components/table-of-contents/styles.css",
+      "propertyDeltas": [
+        {
+          "property": "hover wash contract comment",
+          "from": "wash runs the full container row",
+          "to": "wash hugs the row's own text, matching the shrink-wrapped row in the view"
+        }
+      ]
+    },
+    {
+      "path": "src/components/table-of-contents/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "row width (.table-of-contents-row)",
+          "from": "full container width (grid-cols-[2rem_minmax(0,1fr)])",
+          "to": "shrink-wrapped to its text (w-fit max-w-full grid-cols-[2rem_minmax(0,max-content)])"
+        }
+      ]
+    },
+    {
+      "path": "src/components/wireframe/font.generated.css",
+      "propertyDeltas": [
+        {
+          "property": "@font-face Patrick Hand",
+          "from": "absent",
+          "to": "embedded woff2 for the hand-drawn wireframe voice"
+        }
+      ]
+    },
+    {
+      "path": "src/components/wireframe/styles.css",
+      "propertyDeltas": [
+        {
+          "property": "wireframe frame, pane, region, and annotation styles",
+          "from": "absent",
+          "to": "present (new component; no configured fixture renders it yet)"
+        }
+      ]
+    },
+    {
+      "path": "src/components/wireframe/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "wireframe component markup",
+          "from": "absent",
+          "to": "present (new component; no configured fixture renders it yet)"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.css",
+      "propertyDeltas": [
+        {
+          "property": "--measure / --card-measure / --card-figure tokens",
+          "from": "absent",
+          "to": "45.5rem / 48rem / 54.5rem"
+        },
+        {
+          "property": "max-width ([data-slide])",
+          "from": "none (slides fill the reading column)",
+          "to": "content-earned: --card-measure, --card-figure with a wireframe, none with a table"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "embedded stylesheet",
+          "from": "without measure tokens, slide widths, and wireframe styles",
+          "to": "regenerated with them"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/compile-markdown-transforms.test.ts",
+      "propertyDeltas": [
+        {
+          "property": "expected table scroll-container classes",
+          "from": "block full-width container",
+          "to": "w-fit max-w-full shrink-wrapped container, wireframe subtree exempt"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/compile-markdown.ts",
+      "propertyDeltas": [
+        {
+          "property": "table scroll-container width",
+          "from": "block, stretching to the reading width",
+          "to": "w-fit max-w-full, ending where the columns end; wireframe-owned tables skipped"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/prose.css",
+      "propertyDeltas": [
+        {
+          "property": "max-width (prose blocks, callouts, quick summaries)",
+          "from": "none (blocks fill the reading column)",
+          "to": "var(--measure), with table cells and wireframes exempt"
+        },
+        {
+          "property": "min-width (article table)",
+          "from": "100%",
+          "to": "none (tables hold their natural max-content width)"
+        }
+      ]
+    },
+    {
+      "path": "src/render/render-document.ts",
+      "propertyDeltas": [
+        {
+          "property": "shell title input",
+          "from": "not passed",
+          "to": "resolved plan title passed to the shell header"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/shell.test.ts",
+      "propertyDeltas": [
+        {
+          "property": "expected header markup",
+          "from": "logo-only header",
+          "to": "header with centered plan title"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/shell.ts",
+      "propertyDeltas": [
+        {
+          "property": "reading column (wide breakpoint)",
+          "from": "minmax(0,74ch)",
+          "to": "minmax(0,54.5rem), sized for a standard desktop wireframe through nested card chrome"
+        },
+        {
+          "property": "header layout",
+          "from": "single flex row",
+          "to": "3-column grid with a centered, truncated plan title"
+        },
+        {
+          "property": "TOC entry inset",
+          "from": "pl-5",
+          "to": "pl-3.5"
+        },
+        {
+          "property": "TOC part header",
+          "from": "carries the entry rule and inset (border-l-2 px-3)",
+          "to": "flush with the Contents label (pr-3, no rule)"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/viewer-script.ts",
+      "propertyDeltas": [
+        {
+          "property": "wireframe viewer runtime",
+          "from": "absent",
+          "to": "screen navigation and true-width zoom fitting driven by renderer-emitted data attributes"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__desktop-navigation__desktop__dark.png",
+      "changedPixels": 1134,
+      "before": {
+        "width": 241,
+        "height": 303,
+        "sha256": "fbed24d6b5eeea426f3666bcad657d51baa6ad57edea418326a4933872baa875"
+      },
+      "after": {
+        "width": 240,
+        "height": 303,
+        "sha256": "954e8c248cb4b4264af1edcce85d066554c9e68882f9061d5571df2e536d61ea"
+      },
+      "propertyDeltas": [
+        {
+          "property": "part header and entry inset",
+          "from": "part headers share the entry rule and inset (241px nav)",
+          "to": "part headers flush left, entries at pl-3.5 (240px nav)"
+        }
+      ]
+    },
+    {
+      "capture": "components__desktop-navigation__desktop__light.png",
+      "changedPixels": 1147,
+      "before": {
+        "width": 241,
+        "height": 303,
+        "sha256": "6de8b6c0d223cad563232569c3e823d79f7a359fdd5810c03755630fc7477f6a"
+      },
+      "after": {
+        "width": 240,
+        "height": 303,
+        "sha256": "4eabbc60a57e976f21e24d13848e688518722f3ff2a4cf39ae365aa98557ea26"
+      },
+      "propertyDeltas": [
+        {
+          "property": "part header and entry inset",
+          "from": "part headers share the entry rule and inset (241px nav)",
+          "to": "part headers flush left, entries at pl-3.5 (240px nav)"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__dark.png",
+      "changedPixels": 5251366,
+      "before": {
+        "width": 710,
+        "height": 11603,
+        "sha256": "705887f08d1e52f27388a1ad7ef557962768d604d17fa6c1e35ea0cd91a5f1c2"
+      },
+      "after": {
+        "width": 872,
+        "height": 11468,
+        "sha256": "fc8ff9277e206acc64d07bb2dbe3d920a11f6801802600f62e592913685659ee"
+      },
+      "propertyDeltas": [
+        {
+          "property": "article width (reading column)",
+          "from": "710px (74ch column)",
+          "to": "872px (54.5rem column); prose holds the 45.5rem measure inside it and tables shrink to natural width"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__light.png",
+      "changedPixels": 5360280,
+      "before": {
+        "width": 710,
+        "height": 11603,
+        "sha256": "928c198939518dc6601bf6e0ddb02d7ffa104e32be9ad5099d0a87833f0b0e87"
+      },
+      "after": {
+        "width": 872,
+        "height": 11468,
+        "sha256": "7a0fcc7e899d8a45c7f8cf7619f51fd2ec210d1dc3e1c97ae2ca6a84694e9d89"
+      },
+      "propertyDeltas": [
+        {
+          "property": "article width (reading column)",
+          "from": "710px (74ch column)",
+          "to": "872px (54.5rem column); prose holds the 45.5rem measure inside it and tables shrink to natural width"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__dark.png",
+      "changedPixels": 599209,
+      "before": {
+        "width": 350,
+        "height": 14167,
+        "sha256": "766e6d7d2382f4518799511fa51bd10a078ceac9ec72664494c6170fdaa0ac38"
+      },
+      "after": {
+        "width": 350,
+        "height": 14186,
+        "sha256": "65dfbafeb2944df3f71259acff789921caac3346ab9bd1538f6bd70d0b3f9cd5"
+      },
+      "propertyDeltas": [
+        {
+          "property": "phone reflow of tables and snippets",
+          "from": "table cells stretched to the container minimum; snippets without body padding",
+          "to": "natural-width table cells re-wrap and snippet bodies gain 0.6rem block padding"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__light.png",
+      "changedPixels": 605111,
+      "before": {
+        "width": 350,
+        "height": 14167,
+        "sha256": "36a67235a15e5bddafe763662a55c2c753f7224183ae5cc81cd5f2dda89570d1"
+      },
+      "after": {
+        "width": 350,
+        "height": 14186,
+        "sha256": "12e62fe013cfbda4d3189f389ad1054b8b3a2437180c931779ce7b25d8db6844"
+      },
+      "propertyDeltas": [
+        {
+          "property": "phone reflow of tables and snippets",
+          "from": "table cells stretched to the container minimum; snippets without body padding",
+          "to": "natural-width table cells re-wrap and snippet bodies gain 0.6rem block padding"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__dark.png",
+      "changedPixels": 37843,
+      "before": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "645e61cc0e6bebf8e050786aff7efceffb8eeb0a1968af346c5a032cb66e7874"
+      },
+      "after": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "c5a55f65d5ea18b6a50658ed6336fc2619d02f890eb0968959e379431b0941b8"
+      },
+      "propertyDeltas": [
+        {
+          "property": "code-snippet padding",
+          "from": "0.75rem line inset, no body block padding",
+          "to": "1rem line inset with 0.6rem body block padding"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__light.png",
+      "changedPixels": 37846,
+      "before": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "d12d9024fb60f1ea38ff8ad45649b9b161d7224debb6e980d4646e0c96d35994"
+      },
+      "after": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "112c8b99c90e816c14ce868c3e37f2daf0ca0a9114fb6ad535bd7005d92b1d46"
+      },
+      "propertyDeltas": [
+        {
+          "property": "code-snippet padding",
+          "from": "0.75rem line inset, no body block padding",
+          "to": "1rem line inset with 0.6rem body block padding"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__desktop__dark.png",
+      "changedPixels": 989,
+      "before": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "9b5c536a60890c648589adb4a4cba1691a7509138bd90b3dcb61fb50c9d447c8"
+      },
+      "after": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "f9d40a1420d516cb690cba15c12f8d938b11ae82021ce50de23bf0a32621e79f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "centered plan title",
+          "from": "absent",
+          "to": "truncated plan title centered in the header grid"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__desktop__light.png",
+      "changedPixels": 1011,
+      "before": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "177342d9930a08054862e67b13da3588ebaa292434efe0da3201aa07cb6fda22"
+      },
+      "after": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "554521fda35065b00bf1a4e81cd7799bf25d70341eee354aeb8c4966bd0e5168"
+      },
+      "propertyDeltas": [
+        {
+          "property": "centered plan title",
+          "from": "absent",
+          "to": "truncated plan title centered in the header grid"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__phone__dark.png",
+      "changedPixels": 571,
+      "before": {
+        "width": 390,
+        "height": 44,
+        "sha256": "8096ccf4e923b8b7b05cafa464907c2de461637451c39e6aefdc6ff9ccdf4744"
+      },
+      "after": {
+        "width": 390,
+        "height": 44,
+        "sha256": "f83f1c71f6855cb36a48efa088e778f5daa9fc0dd14b5dda6b42d80a4f0efe4f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "centered plan title",
+          "from": "absent",
+          "to": "truncated plan title centered in the header grid"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__phone__light.png",
+      "changedPixels": 588,
+      "before": {
+        "width": 390,
+        "height": 44,
+        "sha256": "fed71e0dc61814b6eb2a72309837cba84f7ccccb82e98fe544a9cada0616a818"
+      },
+      "after": {
+        "width": 390,
+        "height": 44,
+        "sha256": "adb5f18653856d255712559f3e395d266fbbd588d1b83b7602a6fe372b6ef222"
+      },
+      "propertyDeltas": [
+        {
+          "property": "centered plan title",
+          "from": "absent",
+          "to": "truncated plan title centered in the header grid"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-desktop__desktop__dark.png",
+      "changedPixels": 227382,
+      "before": {
+        "width": 710,
+        "height": 1281,
+        "sha256": "4935f855a81ce08ecf6579bbdb63cd8f52a23cd0d8726154c80686a83f5cbe0d"
+      },
+      "after": {
+        "width": 872,
+        "height": 1281,
+        "sha256": "706e9ccc4ef881dd823a9896ba45198e8ca004478fcd968c9a85098fbf641cc4"
+      },
+      "propertyDeltas": [
+        {
+          "property": "article width (reading column)",
+          "from": "710px (74ch column)",
+          "to": "872px (54.5rem column); prose holds the 45.5rem measure inside it and tables shrink to natural width"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-desktop__desktop__light.png",
+      "changedPixels": 227487,
+      "before": {
+        "width": 710,
+        "height": 1281,
+        "sha256": "08c9f865d90ce08a70d3c2556aae0457727e76ea34fd62b28f467a8512e12dd7"
+      },
+      "after": {
+        "width": 872,
+        "height": 1281,
+        "sha256": "873bb5743082c1bd1fc3e72421a731401bdd463cdb8eeb5c5afdfbfcd03651d0"
+      },
+      "propertyDeltas": [
+        {
+          "property": "article width (reading column)",
+          "from": "710px (74ch column)",
+          "to": "872px (54.5rem column); prose holds the 45.5rem measure inside it and tables shrink to natural width"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-phone__phone__dark.png",
+      "changedPixels": 1454,
+      "before": {
+        "width": 350,
+        "height": 1608,
+        "sha256": "8faedfe0ac0d8fe1e4b90100b1c0a26b649dc0cb04a2f8d5780c1673ac764611"
+      },
+      "after": {
+        "width": 350,
+        "height": 1608,
+        "sha256": "008efc95c9dee613926106497bc31cad66b451416263cad57bc40150068c863f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "phone reflow of tables and snippets",
+          "from": "table cells stretched to the container minimum; snippets without body padding",
+          "to": "natural-width table cells re-wrap and snippet bodies gain 0.6rem block padding"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-phone__phone__light.png",
+      "changedPixels": 1472,
+      "before": {
+        "width": 350,
+        "height": 1608,
+        "sha256": "b2fa591806a71465d532a43d753ce4f1f9f4c05d2f4008069f1b39b1ff541cfc"
+      },
+      "after": {
+        "width": 350,
+        "height": 1608,
+        "sha256": "f63ba4bc72f3995e706c1d3c26f71fe79d71bb03b3f5e8e37f95413c3d421fe7"
+      },
+      "propertyDeltas": [
+        {
+          "property": "phone reflow of tables and snippets",
+          "from": "table cells stretched to the container minimum; snippets without body padding",
+          "to": "natural-width table cells re-wrap and snippet bodies gain 0.6rem block padding"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__dark.png",
+      "changedPixels": 467977,
+      "before": {
+        "width": 710,
+        "height": 2711,
+        "sha256": "90da97d1ab66efe0dbfd5244b392fcd9b632935a1fb3a1f66b31edeb2be3f0ee"
+      },
+      "after": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "8a7f3f9258a1bdcaec2c0da3b446908a1ac5fe893c2f3598bb50a77055b473a0"
+      },
+      "propertyDeltas": [
+        {
+          "property": "article width (reading column)",
+          "from": "710px (74ch column)",
+          "to": "872px (54.5rem column); prose holds the 45.5rem measure inside it and tables shrink to natural width"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__light.png",
+      "changedPixels": 468175,
+      "before": {
+        "width": 710,
+        "height": 2711,
+        "sha256": "6fe7c63834891738e48616a59722a9195172aa0411c002f5bace136913a30bd3"
+      },
+      "after": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "7ed5a0d06a43b0197364005962d8922bde9f0203c3ddf84cfaef1cd051afbed5"
+      },
+      "propertyDeltas": [
+        {
+          "property": "article width (reading column)",
+          "from": "710px (74ch column)",
+          "to": "872px (54.5rem column); prose holds the 45.5rem measure inside it and tables shrink to natural width"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__dark.png",
+      "changedPixels": 1454,
+      "before": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "1fe7d0303962904774d294aec5636d817ce306d1ef1a5a7441b3cdfde474d9a3"
+      },
+      "after": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "fb1f61c86a0ad418644c0cc713a5c7b56a04fcf84eb8d5bd3bfc78197f2a56ef"
+      },
+      "propertyDeltas": [
+        {
+          "property": "phone reflow of tables and snippets",
+          "from": "table cells stretched to the container minimum; snippets without body padding",
+          "to": "natural-width table cells re-wrap and snippet bodies gain 0.6rem block padding"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__light.png",
+      "changedPixels": 1472,
+      "before": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "5ecab17a7be4e3c8afec2503b54c1bdc8ae4e58ee1b1184c61e2098f85b99d42"
+      },
+      "after": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "61201bb1f302929b59904a19afa9e87f663ac3bceec58c3357f9559ffab5721d"
+      },
+      "propertyDeltas": [
+        {
+          "property": "phone reflow of tables and snippets",
+          "from": "table cells stretched to the container minimum; snippets without body padding",
+          "to": "natural-width table cells re-wrap and snippet bodies gain 0.6rem block padding"
+        }
+      ]
+    }
+  ]
+}

@@ -51,6 +51,7 @@ const renderCompiledDocument = ({
   });
   const shell = renderShell({
     nav,
+    title: resolvedTitle,
     contentIds: elementIds,
     contentHtml: serializeHtml({ root }),
   });

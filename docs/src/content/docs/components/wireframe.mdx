@@ -1,0 +1,214 @@
+---
+title: Wireframe
+description: True-size product screens with honest device proportions, safe content growth, an open drawing vocabulary, and short walkable prototypes.
+---
+
+`Wireframe` draws low-fidelity product UI inside a device-appropriate frame.
+Each screen lays out at its device's true width and scales as one unit to fit the review document; desktop screens preserve their 1440 px logical layout within a shared 768 px painted cap.
+Desktop pages and phone screens use realistic minimum silhouettes and grow with content.
+Desktop application shells instead hold a 1440 × 900 workspace viewport: persistent panes own their overflow while the app itself never scrolls sideways.
+Tablet holds a real iPad aspect ratio; overflow scrolls inside the fixed device instead of stretching its bezel.
+Only desktop uses browser chrome; tablet renders as a native device.
+Multiple screens can link to one another without adding executable plan-authored code, while the complete storyboard remains readable when scripts are disabled.
+
+## When to use it
+
+Use a wireframe when a reviewer must picture a screen or interaction path to judge the plan.
+Keep explanations and design rationale in the surrounding prose, and put only customer-visible product UI inside the artboard.
+
+Run `big-plan guidance Wireframe` before authoring one.
+That component guidance owns the judgment calls for product layout, form-factor honesty, action hierarchy, and choosing among primitives; this page is the syntax reference.
+
+## Design front door: CLEAR
+
+Use CLEAR as the index into the design standard, not as a replacement for its detail.
+It covers the product screen and any comments, decisions, diagrams, toolbars, or expanded modes the screen depicts.
+The generated `big-plan guidance Wireframe` output groups every implementation principle, anti-pattern, per-device pass criterion, and mechanical contract beneath these five headings:
+
+1. **Clear job** - decision complexity selects the composition before layout begins; one screen and one step advance one present decision; every persistent pane and review action has one owner; every temporary surface has an exit.
+2. **Layout follows attention** - visual order follows decision order; a small tablet choice is one dominant column of complete touch surfaces; option titles, criteria, definitions, anchored comments, toolbars, facts, recommendations, and side effects remain visually distinct.
+3. **Explicit change** - consequential choices start unselected and reveal continuation only after a deliberate tap; selections, modes, comments, destructive edits, live counts, persistence, focus return, and preserved scroll make every state transition observable.
+4. **Audience language** - one screen speaks to one audience using one term per concept, natural outcome copy, visible identity and escape, anchored context without repetition, actionable time, and unconfusable live-state labels.
+5. **Real device** - desktop, tablet, phone, and expanded viewers keep truthful viewport, navigation, zoom, marker-size, density, and interaction contracts; on tablet the decision is the dominant touch interaction, never a miniature workspace.
+
+The generated guidance is the exact agent-facing owner of those grouped rules.
+The device table below is the syntax-level form-factor contract; the component, compiler, lint, and geometry tests own mechanical facts; LOOP in the generated guidance owns render-and-review practice.
+CRAP still governs the surrounding plan page, not product UI inside an artboard.
+
+### How the standards were distilled
+
+- **Fourteen hierarchy principles** retain their explicit focal-point, reading-order, proximity, grouping, scanning, decoration, emotional-goal, and rough-fidelity rules under CLEAR.
+- **The original task-flow round** retains one job, goal-matching actions, selection outcomes, progressive reveal, hierarchy over containers, attention order, affordances, mode boundaries, concrete language, and importance-based contrast.
+- **The complete task-flow refinement round** retains all 23 check-step, handoff/authentication, and learning-loop principles; its earlier fifteen-rule summary is absorbed by this complete inventory rather than competing with it.
+- **The maximize navigation and commenting-calm round** retains left-side expanded navigation, arrow-key movement, select-then-comment, passive-scroll calm, comment-role ownership, and context/scroll preservation.
+- **Commenting rounds 4–5** retain anchor-visible presence, glyph-safe highlights, non-repeated context, `… more`, edit/delete/confirmation, the shared anchor flow, lifecycle navigation, outcome chips, separated chat scopes, live counts, exact labels, and adversarial path review.
+- **Decision rounds 4–5** retain option-name rules, type contrast, bold-colon criterion labels, regular values, readable matrix headers, centered collapsed actions, idiomatic focus, exit paths, separated dashed-underlined definitions, and explicit component ownership.
+- **Diagram rounds 5–6** retain valid load state, visible deletion diffs, anchor markers, contained tray chrome, toolbar-owned actions, no redundant whole-diagram control, no meaningless footer hover, fixed-size zoom markers, stable note placement, and focus return.
+- **The desktop workspace round** retains viewport fit, independent pane scroll, anchored header and composer, primary dominance, multi-signal dangerous modes, one state owner, compare-versus-judge panes, justified widths, saved views versus filters, actionable time, recommendation provenance, distinct facts/recommendations/side effects, explicit settings context, nested dependencies, outcome labels, and observable persistence.
+- **The CLEAR gap critique** retains all twelve gold-bar corrections: composition follows decision complexity; touch surfaces look touchable; selection uses several signals; consequential choices start unselected; child vocabulary survives selection; detail earns its place; instructions are not repeated; identity and escape stay visible; tablet space enlarges rather than shrinks; the grid quiets behind interaction; copy sounds natural; and next actions stay short.
+- **STAMP** is retired as a competing acronym, but its details remain: Space, Tiers, Align, and Minimal boxes live under Layout and mechanics; Plain state lives under Explicit change.
+- **Per-form-factor principles** live under Real device as explicit desktop/tablet/phone pass and reject criteria.
+- **Type, aspect, state, and target contracts** live under Real device and their mechanical owners: fixed type roles, fixed iPad frame, state paint, 44 px tablet/phone targets, compile diagnostics, and browser geometry tests.
+- **LOOP** remains only the delivery workflow; **CRAP** remains the plan-page layout standard.
+
+## Authoring
+
+```mdx
+<Wireframe id="harbor-phone" title="Harbor inbox" initialScreen="inbox">
+  <Screen id="inbox" name="Inbox" device="phone">
+    <Stack gap="sm">
+      <TopBar title="Inbox" />
+      <List>
+        <ListItem
+          label="Checkout freeze"
+          meta="Northwind · Priority"
+          value="14m"
+          selected
+          navigateTo="ticket"
+        />
+      </List>
+      <BottomBar>
+        <Button label="Inbox" emphasis="primary" />
+        <Button label="Settings" />
+      </BottomBar>
+    </Stack>
+  </Screen>
+
+  <Screen id="ticket" name="Ticket" device="phone">
+    <Stack gap="sm">
+      <TopBar title="Checkout freeze" />
+      <Message
+        author="Maya"
+        time="14m"
+        kind="customer"
+        text="The checkout form freezes after I submit it."
+      />
+      <TextArea label="Reply" placeholder="Write a reply" />
+      <Button label="Send" emphasis="primary" />
+      <Button label="Back to inbox" navigateTo="inbox" />
+    </Stack>
+  </Screen>
+</Wireframe>
+```
+
+All screen copy lives in attributes; loose prose inside `Wireframe`, `Screen`, or a drawing element is rejected.
+`Table` is the sole exception and takes one fenced block as documented below.
+
+## Wireframe and Screen
+
+`Wireframe` requires a non-empty `id` and at least one direct `Screen` child.
+Its optional `title` labels the figure, and `initialScreen` names which child opens first; without it, the first authored screen opens first.
+
+Every `Screen` requires a unique `id`, a non-empty `name`, and one `device`:
+
+| `device`          | Logical size                      | Frame                 |
+| ----------------- | --------------------------------- | --------------------- |
+| `desktop`         | 1440 × 900 px minimum              | Desktop browser; an `AppShell` holds the viewport |
+| `tablet`          | 1180 × 820 px fixed (about 1.44:1) | Landscape tablet; internal scroll |
+| `tablet-portrait` | 820 × 1180 px fixed                | Portrait tablet; internal scroll  |
+| `phone`           | 390 × 720 px minimum               | Phone, no browser bar             |
+
+Only a desktop screen may add `url` for its browser bar.
+Tablet screens reject `url`.
+Phone screens reject `url`, `AppShell`, and `Sidebar`; use `TopBar`, a single content column, and `BottomBar` instead.
+
+`navigateTo` on `Button`, `NavItem`, `ListItem`, or `Crumb` must name another screen in the same wireframe.
+The compiler blocks multiple `PageHeader`s on one screen, equal flexible thirds on desktop, ambiguous record-detail selection, four or more outlined sibling panels, phone desktop-shell primitives, more than one filled work action per screen, and ambiguous Stepper progress.
+A `ChoiceGroup` is the mechanically owned simple-decision path: it holds two to five `ChoiceCard`s, starts unselected on the initial screen, gives every option its own destination that visibly selects the same title and consequence, reveals a primary continuation only after selection, and cannot share a tablet row with a competing region.
+A Stepper must contain exactly one current step in `done` → `current` → `todo` order, while each Step label names only the task because the primitive draws its own number or completion mark.
+A composer's Send button counts as a filled action even when it omits `emphasis="primary"`; selected buttons inside `SegmentedControl` and `BottomBar` are mode or navigation state and do not count as filled work actions.
+On desktop, a direct workspace `Row` derives flexible minmax-style columns: a record collection becomes the bounded comparison pane, `Rail` owns secondary width, and the remaining surface becomes dominant.
+Inside an `AppShell`, the workspace fills the fixed application viewport without app-wide horizontal scrolling; its panes scroll independently, while a conversation thread scrolls behind an anchored mode switch and composer.
+
+## Optional screen patterns
+
+`pattern` is opt-in convenience syntax on `Screen`; omitting it leaves the complete vocabulary available for any layout.
+Each preset expands to the same ordinary `Row`, `Panel`, and `Rail` nodes an author can write directly:
+
+| `pattern`     | Direct `Panel` slots | Expansion                              |
+| ------------- | -------------------: | -------------------------------------- |
+| `list-detail` |                    2 | Derived master pane + dominant detail      |
+| `triage`      |                    3 | Derived master + dominant detail + `Rail`  |
+| `create`      |                    2 | Main form + `Rail`                         |
+| `settings`    |                    2 | `Rail` settings navigation + dense content |
+
+When a screen has an `AppShell`, place those direct `Panel` slots inside its `AppContent`; otherwise place them directly in `Screen`.
+If a preset does not fit, remove `pattern` and compose the screen directly.
+
+## Open drawing vocabulary
+
+The vocabulary is compositional rather than a closed set of page regions.
+Container elements accept nested drawing elements unless a narrower child rule is stated; leaf elements are self-closing.
+
+### Layout and product frame
+
+| Element            | Attributes and placement                                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `Stack`            | `gap="none\|xs\|sm\|md\|lg\|xl"` and `align="start\|center\|end\|stretch"`.                                                                       |
+| `Row`              | `gap`, `align`, and `justify="start\|center\|end\|between"`; a direct record collection derives a master pane while remaining content dominates. |
+| `Panel`            | Optional `title`, `eyebrow`, and `surface="plain\|filled\|outlined"`; defaults to a plain, unboxed region.                                    |
+| `Rail`             | The only secondary-width primitive; owns a readable fixed width and wraps rather than squeezing the primary pane.                            |
+| `Center`           | `measure="narrow\|prose\|wide"` for centered, bounded content.                                                                            |
+| `AppShell`         | Holds only `Sidebar`, optional `TopBar`, and `AppContent`; unavailable on phone.                                                           |
+| `Sidebar`          | Optional `brand` and `mode`; valid only directly in `AppShell`.                                                                           |
+| `AppContent`       | Main product region; valid only directly in `AppShell`.                                                                                   |
+| `TopBar`           | Optional `title`; valid in `AppShell`, `Screen`, or `Stack`.                                                                               |
+| `BottomBar`        | Phone tab strip; valid in `Screen` or `Stack`.                                                                                            |
+| `PageHeader`       | Required `title`, optional `description` and `badge`.                                                                                      |
+| `SegmentedControl` | Holds only `Button` children; mark its selected mode with `emphasis="primary"`.                                                          |
+| `Breadcrumbs`      | Holds only `Crumb` children.                                                                                                              |
+| `Crumb`            | Required `label`, optional `navigateTo`; valid only in `Breadcrumbs`.                                                                      |
+
+### Content, status, and navigation
+
+| Element            | Attributes and placement                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `Heading`          | Required `text`; optional `level="1\|2\|3"`.                                                                        |
+| `Text`             | Required `text`; optional `role="body\|helper\|muted\|section"`.                                                      |
+| `Button`           | Required `label`; optional `emphasis="primary\|secondary\|tertiary\|destructive"` and `navigateTo`.                  |
+| `Nav`              | Optional `label`; holds only `NavItem`.                                                                             |
+| `NavItem`          | Required `label`; optional `active` and `navigateTo`; valid only in `Nav`.                                           |
+| `Metric`           | Required `label` and `value`; optional `note`.                                                                      |
+| `Progress`         | Required `value` from `0` through `100`; optional `label`, tangible `valueLabel`, and `detail`.                     |
+| `Badge`            | Required `label`; optional `tone="neutral\|info\|success\|warning\|danger"`.                                           |
+| `Divider`          | Optional `label`.                                                                                                   |
+| `ImagePlaceholder` | Required `label`; optional `shape="square\|wide\|tall"`.                                                            |
+| `List`             | Holds only `ListItem`.                                                                                              |
+| `ListItem`         | Required `label`; optional `meta`, `value`, `selected`, and `navigateTo`; valid only in `List`.                      |
+| `ChoiceGroup`      | Holds two to five `ChoiceCard` options as one dominant simple-decision surface.                                     |
+| `ChoiceCard`       | Required `icon`, `title`, and one-line `description`; optional `selected` and `navigateTo`; valid only in `ChoiceGroup`. |
+| `Message`          | Required `author`, `time`, and `text`; optional `kind="customer\|agent\|internal"`.                                  |
+
+### Forms and flows
+
+| Element     | Attributes and placement                                                                                                    |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `TextField` | Required `label`; optional `kind="text\|search\|email\|password\|number\|date"`, `placeholder`, `value`, `hint`, and `disabled`. |
+| `TextArea`  | Required `label`; optional `placeholder`, `value`, `hint`, and `disabled`.                                                   |
+| `Select`    | Required `label` and `value`; optional `hint` and `disabled`.                                                                |
+| `Checkbox`  | Required `label`; optional `checked` and `hint`.                                                                             |
+| `Switch`    | Required `label`; optional `on` and `hint`.                                                                                  |
+| `Stepper`   | Holds only `Step`.                                                                                                           |
+| `Step`      | Required `label`; optional `state="done\|current\|todo"`; valid only in `Stepper`.                                            |
+| `Connector` | Optional `direction="right\|down"` and `label`.                                                                             |
+
+### Tables
+
+`Table` takes one fenced block whose first non-empty line names the columns and whose remaining lines are pipe-separated rows with the same number of cells.
+Use optional `selected="N"` to select a one-based row from 1 through 200.
+Columns containing only numeric-looking values align numerically.
+A cell written `[Failed]` renders a neutral status chip; `[Failed:danger]` may use `neutral`, `info`, `success`, `warning`, or `danger`.
+
+````mdx
+<Table selected="1">
+
+```text
+Ticket | Customer | State
+#4821 | Northwind | [Failed:danger]
+#4818 | Acme | [Waiting:warning]
+```
+
+</Table>
+````
+
+Each contract violation fails `validate` and `render` with a positional diagnostic.

@@ -10,7 +10,11 @@
     background: var(--diff-header-bg);
     border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0;
   }
+  /* Padding on the body rather than the line, so a row highlight still runs
+     the full width while the code keeps clear of the header bar above it and
+     the edge below. */
   article .code-snippet-body {
+    padding-block: 0.6rem;
     border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
   }
   article .code-snippet-line {

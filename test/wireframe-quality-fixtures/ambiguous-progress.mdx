@@ -1,0 +1,13 @@
+# Bad progress state
+
+This deliberately invalid flow marks two steps as current.
+
+<Wireframe id="bad-progress">
+  <Screen id="check" name="Check" device="tablet">
+    <Stepper>
+      <Step label="Tell us" state="current" />
+      <Step label="Check" state="current" />
+      <Step label="Handoff" state="todo" />
+    </Stepper>
+  </Screen>
+</Wireframe>

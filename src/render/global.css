@@ -38,11 +38,23 @@ Light and dark follow the reader's OS in inert exports.
 @import "../components/http-endpoint/styles.css";
 @import "../components/quick-summary/styles.css";
 @import "../components/table-of-contents/styles.css";
+@import "../components/wireframe/font.generated.css";
+@import "../components/wireframe/styles.css";
 
 /* Only authored source emits utility candidates; examples and docs do not. */
 @source "../";
 
 :root {
+  /* The standard width: what a passage of prose, and anything that reads
+     like one, is held to. Fixed rather than measured in characters so every
+     block shares one right edge whatever size its type is. */
+  --measure: 45.5rem;
+  /* A card hugging standard-width content: the measure plus its own padding. */
+  --card-measure: calc(var(--measure) + 2.5rem);
+  /* A card that can contain the standard 48rem desktop wireframe through
+     one nested sub-slide. The extra 6.5rem covers both cards' inline padding
+     and borders, so the drawing never has to escape either border. */
+  --card-figure: 54.5rem;
   --bg: #f7f5f0;
   --ink-c: #211e1a;
   --muted-c: #6f695c;
@@ -209,6 +221,27 @@ Light and dark follow the reader's OS in inert exports.
 }
 
 @layer components {
+  /* EXPERIMENT - per-slide width. Delete this block to revert.
+
+     A card much wider than its own contents reads as an empty frame around a
+     narrow column. So a slide hugs the standard width, and only a slide that
+     actually holds something wide - a table, or a drawing - takes the room.
+     The test is on the content, so a slide earns its width rather than being
+     given it. A parent slide matches when any slide inside it does, which is
+     what keeps a wide child from overflowing its own ancestor. */
+  [data-slide] {
+    max-width: var(--card-measure);
+  }
+  /* A drawing gets the exact room needed for the standard desktop screen and
+     the deepest card nesting a deck can add around it. */
+  [data-slide]:has(.wireframe) {
+    max-width: var(--card-figure);
+  }
+  [data-slide]:has(table),
+  [data-slide]:has([data-table-scroll-container]) {
+    max-width: none;
+  }
+
   /* Section navigation glides instead of jumping; readers who ask the OS for
      reduced motion keep instant jumps. */
   @media (prefers-reduced-motion: no-preference) {

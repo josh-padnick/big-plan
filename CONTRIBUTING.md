@@ -6,7 +6,7 @@ The workflow is intentionally light:
 - **DCO sign-off.** Every commit must be signed off: `git commit -s`. This certifies the [Developer Certificate of Origin](https://developercertificate.org/).
 - **Feature branches.** Branch off `main` and open a pull request back into `main`.
 - **Small PRs.** Keep pull requests small and reviewable; prefer several self-contained increments over one large change.
-- **Checks.** Run `bun run lint`, `bun run build`, and `bun run test` before opening a pull request; CI enforces the same checks on branches pushed to this repository.
+- **Checks.** Run `bun run lint`, `bun run build`, `bun run test`, and `bun run test:e2e` before opening a pull request; CI enforces the same checks on branches pushed to this repository.
 - **License.** Big Plan is [MIT](LICENSE) licensed; contributions are accepted under the same license.
 
 ## Styling commits
@@ -27,3 +27,7 @@ Use that evidence to author an approved manifest, then push the commit so the is
 The verifier's diagnostics own the manifest's enforced schema.
 
 See [AGENTS.md](AGENTS.md) for architecture and engineering rules, and [README.md](README.md) for development commands.
+
+Wireframe changes must also pass the rendered geometry fence in `test/wireframe-quality.spec.ts`.
+That browser check renders the proof and form-factor showcase documents at their declared device sizes and rejects cramped panes, overlapping regions, dead layout bands, and device-shell mismatches.
+Run it alone with `bun run test:e2e -- test/wireframe-quality.spec.ts`.
