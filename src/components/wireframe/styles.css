@@ -104,13 +104,15 @@ marks and a plan diff never jitters.
   }
   .wireframe-switch {
     padding: 0.2rem 0.6rem;
-    border: 2px solid transparent;
+    border: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
     border-radius: var(--wf-sketch);
+    background: color-mix(in srgb, var(--bg) 97%, var(--surface-c));
     font-size: 0.8125rem;
     color: var(--color-muted);
     cursor: pointer;
   }
   .wireframe-switch:hover {
+    border-color: color-mix(in srgb, var(--color-ink) 28%, transparent);
     background: var(--wf-fill);
   }
   .wireframe-switch[aria-current="true"] {
@@ -184,13 +186,7 @@ marks and a plan diff never jitters.
     min-height: 3rem;
     gap: 0.5rem;
     padding: 0.4rem 0.5rem;
-    border-bottom: 1px solid var(--edge-c);
     background: color-mix(in srgb, var(--bg) 96%, var(--surface-c));
-  }
-  .wireframe-frame-toolbar > .figure-control {
-    align-self: center;
-    width: 2.25rem;
-    height: 2.25rem;
   }
   [data-wireframe-comment-mode-toggle] {
     display: inline-flex;
@@ -2830,6 +2826,31 @@ marks and a plan diff never jitters.
     [data-wireframe-interactive] .wireframe-switcher {
       display: none;
     }
+  }
+}
+
+/* The shared maximize button's resting dimensions are Tailwind utilities in a
+   later layer than components. Wireframe toolbar peers need one actual 36px
+   centerline contract, so the family-specific override belongs in the same
+   late state layer that owns the shared control's interactive states. */
+@layer bp-state {
+  /* Override invariant: wireframe toolbar peer geometry beats the shared resting h-6 w-6 utilities. */
+  article .wireframe .wireframe-frame-toolbar > .figure-control {
+    display: inline-flex;
+    align-self: center;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    margin-block: 0;
+    padding: 0;
+    line-height: 0;
+  }
+  /* Override invariant: centered glyph layout beats inherited SVG flow inside the shared resting control. */
+  article .wireframe .wireframe-frame-toolbar > .figure-control > svg {
+    display: block;
+    flex: none;
+    margin: 0;
   }
 }
 

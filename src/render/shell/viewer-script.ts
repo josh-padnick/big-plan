@@ -2018,6 +2018,9 @@ ${DIAGRAM_SCRIPT}
     }
     root.addEventListener("figuremaximizechange", (event) => {
       if (event.detail.maximized) {
+        // Promotion is an explicit entry into the viewer. It owns its internal
+        // scroll regions until the reader restores the figure.
+        root.setAttribute("data-wireframe-engaged", "");
         fitAll();
         const currentChoice = root.querySelector(
           "[data-wireframe-switch][aria-current=true]",
@@ -2031,6 +2034,39 @@ ${DIAGRAM_SCRIPT}
       fitAll();
     });
     root.setAttribute("data-wireframe-interactive", "");
+    // A resting wireframe sits in a reading document. Its device and pane
+    // scroll containers must not steal a wheel gesture merely because the
+    // pointer crosses the drawing. One primary click explicitly engages the
+    // viewer; until then, forward ordinary wheel movement to the page.
+    root.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (event.button === 0)
+          root.setAttribute("data-wireframe-engaged", "");
+      },
+      { capture: true },
+    );
+    root.addEventListener(
+      "wheel",
+      (event) => {
+        if (
+          root.hasAttribute("data-wireframe-engaged") ||
+          root.hasAttribute("data-figure-maximized") ||
+          event.ctrlKey ||
+          event.metaKey
+        )
+          return;
+        event.preventDefault();
+        const unit =
+          event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1;
+        window.scrollBy({
+          left: event.deltaX * unit,
+          top: event.deltaY * unit,
+          behavior: "auto",
+        });
+      },
+      { passive: false },
+    );
     const show = (id) => {
       let current = null;
       for (const screen of screens) {
@@ -2098,6 +2134,16 @@ ${DIAGRAM_SCRIPT}
       });
     }
   }
+  document.addEventListener("pointerdown", (event) => {
+    if (!(event.target instanceof Node)) return;
+    for (const root of roots) {
+      if (
+        !root.contains(event.target) &&
+        !root.hasAttribute("data-figure-maximized")
+      )
+        root.removeAttribute("data-wireframe-engaged");
+    }
+  });
   addEventListener(
     "resize",
     () => {

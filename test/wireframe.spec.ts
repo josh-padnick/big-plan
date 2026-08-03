@@ -668,7 +668,7 @@ test("should maximize and restore a wireframe in both themes", async ({
     );
     await expect(stageLocator).toHaveCSS("overflow", "hidden");
     await expect(stageLocator).toHaveCSS("box-shadow", "none");
-    await expect(toolbarLocator).toHaveCSS("border-bottom-width", "1px");
+    await expect(toolbarLocator).toHaveCSS("border-bottom-width", "0px");
     const boundedStage = await boxOf(stageLocator);
     const toolbarBox = await boxOf(toolbarLocator);
     const viewportBox = await boxOf(viewportLocator);
@@ -683,13 +683,41 @@ test("should maximize and restore a wireframe in both themes", async ({
       .getByRole("button", { name: "Comment on this screen" })
       .evaluate((element) => {
         const box = element.getBoundingClientRect();
-        return box.y + box.height / 2;
+        return {
+          center: box.y + box.height / 2,
+          height: box.height,
+        };
       });
-    const maximizeCenter = await trigger.evaluate((element) => {
-      const box = element.getBoundingClientRect();
-      return box.y + box.height / 2;
-    });
-    expect(Math.abs(commentCenter - maximizeCenter)).toBeLessThanOrEqual(0.5);
+    const maximizeGeometry = await trigger
+      .locator("svg:not([hidden])")
+      .evaluate((element) => {
+        if (!(element instanceof SVGGraphicsElement)) {
+          return null;
+        }
+        const svgBox = element.getBoundingClientRect();
+        const glyphBox = element.getBBox();
+        const viewBox =
+          element instanceof SVGSVGElement
+            ? element.viewBox.baseVal
+            : element.ownerSVGElement?.viewBox.baseVal;
+        if (viewBox === undefined || viewBox.height === 0) {
+          return null;
+        }
+        return {
+          glyphCenter:
+            svgBox.y +
+            ((glyphBox.y + glyphBox.height / 2 - viewBox.y) / viewBox.height) *
+              svgBox.height,
+          glyphHeight: (glyphBox.height / viewBox.height) * svgBox.height,
+        };
+      });
+    expect(maximizeGeometry).not.toBeNull();
+    expect(
+      Math.abs(
+        commentCenter.center - (maximizeGeometry?.glyphCenter ?? Number.NaN),
+      ),
+    ).toBeLessThanOrEqual(0.5);
+    expect((await boxOf(trigger)).height).toBe(commentCenter.height);
     const before = await boxOf(wireframe.locator(".wireframe-frame:visible"));
     await trigger.scrollIntoViewIfNeeded();
     const scrollBeforeMaximize = await page.evaluate(() => window.scrollY);
@@ -784,6 +812,57 @@ test("should maximize and restore a wireframe in both themes", async ({
     await expect
       .poll(async () => page.evaluate(() => window.scrollY))
       .toBe(scrollBeforeMaximize);
+  }
+});
+
+test("should let the page wheel past a resting wireframe until a click engages it", async ({
+  page,
+  wireframeFormFactorsViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 700 });
+
+  for (const theme of ["light", "dark"]) {
+    await page.goto(wireframeFormFactorsViewerUrl);
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value;
+    }, theme);
+
+    const wireframe = page.locator("[data-wireframe]").first();
+    const screen = wireframe.locator('[data-wireframe-screen="d-ticket"]');
+    const conversation = screen.locator(
+      '[data-wireframe-span="main"] > .wireframe-panel-body',
+    );
+    await wireframe.scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollBy(0, -180));
+    await conversation.hover();
+
+    const restingPageScroll = await page.evaluate(() => window.scrollY);
+    const restingPaneScroll = await conversation.evaluate(
+      (element) => element.scrollTop,
+    );
+    await page.mouse.wheel(0, 240);
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(restingPageScroll);
+    await expect
+      .poll(() => conversation.evaluate((element) => element.scrollTop))
+      .toBe(restingPaneScroll);
+    await expect(wireframe).not.toHaveAttribute("data-wireframe-engaged", "");
+
+    const currentChoice = wireframe
+      .getByRole("navigation", { name: "Prototype screens" })
+      .getByRole("button", { name: "Desktop · Ticket", exact: true });
+    await currentChoice.click();
+    await expect(wireframe).toHaveAttribute("data-wireframe-engaged", "");
+
+    await conversation.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await conversation.hover();
+    await page.mouse.wheel(0, 240);
+    await expect
+      .poll(() => conversation.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0);
   }
 });
 
