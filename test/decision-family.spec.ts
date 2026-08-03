@@ -182,16 +182,30 @@ test("should comment on each Decision-family component and a meaningful child", 
     readonly target: ReturnType<typeof page.locator>;
     readonly body: string;
   }) => {
-    await target.click();
+    await target.focus();
+    await expect(target).toHaveAttribute("data-decision-selected", "");
     await page
       .locator('.flow-diagram-actionbar [data-flow-action="comment"]')
       .click();
     const compose = page.locator(".flow-diagram-compose");
     await compose.locator("textarea").fill(body);
     await compose.getByRole("button", { name: "Comment", exact: true }).click();
-    await expect(
-      target.locator("[data-decision-comment-marker]"),
-    ).toBeVisible();
+    const marker = target.locator(":scope > [data-decision-comment-marker]");
+    await expect(marker).toBeVisible();
+    const [targetBox, markerBox] = await Promise.all([
+      target.boundingBox(),
+      marker.boundingBox(),
+    ]);
+    if (targetBox === null || markerBox === null) {
+      throw new Error("Expected the comment marker and its anchor to be laid out");
+    }
+    const topInset = markerBox.y - targetBox.y;
+    const rightInset =
+      targetBox.x + targetBox.width - markerBox.x - markerBox.width;
+    expect(topInset).toBeGreaterThanOrEqual(0);
+    expect(topInset).toBeLessThanOrEqual(8);
+    expect(rightInset).toBeGreaterThanOrEqual(0);
+    expect(rightInset).toBeLessThanOrEqual(8);
   };
 
   await test.step("comment on a Decision and one option", async () => {

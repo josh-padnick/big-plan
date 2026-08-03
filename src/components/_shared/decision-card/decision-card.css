@@ -665,6 +665,7 @@
    selection must outrank resting border utilities without moving those
    presentation choices out of the component markup. */
 @layer decision-review {
+  article .decision,
   article .decision [data-decision-element] {
     position: relative;
   }

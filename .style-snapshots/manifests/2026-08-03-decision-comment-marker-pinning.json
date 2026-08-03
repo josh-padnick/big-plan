@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "no-mistakes(review): Pin Decision comment markers to component anchors [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "src/components/_shared/decision-card/decision-card.css",
+      "propertyDeltas": [
+        {
+          "property": "position (.decision card root)",
+          "from": "static",
+          "to": "relative"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "embedded stylesheet",
+          "from": "markers positioned to nearest positioned ancestor",
+          "to": "markers pinned to the decision card"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__document__desktop__dark.png",
+      "changedPixels": 435,
+      "before": {
+        "width": 872,
+        "height": 11468,
+        "sha256": "c1a2a458d6e7d98f9d94ead19d0b9cd8d65f03520dcf984afc94a24d065425e9"
+      },
+      "after": {
+        "width": 872,
+        "height": 11468,
+        "sha256": "db9123b5e8834a4edc0bfc232b1a84322081c539bb1db03549bfbb9cf8d15642"
+      },
+      "propertyDeltas": [
+        {
+          "property": "sub-pixel text rasterization of decision-card rows",
+          "from": "painted before the card root became a containing block",
+          "to": "painted with position:relative on the .decision card root (no perceptible change; max per-channel delta 8/255)"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__light.png",
+      "changedPixels": 570,
+      "before": {
+        "width": 872,
+        "height": 11468,
+        "sha256": "876d807646a29407fe6ed2ecc7848055fac09727707824edade9415b0e530bf6"
+      },
+      "after": {
+        "width": 872,
+        "height": 11468,
+        "sha256": "1d191b9cb7946f167372fd6d2635fc7ab0707b652cfeae3c0693d94b1e8ea5e6"
+      },
+      "propertyDeltas": [
+        {
+          "property": "sub-pixel text rasterization of decision-card rows",
+          "from": "painted before the card root became a containing block",
+          "to": "painted with position:relative on the .decision card root (no perceptible change; max per-channel delta 8/255)"
+        }
+      ]
+    }
+  ]
+}
