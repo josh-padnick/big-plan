@@ -1914,6 +1914,7 @@ export const VIEWER_SCRIPT = `<script>
       if (choice !== null) choice.focus();
     });
     sync();
+  }
 })();
 ${DIAGRAM_SCRIPT}
 </script>`;
