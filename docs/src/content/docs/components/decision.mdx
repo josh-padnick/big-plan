@@ -1,48 +1,23 @@
 ---
 title: Decision
-description: The default decision card - each option carries its own verdict-lined considerations, read one option at a time.
+description: A compact option-by-option choice with inline considerations.
 ---
 
-`Decision` presents one tradeoff as stacked option cards.
-Each option lists its considerations inline as scannable title-verdict lines, so a reviewer reads one option in full instead of cross-referencing a matrix.
-Escalate to [ComplexDecision](/components/complex-decision/) when options need side-by-side scoring across shared criteria, and drop to [SimpleDecisionSet](/components/simple-decision-set/) for quick calls.
+**Purpose: ask one lightweight question and end with a confirmed answer.**
 
-## Authoring
+`Decision` renders distinct option rows. Use a short `summary` and option-local `Consideration` values when the tradeoffs do not need a full matrix.
 
 ```mdx
-<Decision question="How does the skill reach the end user's agent?" status="open">
-
-Context the reviewer needs before the options.
-
-<Option title="Embedded in the CLI" recommended summary="A skill command prints the file verbatim.">
-
-<Consideration title="Version fidelity" verdict="Exact" tone="good">
-
-The skill is compiled into the package, so it can never disagree with the installed CLI.
-
-</Consideration>
-
-<Consideration title="Works offline" verdict="Yes" tone="good" />
-
-Optional prose detail after the considerations.
-
-</Option>
-
-<Option title="Docs-site download" summary="Setup fetches the skill from the docs site.">
-
-<Consideration title="Version fidelity" verdict="Drifts" tone="bad" />
-
-</Option>
-
+<Decision question="How should the skill ship?">
+  <Option title="Embed it" recommended summary="Print the version-matched skill.">
+    <Consideration label="Offline" verdict="Yes" tone="good">The package already contains the skill.</Consideration>
+  </Option>
+  <Option title="Download it">
+    <Consideration label="Offline" verdict="No" tone="bad">Setup must reach the docs site.</Consideration>
+  </Option>
 </Decision>
 ```
 
-## The contract
+`question` is required. Add at least two uniquely titled options and at most one `recommended` option. A `Consideration` requires `label` and `verdict`; its optional `tone` is `good`, `bad`, `mixed`, or `neutral`.
 
-- `question` is required; `status` is `open`, `decided`, or `deferred` (default `open`).
-- At least two `Option` children, at most one marked `recommended`.
-- Every `Option` needs at least one `Consideration` with a required `title` and `verdict`; `tone` is `good`, `bad`, `mixed`, or `neutral` (default `neutral`).
-- Consideration and option bodies are markdown without headings, footnotes, or typed components.
-
-Each violation fails `validate` and `render` with a positional diagnostic.
-Run `big-plan guidance Decision` for judgment-level usage guidance.
+The reader can choose an option, propose another approach, confirm, and later change the reading-session answer.

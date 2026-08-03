@@ -1,0 +1,244 @@
+# Review Storage Analysis
+
+Audit the evidence behind the recommended persistence layer.
+
+<DecisionAnalysis question="Which persistence layer should back review state?" state="proposed" interaction="audit">
+
+The first release is local, but the model should not block shared review later.
+
+<Criterion title="Anchor integrity">
+
+Threads and selection anchors must survive crashes together.
+
+</Criterion>
+
+<Criterion title="Local setup">
+
+The store should stay easy to start on one machine.
+
+</Criterion>
+
+<Criterion title="Shared review">
+
+The model should admit concurrent reviewers later.
+
+</Criterion>
+
+<Option title="PostgreSQL" recommended summary="Use the relational store the team already operates.">
+
+<Score criterion="Anchor integrity" verdict="Strong" tone="good">
+
+Transactions keep a thread and its anchor atomic.
+
+</Score>
+
+<Score criterion="Local setup" verdict="Needs server" tone="mixed">
+
+A local database service must be running.
+
+</Score>
+
+<Score criterion="Shared review" verdict="Ready" tone="good">
+
+Concurrent readers and writers are native.
+
+</Score>
+
+</Option>
+
+<Option title="SQLite" summary="Keep one embedded database beside the local server.">
+
+<Score criterion="Anchor integrity" verdict="Strong" tone="good">
+
+Transactions cover both records in one file.
+
+</Score>
+
+<Score criterion="Local setup" verdict="Zero setup" tone="good">
+
+The application opens the database directly.
+
+</Score>
+
+<Score criterion="Shared review" verdict="Migration later" tone="mixed">
+
+Shared review eventually needs a server store.
+
+</Score>
+
+</Option>
+
+<Reversibility rating="somewhat-hard">
+
+The repository boundary contains the change, but stored data still needs migration.
+
+</Reversibility>
+
+</DecisionAnalysis>
+
+## Enabled choice
+
+Choose mode lets the reviewer settle a proposed decision and revise it in place.
+
+<DecisionAnalysis question="Which rollout shape should we approve?" state="proposed" interaction="choose">
+  <Criterion title="Risk">
+
+How much production exposure the rollout creates at once.
+
+</Criterion>
+  <Criterion title="Learning speed">
+
+How quickly the team receives representative signals.
+
+</Criterion>
+  <Option title="Regional canary" recommended summary="Start with one production region.">
+    <Score criterion="Risk" verdict="Low" tone="good">
+
+Only one region sees the first release.
+
+</Score>
+    <Score criterion="Learning speed" verdict="Fast" tone="good">
+
+Real traffic produces useful signals immediately.
+
+</Score>
+  </Option>
+  <Option title="All regions">
+    <Score criterion="Risk" verdict="High" tone="bad">
+
+Every region receives the unproven change together.
+
+</Score>
+    <Score criterion="Learning speed" verdict="Fastest" tone="good">
+
+The full population produces signals at once.
+
+</Score>
+  </Option>
+  <Reversibility rating="easy">
+
+The feature flag can restore the prior path immediately.
+
+</Reversibility>
+</DecisionAnalysis>
+
+## Seven-criterion weighted choice
+
+Weighted analysis keeps priorities, scores, and normalized totals in one inspectable matrix.
+
+<DecisionAnalysis question="Which review store best fits the next two years?" state="proposed" interaction="choose" scoring="weighted">
+  <Criterion title="Integrity" impact="5">
+
+How safely related review records commit together.
+
+</Criterion>
+  <Criterion title="Local setup" impact="3">
+
+How much work a local reviewer needs before starting.
+
+</Criterion>
+  <Criterion title="Concurrency" impact="5">
+
+How well the store handles simultaneous reviewers.
+
+</Criterion>
+  <Criterion title="Operations" impact="3">
+
+How mature its backup and monitoring tools are.
+
+</Criterion>
+  <Criterion title="Migration cost" impact="2">
+
+How much work is needed to adopt it now.
+
+</Criterion>
+  <Criterion title="Query flexibility" impact="4">
+
+How easily the product can answer new review questions.
+
+</Criterion>
+  <Criterion title="Portability" impact="2">
+
+How easily review data moves between environments.
+
+</Criterion>
+  <Option title="PostgreSQL" recommended summary="Use the durable shared store the team already operates.">
+    <Score criterion="Integrity" verdict="Excellent" tone="good" score="5">
+
+Transactions keep threads and anchors atomic.
+
+</Score>
+    <Score criterion="Local setup" verdict="Moderate" tone="mixed" score="3">
+
+A local database service must be available.
+
+</Score>
+    <Score criterion="Concurrency" verdict="Excellent" tone="good" score="5">
+
+Concurrent readers and writers are native.
+
+</Score>
+    <Score criterion="Operations" verdict="Excellent" tone="good" score="5">
+
+The team already has backup and monitoring tools.
+
+</Score>
+    <Score criterion="Migration cost" verdict="Moderate" tone="mixed" score="3">
+
+The application must add schema migrations and a service dependency.
+
+</Score>
+    <Score criterion="Query flexibility" verdict="Excellent" tone="good" score="5">
+
+Relational queries support new reporting needs.
+
+</Score>
+    <Score criterion="Portability" verdict="Good" tone="good" score="4">
+
+Standard dumps move data between installations.
+
+</Score>
+  </Option>
+  <Option title="SQLite" summary="Keep one embedded file with each local server.">
+    <Score criterion="Integrity" verdict="Strong" tone="good" score="4">
+
+Local transactions keep related records atomic.
+
+</Score>
+    <Score criterion="Local setup" verdict="Excellent" tone="good" score="5">
+
+The process opens the database file directly.
+
+</Score>
+    <Score criterion="Concurrency" verdict="Limited" tone="bad" score="2">
+
+Write concurrency becomes a constraint for shared review.
+
+</Score>
+    <Score criterion="Operations" verdict="Good" tone="good" score="4">
+
+File backups are simple but observability is thinner.
+
+</Score>
+    <Score criterion="Migration cost" verdict="Low" tone="good" score="5">
+
+The embedded driver adds little infrastructure.
+
+</Score>
+    <Score criterion="Query flexibility" verdict="Good" tone="good" score="4">
+
+SQL remains available with fewer operational extensions.
+
+</Score>
+    <Score criterion="Portability" verdict="Excellent" tone="good" score="5">
+
+One file moves directly between environments.
+
+</Score>
+  </Option>
+  <Reversibility rating="somewhat-hard">
+
+Changing stores later requires migrating review history and deployment configuration.
+
+</Reversibility>
+</DecisionAnalysis>

@@ -16,32 +16,50 @@ One decision only.
 
 </Callout>
 
-<ComplexDecision question="Which store?" status="open">
+<DecisionAnalysis question="Which store?" state="proposed" interaction="audit">
 
-<Criterion title="Setup" />
+<Criterion title="Setup">
+
+How much local setup the store requires.
+
+</Criterion>
 
 <Option title="PostgreSQL" recommended summary="The team already runs it.">
 
-<Score criterion="Setup" verdict="Needs a server" tone="bad" />
+<Score criterion="Setup" verdict="Needs a server" tone="bad">
+
+A database service must be running.
+
+</Score>
 
 </Option>
 
 <Option title="SQLite">
 
-<Score criterion="Setup" verdict="Zero setup" tone="good" />
+<Score criterion="Setup" verdict="Zero setup" tone="good">
+
+The process opens the file directly.
+
+</Score>
 
 </Option>
 
-</ComplexDecision>
+<Reversibility rating="somewhat-hard">
+
+Changing stores requires a data migration.
+
+</Reversibility>
+
+</DecisionAnalysis>
 `;
 
 const bigDecisionModelOf = (markdown: string): Record<string, unknown> => {
   const plan = compilePlanModel({ markdown, fallbackTitle: "fallback" });
   const entry = plan.components.find(
-    ({ component }) => component === "ComplexDecision",
+    ({ component }) => component === "DecisionAnalysis",
   );
   if (entry === undefined || typeof entry.model !== "object") {
-    throw new Error("ComplexDecision model missing");
+    throw new Error("DecisionAnalysis model missing");
   }
   return entry.model as Record<string, unknown>;
 };
@@ -54,7 +72,7 @@ describe("compilePlanModel", () => {
     expect(plan.sections.map(({ text }) => text)).toEqual(["Decision"]);
     expect(plan.components.map(({ component }) => component)).toEqual([
       "Callout",
-      "ComplexDecision",
+      "DecisionAnalysis",
     ]);
     const callout = plan.components[0];
     expect(callout?.line).toBe(5);
@@ -108,11 +126,11 @@ describe("compilePlanModel", () => {
   it("should list a parent before its nested component in document order", () => {
     const plan = compilePlanModel({
       markdown:
-        '<ComplexDecision question="Q?">\n\n<Callout type="note">\n\nNested context.\n\n</Callout>\n\n<Option title="A" />\n\n<Option title="B" />\n\n</ComplexDecision>\n',
+        '<Decision question="Q?">\n\n<Callout type="note">\n\nNested context.\n\n</Callout>\n\n<Option title="A" />\n\n<Option title="B" />\n\n</Decision>\n',
       fallbackTitle: "x",
     });
     expect(plan.components.map(({ component }) => component)).toEqual([
-      "ComplexDecision",
+      "Decision",
       "Callout",
     ]);
   });
@@ -120,7 +138,7 @@ describe("compilePlanModel", () => {
   it("should hard-fail on diagnostics exactly as rendering does", () => {
     expect(() =>
       compilePlanModel({
-        markdown: '<ComplexDecision question="Q?">\n\n</ComplexDecision>\n',
+        markdown: '<Decision question="Q?">\n\n</Decision>\n',
         fallbackTitle: "x",
       }),
     ).toThrow(MarkdownDiagnosticsError);
@@ -130,7 +148,7 @@ describe("compilePlanModel", () => {
     try {
       compilePlanModel({
         markdown:
-          '<ComplexDecision question="Q?">\n\n<Option title="A" />\n\n<Option title="A" />\n\n</ComplexDecision>\n',
+          '<Decision question="Q?">\n\n<Option title="A" />\n\n<Option title="A" />\n\n</Decision>\n',
         fallbackTitle: "x",
       });
       throw new Error("expected diagnostics");

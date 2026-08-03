@@ -1,10 +1,9 @@
-// Declares Decision's component integration contract and its option and
-// consideration grammar; rendering lives in the React component library.
+// Declares Decision's compact option-and-consideration authoring grammar.
 
 import { type ScopedChildDefinition } from "../_authoring/contract.js";
+import { defineComponent } from "../_registration/define-component.js";
 import { compileDecisionComponent } from "./compile.js";
 import { Decision } from "./view.js";
-import { defineComponent } from "../_registration/define-component.js";
 
 const bodyPolicy = (name: string): ScopedChildDefinition["markdownBody"] => ({
   prohibited: {
@@ -15,7 +14,6 @@ const bodyPolicy = (name: string): ScopedChildDefinition["markdownBody"] => ({
   },
 });
 
-/** Declares Decision's renderer and option-child contract blocks. */
 export const DECISION_COMPONENT_DEFINITION = defineComponent({
   compile: compileDecisionComponent,
   view: Decision,

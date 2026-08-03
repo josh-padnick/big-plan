@@ -21,17 +21,13 @@ const PLAN = `# Rollout plan
 
 ## Question
 
-<SimpleDecisionSet title="Open questions">
-
-<SimpleDecision question="Ship behind a flag?">
+<QuickDecision question="Ship behind a flag?">
 
 <Option title="Yes" recommended />
 
 <Option title="No" />
 
-</SimpleDecision>
-
-</SimpleDecisionSet>
+</QuickDecision>
 `;
 
 describe("compileCommand", () => {
@@ -39,7 +35,7 @@ describe("compileCommand", () => {
     const inputPath = join(tempDirectory, "invalid.mdx");
     await writeFile(
       inputPath,
-      '<ComplexDecision question="Q?">\n\n</ComplexDecision>\n',
+      '<Decision question="Q?">\n\n</Decision>\n',
       "utf8",
     );
 
@@ -73,17 +69,12 @@ describe("compileCommand", () => {
       title: "Rollout plan",
       components: [
         {
-          component: "SimpleDecisionSet",
+          component: "QuickDecision",
           model: {
-            title: "Open questions",
-            decisions: [
-              {
-                question: "Ship behind a flag?",
-                options: [
-                  { title: "Yes", recommended: true },
-                  { title: "No", recommended: false },
-                ],
-              },
+            question: "Ship behind a flag?",
+            options: [
+              { title: "Yes", recommended: true },
+              { title: "No", recommended: false },
             ],
           },
         },

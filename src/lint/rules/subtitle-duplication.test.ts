@@ -8,7 +8,7 @@ describe("lintPlan subtitle-duplication", () => {
     expect(
       lintPlan({
         markdown:
-          '# T\n\nLede.\n\n## Open questions\n\nThree calls remain.\n\n<SimpleDecisionSet title="Open questions">\n\nBody.\n\n</SimpleDecisionSet>\n',
+          '# T\n\nLede.\n\n## Open questions\n\nThree calls remain.\n\n<FileTree title="Open questions">\n\nBody.\n\n</FileTree>\n',
       }),
     ).toEqual([
       {
@@ -78,7 +78,7 @@ describe("lintPlan subtitle-duplication", () => {
     expect(
       lintPlan({
         markdown:
-          '# T\n\nLede.\n\n## Settling the last calls\n\nThree remain.\n\n<SimpleDecisionSet title="Open questions">\n\nBody.\n\n</SimpleDecisionSet>\n',
+          '# T\n\nLede.\n\n## Settling the last calls\n\nThree remain.\n\n<FileTree title="Open questions">\n\nBody.\n\n</FileTree>\n',
       }),
     ).toEqual([]);
   });

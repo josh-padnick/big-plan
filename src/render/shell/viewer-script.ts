@@ -5,7 +5,8 @@
 // collapse toggles for deck parts, slides, and sub-slides, table-schema column
 // state, a document comment draft, DataTable sorting, filtering, text fit,
 // column layout and grouping, and one maximize behavior shared by every figure
-// family, plus the diagram leg in ./diagram-script.ts. Plan content never
+// family, a decision matrix's column highlight, rationale swap, and confirm
+// step, plus the diagram leg in ./diagram-script.ts. Plan content never
 // contributes script, and every affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
@@ -116,6 +117,11 @@ export const VIEWER_SCRIPT = `<script>
     const body = info.querySelector("[data-info-popover-body]");
     if (summary === null || body === null) continue;
     info.setAttribute("data-info-popover-floating", "");
+    // Hover/focus openings are transient; a click or tap pins the same
+    // disclosure until an outside activation or Escape.
+    // Tracking that distinction prevents a pointerenter immediately before a
+    // click from opening and then closing the popover in one gesture.
+    let pinned = false;
     const open = () => {
       info.open = true;
       const anchor = summary.getBoundingClientRect();
@@ -144,27 +150,44 @@ export const VIEWER_SCRIPT = `<script>
       if (event.pointerType !== "touch") open();
     });
     info.addEventListener("pointerleave", () => {
-      if (!info.matches(":focus-within")) close();
+      if (!pinned && !info.matches(":focus-within")) close();
     });
     summary.addEventListener("focus", () => {
       if (summary.matches(":focus-visible")) open();
     });
     info.addEventListener("focusout", (event) => {
       if (
-        !(event.relatedTarget instanceof Node) ||
-        !info.contains(event.relatedTarget)
+        !pinned &&
+        (!(event.relatedTarget instanceof Node) ||
+          !info.contains(event.relatedTarget))
       )
         close();
     });
     summary.addEventListener("click", (event) => {
       event.preventDefault();
-      if (info.open) close();
-      else open();
+      pinned = true;
+      // Chrome's trusted Summary activation may apply its native toggle
+      // after this listener when hover already opened the Details. Reassert
+      // the intended pinned state after that default-action phase.
+      setTimeout(() => {
+        open();
+      }, 0);
     });
     summary.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || !info.open) return;
+      pinned = false;
       event.bigPlanEscapeHandled = true;
       close();
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (
+        pinned &&
+        event.target instanceof Node &&
+        !info.contains(event.target)
+      ) {
+        pinned = false;
+        close();
+      }
     });
     document.addEventListener(
       "scroll",
@@ -1454,6 +1477,385 @@ export const VIEWER_SCRIPT = `<script>
       },
       true,
     );
+  }
+})();
+(() => {
+  // Decision matrices. Native radios already own picking an option and the
+  // selected column header, so this leg adds only what markup cannot express:
+  // highlighting the whole column, swapping the rationale panel without
+  // moving the page, gating the confirm action, and the answered state.
+  for (const decision of document.querySelectorAll("[data-decision]")) {
+    // A Decision may sit inside another Decision's context, so every lookup
+    // is scoped to the nearest owning card. Without this an outer Decision
+    // binds the inner one's controls and the two corrupt each other.
+    const mine = (node) =>
+      node !== null && node.closest("[data-decision]") === decision;
+    const ownAll = (selector) =>
+      Array.from(decision.querySelectorAll(selector)).filter(mine);
+    const own = (selector) => ownAll(selector)[0] || null;
+
+    const confirm = own("[data-decision-confirm]");
+    const change = own("[data-decision-change]");
+    const footer = own("[data-decision-footer]");
+    const answer = own("[data-decision-answer]");
+    const answerTitle = own("[data-decision-answer-title]");
+    const answerLead = own("[data-decision-answer-lead]");
+    const summary = own("[data-decision-selection-summary]");
+    const rationale = own("[data-decision-rationale]");
+    const question = own("[data-decision-question]");
+    const proposalText = own("[data-decision-proposal-text]");
+    const proposalCancel = own("[data-decision-proposal-cancel]");
+    const proposalLink = own(".decision-propose-link");
+    const propose = own("[data-option-proposal]");
+    const choices = ownAll("[data-decision-choice]");
+    const panels = ownAll("[data-rationale-panel]");
+    const cells = ownAll("[data-decision-column]");
+    const columnHeaders = ownAll(".decision-column");
+    const compareZones = ownAll("[data-decision-compare]");
+    const explainZone = own("[data-decision-explain]");
+    const weighting = own("[data-decision-weighting]");
+    const picked = () => choices.find((choice) => choice.checked) || null;
+    const proposes = (choice) =>
+      choice instanceof Element &&
+      choice.hasAttribute("data-decision-proposal-choice");
+    const proposalValue = () =>
+      proposalText === null ? "" : proposalText.value.trim();
+    let previousOptionChoice =
+      choices.find((choice) => choice.checked && !proposes(choice)) || null;
+
+    // Overlapping the panels freezes the region at the tallest one, so from
+    // here on swapping the visible panel cannot move anything below it.
+    const defaultIndex =
+      rationale === null ? "0" : rationale.getAttribute("data-default-index");
+    if (rationale !== null) {
+      rationale.setAttribute("data-rationale-live", "");
+      for (const panel of panels) {
+        if (panel.getAttribute("data-option-index") === defaultIndex) {
+          panel.setAttribute("data-rationale-shown", "");
+        } else {
+          panel.removeAttribute("data-rationale-shown");
+        }
+      }
+    }
+
+    // Weighted analysis follows DecisionAnalysis's direct-manipulation
+    // treatment: priority squares live below criteria, star ratings keep
+    // option scores compact, and the optional arithmetic matrix stays in sync.
+    if (weighting !== null) {
+      const weightGroups = Array.from(
+        weighting.querySelectorAll("[data-decision-weight-group]"),
+      );
+      const scoreGroups = Array.from(
+        weighting.querySelectorAll("[data-decision-score-group]"),
+      );
+      const compositeRows = Array.from(
+        weighting.querySelectorAll("[data-decision-composite]"),
+      );
+      const calculationWeights = Array.from(
+        weighting.querySelectorAll("[data-decision-calculation-weight]"),
+      );
+      const contributions = Array.from(
+        weighting.querySelectorAll("[data-decision-contribution]"),
+      );
+      const maxTotals = Array.from(
+        weighting.querySelectorAll("[data-decision-max-total]"),
+      );
+      const syncScoring = () => {
+        const weights = weightGroups.map((group) =>
+          Number(group.getAttribute("data-decision-weight-value") || "0"),
+        );
+        const scoresByOption = new Map();
+        for (const group of scoreGroups) {
+          const optionIndex = group.getAttribute("data-option-index") || "0";
+          const criterionIndex = Number(
+            group.getAttribute("data-criterion-index") || "0",
+          );
+          const scores = scoresByOption.get(optionIndex) || [];
+          scores[criterionIndex] = Number(
+            group.getAttribute("data-decision-score-value") || "0",
+          );
+          scoresByOption.set(optionIndex, scores);
+        }
+        const denominator = weights.reduce(
+          (sum, weight) => sum + weight * 5,
+          0,
+        );
+        for (const node of calculationWeights) {
+          const criterionIndex = Number(
+            node.getAttribute("data-criterion-index") || "0",
+          );
+          node.textContent = String(weights[criterionIndex] || 0);
+        }
+        for (const node of maxTotals) {
+          node.textContent = String(denominator) + " max";
+        }
+        for (const cell of contributions) {
+          const optionIndex = cell.getAttribute("data-option-index") || "0";
+          const criterionIndex = Number(
+            cell.getAttribute("data-criterion-index") || "0",
+          );
+          const weight = weights[criterionIndex] || 0;
+          const score =
+            scoresByOption.get(optionIndex)?.[criterionIndex] || 0;
+          cell.textContent =
+            String(weight) +
+            " × " +
+            String(score) +
+            " = " +
+            String(weight * score);
+        }
+        for (const row of compositeRows) {
+          const optionIndex = row.getAttribute("data-option-index") || "0";
+          const scores =
+            scoresByOption.get(optionIndex) ||
+            (row.getAttribute("data-score-values") || "").split(",").map(Number);
+          const numerator = weights.reduce(
+            (sum, weight, index) => sum + weight * (scores[index] || 0),
+            0,
+          );
+          const percent =
+            denominator === 0
+              ? 0
+              : Math.round((numerator / denominator) * 100);
+          const numeratorNode = row.querySelector(
+            "[data-decision-numerator]",
+          );
+          const denominatorNode = row.querySelector(
+            "[data-decision-denominator]",
+          );
+          const percentNode = row.querySelector("[data-decision-percent]");
+          if (numeratorNode !== null) {
+            numeratorNode.textContent = String(numerator);
+          }
+          if (denominatorNode !== null) {
+            denominatorNode.textContent = String(denominator);
+          }
+          if (percentNode !== null) {
+            percentNode.textContent = String(percent) + "%";
+          }
+        }
+      };
+      const applyWeight = (group, value) => {
+        group.setAttribute("data-decision-weight-value", String(value));
+        const output = group.querySelector("[data-decision-weight-output]");
+        if (output !== null) output.textContent = String(value) + "/5";
+        for (const step of group.querySelectorAll("[data-decision-weight]")) {
+          const stepValue = Number(step.getAttribute("data-weight-value"));
+          step.setAttribute(
+            "aria-checked",
+            stepValue === value ? "true" : "false",
+          );
+          step.tabIndex = stepValue === value ? 0 : -1;
+          if (stepValue <= value) step.setAttribute("data-weight-filled", "");
+          else step.removeAttribute("data-weight-filled");
+        }
+        syncScoring();
+      };
+      const applyScore = (group, value) => {
+        group.setAttribute("data-decision-score-value", String(value));
+        const output = group.querySelector("[data-decision-score-output]");
+        if (output !== null) output.textContent = String(value) + "/5";
+        for (const star of group.querySelectorAll("[data-decision-score]")) {
+          const starValue = Number(star.getAttribute("data-score-value"));
+          star.setAttribute(
+            "aria-checked",
+            starValue === value ? "true" : "false",
+          );
+          star.tabIndex = starValue === value ? 0 : -1;
+          if (starValue <= value) star.setAttribute("data-score-filled", "");
+          else star.removeAttribute("data-score-filled");
+        }
+        syncScoring();
+      };
+      for (const group of weightGroups) {
+        for (const step of group.querySelectorAll("[data-decision-weight]")) {
+          step.addEventListener("click", () => {
+            applyWeight(group, Number(step.getAttribute("data-weight-value")));
+          });
+          step.addEventListener("keydown", (event) => {
+            const current = Number(
+              group.getAttribute("data-decision-weight-value") || "1",
+            );
+            const next =
+              event.key === "ArrowRight" || event.key === "ArrowUp"
+                ? Math.min(5, current + 1)
+                : event.key === "ArrowLeft" || event.key === "ArrowDown"
+                  ? Math.max(1, current - 1)
+                  : event.key === "Home"
+                    ? 1
+                    : event.key === "End"
+                      ? 5
+                      : null;
+            if (next === null) return;
+            event.preventDefault();
+            applyWeight(group, next);
+            group
+              .querySelector('[data-weight-value="' + String(next) + '"]')
+              ?.focus();
+          });
+        }
+      }
+      for (const group of scoreGroups) {
+        for (const star of group.querySelectorAll("[data-decision-score]")) {
+          star.addEventListener("click", () => {
+            applyScore(group, Number(star.getAttribute("data-score-value")));
+          });
+          star.addEventListener("keydown", (event) => {
+            const current = Number(
+              group.getAttribute("data-decision-score-value") || "1",
+            );
+            const next =
+              event.key === "ArrowRight" || event.key === "ArrowUp"
+                ? Math.min(5, current + 1)
+                : event.key === "ArrowLeft" || event.key === "ArrowDown"
+                  ? Math.max(1, current - 1)
+                  : event.key === "Home"
+                    ? 1
+                    : event.key === "End"
+                      ? 5
+                      : null;
+            if (next === null) return;
+            event.preventDefault();
+            applyScore(group, next);
+            group
+              .querySelector('[data-score-value="' + String(next) + '"]')
+              ?.focus();
+          });
+        }
+      }
+      syncScoring();
+    }
+    if (confirm === null || change === null || answer === null) continue;
+
+    const showPanel = (index) => {
+      for (const panel of panels) {
+        const shown = panel.getAttribute("data-option-index") === index;
+        if (shown) panel.setAttribute("data-rationale-shown", "");
+        else panel.removeAttribute("data-rationale-shown");
+      }
+    };
+    const paintColumn = (index, settled) => {
+      for (const cell of cells) {
+        const on = index !== null && cell.getAttribute("data-decision-column") === index;
+        if (on) cell.setAttribute("data-column-selected", "");
+        else cell.removeAttribute("data-column-selected");
+        if (on && settled) cell.setAttribute("data-column-settled", "");
+        else cell.removeAttribute("data-column-settled");
+      }
+    };
+    const sync = () => {
+      const choice = picked();
+      const proposing = proposes(choice);
+      const index = choice === null ? null : choice.getAttribute("data-option-index");
+      showPanel(index === null ? defaultIndex : index);
+      paintColumn(index, false);
+      confirm.textContent = proposing ? "Submit proposal" : "Confirm choice";
+      confirm.disabled =
+        choice === null || (proposing && proposalValue() === "");
+      if (summary !== null) {
+        summary.textContent =
+          choice === null
+            ? "Nothing selected yet."
+            : proposing
+              ? "Your own approach selected."
+              : choice.value + " selected.";
+      }
+    };
+    decision.addEventListener("change", (event) => {
+      if (!mine(event.target)) return;
+      if (!proposes(event.target) && event.target.checked) {
+        previousOptionChoice = event.target;
+      }
+      sync();
+      if (proposes(event.target) && proposalText !== null) proposalText.focus();
+    });
+    if (proposalText !== null) proposalText.addEventListener("input", sync);
+    if (proposalCancel !== null) {
+      proposalCancel.addEventListener("click", () => {
+        const proposalChoice = choices.find(proposes) || null;
+        if (proposalChoice !== null) proposalChoice.checked = false;
+        if (previousOptionChoice !== null) previousOptionChoice.checked = true;
+        if (proposalText !== null) proposalText.value = "";
+        sync();
+        if (proposalLink !== null) proposalLink.focus();
+      });
+    }
+
+    const compress = (answered) => {
+      if (footer !== null) footer.hidden = answered;
+      answer.hidden = !answered;
+      const choice = picked();
+      const proposing = proposes(choice);
+      const index =
+        choice === null ? null : choice.getAttribute("data-option-index");
+      // A proposal is not one of the columns, so compressing to it means
+      // retiring the comparison entirely and leaving the reader's own words
+      // standing. Hiding columns by index would strand the criterion labels
+      // beside an unrelated rationale.
+      const retireComparison = answered && proposing;
+      for (const zone of compareZones) zone.hidden = retireComparison;
+      if (explainZone !== null) explainZone.hidden = retireComparison;
+      // The propose block carries the recorded proposal, so it survives a
+      // proposal answer and only retires when a column won.
+      if (propose !== null) propose.hidden = answered && !proposing;
+      // Answering with a column drops the ones the reader turned down, so the
+      // record reads as one option against the criteria, not a live matrix.
+      for (const cell of cells) {
+        const kept = cell.getAttribute("data-decision-column") === index;
+        cell.hidden = answered && !proposing && !kept;
+      }
+      for (const header of columnHeaders) {
+        if (answered && !proposing && header.getAttribute("data-decision-column") === index) {
+          header.setAttribute("data-option-chosen", "");
+        } else if (answered) {
+          header.removeAttribute("data-option-chosen");
+        }
+      }
+      paintColumn(proposing ? null : index, answered);
+    };
+
+    confirm.addEventListener("click", () => {
+      const choice = picked();
+      if (choice === null || confirm.disabled) return;
+      const proposing = proposes(choice);
+      if (answerLead !== null) {
+        answerLead.textContent = proposing
+          ? "Proposal recorded"
+          : "Answer recorded";
+      }
+      if (answerTitle !== null) {
+        answerTitle.textContent =
+          ": " + (proposing ? proposalValue() : choice.value);
+      }
+      if (proposalText !== null) proposalText.readOnly = proposing;
+      decision.setAttribute("data-decision-answered", "");
+      compress(true);
+       // Announce and queue the reading-session answer for an embedding host.
+      const record = {
+        decision: decision.id,
+        question: question === null ? "" : question.textContent,
+        option: choice.value,
+        proposal: proposing ? proposalValue() : "",
+      };
+      window.bigPlanDecisionAnswers = window.bigPlanDecisionAnswers || [];
+      window.bigPlanDecisionAnswers.push(record);
+      document.dispatchEvent(
+        new CustomEvent("bigplan:decision-answered", { detail: record }),
+      );
+      change.focus();
+    });
+    change.addEventListener("click", () => {
+      decision.removeAttribute("data-decision-answered");
+      for (const header of columnHeaders) {
+        header.removeAttribute("data-option-chosen");
+      }
+      compress(false);
+      if (proposalText !== null) proposalText.readOnly = false;
+      sync();
+      const choice = picked();
+      if (choice !== null) choice.focus();
+    });
+    sync();
   }
 })();
 ${DIAGRAM_SCRIPT}

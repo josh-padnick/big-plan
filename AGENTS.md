@@ -173,6 +173,7 @@ Apply these review conventions by judgment:
   A colocated stylesheet writes into `@layer components`, which loses to every Tailwind utility on the same element no matter how specific the selector.
   When a state rule must override a property a resting utility sets, declare that state in its own `@layer` rather than moving the resting utility into a stylesheet or hunting for a more specific selector.
   Layer order follows first appearance, so a layer introduced after Tailwind's is the last one and outranks `utilities` by construction; `_shared/figure-controls/figure-controls.css` is the precedent.
+  The `hidden` attribute is a separate reliable way to script a region's visibility because its preflight rule is `!important`.
 - Keep logic in pure modules and unit-test it there.
   Reserve Playwright for critical user journeys.
 - Write focused, user-oriented tests with `should ... when ...` descriptions and coverage of degenerate and boundary cases.

@@ -114,7 +114,7 @@ Big Plan ships components that present specific kinds of information better than
 - `QuickSummary` for the key points a reviewer reads first.
 - `TableOfContents` for the plan in one look: one linked row per section, directly after the quick summary.
 - `Part` to divide the slides into numbered acts.
-- `Decision` for a tradeoff read option by option; `ComplexDecision` for a full criteria matrix; `SimpleDecisionSet` for quick calls.
+- `Decision` for a tradeoff read option by option; `DecisionAnalysis` for a full criteria matrix; `QuickDecision` for quick calls.
 - `FlowDiagram` for genuinely relational content - a flow, dependency, or fan-out - drawn as staged cards with directed connectors.
 - `CodeDiff` and `CodeSnippet` for concrete code the reviewer should see.
 - `FileTree` and `FileTreeDiff` for layout and placement changes.
@@ -125,7 +125,7 @@ Big Plan ships components that present specific kinds of information better than
 Draw every illustration with a component, never with ASCII art: a box-drawing sketch in a code fence breaks on a narrow screen, says nothing to a screen reader, and gives the reviewer nothing to point at.
 Where no component fits the picture, embed a real image and caption what to notice in it.
 A decision buried in prose is a decision the reviewer cannot easily accept or reject.
-Before using a component, run `big-plan guidance <Component>` (for example `big-plan guidance ComplexDecision`) for how to use it well.
+Before using a component, run `big-plan guidance <Component>` (for example `big-plan guidance DecisionAnalysis`) for how to use it well.
 Every component's attributes and accepted shapes are at https://big-plan.ai/components/; look them up rather than guessing.
 
 ## 11. Validate, render, and reread

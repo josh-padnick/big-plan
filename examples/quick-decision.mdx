@@ -1,0 +1,19 @@
+# Review Rollout Questions
+
+Settle these independent rollout calls before implementation starts.
+
+<QuickDecision question="Ship behind a feature flag?" context="The rollout risk is concentrated in the first week.">
+  <Option title="Yes" recommended summary="Rollback stays one toggle away." />
+  <Option title="No" />
+</QuickDecision>
+
+<QuickDecision question="Where should the canary run?">
+  <Option title="Staging" />
+  <Option title="Production, one region" recommended summary="Real traffic exposes realistic failure modes." />
+  <Option title="Skip the canary" />
+</QuickDecision>
+
+<QuickDecision question="When should the legacy endpoint be removed?">
+  <Option title="Same release" />
+  <Option title="One release later" recommended summary="Integrators get one cycle of overlap." />
+</QuickDecision>

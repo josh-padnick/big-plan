@@ -42,9 +42,12 @@ type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
   readonly componentsViewerUrl: string;
   readonly apiEndpointsViewerUrl: string;
-  readonly complexDecisionViewerUrl: string;
   readonly dataTableViewerUrl: string;
+  readonly decisionAnalysisViewerUrl: string;
+  readonly nestedWeightedDecisionAnalysisViewerUrl: string;
   readonly deckViewerUrl: string;
+  readonly decisionViewerUrl: string;
+  readonly nestedDecisionMatrixViewerUrl: string;
   readonly flowDiagramViewerUrl: string;
   readonly slideCraftViewerUrl: string;
   readonly nestedDecisionViewerUrl: string;
@@ -54,9 +57,10 @@ type WorkerFixtures = {
     readonly second: string;
     readonly unidentified: string;
   };
-  readonly simpleDecisionSetViewerUrl: string;
+  readonly quickDecisionViewerUrl: string;
   readonly sampleViewerUrl: string;
   readonly tableSchemaViewerUrl: string;
+  readonly weightedAuditDecisionAnalysisViewerUrl: string;
 };
 
 const ANNOTATION_CODE_MDX = `# Annotation code
@@ -82,37 +86,66 @@ retry();
 </CodeDiff>
 `;
 
-const NESTED_DECISION_MDX = `# Nested decisions
+// Two Decisions, one inside the other's context, so the specs can prove an
+// outer selector never binds the inner one's controls.
+const NESTED_DECISION_MATRIX_MDX = `# Nested decision matrices
 
-<ComplexDecision question="Which outer option should win?" status="open">
+<Decision question="Which outer channel?">
 
-The outer context introduces a complete decision.
-
-<ComplexDecision question="Which inner option should win?" status="open">
-
-<Criterion title="Inner criterion" />
+<Decision question="Which inner channel?">
 
 <Option title="Inner A" recommended summary="First inner option.">
-<Score criterion="Inner criterion" verdict="Strong" tone="good" />
+<Consideration label="Cost" verdict="Low" tone="good">
+
+It reuses the existing inner path.
+
+</Consideration>
 </Option>
 
 <Option title="Inner B" summary="Second inner option.">
-<Score criterion="Inner criterion" verdict="Weak" tone="bad" />
+<Consideration label="Cost" verdict="High" tone="bad">
+
+It requires a separate inner path.
+
+</Consideration>
 </Option>
 
-</ComplexDecision>
-
-<Criterion title="Outer criterion" />
+</Decision>
 
 <Option title="Outer A" recommended summary="First outer option.">
-<Score criterion="Outer criterion" verdict="Strong" tone="good" />
+<Consideration label="Cost" verdict="Low" tone="good">
+
+It reuses the existing outer path.
+
+</Consideration>
 </Option>
 
 <Option title="Outer B" summary="Second outer option.">
-<Score criterion="Outer criterion" verdict="Weak" tone="bad" />
+<Consideration label="Cost" verdict="High" tone="bad">
+
+It requires a separate outer path.
+
+</Consideration>
 </Option>
 
-</ComplexDecision>
+</Decision>
+`;
+
+const NESTED_DECISION_MDX = `# Nested decisions
+
+<Decision question="Which outer option should win?">
+
+The outer context introduces a complete decision.
+
+<Decision question="Which inner option should win?">
+  <Option title="Inner A" recommended summary="First inner option." />
+  <Option title="Inner B" summary="Second inner option." />
+</Decision>
+
+<Option title="Outer A" recommended summary="First outer option." />
+<Option title="Outer B" summary="Second outer option." />
+
+</Decision>
 `;
 
 const PLAN_ID_COLLISION_FIRST_MDX = `# Shared title
@@ -248,17 +281,101 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     },
     { scope: "worker" },
   ],
-  complexDecisionViewerUrl: [
+  nestedDecisionMatrixViewerUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(
-        join(tmpdir(), "big-plan-complex-decision-"),
+        join(tmpdir(), "big-plan-nested-decision-matrix-"),
       );
-      const outputPath = join(outputDir, "complex-decision.html");
+      const inputPath = join(outputDir, "nested-decision-matrix.mdx");
+      const outputPath = join(outputDir, "nested-decision-matrix.html");
+      await writeFile(inputPath, NESTED_DECISION_MATRIX_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  decisionViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(join(tmpdir(), "big-plan-decision-"));
+      const outputPath = join(outputDir, "decision.html");
       await renderThroughCli({
-        inputPath: join(repoRoot, "examples", "complex-decision.mdx"),
+        inputPath: join(repoRoot, "examples", "decision.mdx"),
         outputPath,
         outputDir,
       });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  decisionAnalysisViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-decision-analysis-"),
+      );
+      const outputPath = join(outputDir, "decision-analysis.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "decision-analysis.mdx"),
+        outputPath,
+        outputDir,
+      });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  nestedWeightedDecisionAnalysisViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-nested-weighted-decision-analysis-"),
+      );
+      const outputPath = join(outputDir, "nested-weighted-analysis.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "decision-analysis.mdx"),
+        outputPath,
+        outputDir,
+      });
+      const html = await readFile(outputPath, "utf8");
+      const weighted = (
+        html.match(/<figure id="decision-analysis-[\s\S]*?<\/figure>/g) ?? []
+      ).find((figure) => figure.includes('data-decision-scoring="weighted"'));
+      if (weighted === undefined) {
+        throw new Error("expected the DecisionAnalysis example to be weighted");
+      }
+      await writeFile(
+        outputPath,
+        html.replace(
+          weighted,
+          weighted.replace("</figcaption>", `</figcaption>${weighted}`),
+        ),
+        "utf8",
+      );
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  weightedAuditDecisionAnalysisViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-weighted-audit-decision-analysis-"),
+      );
+      const inputPath = join(outputDir, "weighted-audit-analysis.mdx");
+      const outputPath = join(outputDir, "weighted-audit-analysis.html");
+      const source = await readFile(
+        join(repoRoot, "examples", "decision-analysis.mdx"),
+        "utf8",
+      );
+      await writeFile(
+        inputPath,
+        source.replace(
+          'question="Which review store best fits the next two years?" state="proposed" interaction="choose" scoring="weighted"',
+          'question="Which review store best fits the next two years?" state="proposed" interaction="audit" scoring="weighted"',
+        ),
+        "utf8",
+      );
+      await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
@@ -380,14 +497,14 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
     },
     { scope: "worker" },
   ],
-  simpleDecisionSetViewerUrl: [
+  quickDecisionViewerUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(
-        join(tmpdir(), "big-plan-simple-decision-set-"),
+        join(tmpdir(), "big-plan-quick-decision-"),
       );
-      const outputPath = join(outputDir, "simple-decision-set.html");
+      const outputPath = join(outputDir, "quick-decision.html");
       await renderThroughCli({
-        inputPath: join(repoRoot, "examples", "simple-decision-set.mdx"),
+        inputPath: join(repoRoot, "examples", "quick-decision.mdx"),
         outputPath,
         outputDir,
       });

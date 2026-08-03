@@ -14,16 +14,17 @@ Light and dark follow the reader's OS in inert exports.
 @import "./markdown/deck.css";
 @import "./markdown/syntax-highlighting.css";
 @import "../components/_shared/annotation-card/annotation-card.css";
+@import "../components/_shared/badge-pill/badge-pill.css";
+@import "../components/_shared/comparison-matrix/comparison-matrix.css";
 @import "../components/_shared/figure-controls/figure-controls.css";
 @import "../components/_shared/tooltip/tooltip.css";
 @import "../components/_shared/tree-hierarchy/tree-hierarchy.css";
 @import "../components/callout/styles.css";
 @import "../components/code-diff/styles.css";
 @import "../components/code-snippet/styles.css";
-@import "../components/complex-decision/styles.css";
 @import "../components/data-table/styles.css";
 @import "../components/database-table-schema/styles.css";
-@import "../components/decision/styles.css";
+@import "../components/_shared/decision-card/decision-card.css";
 @import "../components/file-tree-diff/styles.css";
 @import "../components/file-tree/styles.css";
 @import "../components/flow-diagram/styles.css";
@@ -31,7 +32,6 @@ Light and dark follow the reader's OS in inert exports.
 @import "../components/grpc-method/styles.css";
 @import "../components/http-endpoint/styles.css";
 @import "../components/quick-summary/styles.css";
-@import "../components/simple-decision-set/styles.css";
 @import "../components/table-of-contents/styles.css";
 
 /* Only authored source emits utility candidates; examples and docs do not. */

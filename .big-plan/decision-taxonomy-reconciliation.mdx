@@ -1,0 +1,792 @@
+# Decision family reconciliation
+
+The approved interaction design should survive, but the public components should be named for the reader jobs they perform rather than the arrangements they render.
+
+<QuickSummary>
+
+<Why>
+
+- `Decision` is settled; the remaining design choices are whether analysis can settle a call and whether its scoring stays qualitative or exposes weighted arithmetic.
+
+</Why>
+
+<What>
+
+- Keep `Decision`, compare four live `DecisionAnalysis` variations, and show three per-call `QuickDecision` briefs in sequence.
+
+</What>
+
+<How>
+
+- Hold the analysis options constant while varying interaction, scale, and scoring, then repeat the approved brief without its comparison expander.
+
+</How>
+
+</QuickSummary>
+
+<TableOfContents>
+
+<Entry section="Recommendation" gist="Decision and QuickDecision are fixed; analysis interaction and scoring remain open" />
+
+<Entry section="Captain verdict" gist="Accept the per-call quick format and make the remaining tradeoff explicit" />
+
+<Entry section="Decision" gist="Ask and confirm one explicit answer with approved rows" />
+
+<Entry section="DecisionAnalysis variations" gist="Compare audit, enabled choice, seven criteria, and explicit weighted scoring" />
+
+<Entry section="QuickDecision" gist="Judge three complete brief-minus-compare calls in sequence" />
+
+<Entry section="Boundaries and migration" gist="Make the tradeoff with round 2 explicit" />
+
+</TableOfContents>
+
+<Part title="Recommendation" />
+
+## Recommendation
+
+_Two public contracts are settled; analysis interaction and scoring remain deliberately inspectable._
+
+| Public component | Reader job | Approved form |
+| --- | --- | --- |
+| `Decision` | Ask for and confirm one answer | 2.1 option rows |
+| `DecisionAnalysis` | Review a scored recommendation | 3.1 keyed matrix, interaction and scoring to finalize |
+| `QuickDecision` | Resolve one low-cost call | 4.1 brief minus comparison |
+
+`DecisionMatrix` and `DecisionBrief` remain internal presentation descriptions, not public roots. `QuickDecision` is an intentional exception to the taxonomy report's warning about relative-weight names: the captain prefers one self-contained brief call over a batch, and the narrow contract makes “quick” enforceable rather than subjective prose.
+
+The recommendation is to keep `DecisionAnalysis` audit-only with qualitative scores by default because that preserves the round-2 ask-versus-record seam and avoids false numerical precision. The enabled and weighted variations are still rendered as real alternatives because each adds a coherent, independently inspectable capability.
+
+<Part title="Captain verdict" />
+
+## Captain verdict
+
+_The family now follows the captain's chosen reading experiences while keeping the unresolved analysis boundaries visible._
+
+- **`Decision` — approved as-is.** Rows remain its one public presentation.
+- **`DecisionAnalysis` — approved visual form, interaction and scoring still open.** Four variations below isolate answer behavior, seven-criterion scale, and explicit weighted arithmetic.
+- **`QuickDecision` — one brief call, not a set.** It keeps recommendation framing, radio options, proposal, confirmation, and Change; it removes comparison entirely.
+- **`DecisionMatrix`, `DecisionBrief`, and `useComplexMode` — still rejected as public API.** The first two name presentations, while the boolean would change an entire grammar.
+
+### Why `QuickDecision` now wins
+
+The taxonomy census still matters: six sets contain 25 questions, and twelve of those questions are too heavy to remain quick. The captain's choice accepts more slides or sub-slides for the genuinely small calls in exchange for a complete interaction around each one. That cost is explicit rather than denied.
+
+The guardrail is now stronger: a `QuickDecision` must fit one framing sentence and short option labels. Anything needing criteria, score reasons, reversibility, or detailed option prose moves to `Decision` or `DecisionAnalysis`.
+
+### Why analysis interaction is not `useComplexMode`
+
+The first three `DecisionAnalysis` variations author the same kind of criteria, scores, reasons, reversibility, and options. An `interaction="audit" | "choose"` prop changes only whether the reader can select and confirm an outcome. Weighted scoring adds explicit impact and 1–5 score fields as a separate evidence capability. Both seams are narrower and more honest than `useComplexMode`, which would switch the entire child grammar.
+
+<Part title="Decision" />
+
+## Decision
+
+_Ask the reviewer to choose one answer, explain each option in place, and end with one confirmation._
+
+### Public contract
+
+- **`Decision`** — `question: string` is required.
+- **`Option`** — `title: string` is required and unique; `recommended?: boolean` marks at most one; `summary?: string` adds one-sentence framing.
+- **`Consideration`** — optional and option-local; `label: string` and `verdict: string` are required, with an optional one-sentence body.
+
+`Decision` has no `layout`, `status`, `chosen`, `Criterion`, `Score`, or `useComplexMode` prop. The taxonomy report proposed deleting structured considerations entirely; this plan instead keeps a deliberately weaker, option-local form because the captain-approved row treatment depends on concise labels and values. There is no global criterion declaration, completeness rule, tone, or cross-option alignment. Once comparable scoring is the value, the content belongs in `DecisionAnalysis`.
+
+### Live target appearance
+
+_This live example uses today's `Decision` renderer with `layout="rows"` as a visual proxy. The recommended contract removes that layout prop because rows become the component's one presentation._
+
+<Decision question="What should a maximized figure cover?" layout="rows">
+
+<Criterion title="Comment while maximized">
+
+Whether the reviewer can keep using the Feedback tray while the figure is enlarged.
+
+</Criterion>
+<Criterion title="Context preserved">
+
+How much of the surrounding review document remains visible.
+
+</Criterion>
+<Criterion title="Build effort">
+
+The relative implementation and maintenance cost.
+
+</Criterion>
+
+<Option title="Keep feedback tray visible" recommended summary="The figure fills the reading area; the Feedback tray stays where it is.">
+<Consideration criterion="Comment while maximized" verdict="Yes" tone="good">
+
+The tray remains visible and interactive beside the enlarged figure.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Strong" tone="good">
+
+Only the reading area expands, so the application context remains intact.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="Medium" tone="mixed">
+
+The overlay and tray must coordinate layering and keyboard focus.
+
+</Consideration>
+</Option>
+
+<Option title="Cover the entire app" summary="The figure takes the whole window, tray included.">
+<Consideration criterion="Comment while maximized" verdict="No" tone="bad">
+
+The full-window overlay hides the existing Feedback tray.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Moderate" tone="mixed">
+
+The document is obscured while the application shell remains conceptually present.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="Low" tone="good">
+
+One overlay owns the whole window and its focus trap.
+
+</Consideration>
+</Option>
+
+<Option title="Open a dedicated figure view" summary="The reader leaves the document for a surface built around the figure.">
+<Consideration criterion="Comment while maximized" verdict="Possible" tone="mixed">
+
+A separate view could add its own commenting controls.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Weak" tone="bad">
+
+The reader leaves the plan to inspect the figure.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="High" tone="bad">
+
+A new route needs navigation, state transfer, and its own review controls.
+
+</Consideration>
+</Option>
+
+</Decision>
+
+<Part title="DecisionAnalysis" />
+
+## DecisionAnalysis variations
+
+_Four variations isolate the remaining questions: audit versus choose, three versus seven criteria, and qualitative values versus explicit weighted arithmetic._
+
+### Public contract
+
+- **`DecisionAnalysis`** — `question: string`, `state: "proposed" | "decided" | "deferred"`, and `interaction: "audit" | "choose"` are required; `scoring: "qualitative" | "weighted"` defaults to qualitative.
+- **`Criterion`** — `title: string` is required and unique; the body is a required one-sentence meaning; weighted scoring additionally requires `impact: 1 | 2 | 3 | 4 | 5`.
+- **`Option`** — `title: string` is required and unique; `recommended?: boolean`, `chosen?: boolean`, and `summary?: string` carry recommendation, outcome, and synthesis.
+- **`Score`** — `criterion: string`, `verdict: string`, and `tone: "good" | "mixed" | "bad" | "neutral"` are required; the body is a one-sentence reason; weighted scoring additionally requires `score: 1 | 2 | 3 | 4 | 5`.
+- **`Reversibility`** — `rating: "easy" | "somewhat-hard" | "hard"` and a concise body describe the cost of changing course.
+- **`Details`** — optional body for deeper analysis.
+
+Every option supplies one score for every criterion. There is no `layout` or `useComplexMode` prop, and there is no criteria-free fallback. `interaction="audit"` never renders answer controls. `interaction="choose"` is valid only for a proposed analysis; confirmation records a reading-session answer without rewriting the authored plan. Weighted scoring makes the formula public: `Σ(impact × option score) ÷ Σ(impact × 5)`, with every input constrained to the same 1–5 scale. Authored impacts and scores initialize the controls; reader adjustments update the live analysis without rewriting the plan source.
+
+### Variation A — audit only
+
+_Recommended. This uses today's settled `Decision` matrix to render the approved keyed rail, spacing, and definitions. The target replaces disabled radio circles with outcome markers and remains a record, not a form._
+
+<Decision question="What should a maximized figure cover?" layout="matrix" status="decided">
+
+<Criterion title="Comment while maximized">
+
+Whether the reviewer can keep using the Feedback tray while the figure is enlarged.
+
+</Criterion>
+<Criterion title="Context preserved">
+
+How much of the surrounding review document remains visible.
+
+</Criterion>
+<Criterion title="Build effort">
+
+The relative implementation and maintenance cost.
+
+</Criterion>
+
+<Option title="Keep feedback tray visible" recommended chosen summary="The figure fills the reading area; the Feedback tray stays where it is.">
+<Consideration criterion="Comment while maximized" verdict="Yes" tone="good">
+
+The tray remains visible and interactive beside the enlarged figure.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Strong" tone="good">
+
+Only the reading area expands, so the application context remains intact.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="Medium" tone="mixed">
+
+The overlay and tray must coordinate layering and keyboard focus.
+
+</Consideration>
+</Option>
+
+<Option title="Cover the entire app" summary="The figure takes the whole window, tray included.">
+<Consideration criterion="Comment while maximized" verdict="No" tone="bad">
+
+The full-window overlay hides the existing Feedback tray.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Moderate" tone="mixed">
+
+The document is obscured while the application shell remains conceptually present.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="Low" tone="good">
+
+One overlay owns the whole window and its focus trap.
+
+</Consideration>
+</Option>
+
+<Option title="Open a dedicated figure view" summary="The reader leaves the document for a surface built around the figure.">
+<Consideration criterion="Comment while maximized" verdict="Possible" tone="mixed">
+
+A separate view could add its own commenting controls.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Weak" tone="bad">
+
+The reader leaves the plan to inspect the figure.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="High" tone="bad">
+
+A new route needs navigation, state transfer, and its own review controls.
+
+</Consideration>
+</Option>
+
+</Decision>
+
+The dashed underline remains the definition affordance. A criterion reveals what it means; a score reveals why that value holds. Each reveal stays one sentence maximum on hover, keyboard focus, or tap.
+
+### Variation B — interactive weighted choice
+
+_This variation intentionally reopens the round-2 boundary. The keyed matrix is enabled: select an option, confirm it, then use Change to reopen the same scored comparison._
+
+<Decision question="Which maximized-figure approach should the plan use?" layout="matrix">
+
+<Criterion title="Comment while maximized">
+
+Whether the reviewer can keep using the Feedback tray while the figure is enlarged.
+
+</Criterion>
+<Criterion title="Context preserved">
+
+How much of the surrounding review document remains visible.
+
+</Criterion>
+<Criterion title="Build effort">
+
+The relative implementation and maintenance cost.
+
+</Criterion>
+
+<Option title="Keep feedback tray visible" recommended summary="The figure fills the reading area; the Feedback tray stays where it is.">
+<Consideration criterion="Comment while maximized" verdict="Yes" tone="good">
+
+The tray remains visible and interactive beside the enlarged figure.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Strong" tone="good">
+
+Only the reading area expands, so the application context remains intact.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="Medium" tone="mixed">
+
+The overlay and tray must coordinate layering and keyboard focus.
+
+</Consideration>
+</Option>
+
+<Option title="Cover the entire app" summary="The figure takes the whole window, tray included.">
+<Consideration criterion="Comment while maximized" verdict="No" tone="bad">
+
+The full-window overlay hides the existing Feedback tray.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Moderate" tone="mixed">
+
+The document is obscured while the application shell remains conceptually present.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="Low" tone="good">
+
+One overlay owns the whole window and its focus trap.
+
+</Consideration>
+</Option>
+
+<Option title="Open a dedicated figure view" summary="The reader leaves the document for a surface built around the figure.">
+<Consideration criterion="Comment while maximized" verdict="Possible" tone="mixed">
+
+A separate view could add its own commenting controls.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Weak" tone="bad">
+
+The reader leaves the plan to inspect the figure.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="High" tone="bad">
+
+A new route needs navigation, state transfer, and its own review controls.
+
+</Consideration>
+</Option>
+
+</Decision>
+
+### Variation C — seven-criterion scale test
+
+_The same enabled chooser now carries seven criteria, enough to expose scan length, vertical reach, and the cost of keeping every value explained._
+
+<Decision question="How should a maximized figure behave across the review experience?" layout="matrix">
+
+<Criterion title="Comment while maximized">
+
+Whether the reviewer can keep using the Feedback tray while the figure is enlarged.
+
+</Criterion>
+<Criterion title="Context preserved">
+
+How much of the surrounding review document remains visible.
+
+</Criterion>
+<Criterion title="Build effort">
+
+The relative implementation and maintenance cost.
+
+</Criterion>
+<Criterion title="Keyboard continuity">
+
+Whether focus and shortcuts continue naturally across maximize and restore.
+
+</Criterion>
+<Criterion title="Mobile fit">
+
+How well the approach adapts to a narrow touch viewport.
+
+</Criterion>
+<Criterion title="Deep-link support">
+
+Whether a reviewer can link directly to the enlarged figure state.
+
+</Criterion>
+<Criterion title="Failure isolation">
+
+How well a figure-view failure stays contained away from the review document.
+
+</Criterion>
+
+<Option title="Keep feedback tray visible" recommended summary="Expand the reading area while the review shell and its active feedback context remain intact.">
+<Consideration criterion="Comment while maximized" verdict="Yes" tone="good">
+
+The tray remains visible and interactive beside the enlarged figure.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Strong" tone="good">
+
+Only the reading area expands, so the application context remains intact.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="Medium" tone="mixed">
+
+The overlay and tray must coordinate layering and keyboard focus.
+
+</Consideration>
+<Consideration criterion="Keyboard continuity" verdict="Continuous" tone="good">
+
+Focus stays inside the same document shell and returns to the maximize control.
+
+</Consideration>
+<Consideration criterion="Mobile fit" verdict="Constrained" tone="mixed">
+
+The tray and enlarged figure compete for the limited width.
+
+</Consideration>
+<Consideration criterion="Deep-link support" verdict="Same URL" tone="good">
+
+The figure state can be encoded without leaving the plan route.
+
+</Consideration>
+<Consideration criterion="Failure isolation" verdict="Shared" tone="mixed">
+
+The enlarged view still shares the review shell's rendering boundary.
+
+</Consideration>
+</Option>
+
+<Option title="Cover the entire app" summary="Use one full-window overlay that temporarily replaces every other review surface.">
+<Consideration criterion="Comment while maximized" verdict="No" tone="bad">
+
+The full-window overlay hides the existing Feedback tray.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Moderate" tone="mixed">
+
+The document is obscured while the application shell remains conceptually present.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="Low" tone="good">
+
+One overlay owns the whole window and its focus trap.
+
+</Consideration>
+<Consideration criterion="Keyboard continuity" verdict="Restored" tone="mixed">
+
+The overlay traps focus and returns it after closing.
+
+</Consideration>
+<Consideration criterion="Mobile fit" verdict="Strong" tone="good">
+
+The figure can use the entire narrow viewport.
+
+</Consideration>
+<Consideration criterion="Deep-link support" verdict="Same URL" tone="good">
+
+The full-window state can be represented on the existing plan route.
+
+</Consideration>
+<Consideration criterion="Failure isolation" verdict="Shared" tone="mixed">
+
+The overlay remains coupled to the review application's main runtime.
+
+</Consideration>
+</Option>
+
+<Option title="Open a dedicated figure view" summary="Move the figure to its own route with controls designed around inspection.">
+<Consideration criterion="Comment while maximized" verdict="Possible" tone="mixed">
+
+A separate view could add its own commenting controls.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Weak" tone="bad">
+
+The reader leaves the plan to inspect the figure.
+
+</Consideration>
+<Consideration criterion="Build effort" verdict="High" tone="bad">
+
+A new route needs navigation, state transfer, and its own review controls.
+
+</Consideration>
+<Consideration criterion="Keyboard continuity" verdict="New context" tone="bad">
+
+Focus moves into a different document context and cannot restore implicitly.
+
+</Consideration>
+<Consideration criterion="Mobile fit" verdict="Strong" tone="good">
+
+The dedicated view can optimize every control for a narrow viewport.
+
+</Consideration>
+<Consideration criterion="Deep-link support" verdict="Direct" tone="good">
+
+The figure receives a stable route that can be shared independently.
+
+</Consideration>
+<Consideration criterion="Failure isolation" verdict="Isolated" tone="good">
+
+The dedicated route can fail without taking the review document with it.
+
+</Consideration>
+</Option>
+
+</Decision>
+
+### Variation D — full weighted scoring
+
+_This enabled chooser adds explicit 1–5 option scores as settable star ratings, with the numeric value above each group, plus live 1–5 IMPACT weights directly below each criterion; each option's total finishes the matrix, with exact row-by-row arithmetic available in a calculation matrix on request._
+
+<Decision question="Which maximized-figure approach wins after weighting the criteria?" layout="matrix" scoring="weighted">
+
+<Criterion title="Comment while maximized" impact="5">
+
+Whether the reviewer can keep using the Feedback tray while the figure is enlarged.
+
+</Criterion>
+<Criterion title="Context preserved" impact="4">
+
+How much of the surrounding review document remains visible.
+
+</Criterion>
+<Criterion title="Build simplicity" impact="3">
+
+How little implementation and maintenance work the approach requires.
+
+</Criterion>
+<Criterion title="Keyboard continuity" impact="4">
+
+Whether focus and shortcuts continue naturally across maximize and restore.
+
+</Criterion>
+<Criterion title="Mobile fit" impact="2">
+
+How well the approach adapts to a narrow touch viewport.
+
+</Criterion>
+
+<Option title="Keep feedback tray visible" recommended summary="The strongest review continuity offsets moderate implementation and mobile tradeoffs.">
+<Consideration criterion="Comment while maximized" verdict="Excellent" tone="good" score="5">
+
+The tray remains visible and interactive beside the enlarged figure.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Excellent" tone="good" score="5">
+
+Only the reading area expands, so the surrounding application stays visible.
+
+</Consideration>
+<Consideration criterion="Build simplicity" verdict="Moderate" tone="mixed" score="3">
+
+The overlay and tray need coordinated layering and focus behavior.
+
+</Consideration>
+<Consideration criterion="Keyboard continuity" verdict="Strong" tone="good" score="4">
+
+Focus stays in the same shell and returns to the maximize control.
+
+</Consideration>
+<Consideration criterion="Mobile fit" verdict="Moderate" tone="mixed" score="3">
+
+The tray and enlarged figure must share the narrow viewport.
+
+</Consideration>
+</Option>
+
+<Option title="Cover the entire app" summary="The simplest overlay improves mobile fit but removes live feedback context.">
+<Consideration criterion="Comment while maximized" verdict="Poor" tone="bad" score="1">
+
+The full-window overlay hides the existing Feedback tray.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Moderate" tone="mixed" score="3">
+
+The app remains conceptually present while the plan is fully obscured.
+
+</Consideration>
+<Consideration criterion="Build simplicity" verdict="Excellent" tone="good" score="5">
+
+One overlay owns the whole window and its focus trap.
+
+</Consideration>
+<Consideration criterion="Keyboard continuity" verdict="Moderate" tone="mixed" score="3">
+
+Focus returns only after the full-window overlay closes.
+
+</Consideration>
+<Consideration criterion="Mobile fit" verdict="Strong" tone="good" score="4">
+
+The figure can use the entire narrow viewport.
+
+</Consideration>
+</Option>
+
+<Option title="Open a dedicated figure view" summary="A specialized route earns mobile room but loses context and costs the most to build.">
+<Consideration criterion="Comment while maximized" verdict="Moderate" tone="mixed" score="3">
+
+A separate view could add its own commenting controls.
+
+</Consideration>
+<Consideration criterion="Context preserved" verdict="Poor" tone="bad" score="1">
+
+The reader leaves the plan to inspect the figure.
+
+</Consideration>
+<Consideration criterion="Build simplicity" verdict="Poor" tone="bad" score="1">
+
+A new route needs navigation, state transfer, and review controls.
+
+</Consideration>
+<Consideration criterion="Keyboard continuity" verdict="Weak" tone="bad" score="2">
+
+Focus moves into a different document context.
+
+</Consideration>
+<Consideration criterion="Mobile fit" verdict="Excellent" tone="good" score="5">
+
+The dedicated view can optimize every control for a narrow viewport.
+
+</Consideration>
+</Option>
+
+</Decision>
+
+The four variations preserve the same option identity and one-sentence definition contract while isolating one design question at a time:
+
+- **Audit only:** strongest round-2 and taxonomy fit; plan acceptance or feedback settles disagreement outside the matrix.
+- **Three-criterion interactive:** the approved 4.1.3 baseline and fastest direct comparison.
+- **Seven-criterion interactive:** exposes how the keyed rail and matrix feel when a real analysis becomes long.
+- **Full weighted scoring:** matches ComplexDecision's criterion-local priority controls, makes each option score a compact settable star rating with its number above, keeps each live total at the matrix foot, and reveals exact composite arithmetic as a matrix only when requested.
+
+<Part title="QuickDecision" />
+
+## QuickDecision
+
+_Give one small call the approved brief interaction, with no comparison disclosure hiding underneath it._
+
+### Public contract
+
+- **`QuickDecision`** — `question: string` is required; `context?: string` is one optional framing sentence.
+- **`Option`** — `title: string` is required and unique within the question; `recommended?: boolean` marks at most one; `summary?: string` is one optional sentence.
+
+`QuickDecision` has no set wrapper, criteria, scores, lifecycle state, reversibility, rich option bodies, or comparison expander. It owns native radio selection, Propose another approach, Confirm, the recorded answer, and Change.
+
+### Three live calls in sequence
+
+_These use today's `Decision` brief as live proxies. Each non-discriminating compatibility criterion is invisible and exists only because today's compiler still requires one; the target `QuickDecision` contract has no criteria and never renders Compare all three._
+
+<Decision question="Should the first release ship behind a feature flag?" layout="brief">
+
+<Criterion title="Needs deeper comparison">
+
+Whether this quick call needs a structured tradeoff matrix.
+
+</Criterion>
+
+<Option title="Yes, default off" recommended summary="Ship behind a feature flag, default it off, and expand only after the canary is healthy.">
+<Consideration criterion="Needs deeper comparison" verdict="No" tone="neutral">
+
+The safe rollout fits in the recommendation sentence without a score matrix.
+
+</Consideration>
+</Option>
+
+<Option title="Yes, default on" summary="Keep an emergency off switch while exposing the release immediately.">
+<Consideration criterion="Needs deeper comparison" verdict="No" tone="neutral">
+
+The exposure difference is obvious from the option label and one-sentence framing.
+
+</Consideration>
+</Option>
+
+<Option title="No, release directly" summary="Use the normal deployment rollback instead of a runtime gate.">
+<Consideration criterion="Needs deeper comparison" verdict="No" tone="neutral">
+
+The direct-release tradeoff is small enough to explain without weighted scores.
+
+</Consideration>
+</Option>
+
+</Decision>
+
+<Decision question="How long should detailed rollout logs be retained?" layout="brief">
+
+<Criterion title="Needs deeper comparison">
+
+Whether this quick call needs a structured tradeoff matrix.
+
+</Criterion>
+
+<Option title="Seven days" recommended summary="Keep high-detail rollout logs for seven days, then fall back to the standard aggregate retention.">
+<Consideration criterion="Needs deeper comparison" verdict="No" tone="neutral">
+
+The short diagnostic window and later aggregate history fit in one sentence.
+
+</Consideration>
+</Option>
+
+<Option title="Thirty days" summary="Keep detailed logs through a full monthly operating cycle.">
+<Consideration criterion="Needs deeper comparison" verdict="No" tone="neutral">
+
+The extra storage cost is the only meaningful distinction.
+
+</Consideration>
+</Option>
+
+<Option title="Standard retention" summary="Apply the existing platform retention with no rollout-specific exception.">
+<Consideration criterion="Needs deeper comparison" verdict="No" tone="neutral">
+
+The operational simplicity is obvious without a score matrix.
+
+</Consideration>
+</Option>
+
+</Decision>
+
+<Decision question="Which cohort should receive the first canary?" layout="brief">
+
+<Criterion title="Needs deeper comparison">
+
+Whether this quick call needs a structured tradeoff matrix.
+
+</Criterion>
+
+<Option title="Internal staff" recommended summary="Start with internal staff, verify the primary journey, then expand to the beta cohort.">
+<Consideration criterion="Needs deeper comparison" verdict="No" tone="neutral">
+
+The smallest recoverable cohort is the natural first step.
+
+</Consideration>
+</Option>
+
+<Option title="Five percent of customers" summary="Use a random customer cohort for more representative production traffic.">
+<Consideration criterion="Needs deeper comparison" verdict="No" tone="neutral">
+
+The broader signal is the only material advantage.
+
+</Consideration>
+</Option>
+
+<Option title="All beta users" summary="Treat the beta channel as the canary boundary from the start.">
+<Consideration criterion="Needs deeper comparison" verdict="No" tone="neutral">
+
+The existing beta expectation makes the tradeoff self-explanatory.
+
+</Consideration>
+</Option>
+
+</Decision>
+
+Three complete briefs make the ergonomic cost visible: each quick call repeats recommendation framing, proposal, confirmation, and Change instead of hiding several answers behind one batch completion.
+
+This is not `DecisionBrief` as a public root. The component is named `QuickDecision` because its contract enforces the job: one low-cost call, one sentence of framing, and no deeper comparison path.
+
+<Part title="Boundaries" />
+
+## Boundaries and migration
+
+_Decision and QuickDecision are settled; implementation waits only on the analysis interaction and scoring choices._
+
+### Reconciliation with round 2
+
+- **Preserved in all four variations:** `Decision` remains the ordinary answer component; `DecisionAnalysis` always requires complete scored evidence.
+- **Preserved:** shared implementation primitives are allowed, but they do not define the product taxonomy.
+- **Variation A:** preserves the ruling exactly—`Decision` asks and `DecisionAnalysis` records.
+- **Variations B and C:** deliberately relax the ruling—`DecisionAnalysis` may ask only after the author has supplied the full analysis grammar; C stress-tests that same behavior at seven criteria.
+- **Variation D:** keeps the enabled interaction and adds a second explicit choice: whether `DecisionAnalysis` should own user-adjustable criterion impact and normalized composite scoring.
+- **Preserved visually:** option identity stays in the full-title keyed rail; criteria and values retain one-sentence dashed-underline definitions.
+
+The interactive variations no longer require one universal `Decision`: the two components keep different authoring grammars, while `interaction="choose"` changes only the analysis component's answer behavior. The tradeoff is conceptual, not structural—`DecisionAnalysis` would own both “audit” and “settle this scored call.” Weighted scoring is separable from that interaction decision because it changes the evidence model, not whether the reviewer can answer.
+
+`QuickDecision` is a separate, intentionally narrow answer component. It accepts the taxonomy cost of more slides and a relative-weight name in exchange for the captain-approved brief interaction on every small call.
+
+### Internal primitives
+
+- A selection primitive supports the answer controls used by `Decision`, `QuickDecision`, and interactive `DecisionAnalysis`.
+- A keyed identity rail and comparison matrix support all `DecisionAnalysis` variations.
+- An optional weighted-score primitive owns native impact controls, transparent arithmetic, and live normalized composites without changing the selection primitive.
+- The brief choice list, proposal, confirmation, recorded answer, and Change behavior are shared by `QuickDecision` without carrying over its comparison disclosure.
+- Definition popovers remain shared presentation infrastructure for criterion meanings and score reasons.
+
+These are internal seams. They should be extracted only where there are real consumers, and none should force public components to share a grammar.
+
+### Pre-release migration
+
+1. Make current `Decision` rows its only public presentation and remove `layout`, lifecycle, and matrix-only authoring from its contract.
+2. Rename and sharpen `ComplexDecision` to `DecisionAnalysis`; require criteria, complete score coverage, state, and reversibility, then implement the selected interaction variation.
+3. Replace `SimpleDecisionSet` with standalone `QuickDecision`; migrate each genuinely small question to one brief-minus-compare call and promote the heavier twelve observed questions.
+4. Retire public `brief` and `matrix` layouts. Carry their approved visual language into `QuickDecision` and `DecisionAnalysis` respectively.
+5. Update every example, test, machine model, and authoring guide as one clean pre-release contract change; add no compatibility aliases.
+
+### Acceptance boundary
+
+`Decision` and `QuickDecision` need no further UX choice. For `DecisionAnalysis`, A versus B decides audit-only versus enabled choice; C shows whether B remains usable at seven criteria; D separately asks whether explicit impact weights and computed composites earn a place in the contract. The artifact still uses `Decision` as the live proxy, with only the example support needed for empty-brief suppression and transparent weighted scoring; it does not implement the renamed public components.

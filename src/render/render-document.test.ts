@@ -284,7 +284,7 @@ describe("renderDocument shell", () => {
 describe("validateDocument", () => {
   it("should collect the same model while completing HTML delivery", () => {
     const markdown =
-      '# Plan\n\n## Scope\n\n<ComplexDecision question="Q?">\n\n<Callout type="note">\n\nNested context.\n\n</Callout>\n\n<Option title="A" />\n\n<Option title="B" />\n\n</ComplexDecision>\n';
+      '# Plan\n\n## Scope\n\n<Decision question="Q?">\n\n<Callout type="note">\n\nNested context.\n\n</Callout>\n\n<Option title="A" />\n\n<Option title="B" />\n\n</Decision>\n';
     const input = { markdown, fallbackTitle: "Fallback" };
 
     expect(validateDocument(input)).toEqual(compilePlanModel(input));

@@ -1,0 +1,659 @@
+/* Shared decision-card comparison, selection, proposal, and answer styles.
+
+   Two invariants drive most of the rules below.
+
+   Layout stability: every rationale panel occupies the same grid cell, so the
+   panel region is as tall as the tallest option's reasoning and stays that
+   height forever. Swapping which panel is visible uses `visibility`, never
+   `display`, because a hidden-but-present box keeps sizing the grid.
+
+   State independence: recommendation is a neutral chip, a picked column owns
+   the accent, and a settled one owns the pro colour. Card surfaces and
+   borders are set here rather than with utilities, because a utility would
+   out-rank every variant rule. */
+
+@layer components {
+  /* Decision spends the shared tone colour on the whole verdict: three short
+     rows scan faster in colour, and the word and glyph carry the meaning for
+     any reader who cannot separate the hues. */
+  article .decision-verdict {
+    color: var(--matrix-tone);
+  }
+
+  article .decision-status-pill {
+    background: var(--surface-c);
+    color: var(--muted-c);
+  }
+  article .decision-status-decided {
+    background: var(--decision-pro-bg);
+    color: var(--decision-pro-c);
+  }
+  article .decision-chosen-pill {
+    background: var(--decision-pro-bg);
+    color: var(--decision-pro-c);
+  }
+
+  /* The skeleton and row rules come from the shared comparison matrix; what
+     is local is how narrow the label columns stay. */
+  article .decision-matrix th,
+  article .decision-matrix td {
+    vertical-align: top;
+  }
+  article .decision-corner {
+    width: 1%;
+    white-space: nowrap;
+  }
+  article .decision-criterion {
+    width: 1%;
+    white-space: nowrap;
+  }
+
+  /* Three zones, three surfaces. The card asks a question (header surface),
+     compares options (paper, the brightest and the focal surface), then
+     explains one (a recessed surface). The surface change is the boundary and
+     a hairline marks each transition; reading the three as one continuous
+     field was the round-3 complaint. Header and surface sit too close in this
+     palette to be adjacent, which is why paper separates them. */
+  article .decision-zone-rationale {
+    background: var(--surface-c);
+  }
+
+  /* Column states, ordered so the later rule wins each tie: rest, hover,
+     picked, settled. Cells are transparent at rest so the matrix zone's paper
+     shows through and a picked column reads as tinted against it.
+     `data-column-selected` is written by the viewer script across a whole
+     column; without scripts the header alone carries the selection, which the
+     native radio already makes unambiguous. */
+  article .decision-column,
+  article .decision-cell,
+  article .decision-score-total {
+    background: transparent;
+  }
+  article .decision-column:has(.decision-radio:enabled):hover {
+    background: var(--surface-c);
+  }
+  article .decision-column:has(.decision-radio:checked),
+  article .decision-column[data-column-selected],
+  article .decision-cell[data-column-selected],
+  article .decision-score-total[data-column-selected] {
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--bg));
+  }
+  article .decision-column:has(.decision-radio:checked) {
+    box-shadow: inset 0 2px 0 var(--color-accent);
+  }
+  article .decision-column[data-option-chosen],
+  article .decision-cell[data-option-chosen],
+  article .decision-score-total[data-option-chosen],
+  article .decision-cell[data-column-selected][data-column-settled],
+  article .decision-score-total[data-column-selected][data-column-settled] {
+    background: var(--decision-pro-bg);
+  }
+  article .decision-column[data-option-chosen] {
+    box-shadow: inset 0 2px 0 var(--decision-pro-c);
+  }
+  article .decision-column:has(.decision-radio:disabled) .decision-column-head {
+    cursor: default;
+  }
+
+  /* A real radio, restyled rather than replaced, so the browser keeps
+     selection, arrow-key movement, and the form semantics. */
+  article .decision-radio {
+    border-color: color-mix(in srgb, var(--color-muted) 55%, transparent);
+    background: var(--bg);
+  }
+  /* The inset ring cuts a paper-coloured gap between rim and dot, so a
+     checked radio reads as filled at 16px without a background image. */
+  article .decision-radio:checked {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+    box-shadow: inset 0 0 0 2.5px var(--bg);
+  }
+  article .decision-column[data-option-chosen] .decision-radio:checked {
+    border-color: var(--decision-pro-c);
+    background: var(--decision-pro-c);
+  }
+  /* On a settled or deferred decision nothing is selectable, so an empty
+     radio must read as a list mark rather than as an affordance. */
+  article .decision-radio:disabled:not(:checked) {
+    border-color: var(--edge-c);
+    background: transparent;
+  }
+  /* Focus stays local to the native control. A low-opacity halo is easier to
+     parse than a hard rectangle around an entire row or matrix column. */
+  article .decision-radio:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 24%, transparent);
+  }
+  article .decision-radio:checked:focus-visible {
+    box-shadow:
+      inset 0 0 0 2.5px var(--bg),
+      0 0 0 3px color-mix(in srgb, var(--color-accent) 24%, transparent);
+  }
+
+  /* The rationale region. Without scripts the panels stack and every one is
+     readable; the script turns the region into a single-cell grid so the
+     panels overlap, the height freezes at the tallest, and selecting an
+     option swaps the visible panel without moving anything below it. */
+  article .decision-rationale-panel + .decision-rationale-panel {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--edge-c);
+  }
+  article .decision-rationale[data-rationale-live] {
+    display: grid;
+  }
+  article .decision-rationale[data-rationale-live] > .decision-rationale-panel {
+    grid-area: 1 / 1;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+    visibility: hidden;
+  }
+  article
+    .decision-rationale[data-rationale-live]
+    > .decision-rationale-panel[data-rationale-shown] {
+    visibility: visible;
+  }
+
+  /* --- The three approved reading depths -------------------------------- */
+
+  /* Shared: a verdict is one signal now, the word. Tone colour and the glyph
+     said the same thing twice more. */
+  article .decision-verdict {
+    color: inherit;
+  }
+
+  /* A - options as rows. The title owns a larger tier with a rule beneath it;
+     smaller criteria copy then reads as supporting comparison data instead
+     of competing with the option name. Dimension labels still align. */
+  article .decision-row + .decision-row {
+    border-top: 1px solid var(--edge-c);
+  }
+  article .decision-row-head {
+    padding-bottom: 0.625rem;
+    border-bottom: 1px solid var(--edge-c);
+  }
+  article .decision-row-line {
+    display: grid;
+    grid-template-columns: minmax(0, 13.5rem) minmax(0, 1fr);
+    gap: 0 1rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+  article .decision-row:has(.decision-radio:enabled):hover {
+    background: var(--surface-c);
+  }
+  article .decision-row:has(.decision-radio:checked),
+  article .decision-brief-option:has(.decision-radio:checked) {
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--bg));
+    box-shadow: inset 3px 0 0 var(--color-accent);
+  }
+  /* B - the keyed matrix, with its chooser held apart from comparison. */
+  article .decision-zone-compare {
+    background: var(--bg);
+  }
+  article .decision-chooser-row > th {
+    background: var(--surface-c);
+    border-bottom: 1px solid var(--edge-c);
+  }
+
+  /* The full-title rail and keyed table are intentionally
+     separate surfaces. Letters carry identity into the grid without asking
+     authors to coin brittle abbreviations. */
+  article .decision-keyed-chooser {
+    border-bottom: 1px solid var(--edge-c);
+    background: var(--surface-c);
+  }
+  article .decision-keyed-option + .decision-keyed-option {
+    border-top: 1px solid var(--edge-c);
+  }
+  article .decision-keyed-option:has(.decision-radio:enabled):hover {
+    background: color-mix(in srgb, var(--color-accent) 5%, var(--surface-c));
+  }
+  article .decision-keyed-option:has(.decision-radio:checked),
+  article .decision-keyed-option[data-column-selected] {
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--bg));
+    box-shadow: inset 3px 0 0 var(--color-accent);
+  }
+  article .decision-keyed-option[data-option-chosen],
+  article .decision-keyed-option[data-column-selected][data-column-settled] {
+    background: var(--decision-pro-bg);
+    box-shadow: inset 3px 0 0 var(--decision-pro-c);
+  }
+  article .decision-key {
+    border: 1px solid var(--edge-c);
+    background: var(--bg);
+    color: var(--color-muted);
+  }
+  article .decision-keyed-head .decision-radio {
+    margin-top: 0;
+  }
+  article .decision-matrix-keyed .decision-criterion {
+    width: 46%;
+    white-space: normal;
+  }
+
+  /* Weighted analysis inherits DecisionAnalysis's direct-manipulation
+     hierarchy: compact filled squares sit below each criterion, totals finish
+     the matrix, and arithmetic stays behind a secondary disclosure. */
+  article .decision-weight-step {
+    width: 0.625rem;
+    height: 0.625rem;
+    padding: 0;
+    cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--color-muted) 35%, transparent);
+    border-radius: 0.125rem;
+    background: transparent;
+  }
+  article .decision-weight-step[data-weight-filled] {
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 30%, var(--bg));
+  }
+  article .decision-weight-step:focus-visible {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+  article .decision-score-control {
+    min-width: 5.875rem;
+  }
+  article .decision-score-control > .decision-definition {
+    line-height: 1;
+  }
+  article
+    .decision-score-control
+    > .decision-definition
+    > .decision-definition-trigger {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 700;
+    color: var(--color-ink);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  article .decision-score-stars {
+    gap: 0.0625rem;
+    white-space: nowrap;
+  }
+  article .decision-score-star {
+    display: inline-flex;
+    width: 1.125rem;
+    height: 1.125rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    border: 0;
+    border-radius: 0.1875rem;
+    background: transparent;
+    color: color-mix(in srgb, var(--color-muted) 48%, transparent);
+  }
+  article .decision-score-star svg {
+    width: 0.875rem;
+    height: 0.875rem;
+    fill: transparent;
+    stroke-width: 1.75;
+  }
+  article .decision-score-star[data-score-filled] {
+    color: color-mix(in srgb, var(--color-accent) 82%, var(--color-ink));
+  }
+  article .decision-score-star[data-score-filled] svg {
+    fill: currentColor;
+  }
+  article .decision-score-star:hover {
+    color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  }
+  article .decision-score-star:focus-visible {
+    outline: none;
+    color: var(--color-accent);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+  article .decision-score-row > th,
+  article .decision-score-row > td {
+    border-top: 2px solid var(--edge-c);
+    font-weight: 600;
+  }
+  article .decision-score-breakdown-row > td {
+    border-top: 1px solid var(--edge-c);
+  }
+  article .decision-score-breakdown-link {
+    display: inline;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    list-style: none;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  article .decision-score-breakdown-link::-webkit-details-marker {
+    display: none;
+  }
+  article [data-score-breakdown-open] {
+    display: none;
+  }
+  article
+    .decision-score-breakdown[open]
+    .decision-score-breakdown-link
+    [data-score-breakdown-closed] {
+    display: none;
+  }
+  article
+    .decision-score-breakdown[open]
+    .decision-score-breakdown-link
+    [data-score-breakdown-open] {
+    display: inline;
+  }
+  article .decision-score-breakdown[open] > .decision-score-breakdown-link {
+    color: var(--color-ink);
+  }
+  article .decision-calculation-scroll {
+    min-width: 0;
+  }
+  article .decision-calculation-scroll > [data-table-scroll-container] {
+    margin-bottom: 0;
+  }
+  article .decision-calculation-matrix {
+    min-width: 36rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+  article .decision-calculation-matrix th,
+  article .decision-calculation-matrix td {
+    padding: 0.5rem 0.625rem;
+    border-right: 1px solid var(--edge-c);
+    border-bottom: 1px solid var(--edge-c);
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  article .decision-calculation-matrix th:last-child,
+  article .decision-calculation-matrix td:last-child {
+    border-right: 0;
+  }
+  article .decision-calculation-matrix thead th {
+    background: var(--surface-c);
+    color: var(--color-muted);
+    font-weight: 700;
+  }
+  article .decision-calculation-matrix th:first-child {
+    width: 32%;
+    text-align: left;
+  }
+  article .decision-calculation-matrix tbody th {
+    color: var(--color-ink);
+    font-weight: 500;
+  }
+  article .decision-calculation-contribution,
+  article .decision-calculation-impact,
+  article .decision-calculation-total {
+    white-space: nowrap;
+  }
+  article .decision-calculation-matrix tfoot th,
+  article .decision-calculation-matrix tfoot td {
+    border-bottom: 0;
+    background: color-mix(in srgb, var(--color-accent) 6%, var(--bg));
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+
+  /* The authored term is the affordance: dashed underlines work equally for
+     criterion meanings and value reasons without adding a second icon
+     language. The shell's shared info-popover behavior supplies hover, focus,
+     tap, Escape, and edge-aware positioning. */
+  article .decision-definition {
+    display: inline;
+  }
+  article .decision-definition-trigger {
+    display: inline;
+    list-style: none;
+    cursor: help;
+    text-decoration-line: underline;
+    text-decoration-style: dashed;
+    text-decoration-color: color-mix(in srgb, currentColor 52%, transparent);
+    text-underline-offset: 0.2em;
+  }
+  article .decision-definition-trigger::-webkit-details-marker {
+    display: none;
+  }
+  article .decision-definition-trigger:hover,
+  article .decision-definition[open] > .decision-definition-trigger {
+    color: var(--color-accent);
+    text-decoration-color: currentColor;
+  }
+  article .decision-definition-trigger:focus-visible {
+    outline: none;
+    border-radius: 0.125rem;
+    color: var(--color-accent);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 20%, transparent);
+  }
+  article .decision-definition-body {
+    color: var(--ink-c);
+    font-weight: 400;
+    text-align: left;
+  }
+  article .decision-definition-body > :first-child {
+    margin-top: 0;
+  }
+  article .decision-definition-body > :last-child {
+    margin-bottom: 0;
+  }
+
+  /* C - the brief. These fallback comparison styles remain separate from the
+     options; QuickDecision's criteria-free model never activates them. */
+  article .decision-brief-compare {
+    border-top: 1px solid var(--edge-c);
+  }
+  article .decision-details-summary {
+    list-style: none;
+  }
+  article .decision-details-summary::-webkit-details-marker {
+    display: none;
+  }
+  article .decision-details-chevron {
+    transition: transform 120ms ease-out;
+  }
+  article .decision-details-chevron > svg {
+    width: 100%;
+    height: 100%;
+  }
+  article .decision-brief-compare[open] .decision-details-chevron {
+    transform: rotate(90deg);
+  }
+  article .decision-brief-option + .decision-brief-option {
+    border-top: 1px solid var(--edge-c);
+  }
+  article .decision-brief-option:has(.decision-radio:enabled):hover {
+    background: var(--surface-c);
+  }
+  article .decision-brief-compare-body {
+    border: 1px solid var(--edge-c);
+    border-radius: 0.375rem;
+    overflow: hidden;
+  }
+  article .decision-zone-propose,
+  article .decision-zone-rationale {
+    background: var(--surface-c);
+  }
+
+  /* The proposal field belongs to its radio, so CSS alone reveals it. This is
+     what keeps the no-script promise: without the viewer script the link still
+     checks its radio and the field still appears. */
+  article
+    .decision-propose:not(:has([data-decision-proposal-choice]:checked))
+    .decision-proposal {
+    display: none;
+  }
+
+  /* The escape hatch reads as a quiet link, never as a fourth column. */
+  article .decision-propose-link {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: color-mix(
+      in srgb,
+      var(--color-muted) 45%,
+      transparent
+    );
+    text-underline-offset: 3px;
+  }
+  article .decision-propose-link:hover {
+    color: var(--ink-c);
+  }
+  article .decision-propose:has(.decision-radio:checked) .decision-propose-link,
+  article
+    .decision-propose:has([data-decision-proposal-choice]:checked)
+    .decision-propose-link {
+    color: var(--color-accent);
+    text-decoration-color: var(--color-accent);
+  }
+  article .decision-propose-link:has(:focus-visible) {
+    outline: none;
+    border-radius: 0.125rem;
+    color: var(--ink-c);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 20%, transparent);
+  }
+  article .decision-proposal-input {
+    padding: 0.4375rem 0.625rem;
+    border: 1px solid var(--edge-c);
+    border-radius: 0.375rem;
+    background: var(--bg);
+    color: var(--ink-c);
+    font: inherit;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    resize: vertical;
+  }
+  article .decision-proposal-input:focus-visible {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 20%, transparent);
+  }
+  article .decision-proposal-cancel {
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--edge-c);
+    border-radius: 0.375rem;
+    cursor: pointer;
+    background: var(--bg);
+    color: var(--ink-c);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  article .decision-proposal-cancel:hover {
+    background: var(--surface-c);
+  }
+  article .decision-proposal-cancel:focus-visible {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+  article .decision[data-decision-answered] .decision-proposal-cancel {
+    display: none;
+  }
+  article .decision-details-summary:focus-visible {
+    outline: none;
+    color: var(--color-accent);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 20%, transparent);
+  }
+
+  /* The scrolling hint belongs only to the reader whose viewport clips the
+     matrix; above the reading breakpoint it is noise. */
+  article .decision-scroll-note {
+    display: none;
+  }
+
+  article .decision-confirm {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.375rem 0.875rem;
+    border: 0;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    background: var(--color-accent);
+    color: var(--bg);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+  article .decision-confirm:disabled {
+    cursor: default;
+    background: var(--surface-c);
+    color: var(--color-muted);
+    box-shadow: inset 0 0 0 1px var(--edge-c);
+  }
+  article .decision-confirm:not(:disabled):hover {
+    background: color-mix(in srgb, var(--color-accent) 88%, var(--ink-c));
+  }
+  article .decision-confirm:focus-visible,
+  article .decision-change:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+  article .decision-change:focus-visible {
+    border-color: var(--color-accent);
+  }
+  article .decision-change {
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--edge-c);
+    border-radius: 0.375rem;
+    cursor: pointer;
+    background: var(--bg);
+    color: var(--ink-c);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  article .decision-change:hover {
+    background: var(--surface-c);
+  }
+
+  /* Answering compresses the matrix to the column that won and replaces the
+     confirm row with the recorded strip. Which regions are showing is carried
+     by the hidden attribute, the one display rule utilities cannot out-rank. */
+  article .decision-answer:not([hidden]) {
+    display: flex;
+    background: var(--decision-pro-bg);
+  }
+  article .decision-answer-mark {
+    background: var(--decision-pro-c);
+    color: var(--bg);
+  }
+}
+
+/* The matrix earns its horizontal scroll below the reading breakpoint, where
+   three option columns cannot fit; the hint appears exactly there. */
+@media (width < 56rem) {
+  article .decision-scroll-note {
+    display: block;
+  }
+  article .decision-matrix {
+    min-width: 34rem;
+  }
+}
+
+/* A row keeps its two-column scan line while the option has enough room.
+   Below phone width, stacking the verdict under its label preserves every
+   word instead of squeezing or clipping the value beside the radio gutter. */
+@media (width < 36rem) {
+  article .decision-row-line {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  article .decision-row-line .decision-verdict {
+    padding-left: 0.75rem;
+  }
+}

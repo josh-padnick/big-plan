@@ -1,38 +1,40 @@
-# Skill Distribution Decision Plan
+# Skill Distribution Decision
 
-The skill's delivery channel gets decided with the `Decision` component, read option by option.
+Choose the delivery channel before implementing the installer.
 
-<Decision question="How does the skill reach the end user's agent?" status="open">
+<Decision question="How does the skill reach the user's agent?">
 
-The authored skill file in the repository is canonical either way; this decision is only about the delivery channel.
+The repository copy remains canonical either way.
 
-<Option title="Embedded in the CLI, printed by a new command" recommended summary="A skill command prints the file verbatim; the agent redirects it into place.">
+<Option title="Embed it in the CLI" recommended summary="A command prints the version-matched skill.">
 
-<Consideration title="Version fidelity" verdict="Exact" tone="good">
+<Consideration label="Version fidelity" verdict="Exact" tone="good">
 
-The skill is compiled into the package, so its text can never disagree with the installed CLI.
+The installed package contains the matching skill text.
 
 </Consideration>
 
-<Consideration title="Single source of truth" verdict="One file" tone="good" />
+<Consideration label="Offline setup" verdict="Yes" tone="good">
 
-<Consideration title="Works offline" verdict="Yes" tone="good" />
+Installation never needs the network.
 
-Re-running the command after an upgrade refreshes the installed skill.
+</Consideration>
 
 </Option>
 
-<Option title="Docs-site download" summary="Setup tells the agent to fetch the skill from the docs site.">
+<Option title="Download it from the docs site" summary="Setup fetches the published skill.">
 
-<Consideration title="Version fidelity" verdict="Drifts" tone="bad">
+<Consideration label="Version fidelity" verdict="May drift" tone="bad">
 
-The site always serves the latest text, which can disagree with an older installed CLI.
+The site can move ahead of an older CLI.
 
 </Consideration>
 
-<Consideration title="Single source of truth" verdict="One file" tone="good" />
+<Consideration label="Offline setup" verdict="No" tone="bad">
 
-<Consideration title="Works offline" verdict="No" tone="bad" />
+Setup must reach the documentation host.
+
+</Consideration>
 
 </Option>
 
