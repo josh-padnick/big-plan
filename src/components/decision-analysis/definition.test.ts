@@ -86,7 +86,13 @@ describe("DecisionAnalysis", () => {
 
   it("should identify and explain the chosen option in a decided audit", () => {
     const html = render(
-      analysis({ interaction: "audit" })
+      analysis({
+        interaction: "audit",
+        scoring: ' scoring="weighted"',
+        criterion: ' impact="5"',
+        scoreA: ' score="5"',
+        scoreB: ' score="4"',
+      })
         .replace('state="proposed"', 'state="decided"')
         .replace('<Option title="SQLite">', '<Option title="SQLite" chosen>'),
     );
@@ -94,6 +100,9 @@ describe("DecisionAnalysis", () => {
     expect(html).toContain("Chosen");
     expect(html).toContain('data-default-index="1"');
     expect(html).toContain('data-option-chosen=""');
+    expect(html).toMatch(
+      /<td class="decision-score-total[^>]+data-option-index="1"[^>]+data-option-chosen=""/,
+    );
   });
 
   it("should reject choose mode after a decision is settled", () => {

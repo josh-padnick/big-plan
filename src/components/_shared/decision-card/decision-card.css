@@ -65,14 +65,17 @@
      column; without scripts the header alone carries the selection, which the
      native radio already makes unambiguous. */
   article .decision-column,
-  article .decision-cell {
+  article .decision-cell,
+  article .decision-score-total {
     background: transparent;
   }
   article .decision-column:has(.decision-radio:enabled):hover {
     background: var(--surface-c);
   }
   article .decision-column:has(.decision-radio:checked),
-  article .decision-cell[data-column-selected] {
+  article .decision-column[data-column-selected],
+  article .decision-cell[data-column-selected],
+  article .decision-score-total[data-column-selected] {
     background: color-mix(in srgb, var(--color-accent) 10%, var(--bg));
   }
   article .decision-column:has(.decision-radio:checked) {
@@ -80,7 +83,9 @@
   }
   article .decision-column[data-option-chosen],
   article .decision-cell[data-option-chosen],
-  article .decision-cell[data-column-selected][data-column-settled] {
+  article .decision-score-total[data-option-chosen],
+  article .decision-cell[data-column-selected][data-column-settled],
+  article .decision-score-total[data-column-selected][data-column-settled] {
     background: var(--decision-pro-bg);
   }
   article .decision-column[data-option-chosen] {

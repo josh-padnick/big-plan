@@ -407,6 +407,7 @@ const WeightedScoreFooter = ({
             data-decision-composite=""
             data-option-index={optionIndex}
             data-score-values={total.scores.join(",")}
+            {...(option.chosen ? { "data-option-chosen": "" } : {})}
           >
             <strong
               className="text-base text-ink tabular-nums"

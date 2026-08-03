@@ -72,6 +72,34 @@ test("should audit, choose, and recalculate DecisionAnalysis", async ({
   await expect(
     weighted.locator("table.decision-matrix-keyed > tbody > tr"),
   ).toHaveCount(7);
+  const weightedChoice = weighted.locator("[data-decision-choice]").first();
+  const weightedCell = weighted
+    .locator('.decision-cell[data-decision-column="0"]')
+    .first();
+  const weightedHeader = weighted
+    .locator('.decision-column[data-decision-column="0"]')
+    .first();
+  const weightedTotal = weighted
+    .locator('.decision-score-total[data-decision-column="0"]')
+    .first();
+  await weightedChoice.check();
+  await expect(weightedTotal).toHaveAttribute("data-column-selected", "");
+  const [cellBackground, headerBackground, totalBackground] = await Promise.all(
+    [
+      weightedCell.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      ),
+      weightedHeader.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      ),
+      weightedTotal.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      ),
+    ],
+  );
+  expect(headerBackground).toBe(cellBackground);
+  expect(totalBackground).toBe(cellBackground);
+  expect(totalBackground).not.toBe("rgba(0, 0, 0, 0)");
   const total = weighted.locator("[data-decision-percent]").first();
   const before = await total.textContent();
   await weighted
