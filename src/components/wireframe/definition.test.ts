@@ -310,6 +310,36 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     ]);
   });
 
+  it("should anchor a repeated screen id to its own screen when an earlier screen fails to compile", () => {
+    const broken = {
+      ...element({
+        name: "Screen",
+        attributes: { name: "No id", device: "desktop" },
+        children: [element({ name: "Text", attributes: { text: "Copy" } })],
+      }),
+      position: {
+        start: { line: 2, column: 1, offset: 10 },
+        end: { line: 4, column: 10, offset: 30 },
+      },
+    };
+    const duplicate = {
+      ...LESSON,
+      position: {
+        start: { line: 9, column: 1, offset: 400 },
+        end: { line: 11, column: 10, offset: 500 },
+      },
+    };
+    const { diagnostics } = compile({
+      scopedChildren: [broken, LESSON, duplicate],
+    });
+    expect(diagnostics).toContainEqual({
+      line: 9,
+      column: 1,
+      message:
+        'Duplicate Screen id "lesson"; every screen in a wireframe needs its own id',
+    });
+  });
+
   it("should report an element written directly inside the wireframe", () => {
     const { diagnostics } = compile({
       scopedChildren: [element({ name: "Panel" }), LESSON],

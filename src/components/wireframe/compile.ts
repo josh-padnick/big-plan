@@ -860,23 +860,24 @@ const compileScreen = ({
 // unreachable rather than merely untidy.
 const rejectDuplicateIds = ({
   screens,
-  positions,
   diagnostics,
 }: {
-  readonly screens: ReadonlyArray<WireframeScreen>;
-  readonly positions: ReadonlyArray<ScopedChild["position"]>;
+  readonly screens: ReadonlyArray<{
+    readonly screen: WireframeScreen;
+    readonly position: ScopedChild["position"];
+  }>;
   readonly diagnostics: DiagnosticCollector;
 }): void => {
   const seen = new Set<string>();
-  screens.forEach((screen, index) => {
+  for (const { screen, position } of screens) {
     if (seen.has(screen.id)) {
       diagnostics.add({
         message: `Duplicate Screen id "${screen.id}"; every screen in a wireframe needs its own id`,
-        position: positions[index],
+        position,
       });
     }
     seen.add(screen.id);
-  });
+  }
 };
 
 /** Compiles one Wireframe component into the model consumed by rendering. */
@@ -912,21 +913,18 @@ export const compileWireframe = ({
     });
     return false;
   });
-  const screens = screenChildren.flatMap((child) => {
+  const compiledScreens = screenChildren.flatMap((child) => {
     const screen = compileScreen({ child, diagnostics, references });
-    return screen === undefined ? [] : [screen];
+    return screen === undefined ? [] : [{ screen, position: child.position }];
   });
+  const screens = compiledScreens.map((entry) => entry.screen);
   if (screens.length === 0) {
     diagnostics.add({
       message: 'Wireframe needs at least one <Screen id="..." name="..." />',
       position,
     });
   }
-  rejectDuplicateIds({
-    screens,
-    positions: screenChildren.map((child) => child.position),
-    diagnostics,
-  });
+  rejectDuplicateIds({ screens: compiledScreens, diagnostics });
 
   const screenIds = new Set(screens.map((screen) => screen.id));
   const available = [...screenIds].join(", ");
