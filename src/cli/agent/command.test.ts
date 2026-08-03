@@ -1,6 +1,7 @@
 // Covers the public coding-agent loop: a fresh session gets a pasteable prompt,
 // receives one pending request, and publishes one validated response.
 
+import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -74,24 +75,100 @@ afterAll(async () => {
   await runtime.close();
 });
 
+// The launcher output is plain text: extract one labeled line's value.
+const launcherField = ({
+  output,
+  label,
+}: {
+  readonly output: string;
+  readonly label: string;
+}): string => {
+  const line = output
+    .split("\n")
+    .find((candidate) => candidate.startsWith(`${label}: `));
+  if (line === undefined) {
+    throw new Error(`The launcher output has no ${label} line`);
+  }
+  return line.slice(label.length + 2);
+};
+
 describe("agent command", () => {
-  it("should print a ready-to-paste real-session prompt", async () => {
+  it("should print a plain-text launcher whose commands carry no display escaping", async () => {
     const result = await agentCommand([runtime.planPath]);
-    expect(result.agent_prompt).toContain("You are the coding agent");
-    expect(result.agent_prompt).toContain("agent next");
-    expect(result.agent_prompt).toContain(runtime.planPath);
-    expect(result.codex).toContain('codex "$(cat ');
-    expect(result.claude).toContain('claude "$(cat ');
-    if (typeof result.prompt_file !== "string") {
-      throw new Error("The agent command did not provide its prompt file");
+    if (typeof result !== "string") {
+      throw new Error("The launcher must print plain text, not a record");
     }
-    expect(await readFile(result.prompt_file, "utf8")).toContain(
+    // Display-escaped quotes are the round-7 paste bug: they word-split
+    // when pasted, so the printed bytes must contain no backslashes at all.
+    expect(result).not.toContain("\\");
+    expect(result).toContain('codex "$(cat ');
+    expect(result).toContain('claude "$(cat ');
+    expect(result).toContain("SECOND terminal");
+    expect(launcherField({ output: result, label: "plan" })).toBe(
       runtime.planPath,
     );
+    const promptFile = launcherField({
+      output: result,
+      label: "prompt_file",
+    });
+    const prompt = await readFile(promptFile, "utf8");
+    expect(prompt).toContain("You are the coding agent");
+    expect(prompt).toContain("agent next");
+    expect(prompt).toContain(runtime.planPath);
+  });
+
+  it("should emit codex and claude commands that round-trip through a real shell when pasted byte-for-byte", async () => {
+    const result = await agentCommand([runtime.planPath]);
+    if (typeof result !== "string") {
+      throw new Error("The launcher must print plain text, not a record");
+    }
+    const promptFile = launcherField({
+      output: result,
+      label: "prompt_file",
+    });
+    const prompt = await readFile(promptFile, "utf8");
+    const stubDirectory = await mkdtemp(join(tmpdir(), "big-plan-agent-stub-"));
+    // Each stub proves the pasted command reaches the agent binary with the
+    // whole prompt as exactly one argument.
+    for (const binary of ["codex", "claude"]) {
+      await writeFile(
+        join(stubDirectory, binary),
+        "#!/bin/sh\nprintf 'argc=%s\\n' \"$#\"\nprintf '%s' \"$1\"\n",
+        { mode: 0o755 },
+      );
+    }
+    const shells = ["/bin/sh", "zsh", "bash"].filter(
+      (shell) => spawnSync(shell, ["-c", "true"]).status === 0,
+    );
+    expect(shells).toContain("/bin/sh");
+    const pastedLines = result
+      .split("\n")
+      .filter(
+        (line) => line.startsWith("codex ") || line.startsWith("claude "),
+      );
+    expect(pastedLines).toHaveLength(2);
+    for (const shell of shells) {
+      for (const pasted of pastedLines) {
+        const run = spawnSync(shell, ["-c", pasted], {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            PATH: `${stubDirectory}:${process.env.PATH ?? ""}`,
+          },
+        });
+        expect(run.status).toBe(0);
+        // Command substitution strips trailing newlines; the prompt body
+        // itself must arrive untouched as one argument.
+        expect(run.stdout).toBe(`argc=1\n${prompt.replace(/\n+$/u, "")}`);
+      }
+    }
   });
 
   it("should return the oldest pending work and its response contract", async () => {
     const result = await agentCommand(["next", runtime.planPath]);
+    if (typeof result === "string") {
+      throw new Error("agent next must return a structured record");
+    }
     expect(result).toMatchObject({
       pending: true,
       work: {
@@ -102,6 +179,9 @@ describe("agent command", () => {
         requestId: "aaaaaaaaaaaaaaaa",
       },
     });
+    // The publish command is also pasted; single-quote quoting keeps it free
+    // of double quotes, so structured output prints it without escaping.
+    expect(String(result.respond_command)).not.toContain('"');
     if (typeof result.response_file !== "string") {
       throw new Error("The agent command did not provide a response path");
     }
@@ -168,7 +248,7 @@ describe("agent command lifecycle", () => {
     const stopped = await startReviewRuntime({ planPath });
     await stopped.close();
     await expect(agentCommand([planPath])).rejects.toThrow(
-      /review session is not running/,
+      /review server for this plan is not running/,
     );
   });
 });

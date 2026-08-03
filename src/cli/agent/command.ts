@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
+import { shellQuote } from "../_shared/shell-quote.js";
 import {
   commentsFromExchange,
   deriveSourceRevision,
@@ -42,9 +43,20 @@ const USAGE = [
   "  big-plan agent respond <input.mdx> <response.json>",
 ].join("\n");
 
-const fail = (message: string): never => {
-  throw new AxiError(message, "INVALID_INPUT", [USAGE]);
+const fail = (
+  message: string,
+  suggestions: ReadonlyArray<string> = [USAGE],
+): never => {
+  throw new AxiError(message, "INVALID_INPUT", [...suggestions]);
 };
+
+// Every agent subcommand needs the review server alive in another terminal;
+// spell out the two-terminal shape whenever that precondition fails.
+const twoTerminalSuggestions = (planPath: string): ReadonlyArray<string> => [
+  `Terminal 1: run big-plan review ${shellQuote(planPath)} and LEAVE IT RUNNING for the whole session`,
+  "Terminal 2: rerun this big-plan agent command while the server stays up",
+  USAGE,
+];
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -58,39 +70,39 @@ type SessionDescriptor = {
   readonly token: string;
 };
 
-const sessionDescriptor = (value: unknown): SessionDescriptor => {
-  if (
-    !isRecord(value) ||
-    typeof value.sessionId !== "string" ||
-    typeof value.planId !== "string" ||
-    typeof value.plan !== "string" ||
-    typeof value.url !== "string" ||
-    typeof value.pid !== "number" ||
-    !Number.isInteger(value.pid) ||
-    typeof value.token !== "string" ||
-    !/^[A-Za-z0-9_-]{43}$/.test(value.token)
-  ) {
-    return fail(
-      "No live review session describes this plan. Start `big-plan review` first.",
-    );
-  }
-  return {
-    sessionId: value.sessionId,
-    planId: value.planId,
-    plan: value.plan,
-    url: value.url,
-    pid: value.pid,
-    token: value.token,
+const sessionDescriptorFor =
+  (planPath: string) =>
+  (value: unknown): SessionDescriptor => {
+    if (
+      !isRecord(value) ||
+      typeof value.sessionId !== "string" ||
+      typeof value.planId !== "string" ||
+      typeof value.plan !== "string" ||
+      typeof value.url !== "string" ||
+      typeof value.pid !== "number" ||
+      !Number.isInteger(value.pid) ||
+      typeof value.token !== "string" ||
+      !/^[A-Za-z0-9_-]{43}$/.test(value.token)
+    ) {
+      return fail(
+        "No live review session describes this plan. The review server must be started first, in its own terminal, and stay running.",
+        twoTerminalSuggestions(planPath),
+      );
+    }
+    return {
+      sessionId: value.sessionId,
+      planId: value.planId,
+      plan: value.plan,
+      url: value.url,
+      pid: value.pid,
+      token: value.token,
+    };
   };
-};
 
 const wait = (milliseconds: number): Promise<void> =>
   new Promise((settle) => {
     setTimeout(settle, milliseconds);
   });
-
-const shellQuote = (value: string): string =>
-  `'${value.replaceAll("'", "'\\''")}'`;
 
 const responseHistory = ({
   request,
@@ -190,7 +202,7 @@ const readPlanSession = async (planArgument: string) => {
   await prepareStore(store);
   const descriptor = await readSessionDescriptor({
     store,
-    validate: sessionDescriptor,
+    validate: sessionDescriptorFor(planPath),
   });
   if (
     descriptor.plan !== planPath ||
@@ -199,6 +211,7 @@ const readPlanSession = async (planArgument: string) => {
   ) {
     return fail(
       "The live review session belongs to a different plan. Restart `big-plan review` for this source.",
+      twoTerminalSuggestions(planPath),
     );
   }
   if (
@@ -208,7 +221,8 @@ const readPlanSession = async (planArgument: string) => {
     }))
   ) {
     return fail(
-      "The recorded review session is not running. Start `big-plan review` for this plan first.",
+      "The review server for this plan is not running. It must stay running in its own terminal for the whole agent session; big-plan agent commands belong in a second terminal.",
+      twoTerminalSuggestions(planPath),
     );
   }
   return {
@@ -220,9 +234,11 @@ const readPlanSession = async (planArgument: string) => {
   };
 };
 
-const agentPrompt = async (
-  planArgument: string,
-): Promise<Record<string, unknown>> => {
+// Returns plain text, not a structured record: the codex and claude launch
+// commands must print byte-for-byte pasteable, and structured serialization
+// would add display-only backslash escapes around their inner double quotes
+// that break the command when pasted into a shell.
+const agentPrompt = async (planArgument: string): Promise<string> => {
   const session = await readPlanSession(planArgument);
   const binPath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
   const nextCommand = `node ${shellQuote(binPath)} agent next ${shellQuote(
@@ -249,20 +265,28 @@ For each returned work item:
 Never edit rendered HTML. Never invent a Changed outcome without changing the plan source.`;
   await writeAgentPrompt({ store: session.store, prompt });
   const promptArgument = `"$(cat ${shellQuote(session.store.agentPromptPath)})"`;
-  return {
-    agent_prompt: prompt,
-    prompt_file: session.store.agentPromptPath,
-    codex: `codex ${promptArgument}`,
-    claude: `claude ${promptArgument}`,
-    review: session.url,
-    plan: session.planPath,
-    next: nextCommand,
-    help: [
-      "Run codex or claude in the plan repository to start a real coding-agent session",
-      "Alternatively paste agent_prompt into an already-open coding-agent session",
-      "Keep that session running so browser replies return to the same conversation loop",
-    ],
-  };
+  return [
+    "Big Plan live review - coding-agent launcher",
+    "",
+    `plan: ${session.planPath}`,
+    `review: ${session.url}`,
+    `prompt_file: ${session.store.agentPromptPath}`,
+    "",
+    "The review server (`big-plan review`) must stay running in its own",
+    "terminal for this whole session; if it stops, the agent loop stops",
+    "with it. Start the coding agent in a SECOND terminal.",
+    "",
+    "In that second terminal, from the plan's repository, paste ONE of",
+    "these commands exactly as printed:",
+    "",
+    `codex ${promptArgument}`,
+    "",
+    `claude ${promptArgument}`,
+    "",
+    "Already inside a coding-agent session? Paste the contents of",
+    "prompt_file there instead. Keep the agent session running so browser",
+    "replies continue the same conversation loop.",
+  ].join("\n");
 };
 
 const nextWork = async ({
@@ -468,7 +492,7 @@ const respond = async ({
 /** Dispatches the coding-agent exchange helpers. */
 export const agentCommand = async (
   args: ReadonlyArray<string>,
-): Promise<Record<string, unknown>> => {
+): Promise<Record<string, unknown> | string> => {
   if (args.length === 1) {
     return agentPrompt(args[0] ?? "");
   }

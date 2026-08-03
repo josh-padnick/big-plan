@@ -138,15 +138,18 @@ Unlike the other commands, `review` does not exit after returning its result.
 It holds the port until the reviewer stops it with `Ctrl+C`, because the runtime is what makes submit and progress possible.
 
 `agent <input.mdx>` reads the owner-only descriptor for that running review and
-returns:
+prints a plain-text launcher instead of structured output, because its launch
+commands are meant to be pasted and structured serialization would escape the
+quotes they need. The launcher reports:
 
-- `agent_prompt`: the complete prompt to paste into a fresh Codex or Claude
-  coding session in the plan's repository.
-- `prompt_file`: the owner-only ignored file containing that prompt.
-- `codex` and `claude`: exact launch commands that read `prompt_file`, so the
-  multi-line contract does not need to be copied out of structured output.
-- `review` and `plan`: the live review URL and authoritative source path.
-- `next`: the exact blocking command that receives the next feedback or reply.
+- `plan` and `review`: the authoritative source path and live review URL.
+- `prompt_file`: the owner-only ignored file containing the complete session
+  prompt, including the exact blocking command that receives each next
+  feedback or reply; paste this file's contents when a coding-agent session
+  is already open.
+- The exact `codex "$(cat '<prompt_file>')"` and equivalent `claude` launch
+  commands, printed byte-for-byte pasteable. Run one in a second terminal
+  while the review runtime stays running in its own.
 
 The pasted prompt drives two subcommands:
 
