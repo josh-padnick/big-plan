@@ -316,6 +316,10 @@ export const DIAGRAM_SCRIPT = `
       const node = event.detail && event.detail.target;
       if (node instanceof Element && diagram.contains(node)) select(node);
     });
+    diagram.addEventListener("flow-review-comment", (event) => {
+      const node = event.detail && event.detail.target;
+      if (node instanceof Element && diagram.contains(node)) openCompose(node);
+    });
     diagram.addEventListener("flow-review-clear", () => clearDiagramChrome(diagram));
     if (!c) continue;
 
@@ -1306,7 +1310,8 @@ export const DIAGRAM_SCRIPT = `
 
   // The seam the commenting work connects to. It is deliberately explicit and
   // deliberately honest: if the page-level collector is not present, this says
-  // so and keeps the notes. It never reports success it did not have.
+  // so and keeps the notes. Comment-only component surfaces remain independent
+  // until their narrow batch integration is deliberately connected.
   const pageCollector = () =>
     (window.bigPlan && window.bigPlan.feedback) || null;
 
@@ -1332,8 +1337,13 @@ export const DIAGRAM_SCRIPT = `
     root.appendChild(list);
 
     const foot = el("div", "flow-collector-foot");
-    const note = el("p", "flow-collector-note",
-      "Add these notes to the plan's feedback package; the plan sends once, from the page.");
+    const note = el(
+      "p",
+      "flow-collector-note",
+      commentOnly
+        ? "This wireframe keeps its screen and element notes together until plan feedback is connected."
+        : "Add these notes to the plan's feedback package; the plan sends once, from the page.",
+    );
     foot.appendChild(note);
     const status = el("p", "flow-collector-status");
     status.hidden = true;
@@ -1368,8 +1378,18 @@ export const DIAGRAM_SCRIPT = `
   const handOff = (diagram, status) => {
     const mine = drafts.filter((d) => d.diagram === diagram);
     if (mine.length === 0) return;
-    const target = pageCollector();
     status.hidden = false;
+    if (diagram.hasAttribute("data-flow-comment-only")) {
+      collectors.get(diagram).statusFor = mine.length;
+      status.setAttribute("data-tone", "unavailable");
+      status.textContent =
+        "Sending wireframe feedback to plan comments is not connected yet. " +
+        (mine.length === 1 ? "Your note is" : "Your " + mine.length + " notes are") +
+        " still here.";
+      announce("Wireframe feedback is not connected; your notes are still here");
+      return;
+    }
+    const target = pageCollector();
     if (!target || typeof target.add !== "function") {
       // Never pretend. The notes stay exactly where they are.
       status.setAttribute("data-tone", "unavailable");
@@ -1453,15 +1473,30 @@ export const DIAGRAM_SCRIPT = `
     }
 
     c.count.textContent = String(mine.length);
+    const sendVerb = diagram.hasAttribute("data-flow-comment-only") ? "Send" : "Add";
     const addLabel = mine.length === 1
-      ? "Add 1 note to plan feedback"
-      : "Add " + mine.length + " notes to plan feedback";
+      ? sendVerb + " 1 note to plan feedback"
+      : sendVerb + " " + mine.length + " notes to plan feedback";
     for (const add of [c.toolbarAdd, c.trayAdd]) {
       add.textContent = addLabel;
       add.hidden = mine.length === 0;
       if (add.inert) add.inert = false;
     }
     c.root.hidden = mine.length === 0 || !maximized;
+    if (diagram.hasAttribute("data-flow-comment-only")) {
+      const screenCounts = {};
+      for (const draft of mine) {
+        const screen = draft.element.closest("[data-wireframe-screen]");
+        if (!screen) continue;
+        const id = screen.getAttribute("data-wireframe-screen");
+        screenCounts[id] = (screenCounts[id] || 0) + 1;
+      }
+      diagram.dispatchEvent(
+        new CustomEvent("flow-feedback-change", {
+          detail: { screenCounts, total: mine.length },
+        }),
+      );
+    }
     // The status describes one attempt at one batch. Once the batch changes it
     // is describing something that no longer exists, so it goes.
     if (c.statusFor !== mine.length) {
@@ -1529,6 +1564,12 @@ export const DIAGRAM_SCRIPT = `
   diagrams.forEach((diagram, index) => {
     buildExitAlert(diagram, index);
     buildCollector(diagram);
+    // Comment-only surfaces have no diagram canvas, so they do not enter the
+    // canvas observer above. Their local tray still follows the shared figure
+    // maximize lifecycle directly.
+    diagram.addEventListener("figuremaximizechange", () =>
+      renderCollector(diagram),
+    );
   });
 
   // First layout runs last: fitting the canvas re-anchors the action bar, so

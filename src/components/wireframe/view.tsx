@@ -110,10 +110,10 @@ const nodeLabel = (node: WireframeNode): string => {
   }
 };
 
-// Wireframe targets use the page commenting model's exact block contract.
-// Screen ids and element paths make the address stable across copy edits, and
-// the marker keeps component-specific behavior discoverable without creating
-// a second draft store or transport.
+// Wireframe targets use stable block identity while the component owns its
+// local feedback tray. Screen ids and element paths survive copy edits; the
+// tray can later hand that batch to the page through one narrow integration
+// without coupling the wireframe to page-level commenting chrome.
 const targetProps = ({
   node,
   context,
@@ -782,6 +782,8 @@ const Screen = ({
       data-block-anchor={`screen-${safeTargetSegment(screen.id)}`}
       data-block-kind="wireframe-screen"
       data-block-label={screen.name}
+      data-flow-anchor={`screen-${safeTargetSegment(screen.id)}`}
+      data-flow-name={screen.name}
       {...(current ? { "data-wireframe-current": "" } : {})}
     >
       <div className="wireframe-screen-caption">

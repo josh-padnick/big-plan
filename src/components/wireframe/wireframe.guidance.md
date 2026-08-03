@@ -120,6 +120,9 @@ Viewer and surface discipline:
 
 - Persistent tools live in fixed chrome. Reserve a stable top or edge bar for modes, zoom, and other ongoing controls, and let the canvas make room for it; never float persistent controls over the work they affect.
 - Chrome frames its content. In an inline or minimized view, draw one containing border around the toolbar and the canvas it controls, with the toolbar as an internal edge; never leave screen chrome hovering as a detached strip above its content.
+- A frame that contains only one thing is noise. Keep a containing edge when it groups chrome with the surface it controls; remove a second edge that merely traces the already bounded artboard.
+- Independent subsystems talk through a narrow send. A component-local feedback tray owns its screen and element notes end to end, then hands one batch to plan feedback through an explicit integration action; until that integration exists, show an honest stub and retain the notes locally.
+- Controls in one row share a centerline. Give adjacent text buttons and icon buttons compatible heights, alignment, and focus geometry so they read as one toolbar.
 - Name the mode, not the halves. Express a binary capability as one explicit switch with a named state—such as **Comment Mode: On/Off**—instead of presenting competing nouns such as **Use / Comment** that ask the user to infer what changed.
 - Card interiors share one inset. Align headers, comment rows, and footers to the same horizontal inset, and repeat one compact vertical rhythm so related rows read as a single ordered group rather than independently placed fragments.
 

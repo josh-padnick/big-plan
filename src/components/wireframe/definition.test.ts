@@ -1129,6 +1129,8 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).not.toContain("Open larger + zoom");
     expect(rendered).toContain('"data-wireframe-zoom-controls":""');
     expect(rendered).toContain('"data-block-anchor":"screen-home"');
+    expect(rendered).toContain('"data-flow-anchor":"screen-home"');
+    expect(rendered).toContain('"data-flow-name":"Wallet home"');
     expect(rendered).toContain('"data-wireframe-element":"Text"');
   });
 

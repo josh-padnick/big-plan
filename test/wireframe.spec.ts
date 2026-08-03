@@ -650,6 +650,7 @@ test("should maximize and restore a wireframe in both themes", async ({
       document.documentElement.dataset.theme = value;
     }, theme);
     const wireframe = page.locator("[data-wireframe]").first();
+    const screen = wireframe.locator("[data-wireframe-screen]:visible");
     const trigger = wireframe.locator(
       "[data-wireframe-screen]:visible [data-figure-maximize]",
     );
@@ -666,7 +667,7 @@ test("should maximize and restore a wireframe in both themes", async ({
       "[data-wireframe-screen]:visible .wireframe-frame-viewport",
     );
     await expect(stageLocator).toHaveCSS("overflow", "hidden");
-    await expect(stageLocator).not.toHaveCSS("box-shadow", "none");
+    await expect(stageLocator).toHaveCSS("box-shadow", "none");
     await expect(toolbarLocator).toHaveCSS("border-bottom-width", "1px");
     const boundedStage = await boxOf(stageLocator);
     const toolbarBox = await boxOf(toolbarLocator);
@@ -678,6 +679,17 @@ test("should maximize and restore a wireframe in both themes", async ({
       );
     }
     expect(Math.abs(toolbarBox.y + toolbarBox.height - viewportBox.y)).toBe(0);
+    const commentCenter = await screen
+      .getByRole("button", { name: "Comment on this screen" })
+      .evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        return box.y + box.height / 2;
+      });
+    const maximizeCenter = await trigger.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return box.y + box.height / 2;
+    });
+    expect(Math.abs(commentCenter - maximizeCenter)).toBeLessThanOrEqual(0.5);
     const before = await boxOf(wireframe.locator(".wireframe-frame:visible"));
     await trigger.scrollIntoViewIfNeeded();
     const scrollBeforeMaximize = await page.evaluate(() => window.scrollY);
@@ -785,22 +797,38 @@ test("should comment on a whole wireframe screen and one specific element", asyn
   const screen = page.locator('[data-wireframe-screen="child-home"]');
   const affordance = page.locator("[data-review-affordance]");
   const commentsToggle = page.locator("[data-review-toggle]");
+  const reviewRail = page.locator("[data-review-rail]");
+  const pageCompose = page.locator("[data-review-compose]");
 
-  await test.step("the screen is a registered shared block target", async () => {
+  await test.step("the whole screen enters the wireframe's local tray", async () => {
     await screen.locator(".wireframe-screen-caption").hover();
     await expect(affordance).toBeHidden();
     await screen
       .getByRole("button", { name: "Comment on this screen" })
       .click();
     await page
-      .locator("[data-review-compose-input]")
+      .locator(".flow-diagram-compose textarea")
       .fill("Keep the whole wallet screen calm.");
-    await page.locator("[data-review-compose-save]").click();
-    await expect(page.locator("[data-review-drafts] li")).toHaveCount(1);
+    await wireframe
+      .locator(".flow-diagram-compose")
+      .getByRole("button", { name: "Comment" })
+      .click();
+    await expect(
+      screen.getByRole("button", { name: "Screen comments (1)" }),
+    ).toBeVisible();
+    await expect(pageCompose).toBeHidden();
+    await expect(reviewRail).toBeHidden();
+    await expect(page.locator("[data-review-drafts] li")).toHaveCount(0);
+    await screen.getByRole("button", { name: "Screen comments (1)" }).click();
+    await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
+    await expect(wireframe.locator(".flow-collector")).toBeVisible();
+    await expect(wireframe.locator(".flow-collector")).toContainText(
+      "Keep the whole wallet screen calm.",
+    );
+    await expect(page.locator(".flow-diagram-compose")).toBeHidden();
   });
 
   await test.step("Comment mode reuses the diagram selection and inline composer", async () => {
-    await screen.locator("[data-figure-maximize]").click();
     await expect(commentsToggle).toBeHidden();
     const toolbar = screen.locator(".wireframe-frame-toolbar");
     const frameViewport = screen.locator(".wireframe-frame-viewport");
@@ -844,6 +872,7 @@ test("should comment on a whole wireframe screen and one specific element", asyn
       .click();
     const collector = wireframe.locator(".flow-collector");
     await expect(collector).toBeVisible();
+    await expect(collector).toContainText("Keep the whole wallet screen calm.");
     await expect(collector).toContainText("Keep this action welcoming.");
     const collectorInsets = await Promise.all(
       [
@@ -855,21 +884,25 @@ test("should comment on a whole wireframe screen and one specific element", asyn
       ),
     );
     expect(new Set(collectorInsets).size).toBe(1);
-    await expect(collector.locator(".flow-collector-item")).toHaveCSS(
+    await expect(collector.locator(".flow-collector-item").first()).toHaveCSS(
       "margin",
       "0px",
     );
-    await collector
-      .getByRole("button", { name: "Add 1 note to plan feedback" })
-      .click();
-    await expect(page.locator("[data-review-drafts] li")).toHaveCount(2);
-    const ids = await page
-      .locator("[data-review-annotated]")
-      .evaluateAll((nodes) => nodes.map((node) => node.dataset.blockId));
-    expect(new Set(ids).size).toBe(2);
+    await expect(collector.locator(".flow-collector-item")).toHaveCount(2);
+    const send = collector.getByRole("button", {
+      name: "Send 2 notes to plan feedback",
+    });
+    await expect(send).toHaveCSS("color", "rgb(247, 245, 240)");
+    await send.click();
+    await expect(collector).toContainText(
+      "Sending wireframe feedback to plan comments is not connected yet.",
+    );
+    await expect(collector.locator(".flow-collector-item")).toHaveCount(2);
+    await expect(page.locator("[data-review-drafts] li")).toHaveCount(0);
+    await expect(reviewRail).toBeHidden();
     await expect(affordance).toBeHidden();
     await mode.click();
     await expect(mode).toHaveAttribute("aria-checked", "false");
-    await expect(action).not.toHaveAttribute("data-flow-selected");
+    await expect(wireframe.locator("[data-flow-selected]")).toHaveCount(0);
   });
 });

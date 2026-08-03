@@ -693,17 +693,6 @@
       if (block.closest("[data-wireframe]") !== null) {
         marker.hidden = true;
         marker.removeAttribute("data-review-marker-active");
-        if (block.matches("[data-wireframe-screen]")) {
-          const button = block.querySelector("[data-wireframe-comment-screen]");
-          if (button !== null) {
-            button.textContent =
-              pending > 0
-                ? `Screen comments (${pending})`
-                : sentBlocks.has(id)
-                  ? "Screen comment sent"
-                  : "Comment on this screen";
-          }
-        }
         continue;
       }
       marker.hidden = !hasComment;
@@ -1058,11 +1047,10 @@
   window.bigPlan = window.bigPlan || {};
   window.bigPlan.feedback = { add: addComponentBatch };
 
-  // Wireframes keep whole-screen comments in the page runtime. Element
-  // comments deliberately borrow the landed diagram runtime's selection,
-  // nearby action bar, inline composer, collector, and feedback handoff.
-  // This loop owns only the maximize-only Comment Mode switch that decides
-  // whether clicks operate the prototype or choose a review target.
+  // Wireframes own one local feedback tray for both whole-screen and element
+  // comments. This page runtime only wires its viewer controls to the shared
+  // diagram target/composer/collector events; it never opens page-level
+  // commenting chrome on the wireframe's behalf.
   for (const wireframe of document.querySelectorAll("[data-wireframe]")) {
     const tabState = new Map();
     const screenButtons = Array.from(
@@ -1071,10 +1059,38 @@
     for (const button of screenButtons) {
       button.hidden = false;
       button.addEventListener("click", () => {
-        const screen = button.closest("[data-wireframe-screen][data-block-id]");
-        if (screen !== null) openCompose(targetForBlock(screen));
+        const screen = button.closest("[data-wireframe-screen]");
+        if (screen !== null) {
+          const count = Number(
+            button.getAttribute("data-wireframe-comment-count") || "0",
+          );
+          if (count > 0) {
+            if (!wireframe.hasAttribute("data-figure-maximized")) {
+              const maximize = screen.querySelector("[data-figure-maximize]");
+              if (maximize !== null)
+                requestAnimationFrame(() => maximize.click());
+            }
+            return;
+          }
+          wireframe.dispatchEvent(
+            new CustomEvent("flow-review-comment", {
+              detail: { target: screen },
+            }),
+          );
+        }
       });
     }
+    wireframe.addEventListener("flow-feedback-change", (event) => {
+      const counts = event.detail?.screenCounts || {};
+      for (const button of screenButtons) {
+        const screen = button.closest("[data-wireframe-screen]");
+        const id = screen?.getAttribute("data-wireframe-screen");
+        const count = id === null ? 0 : counts[id] || 0;
+        button.setAttribute("data-wireframe-comment-count", String(count));
+        button.textContent =
+          count > 0 ? `Screen comments (${count})` : "Comment on this screen";
+      }
+    });
     const modeToggle = el("button", {
       type: "button",
       "data-wireframe-comment-mode-toggle": "",
