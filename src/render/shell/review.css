@@ -436,6 +436,57 @@ button[data-review-row-target]:active {
   background: transparent;
   border-left-width: 2px;
 }
+/* A resolved comment is still a distinct card: its head is a real top bar,
+   not a line that reads as another headline in the content. */
+[data-review-resolved-row] {
+  background: var(--surface-c);
+}
+[data-review-resolved-row] > [data-review-row-head] {
+  margin: -0.55rem -0.6rem 0.4rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--edge-c);
+  border-radius: 0.45rem 0.45rem 0 0;
+  background: color-mix(in srgb, var(--surface-c) 55%, var(--bg));
+}
+[data-review-row-icons] {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.18rem;
+}
+[data-review-row-icons] button {
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--muted-c);
+  cursor: pointer;
+}
+[data-review-row-icons] button:hover {
+  border-color: var(--edge-c);
+  background: var(--review-control-hover);
+  color: var(--ink-c);
+}
+[data-review-row-icons] button:active {
+  background: var(--review-control-active);
+}
+[data-review-row-icons] [data-review-row-delete]:hover {
+  border-color: var(--diff-remove-c);
+  color: var(--diff-remove-c);
+}
+[data-review-row-icons] button svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+[data-review-row-sending],
+[data-review-thread-sending] {
+  opacity: 0.85;
+}
 [data-review-sent-row] [data-review-row-body] {
   overflow: hidden;
   color: var(--muted-c);
@@ -649,15 +700,25 @@ button[data-review-row-target]:active {
   border-style: dashed;
   color: var(--muted-c);
 }
+[data-review-chat-message] {
+  min-width: 0;
+}
+/* Wide agent responses wrap inside the bubble; a long unbroken token can
+   never push the chat column out of its rail. */
 [data-review-chat-message] p {
   margin: 0.25rem 0 0;
   color: var(--ink-c);
   font-size: 0.75rem;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 [data-review-outcome] {
   display: grid;
+  /* One clamped column: an implicit auto track would widen to the row's
+     nowrap children and push the whole tray wider than the rail. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.18rem;
   padding: 0.45rem 0.5rem;
   border: 1px solid var(--edge-c);
@@ -706,7 +767,7 @@ button[data-review-row-target]:active {
   position: fixed;
   right: auto;
   width: 17rem;
-  padding: 0.7rem;
+  padding: 0.65rem;
   border: 1px solid var(--edge-c);
   border-radius: 0.6rem;
   background: var(--bg);
@@ -779,8 +840,15 @@ button[data-review-row-target]:active {
   color: var(--muted-c);
   font-size: 0.6875rem;
 }
+[data-review-agent-wait] {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.35rem 0;
+}
+/* The activity title sits above its update stream, never beside it, and the
+   stream stays tight so many updates cost little height. */
 [data-review-agent-activity] {
-  margin-top: 0.45rem;
+  margin: 0.35rem 0;
   padding: 0.4rem 0.5rem;
   border: 1px dashed var(--edge-c);
   border-radius: 0.4rem;
@@ -798,10 +866,55 @@ button[data-review-row-target]:active {
 }
 [data-review-agent-activity] ol {
   display: grid;
-  gap: 0.25rem;
-  margin: 0.45rem 0 0;
-  padding-left: 1rem;
+  gap: 0.12rem;
+  max-height: 9rem;
+  margin: 0.3rem 0 0;
+  padding-left: 1.05rem;
+  overflow-y: auto;
+  line-height: 1.35;
+}
+[data-review-agent-health] {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--callout-warning-c);
+  border-left-width: 3px;
+  border-radius: 0.4rem;
+  background: var(--callout-warning-bg);
+  color: var(--callout-warning-c);
+  font-size: 0.6875rem;
   line-height: 1.4;
+}
+[data-review-agent-health] strong {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 700;
+}
+[data-review-agent-health] strong svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: 0 0 auto;
+}
+[data-review-agent-health] span {
+  color: var(--ink-c);
+}
+[data-review-agent-health][data-health="offline"],
+[data-review-agent-health][data-health="errored"] {
+  border-color: var(--callout-danger-c);
+  background: var(--callout-danger-bg);
+  color: var(--callout-danger-c);
+}
+[data-review-action-error] {
+  grid-column: 1 / -1;
+  margin: 0.35rem 0 0;
+  padding: 0.3rem 0.45rem;
+  border-left: 2px solid var(--callout-danger-c);
+  background: var(--callout-danger-bg);
+  color: var(--callout-danger-c);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 [data-review-thread-expanded] [data-review-thread-summary] {
   margin-bottom: 0.55rem;
@@ -1335,6 +1448,76 @@ button[data-review-row-target]:active {
   }
 }
 
+/* ------------------------------------------------------- shortcut tooltips */
+
+/* Linear-style discovery: hovering or focusing a submit control reveals its
+   key combo as keycap chips beside the action name. The chip is display-only
+   and never intercepts the pointer. */
+[data-review-compose-save],
+[data-review-agent-save],
+[data-review-thread-reply-send],
+[data-review-row-save],
+[data-review-thread-save] {
+  position: relative;
+}
+[data-review-kbd-tooltip] {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.45rem);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.32rem 0.45rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--muted-c);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 100ms ease,
+    visibility 0s linear 100ms;
+  pointer-events: none;
+}
+[data-review-agent-save] [data-review-kbd-tooltip] {
+  right: auto;
+  left: 0;
+}
+button:hover > [data-review-kbd-tooltip],
+button:focus-visible > [data-review-kbd-tooltip] {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 350ms;
+}
+button[disabled] > [data-review-kbd-tooltip] {
+  display: none;
+}
+[data-review-kbd-tooltip] kbd {
+  display: inline-flex;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.25rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.25rem;
+  background: var(--surface-c);
+  color: var(--ink-c);
+  font-family: inherit;
+  font-size: 0.625rem;
+  font-weight: 650;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-review-kbd-tooltip] {
+    transition: none;
+  }
+}
+
 /* ------------------------------------------------------- chips and flashes */
 
 [data-review-comment-highlight] {
@@ -1458,8 +1641,12 @@ button[data-review-row-target]:active {
   line-height: 1.4;
 }
 
+/* Every grid in the change chrome clamps its single column to the container:
+   an implicit auto track would size to the widest nowrap label and push the
+   whole thread wider than the rail. */
 [data-review-change-controls] {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.45rem;
   margin-top: 0.6rem;
 }
@@ -1473,7 +1660,10 @@ button[data-review-row-target]:active {
 }
 
 [data-review-chat-change-toggle] {
+  display: flex;
   width: 100%;
+  align-items: center;
+  gap: 0.3rem;
   padding: 0.18rem 0.25rem;
   border: 0;
   border-radius: 0.25rem;
@@ -1494,19 +1684,20 @@ button[data-review-row-target]:active {
   background: var(--review-control-active);
 }
 
-[data-review-chat-change-toggle]::before {
-  display: inline-block;
-  width: 0.9rem;
-  content: "›";
+[data-review-chat-change-toggle] svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  flex: 0 0 auto;
   transition: transform 120ms ease;
 }
 
-[data-review-chat-change-toggle][aria-expanded="true"]::before {
+[data-review-chat-change-toggle][aria-expanded="true"] svg {
   transform: rotate(90deg);
 }
 
 [data-review-chat-change-list] {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.25rem;
   min-width: 0;
 }
@@ -1515,16 +1706,10 @@ button[data-review-row-target]:active {
   display: none;
 }
 
-[data-review-change-slide-header] {
-  margin-top: 0.22rem;
-  color: var(--muted-c);
-  font-size: 0.62rem;
-  letter-spacing: 0.035em;
-}
-
 [data-review-change-list] {
   display: grid;
-  gap: 0.25rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.3rem;
   min-width: 0;
 }
 
@@ -1535,23 +1720,97 @@ button[data-review-row-target]:active {
   text-transform: uppercase;
 }
 
-[data-review-change-row] {
+/* The navigator is rows under slide groups, not a stack of cards: one quiet
+   container, faint dividers, hierarchy from grouping and the selection
+   accent alone. */
+[data-review-change-nav] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.1rem 0.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+[data-review-change-group] {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.34rem 0.5rem;
+  border: 0;
+  background: var(--surface-c);
+  color: var(--muted-c);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-review-change-nav] > [data-review-change-group]:not(:first-child) {
+  border-top: 1px solid var(--edge-c);
+}
+
+[data-review-change-group]:hover {
+  background: var(--review-control-hover);
+  color: var(--ink-c);
+}
+
+[data-review-change-group]:active {
+  background: var(--review-control-active);
+}
+
+[data-review-change-group] svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: 0 0 auto;
+  transition: transform 120ms ease;
+}
+
+[data-review-change-group][aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+[data-review-change-group-title] {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-review-change-group-count] {
+  flex: 0 0 auto;
+  min-width: 1.05rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted-c);
+  font-size: 0.6rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+[data-review-change-row] {
+  display: flex;
   width: 100%;
   min-width: 0;
-  padding: 0.42rem 0.5rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.35rem;
-  background: var(--surface-c);
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.34rem 0.5rem 0.34rem 1.35rem;
+  border: 0;
+  background: transparent;
   color: var(--text-c);
   text-align: left;
   cursor: pointer;
 }
 
+[data-review-change-nav] [data-review-change-row] + [data-review-change-row] {
+  border-top: 1px solid color-mix(in srgb, var(--edge-c) 55%, transparent);
+}
+
 [data-review-change-row]:hover {
-  border-color: var(--accent-c);
   background: var(--review-control-hover);
 }
 
@@ -1560,34 +1819,38 @@ button[data-review-row-target]:active {
 }
 
 [data-review-change-row][aria-current="true"] {
-  border-color: var(--annotation-c);
-  box-shadow: inset 2px 0 0 var(--annotation-c);
-}
-
-[data-review-change-slide] {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted-c);
-  font-size: 0.62rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  background: color-mix(in srgb, var(--annotation-bg) 45%, transparent);
+  box-shadow: inset 3px 0 0 var(--annotation-c);
 }
 
 [data-review-change-label] {
   min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   font-size: 0.72rem;
-  font-weight: 650;
+  font-weight: 550;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 [data-review-change-kind] {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
+  flex: 0 0 auto;
   color: var(--muted-c);
-  font-size: 0.62rem;
+  font-size: 0.6rem;
+  font-style: italic;
+}
+
+/* Cross-round rows outside the navigator keep light card chrome so they can
+   stand alone in a plain list. */
+[data-review-other-changes] [data-review-change-row] {
+  padding: 0.34rem 0.5rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.35rem;
+  background: var(--surface-c);
+}
+
+[data-review-other-changes] [data-review-change-row]:hover {
+  border-color: var(--accent-c);
 }
 
 [data-review-other-changes],
@@ -1680,12 +1943,16 @@ tr[data-review-diff-lens] > td {
   background: var(--edge-c);
 }
 
+/* The added run hosts real document blocks. Whitespace collapsing returns to
+   normal here - the lens body's pre-wrap would otherwise render the markup's
+   inter-element newlines as blank lines between list items. */
 [data-review-diff-added-run] {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.4rem;
   padding: 0.55rem;
   background: var(--diff-add-bg);
   color: var(--diff-add-c);
+  white-space: normal;
 }
 
 [data-review-diff-added-run] > strong {
@@ -1694,6 +1961,18 @@ tr[data-review-diff-lens] > td {
 }
 
 [data-review-diff-added-run] > [data-block-id] {
+  margin-block: 0;
+}
+
+[data-review-diff-added-run] :is(ul, ol) {
+  margin-block: 0.2rem;
+}
+
+[data-review-diff-added-run] li {
+  margin-block: 0.12rem;
+}
+
+[data-review-diff-added-run] li > p {
   margin-block: 0;
 }
 
@@ -1750,6 +2029,21 @@ tr[data-review-diff-lens] > td {
   color: var(--diff-add-c);
 }
 
+/* A table's extracted text is one line per cell; letting it keep pre-wrap
+   would render a tall column of fragments. Collapse it to flowing text and
+   cap the band's height so a wide table stays a compact, scrollable summary. */
+:is([data-review-diff-kind="table"], [data-review-diff-kind="table-row"])
+  :is([data-review-diff-was], [data-review-diff-now])
+  span {
+  white-space: normal;
+}
+
+:is([data-review-diff-kind="table"], [data-review-diff-kind="table-row"])
+  :is([data-review-diff-was], [data-review-diff-now]) {
+  max-height: 14rem;
+  overflow: auto;
+}
+
 [data-review-diff-stepper] {
   position: fixed;
   z-index: 22;
@@ -1770,14 +2064,27 @@ tr[data-review-diff-lens] > td {
   display: none;
 }
 
+/* Every stepper segment inherits the document face at one size, so "Show
+   current text" renders as pill chrome rather than a browser-default button. */
 [data-review-diff-stepper] button {
+  display: inline-flex;
   min-height: 1.8rem;
+  align-items: center;
+  justify-content: center;
   padding: 0.25rem 0.55rem;
   border: 0;
   border-radius: 999px;
   background: transparent;
   color: var(--text-c);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 650;
   cursor: pointer;
+}
+
+[data-review-diff-stepper] button svg {
+  width: 0.9rem;
+  height: 0.9rem;
 }
 
 [data-review-diff-stepper] button:hover {

@@ -177,9 +177,9 @@ test("should preserve and send a floating review across reload and viewport chan
     );
     await affordance.click();
     await expect(compose).toHaveAttribute("data-review-compose-floating", "");
-    await expect(page.locator("[data-review-compose-save]")).toHaveText(
-      "Add Comment",
-    );
+    await expect(
+      page.locator("[data-review-compose-save] [data-review-button-label]"),
+    ).toHaveText("Add Comment");
     await expect(
       page.locator("[data-review-submit-immediately-input]"),
     ).not.toBeChecked();
@@ -221,7 +221,25 @@ test("should preserve and send a floating review across reload and viewport chan
     await page.locator("[data-review-compose-save]").click();
     const card = page.locator("[data-review-thread-card]").first();
     await expect(card).toBeVisible();
-    await expect(card).toContainText("You");
+    // The staged card leads with its toolbar: state plus icon actions in the
+    // top bar, and Submit Now as the only button in the body.
+    await expect(card.locator("[data-review-thread-toolbar]")).toContainText(
+      "Staged",
+    );
+    await expect(
+      card.locator("[data-review-thread-toolbar] [data-review-thread-edit]"),
+    ).toBeVisible();
+    await expect(
+      card.locator("[data-review-thread-toolbar] [data-review-thread-delete]"),
+    ).toBeVisible();
+    await expect(
+      card.locator(
+        "[data-review-thread-toolbar] [data-review-thread-minimize]",
+      ),
+    ).toBeVisible();
+    await expect(
+      card.locator("[data-review-thread-actions] button"),
+    ).toHaveCount(1);
     await expect(card.locator("time")).not.toHaveText("");
     await expect(card.locator("[data-review-thread-more]")).toHaveText(
       "… more",
@@ -400,10 +418,13 @@ test("should preserve and send a floating review across reload and viewport chan
 
   await test.step("anchored comment presence stays obvious and interactive below 1280 in both themes", async () => {
     await page.setViewportSize({ width: 1024, height: 900 });
+    // Boot reopens the rail for restored drafts; wait for that before closing
+    // so a late open cannot race the close and leave the backdrop up.
     const feedbackToggle = page.locator("[data-review-toggle]");
-    if ((await feedbackToggle.getAttribute("aria-expanded")) === "true") {
-      await feedbackToggle.click();
-    }
+    await expect(feedbackToggle).toHaveAttribute("aria-expanded", "true");
+    await feedbackToggle.click();
+    await expect(feedbackToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("[data-review-backdrop]")).toBeHidden();
     const anchoredBlock = page.locator('[data-block-label="versionId"]');
     await anchoredBlock.scrollIntoViewIfNeeded();
     const marker = page.locator("[data-review-marker]:visible").first();
@@ -743,7 +764,7 @@ test("should preserve and send a floating review across reload and viewport chan
     );
     await expect(
       changed.locator("[data-review-change-list] strong"),
-    ).toHaveText("Changed 1 place");
+    ).toHaveText("1 change across 1 slide");
     await expect(changed.locator("[data-review-change-row]")).toHaveCount(1);
     await expect(changed.locator("[data-review-see-change]")).toHaveText(
       "See the change",
@@ -1160,10 +1181,8 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       question.locator('[data-review-thread-turn="agent"]'),
     ).toHaveCount(1);
-    await expect(
-      question.locator("[data-review-thread-waiting]"),
-    ).toBeVisible();
     const activity = question.locator("[data-review-agent-activity]");
+    await expect(activity).toBeVisible();
     await expect(activity).toHaveAttribute("open", "");
     await activity.locator("summary").click();
     await expect(activity).not.toHaveAttribute("open", "");
@@ -1407,13 +1426,13 @@ Ship the live review loop behind the explicit review command.
       .first();
     await expect(
       digest.locator("[data-review-chat-change-toggle]"),
-    ).toContainText(/Changed \d+ places across \d+ slides/);
+    ).toContainText(/\d+ changes across \d+ slides/);
     const chatPlaces = Number(
       (
         (await digest
           .locator("[data-review-chat-change-toggle]")
           .textContent()) || ""
-      ).match(/Changed (\d+) places/)?.[1],
+      ).match(/(\d+) changes across/)?.[1],
     );
     expect(chatPlaces).toBeGreaterThan(3);
     await expect(
@@ -1458,12 +1477,19 @@ Ship the live review loop behind the explicit review command.
       document.documentElement.setAttribute("data-theme", "light"),
     );
     await digest.locator("[data-review-chat-change-toggle]").click();
+    // Slides are the grouping: expand every collapsed slide group, then all
+    // places appear as rows beneath their slide headers.
+    const slideGroups = digest.locator("[data-review-change-group]");
+    expect(await slideGroups.count()).toBeGreaterThan(1);
+    for (let index = 0; index < (await slideGroups.count()); index += 1) {
+      const group = slideGroups.nth(index);
+      if ((await group.getAttribute("aria-expanded")) === "false") {
+        await group.click();
+      }
+    }
     await expect(digest.locator("[data-review-change-row]")).toHaveCount(
       chatPlaces,
     );
-    expect(
-      await digest.locator("[data-review-change-slide-header]").count(),
-    ).toBeGreaterThan(1);
     await digest.locator("[data-review-see-change]").click();
     await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
     await expect(
