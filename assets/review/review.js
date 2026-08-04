@@ -825,7 +825,7 @@ import {
 
   const rail = el("aside", {
     class:
-      "[position:fixed] [top:2.75rem] [right:0] [bottom:0] [z-index:44] [display:flex] [width:min(22rem,_100vw)] [flex-direction:column] [border-left:1px_solid_var(--edge-c)] [background:var(--bg)] [box-shadow:-8px_0_24px_rgb(0_0_0_/_0.06)] [font-size:0.875rem] [overflow-anchor:none]",
+      "[position:fixed] [top:2.75rem] [right:0] [bottom:0] [z-index:44] [display:flex] [width:min(22rem,_100vw)] max-[80rem]:[width:min(24rem,calc(100vw-2rem))] max-[40rem]:[width:100vw]! [flex-direction:column] [border-left:1px_solid_var(--edge-c)] [background:var(--bg)] [box-shadow:-8px_0_24px_rgb(0_0_0_/_0.06)] [font-size:0.875rem] [overflow-anchor:none]",
     "data-review-rail": true,
     "aria-label": "Feedback",
     hidden: true,
@@ -1323,7 +1323,7 @@ import {
     "div",
     {
       class:
-        "data-[review-compose-centered]:fixed! [position:absolute] [right:auto] [z-index:47] [width:17rem] [padding:0.75rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_8px_28px_rgb(0_0_0_/_0.16)] [pointer-events:auto]",
+        "data-[review-compose-inline]:relative! data-[review-compose-inline]:[right:auto] data-[review-compose-inline]:[z-index:2]! data-[review-compose-inline]:[width:100%]! data-[review-compose-inline]:[margin:0.65rem_0_1rem] data-[review-compose-inline]:[box-shadow:0_4px_18px_rgb(0_0_0_/_0.11)] data-[review-compose-centered]:fixed! data-[review-compose-centered]:[top:50%] data-[review-compose-centered]:[right:auto] data-[review-compose-centered]:[left:50%] data-[review-compose-centered]:[width:min(24rem,calc(100vw-2rem))]! data-[review-compose-centered]:[transform:translate(-50%,-50%)] [position:absolute] [right:auto] [z-index:47] [width:17rem] [padding:0.75rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_8px_28px_rgb(0_0_0_/_0.16)] [pointer-events:auto]",
       "data-review-compose": true,
       role: "dialog",
       "aria-label": "Add a comment",
@@ -4632,7 +4632,7 @@ import {
       "button",
       {
         class:
-          "[display:flex] [min-width:0] [flex:1_1_auto] [align-items:center] [overflow:hidden] [color:var(--ink-c)] [font-size:0.6875rem] [font-weight:600] [letter-spacing:0.06em] [text-align:left] [text-overflow:ellipsis] [text-transform:uppercase] [white-space:nowrap]",
+          "[display:flex] [min-width:0] [flex:1_1_auto] [align-items:center] [overflow:hidden] [color:var(--ink-c)] [font-size:0.6875rem] [font-weight:600] [letter-spacing:0.06em] [text-align:left] [text-overflow:ellipsis] [text-transform:uppercase] [white-space:nowrap] [cursor:pointer] hover:[color:var(--ink-c)] focus-visible:[outline:none] active:[color:var(--annotation-c)]",
         type: "button",
         "data-review-row-target": true,
         "aria-expanded": expanded ? "true" : "false",
@@ -4658,7 +4658,7 @@ import {
           "span",
           {
             class:
-              "[display:inline-flex] [width:1rem] [height:1rem] [flex:0_0_auto] [align-items:center] [justify-content:center] [color:var(--muted-c)] [opacity:0] [transition:opacity_100ms_ease]",
+              "[display:inline-flex] [width:1rem] [height:1rem] [flex:0_0_auto] [align-items:center] [justify-content:center] [color:var(--muted-c)] [opacity:0] [transition:opacity_100ms_ease] group-hover/row:[opacity:1] group-focus-within/row:[opacity:1]",
             "data-review-row-locator": true,
           },
           [icon(CHEVRON_RIGHT_ICON)],
@@ -4754,7 +4754,7 @@ import {
       "li",
       {
         class:
-          "[margin-bottom:0.55rem] [padding:0.55rem_0.6rem] [border:1px_solid_var(--edge-c)] [border-radius:0.5rem] [background:var(--surface-c)] [cursor:pointer] [transition:border-color_100ms_ease,_background-color_100ms_ease] [background:transparent] [display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.18rem] [padding:0.45rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-left-width:2px] [border-radius:0.4rem] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.6875rem] hover:[border-color:color-mix(in_srgb,_var(--muted-c)_45%,_var(--edge-c))] hover:[background:color-mix(in_srgb,_var(--surface-c)_94%,_var(--ink-c))] data-[review-outcome=changed]:[border-left-color:var(--diff-add-c)] data-[review-outcome=question]:[border-left-color:var(--callout-warning-c)] data-[review-outcome=outside]:[border-left-color:var(--muted-c)] data-[review-outcome=waiting]:[border-left-color:var(--muted-c)] data-[review-outcome=cancelled]:[border-left-color:var(--muted-c)]",
+          "group/row [margin-bottom:0.55rem] [padding:0.55rem_0.6rem] [border:1px_solid_var(--edge-c)] [border-radius:0.5rem] [background:var(--surface-c)] [cursor:pointer] [transition:border-color_100ms_ease,_background-color_100ms_ease] [background:transparent] [display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.18rem] [padding:0.45rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-left-width:2px] [border-radius:0.4rem] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.6875rem] hover:[border-color:color-mix(in_srgb,_var(--muted-c)_45%,_var(--edge-c))] hover:[background:color-mix(in_srgb,_var(--surface-c)_94%,_var(--ink-c))] data-[review-outcome=changed]:[border-left-color:var(--diff-add-c)] data-[review-outcome=question]:[border-left-color:var(--callout-warning-c)] data-[review-outcome=outside]:[border-left-color:var(--muted-c)] data-[review-outcome=waiting]:[border-left-color:var(--muted-c)] data-[review-outcome=cancelled]:[border-left-color:var(--muted-c)]",
         "data-review-row": true,
         "data-review-sent-row": true,
         "data-review-row-state": rowState,
@@ -4790,7 +4790,7 @@ import {
     const isEditing = state === "staged" && comment.id === editingId;
     const card = el("article", {
       class:
-        "[position:absolute] [right:auto] [width:17rem] [padding:0.65rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_3px_14px_rgb(0_0_0_/_0.1)] [pointer-events:auto] data-[review-thread-state=sent]:[padding:0.28rem] data-[review-thread-state=sent]:[box-shadow:0_4px_16px_rgb(0_0_0_/_0.1)]",
+        "max-[80rem]:data-[review-thread-inline]:relative! max-[80rem]:data-[review-thread-inline]:[right:auto] max-[80rem]:data-[review-thread-inline]:[z-index:2]! max-[80rem]:data-[review-thread-inline]:block! max-[80rem]:data-[review-thread-inline]:[width:100%]! max-[80rem]:data-[review-thread-inline]:[margin:0.65rem_0_1rem] [position:absolute] [right:auto] [width:17rem] [padding:0.65rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_3px_14px_rgb(0_0_0_/_0.1)] [pointer-events:auto] data-[review-thread-state=sent]:[padding:0.28rem] data-[review-thread-state=sent]:[box-shadow:0_4px_16px_rgb(0_0_0_/_0.1)]",
       "data-review-thread-card": true,
       "data-review-thread-state": state,
       "data-review-comment-id": comment.id,

@@ -3550,12 +3550,14 @@ Ship the live review loop behind the explicit review command.
       .poll(() =>
         page.locator("[data-review-resolved-group]").evaluate((resolved) => ({
           border: getComputedStyle(resolved).borderTopWidth,
-          className: resolved.className,
+          hasFlushOverrides: ["mt-0!", "border-t-0!", "pt-0!"].every(
+            (className) => resolved.classList.contains(className),
+          ),
         })),
       )
       .toEqual({
         border: "0px",
-        className: "mt-0! border-t-0! pt-0!",
+        hasFlushOverrides: true,
       });
     await page.evaluate(async (state) => {
       const token =
