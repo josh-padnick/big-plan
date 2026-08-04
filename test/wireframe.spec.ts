@@ -720,7 +720,13 @@ test("should maximize and restore a wireframe in both themes", async ({
     expect((await boxOf(trigger)).height).toBe(commentCenter.height);
     const before = await boxOf(wireframe.locator(".wireframe-frame:visible"));
     await trigger.scrollIntoViewIfNeeded();
+    await page.evaluate(() => {
+      document.documentElement.style.scrollBehavior = "auto";
+      window.scrollTo(0, 240);
+    });
+    await expect(trigger).toBeInViewport();
     const scrollBeforeMaximize = await page.evaluate(() => window.scrollY);
+    expect(scrollBeforeMaximize).toBeGreaterThan(0);
 
     await trigger.click();
     await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
@@ -806,16 +812,46 @@ test("should maximize and restore a wireframe in both themes", async ({
       .click();
     await expect(zoomControls).toContainText("Fit");
 
+    await wireframe.evaluate((wireframeRoot) => {
+      const documentRoot = document.documentElement;
+      documentRoot.dataset.wireframeRestoreTrace = "";
+      const startSampling = () => {
+        wireframeRoot.removeEventListener(
+          "figuremaximizechange",
+          startSampling,
+        );
+        let frames = 0;
+        const sample = () => {
+          documentRoot.dataset.wireframeRestoreTrace += `${documentRoot.dataset.wireframeRestoreTrace === "" ? "" : ","}${window.scrollY}`;
+          frames += 1;
+          if (frames < 4) requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      };
+      wireframeRoot.addEventListener("figuremaximizechange", startSampling);
+    });
     await page.keyboard.press("Escape");
     await expect(wireframe).not.toHaveAttribute("data-figure-maximized");
     await expect(trigger).toHaveAccessibleName("Maximize wireframe");
-    await expect
-      .poll(async () => page.evaluate(() => window.scrollY))
-      .toBe(scrollBeforeMaximize);
+    await page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
+    const restoreTrace = await page.evaluate(() =>
+      (document.documentElement.dataset.wireframeRestoreTrace ?? "")
+        .split(",")
+        .map(Number),
+    );
+    expect(restoreTrace.length).toBeGreaterThan(1);
+    expect(
+      restoreTrace.every((position) => position === scrollBeforeMaximize),
+    ).toBe(true);
   }
 });
 
-test("should let the page wheel past a resting wireframe until a click engages it", async ({
+test("should let the page wheel natively past every resting wireframe until a click engages it", async ({
   page,
   wireframeFormFactorsViewerUrl,
 }) => {
@@ -825,36 +861,79 @@ test("should let the page wheel past a resting wireframe until a click engages i
     await page.goto(wireframeFormFactorsViewerUrl);
     await page.evaluate((value) => {
       document.documentElement.dataset.theme = value;
+      document.documentElement.style.scrollBehavior = "auto";
     }, theme);
 
-    const wireframe = page.locator("[data-wireframe]").first();
-    const screen = wireframe.locator('[data-wireframe-screen="d-ticket"]');
-    const conversation = screen.locator(
-      '[data-wireframe-span="main"] > .wireframe-panel-body',
+    const wireframes = page.locator("[data-wireframe]");
+    await expect(wireframes).toHaveCount(3);
+    for (let index = 0; index < 3; index += 1) {
+      const wireframe = wireframes.nth(index);
+      const viewport = wireframe.locator(
+        "[data-wireframe-screen]:visible .wireframe-frame-viewport",
+      );
+      await wireframe.scrollIntoViewIfNeeded();
+      await page.evaluate(() => {
+        const scroller = document.scrollingElement;
+        if (scroller !== null) scroller.scrollTop -= 120;
+      });
+      const viewportBox = await boxOf(viewport);
+      await page.mouse.move(
+        viewportBox.x + viewportBox.width / 2,
+        viewportBox.y + viewportBox.height / 2,
+      );
+
+      const restingPageScroll = await page.evaluate(() => window.scrollY);
+      const restingInnerScroll = await wireframe.evaluate((root) =>
+        Array.from(root.querySelectorAll("*"))
+          .filter(
+            (element) =>
+              element.scrollHeight > element.clientHeight ||
+              element.scrollWidth > element.clientWidth,
+          )
+          .map((element) => ({
+            left: element.scrollLeft,
+            top: element.scrollTop,
+          })),
+      );
+      await page.mouse.wheel(0, 360);
+      await expect
+        .poll(() => page.evaluate(() => window.scrollY))
+        .toBeGreaterThan(restingPageScroll);
+      expect(
+        await wireframe.evaluate((root) =>
+          Array.from(root.querySelectorAll("*"))
+            .filter(
+              (element) =>
+                element.scrollHeight > element.clientHeight ||
+                element.scrollWidth > element.clientWidth,
+            )
+            .map((element) => ({
+              left: element.scrollLeft,
+              top: element.scrollTop,
+            })),
+        ),
+      ).toEqual(restingInnerScroll);
+      await expect(wireframe).not.toHaveAttribute("data-wireframe-engaged", "");
+    }
+
+    const desktopWireframe = wireframes.first();
+    const desktopViewport = desktopWireframe.locator(
+      "[data-wireframe-screen]:visible .wireframe-frame-viewport",
     );
-    await wireframe.scrollIntoViewIfNeeded();
-    await page.evaluate(() => window.scrollBy(0, -180));
-    await conversation.hover();
-
-    const restingPageScroll = await page.evaluate(() => window.scrollY);
-    const restingPaneScroll = await conversation.evaluate(
-      (element) => element.scrollTop,
+    await desktopWireframe.scrollIntoViewIfNeeded();
+    const desktopViewportBox = await boxOf(desktopViewport);
+    await page.mouse.click(
+      desktopViewportBox.x + desktopViewportBox.width / 2,
+      desktopViewportBox.y + desktopViewportBox.height / 2,
     );
-    await page.mouse.wheel(0, 240);
-    await expect
-      .poll(() => page.evaluate(() => window.scrollY))
-      .toBeGreaterThan(restingPageScroll);
-    await expect
-      .poll(() => conversation.evaluate((element) => element.scrollTop))
-      .toBe(restingPaneScroll);
-    await expect(wireframe).not.toHaveAttribute("data-wireframe-engaged", "");
+    await expect(desktopWireframe).toHaveAttribute(
+      "data-wireframe-engaged",
+      "",
+    );
 
-    const currentChoice = wireframe
-      .getByRole("navigation", { name: "Prototype screens" })
-      .getByRole("button", { name: "Desktop · Ticket", exact: true });
-    await currentChoice.click();
-    await expect(wireframe).toHaveAttribute("data-wireframe-engaged", "");
-
+    const conversation = desktopWireframe.locator(
+      '[data-wireframe-screen="d-ticket"] [data-wireframe-span="main"] > .wireframe-panel-body',
+    );
     await conversation.evaluate((element) => {
       element.scrollTop = 0;
     });
@@ -863,6 +942,28 @@ test("should let the page wheel past a resting wireframe until a click engages i
     await expect
       .poll(() => conversation.evaluate((element) => element.scrollTop))
       .toBeGreaterThan(0);
+
+    await page.mouse.click(8, 8);
+    await expect(desktopWireframe).not.toHaveAttribute(
+      "data-wireframe-engaged",
+      "",
+    );
+    const paneAfterDisengage = await conversation.evaluate(
+      (element) => element.scrollTop,
+    );
+    const pageAfterDisengage = await page.evaluate(() => window.scrollY);
+    const conversationBox = await boxOf(conversation);
+    await page.mouse.move(
+      conversationBox.x + conversationBox.width / 2,
+      conversationBox.y + conversationBox.height / 2,
+    );
+    await page.mouse.wheel(0, 240);
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(pageAfterDisengage);
+    await expect
+      .poll(() => conversation.evaluate((element) => element.scrollTop))
+      .toBe(paneAfterDisengage);
   }
 });
 

@@ -1335,6 +1335,7 @@ export const VIEWER_SCRIPT = `<script>
     const triggers = Array.from(
       frame.querySelectorAll("[data-figure-maximize]"),
     );
+    let restoreScroll = null;
     if (maximized) {
       pageScroll = { x: window.scrollX, y: window.scrollY };
       dialogAttributes = {
@@ -1357,13 +1358,8 @@ export const VIEWER_SCRIPT = `<script>
         restoreAttribute(frame, "aria-label", dialogAttributes.ariaLabel);
         dialogAttributes = null;
       }
-      const restoreScroll = pageScroll;
+      restoreScroll = pageScroll;
       pageScroll = null;
-      if (restoreScroll !== null) {
-        requestAnimationFrame(() => {
-          window.scrollTo(restoreScroll.x, restoreScroll.y);
-        });
-      }
     }
     open = maximized ? frame : null;
     // The backdrop lives on the root so no ancestor of the figure can clip it.
@@ -1400,6 +1396,12 @@ export const VIEWER_SCRIPT = `<script>
         detail: { maximized },
       }),
     );
+    // Restoring the in-flow figure, its document chrome, and its fitted
+    // geometry all happen in this task. Put the page back only after those
+    // synchronous layout mutations, but before the browser can paint even
+    // one intermediate frame.
+    if (restoreScroll !== null)
+      window.scrollTo(restoreScroll.x, restoreScroll.y);
   };
   const finishRestore = (frame, keyboard, returnFocus) => {
     setMaximized(frame, false);
@@ -1417,7 +1419,10 @@ export const VIEWER_SCRIPT = `<script>
         // A restored diagram is deliberately quiet for every modality. It
         // keeps keyboard position without repainting the whole canvas as a
         // selected object.
-        target.focus({ focusVisible: diagramTarget ? false : keyboard });
+        target.focus({
+          focusVisible: diagramTarget ? false : keyboard,
+          preventScroll: true,
+        });
         // Install the fallback after focus: focusing fires blur on the old
         // trigger, and the shared cleanup listener spends quiet markers on
         // blur by design.
@@ -2034,10 +2039,22 @@ ${DIAGRAM_SCRIPT}
       fitAll();
     });
     root.setAttribute("data-wireframe-interactive", "");
-    // A resting wireframe sits in a reading document. Its device and pane
-    // scroll containers must not steal a wheel gesture merely because the
-    // pointer crosses the drawing. One primary click explicitly engages the
-    // viewer; until then, forward ordinary wheel movement to the page.
+    // Mark the actual scroll owners once, including scroll regions on hidden
+    // slides. The resting state clips only these regions so native wheel
+    // chaining reaches the page without disabling pointer actions or
+    // inventing a synthetic document scroll.
+    for (const element of root.querySelectorAll("*")) {
+      const style = getComputedStyle(element);
+      if (
+        ["auto", "scroll"].includes(style.overflowX) ||
+        ["auto", "scroll"].includes(style.overflowY)
+      )
+        element.setAttribute("data-wireframe-scroll-region", "");
+    }
+    // A resting wireframe sits in a reading document. One primary click
+    // explicitly engages its device and pane scroll regions; until then CSS
+    // clips those scroll owners, so an ordinary wheel retains the browser's
+    // native page-scroll velocity and acceleration.
     root.addEventListener(
       "pointerdown",
       (event) => {
@@ -2045,27 +2062,6 @@ ${DIAGRAM_SCRIPT}
           root.setAttribute("data-wireframe-engaged", "");
       },
       { capture: true },
-    );
-    root.addEventListener(
-      "wheel",
-      (event) => {
-        if (
-          root.hasAttribute("data-wireframe-engaged") ||
-          root.hasAttribute("data-figure-maximized") ||
-          event.ctrlKey ||
-          event.metaKey
-        )
-          return;
-        event.preventDefault();
-        const unit =
-          event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1;
-        window.scrollBy({
-          left: event.deltaX * unit,
-          top: event.deltaY * unit,
-          behavior: "auto",
-        });
-      },
-      { passive: false },
     );
     const show = (id) => {
       let current = null;

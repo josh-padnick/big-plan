@@ -2834,6 +2834,15 @@ marks and a plan diff never jitters.
    centerline contract, so the family-specific override belongs in the same
    late state layer that owns the shared control's interactive states. */
 @layer bp-state {
+  /* Override invariant: the reading document owns native wheel behavior until explicit viewer entry. */
+  article
+    .wireframe[data-wireframe-interactive]:not([data-wireframe-engaged]):not(
+      [data-figure-maximized]
+    )
+    [data-wireframe-scroll-region] {
+    overflow: clip;
+    overscroll-behavior: auto;
+  }
   /* Override invariant: wireframe toolbar peer geometry beats the shared resting h-6 w-6 utilities. */
   article .wireframe .wireframe-frame-toolbar > .figure-control {
     display: inline-flex;
