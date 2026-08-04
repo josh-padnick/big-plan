@@ -11,7 +11,7 @@ import {
   AgentExchangeRejected,
   commentsFromExchange,
   deriveSourceRevision,
-  feedbackAgentRequest,
+  feedbackAgentRequests,
   messageAgentRequest,
   nextPendingAgentRequest,
   readAgentExchange,
@@ -28,6 +28,8 @@ const planId = "2222222222222222";
 const packageId = "3333333333333333";
 const commentId = "4444444444444444";
 const blockId = "section/approach/paragraph-1";
+const placeId = "5555555555555555";
+const secondPlaceId = "6666666666666666";
 const before = "# Plan\n\n## Approach\n\nKeep the first version.\n";
 const after = "# Plan\n\n## Approach\n\nUse the revised version.\n";
 
@@ -53,10 +55,14 @@ const feedback = buildFeedbackPackage({
   comments: [comment],
 });
 
-const request = feedbackAgentRequest({
+const [request] = feedbackAgentRequests({
   feedback,
   sourceRevision: deriveSourceRevision(before),
+  requestIds: [packageId],
 });
+if (request === undefined) {
+  throw new Error("The fixture feedback request was not created");
+}
 
 const snapshot = (): AgentExchangeSnapshot => ({
   requests: [request],
@@ -65,13 +71,45 @@ const snapshot = (): AgentExchangeSnapshot => ({
 });
 
 describe("agent exchange response contract", () => {
+  it("should serialize one ordered exchange per Send-all comment", () => {
+    const secondComment = {
+      ...comment,
+      id: "8888888888888888",
+      body: "Tighten the follow-up.",
+    };
+    const batched = feedbackAgentRequests({
+      feedback: buildFeedbackPackage({
+        sessionId,
+        packageId,
+        planId,
+        planPath: "/tmp/plan.mdx",
+        createdAt: "2026-08-02T12:00:00.000Z",
+        comments: [comment, secondComment],
+      }),
+      sourceRevision: deriveSourceRevision(before),
+      requestIds: ["9999999999999999", "aaaaaaaaaaaaaaaa"],
+    });
+    expect(batched).toHaveLength(2);
+    expect(
+      batched.map((entry) => ({
+        batchIndex: entry.batchIndex,
+        batchSize: entry.batchSize,
+        comments: entry.comments.map((candidate) => candidate.id),
+      })),
+    ).toEqual([
+      { batchIndex: 0, batchSize: 2, comments: [comment.id] },
+      { batchIndex: 1, batchSize: 2, comments: [secondComment.id] },
+    ]);
+  });
+
   it("should require one outcome for every comment in a feedback request", () => {
     expect(() =>
       validateAgentResponseDraft({
         value: { requestId: packageId, outcomes: [] },
         request,
         commentsById: new Map([[commentId, comment]]),
-        changedBlocks: new Set([blockId]),
+        changedPlaceIds: new Set([placeId]),
+        fromRevision: deriveSourceRevision(before),
         currentRevision: deriveSourceRevision(after),
         now: "2026-08-02T12:01:00.000Z",
       }),
@@ -88,13 +126,14 @@ describe("agent exchange response contract", () => {
               commentId,
               state: "changed",
               message: "Revised the approach.",
-              changes: [{ target: blockId, summary: "Clarified the approach" }],
+              changes: [{ placeId, summary: "Clarified the approach" }],
             },
           ],
         },
         request,
         commentsById: new Map([[commentId, comment]]),
-        changedBlocks: new Set([blockId]),
+        changedPlaceIds: new Set([placeId]),
+        fromRevision: deriveSourceRevision(before),
         currentRevision: deriveSourceRevision(before),
         now: "2026-08-02T12:01:00.000Z",
       }),
@@ -111,13 +150,14 @@ describe("agent exchange response contract", () => {
               commentId,
               state: "changed",
               message: "Revised the approach.",
-              changes: [{ target: blockId, summary: "Clarified the approach" }],
+              changes: [{ placeId, summary: "Clarified the approach" }],
             },
           ],
         },
         request,
         commentsById: new Map([[commentId, comment]]),
-        changedBlocks: new Set([blockId]),
+        changedPlaceIds: new Set([placeId]),
+        fromRevision: deriveSourceRevision(before),
         currentRevision: deriveSourceRevision(after),
         now: "2026-08-02T12:01:00.000Z",
       }),
@@ -129,13 +169,13 @@ describe("agent exchange response contract", () => {
         {
           commentId,
           state: "changed",
-          changes: [{ target: blockId, summary: "Clarified the approach" }],
+          changes: [{ placeId, summary: "Clarified the approach" }],
         },
       ],
     });
   });
 
-  it("should reject an unchanged block attributed as a change target", () => {
+  it("should reject a summary for a place outside the owned revision pair", () => {
     expect(() =>
       validateAgentResponseDraft({
         value: {
@@ -147,7 +187,7 @@ describe("agent exchange response contract", () => {
               message: "Revised the approach.",
               changes: [
                 {
-                  target: "section/approach/paragraph-2",
+                  placeId: "7777777777777777",
                   summary: "Clarified the second paragraph",
                 },
               ],
@@ -156,15 +196,15 @@ describe("agent exchange response contract", () => {
         },
         request,
         commentsById: new Map([[commentId, comment]]),
-        changedBlocks: new Set([blockId]),
+        changedPlaceIds: new Set([placeId]),
+        fromRevision: deriveSourceRevision(before),
         currentRevision: deriveSourceRevision(after),
         now: "2026-08-02T12:01:00.000Z",
       }),
-    ).toThrow(/block changed by this revision/);
+    ).toThrow(/real place in this revision pair/);
   });
 
   it("should preserve several attributed changes in presentation order", () => {
-    const secondBlock = "section/approach/paragraph-2";
     expect(
       validateAgentResponseDraft({
         value: {
@@ -175,20 +215,24 @@ describe("agent exchange response contract", () => {
               state: "changed",
               message: "Revised both places.",
               changes: [
-                { target: blockId, summary: "Clarified the approach" },
-                { target: secondBlock, summary: "Tightened the follow-up" },
+                { placeId, summary: "Clarified the approach" },
+                {
+                  placeId: secondPlaceId,
+                  summary: "Tightened the follow-up",
+                },
               ],
             },
           ],
         },
         request,
         commentsById: new Map([[commentId, comment]]),
-        changedBlocks: new Set([blockId, secondBlock]),
+        changedPlaceIds: new Set([placeId, secondPlaceId]),
+        fromRevision: deriveSourceRevision(before),
         currentRevision: deriveSourceRevision(after),
         now: "2026-08-02T12:01:00.000Z",
       }).outcomes[0],
     ).toMatchObject({
-      changes: [{ target: blockId }, { target: secondBlock }],
+      changes: [{ placeId }, { placeId: secondPlaceId }],
     });
   });
 
@@ -213,6 +257,10 @@ describe("agent exchange response contract", () => {
             sessionId,
             planId,
             sourceRevision: deriveSourceRevision(after),
+            revisionPair: {
+              fromRevision: deriveSourceRevision(before),
+              toRevision: deriveSourceRevision(after),
+            },
             createdAt: "2026-08-02T12:01:00.000Z",
             kind: "feedback",
             outcomes: [
@@ -220,9 +268,7 @@ describe("agent exchange response contract", () => {
                 commentId,
                 state: "changed",
                 message: "Revised the approach.",
-                changes: [
-                  { target: blockId, summary: "Clarified the approach" },
-                ],
+                changes: [{ placeId, summary: "Clarified the approach" }],
               },
             ],
           },
@@ -244,7 +290,7 @@ describe("agent exchange filesystem", () => {
     await writeFile(planPath, before);
     const store = reviewStoreFor({ planPath, planId });
     await prepareStore(store);
-    const slideRequest = feedbackAgentRequest({
+    const [slideRequest] = feedbackAgentRequests({
       feedback: buildFeedbackPackage({
         sessionId,
         packageId,
@@ -263,7 +309,11 @@ describe("agent exchange filesystem", () => {
         ],
       }),
       sourceRevision: deriveSourceRevision(before),
+      requestIds: [packageId],
     });
+    if (slideRequest === undefined) {
+      throw new Error("The slide feedback request was not created");
+    }
     await writeAgentRequest({ store, request: slideRequest });
     const exchange = await readAgentExchange({
       store,
@@ -294,13 +344,14 @@ describe("agent exchange filesystem", () => {
             commentId,
             state: "changed",
             message: "Revised the approach.",
-            changes: [{ target: blockId, summary: "Clarified the approach" }],
+            changes: [{ placeId, summary: "Clarified the approach" }],
           },
         ],
       },
       request,
       commentsById: new Map([[commentId, comment]]),
-      changedBlocks: new Set([blockId]),
+      changedPlaceIds: new Set([placeId]),
+      fromRevision: deriveSourceRevision(before),
       currentRevision: deriveSourceRevision(after),
       now: "2026-08-02T12:01:00.000Z",
     });

@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildFeedbackPackage } from "../../review/feedback-package.js";
 import {
   deriveSourceRevision,
-  feedbackAgentRequest,
+  feedbackAgentRequests,
   readAgentExchange,
   writeAgentRequest,
 } from "../../review/agent-exchange.js";
@@ -62,13 +62,15 @@ beforeAll(async () => {
       },
     ],
   });
-  await writeAgentRequest({
-    store: runtime.store,
-    request: feedbackAgentRequest({
-      feedback,
-      sourceRevision: deriveSourceRevision(source),
-    }),
+  const [request] = feedbackAgentRequests({
+    feedback,
+    sourceRevision: deriveSourceRevision(source),
+    requestIds: [feedback.packageId],
   });
+  if (request === undefined) {
+    throw new Error("The fixture feedback request was not created");
+  }
+  await writeAgentRequest({ store: runtime.store, request });
 });
 
 afterAll(async () => {

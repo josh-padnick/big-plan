@@ -7,11 +7,14 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import {
   commentsFromExchange,
   deriveSourceRevision,
+  effectiveSourceRevision,
   nextPendingAgentRequest,
   readAgentExchange,
   validateAgentResponseDraft,
   writeAgentResponse,
 } from "../src/review/agent-exchange.js";
+import { buildRevisionChangeSet } from "../src/review/revision-change-set.js";
+import { renderDocument } from "../src/render/render-document.js";
 import { agentCommand } from "../src/cli/agent/command.js";
 import {
   reviewStoreFor,
@@ -1451,21 +1454,24 @@ test("should preserve and send a floating review across reload and viewport chan
       sessionId: session.sessionId,
       planId: session.planId,
     });
+    const requests = exchange.requests.filter(
+      (candidate) => candidate.kind === "feedback",
+    );
     const request = nextPendingAgentRequest(exchange);
-    if (request?.kind !== "feedback") {
+    if (request?.kind !== "feedback" || requests.length < 3) {
       throw new Error("The feedback request did not reach the coding agent");
     }
     expect(request.comments.at(0)?.target).toMatchObject({
       type: "selection",
       quote: "Content hash of the snapshot",
     });
-    expect(request.comments.at(1)?.target).toMatchObject({
+    expect(requests[1]?.comments.at(0)?.target).toMatchObject({
       type: "selection",
       quote: "Position in this plan's history",
     });
-    const states = ["changed", "question", "outside"];
-    const changeTargets = request.comments
+    const changeTargets = requests
       .slice(0, 2)
+      .flatMap((candidate) => candidate.comments)
       .map((comment) =>
         "blockId" in comment.target ? comment.target.blockId : undefined,
       )
@@ -1486,41 +1492,112 @@ test("should preserve and send a floating review across reload and viewport chan
       revision: deriveSourceRevision(revised),
       source: revised,
     });
+    const pair = {
+      fromRevision: deriveSourceRevision(original),
+      toRevision: deriveSourceRevision(revised),
+    };
+    const render = (markdown: string) =>
+      renderDocument({
+        markdown,
+        fallbackTitle: "Review persistence",
+        identity: {},
+      }).blocks;
+    const changeSet = buildRevisionChangeSet({
+      pair,
+      before: render(original),
+      after: render(revised),
+    });
     const response = validateAgentResponseDraft({
       value: {
         requestId: request.requestId,
-        outcomes: request.comments.map((comment, index) => ({
-          commentId: comment.id,
-          state: states[index],
-          message:
-            index === 0
-              ? "I clarified that the content hash is canonical and stable."
-              : index === 1
-                ? "Should numbering begin at zero or one?"
-                : "This delivery request belongs to implementation, not this plan revision.",
-          ...(index === 0
-            ? {
-                changes: changeTargets.map((target, changeIndex) => ({
-                  target,
-                  summary:
-                    changeIndex === 0
-                      ? "Clarified the canonical snapshot guarantee"
-                      : "Clarified the history position",
-                })),
-              }
-            : {}),
-        })),
+        outcomes: [
+          {
+            commentId: request.comments[0]?.id,
+            state: "changed",
+            message:
+              "I clarified the canonical snapshot, history position, and inspection guidance in this one owned revision.",
+            changes: changeSet.places.map((place) => ({
+              placeId: place.placeId,
+              summary: place.label,
+            })),
+          },
+        ],
       },
       request,
       commentsById: commentsFromExchange(exchange),
-      changedBlocks: new Set([
-        ...changeTargets,
-        "section/delivery/paragraph-2",
-      ]),
+      changedPlaceIds: new Set(changeSet.places.map((place) => place.placeId)),
+      fromRevision: pair.fromRevision,
       currentRevision: deriveSourceRevision(revised),
       now: new Date().toISOString(),
     });
     await writeAgentResponse({ store, response });
+    let nextExchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const questionRequest = nextPendingAgentRequest(nextExchange);
+    if (questionRequest?.kind !== "feedback") {
+      throw new Error("The second serialized comment was not queued");
+    }
+    await writeAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: questionRequest.requestId,
+          outcomes: [
+            {
+              commentId: questionRequest.comments[0]?.id,
+              state: "question",
+              message: "Should numbering begin at zero or one?",
+            },
+          ],
+        },
+        request: questionRequest,
+        commentsById: commentsFromExchange(nextExchange),
+        changedPlaceIds: new Set(),
+        fromRevision: effectiveSourceRevision({
+          request: questionRequest,
+          snapshot: nextExchange,
+        }),
+        currentRevision: deriveSourceRevision(revised),
+        now: new Date().toISOString(),
+      }),
+    });
+    nextExchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const outsideRequest = nextPendingAgentRequest(nextExchange);
+    if (outsideRequest?.kind !== "feedback") {
+      throw new Error("The third serialized comment was not queued");
+    }
+    await writeAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: outsideRequest.requestId,
+          outcomes: [
+            {
+              commentId: outsideRequest.comments[0]?.id,
+              state: "outside",
+              message:
+                "This delivery request belongs to implementation, not this plan revision.",
+            },
+          ],
+        },
+        request: outsideRequest,
+        commentsById: commentsFromExchange(nextExchange),
+        changedPlaceIds: new Set(),
+        fromRevision: effectiveSourceRevision({
+          request: outsideRequest,
+          snapshot: nextExchange,
+        }),
+        currentRevision: deriveSourceRevision(revised),
+        now: new Date().toISOString(),
+      }),
+    });
     await expect(
       page.getByRole("cell", {
         name: "Stable content hash of the canonical snapshot",
@@ -1551,9 +1628,9 @@ test("should preserve and send a floating review across reload and viewport chan
     );
     await expect(
       changed.locator("[data-review-change-list] strong"),
-    ).toHaveText("2 changes across 1 slide");
+    ).toHaveText("3 changes across 2 slides");
     const changeRows = changed.locator("[data-review-change-row]");
-    await expect(changeRows).toHaveCount(2);
+    await expect(changeRows).toHaveCount(3);
     const changeRow = changeRows.first();
     const wrapMetrics = await changeRow.evaluate((row) => {
       row.style.width = "7rem";
@@ -1571,25 +1648,12 @@ test("should preserve and send a floating review across reload and viewport chan
     expect(wrapMetrics.whiteSpace).toBe("normal");
     expect(wrapMetrics.rowFits).toBe(true);
     expect(wrapMetrics.labelHeight).toBeGreaterThan(wrapMetrics.lineHeight);
-    await expect(changeRows.locator("[data-review-change-label]")).toHaveText([
-      "Clarified the canonical snapshot guarantee",
-      "Clarified the history position",
-    ]);
+    await expect(changeRows.locator("[data-review-change-label]")).toHaveCount(
+      3,
+    );
     await expect(changed.locator("[data-review-see-change]")).toHaveText(
-      "See the change",
+      "See changes (3)",
     );
-    expect(
-      await page.locator("[data-review-anchor-changed]").evaluateAll((nodes) =>
-        nodes.map((node) => ({
-          id: node.getAttribute("data-block-id"),
-          label: node.getAttribute("data-block-label"),
-          text: node.textContent,
-        })),
-      ),
-    ).toEqual(
-      expect.arrayContaining([expect.objectContaining({ label: "versionId" })]),
-    );
-
     const question = page
       .locator(
         '[data-review-thread-state="sent"][data-review-outcome="question"]',
@@ -1620,38 +1684,21 @@ test("should preserve and send a floating review across reload and viewport chan
     const lens = page.locator("[data-review-diff-lens]");
     const stepper = page.locator("[data-review-diff-stepper]");
     await expect(lens).toBeVisible();
-    await expect(
-      lens
-        .locator('[data-review-diff-op="del"]')
-        .filter({ hasText: "Content" }),
-    ).toHaveCount(1);
-    await expect(
-      lens.locator('[data-review-diff-op="ins"]').filter({ hasText: "Stable" }),
-    ).toHaveCount(1);
+    await expect(lens.locator('[data-review-diff-op="del"]')).toHaveCount(1);
+    await expect(lens.locator('[data-review-diff-op="ins"]')).toHaveCount(1);
     await expect(lens.locator("[data-review-diff-comment-tag]")).toHaveCount(0);
-    await expect(
-      lens.locator('[data-review-diff-band-kind="table-row"]'),
-    ).toHaveCount(4);
-    const tableWasBands = lens.locator("[data-review-diff-was]");
-    await expect(tableWasBands).toHaveCount(2);
-    await expect(tableWasBands.first()).toContainText(
-      "versionId · Content hash of the snapshot",
+    await expect(lens.locator("[data-review-diff-side]")).toHaveCount(2);
+    await expect(lens.locator("[data-review-diff-side-label]")).toHaveText([
+      "Was",
+      "Now",
+    ]);
+    await expect(lens.locator("[data-review-diff-side-content]")).toHaveCount(
+      2,
     );
-    await expect(tableWasBands.last()).toContainText(
-      "number · Position in this plan's history",
-    );
-    for (const text of await tableWasBands.allTextContents()) {
-      expect(text.replace("Was", "").split("\n")).toHaveLength(1);
-    }
     expect((await lens.boundingBox())?.height ?? 0).toBeLessThan(600);
     await expect(stepper.locator("[data-review-diff-position]")).toHaveText(
-      "Change 1 of 1 · 1 · Details",
+      "Change 1 of 3 · 1 · Details",
     );
-    await expect(
-      lens
-        .locator('[data-review-diff-op="ins"]')
-        .filter({ hasText: "One-based" }),
-    ).toHaveCount(1);
     expect(
       await lens.evaluate((node) => getComputedStyle(node).marginTop),
     ).toBe("0px");
@@ -1737,6 +1784,23 @@ test("should preserve and send a floating review across reload and viewport chan
       revision: deriveSourceRevision(revised),
       source: revised,
     });
+    const replyPair = {
+      fromRevision: deriveSourceRevision(current),
+      toRevision: deriveSourceRevision(revised),
+    };
+    const replyChangeSet = buildRevisionChangeSet({
+      pair: replyPair,
+      before: renderDocument({
+        markdown: current,
+        fallbackTitle: "Review persistence",
+        identity: {},
+      }).blocks,
+      after: renderDocument({
+        markdown: revised,
+        fallbackTitle: "Review persistence",
+        identity: {},
+      }).blocks,
+    });
     await writeAgentResponse({
       store,
       response: validateAgentResponseDraft({
@@ -1747,18 +1811,19 @@ test("should preserve and send a floating review across reload and viewport chan
               commentId,
               state: "changed",
               message: "I made the stability guarantee explicit.",
-              changes: [
-                {
-                  target: blockId,
-                  summary: "Made the stability guarantee explicit",
-                },
-              ],
+              changes: replyChangeSet.places.map((place) => ({
+                placeId: place.placeId,
+                summary: "Made the stability guarantee explicit",
+              })),
             },
           ],
         },
         request,
         commentsById: commentsFromExchange(exchange),
-        changedBlocks: new Set([blockId]),
+        changedPlaceIds: new Set(
+          replyChangeSet.places.map((place) => place.placeId),
+        ),
+        fromRevision: replyPair.fromRevision,
         currentRevision: deriveSourceRevision(revised),
         now: new Date().toISOString(),
       }),
@@ -1777,10 +1842,10 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(restored.locator("[data-review-see-change]")).toHaveCount(2);
     await expect(
       restored.locator("[data-review-see-change]").first(),
-    ).toHaveText("See the change");
+    ).toHaveText("See changes (3)");
     await expect(
       restored.locator("[data-review-see-change]").last(),
-    ).toHaveText("See the change");
+    ).toHaveText("See changes (2)");
     await restored.locator("[data-review-see-change]").first().click();
     await expect(
       restored.locator("[data-review-see-change]").first(),
@@ -1796,7 +1861,7 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(page.locator("[data-review-diff-lens]")).toBeHidden();
     await expect(
       page.locator("[data-review-diff-stepper] [data-review-diff-position]"),
-    ).toHaveText("Change 1 of 1 · 1 · Details");
+    ).toHaveText("Change 1 of 3 · 1 · Details");
     await expect(page.locator("[data-review-diff-stepper]")).toBeVisible();
     await expect(page.locator("[data-review-diff-exit]")).toHaveText(
       "Show changes",
@@ -2081,7 +2146,11 @@ test("should preserve and send a floating review across reload and viewport chan
         },
         request,
         commentsById: commentsFromExchange(exchange),
-        changedBlocks: new Set(),
+        changedPlaceIds: new Set(),
+        fromRevision: effectiveSourceRevision({
+          request,
+          snapshot: exchange,
+        }),
         currentRevision: deriveSourceRevision(source),
         now: new Date().toISOString(),
       }),
@@ -2351,7 +2420,11 @@ Ship the live review loop behind the explicit review command.
         },
         request,
         commentsById: commentsFromExchange(exchange),
-        changedBlocks: new Set(),
+        changedPlaceIds: new Set(),
+        fromRevision: effectiveSourceRevision({
+          request,
+          snapshot: exchange,
+        }),
         currentRevision: deriveSourceRevision(revisedChat),
         now: new Date().toISOString(),
       }),
@@ -2388,7 +2461,7 @@ Ship the live review loop behind the explicit review command.
       };
     });
     expect(chatDiff.responseRevision).not.toBe(chatDiff.requestRevision);
-    expect(chatDiff.diff.locations.length).toBeGreaterThan(0);
+    expect(chatDiff.diff.changeSet.places.length).toBeGreaterThan(0);
     const digest = page
       .locator(
         '[data-review-chat-message="agent"] [data-review-chat-change-digest]',
@@ -2499,8 +2572,8 @@ Ship the live review loop behind the explicit review command.
       .first();
     await expect(rewrittenRow).toBeVisible();
     await rewrittenRow.click();
-    await expect(page.locator("[data-review-diff-was]")).toBeVisible();
-    await expect(page.locator("[data-review-diff-now]")).toBeVisible();
+    await expect(page.locator('[data-review-diff-side="was"]')).toBeVisible();
+    await expect(page.locator('[data-review-diff-side="now"]')).toBeVisible();
     await digest.locator("[data-review-see-change]").click();
 
     const addedRow = digest
@@ -2508,7 +2581,8 @@ Ship the live review loop behind the explicit review command.
       .filter({ hasText: "added" })
       .first();
     await addedRow.click();
-    await expect(page.locator("[data-review-diff-added-run]")).toBeVisible();
+    await expect(page.locator('[data-review-diff-side="was"]')).toHaveCount(0);
+    await expect(page.locator('[data-review-diff-side="now"]')).toBeVisible();
     await digest.locator("[data-review-see-change]").click();
     await expect(page.locator("[data-review-diff-hidden]")).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Security" })).toBeVisible();
@@ -2551,7 +2625,11 @@ Ship the live review loop behind the explicit review command.
         },
         request: formattingRequest,
         commentsById: commentsFromExchange(formattingExchange),
-        changedBlocks: new Set(),
+        changedPlaceIds: new Set(),
+        fromRevision: effectiveSourceRevision({
+          request: formattingRequest,
+          snapshot: formattingExchange,
+        }),
         currentRevision: deriveSourceRevision(formattingSource),
         now: new Date().toISOString(),
       }),
@@ -2599,7 +2677,11 @@ Ship the live review loop behind the explicit review command.
         },
         request: unchangedRequest,
         commentsById: commentsFromExchange(unchangedExchange),
-        changedBlocks: new Set(),
+        changedPlaceIds: new Set(),
+        fromRevision: effectiveSourceRevision({
+          request: unchangedRequest,
+          snapshot: unchangedExchange,
+        }),
         currentRevision: deriveSourceRevision(formattingSource),
         now: new Date().toISOString(),
       }),
@@ -2855,6 +2937,26 @@ Ship the live review loop behind the explicit review command.
       revision: deriveSourceRevision(reverted),
       source: reverted,
     });
+    const revertPair = {
+      fromRevision: effectiveSourceRevision({
+        request,
+        snapshot: exchange,
+      }),
+      toRevision: deriveSourceRevision(reverted),
+    };
+    const revertChangeSet = buildRevisionChangeSet({
+      pair: revertPair,
+      before: renderDocument({
+        markdown: current,
+        fallbackTitle: "Review persistence",
+        identity: {},
+      }).blocks,
+      after: renderDocument({
+        markdown: reverted,
+        fallbackTitle: "Review persistence",
+        identity: {},
+      }).blocks,
+    });
     await writeAgentResponse({
       store,
       response: validateAgentResponseDraft({
@@ -2865,18 +2967,19 @@ Ship the live review loop behind the explicit review command.
               commentId,
               state: "changed",
               message: "I reverted this thread's plan changes.",
-              changes: [
-                {
-                  target: blockId,
-                  summary: "Reverted this thread's plan changes",
-                },
-              ],
+              changes: revertChangeSet.places.map((place) => ({
+                placeId: place.placeId,
+                summary: "Reverted this thread's plan changes",
+              })),
             },
           ],
         },
         request,
         commentsById: commentsFromExchange(exchange),
-        changedBlocks: new Set([blockId]),
+        changedPlaceIds: new Set(
+          revertChangeSet.places.map((place) => place.placeId),
+        ),
+        fromRevision: revertPair.fromRevision,
         currentRevision: deriveSourceRevision(reverted),
         now: new Date().toISOString(),
       }),
@@ -2890,10 +2993,7 @@ Ship the live review loop behind the explicit review command.
 
     await trayThread.locator("[data-review-thread-minimize]").click();
     await expect(trayThread).not.toHaveAttribute("data-review-row-expanded");
-    const attachedOtherChanges = page.locator(
-      `[data-review-other-changes] [data-review-comment-id="${commentId}"]`,
-    );
-    await expect(attachedOtherChanges).not.toHaveCount(0);
+    await expect(page.locator("[data-review-other-changes]")).toHaveCount(0);
     const savedResolve = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/drafts") &&
@@ -2911,7 +3011,7 @@ Ship the live review loop behind the explicit review command.
         `[data-review-resolved-group] [data-review-sent-row][data-review-comment-id="${commentId}"]`,
       ),
     ).toHaveCount(1);
-    await expect(attachedOtherChanges).toHaveCount(0);
+    await expect(page.locator("[data-review-other-changes]")).toHaveCount(0);
     await expect(tray).toBeVisible();
   });
 

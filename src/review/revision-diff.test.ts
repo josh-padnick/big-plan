@@ -3,14 +3,9 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  bandText,
-  diffKindShowsComment,
-  diffLocationMatchesTarget,
-  diffPresentationMode,
   diffRevisions,
   diffRunSimilarity,
   diffWords,
-  markedOffsetForPlainOffset,
 } from "./revision-diff.js";
 
 const block = ({
@@ -34,43 +29,6 @@ const block = ({
 });
 
 describe("revision word diff", () => {
-  it("should flow table cells inside a diff band without changing prose", () => {
-    expect(
-      bandText({
-        location: {
-          kind: "table-row",
-          oldText: "\ntimeout\n504\n\ntransient\n",
-          newText: "",
-        },
-        side: "old",
-      }),
-    ).toBe("timeout · 504 · transient");
-    expect(
-      bandText({
-        location: {
-          kind: "table",
-          oldText: "",
-          newText: "\nfield\n\nmeaning\n",
-        },
-        side: "new",
-      }),
-    ).toBe("field · meaning");
-    expect(
-      bandText({
-        location: {
-          kind: "paragraph",
-          oldText: "First line.\nSecond line.",
-          newText: "",
-        },
-        side: "old",
-      }),
-    ).toBe("First line.\nSecond line.");
-    expect(diffKindShowsComment("paragraph")).toBe(true);
-    expect(diffKindShowsComment("code")).toBe(false);
-    expect(diffKindShowsComment("code-diff")).toBe(false);
-    expect(diffKindShowsComment("table-row")).toBe(false);
-  });
-
   it("should preserve unchanged words around a replacement", () => {
     expect(
       diffWords({
@@ -107,63 +65,8 @@ describe("revision word diff", () => {
     ).toBeGreaterThan(0.2);
   });
 
-  it("should use separate before and after bands for a substantial rewrite", () => {
-    expect(
-      diffPresentationMode(
-        diffWords({
-          before: "Retries use an exponential delay after every failure.",
-          after: "Operators replay bounded queues during the recovery window.",
-        }),
-      ),
-    ).toBe("bands");
-    expect(
-      diffPresentationMode(
-        diffWords({
-          before: "Keep the first version.",
-          after: "Keep the stable version.",
-        }),
-      ),
-    ).toBe("inline");
-  });
-
   it("should treat two empty revisions as identical", () => {
     expect(diffRunSimilarity([])).toBe(1);
-  });
-
-  it("should keep focused edits inline and move high-churn rewrites to bands", () => {
-    expect(
-      diffPresentationMode([
-        { op: "same", text: "The " },
-        { op: "del", text: "worker " },
-        { op: "ins", text: "processor " },
-        { op: "same", text: "classifies " },
-        { op: "del", text: "responses " },
-        { op: "ins", text: "failures " },
-        { op: "same", text: "into " },
-        { op: "del", text: "retryable " },
-        { op: "ins", text: "bounded " },
-        { op: "same", text: "and " },
-        { op: "del", text: "terminal " },
-        { op: "ins", text: "explicit " },
-        { op: "same", text: "outcomes." },
-      ]),
-    ).toBe("bands");
-    expect(
-      diffPresentationMode([
-        { op: "same", text: "Keep this detailed sentence and change only " },
-        { op: "del", text: "two old" },
-        { op: "ins", text: "two new" },
-        { op: "same", text: " words at the end." },
-      ]),
-    ).toBe("inline");
-  });
-
-  it("should translate plain offsets across inline-code sentinels", () => {
-    const markedText = `Use \u0011timeout\u0011 now.`;
-    expect(markedOffsetForPlainOffset({ markedText, plainOffset: 4 })).toBe(4);
-    expect(markedOffsetForPlainOffset({ markedText, plainOffset: 11 })).toBe(
-      12,
-    );
   });
 });
 
@@ -192,10 +95,6 @@ describe("revision block alignment", () => {
       kind: "table-row",
       parentBlockId,
     });
-    expect(
-      location &&
-        diffLocationMatchesTarget({ location, target: parentBlockId }),
-    ).toBe(true);
   });
 
   it("should treat an inserted sibling as added without shifting later identities", () => {

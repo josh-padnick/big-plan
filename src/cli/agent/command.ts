@@ -11,6 +11,7 @@ import { shellQuote } from "../_shared/shell-quote.js";
 import {
   commentsFromExchange,
   deriveSourceRevision,
+  effectiveSourceRevision,
   nextPendingAgentRequest,
   readAgentExchange,
   responseTemplateFor,
@@ -35,7 +36,7 @@ import {
   writeRevisionSnapshot,
 } from "../../review/store.js";
 import { derivePlanId, renderDocument } from "../../render/render-document.js";
-import { diffRevisions } from "../../review/revision-diff.js";
+import { buildRevisionChangeSet } from "../../review/revision-change-set.js";
 
 const USAGE = [
   "Usage:",
@@ -261,7 +262,7 @@ For each returned work item:
   )} "<one short line>"\` when you start each meaningful step - reading the request, deciding an outcome, editing the plan, validating. One line per step, present tense, no repeats.
 3. When revising prose, keep related sentences in one paragraph; never leave a blank line between every sentence.
 4. For every anchored comment, choose exactly one outcome:
-   - changed: revise the plan source, explain the revision, and list every changed render block in changes, each with a reviewer-facing summary of what changed there (outcome, not mechanics), in presentation order.
+   - changed: revise the plan source and explain the revision. Leave changes empty unless the response command gives you concrete revision place IDs to annotate; the immutable revision pair decides membership.
    - question: do not guess; ask the precise question the reviewer must answer.
    - outside: explain why the request is beyond revising this plan.
 5. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
@@ -389,10 +390,11 @@ const nextWork = async ({
     requestId: request.requestId,
   });
   const binPath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
+  const workRevision = effectiveSourceRevision({ request, snapshot });
   return {
     pending: true,
     plan: session.planPath,
-    work: request,
+    work: { ...request, sourceRevision: workRevision },
     history: responseHistory({ request, snapshot }),
     response_template: responseTemplateFor(request),
     response_file: responseFile,
@@ -464,31 +466,28 @@ const respond = async ({
     revision: currentRevision,
     source: markdown,
   });
+  const fromRevision = effectiveSourceRevision({ request, snapshot });
   const previousMarkdown = await readRevisionSnapshot({
     store: session.store,
-    revision: request.sourceRevision,
+    revision: fromRevision,
   });
   const previousRendered = renderDocument({
     markdown: previousMarkdown,
     fallbackTitle: basename(session.planPath, extname(session.planPath)),
     identity: {},
   });
-  const changedBlocks = new Set(
-    diffRevisions({
-      before: previousRendered.blocks,
-      after: rendered.blocks,
-    }).flatMap((location) =>
-      [location.newBlockId, location.oldBlockId].filter(
-        (blockId): blockId is string => blockId !== undefined,
-      ),
-    ),
-  );
+  const changeSet = buildRevisionChangeSet({
+    pair: { fromRevision, toRevision: currentRevision },
+    before: previousRendered.blocks,
+    after: rendered.blocks,
+  });
   assertPlanPassesLint({ markdown });
   const response = validateAgentResponseDraft({
     value: responseDraft,
     request,
     commentsById: commentsFromExchange(snapshot),
-    changedBlocks,
+    changedPlaceIds: new Set(changeSet.places.map((place) => place.placeId)),
+    fromRevision,
     currentRevision,
     now: new Date().toISOString(),
   });

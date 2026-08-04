@@ -43,7 +43,7 @@ import {
 import { buildFeedbackPackage, renderBrief } from "./feedback-package.js";
 import {
   deriveSourceRevision,
-  feedbackAgentRequest,
+  feedbackAgentRequests,
   messageAgentRequest,
   readAgentExchange,
   writeAgentRequest,
@@ -72,7 +72,7 @@ import {
   writeSessionHeartbeat,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
-import { diffRevisions } from "./revision-diff.js";
+import { buildRevisionChangeSet } from "./revision-change-set.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
@@ -416,14 +416,16 @@ export const startReviewRuntime = async ({
       const source = await readFile(resolvedPlanPath, "utf8");
       const revision = deriveSourceRevision(source);
       await writeRevisionSnapshot({ store, revision, source });
-      const agentRequest = feedbackAgentRequest({
+      const agentRequests = feedbackAgentRequests({
         feedback,
         sourceRevision: revision,
+        requestIds: comments.map(() => randomId(8)),
       });
-      await writeAgentRequest({
-        store,
-        request: agentRequest,
-      });
+      await Promise.all(
+        agentRequests.map((agentRequest) =>
+          writeAgentRequest({ store, request: agentRequest }),
+        ),
+      );
       const alreadySent = await readComments({
         path: store.sentPath,
         validate,
@@ -444,7 +446,7 @@ export const startReviewRuntime = async ({
           seq: progressSeq,
           step: "Feedback package received",
           state: "done",
-          requestId: agentRequest.requestId,
+          requestId: agentRequests[0]?.requestId,
           at: new Date().toISOString(),
           detail: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
         },
@@ -457,7 +459,8 @@ export const startReviewRuntime = async ({
           comments: comments.length,
           package: written.jsonPath,
           brief: written.briefPath,
-          agentRequest,
+          agentRequest: agentRequests[0],
+          agentRequests,
           agentConnected: await agentConnected(),
         },
       });
@@ -667,9 +670,8 @@ export const startReviewRuntime = async ({
         response,
         status: 200,
         value: {
-          from,
-          to,
-          locations: diffRevisions({
+          changeSet: buildRevisionChangeSet({
+            pair: { fromRevision: from, toRevision: to },
             before: before.blocks,
             after: after.blocks,
           }),

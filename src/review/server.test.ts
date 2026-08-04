@@ -438,15 +438,25 @@ describe("review runtime feedback", () => {
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      from,
-      to,
-      locations: [
-        {
-          status: "changed",
-          oldText: "Today's reality is that feedback does not reach the agent.",
-          newText: "Today's reality is that feedback reaches the coding agent.",
-        },
-      ],
+      changeSet: {
+        version: 1,
+        fromRevision: from,
+        toRevision: to,
+        places: [
+          {
+            placeId: expect.stringMatching(/^[a-f0-9]{16}$/),
+            locations: [
+              {
+                status: "changed",
+                oldText:
+                  "Today's reality is that feedback does not reach the agent.",
+                newText:
+                  "Today's reality is that feedback reaches the coding agent.",
+              },
+            ],
+          },
+        ],
+      },
     });
   });
 

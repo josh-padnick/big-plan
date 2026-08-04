@@ -34,15 +34,6 @@ import { TRIANGLE_ALERT_ICON } from "../../src/icons/lucide/triangle-alert.js";
 import { UNDO_2_ICON } from "../../src/icons/lucide/undo-2.js";
 import { X_ICON } from "../../src/icons/lucide/x.js";
 import {
-  bandText,
-  diffKindShowsComment,
-  diffLocationMatchesTarget,
-  diffPresentationMode,
-  diffRunSimilarity,
-  INLINE_CODE_SENTINEL,
-  markedOffsetForPlainOffset,
-} from "../../src/review/revision-diff.js";
-import {
   pendingThreadGroup,
   threadSubstate,
 } from "../../src/review/thread-group.js";
@@ -489,10 +480,16 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       value.kind === "chat") &&
     typeof value.createdAt === "string" &&
     !Number.isNaN(Date.parse(value.createdAt)) &&
-    (value.kind === "feedback" ||
-      (typeof value.body === "string" &&
+    (value.kind === "feedback"
+      ? Array.isArray(value.comments) &&
+        value.comments.length === 1 &&
+        Number.isInteger(value.batchIndex) &&
+        Number.isInteger(value.batchSize) &&
+        value.batchIndex >= 0 &&
+        value.batchIndex < value.batchSize
+      : typeof value.body === "string" &&
         value.body.trim() !== "" &&
-        value.body.length <= BODY_LIMIT));
+        value.body.length <= BODY_LIMIT);
 
   const checkedMessageNodes = (value) => {
     if (!Array.isArray(value)) return null;
@@ -560,20 +557,15 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       checkedMessageNodes(value.messageNodes) !== null) &&
     (value.changes === undefined ||
       (Array.isArray(value.changes) &&
-        value.changes.length > 0 &&
         value.changes.every(
           (change) =>
             change !== null &&
             typeof change === "object" &&
-            typeof change.target === "string" &&
-            change.target.length <= 300 &&
+            isExchangeId(change.placeId) &&
             typeof change.summary === "string" &&
             change.summary.trim() !== "" &&
             change.summary.length <= 90,
         )));
-
-  const eventTargets = (event) =>
-    (event?.changes || []).map((change) => change.target);
 
   const isAgentResponse = (value) =>
     value !== null &&
@@ -584,6 +576,10 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       value.kind === "chat") &&
     typeof value.createdAt === "string" &&
     !Number.isNaN(Date.parse(value.createdAt)) &&
+    value.revisionPair !== null &&
+    typeof value.revisionPair === "object" &&
+    /^[a-f0-9]{16,64}$/.test(value.revisionPair.fromRevision || "") &&
+    /^[a-f0-9]{16,64}$/.test(value.revisionPair.toRevision || "") &&
     (value.kind === "chat"
       ? typeof value.message === "string" &&
         value.message.trim() !== "" &&
@@ -2070,20 +2066,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     }
     const candidates = [];
     if (original) candidates.push(original);
-    const events = outcomeEventsFor(comment);
-    const latestChanged = events
-      .filter((event) => event.key === "changed")
-      .at(-1);
-    const changedTargets = [];
-    for (const blockId of eventTargets(latestChanged)) {
-      const block = document.querySelector(
-        '[data-block-id="' + cssEscape(blockId) + '"]',
-      );
-      if (block) {
-        changedTargets.push(block);
-        if (!candidates.includes(block)) candidates.push(block);
-      }
-    }
     for (const block of scopeBlocksFor(target.blockId)) {
       if (!candidates.includes(block)) candidates.push(block);
     }
@@ -2091,11 +2073,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       const range = quoteRangeInBlock(block, target.quote, target.start);
       if (range) return { kind: "range", range, block };
     }
-    const successor =
-      changedTargets[0] ||
-      original ||
-      scopeBlocksFor(target.blockId)[0] ||
-      null;
+    const successor = original || scopeBlocksFor(target.blockId)[0] || null;
     return {
       kind: "changed",
       block: successor,
@@ -2131,9 +2109,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     }
     const commentRanges = [];
     const focusRanges = [];
-    const lensBlocks = diffLens
-      ? diffLens.hiddenBlocks.concat(diffLens.movedBlocks)
-      : [];
+    const lensBlocks = diffLens?.hiddenBlocks ?? [];
     for (const comment of drafts.concat(sent)) {
       if (resolvedCommentIds.has(comment.id)) continue;
       const anchor = anchorStateFor(comment);
@@ -2491,8 +2467,10 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         changes: outcome.changes || [],
         createdAt: response.createdAt,
         requestId: response.requestId,
-        fromRevision: request?.sourceRevision || "",
-        toRevision: response.sourceRevision || "",
+        fromRevision:
+          response.revisionPair?.fromRevision || request?.sourceRevision || "",
+        toRevision:
+          response.revisionPair?.toRevision || response.sourceRevision || "",
       });
     }
     return events;
@@ -2926,7 +2904,8 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         typeof location === "object" &&
         (location.status === "changed" ||
           location.status === "added" ||
-          location.status === "removed") &&
+          location.status === "removed" ||
+          location.status === "moved") &&
         typeof location.kind === "string" &&
         typeof location.label === "string" &&
         typeof location.section === "string" &&
@@ -2943,6 +2922,38 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         ),
     );
 
+  const checkedRevisionChangeSet = (value) => {
+    if (
+      !value ||
+      typeof value !== "object" ||
+      value.version !== 1 ||
+      typeof value.fromRevision !== "string" ||
+      typeof value.toRevision !== "string" ||
+      !Array.isArray(value.places)
+    ) {
+      return { version: 1, fromRevision: "", toRevision: "", places: [] };
+    }
+    return {
+      version: 1,
+      fromRevision: value.fromRevision,
+      toRevision: value.toRevision,
+      places: value.places.flatMap((place) => {
+        if (
+          !place ||
+          typeof place !== "object" ||
+          typeof place.placeId !== "string" ||
+          typeof place.label !== "string" ||
+          typeof place.section !== "string" ||
+          typeof place.note !== "string"
+        ) {
+          return [];
+        }
+        const locations = checkedDiffLocations(place.locations);
+        return locations.length === 0 ? [] : [{ ...place, locations }];
+      }),
+    };
+  };
+
   const loadRevisionDiff = async (event) => {
     if (
       !hasRuntime ||
@@ -2950,7 +2961,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       !event.fromRevision ||
       !event.toRevision
     ) {
-      return [];
+      return { version: 1, fromRevision: "", toRevision: "", places: [] };
     }
     if (revisionDiffs.has(event.requestId)) {
       return revisionDiffs.get(event.requestId);
@@ -2961,151 +2972,20 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         "&to=" +
         encodeURIComponent(event.toRevision),
     );
-    const locations = checkedDiffLocations(answer.locations);
-    revisionDiffs.set(event.requestId, locations);
-    return locations;
-  };
-
-  const blockOrder = new Map(
-    blocks.map((block, index) => [
-      block.getAttribute("data-block-id") || "",
-      index,
-    ]),
-  );
-
-  // Removed locations borrow a fractional slot from their surviving neighbor,
-  // so all-location chat diffs retain the document's reading order.
-  const locationPosition = (location) => {
-    if (location.newBlockId && blockOrder.has(location.newBlockId)) {
-      return blockOrder.get(location.newBlockId);
-    }
-    if (location.beforeBlockId && blockOrder.has(location.beforeBlockId)) {
-      return blockOrder.get(location.beforeBlockId) - 0.5;
-    }
-    if (location.afterBlockId && blockOrder.has(location.afterBlockId)) {
-      return blockOrder.get(location.afterBlockId) + 0.5;
-    }
-    return Number.MAX_SAFE_INTEGER;
-  };
-
-  const locationsForEvent = (event) => {
-    const locations = revisionDiffs.get(event.requestId) || [];
-    const targets = eventTargets(event);
-    const selected =
-      targets.length === 0
-        ? locations
-        : locations.filter((candidate) =>
-            targets.some((target) =>
-              diffLocationMatchesTarget({ location: candidate, target }),
-            ),
-          );
-    // When a table's rows are listed individually, the whole-table location
-    // repeats the same story as noise; the row diffs carry the change.
-    const rowDiffSections = new Set(
-      selected
-        .filter((candidate) => candidate.kind === "table-row")
-        .map((candidate) => candidate.section),
-    );
-    const deduped = selected.filter(
-      (candidate) =>
-        !(
-          candidate.kind === "table" &&
-          candidate.status === "changed" &&
-          rowDiffSections.has(candidate.section)
-        ),
-    );
-    return [...deduped].sort(
-      (left, right) => locationPosition(left) - locationPosition(right),
-    );
-  };
-
-  const runSimilarity = (locations) =>
-    diffRunSimilarity(locations.flatMap((location) => location.runs || []));
-
-  const placeKindNote = (locations) => {
-    if (locations.every((location) => location.status === "added")) {
-      return "added";
-    }
-    if (locations.every((location) => location.status === "removed")) {
-      return "removed";
-    }
-    if (locations.length > 1 && runSimilarity(locations) < 0.2) {
-      return "rewritten";
-    }
-    return locations.length === 1 ? diffKindNote(locations[0]) : "reworked";
-  };
-
-  const locationsAreContiguous = ({ previous, next, changedIds }) => {
-    if (previous.section !== next.section) return false;
-    const previousPosition = locationPosition(previous);
-    const nextPosition = locationPosition(next);
-    if (nextPosition - previousPosition <= 1) return true;
-    const first = Math.floor(previousPosition) + 1;
-    const last = Math.ceil(nextPosition);
-    for (let index = first; index < last; index += 1) {
-      const id = blocks[index]?.getAttribute("data-block-id");
-      if (id && !changedIds.has(id)) return false;
-    }
-    return true;
-  };
-
-  // A place is a contiguous run of changed locations within one slide. This
-  // keeps chat and anchored-comment diffs on one calm, literal vocabulary.
-  const groupLocationsIntoPlaces = (locations) => {
-    const changedIds = new Set(
-      locations
-        .map((location) => location.newBlockId)
-        .filter((id) => typeof id === "string"),
-    );
-    const groups = [];
-    for (const location of locations) {
-      const previous = groups.at(-1);
-      const previousLocation = previous?.locations.at(-1);
-      if (
-        previous &&
-        previousLocation &&
-        locationsAreContiguous({
-          previous: previousLocation,
-          next: location,
-          changedIds,
-        })
-      ) {
-        previous.locations.push(location);
-        previous.note = placeKindNote(previous.locations);
-        if (previous.note === "rewritten") previous.label = "Whole section";
-        continue;
-      }
-      groups.push({
-        locations: [location],
-        section: location.section,
-        label: location.label,
-        note: placeKindNote([location]),
-        slideTitle: slideTitleFor({
-          type: "block",
-          section: location.section,
-          label: location.label,
-        }),
-      });
-    }
-    return groups;
+    const changeSet = checkedRevisionChangeSet(answer.changeSet);
+    revisionDiffs.set(event.requestId, changeSet);
+    return changeSet;
   };
 
   const placesForEvent = (event) =>
-    groupLocationsIntoPlaces(locationsForEvent(event));
-
-  const diffKindNote = (location) => {
-    if (location.status === "added") return "added";
-    if (location.status === "removed") return "removed";
-    if (
-      location.kind === "table" ||
-      location.kind === "table-row" ||
-      location.kind === "code" ||
-      location.kind.includes("diff")
-    ) {
-      return "replaced";
-    }
-    return "reworded";
-  };
+    (revisionDiffs.get(event.requestId)?.places || []).map((place) => ({
+      ...place,
+      slideTitle: slideTitleFor({
+        type: "block",
+        section: place.section,
+        label: place.label,
+      }),
+    }));
 
   const diffStepper = el("div", {
     "data-review-diff-stepper": true,
@@ -3137,16 +3017,8 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   diffStepper.append(diffPrevious, diffPosition, diffNext, diffExit, diffHide);
   document.body.appendChild(diffStepper);
 
-  // Added content is temporarily moved into the lens so its real formatting
-  // remains visible. Restore it before removing the lens: removing first would
-  // take the authoritative current blocks with it.
-  const restoreMovedBlocksBeforeLens = ({ movedBlocks, container }) => {
-    for (const block of movedBlocks) container.before(block);
-  };
-
   const clearDiffLens = () => {
     if (!diffLens) return;
-    restoreMovedBlocksBeforeLens(diffLens);
     for (const block of diffLens.hiddenBlocks) {
       block.removeAttribute("hidden");
       block.removeAttribute("data-review-diff-hidden");
@@ -3159,244 +3031,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
 
   const clearCommentLensIfOwned = (commentId) => {
     if (diffLens?.comment?.id === commentId) clearDiffLens();
-  };
-
-  const appendDiffRun = ({ container, run, comment, oldOffset }) => {
-    const codeState = { active: false };
-    const nodeFor = (text, marked) => {
-      const node = el("span", {
-        "data-review-diff-op": run.op,
-        ...(marked ? { "data-review-diff-comment": true } : {}),
-      });
-      let hasContent = false;
-      for (const [index, part] of text.split(INLINE_CODE_SENTINEL).entries()) {
-        if (index > 0) codeState.active = !codeState.active;
-        if (part === "") continue;
-        hasContent = true;
-        node.appendChild(
-          codeState.active
-            ? el("code", { text: part })
-            : document.createTextNode(part),
-        );
-      }
-      return hasContent ? node : null;
-    };
-    const appendNode = (text, marked) => {
-      if (text === "") return;
-      const node = nodeFor(text, marked);
-      if (node) container.appendChild(node);
-    };
-    if (
-      run.op !== "del" ||
-      comment?.target.type !== "selection" ||
-      run.text === ""
-    ) {
-      appendNode(run.text, false);
-      return;
-    }
-    const runStart = oldOffset.value;
-    const runEnd = runStart + run.text.length;
-    const markStart = Math.max(runStart, comment.target.start);
-    const markEnd = Math.min(runEnd, comment.target.end);
-    if (markStart >= markEnd) {
-      appendNode(run.text, false);
-      return;
-    }
-    const localStart = markStart - runStart;
-    const localEnd = markEnd - runStart;
-    appendNode(run.text.slice(0, localStart), false);
-    appendNode(run.text.slice(localStart, localEnd), true);
-    appendNode(run.text.slice(localEnd), false);
-  };
-
-  const commentAtMarkedOffsets = ({ comment, markedText }) => {
-    if (comment?.target.type !== "selection") return comment;
-    return {
-      ...comment,
-      target: {
-        ...comment.target,
-        start: markedOffsetForPlainOffset({
-          markedText,
-          plainOffset: comment.target.start,
-        }),
-        end: markedOffsetForPlainOffset({
-          markedText,
-          plainOffset: comment.target.end,
-        }),
-      },
-    };
-  };
-
-  const appendWholesalePlace = ({ body, place, comment }) => {
-    const kinds = new Set(place.locations.map((location) => location.kind));
-    const bandKind =
-      kinds.size === 1 ? place.locations[0]?.kind || "place" : "place";
-    const was = el(
-      "div",
-      {
-        "data-review-diff-was": true,
-        "data-review-diff-band-kind": bandKind,
-      },
-      [el("strong", { text: "Was" })],
-    );
-    place.locations.forEach((location, index) => {
-      const oldText = bandText({ location, side: "old" });
-      if (!oldText) return;
-      if (index > 0) was.appendChild(document.createTextNode("\n\n"));
-      if (
-        comment?.target.type === "selection" &&
-        diffKindShowsComment(location.kind) &&
-        !comment.target.endBlockId &&
-        location.oldBlockId === comment.target.blockId
-      ) {
-        appendDiffRun({
-          container: was,
-          run: { op: "del", text: oldText },
-          comment: commentAtMarkedOffsets({
-            comment,
-            markedText: location.oldText,
-          }),
-          oldOffset: { value: 0 },
-        });
-      } else {
-        appendDiffRun({
-          container: was,
-          run: { op: "del", text: oldText },
-          comment: null,
-          oldOffset: { value: 0 },
-        });
-      }
-    });
-    const now = el("div", {
-      "data-review-diff-now": true,
-      "data-review-diff-band-kind": bandKind,
-    });
-    now.appendChild(el("strong", { text: "Now" }));
-    appendDiffRun({
-      container: now,
-      run: {
-        op: "ins",
-        text: place.locations
-          .map((location) => bandText({ location, side: "new" }))
-          .filter(Boolean)
-          .join("\n\n"),
-      },
-      comment: null,
-      oldOffset: { value: 0 },
-    });
-    body.append(was, now);
-  };
-
-  const appendDiffLocation = ({ body, location, comment }) => {
-    const attributedComment =
-      comment &&
-      diffKindShowsComment(location.kind) &&
-      (location.oldBlockId === comment.target.blockId ||
-        location.newBlockId === comment.target.blockId)
-        ? comment
-        : null;
-    if (
-      location.status === "changed" &&
-      ["paragraph", "heading", "quote", "list"].includes(location.kind) &&
-      diffPresentationMode(location.runs) === "bands"
-    ) {
-      appendWholesalePlace({
-        body,
-        place: { locations: [location] },
-        comment: attributedComment,
-      });
-      return;
-    }
-    if (location.status === "changed" && location.kind === "table-row") {
-      const oldRow = el(
-        "div",
-        {
-          "data-review-diff-was": true,
-          "data-review-diff-band-kind": location.kind,
-        },
-        [el("strong", { text: "Was" })],
-      );
-      appendDiffRun({
-        container: oldRow,
-        run: { op: "del", text: bandText({ location, side: "old" }) },
-        comment: null,
-        oldOffset: { value: 0 },
-      });
-      body.append(
-        oldRow,
-        el(
-          "div",
-          {
-            "data-review-diff-now": true,
-            "data-review-diff-band-kind": location.kind,
-          },
-          [
-            el("strong", { text: "Now" }),
-            el("span", {
-              "data-review-diff-op": "ins",
-              text: bandText({ location, side: "new" }),
-            }),
-          ],
-        ),
-      );
-      return;
-    }
-    if (
-      location.status === "changed" &&
-      !["paragraph", "heading", "quote", "list", "table-row", "code"].includes(
-        location.kind,
-      )
-    ) {
-      body.append(
-        el(
-          "div",
-          {
-            "data-review-diff-was": true,
-            "data-review-diff-band-kind": location.kind,
-          },
-          [
-            el("strong", { text: "Was" }),
-            el("span", {
-              text: bandText({ location, side: "old" }).replaceAll(
-                INLINE_CODE_SENTINEL,
-                "",
-              ),
-            }),
-          ],
-        ),
-        el(
-          "div",
-          {
-            "data-review-diff-now": true,
-            "data-review-diff-band-kind": location.kind,
-          },
-          [
-            el("strong", { text: "Now" }),
-            el("span", {
-              text: bandText({ location, side: "new" }).replaceAll(
-                INLINE_CODE_SENTINEL,
-                "",
-              ),
-            }),
-          ],
-        ),
-      );
-      return;
-    }
-    const oldOffset = { value: 0 };
-    const markedComment = commentAtMarkedOffsets({
-      comment: attributedComment,
-      markedText: location.oldText,
-    });
-    for (const run of location.runs) {
-      appendDiffRun({
-        container: body,
-        run,
-        comment: markedComment,
-        oldOffset,
-      });
-      if (run.op !== "ins") oldOffset.value += run.text.length;
-    }
   };
 
   const anchorBlockForPlace = (place) => {
@@ -3416,6 +3050,77 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     return null;
   };
 
+  const renderRevisionContent = (node) => {
+    if (!node || typeof node !== "object") return null;
+    if (node.type === "text") {
+      return typeof node.value === "string"
+        ? document.createTextNode(node.value)
+        : null;
+    }
+    const tags = {
+      paragraph: "p",
+      strong: "strong",
+      emphasis: "em",
+      "inline-code": "code",
+      code: "pre",
+      quote: "blockquote",
+      "list-item": "li",
+      group: "div",
+      list: node.ordered === true ? "ol" : "ul",
+      table: "table",
+      "table-row": "tr",
+      "table-cell": node.header === true ? "th" : "td",
+      link: "a",
+    };
+    const tag = tags[node.type];
+    if (!tag) return null;
+    const rendered = el(tag);
+    if (
+      node.type === "link" &&
+      typeof node.href === "string" &&
+      /^(?:https?:|#)/.test(node.href)
+    ) {
+      rendered.setAttribute("href", node.href);
+    }
+    for (const child of Array.isArray(node.children) ? node.children : []) {
+      const childNode = renderRevisionContent(child);
+      if (childNode) rendered.appendChild(childNode);
+    }
+    return rendered;
+  };
+
+  const diffSide = ({ label, locations, side }) => {
+    const snapshots = locations.flatMap((location) => {
+      const content =
+        side === "was" ? location.oldContent : location.newContent;
+      const fallback = side === "was" ? location.oldText : location.newText;
+      if (!content && !fallback) return [];
+      const snapshot = el("div", {
+        "data-review-diff-snapshot": true,
+        "data-review-diff-kind": location.kind,
+        "data-review-diff-op": side === "was" ? "del" : "ins",
+      });
+      const rendered = renderRevisionContent(content);
+      if (rendered) snapshot.appendChild(rendered);
+      else snapshot.appendChild(document.createTextNode(fallback));
+      return [snapshot];
+    });
+    if (snapshots.length === 0) return null;
+    return el("section", { "data-review-diff-side": side }, [
+      el("strong", {
+        "data-review-diff-side-label": true,
+        text: label,
+      }),
+      el(
+        "div",
+        {
+          "data-review-diff-side-content": true,
+        },
+        snapshots,
+      ),
+    ]);
+  };
+
   const renderDiffLocation = ({ comment, event, index }) => {
     const places = placesForEvent(event);
     const place = places[index];
@@ -3433,6 +3138,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       "data-review-diff-kind":
         place.locations.length === 1 ? place.locations[0]?.kind : "place",
     });
+    container.setAttribute("data-place-id", place.placeId);
     const content =
       containerTag === "tr" ? el("td", { colspan: "99" }) : container;
     content.appendChild(
@@ -3443,14 +3149,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           (event.toRevision !== sourceRevision ? " · since revised again" : ""),
       }),
     );
-    const body = el(
-      place.locations.length === 1 && place.locations[0]?.kind === "code"
-        ? "pre"
-        : "div",
-      {
-        "data-review-diff-body": true,
-      },
-    );
+    const body = el("div", { "data-review-diff-body": true });
     if (containerTag === "tr") container.appendChild(content);
     if (anchorBlock) {
       if (
@@ -3467,53 +3166,34 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         anchorBlock.before(container);
       }
     } else {
-      document.querySelector("main")?.appendChild(container);
+      const firstDocumentBlock = document.querySelector("[data-block-id]");
+      if (firstDocumentBlock) firstDocumentBlock.before(container);
+      else document.querySelector("main")?.prepend(container);
     }
 
-    const hiddenBlocks = [];
-    const movedBlocks = [];
-    const allAdded = place.locations.every(
-      (location) => location.status === "added",
-    );
-    for (const location of place.locations) {
-      if (!location.newBlockId) continue;
+    const was = diffSide({
+      label: "Was",
+      locations: place.locations,
+      side: "was",
+    });
+    const now = diffSide({
+      label: "Now",
+      locations: place.locations,
+      side: "now",
+    });
+    if (was) body.appendChild(was);
+    if (now) body.appendChild(now);
+    content.appendChild(body);
+    const hiddenBlocks = place.locations.flatMap((location) => {
+      if (!location.newBlockId) return [];
       const block = document.querySelector(
         '[data-block-id="' + cssEscape(location.newBlockId) + '"]',
       );
-      if (!block) continue;
-      if (allAdded && containerTag !== "tr") {
-        movedBlocks.push(block);
-      } else {
-        block.setAttribute("hidden", "");
-        block.setAttribute("data-review-diff-hidden", "");
-        hiddenBlocks.push(block);
-      }
-    }
-
-    if (allAdded && movedBlocks.length > 0) {
-      const added = el("div", { "data-review-diff-added-run": true }, [
-        el("strong", { text: "Added" }),
-      ]);
-      for (const block of movedBlocks) added.appendChild(block);
-      body.appendChild(added);
-    } else if (
-      place.locations.length > 1 &&
-      runSimilarity(place.locations) < 0.2
-    ) {
-      appendWholesalePlace({ body, place, comment });
-    } else {
-      place.locations.forEach((location, locationIndex) => {
-        const locationBody = el("div", {
-          "data-review-diff-location": true,
-        });
-        appendDiffLocation({ body: locationBody, location, comment });
-        body.appendChild(locationBody);
-        if (locationIndex < place.locations.length - 1) {
-          body.appendChild(el("hr", { "data-review-diff-separator": true }));
-        }
-      });
-    }
-    content.appendChild(body);
+      if (!(block instanceof HTMLElement)) return [];
+      block.setAttribute("hidden", "");
+      block.setAttribute("data-review-diff-hidden", "");
+      return [block];
+    });
     diffLens = {
       comment,
       event,
@@ -3521,7 +3201,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       places,
       container,
       hiddenBlocks,
-      movedBlocks,
       showingCurrent: false,
     };
     diffPosition.textContent =
@@ -3569,7 +3248,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   diffExit.addEventListener("click", () => {
     if (!diffLens) return;
     if (!diffLens.showingCurrent) {
-      restoreMovedBlocksBeforeLens(diffLens);
       for (const block of diffLens.hiddenBlocks) {
         block.removeAttribute("hidden");
         block.removeAttribute("data-review-diff-hidden");
@@ -3599,17 +3277,17 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       );
       if (
         !response ||
-        !request.sourceRevision ||
-        !response.sourceRevision ||
-        request.sourceRevision === response.sourceRevision
+        !response.revisionPair?.fromRevision ||
+        !response.revisionPair?.toRevision ||
+        response.revisionPair.fromRevision === response.revisionPair.toRevision
       ) {
         continue;
       }
       events.push({
         key: "changed",
         requestId: request.requestId,
-        fromRevision: request.sourceRevision,
-        toRevision: response.sourceRevision,
+        fromRevision: response.revisionPair.fromRevision,
+        toRevision: response.revisionPair.toRevision,
         changes: [],
       });
     }
@@ -3642,24 +3320,25 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   // changes are quiet rows beneath their slide, inactive slides collapse, and
   // the selected row carries the only strong accent. Details stay in the lens.
   const summariesForPlace = ({ event, place }) =>
-    (event.changes || []).filter((change) =>
-      place.locations.some((location) =>
-        diffLocationMatchesTarget({
-          location,
-          target: change.target,
-        }),
-      ),
-    );
+    (event.changes || []).filter((change) => change.placeId === place.placeId);
 
   const changeEntriesForPlace = ({ event, place, index }) => {
     const changes = summariesForPlace({ event, place });
     return changes.length > 0
       ? changes.map((change) => ({
           index,
+          placeId: place.placeId,
           label: change.summary,
           note: place.note,
         }))
-      : [{ index, label: place.label, note: place.note }];
+      : [
+          {
+            index,
+            placeId: place.placeId,
+            label: place.label,
+            note: place.note,
+          },
+        ];
   };
 
   const changeSummaryText = ({ places, event }) => {
@@ -3728,11 +3407,12 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       });
       nav.appendChild(header);
       if (!expanded) continue;
-      for (const { index, label, note } of group.entries) {
+      for (const { index, placeId, label, note } of group.entries) {
         const current = active && diffLens && diffLens.index === index;
         const row = el("button", {
           type: "button",
           "data-review-change-row": true,
+          "data-place-id": placeId,
           ...(current ? { "aria-current": "true" } : {}),
         });
         row.appendChild(
@@ -3753,28 +3433,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   };
 
   const changeControls = (comment, event) => {
-    const loaded = placesForEvent(event);
-    const rows =
-      loaded.length > 0
-        ? loaded
-        : groupLocationsIntoPlaces(
-            eventTargets(event).map((target) => {
-              const block = document.querySelector(
-                '[data-block-id="' + cssEscape(target) + '"]',
-              );
-              return {
-                status: "changed",
-                newBlockId: target,
-                kind: block?.getAttribute("data-block-kind") || "block",
-                label:
-                  block?.getAttribute("data-block-label") || "Changed block",
-                section: block?.getAttribute("data-block-section") || "Plan",
-                oldText: "",
-                newText: block?.textContent || "",
-                runs: [],
-              };
-            }),
-          );
+    const rows = placesForEvent(event);
     if (rows.length === 0) return null;
     const active =
       diffLens?.comment?.id === comment.id &&
@@ -4715,85 +4374,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         ]);
       })
       .filter(Boolean);
-    const otherChanges = [];
-    const seenRequests = new Set();
-    for (const comment of sent) {
-      // Round-level changes stay attached to the thread that caused them.
-      // Resolving that thread removes its unattributed companion changes from
-      // the active review summary with the rest of the conversation.
-      if (resolvedCommentIds.has(comment.id)) continue;
-      for (const event of outcomeEventsFor(comment)) {
-        if (event.key !== "changed" || seenRequests.has(event.requestId)) {
-          continue;
-        }
-        seenRequests.add(event.requestId);
-        const attributed = new Set(eventTargets(event));
-        const locations = revisionDiffs.get(event.requestId) || [];
-        const roundEvent = {
-          ...event,
-          changes: locations
-            .map((location) => location.newBlockId || location.oldBlockId)
-            .filter(Boolean)
-            .map((target) => ({ target, summary: "Changed block" })),
-        };
-        groupLocationsIntoPlaces(locationsForEvent(roundEvent)).forEach(
-          (place, index) => {
-            if (
-              place.locations.some((location) =>
-                Array.from(attributed).some((target) =>
-                  diffLocationMatchesTarget({ location, target }),
-                ),
-              )
-            ) {
-              return;
-            }
-            otherChanges.push({
-              comment,
-              event: roundEvent,
-              place,
-              index,
-            });
-          },
-        );
-      }
-    }
-    if (otherChanges.length > 0) {
-      renderedGroups.push(
-        el("section", { "data-review-other-changes": true }, [
-          el("h3", { text: "Other changes in this round" }),
-          el(
-            "ol",
-            {},
-            otherChanges.map(({ comment, event, place, index }) => {
-              const button = el("button", {
-                type: "button",
-                "data-review-change-row": true,
-              });
-              button.appendChild(
-                el("span", {
-                  "data-review-change-label": true,
-                  text: place.slideTitle + " · " + place.label,
-                }),
-              );
-              if (place.note && place.note !== "reworded") {
-                button.appendChild(
-                  el("span", {
-                    "data-review-change-kind": true,
-                    text: place.note,
-                  }),
-                );
-              }
-              button.addEventListener("click", () => {
-                void openDiffLens(comment, event, index);
-              });
-              return el("li", { "data-review-comment-id": comment.id }, [
-                button,
-              ]);
-            }),
-          ),
-        ]),
-      );
-    }
     const resolved = sent.filter((comment) =>
       resolvedCommentIds.has(comment.id),
     );
@@ -5764,9 +5344,12 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       agentConnected = answer.agentConnected === true;
       const submittedIds = new Set(selected.map((comment) => comment.id));
       sent = sent.concat(selected);
-      if (isAgentRequest(answer.agentRequest)) {
-        agentRequests = agentRequests.concat([answer.agentRequest]);
-      }
+      const submittedRequests = (
+        Array.isArray(answer.agentRequests)
+          ? answer.agentRequests
+          : [answer.agentRequest]
+      ).filter(isAgentRequest);
+      agentRequests = agentRequests.concat(submittedRequests);
       drafts = drafts.filter((comment) => !submittedIds.has(comment.id));
       for (const id of submittedIds) {
         minimizedDraftIds.delete(id);
@@ -6133,6 +5716,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         "`big-plan review`.";
       renderTray();
       if (drafts.length > 0) setRailOpen(true);
+      root.setAttribute("data-review-ready", "");
       return;
     }
     try {
@@ -6190,6 +5774,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       agentInput.value = activeDraft;
       renderTray();
     }
+    root.setAttribute("data-review-ready", "");
   };
 
   renderTray();
