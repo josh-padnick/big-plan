@@ -2313,6 +2313,13 @@ import {
     return true;
   };
 
+  const fullChangeLabel = (location) => {
+    if (!location.label.endsWith("…")) return location.label;
+    const side = location.newText.trim() === "" ? "old" : "new";
+    const fullText = bandText({ location, side }).replace(/\s+/g, " ").trim();
+    return fullText === "" ? location.label.slice(0, -1) : fullText;
+  };
+
   // A place is a contiguous run of changed locations within one slide. This
   // keeps chat and anchored-comment diffs on one calm, literal vocabulary.
   const groupLocationsIntoPlaces = (locations) => {
@@ -2342,7 +2349,7 @@ import {
       groups.push({
         locations: [location],
         section: location.section,
-        label: location.label,
+        label: fullChangeLabel(location),
         note: placeKindNote([location]),
         slideTitle: slideTitleFor({
           type: "block",

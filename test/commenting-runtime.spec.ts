@@ -1092,7 +1092,27 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       changed.locator("[data-review-change-list] strong"),
     ).toHaveText("1 change across 1 slide");
-    await expect(changed.locator("[data-review-change-row]")).toHaveCount(1);
+    const changeRow = changed.locator("[data-review-change-row]");
+    await expect(changeRow).toHaveCount(1);
+    const wrapMetrics = await changeRow.evaluate((row) => {
+      row.style.width = "7rem";
+      const label = row.querySelector("[data-review-change-label]");
+      if (!(label instanceof HTMLElement)) {
+        throw new Error("The change row has no label");
+      }
+      return {
+        whiteSpace: getComputedStyle(label).whiteSpace,
+        rowFits: row.scrollWidth <= row.clientWidth,
+        labelHeight: label.getBoundingClientRect().height,
+        lineHeight: Number.parseFloat(getComputedStyle(label).lineHeight),
+      };
+    });
+    expect(wrapMetrics.whiteSpace).toBe("normal");
+    expect(wrapMetrics.rowFits).toBe(true);
+    expect(wrapMetrics.labelHeight).toBeGreaterThan(wrapMetrics.lineHeight);
+    await expect(
+      changeRow.locator("[data-review-change-label]"),
+    ).not.toContainText("…");
     await expect(changed.locator("[data-review-see-change]")).toHaveText(
       "See the change",
     );
