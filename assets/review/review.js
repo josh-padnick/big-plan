@@ -21,16 +21,19 @@ import { CHECK_ICON } from "../../src/icons/lucide/check.js";
 import { CHEVRON_LEFT_ICON } from "../../src/icons/lucide/chevron-left.js";
 import { CHEVRON_RIGHT_ICON } from "../../src/icons/lucide/chevron-right.js";
 import { CIRCLE_X_ICON } from "../../src/icons/lucide/circle-x.js";
+import { HOURGLASS_ICON } from "../../src/icons/lucide/hourglass.js";
 import { MESSAGE_SQUARE_TEXT_ICON } from "../../src/icons/lucide/message-square-text.js";
 import { MESSAGES_SQUARE_ICON } from "../../src/icons/lucide/messages-square.js";
 import { MINIMIZE_2_ICON } from "../../src/icons/lucide/minimize-2.js";
 import { PENCIL_ICON } from "../../src/icons/lucide/pencil.js";
 import { ROTATE_CCW_ICON } from "../../src/icons/lucide/rotate-ccw.js";
+import { SCAN_TEXT_ICON } from "../../src/icons/lucide/scan-text.js";
 import { TRASH_2_ICON } from "../../src/icons/lucide/trash-2.js";
 import { TRIANGLE_ALERT_ICON } from "../../src/icons/lucide/triangle-alert.js";
 import { UNDO_2_ICON } from "../../src/icons/lucide/undo-2.js";
 import { X_ICON } from "../../src/icons/lucide/x.js";
 import { diffRunSimilarity } from "../../src/review/revision-diff.js";
+import { deriveThreadStatus } from "../../src/review/thread-status.js";
 
 (() => {
   "use strict";
@@ -212,7 +215,6 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   let sent = [];
   let editingId = null;
   let composeTarget = null;
-  let cursorBlock = null;
   let pendingSelection = null;
   let activeDraft = "";
   let threadReplies = {};
@@ -221,6 +223,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   let agentResponses = [];
   let sourceRevision = "";
   let progressSeq = 0;
+  let liveProgressSeq = 0;
   let progressTimer = null;
   let progressEvents = [];
   let runtimeConfirmed = false;
@@ -228,6 +231,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   let revertCandidateId = null;
   let submitRightAway = false;
   let showAgentActivity = true;
+  let openChatSetupOnRender = false;
   const revisionDiffs = new Map();
   const chatDigestExpansion = new Map();
   const changeGroupExpansion = new Map();
@@ -580,8 +584,10 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   });
   agentAlert.append(icon(CIRCLE_X_ICON), agentAlertLabel);
   agentAlert.addEventListener("click", () => {
+    openChatSetupOnRender = true;
     setRailOpen(true);
     setActiveTab("chat");
+    renderPlanChat();
   });
 
   const toggle = el("button", {
@@ -619,7 +625,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   const draftList = el("ol", { "data-review-drafts": true });
   const emptyNote = el("p", {
     "data-review-empty": true,
-    text: "Hover a block and press Comment, or highlight any text, to start.",
+    text: "Select text to comment, or use a slide selector to select it all.",
   });
   const responseSummary = el("p", { "data-review-round-summary": true });
   const sentList = el("div", { "data-review-sent-list": true });
@@ -640,12 +646,6 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     "data-review-agent-state": true,
     "data-tone": "idle",
     text: "Waiting for you",
-  });
-  const activityToggle = el("button", {
-    type: "button",
-    "data-review-activity-toggle": true,
-    hidden: true,
-    text: "Hide activity",
   });
   const agentInput = el("textarea", {
     "data-review-agent-input": true,
@@ -685,7 +685,6 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   const agentPanel = el("section", { "data-review-agent": true }, [
     el("div", { "data-review-agent-head": true }, [
       el("h3", { text: "Plan-wide chat" }),
-      activityToggle,
       agentState,
     ]),
     el("p", {
@@ -765,6 +764,10 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   });
   const affordanceLabel = el("span", { text: "Comment" });
   affordance.append(icon(MESSAGE_SQUARE_TEXT_ICON), affordanceLabel);
+  const slideSelectorLayer = el("div", {
+    "data-review-slide-selector-layer": true,
+    "aria-label": "Select slide content",
+  });
 
   const composeInput = el("textarea", {
     "data-review-compose-input": true,
@@ -942,6 +945,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     toolbar,
     rail,
     affordance,
+    slideSelectorLayer,
     threadLayer,
     compose,
     markerLayer,
@@ -1211,8 +1215,14 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     const block = blockForTarget(target);
     if (!block) return null;
     if (target.type === "selection") {
+      const endBlock = target.endBlockId
+        ? document.querySelector(
+            '[data-block-id="' + cssEscape(target.endBlockId) + '"]',
+          )
+        : block;
+      if (!endBlock) return null;
       const start = textBoundary(block, target.start);
-      const end = textBoundary(block, target.end);
+      const end = textBoundary(endBlock, target.end);
       if (!start || !end) return null;
       const range = document.createRange();
       range.setStart(start.node, start.offset);
@@ -1285,7 +1295,11 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         : { kind: "block", block: original };
     }
     const direct = rangeForTarget(target);
-    if (direct && direct.toString() === target.quote) {
+    if (
+      direct &&
+      (direct.toString() === target.quote ||
+        (target.endBlockId && direct.toString().startsWith(target.quote)))
+    ) {
       return { kind: "range", range: direct, block: original };
     }
     const candidates = [];
@@ -1400,7 +1414,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     changed: "Changed",
     question: "Needs your answer",
     outside: "Outside this plan",
-    waiting: "With agent",
+    waiting: "Sent",
   };
 
   const spinner = () =>
@@ -1409,40 +1423,27 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       "aria-hidden": "true",
     });
 
-  const outcomeBadge = (outcome) => {
+  const outcomeBadge = (outcome, options = {}) => {
     const badge = el("span", {
       "data-review-outcome-state": outcome.key,
     });
-    if (outcome.key === "waiting") badge.appendChild(spinner());
+    if (options.spin === true) badge.appendChild(spinner());
     badge.appendChild(document.createTextNode(outcome.label));
     return badge;
   };
 
-  const currentAgentActivity = () => {
-    const latest = progressEvents[progressEvents.length - 1];
-    if (!latest) return "Waiting for the coding agent to begin…";
-    const prefix =
-      latest.state === "live"
-        ? "Working"
-        : latest.state === "waiting"
-          ? "Queued"
-          : latest.state === "failed"
-            ? "Needs attention"
-            : "Latest";
-    return (
-      prefix + ": " + latest.step + (latest.detail ? " — " + latest.detail : "")
-    );
-  };
+  const isAgentWorkEvent = (event) =>
+    (event.state === "live" || event.state === "waiting") &&
+    !/^(reply sent to agent|plan question sent to agent)$/i.test(event.step);
 
   const currentActivityEvents = () => {
-    let start = 0;
-    for (let index = progressEvents.length - 1; index >= 0; index -= 1) {
-      if (/agent response ready/i.test(progressEvents[index]?.step || "")) {
-        start = index + 1;
-        break;
-      }
-    }
-    return progressEvents.slice(start).slice(-8);
+    return progressEvents
+      .filter(
+        (event) =>
+          isAgentWorkEvent(event) &&
+          !/feedback package received/i.test(event.step),
+      )
+      .slice(-8);
   };
 
   // ------------------------------------------------------------ agent health
@@ -1466,6 +1467,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         requestSeenAt.set(request.requestId, {
           at: Date.now(),
           seqAtSeen: progressSeq,
+          liveSeqAtSeen: liveProgressSeq,
         });
       }
     }
@@ -1487,14 +1489,21 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     const pending = pendingRequestList();
     if (pending.length === 0) return null;
     const latest = progressEvents[progressEvents.length - 1];
-    if (latest && latest.state === "failed") {
+    if (
+      latest &&
+      latest.state === "failed" &&
+      pending.some((request) => {
+        const seen = requestSeenAt.get(request.requestId);
+        return seen !== undefined && latest.seq > seen.seqAtSeen;
+      })
+    ) {
       return {
         key: "errored",
         headline: "The agent reported a problem",
         hint:
           latest.step +
-          (latest.detail ? " — " + latest.detail : "") +
-          ". Check the agent terminal, then reply again or restart `big-plan agent`.",
+          (latest.detail ? " - " + latest.detail : "") +
+          ". Reply again or restart `big-plan agent`.",
       };
     }
     const now = Date.now();
@@ -1503,13 +1512,15 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       .filter(Boolean);
     const oldestAt =
       seen.length > 0 ? Math.min(...seen.map((entry) => entry.at)) : now;
-    const pickedUp = seen.some((entry) => progressSeq > entry.seqAtSeen);
+    const pickedUp = seen.some(
+      (entry) => liveProgressSeq > entry.liveSeqAtSeen,
+    );
     if (!pickedUp) {
       if (now - oldestAt < AGENT_PICKUP_GRACE_MS) return { key: "working" };
       return {
         key: "unavailable",
-        headline: "No coding agent has picked this up",
-        hint: "Keep `big-plan review` running, run `big-plan agent` in a second terminal, and start its returned codex or claude command. This request stays queued until then.",
+        headline: "No agent connected",
+        hint: "This request is queued until an agent connects.",
       };
     }
     const quietFor = now - Math.max(lastProgressAdvanceAt, oldestAt);
@@ -1517,69 +1528,52 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       const minutes = Math.max(1, Math.round(quietFor / 60_000));
       return {
         key: "quiet",
-        headline: "No progress from the agent for " + minutes + "m",
-        hint: "Check the agent terminal — it may be waiting for your approval, out of usage or rate-limited, or stopped. Once it responds, this thread updates by itself.",
+        headline: "No progress for " + minutes + "m",
+        hint: "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This thread updates by itself once the agent resumes.",
       };
     }
     return { key: "working" };
   };
 
-  const agentHealthBanner = () => {
-    const health = agentHealth();
-    if (!health || health.key === "working") return null;
-    return el(
-      "div",
-      { "data-review-agent-health": true, "data-health": health.key },
-      [
-        el("strong", {}, [
-          icon(TRIANGLE_ALERT_ICON),
-          document.createTextNode(health.headline),
-        ]),
-        el("span", { text: health.hint }),
-      ],
+  const pendingRequestForComment = (comment) => {
+    const answered = new Set(
+      agentResponses.map((response) => response.requestId),
     );
+    return agentRequests
+      .filter((request) => {
+        if (answered.has(request.requestId)) return false;
+        if (request.kind === "reply") return request.commentId === comment.id;
+        return (
+          request.kind === "feedback" &&
+          Array.isArray(request.comments) &&
+          request.comments.some((entry) => entry.id === comment.id)
+        );
+      })
+      .at(-1);
   };
 
-  const activityDisclosure = () => {
-    const banner = agentHealthBanner();
-    let activity;
-    if (!showAgentActivity) {
-      activity = el("p", { "data-review-thread-waiting": true }, [
-        spinner(),
-        document.createTextNode("Agent activity hidden"),
-      ]);
-    } else {
-      const events = currentActivityEvents();
-      const items =
-        events.length > 0
-          ? events.map((event) =>
-              el("li", {
-                text: event.step + (event.detail ? " — " + event.detail : ""),
-              }),
-            )
-          : [el("li", { text: currentAgentActivity() })];
-      activity = el(
-        "details",
-        {
-          "data-review-agent-activity": true,
-          open: true,
-        },
-        [
-          el("summary", {}, [
-            spinner(),
-            document.createTextNode("Agent activity"),
-          ]),
-          el("ol", {}, items),
-        ],
-      );
-    }
-    return banner
-      ? el("div", { "data-review-agent-wait": true }, [banner, activity])
-      : activity;
-  };
-
-  const waitingLine = () => {
-    return activityDisclosure();
+  const pendingStatusFor = (request, surfaceName) => {
+    observeRequests();
+    const seen = requestSeenAt.get(request.requestId);
+    const latest = progressEvents[progressEvents.length - 1];
+    const pickedUp = seen !== undefined && liveProgressSeq > seen.liveSeqAtSeen;
+    return deriveThreadStatus({
+      phase: "pending",
+      surface: surfaceName,
+      runtimeOffline,
+      pickedUp,
+      quietForMs: pickedUp
+        ? Date.now() - Math.max(lastProgressAdvanceAt, seen?.at || Date.now())
+        : 0,
+      ...(latest?.state === "failed" &&
+      seen !== undefined &&
+      latest.seq > seen.seqAtSeen
+        ? {
+            failedStep: latest.step,
+            failedDetail: latest.detail || "",
+          }
+        : {}),
+    });
   };
 
   const outcomeEventsFor = (comment) => {
@@ -1609,29 +1603,120 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   const outcomeFor = (comment) => {
     const events = outcomeEventsFor(comment);
-    const answered = new Set(
-      agentResponses.map((response) => response.requestId),
-    );
-    const pendingReply = agentRequests.some(
-      (request) =>
-        request.kind === "reply" &&
-        request.commentId === comment.id &&
-        !answered.has(request.requestId),
-    );
-    if (pendingReply) {
+    const pending = pendingRequestForComment(comment);
+    if (pending) {
+      const status = pendingStatusFor(pending, "thread");
       return {
         key: "waiting",
-        label: OUTCOME_LABELS.waiting,
-        reply: "Waiting for the coding agent to answer this reply.",
+        label: status.badge,
+        status,
       };
     }
     return (
       events[events.length - 1] || {
         key: "waiting",
         label: OUTCOME_LABELS.waiting,
-        reply: "Waiting for the coding agent to answer this comment.",
+        status: deriveThreadStatus({
+          phase: "pending",
+          surface: "thread",
+        }),
       }
     );
+  };
+
+  const appendInlineCode = (node, text) => {
+    const pieces = String(text).split("`");
+    pieces.forEach((piece, index) => {
+      if (piece === "") return;
+      node.appendChild(
+        index % 2 === 1
+          ? el("code", { text: piece })
+          : document.createTextNode(piece),
+      );
+    });
+    return node;
+  };
+
+  const statusIcon = (status) => {
+    if (status.stage === "sent") return icon(HOURGLASS_ICON);
+    if (status.stage === "stalled") return icon(TRIANGLE_ALERT_ICON);
+    if (status.stage === "errored" || status.stage === "offline") {
+      return icon(CIRCLE_X_ICON);
+    }
+    return null;
+  };
+
+  const threadStatusStrip = (status, options = {}) => {
+    if (!status.headline) return null;
+    const events = status.stage === "working" ? currentActivityEvents() : [];
+    const row = el("div", { "data-review-status-row": true });
+    if (status.showsSpinner) row.appendChild(spinner());
+    else {
+      const glyph = statusIcon(status);
+      if (glyph) row.appendChild(glyph);
+    }
+    row.appendChild(el("strong", { text: status.headline }));
+    if (events.length > 0) {
+      const activityButton = el("button", {
+        type: "button",
+        "data-review-status-activity-toggle": true,
+        "aria-expanded": showAgentActivity ? "true" : "false",
+        "aria-label": showAgentActivity
+          ? "Hide agent activity"
+          : "Show agent activity",
+        title: showAgentActivity ? "Hide activity" : "Show activity",
+      });
+      activityButton.appendChild(icon(CHEVRON_RIGHT_ICON));
+      activityButton.addEventListener("click", () => {
+        showAgentActivity = !showAgentActivity;
+        renderTray();
+      });
+      row.appendChild(activityButton);
+    }
+    const strip = el("div", {
+      "data-review-thread-status": status.stage,
+      "data-tone": status.tone,
+    });
+    strip.appendChild(row);
+    if (status.hint) {
+      strip.appendChild(
+        appendInlineCode(
+          el("p", { "data-review-status-hint": true }),
+          status.hint,
+        ),
+      );
+    }
+    if (status.showsSetup) {
+      const setup = el(
+        "details",
+        {
+          "data-review-status-setup": true,
+          ...(options.openSetup === true ? { open: true } : {}),
+        },
+        [
+          el("summary", { text: "Show setup instructions" }),
+          appendInlineCode(
+            el("p", {}),
+            "Keep `big-plan review` running. In a second terminal, run `big-plan agent` and start the command it prints.",
+          ),
+        ],
+      );
+      strip.appendChild(setup);
+    }
+    if (events.length > 0 && showAgentActivity) {
+      strip.appendChild(
+        el(
+          "ol",
+          { "data-review-status-activity": true },
+          events.map((event) =>
+            el("li", {
+              text: event.step + (event.detail ? " — " + event.detail : ""),
+            }),
+          ),
+        ),
+      );
+    }
+    return strip;
   };
 
   const outcomeCounts = () => {
@@ -1708,7 +1793,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         [
           el("div", { "data-review-row-head": true }, [
             jump,
-            outcomeBadge({ key: "waiting", label: "Sending" }),
+            outcomeBadge({ key: "waiting", label: "Sending" }, { spin: true }),
           ]),
           el("p", { "data-review-row-body": true, text: comment.body }),
         ],
@@ -1829,7 +1914,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       field.value = "";
       clearInlineError(button);
       expandedThreadIds.add(comment.id);
-      setAgentState("With agent", "working");
+      setAgentState("Agent working", "working");
       announce("Reply sent to the coding agent.");
       renderTray();
       startProgress();
@@ -2128,6 +2213,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       if (index > 0) was.appendChild(document.createTextNode("\n\n"));
       if (
         comment?.target.type === "selection" &&
+        !comment.target.endBlockId &&
         location.oldBlockId === comment.target.blockId
       ) {
         appendDiffRun({
@@ -2591,13 +2677,23 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   const conversationNodes = (comment) => {
     const outcome = outcomeFor(comment);
+    const initialRequest = agentRequests.find(
+      (request) =>
+        request.kind === "feedback" &&
+        Array.isArray(request.comments) &&
+        request.comments.some((entry) => entry.id === comment.id),
+    );
     const nodes = [
       el("div", { "data-review-thread-turn": "user" }, [
         el("div", { "data-review-turn-meta": true }, [
           el("strong", { text: "You" }),
           el("time", {
-            datetime: comment.createdAt,
-            text: relativeCommentTime(comment.createdAt),
+            datetime: initialRequest?.createdAt || comment.createdAt,
+            text:
+              "Sent · " +
+              relativeCommentTime(
+                initialRequest?.createdAt || comment.createdAt,
+              ),
           }),
         ]),
         el("p", { text: comment.body }),
@@ -2637,7 +2733,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
             el("strong", { text: "You" }),
             el("time", {
               datetime: request.createdAt,
-              text: relativeCommentTime(request.createdAt),
+              text: "Sent · " + relativeCommentTime(request.createdAt),
             }),
           ]),
           el("p", { text: request.body }),
@@ -2659,7 +2755,8 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     }
 
     if (outcome.key === "waiting") {
-      nodes.push(waitingLine());
+      const strip = threadStatusStrip(outcome.status);
+      if (strip) nodes.push(strip);
       return nodes;
     }
 
@@ -2738,9 +2835,15 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       type: "button",
       [attribute]: true,
       "aria-label": label,
-      title: label,
     });
-    button.appendChild(icon(glyph));
+    button.append(
+      icon(glyph),
+      el("span", {
+        "data-review-icon-tooltip": true,
+        "aria-hidden": "true",
+        text: label,
+      }),
+    );
     button.addEventListener("click", action);
     return button;
   };
@@ -2873,7 +2976,11 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     const children = [
       el("div", { "data-review-row-head": true }, [
         jump,
-        outcomeBadge(outcome),
+        outcomeBadge(outcome, {
+          spin:
+            !expandedThreadIds.has(comment.id) &&
+            outcome.status?.stage === "working",
+        }),
       ]),
       el("p", {
         "data-review-row-body": true,
@@ -2896,6 +3003,9 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         ...(resolved ? { "data-review-resolved-row": true } : {}),
         "data-review-comment-id": comment.id,
         "data-review-outcome": outcome.key,
+        ...(outcome.status
+          ? { "data-review-lifecycle": outcome.status.stage }
+          : {}),
       },
       children,
     );
@@ -2913,7 +3023,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       card.append(
         el("div", { "data-review-thread-toolbar": true }, [
           el("div", { "data-review-thread-toolbar-title": true }, [
-            outcomeBadge({ key: "waiting", label: "Sending to agent" }),
+            outcomeBadge({ key: "waiting", label: "Sending" }, { spin: true }),
           ]),
         ]),
         el("p", { "data-review-thread-body": true, text: comment.body }),
@@ -2922,6 +3032,9 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     }
     if (state === "sent") {
       const outcome = outcomeFor(comment);
+      if (outcome.status) {
+        card.setAttribute("data-review-lifecycle", outcome.status.stage);
+      }
       const expanded = expandedThreadIds.has(comment.id);
       const summary = el(
         "button",
@@ -2937,7 +3050,9 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
             shortEcho(comment.body),
         },
         [
-          outcomeBadge(outcome),
+          outcomeBadge(outcome, {
+            spin: outcome.status?.stage === "working",
+          }),
           el("span", {
             "data-review-thread-echo": true,
             text: shortEcho(comment.body),
@@ -3224,12 +3339,12 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       counts.outside +
       " outside this plan · " +
       counts.waiting +
-      " with agent";
+      " awaiting agent";
     const groups = [
       { key: "question", label: "Needs your answer" },
       { key: "changed", label: "Changed" },
       { key: "outside", label: "Outside this plan" },
-      { key: "waiting", label: "With agent" },
+      { key: "waiting", label: "Awaiting agent" },
     ];
     const renderedGroups = groups
       .map(({ key, label }) => {
@@ -3379,7 +3494,6 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     sentGroup.hidden = sent.length === 0;
     renderSentIndex();
     renderPlanChat();
-    syncActivityToggle();
     syncPlanChatValidity();
     paintChips();
     paintTargetHighlights();
@@ -3440,7 +3554,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         agentRequests = agentRequests.concat([answer.request]);
       }
       expandedThreadIds.add(comment.id);
-      setAgentState("With agent", "working");
+      setAgentState("Agent working", "working");
       announce("Revert request sent to the coding agent.");
       revertDialog.close();
       renderTray();
@@ -3644,88 +3758,13 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   // -------------------------------------------------------------- affordance
 
-  const targetForBlock = (block) => ({
-    type: "block",
-    blockId: block.getAttribute("data-block-id"),
-    kind: kindFor(block),
-    label: labelFor(block),
-    section: block.getAttribute("data-block-section") || "",
-  });
-
   // The right edge the floating chrome may reach: the window, or the tray's
   // own left edge while the tray is open, so a control never lands under it.
   const rightLimit = () =>
     railIsOpen() ? rail.getBoundingClientRect().left : window.innerWidth;
 
-  const showAffordance = (block) => {
-    if (!block || !compose.hidden) return;
-    if (railIsOpen() && window.innerWidth < 1280) {
-      affordance.hidden = true;
-      return;
-    }
-    cursorBlock = block;
-    const rect = block.getBoundingClientRect();
-    if (rect.bottom < FLOAT_TOP || rect.top > window.innerHeight) {
-      affordance.hidden = true;
-      return;
-    }
-    affordance.hidden = false;
-    affordance.setAttribute("data-review-mode", "block");
-    affordanceLabel.hidden = true;
-    affordance.setAttribute(
-      "aria-label",
-      "Comment on " + kindFor(block) + ": " + labelFor(block),
-    );
-    affordance.style.top = Math.max(FLOAT_TOP, rect.top) + "px";
-    const width = affordance.offsetWidth || 108;
-    affordance.style.left =
-      Math.min(rect.right + 8, rightLimit() - width - 12) + "px";
-  };
-
-  let affordanceDismissTimer = null;
-
-  const cancelAffordanceDismiss = () => {
-    if (affordanceDismissTimer === null) return;
-    window.clearTimeout(affordanceDismissTimer);
-    affordanceDismissTimer = null;
-  };
-
-  const hideAffordance = () => {
-    cancelAffordanceDismiss();
-    if (document.activeElement === affordance) return;
-    affordance.hidden = true;
-    if (!pendingSelection) cursorBlock = null;
-  };
-
-  const scheduleAffordanceDismiss = () => {
-    cancelAffordanceDismiss();
-    affordanceDismissTimer = window.setTimeout(() => {
-      affordanceDismissTimer = null;
-      if (!pendingSelection && !affordance.matches(":hover")) hideAffordance();
-    }, 100);
-  };
-
-  for (const block of blocks) {
-    block.addEventListener("pointerenter", (event) => {
-      if (event.pointerType === "touch") return;
-      if (pendingSelection) return;
-      cancelAffordanceDismiss();
-      showAffordance(block);
-    });
-    block.addEventListener("pointerleave", () => {
-      if (!pendingSelection) scheduleAffordanceDismiss();
-    });
-  }
-  affordance.addEventListener("pointerenter", cancelAffordanceDismiss);
-  affordance.addEventListener("pointerleave", scheduleAffordanceDismiss);
-  document.addEventListener("pointerleave", hideAffordance);
-
   affordance.addEventListener("click", () => {
-    if (pendingSelection) {
-      openCompose(pendingSelection);
-      return;
-    }
-    if (cursorBlock) openCompose(targetForBlock(cursorBlock));
+    if (pendingSelection) openCompose(pendingSelection);
   });
 
   // --------------------------------------------------------------- selection
@@ -3757,7 +3796,8 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       });
     if (!block || surface.contains(block)) return null;
 
-    const lineTarget = lineRangeFor(range, block);
+    const lineTarget =
+      startBlock === endBlock ? lineRangeFor(range, block) : null;
     if (lineTarget) return lineTarget;
 
     const blockLength = block.textContent?.length || 0;
@@ -3768,21 +3808,25 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       prefix.setEnd(range.startContainer, range.startOffset);
       start = prefix.toString().length;
     }
-    let end = blockLength;
-    if (block.contains(range.endContainer)) {
+    const rangeEndBlock = endBlock || block;
+    let end = rangeEndBlock.textContent?.length || blockLength;
+    if (rangeEndBlock.contains(range.endContainer)) {
       const throughEnd = document.createRange();
-      throughEnd.selectNodeContents(block);
+      throughEnd.selectNodeContents(rangeEndBlock);
       throughEnd.setEnd(range.endContainer, range.endOffset);
       end = throughEnd.toString().length;
     }
     return {
       type: "selection",
       blockId: block.getAttribute("data-block-id"),
+      ...(rangeEndBlock !== block
+        ? { endBlockId: rangeEndBlock.getAttribute("data-block-id") }
+        : {}),
       kind: kindFor(block),
       label: labelFor(block),
       section: block.getAttribute("data-block-section") || "",
       start: start,
-      end: Math.max(start, end),
+      end: rangeEndBlock === block ? Math.max(start, end) : end,
       quote: quote.slice(0, QUOTE_LIMIT),
     };
   };
@@ -3840,6 +3884,56 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     affordance.style.left =
       Math.max(12, Math.min(rect.left, rightLimit() - width - 12)) + "px";
   };
+
+  const slideSelectors = new Map();
+  const positionSlideSelectors = () => {
+    for (const [slide, button] of slideSelectors) {
+      const rect = slide.getBoundingClientRect();
+      const visible =
+        rect.bottom >= FLOAT_TOP && rect.top <= window.innerHeight;
+      button.hidden = !visible;
+      if (!visible) continue;
+      button.style.top = Math.max(FLOAT_TOP + 4, rect.top + 12) + "px";
+      button.style.left = Math.max(4, rect.left - 30) + "px";
+    }
+  };
+
+  for (const slide of document.querySelectorAll("[data-slide]")) {
+    const title =
+      slide
+        .querySelector("[data-block-section]")
+        ?.getAttribute("data-block-section") || "this slide";
+    const selector = el("button", {
+      type: "button",
+      "data-review-slide-selector": true,
+      "aria-label": "Select all content in " + title,
+    });
+    selector.append(
+      icon(SCAN_TEXT_ICON),
+      el("span", {
+        "data-review-icon-tooltip": true,
+        "aria-hidden": "true",
+        text: "Select slide",
+      }),
+    );
+    selector.addEventListener("click", () => {
+      const slideBlocks = Array.from(slide.querySelectorAll("[data-block-id]"));
+      const first = slideBlocks[0];
+      const last = slideBlocks[slideBlocks.length - 1];
+      if (!first || !last) return;
+      const range = document.createRange();
+      range.setStart(first, 0);
+      range.setEnd(last, last.childNodes.length);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      offerSelection();
+      announce("Selected all content in " + title + ".");
+    });
+    slideSelectorLayer.appendChild(selector);
+    slideSelectors.set(slide, selector);
+  }
+  positionSlideSelectors();
 
   document.addEventListener("mouseup", () => setTimeout(offerSelection, 0));
   document.addEventListener("keyup", (event) => {
@@ -3943,8 +4037,8 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       } else {
         messages.push({
           role: "waiting",
-          body: currentAgentActivity(),
           createdAt: request.createdAt,
+          request,
         });
       }
     }
@@ -3953,7 +4047,12 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   const renderPlanChat = () => {
     const messages = hasRuntime ? livePlanChatMessages() : planChatMessages;
-    if (messages.length === 0) {
+    const openSetup = openChatSetupOnRender;
+    const connectionRequest =
+      openSetup && !messages.some((message) => message.role === "waiting")
+        ? pendingRequestList().at(-1)
+        : undefined;
+    if (messages.length === 0 && connectionRequest === undefined) {
       planChatList.replaceChildren(
         el("li", {
           "data-review-chat-empty": true,
@@ -3962,37 +4061,46 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       );
       return;
     }
-    planChatList.replaceChildren(
-      ...messages.map((message) => {
-        if (message.role === "waiting") {
-          return el("li", { "data-review-chat-message": "waiting" }, [
-            el("div", { "data-review-turn-meta": true }, [
-              el("strong", { text: "Agent status" }),
-            ]),
-            activityDisclosure(),
-          ]);
-        }
-        const body = el("p", {});
-        body.appendChild(document.createTextNode(message.body));
-        const turn = el("li", { "data-review-chat-message": message.role }, [
-          el("div", { "data-review-turn-meta": true }, [
-            el("strong", {
-              text: message.role === "user" ? "You" : "Agent",
-            }),
-            el("time", {
-              datetime: message.createdAt,
-              text: relativeCommentTime(message.createdAt),
-            }),
-          ]),
-          body,
+    const rendered = messages.map((message) => {
+      if (message.role === "waiting") {
+        const status = pendingStatusFor(message.request, "chat");
+        return el("li", { "data-review-chat-message": "waiting" }, [
+          threadStatusStrip(status, { openSetup }),
         ]);
-        if (message.role === "agent" && message.event) {
-          const controls = chatChangeControls(message.event);
-          if (controls) turn.appendChild(controls);
-        }
-        return turn;
-      }),
-    );
+      }
+      const body = el("p", {});
+      body.appendChild(document.createTextNode(message.body));
+      const turn = el("li", { "data-review-chat-message": message.role }, [
+        el("div", { "data-review-turn-meta": true }, [
+          el("strong", {
+            text: message.role === "user" ? "You" : "Agent",
+          }),
+          el("time", {
+            datetime: message.createdAt,
+            text:
+              (message.role === "user" ? "Sent · " : "") +
+              relativeCommentTime(message.createdAt),
+          }),
+        ]),
+        body,
+      ]);
+      if (message.role === "agent" && message.event) {
+        const controls = chatChangeControls(message.event);
+        if (controls) turn.appendChild(controls);
+      }
+      return turn;
+    });
+    if (connectionRequest !== undefined) {
+      rendered.push(
+        el("li", { "data-review-chat-message": "waiting" }, [
+          threadStatusStrip(pendingStatusFor(connectionRequest, "chat"), {
+            openSetup: true,
+          }),
+        ]),
+      );
+    }
+    planChatList.replaceChildren(...rendered);
+    openChatSetupOnRender = false;
   };
 
   const syncPlanChatValidity = () => {
@@ -4035,8 +4143,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       syncPlanChatValidity();
       writeLocalState();
       renderPlanChat();
-      syncActivityToggle();
-      setAgentState("With agent", "working");
+      setAgentState("Agent working", "working");
       announce("Plan-wide question sent to the coding agent.");
       await save();
       startProgress();
@@ -4077,10 +4184,16 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   // pending, so a reviewer who has already sent never has to open the tray to
   // learn whether anything is happening.
   const setAgentState = (text, tone) => {
-    agentState.textContent = text;
-    agentState.setAttribute("data-tone", tone);
-    toggle.setAttribute("data-review-agent-tone", tone);
-    toggle.title = "Open feedback sidebar (Alt+C)";
+    if (agentState.textContent !== text) agentState.textContent = text;
+    if (agentState.getAttribute("data-tone") !== tone) {
+      agentState.setAttribute("data-tone", tone);
+    }
+    if (toggle.getAttribute("data-review-agent-tone") !== tone) {
+      toggle.setAttribute("data-review-agent-tone", tone);
+    }
+    if (toggle.title !== "Open feedback sidebar (Alt+C)") {
+      toggle.title = "Open feedback sidebar (Alt+C)";
+    }
   };
 
   const submitComments = async ({ comments, closeRailAfter, trigger }) => {
@@ -4122,7 +4235,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       activeDraft = agentInput.value;
       renderTray();
       await persist();
-      setAgentState("With agent", "working");
+      setAgentState("Agent working", "working");
       sendNote.textContent =
         "Sent " +
         answer.comments +
@@ -4206,14 +4319,15 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       });
     agentRequests = checked.requests;
     agentResponses = checked.responses;
-    if (!changed) return;
-    renderTray();
-    void hydrateRevisionDiffs();
+    if (changed) {
+      renderTray();
+      void hydrateRevisionDiffs();
+    }
     const pending = pendingAgentRequestCount();
     if (needsAnswerCount() > 0) {
       setAgentState("Needs your answer", "ready");
     } else if (pending > 0) {
-      setAgentState("With agent", "working");
+      setAgentState("Agent working", "working");
     } else if (agentResponses.length > 0) {
       setAgentState("Ready to re-review", "ready");
     }
@@ -4227,24 +4341,6 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       .length;
   };
 
-  const syncActivityToggle = () => {
-    activityToggle.hidden = pendingAgentRequestCount() === 0;
-    activityToggle.textContent = showAgentActivity
-      ? "Hide activity"
-      : "Show activity";
-    activityToggle.setAttribute(
-      "aria-pressed",
-      showAgentActivity ? "true" : "false",
-    );
-  };
-
-  activityToggle.addEventListener("click", () => {
-    showAgentActivity = !showAgentActivity;
-    renderPlanChat();
-    renderThreads();
-    syncActivityToggle();
-  });
-
   const renderProgress = (events) => {
     if (events.length === 0) return;
     progressEvents = events;
@@ -4257,7 +4353,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     if (needsAnswerCount() > 0) {
       setAgentState("Needs your answer", "ready");
     } else if (pendingAgentRequestCount() > 0) {
-      setAgentState("With agent", "working");
+      setAgentState("Agent working", "working");
     } else if (
       last.state === "done" &&
       (/re-?review/i.test(last.step) || /agent response ready/i.test(last.step))
@@ -4314,7 +4410,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     if ((!health || health.key === "working") && wasFailing) {
       if (needsAnswerCount() > 0) setAgentState("Needs your answer", "ready");
       else if (pendingAgentRequestCount() > 0) {
-        setAgentState("With agent", "working");
+        setAgentState("Agent working", "working");
       }
     }
     renderTray();
@@ -4344,7 +4440,6 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         if (typeof exchange.sourceRevision === "string") {
           sourceRevision = exchange.sourceRevision;
         }
-        applyAgentSnapshot(exchange);
         // The runtime already drops foreign and out-of-order events; the
         // document checks the same two facts again rather than trusting that
         // an event reached it only because it was allowed to.
@@ -4358,9 +4453,25 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         );
         const latest =
           timeline.length === 0 ? 0 : timeline[timeline.length - 1].seq;
-        if (latest > progressSeq) {
-          progressSeq = latest;
+        const liveTimeline = timeline.filter(isAgentWorkEvent);
+        const liveLatest =
+          liveTimeline.length === 0
+            ? 0
+            : liveTimeline[liveTimeline.length - 1].seq;
+        const progressChanged = latest > progressSeq;
+        if (liveLatest > liveProgressSeq) {
+          liveProgressSeq = liveLatest;
           lastProgressAdvanceAt = Date.now();
+        }
+        if (progressChanged) {
+          progressSeq = latest;
+          progressEvents = timeline;
+        }
+        // On the first poll, establish the existing progress baseline before
+        // pending requests are observed. Historical work must not claim a new
+        // request merely because the page was just opened.
+        applyAgentSnapshot(exchange);
+        if (progressChanged) {
           renderProgress(timeline);
         }
         syncAgentHealthPresentation();
@@ -4382,28 +4493,10 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   // ---------------------------------------------------------------- keyboard
 
-  const moveCursor = (step) => {
-    const index = cursorBlock ? blocks.indexOf(cursorBlock) : -1;
-    const next = blocks[Math.min(Math.max(index + step, 0), blocks.length - 1)];
-    if (!next) return;
-    next.scrollIntoView({ behavior: "smooth", block: "center" });
-    setTimeout(() => showAffordance(next), 220);
-    announce(kindFor(next) + ": " + labelFor(next));
-  };
-
   document.addEventListener("keydown", (event) => {
-    if (event.altKey && event.key === "ArrowDown") {
-      event.preventDefault();
-      moveCursor(1);
-    }
-    if (event.altKey && event.key === "ArrowUp") {
-      event.preventDefault();
-      moveCursor(-1);
-    }
     if (event.altKey && (event.key === "c" || event.key === "C")) {
       event.preventDefault();
       if (pendingSelection) openCompose(pendingSelection);
-      else if (cursorBlock) openCompose(targetForBlock(cursorBlock));
       else setRailOpen(!railIsOpen());
     }
     if (event.key === "Escape" && diffLens) {
@@ -4422,6 +4515,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     syncFloatingMode();
     renderThreads();
     positionMarkers();
+    positionSlideSelectors();
   });
   window.addEventListener(
     "scroll",
@@ -4433,11 +4527,10 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         affordance.hidden = true;
         window.getSelection()?.removeAllRanges();
         paintTargetHighlights();
-      } else if (!affordance.hidden && cursorBlock) {
-        showAffordance(cursorBlock);
       }
       positionThreadCards();
       positionMarkers();
+      positionSlideSelectors();
     },
     { passive: true },
   );

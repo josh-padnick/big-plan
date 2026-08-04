@@ -1,5 +1,5 @@
 /*
-The commenting chrome: the tray rail, the compose card, the hover affordance,
+The commenting chrome: the tray rail, the compose card, selection affordance,
 and the chips that mark an annotated block. Every element styled here is
 created live by assets/review/review.js rather than authored as markup, and
 the chips are drawn from an attribute through a pseudo-element, so this is
@@ -583,6 +583,7 @@ button[data-review-row-target]:active {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted-c);
+  white-space: nowrap;
 }
 [data-review-agent-state] {
   margin-left: auto;
@@ -590,6 +591,7 @@ button[data-review-row-target]:active {
   border-radius: 999px;
   font-size: 0.6875rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 [data-review-agent-state][data-tone="idle"] {
   background: var(--callout-warning-bg);
@@ -607,23 +609,6 @@ button[data-review-row-target]:active {
   background: var(--callout-danger-bg);
   color: var(--callout-danger-c);
 }
-[data-review-activity-toggle] {
-  padding: 0.14rem 0.35rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.3rem;
-  background: var(--bg);
-  color: var(--muted-c);
-  font-size: 0.625rem;
-  cursor: pointer;
-}
-[data-review-activity-toggle]:hover {
-  border-color: var(--accent-c);
-  color: var(--accent-c);
-}
-[data-review-activity-toggle]:active {
-  background: var(--review-control-active);
-}
-
 [data-review-field-label] {
   display: block;
   margin-bottom: 0.25rem;
@@ -859,78 +844,117 @@ button[data-review-row-target]:active {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-[data-review-thread-waiting] {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0.35rem 0;
-  color: var(--muted-c);
-  font-size: 0.6875rem;
-}
-[data-review-agent-wait] {
+[data-review-thread-status] {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.3rem;
   margin: 0.35rem 0;
-}
-/* The activity title sits above its update stream, never beside it, and the
-   stream stays tight so many updates cost little height. */
-[data-review-agent-activity] {
-  margin: 0.35rem 0;
-  padding: 0.4rem 0.5rem;
-  border: 1px dashed var(--edge-c);
-  border-radius: 0.4rem;
-  background: color-mix(in srgb, var(--callout-note-bg) 28%, var(--bg));
-  color: var(--muted-c);
-  font-size: 0.6875rem;
-}
-[data-review-agent-activity] summary {
-  display: flex;
-  align-items: center;
-  gap: 0.38rem;
-  color: var(--callout-note-c);
-  font-weight: 650;
-  cursor: pointer;
-}
-[data-review-agent-activity] ol {
-  display: grid;
-  gap: 0.12rem;
-  max-height: 9rem;
-  margin: 0.3rem 0 0;
-  padding-left: 1.05rem;
-  overflow-y: auto;
-  line-height: 1.35;
-}
-[data-review-agent-health] {
-  display: grid;
-  gap: 0.2rem;
-  padding: 0.45rem 0.5rem;
-  border: 1px solid var(--callout-warning-c);
+  padding: 0.5rem 0.55rem;
+  border: 1px solid var(--edge-c);
   border-left-width: 3px;
   border-radius: 0.4rem;
-  background: var(--callout-warning-bg);
-  color: var(--callout-warning-c);
+  background: color-mix(in srgb, var(--surface-c) 60%, var(--bg));
+  color: var(--muted-c);
   font-size: 0.6875rem;
   line-height: 1.4;
 }
-[data-review-agent-health] strong {
+[data-review-thread-status][data-tone="working"] {
+  border-color: var(--callout-note-c);
+  background: var(--callout-note-bg);
+  color: var(--callout-note-c);
+}
+[data-review-thread-status][data-tone="warning"] {
+  border-color: var(--callout-warning-c);
+  background: var(--callout-warning-bg);
+  color: var(--callout-warning-c);
+}
+[data-review-thread-status][data-tone="danger"] {
+  border-color: var(--callout-danger-c);
+  background: var(--callout-danger-bg);
+  color: var(--callout-danger-c);
+}
+[data-review-status-row] {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  font-weight: 700;
+  gap: 0.38rem;
 }
-[data-review-agent-health] strong svg {
+[data-review-status-row] > svg {
   width: 0.85rem;
   height: 0.85rem;
   flex: 0 0 auto;
 }
-[data-review-agent-health] span {
+[data-review-status-row] strong {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: currentcolor;
+  font-weight: 700;
+}
+[data-review-status-hint] {
+  margin: 0;
+  color: var(--ink-c);
+  overflow-wrap: anywhere;
+}
+[data-review-thread-status] code {
+  padding: 0.04rem 0.22rem;
+  border: 1px solid color-mix(in srgb, currentcolor 24%, transparent);
+  border-radius: 0.22rem;
+  background: color-mix(in srgb, var(--bg) 68%, transparent);
+  color: var(--ink-c);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+[data-review-status-setup] summary {
+  width: fit-content;
+  color: currentcolor;
+  font-weight: 650;
+  cursor: pointer;
+}
+[data-review-status-setup] summary:hover {
   color: var(--ink-c);
 }
-[data-review-agent-health][data-health="offline"],
-[data-review-agent-health][data-health="errored"] {
-  border-color: var(--callout-danger-c);
-  background: var(--callout-danger-bg);
-  color: var(--callout-danger-c);
+[data-review-status-setup] summary:focus-visible {
+  outline: 1px solid var(--accent-c);
+  outline-offset: 2px;
+}
+[data-review-status-setup] summary:active {
+  opacity: 0.72;
+}
+[data-review-status-setup] p {
+  margin: 0.25rem 0 0;
+  color: var(--ink-c);
+}
+[data-review-status-activity-toggle] {
+  display: inline-flex;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  color: currentcolor;
+  cursor: pointer;
+}
+[data-review-status-activity-toggle]:hover,
+[data-review-status-activity-toggle]:focus-visible {
+  background: color-mix(in srgb, currentcolor 12%, transparent);
+}
+[data-review-status-activity-toggle] svg {
+  width: 0.78rem;
+  height: 0.78rem;
+  transition: transform 120ms ease;
+}
+[data-review-status-activity-toggle][aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+[data-review-status-activity] {
+  display: grid;
+  gap: 0.12rem;
+  max-height: 9rem;
+  margin: 0;
+  padding-left: 1.05rem;
+  color: var(--ink-c);
+  list-style: disc;
+  overflow-y: auto;
+  line-height: 1.35;
 }
 [data-review-action-error] {
   grid-column: 1 / -1;
@@ -1159,6 +1183,7 @@ button[data-review-row-target]:active {
   gap: 0.18rem;
 }
 [data-review-thread-toolbar-actions] button {
+  position: relative;
   display: inline-flex;
   width: 1.65rem;
   height: 1.65rem;
@@ -1252,11 +1277,70 @@ button[data-review-row-target]:active {
   width: 0.85rem;
   height: 0.85rem;
 }
-[data-review-affordance][data-review-mode="block"] {
-  width: 1.75rem;
-  height: 1.75rem;
+
+[data-review-slide-selector] {
+  position: fixed;
+  z-index: 44;
+  display: inline-flex;
+  width: 1.4rem;
+  height: 1.4rem;
+  align-items: center;
   justify-content: center;
   padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  color: color-mix(in srgb, var(--muted-c) 72%, transparent);
+  cursor: pointer;
+}
+[data-review-slide-selector]:hover,
+[data-review-slide-selector]:focus-visible {
+  border-color: var(--edge-c);
+  background: var(--review-control-hover);
+  color: var(--accent-c);
+}
+[data-review-slide-selector]:active {
+  background: var(--review-control-active);
+}
+[data-review-slide-selector] svg {
+  width: 0.84rem;
+  height: 0.84rem;
+}
+[data-review-icon-tooltip] {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 60;
+  width: max-content;
+  max-width: 11rem;
+  padding: 0.22rem 0.42rem;
+  border-radius: 0.25rem;
+  background: var(--ink-c);
+  color: var(--bg);
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.35;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-0.1rem);
+  transition:
+    opacity 70ms ease,
+    transform 70ms ease;
+}
+button:hover > [data-review-icon-tooltip],
+button:focus-visible > [data-review-icon-tooltip] {
+  opacity: 1;
+  transform: translateY(0);
+}
+[data-review-slide-selector] [data-review-icon-tooltip] {
+  top: 50%;
+  right: auto;
+  left: calc(100% + 0.35rem);
+  transform: translate(-0.1rem, -50%);
+}
+[data-review-slide-selector]:hover [data-review-icon-tooltip],
+[data-review-slide-selector]:focus-visible [data-review-icon-tooltip] {
+  transform: translate(0, -50%);
 }
 
 /* ---------------------------------------------------------------- compose */
@@ -1461,11 +1545,6 @@ button[data-review-row-target]:active {
 [data-review-outcome-state] [data-review-spinner] {
   margin-right: 0.3rem;
   vertical-align: -0.08rem;
-}
-[data-review-chat-message="waiting"] p {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
 }
 @keyframes big-plan-review-spin {
   to {

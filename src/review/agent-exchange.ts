@@ -202,9 +202,23 @@ const target = (value: unknown): CommentTarget => {
   ) {
     throw new AgentExchangeRejected("A stored comment range is invalid");
   }
+  if (
+    value.type === "selection" &&
+    value.endBlockId !== undefined &&
+    (typeof value.endBlockId !== "string" || !BLOCK_ID.test(value.endBlockId))
+  ) {
+    throw new AgentExchangeRejected(
+      "A stored multi-block selection target is invalid",
+    );
+  }
   return {
     type: value.type,
     ...identity,
+    ...(value.type === "selection" &&
+    typeof value.endBlockId === "string" &&
+    BLOCK_ID.test(value.endBlockId)
+      ? { endBlockId: value.endBlockId }
+      : {}),
     start: value.start,
     end: value.end,
     quote: value.quote,

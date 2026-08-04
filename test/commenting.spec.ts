@@ -1,5 +1,5 @@
 // Browser test of the reviewer's commenting journey over a complete rendered
-// document: the quiet reading default, a comment on a block, a comment on a
+// document: the quiet reading default, a whole-slide selection, a comment on a
 // highlighted passage, the Feedback sidebar's staged lifecycle, and the guarantee
 // that a comment body stays literal text wherever it is shown. The runtime's
 // transport and package behavior is covered by its own unit tests; this spec
@@ -8,7 +8,7 @@
 
 import { expect, test } from "./fixtures";
 
-test("should comment on a block and a passage, then revise before sending", async ({
+test("should comment on a slide and a passage, then revise before sending", async ({
   page,
   deckViewerUrl,
 }) => {
@@ -24,10 +24,17 @@ test("should comment on a block and a passage, then revise before sending", asyn
     await expect(page.locator("[data-review-annotated]")).toHaveCount(0);
   });
 
-  await test.step("hovering a block reveals its comment control", async () => {
+  await test.step("hovering a block stays quiet while a slide selector teaches selection", async () => {
     await page.locator("[data-block-kind='list']").first().hover();
+    await expect(affordance).toBeHidden();
+    const selector = page.locator("[data-review-slide-selector]").first();
+    await expect(selector).toBeVisible();
+    await selector.click();
     await expect(affordance).toBeVisible();
-    await expect(affordance).toHaveAttribute("aria-label", /^Comment on list:/);
+    await expect(affordance).toHaveAttribute(
+      "aria-label",
+      "Comment on the selected text",
+    );
   });
 
   await test.step("saving the first comment floats its card and chips the block", async () => {

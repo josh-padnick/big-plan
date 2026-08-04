@@ -16,6 +16,15 @@ const BLOCKS: ReadonlyMap<string, BlockMapEntry> = new Map([
       section: "Status quo",
     },
   ],
+  [
+    "section/status-quo/paragraph-2",
+    {
+      id: "section/status-quo/paragraph-2",
+      kind: "paragraph",
+      label: "Tomorrow's reality",
+      section: "Status quo",
+    },
+  ],
 ]);
 
 const NOW = "2026-07-31T00:00:00.000Z";
@@ -58,6 +67,26 @@ describe("validateComments acceptance", () => {
       start: 12,
       end: 18,
       quote: "const a = 1;",
+    });
+  });
+
+  it("should accept a selection spanning two known blocks", () => {
+    const [comment] = validate(
+      commentOn({
+        type: "selection",
+        blockId: "section/status-quo/paragraph-1",
+        endBlockId: "section/status-quo/paragraph-2",
+        start: 0,
+        end: 18,
+        quote: "Today's reality",
+      }),
+    );
+    expect(comment?.target).toMatchObject({
+      type: "selection",
+      blockId: "section/status-quo/paragraph-1",
+      endBlockId: "section/status-quo/paragraph-2",
+      start: 0,
+      end: 18,
     });
   });
 

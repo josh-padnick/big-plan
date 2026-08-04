@@ -21,6 +21,7 @@ export type CommentTarget =
   | {
       readonly type: "selection";
       readonly blockId: string;
+      readonly endBlockId?: string;
       readonly kind: string;
       readonly label: string;
       readonly section?: string;
@@ -207,9 +208,14 @@ const validateTarget = ({
     if (end < start) {
       throw new CommentRejected("A range must end at or after it starts");
     }
+    const endBlock =
+      type === "selection" && target.endBlockId !== undefined
+        ? resolveBlock({ value: target.endBlockId, blocks })
+        : undefined;
     return {
       type,
       ...identity,
+      ...(endBlock === undefined ? {} : { endBlockId: endBlock.id }),
       start,
       end,
       quote: asText({
