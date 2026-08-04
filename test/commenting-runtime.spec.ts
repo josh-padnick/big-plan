@@ -1721,6 +1721,19 @@ test("should preserve and send a floating review across reload and viewport chan
         '[data-review-thread-state="sent"][data-review-lifecycle="working"]',
       )
       .first();
+    const workingSpinner = workingCard.locator("[data-review-spinner]").first();
+    await expect(workingSpinner).toHaveCSS("animation-name", "spin");
+    await expect(workingSpinner).toHaveCSS("animation-duration", "0.7s");
+    const spinnerTimes = await workingSpinner.evaluate(async (node) => {
+      const animation = node.getAnimations()[0];
+      const before = Number(animation?.currentTime ?? 0);
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+      return {
+        before,
+        after: Number(animation?.currentTime ?? 0),
+      };
+    });
+    expect(spinnerTimes.after).toBeGreaterThan(spinnerTimes.before);
     await workingCard.locator("[data-review-thread-summary-toggle]").click();
     const cardActivityToggle = workingCard.locator(
       "[data-review-status-activity-toggle]",
@@ -1733,6 +1746,11 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(cardActivity.locator("li")).toHaveCount(8, {
       timeout: 10_000,
     });
+    await expect
+      .poll(() =>
+        cardActivity.evaluate((node) => node.scrollWidth <= node.clientWidth),
+      )
+      .toBe(true);
     const cardScroll = await cardActivity.evaluate((node) => {
       node.scrollTop = Math.min(24, node.scrollHeight - node.clientHeight);
       return {

@@ -2523,7 +2523,7 @@ import {
   const spinner = () =>
     el("span", {
       class:
-        "[display:inline-block] [width:0.72rem] [height:0.72rem] [flex:0_0_auto] [border:1.5px_solid_currentcolor] [border-right-color:transparent] [border-radius:999px] [animation:700ms_linear_infinite_big-plan-review-spin]",
+        "animate-spin motion-reduce:[animation-duration:1.8s] [animation-duration:700ms] [display:inline-block] [width:0.72rem] [height:0.72rem] [flex:0_0_auto] [border:1.5px_solid_currentcolor] [border-right-color:transparent] [border-radius:999px]",
       "data-review-spinner": true,
       "aria-hidden": "true",
     });
@@ -2968,7 +2968,7 @@ import {
               (options.surface === "tray"
                 ? "max-h-none! overflow-visible!"
                 : "") +
-              " [display:grid] [max-height:9rem] [margin:0] [padding-left:0.2rem] [color:var(--ink-c)] [list-style:none] [overflow-y:auto] [overscroll-behavior:contain] [line-height:1.35]",
+              " [display:grid] [min-width:0] [max-width:100%] [max-height:9rem] [margin:0] [padding-left:0.2rem] [color:var(--ink-c)] [list-style:none] [overflow-x:hidden] [overflow-y:auto] [overscroll-behavior:contain] [line-height:1.35]",
             "data-review-status-activity": true,
             ...(options.surface === "card" && options.commentId
               ? { "data-review-activity-owner": options.commentId }

@@ -907,11 +907,6 @@ review script; this file contains only the cross-element and document behavior.
     margin-right: 0.3rem;
     vertical-align: -0.08rem;
   }
-  @keyframes big-plan-review-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
   @keyframes big-plan-review-hourglass {
     0%,
     70% {
@@ -927,9 +922,6 @@ review script; this file contains only the cross-element and document behavior.
     animation: 2.4s ease-in-out infinite big-plan-review-hourglass;
   }
   @media (prefers-reduced-motion: reduce) {
-    [data-review-spinner] {
-      animation-duration: 1.8s;
-    }
     [data-review-switch-track]::after {
       transition: none;
     }
