@@ -124,6 +124,7 @@ Viewer and surface discipline:
 - Independent subsystems talk through a narrow send. A component-local feedback tray owns its screen and element notes end to end, then hands one batch to plan feedback through an explicit integration action; until that integration exists, show an honest stub and retain the notes locally.
 - Controls in one row share a centerline. Give adjacent text buttons and icon buttons compatible heights, alignment, and focus geometry so they read as one toolbar.
 - A resting figure never claims the page's scroll. Let an ordinary wheel or trackpad gesture continue through the reading document until the reader explicitly clicks into the viewer or maximizes it; only an engaged viewer owns internal canvas or pane scrolling.
+- Selection decorates, never deforms. Paint engagement around the viewer with an outline or a border whose transparent width was reserved before selection; never change the artboard's box size, overflow geometry, fitted scale, or internal layout to communicate selection.
 - Name the mode, not the halves. Express a binary capability as one explicit switch with a named state—such as **Comment Mode: On/Off**—instead of presenting competing nouns such as **Use / Comment** that ask the user to infer what changed.
 - Card interiors share one inset. Align headers, comment rows, and footers to the same horizontal inset, and repeat one compact vertical rhythm so related rows read as a single ordered group rather than independently placed fragments.
 

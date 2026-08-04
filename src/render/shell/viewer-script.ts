@@ -2039,22 +2039,22 @@ ${DIAGRAM_SCRIPT}
       fitAll();
     });
     root.setAttribute("data-wireframe-interactive", "");
-    // Mark the actual scroll owners once, including scroll regions on hidden
-    // slides. The resting state clips only these regions so native wheel
-    // chaining reaches the page without disabling pointer actions or
-    // inventing a synthetic document scroll.
-    for (const element of root.querySelectorAll("*")) {
-      const style = getComputedStyle(element);
-      if (
-        ["auto", "scroll"].includes(style.overflowX) ||
-        ["auto", "scroll"].includes(style.overflowY)
-      )
-        element.setAttribute("data-wireframe-scroll-region", "");
+    // The shield is a sibling of every internal scroll owner, so a resting
+    // wheel follows its ordinary ancestor chain to the page. Engagement only
+    // removes hit testing from the shield; no artboard overflow, gutter, fit,
+    // or box-model value changes.
+    for (const screen of screens) {
+      const stage = screen.querySelector(":scope > .wireframe-frame-stage");
+      if (stage === null) continue;
+      const shield = document.createElement("span");
+      shield.className = "wireframe-engagement-shield";
+      shield.setAttribute("aria-hidden", "true");
+      stage.append(shield);
     }
     // A resting wireframe sits in a reading document. One primary click
-    // explicitly engages its device and pane scroll regions; until then CSS
-    // clips those scroll owners, so an ordinary wheel retains the browser's
-    // native page-scroll velocity and acceleration.
+    // explicitly engages its device and pane scroll regions; until then the
+    // shield keeps them out of the event path, so an ordinary wheel retains
+    // the browser's native page-scroll velocity and acceleration.
     root.addEventListener(
       "pointerdown",
       (event) => {

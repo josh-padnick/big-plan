@@ -44,6 +44,16 @@ test("should walk the wireframe prototype between screens", async ({
   });
 
   await test.step("an action inside the drawing moves the prototype", async () => {
+    const viewport = wireframe.locator(
+      "[data-wireframe-screen]:visible .wireframe-frame-viewport",
+    );
+    await viewport.scrollIntoViewIfNeeded();
+    const viewportBox = await boxOf(viewport);
+    await page.mouse.click(
+      viewportBox.x + viewportBox.width / 2,
+      viewportBox.y + viewportBox.height / 2,
+    );
+    await expect(wireframe).toHaveAttribute("data-wireframe-engaged", "");
     await page.getByRole("button", { name: "Start lesson" }).click();
     await expect(lesson).toBeVisible();
     await expect(home).toBeHidden();
@@ -104,6 +114,17 @@ test("should separate the child's question, the handoff, authentication, and app
   await page.goto(wireframeViewerUrl);
 
   await test.step("the child chooses a parallel, concrete branch", async () => {
+    const wireframe = page.locator("[data-wireframe]");
+    const viewport = wireframe.locator(
+      "[data-wireframe-screen]:visible .wireframe-frame-viewport",
+    );
+    await viewport.scrollIntoViewIfNeeded();
+    const viewportBox = await boxOf(viewport);
+    await page.mouse.click(
+      viewportBox.x + viewportBox.width / 2,
+      viewportBox.y + viewportBox.height / 2,
+    );
+    await expect(wireframe).toHaveAttribute("data-wireframe-engaged", "");
     await page.getByRole("button", { name: "✋ Ask a grown-up" }).click();
     await expect(
       page.getByRole("button", { name: "⚽ Ask about a purchase" }),
@@ -917,10 +938,19 @@ test("should let the page wheel natively past every resting wireframe until a cl
     }
 
     const desktopWireframe = wireframes.first();
+    const desktopScreen = desktopWireframe.locator(
+      "[data-wireframe-screen]:visible",
+    );
     const desktopViewport = desktopWireframe.locator(
       "[data-wireframe-screen]:visible .wireframe-frame-viewport",
     );
+    const desktopFrame = desktopScreen.locator(".wireframe-frame");
+    const desktopCaption = desktopScreen.locator(".wireframe-screen-caption");
     await desktopWireframe.scrollIntoViewIfNeeded();
+    await desktopCaption.hover();
+    const screenBeforeEngagement = await desktopScreen.screenshot();
+    const frameBeforeEngagement = await desktopFrame.screenshot();
+    const frameBoxBeforeEngagement = await boxOf(desktopFrame);
     const desktopViewportBox = await boxOf(desktopViewport);
     await page.mouse.click(
       desktopViewportBox.x + desktopViewportBox.width / 2,
@@ -930,6 +960,15 @@ test("should let the page wheel natively past every resting wireframe until a cl
       "data-wireframe-engaged",
       "",
     );
+    await desktopCaption.hover();
+    const frameBoxAfterEngagement = await boxOf(desktopFrame);
+    const frameAfterEngagement = await desktopFrame.screenshot();
+    const screenAfterEngagement = await desktopScreen.screenshot();
+    expect(frameBoxAfterEngagement).toEqual(frameBoxBeforeEngagement);
+    expect(frameAfterEngagement.equals(frameBeforeEngagement)).toBe(true);
+    expect(screenAfterEngagement.equals(screenBeforeEngagement)).toBe(false);
+    await expect(desktopScreen).toHaveCSS("outline-width", "4px");
+    await expect(desktopScreen).toHaveCSS("outline-style", "solid");
 
     const conversation = desktopWireframe.locator(
       '[data-wireframe-screen="d-ticket"] [data-wireframe-span="main"] > .wireframe-panel-body',
