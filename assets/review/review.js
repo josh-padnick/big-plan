@@ -20,6 +20,7 @@
 import { CHECK_ICON } from "../../src/icons/lucide/check.js";
 import { CHEVRON_LEFT_ICON } from "../../src/icons/lucide/chevron-left.js";
 import { CHEVRON_RIGHT_ICON } from "../../src/icons/lucide/chevron-right.js";
+import { CIRCLE_X_ICON } from "../../src/icons/lucide/circle-x.js";
 import { MESSAGE_SQUARE_TEXT_ICON } from "../../src/icons/lucide/message-square-text.js";
 import { MESSAGES_SQUARE_ICON } from "../../src/icons/lucide/messages-square.js";
 import { MINIMIZE_2_ICON } from "../../src/icons/lucide/minimize-2.js";
@@ -568,6 +569,21 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     hidden: true,
   });
 
+  // Connection trouble stays visible beside the Feedback toggle and links to
+  // the existing chat status surface; it does not introduce a second status
+  // model.
+  const agentAlertLabel = el("span", { text: "No agent connected" });
+  const agentAlert = el("button", {
+    type: "button",
+    "data-review-agent-alert": true,
+    hidden: true,
+  });
+  agentAlert.append(icon(CIRCLE_X_ICON), agentAlertLabel);
+  agentAlert.addEventListener("click", () => {
+    setRailOpen(true);
+    setActiveTab("chat");
+  });
+
   const toggle = el("button", {
     type: "button",
     "data-review-toggle": true,
@@ -584,6 +600,10 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     el("span", { text: "Feedback" }),
     toggleCount,
   );
+  const toolbar = el("div", { "data-review-toolbar": true }, [
+    agentAlert,
+    toggle,
+  ]);
 
   const countLabel = el("span", {
     "data-review-count": true,
@@ -743,10 +763,8 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     "data-review-affordance": true,
     hidden: true,
   });
-  affordance.append(
-    icon(MESSAGE_SQUARE_TEXT_ICON),
-    el("span", { text: "Comment" }),
-  );
+  const affordanceLabel = el("span", { text: "Comment" });
+  affordance.append(icon(MESSAGE_SQUARE_TEXT_ICON), affordanceLabel);
 
   const composeInput = el("textarea", {
     "data-review-compose-input": true,
@@ -921,7 +939,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   const surface = el("div", { "data-review-root": true }, [
     backdrop,
-    toggle,
+    toolbar,
     rail,
     affordance,
     threadLayer,
@@ -3652,6 +3670,8 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       return;
     }
     affordance.hidden = false;
+    affordance.setAttribute("data-review-mode", "block");
+    affordanceLabel.hidden = true;
     affordance.setAttribute(
       "aria-label",
       "Comment on " + kindFor(block) + ": " + labelFor(block),
@@ -3812,6 +3832,8 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     const selection = window.getSelection();
     const rect = selection.getRangeAt(0).getBoundingClientRect();
     affordance.hidden = false;
+    affordance.setAttribute("data-review-mode", "selection");
+    affordanceLabel.hidden = false;
     affordance.setAttribute("aria-label", "Comment on the selected text");
     affordance.style.top = Math.max(FLOAT_TOP, rect.top - 40) + "px";
     const width = affordance.offsetWidth || 108;
@@ -4250,11 +4272,30 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     }
   };
 
+  const AGENT_ALERT_LABELS = {
+    unavailable: "No agent connected",
+    quiet: "Agent not responding",
+    errored: "Agent error",
+    offline: "Review server offline",
+  };
+
+  const syncAgentAlert = (health) => {
+    const label = health ? AGENT_ALERT_LABELS[health.key] : undefined;
+    agentAlert.hidden = label === undefined;
+    if (label === undefined) return;
+    agentAlertLabel.textContent = label;
+    agentAlert.setAttribute(
+      "aria-label",
+      label + " — open the connection status",
+    );
+  };
+
   // Re-renders the waiting chrome only when the derived health actually
   // changes, and lets a failure state own the toolbar pill until it clears.
   const syncAgentHealthPresentation = () => {
     const health = agentHealth();
     const signature = health ? health.key + "|" + (health.headline || "") : "";
+    syncAgentAlert(health);
     if (health) {
       if (health.key === "offline") {
         setAgentState("Review server offline", "failed");

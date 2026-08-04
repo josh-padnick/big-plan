@@ -138,6 +138,9 @@ test("should preserve and send a floating review across reload and viewport chan
   await test.step("the hover Comment control dismisses when its trigger is left", async () => {
     await page.locator("[data-block-kind='paragraph']").first().hover();
     await expect(affordance).toBeVisible();
+    await expect(affordance).toHaveAttribute("data-review-mode", "block");
+    await expect(affordance.locator("span")).toBeHidden();
+    await expect(affordance.locator("svg")).toBeVisible();
     await toggle.hover();
     await expect(affordance).toBeHidden();
   });
@@ -151,6 +154,9 @@ test("should preserve and send a floating review across reload and viewport chan
       "aria-label",
       "Comment on the selected text",
     );
+    await expect(affordance).toHaveAttribute("data-review-mode", "selection");
+    await expect(affordance.locator("span")).toHaveText("Comment");
+    await expect(affordance.locator("span")).toBeVisible();
     const before = await affordance.boundingBox();
     const scrollBefore = await page.evaluate(() => window.scrollY);
     await page.mouse.move(720, 820);
@@ -165,6 +171,26 @@ test("should preserve and send a floating review across reload and viewport chan
     );
     expect(before).not.toBeNull();
     await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
+  await test.step("the connection indicator and Feedback share one vertical center", async () => {
+    const alert = page.locator("[data-review-agent-alert]");
+    await alert.evaluate((node) => {
+      node.hidden = false;
+    });
+    const centers = await page
+      .locator("[data-review-agent-alert], [data-review-toggle]")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const box = node.getBoundingClientRect();
+          return box.top + box.height / 2;
+        }),
+      );
+    expect(centers).toHaveLength(2);
+    expect(Math.abs(centers[0] - centers[1])).toBeLessThanOrEqual(0.5);
+    await alert.evaluate((node) => {
+      node.hidden = true;
+    });
   });
 
   await test.step("a whole-paragraph selection always offers the same floating composer", async () => {

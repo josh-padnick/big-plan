@@ -32,14 +32,24 @@ elements exist and the document is exactly the document it always was.
   outline-offset: 2px;
 }
 
-/* The tray's entry point reads as toolbar chrome, not a pill-shaped action.
-   It stays a real button for keyboard and screen-reader semantics. */
-[data-review-toggle] {
+/* Both controls occupy one real toolbar row. Sharing its cross-axis is what
+   keeps the connection state and Feedback label vertically centered. */
+[data-review-toolbar] {
   position: fixed;
-  top: 0.22rem;
+  top: 0;
   right: 1rem;
   z-index: 45;
+  display: flex;
+  height: 2.75rem;
+  align-items: center;
+  gap: 0.35rem;
+}
+/* The tray's entry point reads as toolbar chrome, not a pill-shaped action.
+   It stays a real button for keyboard and screen-reader semantics. */
+[data-review-toggle],
+[data-review-agent-alert] {
   display: inline-flex;
+  min-height: 1.85rem;
   align-items: center;
   gap: 0.4rem;
   padding: 0.32rem 0.4rem;
@@ -50,6 +60,21 @@ elements exist and the document is exactly the document it always was.
   font-size: 0.8125rem;
   line-height: 1.2;
   cursor: pointer;
+}
+[data-review-agent-alert] {
+  color: var(--callout-danger-c);
+  font-size: 0.75rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+[data-review-agent-alert][hidden] {
+  display: none;
+}
+[data-review-agent-alert]:hover {
+  background: var(--callout-danger-bg);
+}
+[data-review-agent-alert]:active {
+  background: color-mix(in srgb, var(--callout-danger-bg) 80%, var(--ink-c));
 }
 [data-review-toggle]:hover {
   background: var(--review-control-hover);
@@ -63,9 +88,11 @@ elements exist and the document is exactly the document it always was.
   box-shadow: inset 0 0 0 1px var(--edge-c);
   color: var(--ink-c);
 }
-[data-review-toggle] svg {
+[data-review-toggle] svg,
+[data-review-agent-alert] svg {
   width: 0.95rem;
   height: 0.95rem;
+  flex: 0 0 auto;
 }
 [data-review-toggle-count] {
   min-width: 0.8rem;
@@ -1224,6 +1251,12 @@ button[data-review-row-target]:active {
 [data-review-affordance] svg {
   width: 0.85rem;
   height: 0.85rem;
+}
+[data-review-affordance][data-review-mode="block"] {
+  width: 1.75rem;
+  height: 1.75rem;
+  justify-content: center;
+  padding: 0;
 }
 
 /* ---------------------------------------------------------------- compose */
