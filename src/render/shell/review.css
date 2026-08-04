@@ -26,10 +26,6 @@ elements exist and the document is exactly the document it always was.
     var(--ink-c)
   );
 }
-[data-review-root] {
-  position: static;
-  z-index: 40;
-}
 
 [data-review-root] button:focus-visible,
 [data-review-root] textarea:focus-visible,
@@ -40,48 +36,11 @@ elements exist and the document is exactly the document it always was.
 
 /* Both controls occupy one real toolbar row. Sharing its cross-axis is what
    keeps the connection state and Feedback label vertically centered. */
-[data-review-toolbar] {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
-  z-index: 80;
-  display: flex;
-  height: 2.75rem;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.35rem;
-  padding-right: 1rem;
-  border-bottom: 1px solid var(--edge-c);
-  background: var(--bg);
-  pointer-events: none;
-}
 [data-review-toolbar] > * {
   pointer-events: auto;
 }
 /* The tray's entry point reads as toolbar chrome, not a pill-shaped action.
    It stays a real button for keyboard and screen-reader semantics. */
-[data-review-toggle],
-[data-review-agent-alert],
-[data-review-agent-ok] {
-  display: inline-flex;
-  min-height: 1.85rem;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.32rem 0.4rem;
-  border: 0;
-  border-radius: 0.25rem;
-  background: transparent;
-  color: var(--muted-c);
-  font-size: 0.8125rem;
-  line-height: 1.2;
-  cursor: pointer;
-}
-[data-review-agent-ok] {
-  position: relative;
-  width: 1.85rem;
-  justify-content: center;
-}
 [data-review-agent-ok][hidden] {
   display: none;
 }
@@ -90,19 +49,6 @@ elements exist and the document is exactly the document it always was.
 }
 [data-review-agent-ok]:active {
   background: var(--review-control-active);
-}
-[data-review-agent-ok-dot] {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--diff-add-c);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--diff-add-c) 34%, transparent);
-}
-[data-review-agent-alert] {
-  color: var(--callout-danger-c);
-  font-size: 0.75rem;
-  font-weight: 650;
-  white-space: nowrap;
 }
 [data-review-agent-alert][hidden] {
   display: none;
@@ -132,20 +78,6 @@ elements exist and the document is exactly the document it always was.
   width: 0.95rem;
   height: 0.95rem;
   flex: 0 0 auto;
-}
-[data-review-toggle-count] {
-  display: inline-flex;
-  min-width: 1.15rem;
-  height: 1.15rem;
-  align-items: center;
-  justify-content: center;
-  padding: 0 0.28rem;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  font-variant-numeric: tabular-nums;
-  font-size: 0.625rem;
-  font-weight: 700;
-  text-align: center;
 }
 [data-review-toggle-count]:empty {
   display: none;
@@ -180,10 +112,6 @@ elements exist and the document is exactly the document it always was.
   padding: 0.32rem 0.65rem;
   white-space: nowrap;
 }
-[data-review-batch-menu] {
-  position: relative;
-  display: none;
-}
 [data-review-batch-menu] summary {
   display: inline-flex;
   min-height: 1.85rem;
@@ -216,18 +144,6 @@ elements exist and the document is exactly the document it always was.
 [data-review-batch-menu][open] summary svg {
   transform: rotate(90deg);
 }
-[data-review-batch-actions] {
-  position: absolute;
-  top: calc(100% + 0.3rem);
-  right: 0;
-  display: grid;
-  width: 11rem;
-  padding: 0.3rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.45rem;
-  background: var(--bg);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
-}
 [data-review-batch-actions] button {
   padding: 0.42rem 0.5rem;
   border: 0;
@@ -256,22 +172,6 @@ elements exist and the document is exactly the document it always was.
 }
 
 /* ------------------------------------------------------------------- rail */
-
-[data-review-rail] {
-  position: fixed;
-  top: 2.75rem;
-  right: 0;
-  bottom: 0;
-  z-index: 44;
-  display: flex;
-  width: min(22rem, 100vw);
-  flex-direction: column;
-  border-left: 1px solid var(--edge-c);
-  background: var(--bg);
-  box-shadow: -8px 0 24px rgb(0 0 0 / 0.06);
-  font-size: 0.875rem;
-  overflow-anchor: none;
-}
 [data-review-rail][hidden] {
   display: none;
 }
@@ -300,15 +200,6 @@ elements exist and the document is exactly the document it always was.
     width: 100vw;
   }
 }
-
-[data-review-backdrop] {
-  position: fixed;
-  inset: 2.75rem 0 0;
-  z-index: 43;
-  border: 0;
-  background: rgb(0 0 0 / 0.28);
-  cursor: pointer;
-}
 [data-review-backdrop][hidden] {
   display: none;
 }
@@ -316,32 +207,6 @@ elements exist and the document is exactly the document it always was.
   [data-review-backdrop] {
     display: none;
   }
-}
-
-[data-review-tabs] {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: stretch;
-  gap: 0.2rem;
-  padding: 0.35rem 0.4rem 0;
-}
-[data-review-rail-header] {
-  flex: 0 0 auto;
-  border-bottom: 1px solid var(--edge-c);
-}
-[data-review-tab] {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.42rem 0.52rem;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--muted-c);
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 650;
-  cursor: pointer;
 }
 [data-review-tab] svg {
   width: 0.85rem;
@@ -368,9 +233,6 @@ elements exist and the document is exactly the document it always was.
   align-self: center;
   margin-left: auto;
 }
-[data-review-panel] {
-  min-height: 0;
-}
 [data-review-panel="comments"] {
   display: flex;
   flex: 1 1 auto;
@@ -390,21 +252,6 @@ elements exist and the document is exactly the document it always was.
 [data-review-panel][hidden] {
   display: none;
 }
-
-[data-review-count] {
-  display: inline-flex;
-  min-width: 1.15rem;
-  height: 1.15rem;
-  align-items: center;
-  justify-content: center;
-  padding: 0 0.28rem;
-  border-radius: 999px;
-  background: var(--surface-c);
-  color: var(--muted-c);
-  font-size: 0.625rem;
-  font-weight: 750;
-  font-variant-numeric: tabular-nums;
-}
 [data-review-count]:empty {
   display: none;
 }
@@ -415,13 +262,6 @@ elements exist and the document is exactly the document it always was.
 [data-review-count-tone="pending"] {
   background: var(--annotation-bg);
   color: var(--annotation-c);
-}
-[data-review-hide] {
-  display: inline-flex;
-  padding: 0.2rem;
-  border-radius: 0.3rem;
-  color: var(--muted-c);
-  cursor: pointer;
 }
 [data-review-hide]:hover {
   background: var(--review-control-hover);
@@ -434,45 +274,8 @@ elements exist and the document is exactly the document it always was.
   width: 1rem;
   height: 1rem;
 }
-
-[data-review-scroll] {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  /* Extra bottom room so the last row clears the send bar rather than ending
-     flush against it at the scroll boundary. */
-  padding: 0.7rem 0.9rem 1.2rem;
-}
-
-[data-review-empty] {
-  margin: 0.4rem 0 0;
-  color: var(--muted-c);
-  font-size: 0.8125rem;
-  line-height: 1.5;
-}
 [data-review-empty][hidden] {
   display: none;
-}
-
-[data-review-drafts],
-[data-review-sent-list] {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-[data-review-row] {
-  margin-bottom: 0.55rem;
-  padding: 0.55rem 0.6rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.5rem;
-  background: var(--surface-c);
-}
-[data-review-sent-row] {
-  cursor: pointer;
-  transition:
-    border-color 100ms ease,
-    background-color 100ms ease;
 }
 [data-review-sent-row]:hover {
   border-color: color-mix(in srgb, var(--muted-c) 45%, var(--edge-c));
@@ -490,46 +293,8 @@ elements exist and the document is exactly the document it always was.
   border-color: color-mix(in srgb, var(--muted-c) 52%, var(--edge-c));
   background: color-mix(in srgb, var(--surface-c) 94%, var(--ink-c));
 }
-[data-review-row-head] {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.3rem;
-}
 /* The title is deliberately only the slide name. The source highlight
    identifies the exact block or passage without duplicating a path here. */
-[data-review-row-target] {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  align-items: center;
-  overflow: hidden;
-  color: var(--ink-c);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-align: left;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-[data-review-row-title] {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-[data-review-row-locator] {
-  display: inline-flex;
-  width: 1rem;
-  height: 1rem;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted-c);
-  opacity: 0;
-  transition: opacity 100ms ease;
-}
 [data-review-row-locator] svg {
   width: 0.78rem;
   height: 0.78rem;
@@ -537,17 +302,6 @@ elements exist and the document is exactly the document it always was.
 [data-review-sent-row]:hover [data-review-row-locator],
 [data-review-row-target]:focus-visible [data-review-row-locator] {
   opacity: 1;
-}
-[data-review-comment-state] {
-  flex: 0 0 auto;
-  padding: 0.05rem 0.35rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 999px;
-  color: var(--muted-c);
-  font-size: 0.5625rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 [data-review-comment-state="staged"] {
   border-color: color-mix(in srgb, var(--annotation-c) 50%, var(--edge-c));
@@ -564,21 +318,6 @@ button[data-review-row-target]:hover {
 }
 button[data-review-row-target]:active {
   color: var(--annotation-c);
-}
-[data-review-row-body] {
-  margin: 0;
-  color: var(--ink-c);
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-[data-review-row-actions] {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.4rem;
-  margin-top: 0.4rem;
 }
 [data-review-row-actions] button {
   padding: 0.15rem 0.5rem;
@@ -601,11 +340,6 @@ button[data-review-row-target]:active {
   color: var(--diff-remove-c);
   border-color: var(--diff-remove-c);
 }
-[data-review-row-save] {
-  color: var(--bg) !important;
-  background: var(--accent-c) !important;
-  border-color: var(--accent-c) !important;
-}
 [data-review-thread-submit] {
   border-color: var(--annotation-c) !important;
   color: var(--annotation-c) !important;
@@ -614,12 +348,6 @@ button[data-review-row-target]:active {
 [data-review-thread-submit]:hover {
   background: color-mix(in srgb, var(--annotation-c) 10%, var(--bg)) !important;
 }
-[data-review-thread-submit-all] {
-  border-color: transparent !important;
-  background: transparent !important;
-  color: var(--annotation-c) !important;
-  font-weight: 650;
-}
 [data-review-thread-submit-all]:hover {
   text-decoration: underline;
   text-underline-offset: 0.15em;
@@ -627,38 +355,8 @@ button[data-review-row-target]:active {
 [data-review-thread-submit-all]:active {
   opacity: 0.65;
 }
-
-[data-review-sent] {
-  margin-top: 0.9rem;
-  padding-top: 0.7rem;
-  border-top: 1px solid var(--edge-c);
-}
 [data-review-sent][hidden] {
   display: none;
-}
-[data-review-round-head] {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 0.6rem;
-  margin-bottom: 0.7rem;
-}
-[data-review-round-summary] {
-  min-width: 0;
-  flex: 1 1 auto;
-  margin: 0;
-  color: var(--muted-c);
-  font-size: 0.6875rem;
-  line-height: 1.45;
-}
-[data-review-resolve-all] {
-  flex: 0 0 auto;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--muted-c);
-  font-size: 0.72rem;
-  cursor: pointer;
 }
 [data-review-resolve-all]:hover,
 [data-review-resolve-all]:focus-visible {
@@ -701,26 +399,10 @@ button[data-review-row-target]:active {
 [data-review-outcome-group="blocked"] h3 {
   color: var(--callout-warning-c);
 }
-[data-review-outcome-group-count] {
-  display: inline-flex;
-  min-width: 1.1rem;
-  height: 1.1rem;
-  align-items: center;
-  justify-content: center;
-  margin-left: auto;
-  padding: 0 0.25rem;
-  border-radius: 999px;
-  background: var(--surface-c);
-  font-size: 0.625rem;
-  font-variant-numeric: tabular-nums;
-}
 [data-review-outcome-group] ol {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-[data-review-sent-row] {
-  background: transparent;
 }
 [data-review-sent-row][data-review-row-expanded] {
   background: var(--surface-c);
@@ -735,21 +417,12 @@ button[data-review-row-target]:active {
 }
 /* A resolved comment is still a distinct card: its head is a real top bar,
    not a line that reads as another headline in the content. */
-[data-review-resolved-row] {
-  background: var(--surface-c);
-}
 [data-review-resolved-row] > [data-review-row-head] {
   margin: -0.55rem -0.6rem 0.4rem;
   padding: 0.4rem 0.6rem;
   border-bottom: 1px solid var(--edge-c);
   border-radius: 0.45rem 0.45rem 0 0;
   background: color-mix(in srgb, var(--surface-c) 55%, var(--bg));
-}
-[data-review-row-icons] {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 0.18rem;
 }
 [data-review-row-icons] button {
   display: inline-flex;
@@ -780,15 +453,6 @@ button[data-review-row-target]:active {
   width: 0.85rem;
   height: 0.85rem;
 }
-[data-review-row-substate] {
-  display: inline-flex;
-  width: 1.2rem;
-  height: 1.2rem;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted-c);
-}
 [data-review-row-substate="stalled"] {
   color: var(--callout-warning-c);
 }
@@ -807,26 +471,8 @@ button[data-review-row-target]:active {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-[data-review-row-secondary] {
-  margin: 0.25rem 0 0;
-  color: var(--muted-c);
-  font-size: 0.6875rem;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.35;
-}
 [data-review-row-state="working"] [data-review-row-secondary] {
   color: var(--callout-note-c);
-}
-[data-review-row-review-change] {
-  margin-top: 0.45rem;
-  padding: 0.28rem 0.5rem;
-  border: 1px solid var(--annotation-c);
-  border-radius: 0.35rem;
-  background: color-mix(in srgb, var(--annotation-c) 9%, var(--bg));
-  color: var(--annotation-c);
-  cursor: pointer;
-  font-size: 0.6875rem;
-  font-weight: 700;
 }
 [data-review-row-review-change]:hover {
   background: color-mix(in srgb, var(--annotation-c) 14%, var(--bg));
@@ -834,38 +480,8 @@ button[data-review-row-target]:active {
 [data-review-row-review-change]:active {
   background: color-mix(in srgb, var(--annotation-c) 20%, var(--bg));
 }
-[data-review-round-summary] {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-}
-[data-review-round-chip] {
-  padding: 0.1rem 0.38rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 999px;
-  background: var(--surface-c);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-[data-review-send-bar] {
-  margin-top: 0.7rem;
-  padding-top: 0.7rem;
-  border-top: 1px solid var(--edge-c);
-}
 [data-review-send-bar][hidden] {
   display: none;
-}
-[data-review-send] {
-  width: 100%;
-  padding: 0.45rem 0.7rem;
-  border: 1px solid var(--accent-c);
-  border-radius: 0.4rem;
-  background: var(--accent-c);
-  color: var(--bg);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
 }
 [data-review-send]:not([disabled]):hover {
   filter: brightness(1.08);
@@ -882,30 +498,11 @@ button[data-review-row-target]:active {
 [data-review-send][data-review-busy] {
   opacity: 0.6;
 }
-[data-review-send-note] {
-  margin: 0.45rem 0 0;
-  color: var(--muted-c);
-  font-size: 0.75rem;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
 [data-review-send-note]:empty {
   display: none;
 }
 
 /* ------------------------------------------------------------ agent panel */
-
-[data-review-agent] {
-  padding: 0.7rem 0.9rem 0.9rem;
-  border-top: 1px solid var(--edge-c);
-  background: var(--surface-c);
-}
-[data-review-agent-head] {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
 [data-review-agent-head] h3 {
   margin: 0;
   font-size: 0.8125rem;
@@ -913,14 +510,6 @@ button[data-review-row-target]:active {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted-c);
-  white-space: nowrap;
-}
-[data-review-agent-state] {
-  margin-left: auto;
-  padding: 0.1rem 0.45rem;
-  border-radius: 999px;
-  font-size: 0.6875rem;
-  font-weight: 600;
   white-space: nowrap;
 }
 [data-review-agent-state][data-tone="idle"] {
@@ -939,31 +528,6 @@ button[data-review-row-target]:active {
   background: var(--callout-danger-bg);
   color: var(--callout-danger-c);
 }
-[data-review-field-label] {
-  display: block;
-  margin-bottom: 0.25rem;
-  color: var(--muted-c);
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-[data-review-agent-input],
-[data-review-compose-input],
-[data-review-row-input],
-[data-review-thread-input],
-[data-review-thread-reply] {
-  display: block;
-  width: 100%;
-  padding: 0.4rem 0.5rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.4rem;
-  background: var(--bg);
-  color: var(--ink-c);
-  font: inherit;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  resize: vertical;
-}
 [data-review-agent-input]:focus-visible,
 [data-review-compose-input]:focus-visible,
 [data-review-row-input]:focus-visible,
@@ -972,28 +536,8 @@ button[data-review-row-target]:active {
   outline: 1px solid var(--accent-c);
   outline-offset: 2px;
 }
-
-[data-review-attach] {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.4rem;
-  color: var(--muted-c);
-  font-size: 0.75rem;
-}
 [data-review-attach][hidden] {
   display: none;
-}
-
-[data-review-agent-save] {
-  margin-top: 0.45rem;
-  padding: 0.3rem 0.65rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.35rem;
-  background: var(--bg);
-  color: var(--ink-c);
-  font-size: 0.75rem;
-  cursor: pointer;
 }
 [data-review-agent-save]:hover {
   background: var(--review-control-hover);
@@ -1003,45 +547,10 @@ button[data-review-row-target]:active {
 [data-review-agent-save]:active {
   background: var(--review-control-active);
 }
-[data-review-chat-note] {
-  margin: -0.15rem 0 0.65rem;
-  color: var(--muted-c);
-  font-size: 0.6875rem;
-  line-height: 1.45;
-}
-[data-review-plan-chat] {
-  display: grid;
-  gap: 0.5rem;
-  margin: 0 0 0.7rem;
-  padding: 0;
-  list-style: none;
-}
-[data-review-chat-empty] {
-  color: var(--muted-c);
-  font-size: 0.75rem;
-  line-height: 1.45;
-}
-[data-review-chat-message] {
-  width: calc(100% - 1.5rem);
-  padding: 0.5rem 0.55rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.45rem;
-  background: var(--bg);
-}
 [data-review-chat-message="user"] {
   margin-left: 1.5rem;
   border-right: 2px solid var(--annotation-c);
   background: color-mix(in srgb, var(--annotation-bg) 30%, var(--bg));
-}
-
-[data-review-connection-state] {
-  display: grid;
-  gap: 0.55rem;
-  padding: 0.8rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.45rem;
-  font-size: 0.75rem;
-  line-height: 1.5;
 }
 [data-review-connection-state] :is(p, ol) {
   margin: 0;
@@ -1064,26 +573,6 @@ button[data-review-row-target]:active {
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-[data-review-copy-block] {
-  position: relative;
-  min-width: 0;
-}
-[data-review-copy] {
-  position: absolute;
-  top: 0.38rem;
-  right: 0.38rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.2rem 0.35rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.3rem;
-  background: var(--surface-c);
-  color: var(--muted-c);
-  font-size: 0.625rem;
-  line-height: 1;
-  cursor: pointer;
 }
 [data-review-copy] svg {
   width: 0.72rem;
@@ -1113,30 +602,6 @@ button[data-review-row-target]:active {
   background: var(--diff-add-bg);
   color: var(--diff-add-c);
 }
-[data-review-connection-title] {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-[data-review-connection-dot] {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--diff-add-c) 34%, transparent);
-}
-[data-review-connection-phase] {
-  margin-left: auto;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-[data-review-connection-history] {
-  margin-top: 0.9rem;
-  color: var(--muted-c);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-}
 [data-review-connection-history] > summary {
   display: flex;
   align-items: center;
@@ -1145,28 +610,8 @@ button[data-review-row-target]:active {
   cursor: pointer;
   font-weight: 650;
 }
-[data-review-connection-count],
-[data-review-current] {
-  padding: 0.08rem 0.32rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 999px;
-  color: var(--muted-c);
-  font-size: 0.5625rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 1.2;
-  text-transform: uppercase;
-}
 [data-review-connection-history] p {
   margin: 0.45rem 0;
-}
-[data-review-connection-summary] {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.55rem 0.8rem;
-  margin: 0.65rem 0 0.8rem;
-  padding: 0.65rem 0;
-  border-block: 1px solid var(--edge-c);
 }
 [data-review-connection-summary] div {
   min-width: 0;
@@ -1211,24 +656,6 @@ button[data-review-row-target]:active {
   padding: 0;
   list-style: none;
 }
-[data-review-connection-event] {
-  position: relative;
-  display: grid;
-  grid-template-columns: 0.65rem 4.6rem minmax(0, 1fr) auto;
-  gap: 0.22rem 0.4rem;
-  align-items: baseline;
-  min-width: 0;
-  padding: 0.28rem 0;
-}
-[data-review-connection-marker] {
-  position: relative;
-  width: 6px;
-  height: 6px;
-  align-self: center;
-  border: 1px solid var(--muted-c);
-  border-radius: 999px;
-  background: var(--bg);
-}
 [data-review-connection-event]:not(:last-child)
   [data-review-connection-marker]::after {
   position: absolute;
@@ -1260,15 +687,6 @@ button[data-review-row-target]:active {
 [data-review-connection-event="connected"] strong {
   color: var(--diff-add-c);
 }
-[data-review-connection-duration],
-[data-review-connection-reason] {
-  grid-column: 3 / -1;
-  color: var(--muted-c);
-  font-size: 0.625rem;
-}
-[data-review-connection-reason] {
-  color: var(--callout-warning-c);
-}
 [data-review-chat-message="agent"] {
   margin-right: 1.5rem;
   border-left: 2px solid var(--callout-note-c);
@@ -1277,9 +695,6 @@ button[data-review-row-target]:active {
 [data-review-chat-message="waiting"] {
   border-style: dashed;
   color: var(--muted-c);
-}
-[data-review-chat-message] {
-  min-width: 0;
 }
 /* Wide agent responses wrap inside the bubble; a long unbroken token can
    never push the chat column out of its rail. */
@@ -1290,30 +705,6 @@ button[data-review-row-target]:active {
   line-height: 1.45;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-}
-
-[data-review-outcome] {
-  display: grid;
-  /* One clamped column: an implicit auto track would widen to the row's
-     nowrap children and push the whole tray wider than the rail. */
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.18rem;
-  padding: 0.45rem 0.5rem;
-  border: 1px solid var(--edge-c);
-  border-left-width: 2px;
-  border-radius: 0.4rem;
-  background: var(--bg);
-  color: var(--muted-c);
-  font-size: 0.6875rem;
-}
-[data-review-outcome-state] {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.22rem;
-  font-size: 0.625rem;
-  font-weight: 750;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 [data-review-outcome-state] svg {
   width: 0.75rem;
@@ -1349,27 +740,6 @@ button[data-review-row-target]:active {
 }
 
 /* ------------------------------------------------------- floating threads */
-
-[data-review-thread-layer] {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 0;
-  z-index: 44;
-  pointer-events: none;
-}
-[data-review-thread-card] {
-  position: absolute;
-  right: auto;
-  width: 17rem;
-  padding: 0.65rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.6rem;
-  background: var(--bg);
-  box-shadow: 0 3px 14px rgb(0 0 0 / 0.1);
-  pointer-events: auto;
-}
 [data-review-thread-card][hidden] {
   display: none;
 }
@@ -1413,26 +783,6 @@ button[data-review-row-target]:active {
   opacity: 1;
   pointer-events: auto;
 }
-[data-review-thread-summary] {
-  display: grid;
-  width: 100%;
-  min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.18rem 5.2rem 0.18rem 0.22rem;
-  color: var(--ink-c);
-  text-align: left;
-}
-[data-review-thread-summary-toggle] {
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-}
 [data-review-thread-summary-toggle]:hover [data-review-thread-echo] {
   color: var(--annotation-c);
   text-decoration: underline;
@@ -1466,26 +816,6 @@ button[data-review-row-target]:active {
   background: var(--callout-warning-bg);
   color: var(--callout-warning-c);
 }
-[data-review-thread-echo] {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 0.6875rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-[data-review-thread-status] {
-  display: grid;
-  gap: 0.3rem;
-  margin: 0.35rem 0;
-  padding: 0.5rem 0.55rem;
-  border: 1px solid var(--edge-c);
-  border-left-width: 3px;
-  border-radius: 0.4rem;
-  background: color-mix(in srgb, var(--surface-c) 60%, var(--bg));
-  color: var(--muted-c);
-  font-size: 0.6875rem;
-  line-height: 1.4;
-}
 [data-review-thread-status][data-tone="working"] {
   border-color: var(--callout-note-c);
   background: var(--callout-note-bg);
@@ -1501,11 +831,6 @@ button[data-review-row-target]:active {
   background: var(--callout-danger-bg);
   color: var(--callout-danger-c);
 }
-[data-review-status-row] {
-  display: flex;
-  align-items: center;
-  gap: 0.38rem;
-}
 [data-review-status-row] > svg {
   width: 0.85rem;
   height: 0.85rem;
@@ -1517,11 +842,6 @@ button[data-review-row-target]:active {
   color: currentcolor;
   font-weight: 700;
 }
-[data-review-status-hint] {
-  margin: 0;
-  color: var(--ink-c);
-  overflow-wrap: anywhere;
-}
 [data-review-thread-status] code {
   padding: 0.04rem 0.22rem;
   border: 1px solid color-mix(in srgb, currentcolor 24%, transparent);
@@ -1531,29 +851,11 @@ button[data-review-row-target]:active {
   font-family: var(--font-mono);
   font-size: 0.92em;
 }
-
-[data-review-cancel-request] {
-  justify-self: end;
-  color: currentColor;
-  font-size: 0.65rem;
-  text-decoration: underline;
-  text-underline-offset: 0.16em;
-}
-
-[data-review-request-cancelled] {
-  margin: 0.2rem 0;
-  color: var(--muted-c);
-  font-size: 0.6875rem;
-  font-style: italic;
-}
 [data-review-status-setup] summary {
   width: fit-content;
   color: currentcolor;
   font-weight: 650;
   cursor: pointer;
-}
-[data-review-status-setup] {
-  margin-top: 0.35rem;
 }
 [data-review-status-setup] summary:hover {
   color: var(--ink-c);
@@ -1569,18 +871,6 @@ button[data-review-row-target]:active {
   margin: 0.25rem 0 0;
   color: var(--ink-c);
 }
-[data-review-status-activity-toggle] {
-  display: inline-flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.45rem;
-  padding: 0.12rem 0.2rem;
-  border-radius: 0.25rem;
-  color: currentcolor;
-  cursor: pointer;
-}
 [data-review-status-activity-toggle]:hover,
 [data-review-status-activity-toggle]:focus-visible {
   background: color-mix(in srgb, currentcolor 12%, transparent);
@@ -1592,17 +882,6 @@ button[data-review-row-target]:active {
 }
 [data-review-status-activity-toggle][aria-expanded="true"] svg {
   transform: rotate(90deg);
-}
-[data-review-status-activity] {
-  display: grid;
-  max-height: 9rem;
-  margin: 0;
-  padding-left: 0.2rem;
-  color: var(--ink-c);
-  list-style: none;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  line-height: 1.35;
 }
 [data-review-status-activity] li {
   display: flex;
@@ -1624,17 +903,6 @@ button[data-review-row-target]:active {
   flex: 0 0 auto;
   color: var(--muted-c);
   font-size: 0.625rem;
-}
-[data-review-action-error] {
-  grid-column: 1 / -1;
-  margin: 0.35rem 0 0;
-  padding: 0.3rem 0.45rem;
-  border-left: 2px solid var(--callout-danger-c);
-  background: var(--callout-danger-bg);
-  color: var(--callout-danger-c);
-  font-size: 0.6875rem;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
 }
 [data-review-thread-expanded] [data-review-thread-summary] {
   margin-bottom: 0.55rem;
@@ -1669,21 +937,6 @@ button[data-review-row-target]:active {
   font-size: 0.625rem;
   font-weight: 750;
 }
-[data-review-thread-body] {
-  margin: 0;
-  color: var(--ink-c);
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-[data-review-thread-turn] {
-  width: calc(100% - 1rem);
-  margin-top: 0.45rem;
-  padding: 0.48rem 0.52rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.45rem;
-}
 [data-review-thread-turn="user"] {
   margin-left: 1rem;
   border-right: 2px solid var(--annotation-c);
@@ -1693,13 +946,6 @@ button[data-review-row-target]:active {
   margin-right: 1rem;
   border-left: 2px solid var(--callout-note-c);
   background: color-mix(in srgb, var(--callout-note-bg) 46%, var(--bg));
-}
-[data-review-turn-meta] {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--muted-c);
-  font-size: 0.625rem;
 }
 [data-review-turn-meta] strong {
   color: var(--ink-c);
@@ -1764,24 +1010,6 @@ button[data-review-row-target]:active {
   color: var(--accent-c);
   text-decoration: underline;
 }
-[data-review-code-language] {
-  display: block;
-  margin-bottom: 0.25rem;
-  color: var(--muted-c);
-  font-size: 0.58rem;
-  text-transform: uppercase;
-}
-[data-review-see-change] {
-  margin-top: 0.45rem;
-  padding: 0.2rem 0.45rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.3rem;
-  background: var(--bg);
-  color: var(--accent-c);
-  font-size: 0.6875rem;
-  font-weight: 650;
-  cursor: pointer;
-}
 [data-review-see-change]:hover {
   background: var(--review-control-hover);
   border-color: var(--accent-c);
@@ -1789,31 +1017,10 @@ button[data-review-row-target]:active {
 [data-review-see-change]:active {
   background: var(--review-control-active);
 }
-[data-review-thread-reply-box] {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.4rem;
-  margin-top: 0.55rem;
-}
 [data-review-thread-reply-box] label {
   color: var(--muted-c);
   font-size: 0.6875rem;
   font-weight: 650;
-}
-[data-review-thread-reply] {
-  min-height: 3.25rem;
-  resize: vertical;
-}
-[data-review-thread-reply-send] {
-  justify-self: end;
-  padding: 0.35rem 0.55rem;
-  border: 1px solid var(--accent-c);
-  border-radius: 0.35rem;
-  background: var(--accent-c);
-  color: var(--bg);
-  font-size: 0.6875rem;
-  font-weight: 650;
-  cursor: pointer;
 }
 [data-review-thread-reply-send]:hover:not([disabled]) {
   filter: brightness(1.08);
@@ -1827,29 +1034,12 @@ button[data-review-row-target]:active {
   color: var(--muted-c);
   cursor: default;
 }
-[data-review-thread-more] {
-  display: inline;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--muted-c);
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-}
 [data-review-thread-more]:hover {
   color: var(--accent-c);
   text-decoration: underline;
 }
 [data-review-thread-more]:active {
   color: var(--ink-c);
-}
-[data-review-thread-actions] {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.35rem;
-  margin-top: 0.55rem;
 }
 [data-review-thread-actions] button {
   padding: 0.2rem 0.5rem;
@@ -1868,24 +1058,6 @@ button[data-review-row-target]:active {
 [data-review-thread-actions] button:active {
   background: var(--review-control-active);
 }
-[data-review-thread-toolbar] {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 0.45rem;
-  margin: -0.65rem -0.65rem 0.6rem;
-  padding: 0.42rem 0.45rem;
-  border-bottom: 1px solid var(--edge-c);
-  border-radius: 0.55rem 0.55rem 0 0;
-  background: var(--surface-c);
-}
-[data-review-thread-toolbar-title] {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 0.35rem;
-}
 [data-review-thread-toolbar-title] > span:last-child {
   min-width: 0;
   overflow: hidden;
@@ -1897,12 +1069,6 @@ button[data-review-row-target]:active {
 [data-review-thread-toolbar-title] time {
   color: var(--muted-c);
   font-size: 0.65rem;
-}
-[data-review-thread-toolbar-actions] {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 0.18rem;
 }
 [data-review-thread-toolbar-actions] button {
   position: relative;
@@ -1947,11 +1113,6 @@ button[data-review-row-target]:active {
   border-color: var(--diff-remove-c) !important;
   color: var(--diff-remove-c) !important;
 }
-[data-review-thread-save] {
-  border-color: var(--accent-c) !important;
-  background: var(--accent-c) !important;
-  color: var(--bg) !important;
-}
 @media (width < 80rem) {
   [data-review-thread-layer] {
     display: none;
@@ -1967,22 +1128,6 @@ button[data-review-row-target]:active {
 }
 
 /* ------------------------------------------------------------- affordance */
-
-[data-review-affordance] {
-  position: fixed;
-  z-index: 46;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.2rem 0.5rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 999px;
-  background: var(--bg);
-  color: var(--muted-c);
-  font-size: 0.75rem;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
-}
 [data-review-affordance][hidden] {
   display: none;
 }
@@ -2006,23 +1151,6 @@ button[data-review-row-target]:active {
 [data-slide][data-review-slide-selectable] {
   position: relative;
 }
-[data-review-slide-selector] {
-  position: absolute;
-  top: calc(0.75rem - 1px);
-  right: calc(100% + 0.5625rem);
-  z-index: 44;
-  display: inline-flex;
-  width: 1.4rem;
-  height: 1.4rem;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 0.3rem;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  color: color-mix(in srgb, var(--muted-c) 72%, transparent);
-  cursor: pointer;
-}
 [data-review-slide-selector]:hover,
 [data-review-slide-selector]:focus-visible {
   border-color: var(--edge-c);
@@ -2039,27 +1167,6 @@ button[data-review-row-target]:active {
 [data-review-slide-selector] svg {
   width: 0.84rem;
   height: 0.84rem;
-}
-[data-review-icon-tooltip] {
-  position: absolute;
-  top: calc(100% + 0.35rem);
-  right: 0;
-  z-index: 60;
-  width: max-content;
-  max-width: 11rem;
-  padding: 0.22rem 0.42rem;
-  border-radius: 0.25rem;
-  background: var(--ink-c);
-  color: var(--bg);
-  font-size: 0.66rem;
-  font-weight: 600;
-  line-height: 1.35;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(-0.1rem);
-  transition:
-    opacity 70ms ease,
-    transform 70ms ease;
 }
 button:hover > [data-review-icon-tooltip],
 button:focus-visible > [data-review-icon-tooltip] {
@@ -2078,19 +1185,6 @@ button:focus-visible > [data-review-icon-tooltip] {
 }
 
 /* ---------------------------------------------------------------- compose */
-
-[data-review-compose] {
-  position: absolute;
-  right: auto;
-  z-index: 47;
-  width: 17rem;
-  padding: 0.75rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.6rem;
-  background: var(--bg);
-  box-shadow: 0 8px 28px rgb(0 0 0 / 0.16);
-  pointer-events: auto;
-}
 [data-review-compose][hidden] {
   display: none;
 }
@@ -2108,36 +1202,6 @@ button:focus-visible > [data-review-icon-tooltip] {
   left: 50%;
   width: min(24rem, calc(100vw - 2rem));
   transform: translate(-50%, -50%);
-}
-[data-review-compose-hint] {
-  margin: 0.35rem 0 0;
-  color: var(--muted-c);
-  font-size: 0.6875rem;
-}
-[data-review-submit-immediately] {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  width: fit-content;
-  margin-top: 0.55rem;
-  color: var(--muted-c);
-  font-size: 0.75rem;
-  cursor: pointer;
-}
-[data-review-submit-immediately-input] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-[data-review-switch-track] {
-  position: relative;
-  width: 1.8rem;
-  height: 1rem;
-  flex: 0 0 auto;
-  border: 1px solid var(--edge-c);
-  border-radius: 999px;
-  background: var(--surface-c);
 }
 [data-review-switch-track]::after {
   position: absolute;
@@ -2164,12 +1228,6 @@ button:focus-visible > [data-review-icon-tooltip] {
   outline: 1px solid var(--accent-c);
   outline-offset: 2px;
 }
-[data-review-compose-actions] {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.4rem;
-  margin-top: 0.5rem;
-}
 [data-review-compose-actions] button {
   padding: 0.25rem 0.6rem;
   border: 1px solid var(--edge-c);
@@ -2185,12 +1243,6 @@ button:focus-visible > [data-review-icon-tooltip] {
 [data-review-compose-actions] button:active {
   background: var(--review-control-active);
 }
-[data-review-compose-save] {
-  border-color: var(--accent-c) !important;
-  background: var(--accent-c) !important;
-  color: var(--bg) !important;
-  font-weight: 600;
-}
 [data-review-compose-save][disabled] {
   border-color: var(--edge-c) !important;
   background: var(--surface-c) !important;
@@ -2200,24 +1252,9 @@ button:focus-visible > [data-review-icon-tooltip] {
 
 /* The repo ships inert HTML rather than a React runtime, so deletion uses the
    native dialog element with shadcn/ui's alert-dialog hierarchy and actions. */
-[data-review-delete-dialog],
-[data-review-revert-dialog] {
-  position: fixed;
-  width: min(26rem, calc(100vw - 2rem));
-  margin: auto;
-  padding: 0;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.65rem;
-  background: var(--bg);
-  color: var(--ink-c);
-  box-shadow: 0 18px 48px rgb(0 0 0 / 0.24);
-}
 [data-review-delete-dialog]::backdrop,
 [data-review-revert-dialog]::backdrop {
   background: rgb(0 0 0 / 0.46);
-}
-[data-review-delete-content] {
-  padding: 1.1rem;
 }
 [data-review-delete-content] h2 {
   margin: 0;
@@ -2229,12 +1266,6 @@ button:focus-visible > [data-review-icon-tooltip] {
   color: var(--muted-c);
   font-size: 0.8125rem;
   line-height: 1.5;
-}
-[data-review-delete-actions] {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 1rem;
 }
 [data-review-delete-actions] button {
   padding: 0.35rem 0.7rem;
@@ -2249,27 +1280,6 @@ button:focus-visible > [data-review-icon-tooltip] {
 }
 [data-review-delete-actions] button:active {
   background: var(--review-control-active);
-}
-[data-review-delete-confirm] {
-  border-color: var(--diff-remove-c) !important;
-  background: var(--diff-remove-c) !important;
-  color: var(--bg) !important;
-}
-[data-review-revert-confirm] {
-  border-color: var(--diff-remove-c) !important;
-  color: var(--diff-remove-c) !important;
-  font-weight: 650;
-}
-
-[data-review-spinner] {
-  display: inline-block;
-  width: 0.72rem;
-  height: 0.72rem;
-  flex: 0 0 auto;
-  border: 1.5px solid currentcolor;
-  border-right-color: transparent;
-  border-radius: 999px;
-  animation: 700ms linear infinite big-plan-review-spin;
 }
 [data-review-outcome-state] [data-review-spinner] {
   margin-right: 0.3rem;
@@ -2312,37 +1322,6 @@ button:focus-visible > [data-review-icon-tooltip] {
 /* Linear-style discovery: hovering or focusing a submit control reveals its
    key combo as keycap chips beside the action name. The chip is display-only
    and never intercepts the pointer. */
-[data-review-compose-save],
-[data-review-agent-save],
-[data-review-thread-reply-send],
-[data-review-row-save],
-[data-review-thread-save] {
-  position: relative;
-}
-[data-review-kbd-tooltip] {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 0.45rem);
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.32rem 0.45rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.4rem;
-  background: var(--bg);
-  color: var(--muted-c);
-  font-size: 0.6875rem;
-  font-weight: 500;
-  white-space: nowrap;
-  box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity 100ms ease,
-    visibility 0s linear 100ms;
-  pointer-events: none;
-}
 [data-review-agent-save] [data-review-kbd-tooltip] {
   right: auto;
   left: 0;
@@ -2404,35 +1383,12 @@ button[disabled] > [data-review-kbd-tooltip] {
   outline: 1px solid var(--annotation-c);
   outline-offset: 3px;
 }
-
-[data-review-marker] {
-  position: fixed;
-  z-index: 42;
-  display: inline-flex;
-  min-width: 1.65rem;
-  height: 1.65rem;
-  align-items: center;
-  justify-content: center;
-  gap: 0.28rem;
-  padding: 0 0.48rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 999px;
-  background: var(--bg);
-  color: var(--accent-c);
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
-}
 [data-review-marker][hidden] {
   display: none;
 }
 [data-review-marker] svg {
   width: 0.9rem;
   height: 0.9rem;
-}
-[data-review-marker-label] {
-  font-size: 0.625rem;
-  font-weight: 700;
-  white-space: nowrap;
 }
 [data-review-marker]::after {
   display: none;
@@ -2505,49 +1461,9 @@ button[disabled] > [data-review-kbd-tooltip] {
   animation: big-plan-review-flash 1.4s ease-out;
 }
 
-[data-review-anchor-context],
-[data-review-draft-stale] {
-  margin: 0.45rem 0 0;
-  padding-left: 0.55rem;
-  border-left: 2px solid var(--annotation-c);
-  color: var(--muted-c);
-  font-size: 0.72rem;
-  line-height: 1.4;
-}
-
 /* Every grid in the change chrome clamps its single column to the container:
    an implicit auto track would size to the widest nowrap label and push the
    whole thread wider than the rail. */
-[data-review-change-controls] {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.45rem;
-  margin-top: 0.6rem;
-}
-
-[data-review-chat-change-digest] {
-  display: grid;
-  gap: 0.4rem;
-  margin-top: 0.55rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--edge-c);
-}
-
-[data-review-chat-change-toggle] {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.18rem 0.25rem;
-  border: 0;
-  border-radius: 0.25rem;
-  background: transparent;
-  color: var(--muted-c);
-  font-size: 0.68rem;
-  font-weight: 750;
-  text-align: left;
-  cursor: pointer;
-}
 
 [data-review-chat-change-toggle]:hover {
   background: var(--review-control-hover);
@@ -2569,22 +1485,8 @@ button[disabled] > [data-review-kbd-tooltip] {
   transform: rotate(90deg);
 }
 
-[data-review-chat-change-list] {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.25rem;
-  min-width: 0;
-}
-
 [data-review-chat-change-list][hidden] {
   display: none;
-}
-
-[data-review-change-list] {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.3rem;
-  min-width: 0;
 }
 
 [data-review-change-list] > strong {
@@ -2597,30 +1499,6 @@ button[disabled] > [data-review-kbd-tooltip] {
 /* The navigator is rows under slide groups, not a stack of cards: one quiet
    container, faint dividers, hierarchy from grouping and the selection
    accent alone. */
-[data-review-change-nav] {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  min-width: 0;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.4rem;
-  background: var(--bg);
-  overflow: hidden;
-}
-
-[data-review-change-group] {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.34rem 0.5rem;
-  border: 0;
-  background: var(--surface-c);
-  color: var(--muted-c);
-  font-size: 0.66rem;
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-}
 
 [data-review-change-nav] > [data-review-change-group]:not(:first-child) {
   border-top: 1px solid var(--edge-c);
@@ -2646,40 +1524,6 @@ button[disabled] > [data-review-kbd-tooltip] {
   transform: rotate(90deg);
 }
 
-[data-review-change-group-title] {
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-[data-review-change-group-count] {
-  flex: 0 0 auto;
-  min-width: 1.05rem;
-  padding: 0 0.25rem;
-  border-radius: 999px;
-  background: var(--bg);
-  color: var(--muted-c);
-  font-size: 0.6rem;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
-[data-review-change-row] {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  align-items: start;
-  gap: 0.4rem;
-  padding: 0.34rem 0.5rem 0.34rem 1.35rem;
-  border: 0;
-  background: transparent;
-  color: var(--text-c);
-  text-align: left;
-  cursor: pointer;
-}
-
 [data-review-change-nav] [data-review-change-row] + [data-review-change-row] {
   border-top: 1px solid color-mix(in srgb, var(--edge-c) 55%, transparent);
 }
@@ -2695,23 +1539,6 @@ button[disabled] > [data-review-kbd-tooltip] {
 [data-review-change-row][aria-current="true"] {
   background: color-mix(in srgb, var(--annotation-bg) 45%, transparent);
   box-shadow: inset 3px 0 0 var(--annotation-c);
-}
-
-[data-review-change-label] {
-  min-width: 0;
-  flex: 1 1 auto;
-  font-size: 0.72rem;
-  font-weight: 550;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-[data-review-change-kind] {
-  flex: 0 0 auto;
-  margin-top: 0.1rem;
-  color: var(--muted-c);
-  font-size: 0.6rem;
-  font-style: italic;
 }
 
 /* Cross-round rows outside the navigator keep light card chrome so they can
@@ -2750,18 +1577,6 @@ button[disabled] > [data-review-kbd-tooltip] {
   cursor: pointer;
 }
 
-[data-review-diff-lens] {
-  position: relative;
-  box-sizing: border-box;
-  width: 100%;
-  margin: 0 0 0.35rem;
-  padding: 0.85rem 1rem 0.8rem;
-  border: 1px dashed var(--annotation-c);
-  border-radius: 0.45rem;
-  background: var(--diff-content-bg);
-  color: var(--text-c);
-}
-
 tr[data-review-diff-lens] {
   display: table-row;
   padding: 0;
@@ -2781,30 +1596,6 @@ tr[data-review-diff-lens] > td {
 [data-review-diff-status="removed"] {
   border-color: var(--diff-remove-c);
   background: var(--diff-remove-bg);
-}
-
-[data-review-diff-label] {
-  position: absolute;
-  top: -0.55rem;
-  left: 0.75rem;
-  padding: 0.12rem 0.38rem;
-  border: 1px solid var(--annotation-c);
-  border-radius: 999px;
-  background: var(--bg);
-  color: var(--annotation-c);
-  font-size: 0.58rem;
-  font-weight: 750;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-[data-review-diff-body] {
-  display: grid;
-  gap: 0.55rem;
-  margin: 0;
-  color: inherit;
-  font: inherit;
-  line-height: inherit;
 }
 
 [data-review-diff-op="del"] {
@@ -2828,25 +1619,6 @@ tr[data-review-diff-lens] > td {
   margin-inline-start: 0.22em;
 }
 
-[data-review-diff-side] {
-  display: grid;
-  grid-template-columns: 3rem minmax(0, 1fr);
-  gap: 0.55rem;
-  padding: 0.45rem 0.55rem;
-  overflow: hidden;
-}
-
-[data-review-diff-side-label] {
-  font-size: 0.68rem;
-  text-transform: uppercase;
-}
-
-[data-review-diff-side-content] {
-  min-width: 55%;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-
 [data-review-diff-side-content] > * + * {
   margin-top: 0.45rem;
 }
@@ -2867,22 +1639,6 @@ tr[data-review-diff-lens] > td {
 [data-review-diff-side="now"] {
   background: var(--diff-add-bg);
   color: var(--diff-add-c);
-}
-
-[data-review-diff-stepper] {
-  position: fixed;
-  z-index: 22;
-  bottom: 1rem;
-  left: 50%;
-  display: flex;
-  align-items: center;
-  gap: 0.2rem;
-  padding: 0.28rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 999px;
-  background: var(--surface-c);
-  box-shadow: 0 0.7rem 1.8rem rgb(0 0 0 / 18%);
-  transform: translateX(-50%);
 }
 
 [data-review-diff-stepper][hidden] {
@@ -2924,17 +1680,6 @@ tr[data-review-diff-lens] > td {
   opacity: 0.35;
   cursor: default;
 }
-
-[data-review-diff-position] {
-  max-width: min(42vw, 28rem);
-  overflow: hidden;
-  padding: 0 0.45rem;
-  color: var(--muted-c);
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 @keyframes big-plan-review-flash {
   0% {
     background: var(--annotation-bg);
@@ -2953,13 +1698,3 @@ tr[data-review-diff-lens] > td {
 
 /* The announcement channel for keyboard navigation stays audible to screen
    readers while taking no visual space. */
-[data-review-live] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}

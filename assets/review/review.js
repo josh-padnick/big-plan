@@ -109,6 +109,8 @@ import {
           ...(node.language
             ? [
                 el("span", {
+                  class:
+                    "[display:block] [margin-bottom:0.25rem] [color:var(--muted-c)] [font-size:0.58rem] [text-transform:uppercase]",
                   "data-review-code-language": true,
                   text: node.language,
                 }),
@@ -179,11 +181,20 @@ import {
 
   const attachShortcutTooltip = (button, label) => {
     button.appendChild(
-      el("span", { "data-review-kbd-tooltip": true, "aria-hidden": "true" }, [
-        el("kbd", { text: MOD_KEY_LABEL }),
-        el("kbd", { text: "Enter" }),
-        el("span", { text: label }),
-      ]),
+      el(
+        "span",
+        {
+          class:
+            "[position:absolute] [right:0] [bottom:calc(100%_+_0.45rem)] [z-index:60] [display:flex] [align-items:center] [gap:0.3rem] [padding:0.32rem_0.45rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.6875rem] [font-weight:500] [white-space:nowrap] [box-shadow:0_6px_20px_rgb(0_0_0_/_0.14)] [opacity:0] [visibility:hidden] [transition:opacity_100ms_ease,_visibility_0s_linear_100ms] [pointer-events:none]",
+          "data-review-kbd-tooltip": true,
+          "aria-hidden": "true",
+        },
+        [
+          el("kbd", { text: MOD_KEY_LABEL }),
+          el("kbd", { text: "Enter" }),
+          el("span", { text: label }),
+        ],
+      ),
     );
     button.setAttribute(
       "aria-keyshortcuts",
@@ -811,6 +822,8 @@ import {
   // ------------------------------------------------------------------ layout
 
   const rail = el("aside", {
+    class:
+      "[position:fixed] [top:2.75rem] [right:0] [bottom:0] [z-index:44] [display:flex] [width:min(22rem,_100vw)] [flex-direction:column] [border-left:1px_solid_var(--edge-c)] [background:var(--bg)] [box-shadow:-8px_0_24px_rgb(0_0_0_/_0.06)] [font-size:0.875rem] [overflow-anchor:none]",
     "data-review-rail": true,
     "aria-label": "Feedback",
     hidden: true,
@@ -821,6 +834,8 @@ import {
   // model.
   const agentAlertLabel = el("span", { text: "No agent connected" });
   const agentAlert = el("button", {
+    class:
+      "[display:inline-flex] [min-height:1.85rem] [align-items:center] [gap:0.4rem] [padding:0.32rem_0.4rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.2] [cursor:pointer] [color:var(--callout-danger-c)] [font-size:0.75rem] [font-weight:650] [white-space:nowrap]",
     type: "button",
     "data-review-agent-alert": true,
     hidden: true,
@@ -831,6 +846,8 @@ import {
     setActiveTab("agent");
   });
   const agentOk = el("button", {
+    class:
+      "[display:inline-flex] [min-height:1.85rem] [align-items:center] [gap:0.4rem] [padding:0.32rem_0.4rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.2] [cursor:pointer] [position:relative] [width:1.85rem] [justify-content:center]",
     type: "button",
     "data-review-agent-ok": true,
     "aria-label": "Agent session active",
@@ -838,10 +855,14 @@ import {
   });
   agentOk.append(
     el("span", {
+      class:
+        "[width:6px] [height:6px] [border-radius:999px] [background:var(--diff-add-c)] [box-shadow:0_0_0_2px_color-mix(in_srgb,_var(--diff-add-c)_34%,_transparent)]",
       "data-review-agent-ok-dot": true,
       "aria-hidden": "true",
     }),
     el("span", {
+      class:
+        "[position:absolute] [top:calc(100%_+_0.35rem)] [right:0] [z-index:60] [width:max-content] [max-width:11rem] [padding:0.22rem_0.42rem] [border-radius:0.25rem] [background:var(--ink-c)] [color:var(--bg)] [font-size:0.66rem] [font-weight:600] [line-height:1.35] [pointer-events:none] [opacity:0] [transform:translateY(-0.1rem)] [transition:opacity_70ms_ease,_transform_70ms_ease]",
       "data-review-icon-tooltip": true,
       "aria-hidden": "true",
       text: "Agent session active",
@@ -853,6 +874,8 @@ import {
   });
 
   const toggle = el("button", {
+    class:
+      "[display:inline-flex] [min-height:1.85rem] [align-items:center] [gap:0.4rem] [padding:0.32rem_0.4rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.2] [cursor:pointer]",
     type: "button",
     "data-review-toggle": true,
     "aria-expanded": "false",
@@ -860,12 +883,16 @@ import {
     title: "Open feedback sidebar (Alt+C)",
   });
   const toggleCount = el("span", {
+    class:
+      "[display:inline-flex] [min-width:1.15rem] [height:1.15rem] [align-items:center] [justify-content:center] [padding:0_0.28rem] [border:1px_solid_currentColor] [border-radius:999px] [font-variant-numeric:tabular-nums] [font-size:0.625rem] [font-weight:700] [text-align:center]",
     "data-review-toggle-count": true,
     text: "0",
   });
   const feedbackLabel = el("span", { "data-review-toggle-label": true });
   toggle.append(icon(MESSAGE_SQUARE_TEXT_ICON), feedbackLabel, toggleCount);
   const sendButton = el("button", {
+    class:
+      "[width:100%] [padding:0.45rem_0.7rem] [border:1px_solid_var(--accent-c)] [border-radius:0.4rem] [background:var(--accent-c)] [color:var(--bg)] [font-size:0.8125rem] [font-weight:600] [cursor:pointer]",
     type: "button",
     "data-review-send": true,
     hidden: true,
@@ -875,6 +902,7 @@ import {
     "data-review-batch-label": true,
   });
   const compactBatchMenu = el("details", {
+    class: "[position:relative] [display:none]",
     "data-review-batch-menu": true,
     hidden: true,
   });
@@ -894,32 +922,48 @@ import {
   });
   compactBatchMenu.append(
     compactBatchSummary,
-    el("div", { "data-review-batch-actions": true }, [
-      compactReviewButton,
-      compactSendButton,
-    ]),
+    el(
+      "div",
+      {
+        class:
+          "[position:absolute] [top:calc(100%_+_0.3rem)] [right:0] [display:grid] [width:11rem] [padding:0.3rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [box-shadow:0_8px_24px_rgb(0_0_0_/_0.14)]",
+        "data-review-batch-actions": true,
+      },
+      [compactReviewButton, compactSendButton],
+    ),
   );
-  const toolbar = el("div", { "data-review-toolbar": true }, [
-    agentAlert,
-    agentOk,
-    toggle,
-    sendButton,
-    compactBatchMenu,
-  ]);
+  const toolbar = el(
+    "div",
+    {
+      class:
+        "[position:fixed] [top:0] [right:0] [left:0] [z-index:80] [display:flex] [height:2.75rem] [align-items:center] [justify-content:flex-end] [gap:0.35rem] [padding-right:1rem] [border-bottom:1px_solid_var(--edge-c)] [background:var(--bg)] [pointer-events:none]",
+      "data-review-toolbar": true,
+    },
+    [agentAlert, agentOk, toggle, sendButton, compactBatchMenu],
+  );
 
   const countLabel = el("span", {
+    class:
+      "[display:inline-flex] [min-width:1.15rem] [height:1.15rem] [align-items:center] [justify-content:center] [padding:0_0.28rem] [border-radius:999px] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.625rem] [font-weight:750] [font-variant-numeric:tabular-nums]",
     "data-review-count": true,
     text: "Nothing pending",
   });
   const hideButton = el("button", {
+    class:
+      "[display:inline-flex] [padding:0.2rem] [border-radius:0.3rem] [color:var(--muted-c)] [cursor:pointer]",
     type: "button",
     "data-review-hide": true,
     "aria-label": "Hide feedback",
   });
   hideButton.appendChild(icon(X_ICON));
 
-  const draftList = el("ol", { "data-review-drafts": true });
+  const draftList = el("ol", {
+    class: "[margin:0] [padding:0] [list-style:none]",
+    "data-review-drafts": true,
+  });
   const draftGroupCount = el("span", {
+    class:
+      "[display:inline-flex] [min-width:1.1rem] [height:1.1rem] [align-items:center] [justify-content:center] [margin-left:auto] [padding:0_0.25rem] [border-radius:999px] [background:var(--surface-c)] [font-size:0.625rem] [font-variant-numeric:tabular-nums]",
     "data-review-outcome-group-count": true,
   });
   const sidebarSendButton = el("button", {
@@ -947,37 +991,74 @@ import {
     ],
   );
   const emptyNote = el("p", {
+    class:
+      "[margin:0.4rem_0_0] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.5]",
     "data-review-empty": true,
     text: "Select text to comment, or use a slide selector to select it all.",
   });
-  const responseSummary = el("p", { "data-review-round-summary": true });
+  const responseSummary = el("p", {
+    class:
+      "[min-width:0] [flex:1_1_auto] [margin:0] [color:var(--muted-c)] [font-size:0.6875rem] [line-height:1.45] [display:flex] [flex-wrap:wrap] [gap:0.3rem]",
+    "data-review-round-summary": true,
+  });
   const resolveAllButton = el("button", {
+    class:
+      "[flex:0_0_auto] [padding:0] [border:0] [background:transparent] [color:var(--muted-c)] [font-size:0.72rem] [cursor:pointer]",
     type: "button",
     "data-review-resolve-all": true,
     text: "Resolve all",
     hidden: true,
   });
-  const roundHead = el("div", { "data-review-round-head": true }, [
-    responseSummary,
-    resolveAllButton,
-  ]);
-  const sentList = el("div", { "data-review-sent-list": true });
-  const sentGroup = el("section", { "data-review-sent": true, hidden: true }, [
-    roundHead,
-    sentList,
-  ]);
+  const roundHead = el(
+    "div",
+    {
+      class:
+        "[display:flex] [min-width:0] [align-items:baseline] [gap:0.6rem] [margin-bottom:0.7rem]",
+      "data-review-round-head": true,
+    },
+    [responseSummary, resolveAllButton],
+  );
+  const sentList = el("div", {
+    class: "[margin:0] [padding:0] [list-style:none]",
+    "data-review-sent-list": true,
+  });
+  const sentGroup = el(
+    "section",
+    {
+      class:
+        "[margin-top:0.9rem] [padding-top:0.7rem] [border-top:1px_solid_var(--edge-c)]",
+      "data-review-sent": true,
+      hidden: true,
+    },
+    [roundHead, sentList],
+  );
 
-  const sendNote = el("p", { "data-review-send-note": true });
-  const sendBar = el("div", { "data-review-send-bar": true, hidden: true }, [
-    sendNote,
-  ]);
+  const sendNote = el("p", {
+    class:
+      "[margin:0.45rem_0_0] [color:var(--muted-c)] [font-size:0.75rem] [line-height:1.45] [overflow-wrap:anywhere]",
+    "data-review-send-note": true,
+  });
+  const sendBar = el(
+    "div",
+    {
+      class:
+        "[margin-top:0.7rem] [padding-top:0.7rem] [border-top:1px_solid_var(--edge-c)]",
+      "data-review-send-bar": true,
+      hidden: true,
+    },
+    [sendNote],
+  );
 
   const agentState = el("span", {
+    class:
+      "[margin-left:auto] [padding:0.1rem_0.45rem] [border-radius:999px] [font-size:0.6875rem] [font-weight:600] [white-space:nowrap]",
     "data-review-agent-state": true,
     "data-tone": "idle",
     text: "Waiting for you",
   });
   const agentInput = el("textarea", {
+    class:
+      "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical]",
     "data-review-agent-input": true,
     id: "big-plan-review-agent-note",
     rows: "3",
@@ -992,7 +1073,12 @@ import {
   });
   const attachLabel = el(
     "label",
-    { "data-review-attach": true, hidden: true },
+    {
+      class:
+        "[display:flex] [align-items:center] [gap:0.4rem] [margin-top:0.4rem] [color:var(--muted-c)] [font-size:0.75rem]",
+      "data-review-attach": true,
+      hidden: true,
+    },
     [
       attachInput,
       el("span", {
@@ -1002,39 +1088,62 @@ import {
     ],
   );
   const agentSave = el("button", {
+    class:
+      "[margin-top:0.45rem] [padding:0.3rem_0.65rem] [border:1px_solid_var(--edge-c)] [border-radius:0.35rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.75rem] [cursor:pointer] [position:relative]",
     type: "button",
     "data-review-agent-save": true,
     text: "Send",
   });
   attachShortcutTooltip(agentSave, "Send message");
   const planChatList = el("ol", {
+    class:
+      "[display:grid] [gap:0.5rem] [margin:0_0_0.7rem] [padding:0] [list-style:none]",
     "data-review-plan-chat": true,
     "aria-label": "Plan-wide conversation",
   });
 
-  const agentPanel = el("section", { "data-review-agent": true }, [
-    el("div", { "data-review-agent-head": true }, [
-      el("h3", { text: "Plan-wide chat" }),
-      agentState,
-    ]),
-    el("p", {
-      "data-review-chat-note": true,
-      text: hasRuntime
-        ? "Live coding-agent conversation through this plan’s local review session."
-        : "Start `big-plan review` and its coding-agent session to chat.",
-    }),
-    planChatList,
-    el("label", {
-      for: "big-plan-review-agent-note",
-      "data-review-field-label": true,
-      text: "Message",
-    }),
-    agentInput,
-    attachLabel,
-    agentSave,
-  ]);
+  const agentPanel = el(
+    "section",
+    {
+      class:
+        "[padding:0.7rem_0.9rem_0.9rem] [border-top:1px_solid_var(--edge-c)] [background:var(--surface-c)]",
+      "data-review-agent": true,
+    },
+    [
+      el(
+        "div",
+        {
+          class:
+            "[display:flex] [align-items:center] [gap:0.5rem] [margin-bottom:0.5rem]",
+          "data-review-agent-head": true,
+        },
+        [el("h3", { text: "Plan-wide chat" }), agentState],
+      ),
+      el("p", {
+        class:
+          "[margin:-0.15rem_0_0.65rem] [color:var(--muted-c)] [font-size:0.6875rem] [line-height:1.45]",
+        "data-review-chat-note": true,
+        text: hasRuntime
+          ? "Live coding-agent conversation through this plan’s local review session."
+          : "Start `big-plan review` and its coding-agent session to chat.",
+      }),
+      planChatList,
+      el("label", {
+        class:
+          "[display:block] [margin-bottom:0.25rem] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:600]",
+        for: "big-plan-review-agent-note",
+        "data-review-field-label": true,
+        text: "Message",
+      }),
+      agentInput,
+      attachLabel,
+      agentSave,
+    ],
+  );
 
   const commentsTab = el("button", {
+    class:
+      "[display:inline-flex] [align-items:center] [gap:0.35rem] [padding:0.42rem_0.52rem] [border-top-width:0] [border-right-width:0] [border-bottom-width:2px] [border-left-width:0] [border-bottom-style:solid] [border-bottom-color:transparent] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:650] [cursor:pointer]",
     type: "button",
     role: "tab",
     "data-review-tab": "comments",
@@ -1047,6 +1156,8 @@ import {
     countLabel,
   );
   const chatTab = el("button", {
+    class:
+      "[display:inline-flex] [align-items:center] [gap:0.35rem] [padding:0.42rem_0.52rem] [border-top-width:0] [border-right-width:0] [border-bottom-width:2px] [border-left-width:0] [border-bottom-style:solid] [border-bottom-color:transparent] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:650] [cursor:pointer]",
     type: "button",
     role: "tab",
     "data-review-tab": "chat",
@@ -1056,6 +1167,8 @@ import {
   chatTab.append(icon(MESSAGES_SQUARE_ICON), el("span", { text: "Chat" }));
   const connectionTab = hasRuntime
     ? el("button", {
+        class:
+          "[display:inline-flex] [align-items:center] [gap:0.35rem] [padding:0.42rem_0.52rem] [border-top-width:0] [border-right-width:0] [border-bottom-width:2px] [border-left-width:0] [border-bottom-style:solid] [border-bottom-color:transparent] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:650] [cursor:pointer]",
         type: "button",
         role: "tab",
         "data-review-tab": "agent",
@@ -1064,31 +1177,40 @@ import {
       })
     : null;
   connectionTab?.append(icon(ACTIVITY_ICON), el("span", { text: "Agent" }));
-  const tabList = el("div", { "data-review-tabs": true, role: "tablist" }, [
-    commentsTab,
-    chatTab,
-    connectionTab,
-    hideButton,
-  ]);
+  const tabList = el(
+    "div",
+    {
+      class:
+        "[display:flex] [flex:0_0_auto] [align-items:stretch] [gap:0.2rem] [padding:0.35rem_0.4rem_0]",
+      "data-review-tabs": true,
+      role: "tablist",
+    },
+    [commentsTab, chatTab, connectionTab, hideButton],
+  );
   const commentsPanel = el(
     "section",
     {
+      class: "[min-height:0]",
       id: "big-plan-review-comments",
       "data-review-panel": "comments",
       role: "tabpanel",
     },
     [
-      el("div", { "data-review-scroll": true }, [
-        draftGroup,
-        sendBar,
-        emptyNote,
-        sentGroup,
-      ]),
+      el(
+        "div",
+        {
+          class:
+            "[flex:1_1_auto] [overflow-y:auto] [overscroll-behavior:contain] [padding:0.7rem_0.9rem_1.2rem]",
+          "data-review-scroll": true,
+        },
+        [draftGroup, sendBar, emptyNote, sentGroup],
+      ),
     ],
   );
   const chatPanel = el(
     "section",
     {
+      class: "[min-height:0]",
       id: "big-plan-review-chat",
       "data-review-panel": "chat",
       role: "tabpanel",
@@ -1098,19 +1220,27 @@ import {
   );
   const connectionPanel = hasRuntime
     ? el("section", {
+        class: "[min-height:0]",
         id: "big-plan-review-agent",
         "data-review-panel": "agent",
         role: "tabpanel",
         hidden: true,
       })
     : null;
-  const railHeader = el("header", { "data-review-rail-header": true }, [
-    tabList,
-  ]);
+  const railHeader = el(
+    "header",
+    {
+      class: "[flex:0_0_auto] [border-bottom:1px_solid_var(--edge-c)]",
+      "data-review-rail-header": true,
+    },
+    [tabList],
+  );
   rail.append(railHeader, commentsPanel, chatPanel);
   if (connectionPanel) rail.appendChild(connectionPanel);
 
   const affordance = el("button", {
+    class:
+      "[position:fixed] [z-index:46] [display:inline-flex] [align-items:center] [gap:0.3rem] [padding:0.2rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.75rem] [cursor:pointer] [box-shadow:0_2px_8px_rgb(0_0_0_/_0.08)]",
     type: "button",
     "data-review-affordance": true,
     hidden: true,
@@ -1118,6 +1248,8 @@ import {
   const affordanceLabel = el("span", { text: "Comment" });
   affordance.append(icon(MESSAGE_SQUARE_TEXT_ICON), affordanceLabel);
   const composeInput = el("textarea", {
+    class:
+      "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical]",
     "data-review-compose-input": true,
     id: "big-plan-review-compose",
     rows: "4",
@@ -1136,6 +1268,8 @@ import {
   const composeSave = el(
     "button",
     {
+      class:
+        "[border-color:var(--accent-c)]! [background:var(--accent-c)]! [color:var(--bg)]! [font-weight:600] [position:relative]",
       type: "button",
       "data-review-compose-save": true,
       disabled: true,
@@ -1155,6 +1289,7 @@ import {
   };
   syncComposeSaveLabel();
   const submitImmediatelyInput = el("input", {
+    class: "[position:absolute] [width:1px] [height:1px] [opacity:0]",
     type: "checkbox",
     role: "switch",
     "data-review-submit-immediately-input": true,
@@ -1164,19 +1299,26 @@ import {
   const submitImmediately = el(
     "label",
     {
+      class:
+        "[display:flex] [align-items:center] [gap:0.45rem] [width:fit-content] [margin-top:0.55rem] [color:var(--muted-c)] [font-size:0.75rem] [cursor:pointer]",
       "data-review-submit-immediately": true,
       for: "big-plan-review-submit-immediately",
     },
     [
       submitImmediatelyInput,
-      el("span", { "data-review-switch-track": true }),
+      el("span", {
+        class:
+          "[position:relative] [width:1.8rem] [height:1rem] [flex:0_0_auto] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--surface-c)]",
+        "data-review-switch-track": true,
+      }),
       el("span", { text: "Submit right away" }),
     ],
   );
   const compose = el(
     "div",
     {
-      class: "data-[review-compose-centered]:fixed!",
+      class:
+        "data-[review-compose-centered]:fixed! [position:absolute] [right:auto] [z-index:47] [width:17rem] [padding:0.75rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_8px_28px_rgb(0_0_0_/_0.16)] [pointer-events:auto]",
       "data-review-compose": true,
       role: "dialog",
       "aria-label": "Add a comment",
@@ -1184,24 +1326,35 @@ import {
     },
     [
       el("label", {
+        class:
+          "[display:block] [margin-bottom:0.25rem] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:600]",
         for: "big-plan-review-compose",
         "data-review-field-label": true,
         text: "Add a comment",
       }),
       composeInput,
       el("p", {
+        class:
+          "[margin:0.35rem_0_0] [color:var(--muted-c)] [font-size:0.6875rem]",
         "data-review-compose-hint": true,
         text: "Escape cancels · Cmd/Ctrl+Enter adds",
       }),
       submitImmediately,
-      el("div", { "data-review-compose-actions": true }, [
-        composeCancel,
-        composeSave,
-      ]),
+      el(
+        "div",
+        {
+          class:
+            "[display:flex] [justify-content:flex-end] [gap:0.4rem] [margin-top:0.5rem]",
+          "data-review-compose-actions": true,
+        },
+        [composeCancel, composeSave],
+      ),
     ],
   );
 
   const threadLayer = el("div", {
+    class:
+      "[position:absolute] [top:0] [right:0] [left:0] [height:0] [z-index:44] [pointer-events:none]",
     "data-review-thread-layer": true,
     "aria-label": "Comments beside the plan",
   });
@@ -1209,7 +1362,12 @@ import {
     "data-review-marker-layer": true,
     "aria-label": "Comment anchors",
   });
-  const live = el("p", { "data-review-live": true, "aria-live": "polite" });
+  const live = el("p", {
+    class:
+      "[position:absolute] [width:1px] [height:1px] [margin:-1px] [padding:0] [overflow:hidden] [clip-path:inset(50%)] [white-space:nowrap]",
+    "data-review-live": true,
+    "aria-live": "polite",
+  });
   const toast = el("div", {
     class:
       "fixed bottom-4 left-1/2 z-[70] hidden -translate-x-1/2 items-center gap-3 rounded-md border border-edge bg-[var(--ink-c)] px-3 py-2 text-xs font-semibold text-[var(--bg)] shadow-lg",
@@ -1217,6 +1375,8 @@ import {
     role: "status",
   });
   const backdrop = el("button", {
+    class:
+      "[position:fixed] [inset:2.75rem_0_0] [z-index:43] [border:0] [background:rgb(0_0_0_/_0.28)] [cursor:pointer]",
     type: "button",
     "data-review-backdrop": true,
     "aria-label": "Close feedback and return to the plan",
@@ -1236,6 +1396,8 @@ import {
     text: "Cancel",
   });
   const deleteConfirm = el("button", {
+    class:
+      "[border-color:var(--diff-remove-c)]! [background:var(--diff-remove-c)]! [color:var(--bg)]!",
     type: "button",
     "data-review-delete-confirm": true,
     text: "Delete",
@@ -1243,19 +1405,30 @@ import {
   const deleteDialog = el(
     "dialog",
     {
+      class:
+        "[position:fixed] [width:min(26rem,_calc(100vw_-_2rem))] [margin:auto] [padding:0] [border:1px_solid_var(--edge-c)] [border-radius:0.65rem] [background:var(--bg)] [color:var(--ink-c)] [box-shadow:0_18px_48px_rgb(0_0_0_/_0.24)]",
       "data-review-delete-dialog": true,
       "aria-labelledby": "big-plan-review-delete-title",
       "aria-describedby": "big-plan-review-delete-description",
     },
     [
-      el("div", { "data-review-delete-content": true }, [
-        deleteTitle,
-        deleteDescription,
-        el("div", { "data-review-delete-actions": true }, [
-          deleteCancel,
-          deleteConfirm,
-        ]),
-      ]),
+      el(
+        "div",
+        { class: "[padding:1.1rem]", "data-review-delete-content": true },
+        [
+          deleteTitle,
+          deleteDescription,
+          el(
+            "div",
+            {
+              class:
+                "[display:flex] [justify-content:flex-end] [gap:0.5rem] [margin-top:1rem]",
+              "data-review-delete-actions": true,
+            },
+            [deleteCancel, deleteConfirm],
+          ),
+        ],
+      ),
     ],
   );
   const revertTitle = el("h2", {
@@ -1272,6 +1445,8 @@ import {
     text: "Cancel",
   });
   const revertConfirm = el("button", {
+    class:
+      "[border-color:var(--diff-remove-c)]! [color:var(--diff-remove-c)]! [font-weight:650]",
     type: "button",
     "data-review-revert-confirm": true,
     text: "Revert changes",
@@ -1279,35 +1454,50 @@ import {
   const revertDialog = el(
     "dialog",
     {
+      class:
+        "[position:fixed] [width:min(26rem,_calc(100vw_-_2rem))] [margin:auto] [padding:0] [border:1px_solid_var(--edge-c)] [border-radius:0.65rem] [background:var(--bg)] [color:var(--ink-c)] [box-shadow:0_18px_48px_rgb(0_0_0_/_0.24)]",
       "data-review-revert-dialog": true,
       "aria-labelledby": "big-plan-review-revert-title",
       "aria-describedby": "big-plan-review-revert-description",
     },
     [
-      el("div", { "data-review-delete-content": true }, [
-        revertTitle,
-        revertDescription,
-        el("div", { "data-review-delete-actions": true }, [
-          revertCancel,
-          revertConfirm,
-        ]),
-      ]),
+      el(
+        "div",
+        { class: "[padding:1.1rem]", "data-review-delete-content": true },
+        [
+          revertTitle,
+          revertDescription,
+          el(
+            "div",
+            {
+              class:
+                "[display:flex] [justify-content:flex-end] [gap:0.5rem] [margin-top:1rem]",
+              "data-review-delete-actions": true,
+            },
+            [revertCancel, revertConfirm],
+          ),
+        ],
+      ),
     ],
   );
 
-  const surface = el("div", { "data-review-root": true }, [
-    backdrop,
-    toolbar,
-    rail,
-    affordance,
-    threadLayer,
-    compose,
-    markerLayer,
-    deleteDialog,
-    revertDialog,
-    toast,
-    live,
-  ]);
+  const surface = el(
+    "div",
+    { class: "[position:static] [z-index:40]", "data-review-root": true },
+    [
+      backdrop,
+      toolbar,
+      rail,
+      affordance,
+      threadLayer,
+      compose,
+      markerLayer,
+      deleteDialog,
+      revertDialog,
+      toast,
+      live,
+    ],
+  );
   document.body.appendChild(surface);
   // Tailwind's delivery optimizer does not yet parse the standardized
   // ::highlight() pseudo-element, so these named-highlight rules live with the browser
@@ -1438,6 +1628,8 @@ import {
 
   const copyBlock = ({ attribute, text }) => {
     const button = el("button", {
+      class:
+        "[position:absolute] [top:0.38rem] [right:0.38rem] [display:inline-flex] [align-items:center] [gap:0.25rem] [padding:0.2rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.625rem] [line-height:1] [cursor:pointer]",
       type: "button",
       "data-review-copy": attribute,
       "aria-label": "Copy to clipboard",
@@ -1461,10 +1653,14 @@ import {
         button.setAttribute("aria-label", message);
       }
     });
-    return el("div", { "data-review-copy-block": attribute }, [
-      el("pre", { [attribute]: true }, [el("code", { text })]),
-      button,
-    ]);
+    return el(
+      "div",
+      {
+        class: "[position:relative] [min-width:0]",
+        "data-review-copy-block": attribute,
+      },
+      [el("pre", { [attribute]: true }, [el("code", { text })]), button],
+    );
   };
 
   const connectionLogView = ({ historyWasOpen }) => {
@@ -1489,6 +1685,8 @@ import {
     });
     const title = el("span", { text: "Connection log" });
     const count = el("span", {
+      class:
+        "[padding:0.08rem_0.32rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [color:var(--muted-c)] [font-size:0.5625rem] [font-weight:700] [letter-spacing:0.04em] [line-height:1.2] [text-transform:uppercase]",
       "data-review-connection-count": true,
       text: String(events.length),
       "aria-label": events.length + " event" + (events.length === 1 ? "" : "s"),
@@ -1496,6 +1694,8 @@ import {
     const details = el(
       "details",
       {
+        class:
+          "[margin-top:0.9rem] [color:var(--muted-c)] [font-size:0.75rem] [font-variant-numeric:tabular-nums]",
         "data-review-connection-history": true,
         ...(historyWasOpen ? { open: true } : {}),
       },
@@ -1510,42 +1710,50 @@ import {
 
     const latestAt = latest?.atMs || Date.now();
     const lastSignalAt = agentHeartbeatAt > 0 ? agentHeartbeatAt : latestAt;
-    const summary = el("dl", { "data-review-connection-summary": true }, [
-      el("div", {}, [
-        el("dt", { text: "State" }),
-        el("dd", {
-          "data-state": agentConnected ? "connected" : "disconnected",
-          text: agentConnected ? "CONNECTED" : "DISCONNECTED",
-        }),
-      ]),
-      el("div", {}, [
-        el("dt", { text: "Since" }),
-        el("dd", {}, [
-          el("time", {
-            datetime: latest?.at,
-            text: new Intl.DateTimeFormat(undefined, {
-              hour: "numeric",
-              minute: "2-digit",
-              second: "2-digit",
-            }).format(new Date(latestAt)),
+    const summary = el(
+      "dl",
+      {
+        class:
+          "[display:grid] [grid-template-columns:repeat(2,_minmax(0,_1fr))] [gap:0.55rem_0.8rem] [margin:0.65rem_0_0.8rem] [padding:0.65rem_0] [border-block:1px_solid_var(--edge-c)]",
+        "data-review-connection-summary": true,
+      },
+      [
+        el("div", {}, [
+          el("dt", { text: "State" }),
+          el("dd", {
+            "data-state": agentConnected ? "connected" : "disconnected",
+            text: agentConnected ? "CONNECTED" : "DISCONNECTED",
           }),
         ]),
-      ]),
-      el("div", {}, [
-        el("dt", { text: "Last signal" }),
-        el("dd", {
-          "data-review-agent-heartbeat": true,
-          "data-review-relative-at": lastSignalAt,
-          text: relativeSignal(lastSignalAt),
-        }),
-      ]),
-      el("div", {}, [
-        el("dt", { text: "Events" }),
-        el("dd", {
-          text: disconnects + " disconnects · " + reconnects + " reconnects",
-        }),
-      ]),
-    ]);
+        el("div", {}, [
+          el("dt", { text: "Since" }),
+          el("dd", {}, [
+            el("time", {
+              datetime: latest?.at,
+              text: new Intl.DateTimeFormat(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit",
+              }).format(new Date(latestAt)),
+            }),
+          ]),
+        ]),
+        el("div", {}, [
+          el("dt", { text: "Last signal" }),
+          el("dd", {
+            "data-review-agent-heartbeat": true,
+            "data-review-relative-at": lastSignalAt,
+            text: relativeSignal(lastSignalAt),
+          }),
+        ]),
+        el("div", {}, [
+          el("dt", { text: "Events" }),
+          el("dd", {
+            text: disconnects + " disconnects · " + reconnects + " reconnects",
+          }),
+        ]),
+      ],
+    );
     details.appendChild(summary);
 
     const groups = new Map();
@@ -1578,6 +1786,8 @@ import {
         el(
           "li",
           {
+            class:
+              "[position:relative] [display:grid] [grid-template-columns:0.65rem_4.6rem_minmax(0,_1fr)_auto] [gap:0.22rem_0.4rem] [align-items:baseline] [min-width:0] [padding:0.28rem_0]",
             "data-review-connection-event": entry.connected
               ? "connected"
               : "disconnected",
@@ -1587,6 +1797,8 @@ import {
           },
           [
             el("span", {
+              class:
+                "[position:relative] [width:6px] [height:6px] [align-self:center] [border:1px_solid_var(--muted-c)] [border-radius:999px] [background:var(--bg)]",
               "data-review-connection-marker": true,
               "aria-hidden": "true",
             }),
@@ -1602,9 +1814,18 @@ import {
               text: entry.connected ? "Connected" : "Disconnected",
             }),
             ...(reverseIndex === 0
-              ? [el("span", { "data-review-current": true, text: "Current" })]
+              ? [
+                  el("span", {
+                    class:
+                      "[padding:0.08rem_0.32rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [color:var(--muted-c)] [font-size:0.5625rem] [font-weight:700] [letter-spacing:0.04em] [line-height:1.2] [text-transform:uppercase]",
+                    "data-review-current": true,
+                    text: "Current",
+                  }),
+                ]
               : []),
             el("span", {
+              class:
+                "[grid-column:3_/_-1] [color:var(--muted-c)] [font-size:0.625rem]",
               "data-review-connection-duration": true,
               "data-review-duration-start": entry.atMs,
               ...(durationEnd === undefined
@@ -1617,6 +1838,8 @@ import {
             ...(entry.reason
               ? [
                   el("span", {
+                    class:
+                      "[grid-column:3_/_-1] [color:var(--muted-c)] [font-size:0.625rem] [color:var(--callout-warning-c)]",
                     "data-review-connection-reason": true,
                     text: entry.reason,
                   }),
@@ -1657,6 +1880,8 @@ import {
       connectionPanel.querySelector("[data-review-connection-history]")
         ?.open === true;
     const state = el("section", {
+      class:
+        "[display:grid] [gap:0.55rem] [padding:0.8rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [font-size:0.75rem] [line-height:1.5]",
       "data-review-connection-state": agentConnected
         ? "connected"
         : runtimeOffline
@@ -1666,17 +1891,28 @@ import {
     });
     if (agentConnected) {
       state.append(
-        el("div", { "data-review-connection-title": true }, [
-          el("span", {
-            "data-review-connection-dot": true,
-            "aria-hidden": "true",
-          }),
-          el("strong", { text: "Agent session active" }),
-          el("span", {
-            "data-review-connection-phase": true,
-            text: agentSessionState === "working" ? "Working" : "Waiting",
-          }),
-        ]),
+        el(
+          "div",
+          {
+            class: "[display:flex] [align-items:center] [gap:0.45rem]",
+            "data-review-connection-title": true,
+          },
+          [
+            el("span", {
+              class:
+                "[width:6px] [height:6px] [border-radius:999px] [background:currentColor] [box-shadow:0_0_0_2px_color-mix(in_srgb,_var(--diff-add-c)_34%,_transparent)]",
+              "data-review-connection-dot": true,
+              "aria-hidden": "true",
+            }),
+            el("strong", { text: "Agent session active" }),
+            el("span", {
+              class:
+                "[margin-left:auto] [font-size:0.6875rem] [font-weight:700] [text-transform:uppercase]",
+              "data-review-connection-phase": true,
+              text: agentSessionState === "working" ? "Working" : "Waiting",
+            }),
+          ],
+        ),
         el("p", {}, [
           document.createTextNode("Last signal "),
           el("span", {
@@ -1780,12 +2016,17 @@ import {
     const existing = markerByBlock.get(block);
     if (existing) return existing;
     const marker = el("button", {
+      class:
+        "[position:fixed] [z-index:42] [display:inline-flex] [min-width:1.65rem] [height:1.65rem] [align-items:center] [justify-content:center] [gap:0.28rem] [padding:0_0.48rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--bg)] [color:var(--accent-c)] [cursor:pointer] [box-shadow:0_2px_8px_rgb(0_0_0_/_0.08)]",
       type: "button",
       "data-review-marker": true,
     });
     marker.append(
       icon(MESSAGE_SQUARE_TEXT_ICON),
-      el("span", { "data-review-marker-label": true }),
+      el("span", {
+        class: "[font-size:0.625rem] [font-weight:700] [white-space:nowrap]",
+        "data-review-marker-label": true,
+      }),
     );
     marker.addEventListener("click", () => {
       const blockId = block.getAttribute("data-block-id");
@@ -2276,6 +2517,8 @@ import {
 
   const spinner = () =>
     el("span", {
+      class:
+        "[display:inline-block] [width:0.72rem] [height:0.72rem] [flex:0_0_auto] [border:1.5px_solid_currentcolor] [border-right-color:transparent] [border-radius:999px] [animation:700ms_linear_infinite_big-plan-review-spin]",
       "data-review-spinner": true,
       "aria-hidden": "true",
     });
@@ -2283,6 +2526,8 @@ import {
   const outcomeBadge = (outcome, options = {}) => {
     const state = outcome.status?.stage || outcome.key;
     const badge = el("span", {
+      class:
+        "[display:inline-flex] [align-items:center] [gap:0.22rem] [font-size:0.625rem] [font-weight:750] [letter-spacing:0.06em] [text-transform:uppercase]",
       "data-review-outcome-state": state,
       ...(options.iconOnly === true ? { "aria-label": outcome.label } : {}),
     });
@@ -2614,9 +2859,7 @@ import {
   const setupInstructions = () =>
     el(
       "details",
-      {
-        "data-review-status-setup": true,
-      },
+      { class: "[margin-top:0.35rem]", "data-review-status-setup": true },
       [
         el("summary", { text: "Show setup instructions" }),
         appendInlineCode(
@@ -2656,7 +2899,10 @@ import {
     if (!status.headline) return null;
     const events =
       status.stage === "working" ? currentActivityEvents(status.requestId) : [];
-    const row = el("div", { "data-review-status-row": true });
+    const row = el("div", {
+      class: "[display:flex] [align-items:center] [gap:0.38rem]",
+      "data-review-status-row": true,
+    });
     if (status.showsSpinner) row.appendChild(spinner());
     else {
       const glyph = statusIcon(status);
@@ -2664,6 +2910,8 @@ import {
     }
     if (events.length > 0) {
       const activityButton = el("button", {
+        class:
+          "[display:inline-flex] [min-width:0] [flex:1_1_auto] [align-items:center] [justify-content:space-between] [gap:0.45rem] [padding:0.12rem_0.2rem] [border-radius:0.25rem] [color:currentcolor] [cursor:pointer]",
         type: "button",
         "data-review-status-activity-toggle": true,
         "aria-expanded": showAgentActivity ? "true" : "false",
@@ -2685,6 +2933,8 @@ import {
       row.appendChild(el("strong", { text: status.headline }));
     }
     const strip = el("div", {
+      class:
+        "[display:grid] [gap:0.3rem] [margin:0.35rem_0] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-left-width:3px] [border-radius:0.4rem] [background:color-mix(in_srgb,_var(--surface-c)_60%,_var(--bg))] [color:var(--muted-c)] [font-size:0.6875rem] [line-height:1.4]",
       "data-review-thread-status": status.stage,
       "data-tone": status.tone,
       ...(status.waitingBusy ? { "data-waiting-busy": true } : {}),
@@ -2693,7 +2943,10 @@ import {
     if (status.hint) {
       strip.appendChild(
         appendInlineCode(
-          el("p", { "data-review-status-hint": true }),
+          el("p", {
+            class: "[margin:0] [color:var(--ink-c)] [overflow-wrap:anywhere]",
+            "data-review-status-hint": true,
+          }),
           status.hint,
         ),
       );
@@ -2707,7 +2960,10 @@ import {
           "ol",
           {
             class:
-              options.surface === "tray" ? "max-h-none! overflow-visible!" : "",
+              (options.surface === "tray"
+                ? "max-h-none! overflow-visible!"
+                : "") +
+              " [display:grid] [max-height:9rem] [margin:0] [padding-left:0.2rem] [color:var(--ink-c)] [list-style:none] [overflow-y:auto] [overscroll-behavior:contain] [line-height:1.35]",
             "data-review-status-activity": true,
             ...(options.surface === "card" && options.commentId
               ? { "data-review-activity-owner": options.commentId }
@@ -2743,7 +2999,7 @@ import {
       const cancel = el("button", {
         type: "button",
         class:
-          "-mx-1 cursor-pointer rounded-sm px-1 transition-colors hover:bg-[color-mix(in_srgb,currentColor_10%,transparent)] active:opacity-65 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-current",
+          "-mx-1 cursor-pointer rounded-sm px-1 transition-colors hover:bg-[color-mix(in_srgb,currentColor_10%,transparent)] active:opacity-65 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-current [justify-self:end] [color:currentColor] [font-size:0.65rem] [text-decoration:underline] [text-underline-offset:0.16em]",
         "data-review-cancel-request": true,
         text: "Cancel request",
       });
@@ -2791,6 +3047,8 @@ import {
       return null;
     }
     return el("p", {
+      class:
+        "[margin:0.45rem_0_0] [padding-left:0.55rem] [border-left:2px_solid_var(--annotation-c)] [color:var(--muted-c)] [font-size:0.72rem] [line-height:1.4]",
       "data-review-anchor-context": true,
       text:
         "You commented on: “" +
@@ -2802,6 +3060,8 @@ import {
   const stagedAnchorNotice = (comment) => {
     if (anchorStateFor(comment).kind !== "changed") return null;
     return el("p", {
+      class:
+        "[margin:0.45rem_0_0] [padding-left:0.55rem] [border-left:2px_solid_var(--annotation-c)] [color:var(--muted-c)] [font-size:0.72rem] [line-height:1.4]",
       "data-review-draft-stale": true,
       text: "The text changed since you drafted this.",
     });
@@ -2824,7 +3084,8 @@ import {
     if (surface === "row") return [sendThis];
     const sendAll = el("button", {
       type: "button",
-      class: "active:opacity-60",
+      class:
+        "active:opacity-60 [border-color:transparent]! [background:transparent]! [color:var(--annotation-c)]! [font-weight:650]",
       "data-review-thread-submit-all": true,
       text: `Send all ${drafts.length}`,
     });
@@ -2858,10 +3119,14 @@ import {
   const draftRow = (comment) => {
     const isEditing = comment.id === editingId;
     const rowAttributes = {
+      class:
+        "[margin-bottom:0.55rem] [padding:0.55rem_0.6rem] [border:1px_solid_var(--edge-c)] [border-radius:0.5rem] [background:var(--surface-c)]",
       "data-review-row": true,
       "data-review-comment-id": comment.id,
     };
     const jump = el("button", {
+      class:
+        "[display:flex] [min-width:0] [flex:1_1_auto] [align-items:center] [overflow:hidden] [color:var(--ink-c)] [font-size:0.6875rem] [font-weight:600] [letter-spacing:0.06em] [text-align:left] [text-overflow:ellipsis] [text-transform:uppercase] [white-space:nowrap]",
       type: "button",
       "data-review-row-target": true,
       text: slideTitleFor(comment.target),
@@ -2869,41 +3134,80 @@ import {
     });
     jump.addEventListener("click", () => focusTarget(comment));
     if (submittingIds.has(comment.id)) {
-      return el("li", { ...rowAttributes, "data-review-row-sending": true }, [
-        el("div", { "data-review-row-head": true }, [
-          jump,
-          outcomeBadge({ key: "waiting", label: "Sending" }, { spin: true }),
-        ]),
-        el("p", {
-          class: COMMENT_WRAP_CLASSES,
-          "data-review-row-body": true,
-          text: comment.body,
-        }),
-      ]);
+      return el(
+        "li",
+        {
+          class: "[opacity:0.85]",
+          ...rowAttributes,
+          "data-review-row-sending": true,
+        },
+        [
+          el(
+            "div",
+            {
+              class:
+                "[display:flex] [min-width:0] [align-items:center] [gap:0.5rem] [margin-bottom:0.3rem]",
+              "data-review-row-head": true,
+            },
+            [
+              jump,
+              outcomeBadge(
+                { key: "waiting", label: "Sending" },
+                { spin: true },
+              ),
+            ],
+          ),
+          el("p", {
+            class:
+              COMMENT_WRAP_CLASSES +
+              " [margin:0] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [overflow-wrap:anywhere] [white-space:pre-wrap]",
+            "data-review-row-body": true,
+            text: comment.body,
+          }),
+        ],
+      );
     }
 
     if (!isEditing) {
-      const iconActions = el("div", { "data-review-row-icons": true }, [
-        toolbarButton({
-          attribute: "data-review-row-edit",
-          label: "Edit comment",
-          glyph: PENCIL_ICON,
-          action: () => {
-            editingId = comment.id;
-            renderTray();
-          },
-        }),
-        toolbarButton({
-          attribute: "data-review-row-delete",
-          label: "Remove comment",
-          glyph: TRASH_2_ICON,
-          action: () => openDeleteDialog(comment),
-        }),
-      ]);
+      const iconActions = el(
+        "div",
+        {
+          class:
+            "[display:flex] [flex:0_0_auto] [align-items:center] [gap:0.18rem]",
+          "data-review-row-icons": true,
+        },
+        [
+          toolbarButton({
+            attribute: "data-review-row-edit",
+            label: "Edit comment",
+            glyph: PENCIL_ICON,
+            action: () => {
+              editingId = comment.id;
+              renderTray();
+            },
+          }),
+          toolbarButton({
+            attribute: "data-review-row-delete",
+            label: "Remove comment",
+            glyph: TRASH_2_ICON,
+            action: () => openDeleteDialog(comment),
+          }),
+        ],
+      );
       return el("li", rowAttributes, [
-        el("div", { "data-review-row-head": true }, [jump, iconActions]),
+        el(
+          "div",
+          {
+            class:
+              "[display:flex] [min-width:0] [align-items:center] [gap:0.5rem] [margin-bottom:0.3rem]",
+            "data-review-row-head": true,
+          },
+          [jump, iconActions],
+        ),
         el("p", {
-          class: COMMENT_WRAP_CLASSES,
+          class:
+            COMMENT_WRAP_CLASSES +
+            " [margin:0] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [overflow-wrap:anywhere] [white-space:pre-wrap]",
           "data-review-row-body": true,
           text: comment.body,
         }),
@@ -2911,13 +3215,19 @@ import {
         submitErrorNote(comment),
         el(
           "div",
-          { "data-review-row-actions": true },
+          {
+            class:
+              "[display:flex] [flex-wrap:wrap] [justify-content:flex-end] [gap:0.4rem] [margin-top:0.4rem]",
+            "data-review-row-actions": true,
+          },
           stagedSubmitActions({ comment, surface: "row" }),
         ),
       ]);
     }
 
     const field = el("textarea", {
+      class:
+        "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical]",
       "data-review-row-input": true,
       rows: "3",
       value: comment.body,
@@ -2934,6 +3244,8 @@ import {
       renderTray();
     });
     const confirm = el("button", {
+      class:
+        "[color:var(--bg)]! [background:var(--accent-c)]! [border-color:var(--accent-c)]! [position:relative]",
       type: "button",
       "data-review-row-save": true,
       text: "Save",
@@ -2949,9 +3261,25 @@ import {
       if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) commit();
     });
     const row = el("li", { ...rowAttributes, "data-review-editing": true }, [
-      el("div", { "data-review-row-head": true }, [jump]),
+      el(
+        "div",
+        {
+          class:
+            "[display:flex] [min-width:0] [align-items:center] [gap:0.5rem] [margin-bottom:0.3rem]",
+          "data-review-row-head": true,
+        },
+        [jump],
+      ),
       field,
-      el("div", { "data-review-row-actions": true }, [cancel, confirm]),
+      el(
+        "div",
+        {
+          class:
+            "[display:flex] [flex-wrap:wrap] [justify-content:flex-end] [gap:0.4rem] [margin-top:0.4rem]",
+          "data-review-row-actions": true,
+        },
+        [cancel, confirm],
+      ),
     ]);
     if (railIsOpen()) setTimeout(() => field.focus(), 0);
     return row;
@@ -3100,6 +3428,8 @@ import {
     }));
 
   const diffStepper = el("div", {
+    class:
+      "[position:fixed] [z-index:22] [bottom:1rem] [left:50%] [display:flex] [align-items:center] [gap:0.2rem] [padding:0.28rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--surface-c)] [box-shadow:0_0.7rem_1.8rem_rgb(0_0_0_/_18%)] [transform:translateX(-50%)]",
     "data-review-diff-stepper": true,
     hidden: true,
   });
@@ -3109,7 +3439,11 @@ import {
     "aria-label": "Previous change",
   });
   diffPrevious.appendChild(icon(CHEVRON_LEFT_ICON));
-  const diffPosition = el("span", { "data-review-diff-position": true });
+  const diffPosition = el("span", {
+    class:
+      "[max-width:min(42vw,_28rem)] [overflow:hidden] [padding:0_0.45rem] [color:var(--muted-c)] [font-size:0.68rem] [font-weight:700] [text-overflow:ellipsis] [white-space:nowrap]",
+    "data-review-diff-position": true,
+  });
   const diffNext = el("button", {
     type: "button",
     "data-review-diff-next": true,
@@ -3218,19 +3552,30 @@ import {
       return [snapshot];
     });
     if (snapshots.length === 0) return null;
-    return el("section", { "data-review-diff-side": side }, [
-      el("strong", {
-        "data-review-diff-side-label": true,
-        text: label,
-      }),
-      el(
-        "div",
-        {
-          "data-review-diff-side-content": true,
-        },
-        snapshots,
-      ),
-    ]);
+    return el(
+      "section",
+      {
+        class:
+          "[display:grid] [grid-template-columns:3rem_minmax(0,_1fr)] [gap:0.55rem] [padding:0.45rem_0.55rem] [overflow:hidden]",
+        "data-review-diff-side": side,
+      },
+      [
+        el("strong", {
+          class: "[font-size:0.68rem] [text-transform:uppercase]",
+          "data-review-diff-side-label": true,
+          text: label,
+        }),
+        el(
+          "div",
+          {
+            class:
+              "[min-width:55%] [overflow:auto] [overscroll-behavior:contain]",
+            "data-review-diff-side-content": true,
+          },
+          snapshots,
+        ),
+      ],
+    );
   };
 
   const renderDiffLocation = ({ comment, event, index }) => {
@@ -3244,6 +3589,8 @@ import {
       place.locations.map((location) => location.status),
     );
     const container = el(containerTag, {
+      class:
+        "[position:relative] [box-sizing:border-box] [width:100%] [margin:0_0_0.35rem] [padding:0.85rem_1rem_0.8rem] [border:1px_dashed_var(--annotation-c)] [border-radius:0.45rem] [background:var(--diff-content-bg)] [color:var(--text-c)]",
       "data-review-diff-lens": true,
       "data-review-diff-status":
         statuses.size === 1 ? place.locations[0]?.status : "changed",
@@ -3255,13 +3602,19 @@ import {
       containerTag === "tr" ? el("td", { colspan: "99" }) : container;
     content.appendChild(
       el("span", {
+        class:
+          "[position:absolute] [top:-0.55rem] [left:0.75rem] [padding:0.12rem_0.38rem] [border:1px_solid_var(--annotation-c)] [border-radius:999px] [background:var(--bg)] [color:var(--annotation-c)] [font-size:0.58rem] [font-weight:750] [letter-spacing:0.04em] [text-transform:uppercase]",
         "data-review-diff-label": true,
         text:
           "Diff vs. previous version" +
           (event.toRevision !== sourceRevision ? " · since revised again" : ""),
       }),
     );
-    const body = el("div", { "data-review-diff-body": true });
+    const body = el("div", {
+      class:
+        "[display:grid] [gap:0.55rem] [margin:0] [color:inherit] [line-height:inherit]",
+      "data-review-diff-body": true,
+    });
     if (containerTag === "tr") container.appendChild(content);
     if (anchorBlock) {
       if (
@@ -3484,7 +3837,11 @@ import {
     });
     const activeSlide =
       active && diffLens ? places[diffLens.index]?.slideTitle : null;
-    const nav = el("div", { "data-review-change-nav": true });
+    const nav = el("div", {
+      class:
+        "[display:grid] [grid-template-columns:minmax(0,_1fr)] [min-width:0] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [overflow:hidden]",
+      "data-review-change-nav": true,
+    });
     for (const group of groups) {
       const key = event.requestId + ":" + group.title;
       const stored = changeGroupExpansion.get(key);
@@ -3497,6 +3854,8 @@ import {
       const header = el(
         "button",
         {
+          class:
+            "[display:flex] [width:100%] [align-items:center] [gap:0.3rem] [padding:0.34rem_0.5rem] [border:0] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.66rem] [font-weight:700] [text-align:left] [cursor:pointer]",
           type: "button",
           "data-review-change-group": true,
           "aria-expanded": expanded ? "true" : "false",
@@ -3504,10 +3863,14 @@ import {
         [
           icon(CHEVRON_RIGHT_ICON),
           el("span", {
+            class:
+              "[min-width:0] [flex:1_1_auto] [overflow:hidden] [text-overflow:ellipsis] [white-space:nowrap]",
             "data-review-change-group-title": true,
             text: group.title,
           }),
           el("span", {
+            class:
+              "[flex:0_0_auto] [min-width:1.05rem] [padding:0_0.25rem] [border-radius:999px] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.6rem] [font-variant-numeric:tabular-nums] [text-align:center]",
             "data-review-change-group-count": true,
             text: String(group.entries.length),
           }),
@@ -3522,17 +3885,29 @@ import {
       for (const { index, placeId, label, note } of group.entries) {
         const current = active && diffLens && diffLens.index === index;
         const row = el("button", {
+          class:
+            "[display:flex] [width:100%] [min-width:0] [align-items:start] [gap:0.4rem] [padding:0.34rem_0.5rem_0.34rem_1.35rem] [border:0] [background:transparent] [color:var(--text-c)] [text-align:left] [cursor:pointer]",
           type: "button",
           "data-review-change-row": true,
           "data-place-id": placeId,
           ...(current ? { "aria-current": "true" } : {}),
         });
         row.appendChild(
-          el("span", { "data-review-change-label": true, text: label }),
+          el("span", {
+            class:
+              "[min-width:0] [flex:1_1_auto] [font-size:0.72rem] [font-weight:550] [overflow-wrap:anywhere] [white-space:normal]",
+            "data-review-change-label": true,
+            text: label,
+          }),
         );
         if (note && note !== "reworded") {
           row.appendChild(
-            el("span", { "data-review-change-kind": true, text: note }),
+            el("span", {
+              class:
+                "[flex:0_0_auto] [margin-top:0.1rem] [color:var(--muted-c)] [font-size:0.6rem] [font-style:italic]",
+              "data-review-change-kind": true,
+              text: note,
+            }),
           );
         }
         row.addEventListener("click", () => {
@@ -3550,11 +3925,21 @@ import {
     const active =
       diffLens?.comment?.id === comment.id &&
       diffLens?.event.requestId === event.requestId;
-    const list = el("div", { "data-review-change-list": true }, [
-      el("strong", { text: changeSummaryText({ places: rows, event }) }),
-      changeNavigator({ comment, event, places: rows, active }),
-    ]);
+    const list = el(
+      "div",
+      {
+        class:
+          "[display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.3rem] [min-width:0]",
+        "data-review-change-list": true,
+      },
+      [
+        el("strong", { text: changeSummaryText({ places: rows, event }) }),
+        changeNavigator({ comment, event, places: rows, active }),
+      ],
+    );
     const see = el("button", {
+      class:
+        "[margin-top:0.45rem] [padding:0.2rem_0.45rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--bg)] [color:var(--accent-c)] [font-size:0.6875rem] [font-weight:650] [cursor:pointer]",
       type: "button",
       "data-review-see-change": true,
       text: active
@@ -3567,24 +3952,41 @@ import {
       if (active) clearDiffLens();
       else void openDiffLens(comment, event, 0);
     });
-    return el("div", { "data-review-change-controls": true }, [list, see]);
+    return el(
+      "div",
+      {
+        class:
+          "[display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.45rem] [margin-top:0.6rem]",
+        "data-review-change-controls": true,
+      },
+      [list, see],
+    );
   };
 
   const agentTurn = (outcome, createdAt, comment, event) => {
     const node = el(
       "div",
       {
-        class: "min-w-0 max-w-full",
+        class:
+          "min-w-0 max-w-full [width:calc(100%_-_1rem)] [margin-top:0.45rem] [padding:0.48rem_0.52rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem]",
         "data-review-thread-turn": "agent",
       },
       [
-        el("div", { "data-review-turn-meta": true }, [
-          el("strong", { text: "Agent" }),
-          el("time", {
-            datetime: createdAt,
-            text: relativeCommentTime(createdAt),
-          }),
-        ]),
+        el(
+          "div",
+          {
+            class:
+              "[display:flex] [align-items:center] [gap:0.35rem] [color:var(--muted-c)] [font-size:0.625rem]",
+            "data-review-turn-meta": true,
+          },
+          [
+            el("strong", { text: "Agent" }),
+            el("time", {
+              datetime: createdAt,
+              text: relativeCommentTime(createdAt),
+            }),
+          ],
+        ),
         messageBody(outcome.messageNodes, outcome.message),
       ],
     );
@@ -3605,6 +4007,8 @@ import {
 
   const cancelledRequestLine = () =>
     el("p", {
+      class:
+        "[margin:0.2rem_0] [color:var(--muted-c)] [font-size:0.6875rem] [font-style:italic]",
       "data-review-request-cancelled": true,
       text: "You cancelled this request.",
     });
@@ -3621,22 +4025,31 @@ import {
       el(
         "div",
         {
-          class: "min-w-0 max-w-full",
+          class:
+            "min-w-0 max-w-full [width:calc(100%_-_1rem)] [margin-top:0.45rem] [padding:0.48rem_0.52rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem]",
           "data-review-thread-turn": "user",
         },
         [
-          el("div", { "data-review-turn-meta": true }, [
-            el("strong", { text: "You" }),
-            el("time", {
-              datetime: initialRequest?.createdAt || comment.createdAt,
-              text:
-                requestDeliveryLabel(initialRequest) +
-                " · " +
-                relativeCommentTime(
-                  initialRequest?.createdAt || comment.createdAt,
-                ),
-            }),
-          ]),
+          el(
+            "div",
+            {
+              class:
+                "[display:flex] [align-items:center] [gap:0.35rem] [color:var(--muted-c)] [font-size:0.625rem]",
+              "data-review-turn-meta": true,
+            },
+            [
+              el("strong", { text: "You" }),
+              el("time", {
+                datetime: initialRequest?.createdAt || comment.createdAt,
+                text:
+                  requestDeliveryLabel(initialRequest) +
+                  " · " +
+                  relativeCommentTime(
+                    initialRequest?.createdAt || comment.createdAt,
+                  ),
+              }),
+            ],
+          ),
           el("p", { class: COMMENT_WRAP_CLASSES, text: comment.body }),
           anchorContextLine(comment),
         ],
@@ -3679,20 +4092,29 @@ import {
         el(
           "div",
           {
-            class: "min-w-0 max-w-full",
+            class:
+              "min-w-0 max-w-full [width:calc(100%_-_1rem)] [margin-top:0.45rem] [padding:0.48rem_0.52rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem]",
             "data-review-thread-turn": "user",
           },
           [
-            el("div", { "data-review-turn-meta": true }, [
-              el("strong", { text: "You" }),
-              el("time", {
-                datetime: request.createdAt,
-                text:
-                  requestDeliveryLabel(request) +
-                  " · " +
-                  relativeCommentTime(request.createdAt),
-              }),
-            ]),
+            el(
+              "div",
+              {
+                class:
+                  "[display:flex] [align-items:center] [gap:0.35rem] [color:var(--muted-c)] [font-size:0.625rem]",
+                "data-review-turn-meta": true,
+              },
+              [
+                el("strong", { text: "You" }),
+                el("time", {
+                  datetime: request.createdAt,
+                  text:
+                    requestDeliveryLabel(request) +
+                    " · " +
+                    relativeCommentTime(request.createdAt),
+                }),
+              ],
+            ),
             el("p", { class: COMMENT_WRAP_CLASSES, text: request.body }),
           ],
         ),
@@ -3726,6 +4148,8 @@ import {
     }
 
     const field = el("textarea", {
+      class:
+        "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical] [min-height:3.25rem] [resize:vertical]",
       "data-review-thread-reply": true,
       rows: "3",
       maxlength: String(BODY_LIMIT),
@@ -3739,6 +4163,8 @@ import {
           : "Reply on this comment",
     });
     const sendReply = el("button", {
+      class:
+        "[justify-self:end] [padding:0.35rem_0.55rem] [border:1px_solid_var(--accent-c)] [border-radius:0.35rem] [background:var(--accent-c)] [color:var(--bg)] [font-size:0.6875rem] [font-weight:650] [cursor:pointer] [position:relative]",
       type: "button",
       "data-review-thread-reply-send": true,
       disabled: true,
@@ -3762,13 +4188,21 @@ import {
       void sendThreadReply(comment, field, sendReply);
     });
     nodes.push(
-      el("div", { "data-review-thread-reply-box": true }, [
-        el("label", {
-          text: outcome.key === "question" ? "Your answer" : "Reply",
-        }),
-        field,
-        sendReply,
-      ]),
+      el(
+        "div",
+        {
+          class:
+            "[display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.4rem] [margin-top:0.55rem]",
+          "data-review-thread-reply-box": true,
+        },
+        [
+          el("label", {
+            text: outcome.key === "question" ? "Your answer" : "Reply",
+          }),
+          field,
+          sendReply,
+        ],
+      ),
     );
     nodes.push(
       threadResolutionFooter({
@@ -3903,6 +4337,8 @@ import {
     button.append(
       icon(glyph),
       el("span", {
+        class:
+          "[position:absolute] [top:calc(100%_+_0.35rem)] [right:0] [z-index:60] [width:max-content] [max-width:11rem] [padding:0.22rem_0.42rem] [border-radius:0.25rem] [background:var(--ink-c)] [color:var(--bg)] [font-size:0.66rem] [font-weight:600] [line-height:1.35] [pointer-events:none] [opacity:0] [transform:translateY(-0.1rem)] [transition:opacity_70ms_ease,_transform_70ms_ease]",
         "data-review-icon-tooltip": true,
         "aria-hidden": "true",
         text: label,
@@ -3949,7 +4385,15 @@ import {
       );
     }
     if (revertAction) actions.push(revertAction);
-    return el("div", { "data-review-thread-toolbar-actions": true }, actions);
+    return el(
+      "div",
+      {
+        class:
+          "[display:flex] [flex:0_0_auto] [align-items:center] [gap:0.18rem]",
+        "data-review-thread-toolbar-actions": true,
+      },
+      actions,
+    );
   };
 
   const threadToolbarActions = (comment, options = {}) => {
@@ -3971,14 +4415,30 @@ import {
   };
 
   const threadToolbar = (comment, options = {}) => {
-    return el("div", { "data-review-thread-toolbar": true }, [
-      el("div", { "data-review-thread-toolbar-title": true }, [
-        el("span", {
-          text: slideTitleFor(comment.target),
-        }),
-      ]),
-      threadToolbarActions(comment, options),
-    ]);
+    return el(
+      "div",
+      {
+        class:
+          "[display:flex] [min-width:0] [align-items:center] [gap:0.45rem] [margin:-0.65rem_-0.65rem_0.6rem] [padding:0.42rem_0.45rem] [border-bottom:1px_solid_var(--edge-c)] [border-radius:0.55rem_0.55rem_0_0] [background:var(--surface-c)]",
+        "data-review-thread-toolbar": true,
+      },
+      [
+        el(
+          "div",
+          {
+            class:
+              "[display:flex] [min-width:0] [flex:1_1_auto] [align-items:center] [gap:0.35rem]",
+            "data-review-thread-toolbar-title": true,
+          },
+          [
+            el("span", {
+              text: slideTitleFor(comment.target),
+            }),
+          ],
+        ),
+        threadToolbarActions(comment, options),
+      ],
+    );
   };
 
   // Staged cards share the sent-thread toolbar pattern: state and actions in
@@ -3989,49 +4449,83 @@ import {
       options.withActions === false
         ? []
         : [
-            el("div", { "data-review-thread-toolbar-actions": true }, [
-              toolbarButton({
-                attribute: "data-review-thread-minimize",
-                label: "Minimize comment",
-                glyph: MINIMIZE_2_ICON,
-                action: () => {
-                  minimizedDraftIds.add(comment.id);
-                  renderTray();
-                },
-              }),
-              toolbarButton({
-                attribute: "data-review-thread-edit",
-                label: "Edit comment",
-                glyph: PENCIL_ICON,
-                action: () => {
-                  editingId = comment.id;
-                  renderTray();
-                },
-              }),
-              toolbarButton({
-                attribute: "data-review-thread-delete",
-                label: "Remove comment",
-                glyph: TRASH_2_ICON,
-                action: () => openDeleteDialog(comment),
-              }),
-            ]),
+            el(
+              "div",
+              {
+                class:
+                  "[display:flex] [flex:0_0_auto] [align-items:center] [gap:0.18rem]",
+                "data-review-thread-toolbar-actions": true,
+              },
+              [
+                toolbarButton({
+                  attribute: "data-review-thread-minimize",
+                  label: "Minimize comment",
+                  glyph: MINIMIZE_2_ICON,
+                  action: () => {
+                    minimizedDraftIds.add(comment.id);
+                    renderTray();
+                  },
+                }),
+                toolbarButton({
+                  attribute: "data-review-thread-edit",
+                  label: "Edit comment",
+                  glyph: PENCIL_ICON,
+                  action: () => {
+                    editingId = comment.id;
+                    renderTray();
+                  },
+                }),
+                toolbarButton({
+                  attribute: "data-review-thread-delete",
+                  label: "Remove comment",
+                  glyph: TRASH_2_ICON,
+                  action: () => openDeleteDialog(comment),
+                }),
+              ],
+            ),
           ];
-    return el("div", { "data-review-thread-toolbar": true }, [
-      el("div", { "data-review-thread-toolbar-title": true }, [
-        el("span", { "data-review-comment-state": "staged", text: "Staged" }),
-        el("time", {
-          datetime: comment.createdAt,
-          text: relativeCommentTime(comment.createdAt),
-        }),
-      ]),
-      ...actions,
-    ]);
+    return el(
+      "div",
+      {
+        class:
+          "[display:flex] [min-width:0] [align-items:center] [gap:0.45rem] [margin:-0.65rem_-0.65rem_0.6rem] [padding:0.42rem_0.45rem] [border-bottom:1px_solid_var(--edge-c)] [border-radius:0.55rem_0.55rem_0_0] [background:var(--surface-c)]",
+        "data-review-thread-toolbar": true,
+      },
+      [
+        el(
+          "div",
+          {
+            class:
+              "[display:flex] [min-width:0] [flex:1_1_auto] [align-items:center] [gap:0.35rem]",
+            "data-review-thread-toolbar-title": true,
+          },
+          [
+            el("span", {
+              class:
+                "[flex:0_0_auto] [padding:0.05rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [color:var(--muted-c)] [font-size:0.5625rem] [font-weight:700] [letter-spacing:0.06em] [text-transform:uppercase]",
+              "data-review-comment-state": "staged",
+              text: "Staged",
+            }),
+            el("time", {
+              datetime: comment.createdAt,
+              text: relativeCommentTime(comment.createdAt),
+            }),
+          ],
+        ),
+        ...actions,
+      ],
+    );
   };
 
   const submitErrorNote = (comment) => {
     const message = submitErrorById.get(comment.id);
     if (!message) return null;
-    return el("p", { "data-review-action-error": true, text: message });
+    return el("p", {
+      class:
+        "[grid-column:1_/_-1] [margin:0.35rem_0_0] [padding:0.3rem_0.45rem] [border-left:2px_solid_var(--callout-danger-c)] [background:var(--callout-danger-bg)] [color:var(--callout-danger-c)] [font-size:0.6875rem] [line-height:1.4] [overflow-wrap:anywhere]",
+      "data-review-action-error": true,
+      text: message,
+    });
   };
 
   const bindCommentAssociation = (node, comment) => {
@@ -4130,6 +4624,8 @@ import {
     const jump = el(
       "button",
       {
+        class:
+          "[display:flex] [min-width:0] [flex:1_1_auto] [align-items:center] [overflow:hidden] [color:var(--ink-c)] [font-size:0.6875rem] [font-weight:600] [letter-spacing:0.06em] [text-align:left] [text-overflow:ellipsis] [text-transform:uppercase] [white-space:nowrap]",
         type: "button",
         "data-review-row-target": true,
         "aria-expanded": expanded ? "true" : "false",
@@ -4147,12 +4643,19 @@ import {
       },
       [
         el("span", {
+          class: "[min-width:0] [overflow:hidden] [text-overflow:ellipsis]",
           "data-review-row-title": true,
           text: slideTitleFor(comment.target),
         }),
-        el("span", { "data-review-row-locator": true }, [
-          icon(CHEVRON_RIGHT_ICON),
-        ]),
+        el(
+          "span",
+          {
+            class:
+              "[display:inline-flex] [width:1rem] [height:1rem] [flex:0_0_auto] [align-items:center] [justify-content:center] [color:var(--muted-c)] [opacity:0] [transition:opacity_100ms_ease]",
+            "data-review-row-locator": true,
+          },
+          [icon(CHEVRON_RIGHT_ICON)],
+        ),
       ],
     );
     jump.addEventListener("click", toggleThread);
@@ -4165,6 +4668,8 @@ import {
       const substate = threadSubstate(outcome.status?.stage);
       if (substate !== null) {
         const slot = el("span", {
+          class:
+            "[display:inline-flex] [width:1.2rem] [height:1.2rem] [flex:0_0_auto] [align-items:center] [justify-content:center] [color:var(--muted-c)]",
           "data-review-row-substate": substate,
           "aria-label":
             substate === "working" ? "Agent working" : "Agent progress stalled",
@@ -4178,7 +4683,11 @@ import {
     }
     const rowHead = el(
       "div",
-      { "data-review-row-head": true },
+      {
+        class:
+          "[display:flex] [min-width:0] [align-items:center] [gap:0.5rem] [margin-bottom:0.3rem]",
+        "data-review-row-head": true,
+      },
       rowHeadChildren,
     );
     const children = [rowHead];
@@ -4201,11 +4710,15 @@ import {
             : "Queued";
       children.push(
         el("p", {
-          class: COMMENT_WRAP_CLASSES,
+          class:
+            COMMENT_WRAP_CLASSES +
+            " [margin:0] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [overflow-wrap:anywhere] [white-space:pre-wrap]",
           "data-review-row-body": true,
           text: shortEcho(comment.body),
         }),
         el("p", {
+          class:
+            "[margin:0.25rem_0_0] [color:var(--muted-c)] [font-size:0.6875rem] [font-variant-numeric:tabular-nums] [line-height:1.35]",
           "data-review-row-secondary": rowState,
           text: secondary,
         }),
@@ -4215,6 +4728,8 @@ import {
         .at(-1);
       if (rowState === "ready" && changedEvent !== undefined) {
         const reviewChange = el("button", {
+          class:
+            "[margin-top:0.45rem] [padding:0.28rem_0.5rem] [border:1px_solid_var(--annotation-c)] [border-radius:0.35rem] [background:color-mix(in_srgb,_var(--annotation-c)_9%,_var(--bg))] [color:var(--annotation-c)] [cursor:pointer] [font-size:0.6875rem] [font-weight:700]",
           type: "button",
           "data-review-row-review-change": true,
           text: "Review change",
@@ -4231,10 +4746,17 @@ import {
     const row = el(
       "li",
       {
+        class:
+          "[margin-bottom:0.55rem] [padding:0.55rem_0.6rem] [border:1px_solid_var(--edge-c)] [border-radius:0.5rem] [background:var(--surface-c)] [cursor:pointer] [transition:border-color_100ms_ease,_background-color_100ms_ease] [background:transparent] [display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.18rem] [padding:0.45rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-left-width:2px] [border-radius:0.4rem] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.6875rem]",
         "data-review-row": true,
         "data-review-sent-row": true,
         "data-review-row-state": rowState,
-        ...(resolved ? { "data-review-resolved-row": true } : {}),
+        ...(resolved
+          ? {
+              class: "[background:var(--surface-c)]",
+              "data-review-resolved-row": true,
+            }
+          : {}),
         ...(expanded ? { "data-review-row-expanded": true } : {}),
         "data-review-comment-id": comment.id,
         "data-review-outcome": outcome.key,
@@ -4256,6 +4778,8 @@ import {
   const threadCard = ({ comment, state }) => {
     const isEditing = state === "staged" && comment.id === editingId;
     const card = el("article", {
+      class:
+        "[position:absolute] [right:auto] [width:17rem] [padding:0.65rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_3px_14px_rgb(0_0_0_/_0.1)] [pointer-events:auto]",
       "data-review-thread-card": true,
       "data-review-thread-state": state,
       "data-review-comment-id": comment.id,
@@ -4264,13 +4788,34 @@ import {
     if (state === "staged" && submittingIds.has(comment.id)) {
       card.setAttribute("data-review-thread-sending", "");
       card.append(
-        el("div", { "data-review-thread-toolbar": true }, [
-          el("div", { "data-review-thread-toolbar-title": true }, [
-            outcomeBadge({ key: "waiting", label: "Sending" }, { spin: true }),
-          ]),
-        ]),
+        el(
+          "div",
+          {
+            class:
+              "[display:flex] [min-width:0] [align-items:center] [gap:0.45rem] [margin:-0.65rem_-0.65rem_0.6rem] [padding:0.42rem_0.45rem] [border-bottom:1px_solid_var(--edge-c)] [border-radius:0.55rem_0.55rem_0_0] [background:var(--surface-c)]",
+            "data-review-thread-toolbar": true,
+          },
+          [
+            el(
+              "div",
+              {
+                class:
+                  "[display:flex] [min-width:0] [flex:1_1_auto] [align-items:center] [gap:0.35rem]",
+                "data-review-thread-toolbar-title": true,
+              },
+              [
+                outcomeBadge(
+                  { key: "waiting", label: "Sending" },
+                  { spin: true },
+                ),
+              ],
+            ),
+          ],
+        ),
         el("p", {
-          class: COMMENT_WRAP_CLASSES,
+          class:
+            COMMENT_WRAP_CLASSES +
+            " [margin:0] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [overflow-wrap:anywhere] [white-space:pre-wrap]",
           "data-review-thread-body": true,
           text: comment.body,
         }),
@@ -4287,6 +4832,8 @@ import {
       const summaryToggle = el(
         "button",
         {
+          class:
+            "[min-width:0] [padding:0] [border:0] [background:transparent] [color:inherit] [cursor:pointer] [text-align:left]",
           type: "button",
           "data-review-thread-summary-toggle": true,
           "aria-expanded": expanded ? "true" : "false",
@@ -4299,19 +4846,29 @@ import {
         },
         [
           el("span", {
+            class:
+              "[min-width:0] [overflow:hidden] [font-size:0.6875rem] [text-overflow:ellipsis] [white-space:nowrap]",
             "data-review-thread-echo": true,
             text: shortEcho(comment.body),
           }),
         ],
       );
-      const summary = el("div", { "data-review-thread-summary": true }, [
-        outcomeBadge(outcome, {
-          spin: outcome.status?.stage === "working",
-          iconOnly: outcome.key === "waiting",
-          waitingBusy: outcome.status?.waitingBusy,
-        }),
-        summaryToggle,
-      ]);
+      const summary = el(
+        "div",
+        {
+          class:
+            "[display:grid] [width:100%] [min-width:0] [grid-template-columns:auto_minmax(0,_1fr)] [align-items:center] [gap:0.4rem] [padding:0.18rem_5.2rem_0.18rem_0.22rem] [color:var(--ink-c)] [text-align:left]",
+          "data-review-thread-summary": true,
+        },
+        [
+          outcomeBadge(outcome, {
+            spin: outcome.status?.stage === "working",
+            iconOnly: outcome.key === "waiting",
+            waitingBusy: outcome.status?.waitingBusy,
+          }),
+          summaryToggle,
+        ],
+      );
       summaryToggle.addEventListener("click", () => {
         if (expanded) {
           clearCommentLensIfOwned(comment.id);
@@ -4347,6 +4904,8 @@ import {
       const summaryToggle = el(
         "button",
         {
+          class:
+            "[min-width:0] [padding:0] [border:0] [background:transparent] [color:inherit] [cursor:pointer] [text-align:left]",
           type: "button",
           "data-review-thread-summary-toggle": true,
           "aria-expanded": "false",
@@ -4354,18 +4913,30 @@ import {
         },
         [
           el("span", {
+            class:
+              "[min-width:0] [overflow:hidden] [font-size:0.6875rem] [text-overflow:ellipsis] [white-space:nowrap]",
             "data-review-thread-echo": true,
             text: shortEcho(comment.body),
           }),
         ],
       );
-      const summary = el("div", { "data-review-thread-summary": true }, [
-        el("span", {
-          "data-review-comment-state": "staged",
-          text: "Staged",
-        }),
-        summaryToggle,
-      ]);
+      const summary = el(
+        "div",
+        {
+          class:
+            "[display:grid] [width:100%] [min-width:0] [grid-template-columns:auto_minmax(0,_1fr)] [align-items:center] [gap:0.4rem] [padding:0.18rem_5.2rem_0.18rem_0.22rem] [color:var(--ink-c)] [text-align:left]",
+          "data-review-thread-summary": true,
+        },
+        [
+          el("span", {
+            class:
+              "[flex:0_0_auto] [padding:0.05rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [color:var(--muted-c)] [font-size:0.5625rem] [font-weight:700] [letter-spacing:0.06em] [text-transform:uppercase]",
+            "data-review-comment-state": "staged",
+            text: "Staged",
+          }),
+          summaryToggle,
+        ],
+      );
       summaryToggle.addEventListener("click", () => {
         minimizedDraftIds.delete(comment.id);
         renderTray();
@@ -4378,6 +4949,8 @@ import {
 
     if (isEditing) {
       const field = el("textarea", {
+        class:
+          "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical]",
         "data-review-thread-input": true,
         rows: "4",
         value: comment.body,
@@ -4394,6 +4967,8 @@ import {
         renderTray();
       });
       const confirm = el("button", {
+        class:
+          "[border-color:var(--accent-c)]! [background:var(--accent-c)]! [color:var(--bg)]! [position:relative]",
         type: "button",
         "data-review-thread-save": true,
         text: "Save",
@@ -4412,7 +4987,15 @@ import {
       });
       card.append(
         field,
-        el("div", { "data-review-thread-actions": true }, [cancel, confirm]),
+        el(
+          "div",
+          {
+            class:
+              "[display:flex] [flex-wrap:wrap] [justify-content:flex-end] [gap:0.35rem] [margin-top:0.55rem]",
+            "data-review-thread-actions": true,
+          },
+          [cancel, confirm],
+        ),
       );
       setTimeout(() => field.focus(), 0);
       return card;
@@ -4421,7 +5004,9 @@ import {
     const isLong = comment.body.length > LONG_COMMENT_LIMIT;
     const expanded = expandedCommentIds.has(comment.id);
     const body = el("p", {
-      class: COMMENT_WRAP_CLASSES,
+      class:
+        COMMENT_WRAP_CLASSES +
+        " [margin:0] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [overflow-wrap:anywhere] [white-space:pre-wrap]",
       "data-review-thread-body": true,
     });
     if (isLong && !expanded) {
@@ -4431,6 +5016,8 @@ import {
         ),
       );
       const more = el("button", {
+        class:
+          "[display:inline] [padding:0] [border:0] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:600] [cursor:pointer]",
         type: "button",
         "data-review-thread-more": true,
         text: "… more",
@@ -4452,7 +5039,11 @@ import {
       card.appendChild(
         el(
           "div",
-          { "data-review-thread-actions": true },
+          {
+            class:
+              "[display:flex] [flex-wrap:wrap] [justify-content:flex-end] [gap:0.35rem] [margin-top:0.55rem]",
+            "data-review-thread-actions": true,
+          },
           stagedSubmitActions({ comment, surface: "thread" }),
         ),
       );
@@ -4640,6 +5231,8 @@ import {
     responseSummary.replaceChildren(
       ...summaryItems.map((item) =>
         el("span", {
+          class:
+            "[padding:0.1rem_0.38rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--surface-c)] [font-variant-numeric:tabular-nums] [white-space:nowrap]",
           "data-review-round-chip": item.label,
           text: `${item.count} ${item.label}`,
         }),
@@ -4686,6 +5279,8 @@ import {
           el("span", { text: label }),
           document.createTextNode(" "),
           el("span", {
+            class:
+              "[display:inline-flex] [min-width:1.1rem] [height:1.1rem] [align-items:center] [justify-content:center] [margin-left:auto] [padding:0_0.25rem] [border-radius:999px] [background:var(--surface-c)] [font-size:0.625rem] [font-variant-numeric:tabular-nums]",
             "data-review-outcome-group-count": true,
             "aria-label":
               comments.length + " thread" + (comments.length === 1 ? "" : "s"),
@@ -4707,7 +5302,9 @@ import {
         el(
           "details",
           {
-            class: followsActiveGroup ? "" : "mt-0! border-t-0! pt-0!",
+            class:
+              (followsActiveGroup ? "" : "mt-0! border-t-0! pt-0!") +
+              " [margin-top:0.7rem] [padding-top:0.7rem] [border-top:1px_solid_var(--edge-c)]",
             "data-review-resolved-group": true,
             open: resolved.some((comment) => expandedThreadIds.has(comment.id)),
           },
@@ -4974,7 +5571,11 @@ import {
     }
     let note = parent.querySelector("[data-review-action-error]");
     if (!note) {
-      note = el("p", { "data-review-action-error": true });
+      note = el("p", {
+        class:
+          "[grid-column:1_/_-1] [margin:0.35rem_0_0] [padding:0.3rem_0.45rem] [border-left:2px_solid_var(--callout-danger-c)] [background:var(--callout-danger-bg)] [color:var(--callout-danger-c)] [font-size:0.6875rem] [line-height:1.4] [overflow-wrap:anywhere]",
+        "data-review-action-error": true,
+      });
       parent.appendChild(note);
     }
     note.textContent = message;
@@ -5382,6 +5983,8 @@ import {
         .querySelector("[data-block-section]")
         ?.getAttribute("data-block-section") || "this slide";
     const selector = el("button", {
+      class:
+        "[position:absolute] [top:calc(0.75rem_-_1px)] [right:calc(100%_+_0.5625rem)] [z-index:44] [display:inline-flex] [width:1.4rem] [height:1.4rem] [align-items:center] [justify-content:center] [padding:0] [border:1px_solid_transparent] [border-radius:0.3rem] [background:color-mix(in_srgb,_var(--bg)_88%,_transparent)] [color:color-mix(in_srgb,_var(--muted-c)_72%,_transparent)] [cursor:pointer]",
       type: "button",
       "data-review-slide-selector": true,
       "aria-label": "Comment on all content in " + title,
@@ -5389,6 +5992,8 @@ import {
     selector.append(
       icon(MESSAGE_SQUARE_TEXT_ICON),
       el("span", {
+        class:
+          "[position:absolute] [top:calc(100%_+_0.35rem)] [right:0] [z-index:60] [width:max-content] [max-width:11rem] [padding:0.22rem_0.42rem] [border-radius:0.25rem] [background:var(--ink-c)] [color:var(--bg)] [font-size:0.66rem] [font-weight:600] [line-height:1.35] [pointer-events:none] [opacity:0] [transform:translateY(-0.1rem)] [transition:opacity_70ms_ease,_transform_70ms_ease]",
         "data-review-icon-tooltip": true,
         "aria-hidden": "true",
         text: "Comment on slide",
@@ -5457,6 +6062,8 @@ import {
     const disclosure = el(
       "button",
       {
+        class:
+          "[display:flex] [width:100%] [align-items:center] [gap:0.3rem] [padding:0.18rem_0.25rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.68rem] [font-weight:750] [text-align:left] [cursor:pointer]",
         type: "button",
         "data-review-chat-change-toggle": true,
         "aria-expanded": expanded ? "true" : "false",
@@ -5474,12 +6081,16 @@ import {
     const list = el(
       "div",
       {
+        class:
+          "[display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.25rem] [min-width:0]",
         "data-review-chat-change-list": true,
         ...(expanded ? {} : { hidden: true }),
       },
       [changeNavigator({ comment: null, event, places, active })],
     );
     const see = el("button", {
+      class:
+        "[margin-top:0.45rem] [padding:0.2rem_0.45rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--bg)] [color:var(--accent-c)] [font-size:0.6875rem] [font-weight:650] [cursor:pointer]",
       type: "button",
       "data-review-see-change": true,
       text: active
@@ -5492,11 +6103,15 @@ import {
       if (active) clearDiffLens();
       else void openDiffLens(null, event, 0);
     });
-    return el("div", { "data-review-chat-change-digest": true }, [
-      disclosure,
-      list,
-      see,
-    ]);
+    return el(
+      "div",
+      {
+        class:
+          "[display:grid] [gap:0.4rem] [margin-top:0.55rem] [padding-top:0.5rem] [border-top:1px_solid_var(--edge-c)]",
+        "data-review-chat-change-digest": true,
+      },
+      [disclosure, list, see],
+    );
   };
 
   const livePlanChatMessages = () => {
@@ -5549,47 +6164,83 @@ import {
   const renderPlanChat = () => {
     const messages = hasRuntime ? livePlanChatMessages() : planChatMessages;
     if (messages.length === 0) {
-      const empty = el("li", { "data-review-chat-empty": true }, [
-        el("p", {
-          text: hasRuntime
-            ? "Ask about the plan as a whole. Connection status and setup are in the Agent tab."
-            : "Ask about the plan as a whole. Anchored comment threads stay beside their source.",
-        }),
-      ]);
+      const empty = el(
+        "li",
+        {
+          class:
+            "[color:var(--muted-c)] [font-size:0.75rem] [line-height:1.45]",
+          "data-review-chat-empty": true,
+        },
+        [
+          el("p", {
+            text: hasRuntime
+              ? "Ask about the plan as a whole. Connection status and setup are in the Agent tab."
+              : "Ask about the plan as a whole. Anchored comment threads stay beside their source.",
+          }),
+        ],
+      );
       planChatList.replaceChildren(empty);
       return;
     }
     const rendered = messages.map((message) => {
       if (message.role === "cancelled") {
-        return el("li", { "data-review-chat-message": "cancelled" }, [
-          cancelledRequestLine(),
-        ]);
+        return el(
+          "li",
+          {
+            class:
+              "[width:calc(100%_-_1.5rem)] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [min-width:0]",
+            "data-review-chat-message": "cancelled",
+          },
+          [cancelledRequestLine()],
+        );
       }
       if (message.role === "waiting") {
         const status = pendingStatusFor(message.request, "chat");
-        return el("li", { "data-review-chat-message": "waiting" }, [
-          threadStatusStrip(status, { surface: "tray" }),
-        ]);
+        return el(
+          "li",
+          {
+            class:
+              "[width:calc(100%_-_1.5rem)] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [min-width:0]",
+            "data-review-chat-message": "waiting",
+          },
+          [threadStatusStrip(status, { surface: "tray" })],
+        );
       }
       const body =
         message.role === "agent"
           ? messageBody(message.messageNodes, message.body)
           : el("p", { class: COMMENT_WRAP_CLASSES, text: message.body });
-      const turn = el("li", { "data-review-chat-message": message.role }, [
-        el("div", { "data-review-turn-meta": true }, [
-          el("strong", {
-            text: message.role === "user" ? "You" : "Agent",
-          }),
-          el("time", {
-            datetime: message.createdAt,
-            text:
-              (message.role === "user"
-                ? requestDeliveryLabel(message.request) + " · "
-                : "") + relativeCommentTime(message.createdAt),
-          }),
-        ]),
-        body,
-      ]);
+      const turn = el(
+        "li",
+        {
+          class:
+            "[width:calc(100%_-_1.5rem)] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [min-width:0]",
+          "data-review-chat-message": message.role,
+        },
+        [
+          el(
+            "div",
+            {
+              class:
+                "[display:flex] [align-items:center] [gap:0.35rem] [color:var(--muted-c)] [font-size:0.625rem]",
+              "data-review-turn-meta": true,
+            },
+            [
+              el("strong", {
+                text: message.role === "user" ? "You" : "Agent",
+              }),
+              el("time", {
+                datetime: message.createdAt,
+                text:
+                  (message.role === "user"
+                    ? requestDeliveryLabel(message.request) + " · "
+                    : "") + relativeCommentTime(message.createdAt),
+              }),
+            ],
+          ),
+          body,
+        ],
+      );
       if (message.role === "agent" && message.event) {
         const controls = chatChangeControls(message.event);
         if (controls) turn.appendChild(controls);
