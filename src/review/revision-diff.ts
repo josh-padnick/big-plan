@@ -9,6 +9,7 @@ type RevisionBlock = {
   readonly section: string;
   readonly text: string;
   readonly markedText: string;
+  readonly parentBlockId?: string;
 };
 
 export type DiffRun = {
@@ -28,6 +29,7 @@ export type RevisionDiffLocation = {
   readonly runs: ReadonlyArray<DiffRun>;
   readonly beforeBlockId?: string;
   readonly afterBlockId?: string;
+  readonly parentBlockId?: string;
 };
 
 export const INLINE_CODE_SENTINEL = "\u0011";
@@ -78,6 +80,21 @@ export const diffKindShowsComment = (kind: string): boolean =>
   kind !== "table-row" &&
   kind !== "code" &&
   !kind.includes("diff");
+
+/** Includes a precise child location when an outcome attributes its container. */
+export const diffLocationMatchesTarget = ({
+  location,
+  target,
+}: {
+  readonly location: Pick<
+    RevisionDiffLocation,
+    "oldBlockId" | "newBlockId" | "parentBlockId"
+  >;
+  readonly target: string;
+}): boolean =>
+  location.newBlockId === target ||
+  location.oldBlockId === target ||
+  location.parentBlockId === target;
 
 /** Measures how much text survives a diff, independent of insert/delete size. */
 export const diffRunSimilarity = (runs: ReadonlyArray<DiffRun>): number => {
@@ -309,6 +326,12 @@ export const diffRevisions = ({
           section: newBlock.section,
           oldText: oldBlock.markedText,
           newText: newBlock.markedText,
+          ...(newBlock.parentBlockId === undefined &&
+          oldBlock.parentBlockId === undefined
+            ? {}
+            : {
+                parentBlockId: newBlock.parentBlockId ?? oldBlock.parentBlockId,
+              }),
           runs: diffWords({
             before: oldBlock.markedText,
             after: newBlock.markedText,
@@ -333,6 +356,9 @@ export const diffRevisions = ({
           section: oldBlock.section,
           oldText: oldBlock.markedText,
           newText: "",
+          ...(oldBlock.parentBlockId === undefined
+            ? {}
+            : { parentBlockId: oldBlock.parentBlockId }),
           runs: [{ op: "del", text: oldBlock.markedText }],
           ...(afterBlock === undefined ? {} : { afterBlockId: afterBlock.id }),
           ...(beforeBlock === undefined
@@ -351,6 +377,9 @@ export const diffRevisions = ({
           section: newBlock.section,
           oldText: "",
           newText: newBlock.markedText,
+          ...(newBlock.parentBlockId === undefined
+            ? {}
+            : { parentBlockId: newBlock.parentBlockId }),
           runs: [{ op: "ins", text: newBlock.markedText }],
         });
       }

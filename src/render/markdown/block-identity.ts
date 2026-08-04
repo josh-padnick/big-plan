@@ -30,6 +30,7 @@ export type BlockDescriptor = {
   // Diff presentation retains inline-code boundaries without changing the
   // plain-text offsets used by comment anchors.
   readonly markedText: string;
+  readonly parentBlockId?: string;
 };
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
@@ -289,12 +290,14 @@ const stampTableRows = ({
   section,
   blocks,
   counter,
+  parentBlockId,
 }: {
   readonly table: Element;
   readonly scope: string;
   readonly section: string;
   readonly blocks: Array<BlockDescriptor>;
   readonly counter: ScopeCounter;
+  readonly parentBlockId: string;
 }): void => {
   forEachDescendant({
     node: table,
@@ -322,6 +325,7 @@ const stampTableRows = ({
         section,
         text: textOf(candidate),
         markedText: markedTextOf(candidate),
+        parentBlockId,
       });
     },
   });
@@ -380,7 +384,14 @@ const stampScope = ({
     if (kind === "code" || kind.startsWith("code-")) {
       stampCodeLines(child);
     } else if (kind === "table") {
-      stampTableRows({ table: child, scope, section, blocks, counter });
+      stampTableRows({
+        table: child,
+        scope,
+        section,
+        blocks,
+        counter,
+        parentBlockId: id,
+      });
     }
   }
 };

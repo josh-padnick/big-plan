@@ -163,11 +163,13 @@ describe("block identity boundaries", () => {
       "## Rows\n\n| Field | Meaning |\n| --- | --- |\n| `versionId` | Content hash |\n| `number` | History position |\n",
     );
     const rows = blocks.filter((block) => block.kind === "table-row");
+    const table = blocks.find((block) => block.kind === "table");
     expect(rows.map((row) => row.label)).toEqual([
       "Field",
       "versionId",
       "number",
     ]);
+    expect(rows.every((row) => row.parentBlockId === table?.id)).toBe(true);
     expect(rows.map((row) => row.id)).toEqual([
       "section/rows/table-row-1",
       "section/rows/table-row-2",

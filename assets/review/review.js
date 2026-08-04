@@ -34,6 +34,7 @@ import { X_ICON } from "../../src/icons/lucide/x.js";
 import {
   bandText,
   diffKindShowsComment,
+  diffLocationMatchesTarget,
   diffPresentationMode,
   diffRunSimilarity,
   INLINE_CODE_SENTINEL,
@@ -2412,6 +2413,8 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         typeof location.section === "string" &&
         typeof location.oldText === "string" &&
         typeof location.newText === "string" &&
+        (location.parentBlockId === undefined ||
+          typeof location.parentBlockId === "string") &&
         Array.isArray(location.runs) &&
         location.runs.every(
           (run) =>
@@ -2473,10 +2476,8 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       targets.length === 0
         ? locations
         : locations.filter((candidate) =>
-            targets.some(
-              (target) =>
-                candidate.newBlockId === target ||
-                candidate.oldBlockId === target,
+            targets.some((target) =>
+              diffLocationMatchesTarget({ location: candidate, target }),
             ),
           );
     // When a table's rows are listed individually, the whole-table location
