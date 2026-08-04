@@ -14,6 +14,7 @@ import {
   effectiveSourceRevision,
   nextPendingAgentRequest,
   readAgentExchange,
+  resolveAgentResponseRequest,
   responseTemplateFor,
   validateAgentResponseDraft,
   writeAgentResponse,
@@ -434,24 +435,12 @@ const respond = async ({
   if (!isRecord(responseDraft) || typeof responseDraft.requestId !== "string") {
     return fail("The response JSON must name its requestId");
   }
-  const request = snapshot.requests.find(
-    (candidate) => candidate.requestId === responseDraft.requestId,
-  );
-  if (request === undefined) {
-    return fail("The response does not name a request in this review session");
-  }
-  if (snapshot.cancelledIds.includes(request.requestId)) {
-    return fail(
-      "The reviewer cancelled this request. Discard your draft, revert any plan edits you made for it, and run agent next.",
-    );
-  }
-  const pending = nextPendingAgentRequest(snapshot);
-  if (pending === undefined) {
-    return fail("There is no pending agent request to answer");
-  }
-  if (pending.requestId !== request.requestId) {
-    return fail("The response does not answer the next pending agent request");
-  }
+  const resolution = resolveAgentResponseRequest({
+    snapshot,
+    requestId: responseDraft.requestId,
+  });
+  if (!resolution.ok) return fail(resolution.message);
+  const { request } = resolution;
   let markdown: string;
   try {
     markdown = await readFile(session.planPath, "utf8");

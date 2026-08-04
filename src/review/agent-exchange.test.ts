@@ -15,6 +15,7 @@ import {
   messageAgentRequest,
   nextPendingAgentRequest,
   readAgentExchange,
+  resolveAgentResponseRequest,
   validateAgentResponseDraft,
   writeAgentRequest,
   writeAgentResponse,
@@ -68,6 +69,64 @@ const snapshot = (): AgentExchangeSnapshot => ({
   requests: [request],
   responses: [],
   cancelledIds: [],
+});
+
+describe("agent response request resolution", () => {
+  const secondRequest = messageAgentRequest({
+    kind: "chat",
+    requestId: "7777777777777777",
+    sessionId,
+    planId,
+    sourceRevision: deriveSourceRevision(before),
+    createdAt: "2026-08-02T12:01:00.000Z",
+    body: "Answer the later question.",
+  });
+
+  it("should resolve only the next live request named by the response", () => {
+    expect(
+      resolveAgentResponseRequest({
+        snapshot: {
+          requests: [request, secondRequest],
+          responses: [],
+          cancelledIds: [request.requestId],
+        },
+        requestId: secondRequest.requestId,
+      }),
+    ).toEqual({ ok: true, request: secondRequest });
+  });
+
+  it("should reject cancellation only for the response request identity", () => {
+    expect(
+      resolveAgentResponseRequest({
+        snapshot: {
+          requests: [request, secondRequest],
+          responses: [],
+          cancelledIds: [request.requestId],
+        },
+        requestId: request.requestId,
+      }),
+    ).toEqual({
+      ok: false,
+      message:
+        "The reviewer cancelled this request. Discard your draft, revert any plan edits you made for it, and run agent next.",
+    });
+  });
+
+  it("should preserve serialized response order", () => {
+    expect(
+      resolveAgentResponseRequest({
+        snapshot: {
+          requests: [request, secondRequest],
+          responses: [],
+          cancelledIds: [],
+        },
+        requestId: secondRequest.requestId,
+      }),
+    ).toEqual({
+      ok: false,
+      message: "The response does not answer the next pending agent request",
+    });
+  });
 });
 
 describe("agent exchange response contract", () => {

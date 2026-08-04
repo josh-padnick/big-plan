@@ -844,6 +844,60 @@ export const nextPendingAgentRequest = (
   );
 };
 
+export type AgentResponseRequestResolution =
+  | {
+      readonly ok: true;
+      readonly request: AgentRequest;
+    }
+  | {
+      readonly ok: false;
+      readonly message: string;
+    };
+
+/**
+ * Resolves the exact request named by a response draft while preserving the
+ * serialized queue contract. Cancellation belongs to that identity, never to
+ * an unrelated raw queue head.
+ */
+export const resolveAgentResponseRequest = ({
+  snapshot,
+  requestId,
+}: {
+  readonly snapshot: AgentExchangeSnapshot;
+  readonly requestId: string;
+}): AgentResponseRequestResolution => {
+  const request = snapshot.requests.find(
+    (candidate) => candidate.requestId === requestId,
+  );
+  if (request === undefined) {
+    return {
+      ok: false,
+      message: "The response does not name a request in this review session",
+    };
+  }
+  if (snapshot.cancelledIds.includes(request.requestId)) {
+    return {
+      ok: false,
+      message:
+        "The reviewer cancelled this request. Discard your draft, revert any plan edits you made for it, and run agent next.",
+    };
+  }
+  const pending = nextPendingAgentRequest(snapshot);
+  if (pending === undefined) {
+    return {
+      ok: false,
+      message: "There is no pending agent request to answer",
+    };
+  }
+  if (pending.requestId !== request.requestId) {
+    return {
+      ok: false,
+      message: "The response does not answer the next pending agent request",
+    };
+  }
+  return { ok: true, request };
+};
+
 /**
  * Resolves the causal baseline for one serialized work item. Later comments in
  * a Send-all batch begin where the preceding comment's immutable pair ended.
