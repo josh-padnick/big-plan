@@ -114,6 +114,8 @@ describe("agent command", () => {
     const prompt = await readFile(promptFile, "utf8");
     expect(prompt).toContain("You are the coding agent");
     expect(prompt).toContain("agent next");
+    expect(prompt).toContain("agent note");
+    expect(prompt).toContain("One line per step, present tense, no repeats");
     expect(prompt).toContain(runtime.planPath);
   });
 
@@ -208,6 +210,48 @@ describe("agent command", () => {
         }),
       ]),
     );
+  });
+
+  it("should relay a bounded narration line and renew the working heartbeat", async () => {
+    await expect(
+      agentCommand([
+        "note",
+        runtime.planPath,
+        `Reading the reviewer request${" now".repeat(50)}`,
+      ]),
+    ).resolves.toMatchObject({
+      noted: true,
+      requestId: "aaaaaaaaaaaaaaaa",
+    });
+    await expect(
+      readProgress({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          step: expect.stringMatching(/^Reading the reviewer request/u),
+          state: "live",
+          requestId: "aaaaaaaaaaaaaaaa",
+          at: expect.any(String),
+        }),
+      ]),
+    );
+    const progress = await readProgress({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+    });
+    expect(progress.at(-1)?.step).toHaveLength(120);
+    await expect(
+      agentHeartbeatIsFresh({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      agentCommand(["note", runtime.planPath, "   "]),
+    ).rejects.toThrow(/must contain one short line/u);
   });
 
   it("should publish a complete question outcome without editing the plan", async () => {

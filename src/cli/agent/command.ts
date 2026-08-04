@@ -41,6 +41,7 @@ const USAGE = [
   "Usage:",
   "  big-plan agent <input.mdx>",
   "  big-plan agent next <input.mdx> [--wait]",
+  "  big-plan agent note <input.mdx> <text>",
   "  big-plan agent respond <input.mdx> <response.json>",
 ].join("\n");
 
@@ -255,13 +256,16 @@ ${nextCommand}
 
 For each returned work item:
 1. Read the current plan source and the request plus its conversation history.
-2. For every anchored comment, choose exactly one outcome:
+2. As you work, narrate for the reviewer: run \`node ${shellQuote(binPath)} agent note ${shellQuote(
+    session.planPath,
+  )} "<one short line>"\` when you start each meaningful step - reading the request, deciding an outcome, editing the plan, validating. One line per step, present tense, no repeats.
+3. For every anchored comment, choose exactly one outcome:
    - changed: revise the plan source, explain the revision, and list every changed render block id in changeTargets, in presentation order.
    - question: do not guess; ask the precise question the reviewer must answer.
    - outside: explain why the request is beyond revising this plan.
-3. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
-4. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates the revised MDX and the complete response before publishing it to the reviewer.
-5. Repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
+4. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
+5. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates the revised MDX and the complete response before publishing it to the reviewer.
+6. Repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
 
 Never edit rendered HTML. Never invent a Changed outcome without changing the plan source.`;
   await writeAgentPrompt({ store: session.store, prompt });
@@ -519,6 +523,54 @@ const respond = async ({
   };
 };
 
+/** Relays one bounded, request-attributed narration line to the reviewer. */
+const note = async ({
+  planArgument,
+  textArgument,
+}: {
+  readonly planArgument: string;
+  readonly textArgument: string;
+}): Promise<Record<string, unknown>> => {
+  const step = textArgument.trim().slice(0, 120);
+  if (step === "") {
+    return fail("The agent note must contain one short line");
+  }
+  const session = await readPlanSession(planArgument);
+  const snapshot = await readAgentExchange({
+    store: session.store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const request = nextPendingAgentRequest(snapshot);
+  const progress = await readProgress({
+    store: session.store,
+    sessionId: session.sessionId,
+  });
+  await appendProgress({
+    store: session.store,
+    event: {
+      sessionId: session.sessionId,
+      seq:
+        progress.reduce((highest, event) => Math.max(highest, event.seq), 0) +
+        1,
+      step,
+      state: "live",
+      ...(request === undefined ? {} : { requestId: request.requestId }),
+      at: new Date().toISOString(),
+    },
+  });
+  await writeAgentHeartbeat({
+    store: session.store,
+    sessionId: session.sessionId,
+    state: "working",
+  });
+  return {
+    noted: true,
+    step,
+    ...(request === undefined ? {} : { requestId: request.requestId }),
+  };
+};
+
 /** Dispatches the coding-agent exchange helpers. */
 export const agentCommand = async (
   args: ReadonlyArray<string>,
@@ -539,6 +591,12 @@ export const agentCommand = async (
     return respond({
       planArgument: args[1] ?? "",
       responseArgument: args[2] ?? "",
+    });
+  }
+  if (args[0] === "note" && args.length === 3) {
+    return note({
+      planArgument: args[1] ?? "",
+      textArgument: args[2] ?? "",
     });
   }
   return fail(USAGE);
