@@ -3086,7 +3086,7 @@ import {
         trigger: sendThis,
       });
     });
-    if (surface === "row") return [sendThis];
+    if (surface === "row" || drafts.length < 2) return [sendThis];
     const sendAll = el("button", {
       type: "button",
       class:

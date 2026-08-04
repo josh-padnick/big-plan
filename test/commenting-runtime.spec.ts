@@ -931,12 +931,12 @@ test("should preserve and send a floating review across reload and viewport chan
     );
     await expect(
       card.locator("[data-review-thread-actions] button"),
-    ).toHaveCount(2);
+    ).toHaveCount(1);
     await expect(card.locator("[data-review-thread-submit]")).toHaveText(
       "Send this",
     );
-    await expect(card.locator("[data-review-thread-submit-all]")).toHaveText(
-      "Send all 1",
+    await expect(card.locator("[data-review-thread-submit-all]")).toHaveCount(
+      0,
     );
     await expect(card.locator("time")).not.toHaveText("");
     await expect(card.locator("[data-review-thread-more]")).toHaveText(
@@ -1165,6 +1165,11 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(page.locator("[data-review-draft-group] > h3")).toHaveText(
       "Staged 2",
     );
+    await expect(
+      page.locator(
+        '[data-review-thread-state="staged"] [data-review-thread-submit-all]',
+      ),
+    ).toHaveText(["Send all 2", "Send all 2"]);
     const stagedCount = toggle.locator("[data-review-toggle-count]");
     await expect(stagedCount).toHaveText("2");
     await expect(stagedCount).toHaveAttribute(
