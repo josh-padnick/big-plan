@@ -33,16 +33,18 @@ import { TRASH_2_ICON } from "../../src/icons/lucide/trash-2.js";
 import { TRIANGLE_ALERT_ICON } from "../../src/icons/lucide/triangle-alert.js";
 import { UNDO_2_ICON } from "../../src/icons/lucide/undo-2.js";
 import { X_ICON } from "../../src/icons/lucide/x.js";
-import {
-  pendingThreadGroup,
-  threadSubstate,
-} from "../../src/review/thread-group.js";
+import { threadSubstate } from "../../src/review/thread-group.js";
 import {
   deriveAgentIndicator,
   deriveThreadStatus,
   sessionQuietMs,
 } from "../../src/review/thread-status.js";
 import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
+import {
+  commentTimeLabel,
+  compactDurationLabel,
+  relativeSignalLabel,
+} from "../../src/review/time-label.js";
 
 (() => {
   "use strict";
@@ -856,15 +858,48 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     "data-review-toggle-count": true,
     text: "0",
   });
-  toggle.append(
-    icon(MESSAGE_SQUARE_TEXT_ICON),
-    el("span", { text: "Feedback" }),
-    toggleCount,
+  const feedbackLabel = el("span", { "data-review-toggle-label": true });
+  toggle.append(icon(MESSAGE_SQUARE_TEXT_ICON), feedbackLabel, toggleCount);
+  const sendButton = el("button", {
+    type: "button",
+    "data-review-send": true,
+    hidden: true,
+    text: "Send all to agent",
+  });
+  const compactBatchLabel = el("span", {
+    "data-review-batch-label": true,
+  });
+  const compactBatchMenu = el("details", {
+    "data-review-batch-menu": true,
+    hidden: true,
+  });
+  const compactBatchSummary = el("summary", {}, [
+    compactBatchLabel,
+    icon(CHEVRON_RIGHT_ICON),
+  ]);
+  const compactReviewButton = el("button", {
+    type: "button",
+    "data-review-batch-review": true,
+    text: "Review comments",
+  });
+  const compactSendButton = el("button", {
+    type: "button",
+    "data-review-batch-send": true,
+    text: "Send all to agent",
+  });
+  compactBatchMenu.append(
+    compactBatchSummary,
+    el("div", { "data-review-batch-actions": true }, [
+      compactReviewButton,
+      compactSendButton,
+    ]),
   );
   const toolbar = el("div", { "data-review-toolbar": true }, [
     agentAlert,
     agentOk,
     toggle,
+    sendButton,
+    compactBatchMenu,
   ]);
 
   const countLabel = el("span", {
@@ -879,6 +914,33 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   hideButton.appendChild(icon(X_ICON));
 
   const draftList = el("ol", { "data-review-drafts": true });
+  const draftGroupCount = el("span", {
+    "data-review-outcome-group-count": true,
+  });
+  const sidebarSendButton = el("button", {
+    type: "button",
+    class:
+      "mt-3 w-full cursor-pointer rounded-md border border-accent bg-accent px-3 py-2 text-[0.8125rem] font-semibold text-[var(--bg)] hover:brightness-110 active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+    "data-review-sidebar-send": true,
+    text: "Send all to agent",
+  });
+  const draftGroup = el(
+    "section",
+    {
+      "data-review-draft-group": true,
+      "data-review-outcome-group": "staged",
+      hidden: true,
+    },
+    [
+      el("h3", {}, [
+        el("span", { text: "Staged" }),
+        document.createTextNode(" "),
+        draftGroupCount,
+      ]),
+      draftList,
+      sidebarSendButton,
+    ],
+  );
   const emptyNote = el("p", {
     "data-review-empty": true,
     text: "Select text to comment, or use a slide selector to select it all.",
@@ -900,15 +962,8 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     sentList,
   ]);
 
-  const sendButton = el("button", {
-    type: "button",
-    "data-review-send": true,
-    disabled: true,
-    text: "Send all comments to agent",
-  });
   const sendNote = el("p", { "data-review-send-note": true });
   const sendBar = el("div", { "data-review-send-bar": true, hidden: true }, [
-    sendButton,
     sendNote,
   ]);
 
@@ -1019,7 +1074,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     },
     [
       el("div", { "data-review-scroll": true }, [
-        draftList,
+        draftGroup,
         sendBar,
         emptyNote,
         sentGroup,
@@ -1254,10 +1309,10 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         "text-decoration-thickness:2px;" +
         "text-underline-offset:.16em}" +
         "::highlight(big-plan-review-focus){" +
-        "background-color:color-mix(in srgb,var(--annotation-bg) 92%,transparent);" +
+        "background-color:color-mix(in srgb,var(--annotation-c) 12%,transparent);" +
         "text-decoration:underline;" +
-        "text-decoration-color:var(--accent-c);" +
-        "text-decoration-thickness:3px;" +
+        "text-decoration-color:var(--annotation-c);" +
+        "text-decoration-thickness:2px;" +
         "text-underline-offset:.16em}" +
         "::highlight(big-plan-review-active){" +
         "background-color:var(--annotation-bg)}",
@@ -1302,22 +1357,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
 
   const railIsOpen = () => !rail.hidden;
 
-  const compactDuration = (milliseconds) => {
-    const seconds = Math.max(0, Math.floor(milliseconds / 1_000));
-    if (seconds < 60) return seconds + "s";
-    const minutes = Math.floor(seconds / 60);
-    const remainder = seconds % 60;
-    if (minutes < 60) {
-      return minutes + "m " + String(remainder).padStart(2, "0") + "s";
-    }
-    const hours = Math.floor(minutes / 60);
-    return hours + "h " + String(minutes % 60).padStart(2, "0") + "m";
-  };
-
-  const relativeSignal = (at) => {
-    const seconds = Math.max(0, Math.round((Date.now() - at) / 1_000));
-    return seconds < 2 ? "just now" : seconds + "s ago";
-  };
+  const relativeSignal = (at) => relativeSignalLabel({ now: Date.now(), at });
 
   const selectionTouches = (node) => {
     const selection = window.getSelection();
@@ -1346,7 +1386,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       "[data-review-relative-at]",
     ) || []) {
       const at = Number(node.getAttribute("data-review-relative-at"));
-      if (Number.isFinite(at)) setLiveText(node, relativeSignal(at));
+      setLiveText(node, relativeSignal(at));
     }
     for (const node of connectionPanel?.querySelectorAll(
       "[data-review-duration-start]",
@@ -1354,8 +1394,8 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       const start = Number(node.getAttribute("data-review-duration-start"));
       const endAttribute = node.getAttribute("data-review-duration-end");
       const end = endAttribute === null ? Date.now() : Number(endAttribute);
-      if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
-      const duration = compactDuration(end - start);
+      const duration = compactDurationLabel({ start, end });
+      if (duration === null) continue;
       const prefix = node.getAttribute("data-review-duration-prefix") || "";
       const suffix = node.getAttribute("data-review-duration-suffix") || "";
       setLiveText(node, prefix + duration + suffix);
@@ -1495,6 +1535,11 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           : "Offline for ";
       const durationSuffix =
         !entry.connected && next?.connected ? " offline" : "";
+      const durationLabel =
+        compactDurationLabel({
+          start: entry.atMs,
+          end: durationEnd ?? Date.now(),
+        }) ?? "duration unavailable";
       groups.get(date).push(
         el(
           "li",
@@ -1533,10 +1578,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
                 : { "data-review-duration-end": durationEnd }),
               "data-review-duration-prefix": durationPrefix,
               "data-review-duration-suffix": durationSuffix,
-              text:
-                durationPrefix +
-                compactDuration((durationEnd ?? Date.now()) - entry.atMs) +
-                durationSuffix,
+              text: durationPrefix + durationLabel + durationSuffix,
             }),
             ...(entry.reason
               ? [
@@ -2179,16 +2221,15 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   };
 
   const relativeCommentTime = (createdAt) => {
-    const time = Date.parse(createdAt);
-    if (Number.isNaN(time)) return "Just now";
-    const elapsed = Date.now() - time;
-    if (elapsed < 60_000) return "Just now";
-    if (elapsed < 3_600_000)
-      return Math.max(1, Math.floor(elapsed / 60_000)) + "m";
-    return new Intl.DateTimeFormat(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(time));
+    return commentTimeLabel({
+      now: Date.now(),
+      at: Date.parse(createdAt),
+      absoluteLabel: (at) =>
+        new Intl.DateTimeFormat(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date(at)),
+    });
   };
 
   const OUTCOME_LABELS = {
@@ -2723,6 +2764,37 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     });
   };
 
+  const stagedSubmitActions = ({ comment, surface }) => {
+    const sendThis = el("button", {
+      type: "button",
+      class: "active:opacity-60",
+      [`data-review-${surface}-submit`]: true,
+      text: "Send this",
+    });
+    sendThis.addEventListener("click", () => {
+      void submitComments({
+        comments: [comment],
+        closeRailAfter: false,
+        trigger: sendThis,
+      });
+    });
+    if (surface === "row") return [sendThis];
+    const sendAll = el("button", {
+      type: "button",
+      class: "active:opacity-60",
+      "data-review-thread-submit-all": true,
+      text: `Send all ${drafts.length}`,
+    });
+    sendAll.addEventListener("click", () => {
+      void submitComments({
+        comments: drafts,
+        closeRailAfter: false,
+        trigger: sendAll,
+      });
+    });
+    return [sendThis, sendAll];
+  };
+
   const openDeleteDialog = (comment) => {
     deleteCandidateId = comment.id;
     deleteDescription.textContent =
@@ -2753,11 +2825,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       title: "Jump to this target",
     });
     jump.addEventListener("click", () => focusTarget(comment));
-    const state = el("span", {
-      "data-review-comment-state": "staged",
-      text: "Staged",
-    });
-
     if (submittingIds.has(comment.id)) {
       return el("li", { ...rowAttributes, "data-review-row-sending": true }, [
         el("div", { "data-review-row-head": true }, [
@@ -2769,18 +2836,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     }
 
     if (!isEditing) {
-      const submitNow = el("button", {
-        type: "button",
-        "data-review-row-submit": true,
-        text: "Submit Now",
-      });
-      submitNow.addEventListener("click", () => {
-        void submitComments({
-          comments: [comment],
-          closeRailAfter: false,
-          trigger: submitNow,
-        });
-      });
       const iconActions = el("div", { "data-review-row-icons": true }, [
         toolbarButton({
           attribute: "data-review-row-edit",
@@ -2799,11 +2854,15 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         }),
       ]);
       return el("li", rowAttributes, [
-        el("div", { "data-review-row-head": true }, [jump, state, iconActions]),
+        el("div", { "data-review-row-head": true }, [jump, iconActions]),
         el("p", { "data-review-row-body": true, text: comment.body }),
         stagedAnchorNotice(comment),
         submitErrorNote(comment),
-        el("div", { "data-review-row-actions": true }, [submitNow]),
+        el(
+          "div",
+          { "data-review-row-actions": true },
+          stagedSubmitActions({ comment, surface: "row" }),
+        ),
       ]);
     }
 
@@ -2839,7 +2898,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) commit();
     });
     const row = el("li", { ...rowAttributes, "data-review-editing": true }, [
-      el("div", { "data-review-row-head": true }, [jump, state]),
+      el("div", { "data-review-row-head": true }, [jump]),
       field,
       el("div", { "data-review-row-actions": true }, [cancel, confirm]),
     ]);
@@ -3716,25 +3775,30 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           action: () => openRevertDialog(comment),
         })
       : null;
-    const actions = [
-      resolved
-        ? toolbarButton({
-            attribute: "data-review-thread-unresolve",
-            label: "Unresolve comment",
-            glyph: UNDO_2_ICON,
-            action: () => {
-              void unresolveThread(comment);
-            },
-          })
-        : toolbarButton({
-            attribute: "data-review-thread-resolve",
-            label: "Resolve comment",
-            glyph: CHECK_ICON,
-            action: () => {
-              void resolveThread(comment);
-            },
-          }),
-    ];
+    const actions = [];
+    if (resolved) {
+      actions.push(
+        toolbarButton({
+          attribute: "data-review-thread-unresolve",
+          label: "Unresolve comment",
+          glyph: UNDO_2_ICON,
+          action: () => {
+            void unresolveThread(comment);
+          },
+        }),
+      );
+    } else if (outcomeFor(comment).key !== "waiting") {
+      actions.push(
+        toolbarButton({
+          attribute: "data-review-thread-resolve",
+          label: "Resolve comment",
+          glyph: CHECK_ICON,
+          action: () => {
+            void resolveThread(comment);
+          },
+        }),
+      );
+    }
     if (revertAction) actions.push(revertAction);
     return el("div", { "data-review-thread-toolbar-actions": true }, actions);
   };
@@ -3844,6 +3908,13 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   const sentRow = (comment, options = {}) => {
     const resolved = options.resolved === true;
     const outcome = outcomeFor(comment);
+    const lifecycle = outcome.status?.stage;
+    const rowState =
+      outcome.key !== "waiting"
+        ? "ready"
+        : lifecycle === "working" || lifecycle === "stalled"
+          ? "working"
+          : "queued";
     const expanded = expandedThreadIds.has(comment.id);
     const collapse = () => {
       clearCommentLensIfOwned(comment.id);
@@ -3871,23 +3942,34 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       }
       openThreadAt(comment);
     };
-    const jump = el("button", {
-      type: "button",
-      "data-review-row-target": true,
-      text: slideTitleFor(comment.target),
-      "aria-expanded": expanded ? "true" : "false",
-      "aria-label":
-        (expanded ? "Collapse" : "Open") +
-        " thread on " +
-        slideTitleFor(comment.target) +
-        ": " +
-        shortEcho(comment.body),
-      title: expanded
-        ? "Collapse this thread"
-        : resolved
-          ? "Open this resolved thread"
-          : "Jump to and expand this thread",
-    });
+    const jump = el(
+      "button",
+      {
+        type: "button",
+        "data-review-row-target": true,
+        "aria-expanded": expanded ? "true" : "false",
+        "aria-label":
+          (expanded ? "Collapse" : "Open") +
+          " thread on " +
+          slideTitleFor(comment.target) +
+          ": " +
+          shortEcho(comment.body),
+        title: expanded
+          ? "Collapse this thread"
+          : resolved
+            ? "Open this resolved thread"
+            : "Jump to and expand this thread",
+      },
+      [
+        el("span", {
+          "data-review-row-title": true,
+          text: slideTitleFor(comment.target),
+        }),
+        el("span", { "data-review-row-locator": true }, [
+          icon(CHEVRON_RIGHT_ICON),
+        ]),
+      ],
+    );
     jump.addEventListener("click", toggleThread);
     const rowHeadChildren = [jump];
     if (expanded) {
@@ -3914,39 +3996,92 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       { "data-review-row-head": true },
       rowHeadChildren,
     );
-    rowHead.addEventListener("click", (event) => {
-      if (event.target instanceof Element && event.target.closest("button")) {
-        return;
-      }
-      toggleThread();
-    });
     const children = [rowHead];
-    if (expanded) children.push(...conversationNodes(comment));
-    else
+    if (expanded) {
+      children.push(...conversationNodes(comment));
+    } else {
+      const pendingRequest = pendingRequestForComment(comment);
+      const queuedRequests = agentRequests.filter(
+        (request) =>
+          !agentResponses.some(
+            (response) => response.requestId === request.requestId,
+          ) && !agentCancelledIds.includes(request.requestId),
+      );
+      const queueIndex = pendingRequest
+        ? queuedRequests.findIndex(
+            (request) => request.requestId === pendingRequest.requestId,
+          )
+        : -1;
+      const latestOutcome = outcomeEventsFor(comment).at(-1);
+      const secondary =
+        rowState === "ready"
+          ? `${outcome.label} · ${relativeCommentTime(
+              latestOutcome?.createdAt || comment.createdAt,
+            )}`
+          : rowState === "working"
+            ? lifecycle === "stalled"
+              ? "Agent quiet · check its terminal"
+              : `Working · ${relativeCommentTime(
+                  pendingRequest?.createdAt || comment.createdAt,
+                )}`
+            : lifecycle === "blocked" || lifecycle === "offline"
+              ? "Blocked · sends automatically on reconnect"
+              : `Queued${
+                  queueIndex >= 0
+                    ? ` · position ${queueIndex + 1} of ${queuedRequests.length}`
+                    : ""
+                }`;
       children.push(
         el("p", {
           "data-review-row-body": true,
           text: shortEcho(comment.body),
         }),
+        el("p", {
+          "data-review-row-secondary": rowState,
+          text: secondary,
+        }),
       );
-    return bindCommentAssociation(
-      el(
-        "li",
-        {
-          "data-review-row": true,
-          "data-review-sent-row": true,
-          ...(resolved ? { "data-review-resolved-row": true } : {}),
-          ...(expanded ? { "data-review-row-expanded": true } : {}),
-          "data-review-comment-id": comment.id,
-          "data-review-outcome": outcome.key,
-          ...(outcome.status
-            ? { "data-review-lifecycle": outcome.status.stage }
-            : {}),
-        },
-        children,
-      ),
-      comment,
+      const changedEvent = outcomeEventsFor(comment)
+        .filter((event) => event.key === "changed")
+        .at(-1);
+      if (rowState === "ready" && changedEvent !== undefined) {
+        const reviewChange = el("button", {
+          type: "button",
+          "data-review-row-review-change": true,
+          text: "Review change",
+        });
+        reviewChange.addEventListener("click", (event) => {
+          event.stopPropagation();
+          expandedThreadIds.add(comment.id);
+          renderTray();
+          void openDiffLens(comment, changedEvent);
+        });
+        children.push(reviewChange);
+      }
+    }
+    const row = el(
+      "li",
+      {
+        "data-review-row": true,
+        "data-review-sent-row": true,
+        "data-review-row-state": rowState,
+        ...(resolved ? { "data-review-resolved-row": true } : {}),
+        ...(expanded ? { "data-review-row-expanded": true } : {}),
+        "data-review-comment-id": comment.id,
+        "data-review-outcome": outcome.key,
+        ...(outcome.status
+          ? { "data-review-lifecycle": outcome.status.stage }
+          : {}),
+      },
+      children,
     );
+    row.addEventListener("click", (event) => {
+      if (event.target instanceof Element && event.target.closest("button")) {
+        return;
+      }
+      toggleThread();
+    });
+    return bindCommentAssociation(row, comment);
   };
 
   const threadCard = ({ comment, state }) => {
@@ -3976,11 +4111,11 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         card.setAttribute("data-review-lifecycle", outcome.status.stage);
       }
       const expanded = expandedThreadIds.has(comment.id);
-      const summary = el(
+      const summaryToggle = el(
         "button",
         {
           type: "button",
-          "data-review-thread-summary": true,
+          "data-review-thread-summary-toggle": true,
           "aria-expanded": expanded ? "true" : "false",
           "aria-label":
             (expanded ? "Collapse" : "Open") +
@@ -3990,18 +4125,21 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
             shortEcho(comment.body),
         },
         [
-          outcomeBadge(outcome, {
-            spin: outcome.status?.stage === "working",
-            iconOnly: outcome.key === "waiting",
-            waitingBusy: outcome.status?.waitingBusy,
-          }),
           el("span", {
             "data-review-thread-echo": true,
             text: shortEcho(comment.body),
           }),
         ],
       );
-      summary.addEventListener("click", () => {
+      const summary = el("div", { "data-review-thread-summary": true }, [
+        outcomeBadge(outcome, {
+          spin: outcome.status?.stage === "working",
+          iconOnly: outcome.key === "waiting",
+          waitingBusy: outcome.status?.waitingBusy,
+        }),
+        summaryToggle,
+      ]);
+      summaryToggle.addEventListener("click", () => {
         if (expanded) {
           clearCommentLensIfOwned(comment.id);
           expandedThreadIds.delete(comment.id);
@@ -4014,7 +4152,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
             .querySelector(
               '[data-review-comment-id="' +
                 comment.id +
-                '"] [data-review-thread-summary]',
+                '"] [data-review-thread-summary-toggle]',
             )
             ?.focus();
         });
@@ -4030,26 +4168,29 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     }
 
     if (minimizedDraftIds.has(comment.id)) {
-      const summary = el(
+      const summaryToggle = el(
         "button",
         {
           type: "button",
-          "data-review-thread-summary": true,
+          "data-review-thread-summary-toggle": true,
           "aria-expanded": "false",
           "aria-label": "Expand staged comment: " + shortEcho(comment.body),
         },
         [
-          el("span", {
-            "data-review-comment-state": "staged",
-            text: "Staged",
-          }),
           el("span", {
             "data-review-thread-echo": true,
             text: shortEcho(comment.body),
           }),
         ],
       );
-      summary.addEventListener("click", () => {
+      const summary = el("div", { "data-review-thread-summary": true }, [
+        el("span", {
+          "data-review-comment-state": "staged",
+          text: "Staged",
+        }),
+        summaryToggle,
+      ]);
+      summaryToggle.addEventListener("click", () => {
         minimizedDraftIds.delete(comment.id);
         renderTray();
       });
@@ -4131,20 +4272,12 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     const errorNote = submitErrorNote(comment);
     if (errorNote) card.appendChild(errorNote);
     if (state === "staged") {
-      const submitNow = el("button", {
-        type: "button",
-        "data-review-thread-submit": true,
-        text: "Submit Now",
-      });
-      submitNow.addEventListener("click", () => {
-        void submitComments({
-          comments: [comment],
-          closeRailAfter: false,
-          trigger: submitNow,
-        });
-      });
       card.appendChild(
-        el("div", { "data-review-thread-actions": true }, [submitNow]),
+        el(
+          "div",
+          { "data-review-thread-actions": true },
+          stagedSubmitActions({ comment, surface: "thread" }),
+        ),
       );
     }
     return card;
@@ -4298,33 +4431,36 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
 
   const renderSentIndex = () => {
     const counts = outcomeCounts();
-    const pendingGroup = pendingThreadGroup(agentConnected);
     const workingCount = sent.filter((comment) => {
       if (resolvedCommentIds.has(comment.id)) return false;
       const stage = outcomeFor(comment).status?.stage;
       return stage === "working" || stage === "stalled";
     }).length;
     const waitingCount = Math.max(0, counts.waiting - workingCount);
-    responseSummary.textContent =
-      "Latest round · " +
-      counts.question +
-      " needs your answer · " +
-      workingCount +
-      " working · " +
-      waitingCount +
-      " " +
-      pendingGroup.label.toLowerCase() +
-      " · " +
-      counts.changed +
-      " changed · " +
-      counts.outside +
-      " outside this plan · " +
-      counts.cancelled +
-      " cancelled";
+    const readyCount =
+      counts.question + counts.changed + counts.outside + counts.cancelled;
+    const summaryItems = [
+      { count: readyCount, label: "ready" },
+      { count: workingCount, label: "working" },
+      { count: waitingCount, label: "queued" },
+    ].filter((item) => item.count > 0);
+    responseSummary.replaceChildren(
+      ...summaryItems.map((item) =>
+        el("span", {
+          "data-review-round-chip": item.label,
+          text: `${item.count} ${item.label}`,
+        }),
+      ),
+    );
     resolveAllButton.hidden =
       counts.changed + counts.question + counts.outside === 0;
     const groups = [
-      { key: "question", label: "Needs your answer" },
+      {
+        key: "ready",
+        label: "Ready for Review",
+        glyph: CHECK_ICON,
+        match: (outcome) => outcome.key !== "waiting",
+      },
       {
         key: "working",
         label: "Working",
@@ -4334,19 +4470,14 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           outcome.status?.stage === "stalled",
       },
       {
-        key: "waiting",
-        label: pendingGroup.label,
-        displayKey: pendingGroup.key,
-        glyph:
-          pendingGroup.key === "waiting" ? HOURGLASS_ICON : TRIANGLE_ALERT_ICON,
+        key: "queued",
+        label: "Queued",
+        glyph: HOURGLASS_ICON,
         match: (outcome) =>
           outcome.key === "waiting" &&
           outcome.status?.stage !== "working" &&
           outcome.status?.stage !== "stalled",
       },
-      { key: "changed", label: "Changed" },
-      { key: "outside", label: "Outside this plan" },
-      { key: "cancelled", label: "Cancelled" },
     ];
     const renderedGroups = groups
       .map(({ key, label, displayKey = key, glyph, spin, match }) => {
@@ -4434,6 +4565,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     const toolbarCount = pending > 0 ? pending : needs;
     const toolbarCountKind =
       pending > 0 ? "staged" : needs > 0 ? "needs" : "idle";
+    feedbackLabel.textContent = "Feedback";
     toggleCount.textContent = toolbarCount > 0 ? String(toolbarCount) : "";
     toggleCount.setAttribute("data-review-toggle-count-kind", toolbarCountKind);
     toggleCount.setAttribute(
@@ -4459,8 +4591,23 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
             ? `, ${needs} needs your answer`
             : ""),
     );
+    toolbar.setAttribute(
+      "data-review-batch-ready",
+      pending > 0 ? "true" : "false",
+    );
+    sendButton.hidden = pending === 0;
     sendButton.disabled = pending === 0;
-    sendBar.hidden = pending === 0 && sendNote.textContent.trim().length === 0;
+    draftGroup.hidden = pending === 0;
+    draftGroupCount.textContent = String(pending);
+    draftGroupCount.setAttribute(
+      "aria-label",
+      `${pending} staged comment${pending === 1 ? "" : "s"}`,
+    );
+    sidebarSendButton.disabled = pending === 0;
+    compactBatchMenu.hidden = pending === 0;
+    compactBatchLabel.textContent = `Send ${pending} comment${pending === 1 ? "" : "s"}`;
+    compactBatchMenu.open = false;
+    sendBar.hidden = sendNote.textContent.trim().length === 0;
     sentGroup.hidden = sent.length === 0;
     renderSentIndex();
     renderPlanChat();
@@ -4511,6 +4658,13 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   });
 
   document.addEventListener("click", (event) => {
+    const clickedElement =
+      event.target instanceof Element
+        ? event.target
+        : event.target?.parentElement;
+    // Named highlights are paint-only; their association hit-testing must not
+    // turn a real document link into a comment-card shortcut.
+    if (clickedElement?.closest("a[href]")) return;
     const comment = commentAtDocumentPoint({
       target: event.target,
       x: event.clientX,
@@ -5400,15 +5554,27 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
 
   // One intentional send of everything pending, with no confirmation dialog:
   // the tray already shows the count and every body about to leave.
-  const submit = () =>
+  const submit = (trigger = sendButton) =>
     submitComments({
       comments: drafts,
       closeRailAfter: false,
-      trigger: sendButton,
+      trigger,
     });
 
   sendButton.addEventListener("click", () => {
     void submit();
+  });
+  sidebarSendButton.addEventListener("click", () => {
+    void submit(sidebarSendButton);
+  });
+  compactSendButton.addEventListener("click", () => {
+    compactBatchMenu.open = false;
+    void submit(compactSendButton);
+  });
+  compactReviewButton.addEventListener("click", () => {
+    compactBatchMenu.open = false;
+    setRailOpen(true);
+    setActiveTab("comments");
   });
 
   // ----------------------------------------------------------------- progress

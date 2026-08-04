@@ -45,7 +45,7 @@ elements exist and the document is exactly the document it always was.
   top: 0;
   right: 0;
   left: 0;
-  z-index: 45;
+  z-index: 80;
   display: flex;
   height: 2.75rem;
   align-items: center;
@@ -53,6 +53,7 @@ elements exist and the document is exactly the document it always was.
   gap: 0.35rem;
   padding-right: 1rem;
   border-bottom: 1px solid var(--edge-c);
+  background: var(--bg);
   pointer-events: none;
 }
 [data-review-toolbar] > * {
@@ -172,6 +173,86 @@ elements exist and the document is exactly the document it always was.
   border-color: var(--callout-warning-c);
   background: var(--callout-warning-bg);
   color: var(--callout-warning-c);
+}
+[data-review-toolbar] > [data-review-send] {
+  width: auto;
+  min-height: 1.85rem;
+  padding: 0.32rem 0.65rem;
+  white-space: nowrap;
+}
+[data-review-batch-menu] {
+  position: relative;
+  display: none;
+}
+[data-review-batch-menu] summary {
+  display: inline-flex;
+  min-height: 1.85rem;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.32rem 0.55rem;
+  border: 1px solid var(--annotation-c);
+  border-radius: 0.35rem;
+  background: var(--annotation-c);
+  color: var(--bg);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  list-style: none;
+}
+[data-review-batch-menu] summary::-webkit-details-marker {
+  display: none;
+}
+[data-review-batch-menu] summary:hover {
+  filter: brightness(1.08);
+}
+[data-review-batch-menu] summary:active {
+  filter: brightness(0.94);
+}
+[data-review-batch-menu] summary svg {
+  width: 0.78rem;
+  height: 0.78rem;
+  transition: transform 120ms ease;
+}
+[data-review-batch-menu][open] summary svg {
+  transform: rotate(90deg);
+}
+[data-review-batch-actions] {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  right: 0;
+  display: grid;
+  width: 11rem;
+  padding: 0.3rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.45rem;
+  background: var(--bg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+}
+[data-review-batch-actions] button {
+  padding: 0.42rem 0.5rem;
+  border: 0;
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--ink-c);
+  cursor: pointer;
+  font-size: 0.75rem;
+  text-align: left;
+}
+[data-review-batch-actions] button:hover {
+  background: color-mix(in srgb, var(--surface-c) 55%, transparent);
+}
+[data-review-batch-actions] button:active {
+  background: var(--review-control-active);
+}
+@media (width < 40rem) {
+  [data-review-toolbar][data-review-batch-ready="true"]
+    > :is([data-review-toggle], [data-review-send]) {
+    display: none;
+  }
+  [data-review-toolbar][data-review-batch-ready="true"]
+    > [data-review-batch-menu]:not([hidden]) {
+    display: block;
+  }
 }
 
 /* ------------------------------------------------------------------- rail */
@@ -387,13 +468,27 @@ elements exist and the document is exactly the document it always was.
   border-radius: 0.5rem;
   background: var(--surface-c);
 }
-[data-review-row][data-review-tray-target] {
-  outline: 2px solid var(--annotation-c);
-  outline-offset: 2px;
+[data-review-sent-row] {
+  cursor: pointer;
+  transition:
+    border-color 100ms ease,
+    background-color 100ms ease;
 }
-[data-review-comment-emphasized] {
-  outline: 2px solid var(--annotation-c);
-  outline-offset: 2px;
+[data-review-sent-row]:hover {
+  border-color: color-mix(in srgb, var(--muted-c) 45%, var(--edge-c));
+  background: color-mix(in srgb, var(--surface-c) 94%, var(--ink-c));
+}
+[data-review-sent-row]:has([data-review-row-target]:focus-visible) {
+  border-color: var(--accent-c);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-c) 18%, transparent);
+}
+[data-review-row][data-review-tray-target] {
+  border-color: var(--annotation-c);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--annotation-c) 13%, transparent);
+}
+[data-review-sent-row][data-review-comment-emphasized] {
+  border-color: color-mix(in srgb, var(--muted-c) 52%, var(--edge-c));
+  background: color-mix(in srgb, var(--surface-c) 94%, var(--ink-c));
 }
 [data-review-row-head] {
   display: flex;
@@ -405,11 +500,12 @@ elements exist and the document is exactly the document it always was.
 /* The title is deliberately only the slide name. The source highlight
    identifies the exact block or passage without duplicating a path here. */
 [data-review-row-target] {
-  display: block;
+  display: flex;
   min-width: 0;
   flex: 1 1 auto;
+  align-items: center;
   overflow: hidden;
-  color: var(--accent-c);
+  color: var(--ink-c);
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -417,6 +513,30 @@ elements exist and the document is exactly the document it always was.
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
+}
+[data-review-row-title] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-review-row-locator] {
+  display: inline-flex;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-c);
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+[data-review-row-locator] svg {
+  width: 0.78rem;
+  height: 0.78rem;
+}
+[data-review-sent-row]:hover [data-review-row-locator],
+[data-review-row-target]:focus-visible [data-review-row-locator] {
+  opacity: 1;
 }
 [data-review-comment-state] {
   flex: 0 0 auto;
@@ -430,19 +550,20 @@ elements exist and the document is exactly the document it always was.
   text-transform: uppercase;
 }
 [data-review-comment-state="staged"] {
-  border-color: color-mix(in srgb, var(--accent-c) 50%, var(--edge-c));
-  color: var(--accent-c);
+  border-color: color-mix(in srgb, var(--annotation-c) 50%, var(--edge-c));
+  color: var(--annotation-c);
 }
 button[data-review-row-target] {
   cursor: pointer;
 }
+button[data-review-row-target]:focus-visible {
+  outline: none;
+}
 button[data-review-row-target]:hover {
-  border-radius: 0.2rem;
-  background: var(--review-control-hover);
-  text-decoration: underline;
+  color: var(--ink-c);
 }
 button[data-review-row-target]:active {
-  background: var(--review-control-active);
+  color: var(--annotation-c);
 }
 [data-review-row-body] {
   margin: 0;
@@ -485,15 +606,26 @@ button[data-review-row-target]:active {
   background: var(--accent-c) !important;
   border-color: var(--accent-c) !important;
 }
-[data-review-row-submit],
 [data-review-thread-submit] {
-  border-color: var(--accent-c) !important;
-  color: var(--accent-c) !important;
+  border-color: var(--annotation-c) !important;
+  color: var(--annotation-c) !important;
   font-weight: 650;
 }
-[data-review-row-submit]:hover,
 [data-review-thread-submit]:hover {
-  background: color-mix(in srgb, var(--accent-c) 10%, var(--bg)) !important;
+  background: color-mix(in srgb, var(--annotation-c) 10%, var(--bg)) !important;
+}
+[data-review-thread-submit-all] {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: var(--annotation-c) !important;
+  font-weight: 650;
+}
+[data-review-thread-submit-all]:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+[data-review-thread-submit-all]:active {
+  opacity: 0.65;
 }
 
 [data-review-sent] {
@@ -557,6 +689,15 @@ button[data-review-row-target]:active {
   width: 0.78rem;
   height: 0.78rem;
 }
+[data-review-outcome-group="ready"] h3 {
+  color: var(--accent-c);
+}
+[data-review-outcome-group="working"] h3 {
+  color: var(--callout-note-c);
+}
+[data-review-outcome-group="queued"] h3 {
+  color: var(--muted-c);
+}
 [data-review-outcome-group="blocked"] h3 {
   color: var(--callout-warning-c);
 }
@@ -580,7 +721,6 @@ button[data-review-row-target]:active {
 }
 [data-review-sent-row] {
   background: transparent;
-  border-left-width: 2px;
 }
 [data-review-sent-row][data-review-row-expanded] {
   background: var(--surface-c);
@@ -665,6 +805,46 @@ button[data-review-row-target]:active {
   color: var(--muted-c);
   font-size: 0.75rem;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-review-row-secondary] {
+  margin: 0.25rem 0 0;
+  color: var(--muted-c);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+[data-review-row-state="working"] [data-review-row-secondary] {
+  color: var(--callout-note-c);
+}
+[data-review-row-review-change] {
+  margin-top: 0.45rem;
+  padding: 0.28rem 0.5rem;
+  border: 1px solid var(--annotation-c);
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--annotation-c) 9%, var(--bg));
+  color: var(--annotation-c);
+  cursor: pointer;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+[data-review-row-review-change]:hover {
+  background: color-mix(in srgb, var(--annotation-c) 14%, var(--bg));
+}
+[data-review-row-review-change]:active {
+  background: color-mix(in srgb, var(--annotation-c) 20%, var(--bg));
+}
+[data-review-round-summary] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+[data-review-round-chip] {
+  padding: 0.1rem 0.38rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 999px;
+  background: var(--surface-c);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -1187,7 +1367,7 @@ button[data-review-row-target]:active {
   border: 1px solid var(--edge-c);
   border-radius: 0.6rem;
   background: var(--bg);
-  box-shadow: 0 8px 28px rgb(0 0 0 / 0.14);
+  box-shadow: 0 3px 14px rgb(0 0 0 / 0.1);
   pointer-events: auto;
 }
 [data-review-thread-card][hidden] {
@@ -1203,6 +1383,13 @@ button[data-review-row-target]:active {
   box-shadow: 0 10px 32px rgb(0 0 0 / 0.16);
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+[data-review-thread-card][data-review-comment-emphasized],
+[data-review-thread-card][data-review-thread-expanded] {
+  border-color: var(--annotation-c);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--annotation-c) 13%, transparent),
+    0 3px 12px rgb(0 0 0 / 0.08);
 }
 [data-review-thread-expanded] [data-review-thread-toolbar] {
   position: sticky;
@@ -1233,19 +1420,27 @@ button[data-review-row-target]:active {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 0.4rem;
-  padding: 0.18rem 0.22rem;
-  border: 0;
-  border-radius: 0.35rem;
-  background: transparent;
+  padding: 0.18rem 5.2rem 0.18rem 0.22rem;
   color: var(--ink-c);
+  text-align: left;
+}
+[data-review-thread-summary-toggle] {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
   cursor: pointer;
   text-align: left;
 }
-[data-review-thread-summary]:hover {
-  background: var(--review-control-hover);
+[data-review-thread-summary-toggle]:hover [data-review-thread-echo] {
+  color: var(--annotation-c);
+  text-decoration: underline;
+  text-decoration-color: var(--annotation-c);
+  text-underline-offset: 0.14em;
 }
-[data-review-thread-summary]:active {
-  background: var(--review-control-active);
+[data-review-thread-summary-toggle]:active [data-review-thread-echo] {
+  opacity: 0.72;
 }
 [data-review-thread-summary] [data-review-outcome-state] {
   padding: 0.12rem 0.4rem;
@@ -2196,17 +2391,17 @@ button[disabled] > [data-review-kbd-tooltip] {
 }
 [data-slide][data-review-slide-highlight="active"],
 [data-slide][data-review-slide-focus] {
-  background: color-mix(in srgb, var(--annotation-bg) 34%, transparent);
-  outline: 2px solid var(--accent-c);
+  background: color-mix(in srgb, var(--annotation-c) 12%, transparent);
+  outline: 1px solid var(--annotation-c);
 }
 [data-review-active-highlight] {
-  background: var(--annotation-bg);
-  outline: 2px solid var(--accent-c);
+  background: color-mix(in srgb, var(--annotation-c) 12%, transparent);
+  outline: 1px solid var(--annotation-c);
   outline-offset: 3px;
 }
 [data-review-comment-focus] {
-  background: color-mix(in srgb, var(--annotation-bg) 88%, transparent);
-  outline: 2px solid var(--accent-c);
+  background: color-mix(in srgb, var(--annotation-c) 12%, transparent);
+  outline: 1px solid var(--annotation-c);
   outline-offset: 3px;
 }
 
