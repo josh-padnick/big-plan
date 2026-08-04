@@ -891,7 +891,8 @@ button[data-review-row-target]:active {
   color: var(--callout-warning-c);
 }
 [data-review-outcome="outside"],
-[data-review-outcome="waiting"] {
+[data-review-outcome="waiting"],
+[data-review-outcome="cancelled"] {
   border-left-color: var(--muted-c);
 }
 [data-review-lifecycle="blocked"] {
@@ -901,7 +902,8 @@ button[data-review-row-target]:active {
   color: var(--callout-warning-c);
 }
 [data-review-outcome="outside"] [data-review-outcome-state],
-[data-review-outcome="waiting"] [data-review-outcome-state] {
+[data-review-outcome="waiting"] [data-review-outcome-state],
+[data-review-outcome="cancelled"] [data-review-outcome-state] {
   color: var(--muted-c);
 }
 
@@ -999,7 +1001,8 @@ button[data-review-row-target]:active {
   color: var(--callout-warning-c);
 }
 [data-review-thread-summary] [data-review-outcome-state="outside"],
-[data-review-thread-summary] [data-review-outcome-state="waiting"] {
+[data-review-thread-summary] [data-review-outcome-state="waiting"],
+[data-review-thread-summary] [data-review-outcome-state="cancelled"] {
   background: var(--surface-c);
   color: var(--muted-c);
 }
@@ -1071,6 +1074,21 @@ button[data-review-row-target]:active {
   color: var(--ink-c);
   font-family: var(--font-mono);
   font-size: 0.92em;
+}
+
+[data-review-cancel-request] {
+  justify-self: end;
+  color: currentColor;
+  font-size: 0.65rem;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+[data-review-request-cancelled] {
+  margin: 0.2rem 0;
+  color: var(--muted-c);
+  font-size: 0.6875rem;
+  font-style: italic;
 }
 [data-review-status-setup] summary {
   width: fit-content;

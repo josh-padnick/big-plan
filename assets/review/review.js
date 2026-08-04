@@ -1785,6 +1785,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     question: "Needs your answer",
     outside: "Outside this plan",
     waiting: "Waiting",
+    cancelled: "Cancelled",
   };
 
   const spinner = () =>
@@ -1965,9 +1966,15 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     const answered = new Set(
       agentResponses.map((response) => response.requestId),
     );
+    const cancelled = new Set(agentCancelledIds);
     return agentRequests
       .filter((request) => {
-        if (answered.has(request.requestId)) return false;
+        if (
+          answered.has(request.requestId) ||
+          cancelled.has(request.requestId)
+        ) {
+          return false;
+        }
         if (request.kind === "reply") return request.commentId === comment.id;
         return (
           request.kind === "feedback" &&
@@ -1977,6 +1984,18 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       })
       .at(-1);
   };
+
+  const requestBelongsToComment = ({ request, comment }) =>
+    request.kind === "reply"
+      ? request.commentId === comment.id
+      : request.kind === "feedback" &&
+        Array.isArray(request.comments) &&
+        request.comments.some((entry) => entry.id === comment.id);
+
+  const latestRequestForComment = (comment) =>
+    agentRequests
+      .filter((request) => requestBelongsToComment({ request, comment }))
+      .at(-1);
 
   const pendingStatusFor = (request, surfaceName) => {
     observeRequests();
@@ -2055,6 +2074,19 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         status,
       };
     }
+    const latestRequest = latestRequestForComment(comment);
+    if (
+      latestRequest &&
+      agentCancelledIds.includes(latestRequest.requestId) &&
+      !agentResponses.some(
+        (response) => response.requestId === latestRequest.requestId,
+      )
+    ) {
+      return {
+        key: "cancelled",
+        label: OUTCOME_LABELS.cancelled,
+      };
+    }
     return (
       events[events.length - 1] || {
         key: "waiting",
@@ -2109,6 +2141,28 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         ),
       ],
     );
+
+  const cancelAgentRequest = async ({ requestId, trigger }) => {
+    trigger.disabled = true;
+    try {
+      await confirmRuntime();
+      await call("/api/agent-requests/cancel", {
+        method: "POST",
+        body: { requestId },
+      });
+      if (!agentCancelledIds.includes(requestId)) {
+        agentCancelledIds = agentCancelledIds.concat([requestId]);
+      }
+      clearInlineError(trigger);
+      announce("Agent request cancelled.");
+      renderTray();
+      startProgress();
+    } catch (error) {
+      trigger.disabled = false;
+      showInlineError(trigger, "Couldn’t cancel: " + describeError(error));
+      announce(describeError(error));
+    }
+  };
 
   const threadStatusStrip = (status) => {
     if (!status.headline) return null;
@@ -2182,11 +2236,34 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         ),
       );
     }
+    if (
+      status.requestId &&
+      ["waiting", "blocked", "working", "stalled"].includes(status.stage)
+    ) {
+      const cancel = el("button", {
+        type: "button",
+        "data-review-cancel-request": true,
+        text: "Cancel request",
+      });
+      cancel.addEventListener("click", () => {
+        void cancelAgentRequest({
+          requestId: status.requestId,
+          trigger: cancel,
+        });
+      });
+      strip.appendChild(cancel);
+    }
     return strip;
   };
 
   const outcomeCounts = () => {
-    const counts = { changed: 0, question: 0, outside: 0, waiting: 0 };
+    const counts = {
+      changed: 0,
+      question: 0,
+      outside: 0,
+      waiting: 0,
+      cancelled: 0,
+    };
     for (const comment of sent) {
       if (resolvedCommentIds.has(comment.id)) continue;
       counts[outcomeFor(comment).key] += 1;
@@ -3317,6 +3394,12 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     return answered || requestPickedUp(request) ? "Sent" : "Queued";
   };
 
+  const cancelledRequestLine = () =>
+    el("p", {
+      "data-review-request-cancelled": true,
+      text: "You cancelled this request.",
+    });
+
   const conversationNodes = (comment) => {
     const outcome = outcomeFor(comment);
     const initialRequest = agentRequests.find(
@@ -3343,6 +3426,12 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         anchorContextLine(comment),
       ]),
     ];
+    if (
+      initialRequest &&
+      agentCancelledIds.includes(initialRequest.requestId)
+    ) {
+      nodes.push(cancelledRequestLine());
+    }
 
     for (const request of agentRequests) {
       const response = agentResponses.find(
@@ -3385,6 +3474,9 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           el("p", { text: request.body }),
         ]),
       );
+      if (agentCancelledIds.includes(request.requestId)) {
+        nodes.push(cancelledRequestLine());
+      }
       if (response && response.kind === "reply") {
         const responseOutcome = response.outcomes.find(
           (entry) => entry.commentId === comment.id,
@@ -4124,6 +4216,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       { key: "question", label: "Needs your answer" },
       { key: "changed", label: "Changed" },
       { key: "outside", label: "Outside this plan" },
+      { key: "cancelled", label: "Cancelled" },
       {
         key: "waiting",
         label: pendingGroup.label,
@@ -5000,6 +5093,12 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
                 }
               : null,
         });
+      } else if (agentCancelledIds.includes(request.requestId)) {
+        messages.push({
+          role: "cancelled",
+          createdAt: request.createdAt,
+          request,
+        });
       } else {
         messages.push({
           role: "waiting",
@@ -5026,6 +5125,11 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       return;
     }
     const rendered = messages.map((message) => {
+      if (message.role === "cancelled") {
+        return el("li", { "data-review-chat-message": "cancelled" }, [
+          cancelledRequestLine(),
+        ]);
+      }
       if (message.role === "waiting") {
         const status = pendingStatusFor(message.request, "chat");
         return el("li", { "data-review-chat-message": "waiting" }, [
