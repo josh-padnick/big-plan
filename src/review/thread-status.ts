@@ -25,6 +25,21 @@ export type ThreadStatus = {
   readonly waitingBusy?: boolean;
 };
 
+/** Chooses the one toolbar connection indicator allowed to be visible. */
+export const deriveAgentIndicator = ({
+  hasRuntime,
+  agentConnected,
+  healthKey,
+}: {
+  readonly hasRuntime: boolean;
+  readonly agentConnected: boolean;
+  readonly healthKey?: string;
+}): "ok" | "alert" | "hidden" => {
+  if (!hasRuntime) return "hidden";
+  if (healthKey !== undefined && healthKey !== "working") return "alert";
+  return agentConnected ? "ok" : "hidden";
+};
+
 type ThreadStatusInput = {
   readonly phase: "staged" | "sending" | "pending" | "outcome" | "resolved";
   readonly surface: "thread" | "chat";

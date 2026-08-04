@@ -2,9 +2,43 @@
 
 import { describe, expect, it } from "vitest";
 
-import { deriveThreadStatus, sessionQuietMs } from "./thread-status.js";
+import {
+  deriveAgentIndicator,
+  deriveThreadStatus,
+  sessionQuietMs,
+} from "./thread-status.js";
 
 describe("deriveThreadStatus", () => {
+  it("should show exactly one connection indicator for each health pair", () => {
+    expect(
+      deriveAgentIndicator({
+        hasRuntime: true,
+        agentConnected: true,
+        healthKey: "working",
+      }),
+    ).toBe("ok");
+    expect(
+      deriveAgentIndicator({
+        hasRuntime: true,
+        agentConnected: true,
+        healthKey: "quiet",
+      }),
+    ).toBe("alert");
+    expect(
+      deriveAgentIndicator({
+        hasRuntime: true,
+        agentConnected: false,
+        healthKey: "unavailable",
+      }),
+    ).toBe("alert");
+    expect(
+      deriveAgentIndicator({
+        hasRuntime: false,
+        agentConnected: true,
+      }),
+    ).toBe("hidden");
+  });
+
   it("should distinguish a connected queue from a recoverable blocked queue", () => {
     expect(
       deriveThreadStatus({

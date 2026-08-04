@@ -61,7 +61,8 @@ elements exist and the document is exactly the document it always was.
 /* The tray's entry point reads as toolbar chrome, not a pill-shaped action.
    It stays a real button for keyboard and screen-reader semantics. */
 [data-review-toggle],
-[data-review-agent-alert] {
+[data-review-agent-alert],
+[data-review-agent-ok] {
   display: inline-flex;
   min-height: 1.85rem;
   align-items: center;
@@ -74,6 +75,35 @@ elements exist and the document is exactly the document it always was.
   font-size: 0.8125rem;
   line-height: 1.2;
   cursor: pointer;
+}
+[data-review-agent-ok] {
+  position: relative;
+  display: inline-flex;
+  width: 1.85rem;
+  min-height: 1.85rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  cursor: pointer;
+}
+[data-review-agent-ok][hidden] {
+  display: none;
+}
+[data-review-agent-ok]:hover {
+  background: var(--review-control-hover);
+}
+[data-review-agent-ok]:active {
+  background: var(--review-control-active);
+}
+[data-review-agent-ok-dot] {
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 1px solid var(--ink-c);
+  border-radius: 999px;
+  background: var(--diff-add-c);
+  box-shadow: 0 0 0 1.5px var(--diff-add-c);
 }
 [data-review-agent-alert] {
   color: var(--callout-danger-c);

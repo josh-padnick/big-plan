@@ -38,6 +38,7 @@ import {
   threadSubstate,
 } from "../../src/review/thread-group.js";
 import {
+  deriveAgentIndicator,
   deriveThreadStatus,
   sessionQuietMs,
 } from "../../src/review/thread-status.js";
@@ -621,6 +622,28 @@ import {
     setActiveTab("chat");
     renderPlanChat();
   });
+  const agentOk = el("button", {
+    type: "button",
+    "data-review-agent-ok": true,
+    "aria-label": "Agent session active",
+    hidden: true,
+  });
+  agentOk.append(
+    el("span", {
+      "data-review-agent-ok-dot": true,
+      "aria-hidden": "true",
+    }),
+    el("span", {
+      "data-review-icon-tooltip": true,
+      "aria-hidden": "true",
+      text: "Agent session active",
+    }),
+  );
+  agentOk.addEventListener("click", () => {
+    setRailOpen(true);
+    setActiveTab("chat");
+    renderPlanChat();
+  });
 
   const toggle = el("button", {
     type: "button",
@@ -640,6 +663,7 @@ import {
   );
   const toolbar = el("div", { "data-review-toolbar": true }, [
     agentAlert,
+    agentOk,
     toggle,
   ]);
 
@@ -4709,8 +4733,14 @@ import {
 
   const syncAgentAlert = (health) => {
     const label = health ? AGENT_ALERT_LABELS[health.key] : undefined;
-    agentAlert.hidden = label === undefined;
-    if (label === undefined) return;
+    const indicator = deriveAgentIndicator({
+      hasRuntime,
+      agentConnected,
+      healthKey: health?.key,
+    });
+    agentOk.hidden = indicator !== "ok";
+    agentAlert.hidden = indicator !== "alert";
+    if (indicator !== "alert" || label === undefined) return;
     agentAlertLabel.textContent = label;
     agentAlert.setAttribute(
       "aria-label",
@@ -4919,7 +4949,7 @@ import {
       renderTray();
       void hydrateRevisionDiffs();
       if (drafts.length > 0) setRailOpen(true);
-      if (sent.length > 0 || agentRequests.length > 0) startProgress();
+      if (hasRuntime) startProgress();
       if (reloadState !== null) {
         setActiveTab(reloadState.tab);
         setRailOpen(reloadState.railOpen);
