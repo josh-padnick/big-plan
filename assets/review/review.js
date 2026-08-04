@@ -3963,6 +3963,7 @@ import {
   const openCompose = (target) => {
     composeTarget = target;
     pendingSelection = null;
+    window.getSelection()?.removeAllRanges();
     attachLabel.hidden = true;
     // The affordance did its job; leaving it up would float a second control
     // over the card the reviewer is now typing in.

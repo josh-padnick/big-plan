@@ -824,6 +824,13 @@ test("should preserve and send a floating review across reload and viewport chan
     await heading.click({ clickCount: 3 });
     await affordance.click();
     await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+    await expect
+      .poll(() => page.evaluate(() => window.getSelection()?.isCollapsed))
+      .toBe(true);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-active-selection-highlight",
+      "true",
+    );
     await expect(page.locator("[data-review-thread-card]:visible")).toHaveCount(
       0,
     );
@@ -1691,7 +1698,7 @@ test("should preserve and send a floating review across reload and viewport chan
     await agentCommand(["next", session.plan]);
     await expect(
       page.locator('[data-review-chat-message="waiting"]'),
-    ).toContainText("Coding agent reviewing plan question", {
+    ).toContainText("Picked up: plan question", {
       timeout: 10_000,
     });
     await expect(chatStatus).toHaveAttribute(
