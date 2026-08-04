@@ -35,6 +35,8 @@ export type ProgressEvent = {
   readonly step: string;
   readonly state: string;
   readonly detail?: string;
+  readonly requestId?: string;
+  readonly at?: string;
 };
 
 /** Where one plan's review state lives. */
@@ -495,6 +497,10 @@ const asProgressEvent = ({
     ...(typeof event.detail === "string"
       ? { detail: event.detail.slice(0, PROGRESS_TEXT_LIMIT) }
       : {}),
+    ...(typeof event.requestId === "string"
+      ? { requestId: event.requestId }
+      : {}),
+    ...(typeof event.at === "string" ? { at: event.at } : {}),
   };
 };
 

@@ -312,8 +312,15 @@ describe("review store progress relay", () => {
         seq: 1,
         step: "Feedback package received",
         state: "done",
+        requestId: "request-1",
+        at: "2026-08-03T12:00:00.000Z",
       },
     });
-    expect(await readProgress({ store, sessionId: "s1" })).toHaveLength(1);
+    expect(await readProgress({ store, sessionId: "s1" })).toEqual([
+      expect.objectContaining({
+        requestId: "request-1",
+        at: "2026-08-03T12:00:00.000Z",
+      }),
+    ]);
   });
 });

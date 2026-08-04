@@ -411,6 +411,8 @@ export const startReviewRuntime = async ({
           seq: progressSeq,
           step: "Feedback package received",
           state: "done",
+          requestId: agentRequest.requestId,
+          at: new Date().toISOString(),
           detail: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
         },
       });
@@ -500,6 +502,8 @@ export const startReviewRuntime = async ({
               ? "Reply sent to agent"
               : "Plan question sent to agent",
           state: "waiting",
+          requestId: agentRequest.requestId,
+          at: new Date().toISOString(),
         },
       });
       sendJson({

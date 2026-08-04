@@ -358,11 +358,15 @@ const nextWork = async ({
         1,
       step:
         request.kind === "chat"
-          ? "Coding agent reviewing plan question"
+          ? "Picked up: plan question"
           : request.kind === "reply"
-            ? "Coding agent reviewing thread reply"
-            : "Coding agent reviewing feedback",
+            ? "Picked up: thread reply"
+            : `Picked up: ${request.comments.length} comment${
+                request.comments.length === 1 ? "" : "s"
+              }`,
       state: "live",
+      requestId: request.requestId,
+      at: new Date().toISOString(),
       ...(request.kind === "feedback"
         ? {
             detail: `${request.comments.length} comment${
@@ -482,6 +486,8 @@ const respond = async ({
       seq: highest + 1,
       step: "Agent response ready",
       state: "done",
+      requestId: request.requestId,
+      at: new Date().toISOString(),
       detail:
         response.kind === "chat"
           ? "Plan-wide answer"

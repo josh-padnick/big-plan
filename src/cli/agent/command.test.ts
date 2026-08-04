@@ -200,9 +200,11 @@ describe("agent command", () => {
     ).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          step: "Coding agent reviewing feedback",
+          step: "Picked up: 1 comment",
           state: "live",
           detail: "1 comment",
+          requestId: "aaaaaaaaaaaaaaaa",
+          at: expect.any(String),
         }),
       ]),
     );
@@ -243,6 +245,21 @@ describe("agent command", () => {
         ],
       },
     ]);
+    await expect(
+      readProgress({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          step: "Agent response ready",
+          state: "done",
+          requestId: "aaaaaaaaaaaaaaaa",
+          at: expect.any(String),
+        }),
+      ]),
+    );
   });
 });
 
