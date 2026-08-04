@@ -4750,17 +4750,21 @@ import {
         children.push(reviewChange);
       }
     }
+    const rowClasses =
+      "group/row [margin-bottom:0.55rem] [padding:0.55rem_0.6rem] [border:1px_solid_var(--edge-c)] [border-radius:0.5rem] [background:var(--surface-c)] [cursor:pointer] [transition:border-color_100ms_ease,_background-color_100ms_ease] [background:transparent] [display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.18rem] [padding:0.45rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-left-width:2px] [border-radius:0.4rem] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.6875rem] hover:[border-color:color-mix(in_srgb,_var(--muted-c)_45%,_var(--edge-c))] hover:[background:color-mix(in_srgb,_var(--surface-c)_94%,_var(--ink-c))] data-[review-outcome=changed]:[border-left-color:var(--diff-add-c)] data-[review-outcome=question]:[border-left-color:var(--callout-warning-c)] data-[review-outcome=outside]:[border-left-color:var(--muted-c)] data-[review-outcome=waiting]:[border-left-color:var(--muted-c)] data-[review-outcome=cancelled]:[border-left-color:var(--muted-c)]" +
+      (resolved ? " [background:var(--surface-c)]" : "") +
+      (outcome.status
+        ? " data-[review-lifecycle=blocked]:[border-left-color:var(--callout-warning-c)]"
+        : "");
     const row = el(
       "li",
       {
-        class:
-          "group/row [margin-bottom:0.55rem] [padding:0.55rem_0.6rem] [border:1px_solid_var(--edge-c)] [border-radius:0.5rem] [background:var(--surface-c)] [cursor:pointer] [transition:border-color_100ms_ease,_background-color_100ms_ease] [background:transparent] [display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.18rem] [padding:0.45rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-left-width:2px] [border-radius:0.4rem] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.6875rem] hover:[border-color:color-mix(in_srgb,_var(--muted-c)_45%,_var(--edge-c))] hover:[background:color-mix(in_srgb,_var(--surface-c)_94%,_var(--ink-c))] data-[review-outcome=changed]:[border-left-color:var(--diff-add-c)] data-[review-outcome=question]:[border-left-color:var(--callout-warning-c)] data-[review-outcome=outside]:[border-left-color:var(--muted-c)] data-[review-outcome=waiting]:[border-left-color:var(--muted-c)] data-[review-outcome=cancelled]:[border-left-color:var(--muted-c)]",
+        class: rowClasses,
         "data-review-row": true,
         "data-review-sent-row": true,
         "data-review-row-state": rowState,
         ...(resolved
           ? {
-              class: "[background:var(--surface-c)]",
               "data-review-resolved-row": true,
             }
           : {}),
@@ -4769,8 +4773,6 @@ import {
         "data-review-outcome": outcome.key,
         ...(outcome.status
           ? {
-              class:
-                "data-[review-lifecycle=blocked]:[border-left-color:var(--callout-warning-c)]",
               "data-review-lifecycle": outcome.status.stage,
             }
           : {}),

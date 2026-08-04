@@ -1634,6 +1634,18 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       page.locator('[data-review-outcome-group="queued"] [data-review-row]'),
     ).toHaveCount(3);
+    const queuedCardBox = await page
+      .locator('[data-review-outcome-group="queued"] [data-review-row]')
+      .first()
+      .evaluate((row) => {
+        const style = getComputedStyle(row);
+        return {
+          paddingLeft: Number.parseFloat(style.paddingLeft),
+          borderWidth: Number.parseFloat(style.borderTopWidth),
+        };
+      });
+    expect(queuedCardBox.paddingLeft).toBeGreaterThanOrEqual(8);
+    expect(queuedCardBox.borderWidth).toBeGreaterThan(0);
 
     const answer: unknown = await response.json();
     if (
@@ -1709,6 +1721,18 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       page.locator('[data-review-outcome-group="working"] [data-review-row]'),
     ).toHaveCount(1, { timeout: 10_000 });
+    const workingCardBox = await page
+      .locator('[data-review-outcome-group="working"] [data-review-row]')
+      .first()
+      .evaluate((row) => {
+        const style = getComputedStyle(row);
+        return {
+          paddingLeft: Number.parseFloat(style.paddingLeft),
+          borderWidth: Number.parseFloat(style.borderTopWidth),
+        };
+      });
+    expect(workingCardBox.paddingLeft).toBeGreaterThanOrEqual(8);
+    expect(workingCardBox.borderWidth).toBeGreaterThan(0);
     for (let index = 0; index < 12; index += 1) {
       await agentCommand([
         "note",
