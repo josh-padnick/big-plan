@@ -13,7 +13,11 @@ import {
   writeAgentResponse,
 } from "../src/review/agent-exchange.js";
 import { agentCommand } from "../src/cli/agent/command.js";
-import { reviewStoreFor, writeRevisionSnapshot } from "../src/review/store.js";
+import {
+  reviewStoreFor,
+  writeAgentHeartbeat,
+  writeRevisionSnapshot,
+} from "../src/review/store.js";
 import { expect, test } from "./fixtures";
 
 test("should preserve and send a floating review across reload and viewport changes", async ({
@@ -183,7 +187,7 @@ test("should preserve and send a floating review across reload and viewport chan
         "data-review-slide-highlight",
         "active",
       );
-      await expect(kicker).toHaveAttribute("data-review-comment-highlight", "");
+      await expect(kicker).not.toHaveAttribute("data-review-comment-highlight");
       await page.keyboard.press("Escape");
       await expect(compose).toBeHidden();
       await expect(affordance).toBeHidden();
@@ -313,13 +317,80 @@ test("should preserve and send a floating review across reload and viewport chan
       "aria-label",
       "Comment on the selected text",
     );
-    await expect(page.locator("[data-review-selection-notice]")).toBeHidden();
+    await expect(page.locator("[data-review-selection-notice]")).toHaveCount(0);
     await expect
       .poll(() => page.evaluate(() => window.getSelection()?.isCollapsed))
       .toBe(false);
     await affordance.click();
     await expect(compose).toBeVisible();
     await page.locator("[data-review-compose-cancel]").click();
+  });
+
+  await test.step("nested-list selection keeps its exact range and chrome selections stay quiet", async () => {
+    const list = page.locator(
+      '[data-block-section="Delivery"][data-block-kind="list"]',
+    );
+    await list.scrollIntoViewIfNeeded();
+    const expected =
+      "Terminal states: succeeded, exhausted, cancelled.\nTerminal rows are retained for 90 days, then archived.";
+    await list.evaluate((block) => {
+      const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+      let start: Text | null = null;
+      let end: Text | null = null;
+      let node = walker.nextNode();
+      while (node) {
+        if (node.textContent?.includes("Terminal states:"))
+          start = node as Text;
+        if (node.textContent?.includes("Terminal rows are retained")) {
+          end = node as Text;
+        }
+        node = walker.nextNode();
+      }
+      if (start === null || end === null) {
+        throw new Error("Fixture needs the nested terminal-state list");
+      }
+      const range = document.createRange();
+      range.setStart(start, 0);
+      range.setEnd(end, end.data.length);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    await expect(affordance).toBeVisible();
+    await affordance.click();
+    await page
+      .locator("[data-review-compose-input]")
+      .fill("Keep this exact two-item selection.");
+    await page.locator("[data-review-compose-save]").click();
+    await expect(page.locator("[data-review-draft-stale]")).toHaveCount(0);
+    const highlighted = await page.evaluate(() =>
+      Array.from(
+        CSS.highlights.get("big-plan-review-comments") ?? [],
+        (range) => range.toString(),
+      ).find((text) => text.startsWith("Terminal states:")),
+    );
+    expect(highlighted?.replaceAll(/\n+/g, "\n")).toBe(expected);
+    expect(highlighted).not.toContain("worker claim");
+    const staged = page
+      .locator('[data-review-thread-state="staged"]')
+      .filter({ hasText: "Keep this exact two-item selection." })
+      .first();
+    await staged.locator("[data-review-thread-delete]").click();
+    await page.locator("[data-review-delete-confirm]").click();
+    await expect(staged).toHaveCount(0);
+
+    await toggle.evaluate((button) => {
+      const range = document.createRange();
+      range.selectNodeContents(button);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    await expect(affordance).toBeHidden();
+    await expect(page.locator("[data-review-selection-notice]")).toHaveCount(0);
+    await page.keyboard.press("Escape");
   });
 
   await test.step("Escape preserves a typed compose draft for the same target", async () => {
@@ -417,6 +488,53 @@ test("should preserve and send a floating review across reload and viewport chan
     await alert.evaluate((node) => {
       node.hidden = true;
     });
+  });
+
+  await test.step("heartbeat transitions proactively drive both toolbar indicators and an immutable open history", async () => {
+    const ok = page.locator("[data-review-agent-ok]");
+    const alert = page.locator("[data-review-agent-alert]");
+    await writeAgentHeartbeat({
+      store,
+      sessionId: session.sessionId,
+      state: "waiting",
+    });
+    await expect(ok).toBeVisible({ timeout: 8_000 });
+    await expect(alert).toBeHidden();
+    await ok.click();
+    await expect(page.locator('[data-review-panel="agent"]')).toBeVisible();
+    const history = page.locator("[data-review-connection-history]");
+    await history.locator("summary").click();
+    await expect(history).toHaveAttribute("open", "");
+    await page.waitForTimeout(2_200);
+    await expect(history).toHaveAttribute("open", "");
+
+    await expect(alert).toBeVisible({ timeout: 8_000 });
+    await expect(ok).toBeHidden();
+    await alert.click();
+    await expect(page.locator('[data-review-panel="agent"]')).toBeVisible();
+    await expect(history).toHaveAttribute("open", "");
+    await expect(page.locator("[data-review-recovery-command]")).toContainText(
+      session.plan,
+    );
+    await expect(page.locator("[data-review-recovery-prompt]")).toContainText(
+      "Reconnect to my existing Big Plan review",
+    );
+    const events = history.locator("li");
+    await expect(events).toHaveCount(3);
+    await expect(events).toHaveText([
+      /Disconnected · /,
+      /Connected · /,
+      /Disconnected · /,
+    ]);
+    for (const timestamp of await history.locator("time").all()) {
+      expect(
+        Number.isNaN(
+          Date.parse((await timestamp.getAttribute("datetime")) ?? ""),
+        ),
+      ).toBe(false);
+    }
+    await page.locator('[data-review-tab="comments"]').click();
+    await page.locator("[data-review-hide]").click();
   });
 
   await test.step("a whole-paragraph selection always offers the same floating composer", async () => {
@@ -976,10 +1094,9 @@ test("should preserve and send a floating review across reload and viewport chan
       "data-review-slide-highlight",
       "active",
     );
-    await expect(selectedSlide.locator("[data-slide-kicker]")).toHaveAttribute(
-      "data-review-comment-highlight",
-      "",
-    );
+    await expect(
+      selectedSlide.locator("[data-slide-kicker]"),
+    ).not.toHaveAttribute("data-review-comment-highlight");
     await expect(
       selectedSlide.locator("[data-block-kind='heading']"),
     ).not.toHaveAttribute("data-review-active-highlight", "");

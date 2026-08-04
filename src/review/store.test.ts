@@ -5,11 +5,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   agentHeartbeatIsFresh,
   appendAgentCancellation,
+  appendAgentConnectionEvent,
   appendProgress,
   prepareStore,
   readActiveDraft,
   readAgentHeartbeat,
   readAgentCancellations,
+  readAgentConnectionEvents,
   readProgress,
   readResolvedCommentIds,
   readRevisionSnapshot,
@@ -57,6 +59,7 @@ describe("review store placement", () => {
       store.heartbeatPath,
       store.agentHeartbeatPath,
       store.agentCancellationsPath,
+      store.agentConnectionEventsPath,
     ]) {
       expect(path.startsWith(join(directory, ".big-plan"))).toBe(true);
     }
@@ -263,6 +266,57 @@ describe("review store agent heartbeat", () => {
         now: 91_000,
       }),
     ).resolves.toBe(true);
+  });
+});
+
+describe("review store connection events", () => {
+  it("should append an immutable timestamped timeline for one session", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await appendAgentConnectionEvent({
+      store,
+      event: {
+        sessionId: "agent-session",
+        connected: false,
+        at: "2026-08-04T17:00:00.000Z",
+      },
+    });
+    await appendAgentConnectionEvent({
+      store,
+      event: {
+        sessionId: "agent-session",
+        connected: true,
+        at: "2026-08-04T17:00:01.000Z",
+      },
+    });
+    await appendAgentConnectionEvent({
+      store,
+      event: {
+        sessionId: "another-session",
+        connected: true,
+        at: "2026-08-04T17:00:02.000Z",
+      },
+    });
+    await expect(
+      readAgentConnectionEvents({ store, sessionId: "agent-session" }),
+    ).resolves.toEqual([
+      {
+        sessionId: "agent-session",
+        connected: false,
+        at: "2026-08-04T17:00:00.000Z",
+      },
+      {
+        sessionId: "agent-session",
+        connected: true,
+        at: "2026-08-04T17:00:01.000Z",
+      },
+    ]);
+    expect(
+      (await readFile(store.agentConnectionEventsPath, "utf8"))
+        .trim()
+        .split("\n"),
+    ).toHaveLength(3);
   });
 });
 

@@ -296,6 +296,9 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   let agentHeartbeatAt = 0;
   let agentSessionState = null;
   let agentConnectionLog = [];
+  let agentPlanPath = "";
+  let agentCommand = "";
+  let agentRecoveryPrompt = "";
   let sourceRevision = "";
   let progressSeq = 0;
   let liveProgressSeq = 0;
@@ -632,7 +635,21 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
             typeof entry.at === "string" &&
             !Number.isNaN(Date.parse(entry.at)),
         )
-        .slice(0, 50),
+        .slice(0, MESSAGE_LIMIT),
+      plan:
+        typeof value.plan === "string" && value.plan.length <= BODY_LIMIT
+          ? value.plan
+          : "",
+      agentCommand:
+        typeof value.agentCommand === "string" &&
+        value.agentCommand.length <= BODY_LIMIT
+          ? value.agentCommand
+          : "",
+      recoveryPrompt:
+        typeof value.recoveryPrompt === "string" &&
+        value.recoveryPrompt.length <= BODY_LIMIT
+          ? value.recoveryPrompt
+          : "",
     };
   };
 
@@ -1125,11 +1142,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     "aria-label": "Comment anchors",
   });
   const live = el("p", { "data-review-live": true, "aria-live": "polite" });
-  const selectionNotice = el("p", {
-    "data-review-selection-notice": true,
-    "aria-live": "polite",
-    hidden: true,
-  });
   const backdrop = el("button", {
     type: "button",
     "data-review-backdrop": true,
@@ -1214,7 +1226,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     toolbar,
     rail,
     affordance,
-    selectionNotice,
     threadLayer,
     compose,
     markerLayer,
@@ -1292,6 +1303,9 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
 
   const renderConnectionPanel = () => {
     if (!connectionPanel) return;
+    const historyWasOpen =
+      connectionPanel.querySelector("[data-review-connection-history]")
+        ?.open === true;
     const state = el("section", {
       "data-review-connection-state": agentConnected
         ? "connected"
@@ -1334,45 +1348,60 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         el("p", {
           text: "Your comments still save and queue here; nothing is sent until an agent reconnects.",
         }),
-        el("p", { text: "To restore the connection:" }),
-        el("ol", {}, [
-          appendInlineCode(
-            el("li", {}),
-            "Keep `big-plan review` running in its terminal.",
-          ),
-          appendInlineCode(
-            el("li", {}),
-            "In a second terminal run `big-plan agent <plan.mdx>`.",
-          ),
-          el("li", {
-            text: "Paste the command it prints into codex or claude.",
+        el("p", {
+          text: "To reconnect this running review, paste this exact prompt into your coding agent:",
+        }),
+        el("pre", { "data-review-recovery-prompt": true }, [
+          el("code", {
+            text:
+              agentRecoveryPrompt ||
+              "Ask your coding agent to reconnect to this Big Plan review and keep its feedback loop running.",
+          }),
+        ]),
+        el("p", {
+          text: "Or run this exact connector command yourself from the Big Plan repository:",
+        }),
+        el("pre", { "data-review-recovery-command": true }, [
+          el("code", {
+            text:
+              agentCommand ||
+              "node bin/big-plan.mjs agent " + (agentPlanPath || "<plan.mdx>"),
           }),
         ]),
       );
     }
-    const history = el("details", { "data-review-connection-history": true }, [
-      el("summary", { text: "Connection history" }),
-      el("p", { text: "Since this review session started." }),
-      el(
-        "ol",
-        {},
-        agentConnectionLog.map((entry) =>
-          el("li", {}, [
-            el("span", {
-              text: entry.connected ? "Connected" : "Disconnected",
-            }),
-            document.createTextNode(" · "),
-            el("time", {
-              datetime: entry.at,
-              text: new Intl.DateTimeFormat(undefined, {
-                hour: "numeric",
-                minute: "2-digit",
-              }).format(new Date(entry.at)),
-            }),
-          ]),
+    const history = el(
+      "details",
+      {
+        "data-review-connection-history": true,
+        ...(historyWasOpen ? { open: true } : {}),
+      },
+      [
+        el("summary", { text: "Connection history" }),
+        el("p", {
+          text: "Immutable events recorded since this review session started.",
+        }),
+        el(
+          "ol",
+          {},
+          agentConnectionLog.map((entry) =>
+            el("li", {}, [
+              el("span", {
+                text: entry.connected ? "Connected" : "Disconnected",
+              }),
+              document.createTextNode(" · "),
+              el("time", {
+                datetime: entry.at,
+                text: new Intl.DateTimeFormat(undefined, {
+                  dateStyle: "medium",
+                  timeStyle: "medium",
+                }).format(new Date(entry.at)),
+              }),
+            ]),
+          ),
         ),
-      ),
-    ]);
+      ],
+    );
     connectionPanel.replaceChildren(state, history);
   };
 
@@ -1670,6 +1699,17 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     return last === null ? null : { node: last, offset: last.data.length };
   };
 
+  /** Reads a Range through raw text nodes so list layout newlines add no drift. */
+  const rangeText = (range) => range.cloneContents().textContent || "";
+
+  /** Maps a DOM boundary to the same raw-text coordinate system as textBoundary. */
+  const textOffsetForBoundary = ({ block, container, offset }) => {
+    const prefix = document.createRange();
+    prefix.selectNodeContents(block);
+    prefix.setEnd(container, offset);
+    return rangeText(prefix).length;
+  };
+
   const rangeForTarget = (target) => {
     const block = blockForTarget(target);
     if (!block) return null;
@@ -1756,8 +1796,8 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     const direct = rangeForTarget(target);
     if (
       direct &&
-      (direct.toString() === target.quote ||
-        (target.endBlockId && direct.toString().startsWith(target.quote)))
+      (rangeText(direct) === target.quote ||
+        (target.endBlockId && rangeText(direct).startsWith(target.quote)))
     ) {
       return { kind: "range", range: direct, block: original };
     }
@@ -1818,11 +1858,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       block.removeAttribute("data-review-comment-focus");
       block.removeAttribute("data-review-anchor-changed");
     }
-    for (const kicker of document.querySelectorAll("[data-slide-kicker]")) {
-      kicker.removeAttribute("data-review-comment-highlight");
-      kicker.removeAttribute("data-review-active-highlight");
-      kicker.removeAttribute("data-review-comment-focus");
-    }
     for (const slide of document.querySelectorAll("[data-slide]")) {
       slide.removeAttribute("data-review-slide-highlight");
       slide.removeAttribute("data-review-slide-focus");
@@ -1840,7 +1875,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           ? visualAnchorForTarget(comment.target)
           : null;
       if (visualAnchor && !lensBlocks.includes(anchor.block)) {
-        visualAnchor.setAttribute("data-review-comment-highlight", "");
         slideForTarget(comment.target)?.setAttribute(
           "data-review-slide-highlight",
           "comment",
@@ -1873,10 +1907,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         slideForTarget(activeTarget)?.setAttribute(
           "data-review-slide-highlight",
           "active",
-        );
-        visualAnchorForTarget(activeTarget)?.setAttribute(
-          "data-review-comment-highlight",
-          "",
         );
       } else {
         visualAnchorForTarget(activeTarget)?.setAttribute(
@@ -4946,14 +4976,13 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   // of what the reviewer highlighted - never as an instruction, and never as
   // markup: it is read with toString() and written with textContent.
   const anchorFromSelection = () => {
-    selectionFailure = "";
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
       return null;
     }
     const range = selection.getRangeAt(0);
-    const selectedText = selection.toString();
-    const quote = selectedText.trim();
+    const rawText = rangeText(range);
+    const quote = rawText.trim();
     if (quote === "") return null;
     const startBlock = blockOf(range.startContainer);
     const endBlock = blockOf(range.endContainer);
@@ -4967,11 +4996,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           return false;
         }
       });
-    if (!block || surface.contains(block)) {
-      selectionFailure =
-        "That selection cannot be attached to plan content. Select text within the document.";
-      return null;
-    }
+    if (!block || surface.contains(block)) return null;
     if (!startBlock || !endBlock) {
       const touchedSlides = new Set(
         Array.from(document.querySelectorAll("[data-slide]"))
@@ -4984,33 +5009,33 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           })
           .map((slide) => slide),
       );
-      if (touchedSlides.size > 1) {
-        selectionFailure =
-          "A comment cannot include slide chrome. Select plan text across the slides instead.";
-        return null;
-      }
+      if (touchedSlides.size > 1) return null;
     }
 
     const lineTarget =
       startBlock === endBlock ? lineRangeFor(range, block) : null;
     if (lineTarget) return lineTarget;
 
+    const leadingWhitespace = rawText.length - rawText.trimStart().length;
+    const trailingWhitespace = rawText.length - rawText.trimEnd().length;
     const blockLength = block.textContent?.length || 0;
-    let start = 0;
-    if (block.contains(range.startContainer)) {
-      const prefix = document.createRange();
-      prefix.selectNodeContents(block);
-      prefix.setEnd(range.startContainer, range.startOffset);
-      start = prefix.toString().length;
-    }
+    let start = block.contains(range.startContainer)
+      ? textOffsetForBoundary({
+          block,
+          container: range.startContainer,
+          offset: range.startOffset,
+        })
+      : 0;
+    start += leadingWhitespace;
     const rangeEndBlock = endBlock || block;
-    let end = rangeEndBlock.textContent?.length || blockLength;
-    if (rangeEndBlock.contains(range.endContainer)) {
-      const throughEnd = document.createRange();
-      throughEnd.selectNodeContents(rangeEndBlock);
-      throughEnd.setEnd(range.endContainer, range.endOffset);
-      end = throughEnd.toString().length;
-    }
+    let end = rangeEndBlock.contains(range.endContainer)
+      ? textOffsetForBoundary({
+          block: rangeEndBlock,
+          container: range.endContainer,
+          offset: range.endOffset,
+        })
+      : rangeEndBlock.textContent?.length || blockLength;
+    end = Math.max(0, end - trailingWhitespace);
     return {
       type: "selection",
       blockId: block.getAttribute("data-block-id"),
@@ -5061,18 +5086,8 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         paintTargetHighlights();
       }
       attachLabel.hidden = true;
-      const nativeSelection = window.getSelection();
-      const shouldExplain =
-        selectionFailure !== "" &&
-        nativeSelection !== null &&
-        !nativeSelection.isCollapsed;
-      selectionNotice.hidden = !shouldExplain;
-      selectionNotice.textContent = shouldExplain ? selectionFailure : "";
-      if (shouldExplain) announce(selectionFailure);
       return;
     }
-    selectionNotice.hidden = true;
-    selectionNotice.textContent = "";
     pendingSelection = anchor;
     attachLabel.hidden = false;
     attachInput.checked = false;
@@ -5106,7 +5121,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   };
 
   let selectionOfferTimer = null;
-  let selectionFailure = "";
 
   // Escape returns both native and semantic selection flows to the same quiet
   // reading state. Clearing only the Range would leave a whole-slide target
@@ -5120,8 +5134,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     attachLabel.hidden = true;
     attachInput.checked = false;
     affordance.hidden = true;
-    selectionNotice.hidden = true;
-    selectionNotice.textContent = "";
     window.getSelection()?.removeAllRanges();
     paintTargetHighlights();
   };
@@ -5587,6 +5599,9 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     agentHeartbeatAt = checked.updatedAtMs;
     agentSessionState = checked.state;
     agentConnectionLog = checked.connectionLog;
+    agentPlanPath = checked.plan;
+    agentCommand = checked.agentCommand;
+    agentRecoveryPrompt = checked.recoveryPrompt;
     if (changed || connectionChanged) {
       renderTray();
       void hydrateRevisionDiffs();
@@ -5648,7 +5663,11 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   };
 
   const syncAgentAlert = (health) => {
-    const label = health ? AGENT_ALERT_LABELS[health.key] : undefined;
+    const label = health
+      ? AGENT_ALERT_LABELS[health.key]
+      : hasRuntime && !agentConnected
+        ? AGENT_ALERT_LABELS.unavailable
+        : undefined;
     const indicator = deriveAgentIndicator({
       hasRuntime,
       agentConnected,

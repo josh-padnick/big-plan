@@ -14,7 +14,13 @@
 //    re-checked on read exactly as if they had arrived over the wire.
 
 import { randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  mkdir,
+  readdir,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import type { ReviewComment } from "./comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
@@ -46,6 +52,13 @@ export type AgentHeartbeat = {
   readonly updatedAtMs: number;
 };
 
+/** One immutable connection transition recorded by the review runtime. */
+export type AgentConnectionEvent = {
+  readonly sessionId: string;
+  readonly connected: boolean;
+  readonly at: string;
+};
+
 /** Where one plan's review state lives. */
 export type ReviewStore = {
   readonly root: string;
@@ -65,6 +78,7 @@ export type ReviewStore = {
   readonly heartbeatPath: string;
   readonly agentHeartbeatPath: string;
   readonly agentCancellationsPath: string;
+  readonly agentConnectionEventsPath: string;
 };
 
 // The one place a review path is constructed. Callers name a leaf, never a
@@ -137,6 +151,10 @@ export const reviewStoreFor = ({
     agentCancellationsPath: inside({
       base: agentDirectory,
       leaf: "cancellations.json",
+    }),
+    agentConnectionEventsPath: inside({
+      base: agentDirectory,
+      leaf: "connection-events.jsonl",
     }),
   };
 };
@@ -499,6 +517,75 @@ export const appendAgentCancellation = async ({
     path: store.agentCancellationsPath,
     value: [...existing, cancellation],
   });
+};
+
+const asAgentConnectionEvent = ({
+  value,
+  sessionId,
+}: {
+  readonly value: unknown;
+  readonly sessionId: string;
+}): AgentConnectionEvent | undefined => {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("sessionId" in value) ||
+    value.sessionId !== sessionId ||
+    !("connected" in value) ||
+    typeof value.connected !== "boolean" ||
+    !("at" in value) ||
+    typeof value.at !== "string" ||
+    Number.isNaN(Date.parse(value.at))
+  ) {
+    return undefined;
+  }
+  return {
+    sessionId,
+    connected: value.connected,
+    at: new Date(value.at).toISOString(),
+  };
+};
+
+/** Reads the append-only connection timeline for one review session. */
+export const readAgentConnectionEvents = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<ReadonlyArray<AgentConnectionEvent>> => {
+  const raw = await readFile(store.agentConnectionEventsPath, "utf8").catch(
+    () => "",
+  );
+  const accepted: Array<AgentConnectionEvent> = [];
+  for (const line of raw.split("\n")) {
+    if (line.trim() === "") continue;
+    let value: unknown;
+    try {
+      value = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const event = asAgentConnectionEvent({ value, sessionId });
+    if (event !== undefined) accepted.push(event);
+  }
+  return accepted;
+};
+
+/** Appends one runtime-observed connection transition without rewriting history. */
+export const appendAgentConnectionEvent = async ({
+  store,
+  event,
+}: {
+  readonly store: ReviewStore;
+  readonly event: AgentConnectionEvent;
+}): Promise<void> => {
+  await appendFile(
+    store.agentConnectionEventsPath,
+    `${JSON.stringify(event)}\n`,
+    { mode: FILE_MODE },
+  );
 };
 
 /** Gives an agent a safe ignored path for authoring one response draft. */

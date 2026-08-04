@@ -242,6 +242,10 @@ The table has adjacent targets that must remain distinguishable.
 ## Delivery
 
 Sending writes one real feedback package beside this plan.
+
+- Terminal states: succeeded, exhausted, cancelled.
+  - Terminal rows are retained for 90 days, then archived.
+- The worker claim is deliberately outside the selected terminal-state text.
 `;
 
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({

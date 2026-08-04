@@ -33,6 +33,12 @@ describe("deriveThreadStatus", () => {
     ).toBe("alert");
     expect(
       deriveAgentIndicator({
+        hasRuntime: true,
+        agentConnected: false,
+      }),
+    ).toBe("alert");
+    expect(
+      deriveAgentIndicator({
         hasRuntime: false,
         agentConnected: true,
       }),

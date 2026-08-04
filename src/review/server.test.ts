@@ -365,6 +365,35 @@ describe("review runtime feedback", () => {
     });
   });
 
+  it("should proactively expire a lease and preserve every connection transition", async () => {
+    await writeAgentHeartbeat({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      state: "waiting",
+      now: 0,
+    });
+    const answer: unknown = await (await call({ path: "/api/agent" })).json();
+    expect(answer).toMatchObject({
+      connected: false,
+      plan: runtime.planPath,
+      agentCommand: expect.stringContaining(runtime.planPath),
+      recoveryPrompt: expect.stringContaining(
+        "Reconnect to my existing Big Plan review",
+      ),
+      connectionLog: [
+        { connected: false, at: expect.any(String) },
+        { connected: true, at: expect.any(String) },
+        { connected: false, at: expect.any(String) },
+      ],
+    });
+    const lines = (
+      await readFile(runtime.store.agentConnectionEventsPath, "utf8")
+    )
+      .trim()
+      .split("\n");
+    expect(lines).toHaveLength(3);
+  });
+
   it("should serve a deterministic diff between retained revisions", async () => {
     const revised = PLAN.replace(
       "feedback does not reach the agent",

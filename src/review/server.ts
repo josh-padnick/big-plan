@@ -51,10 +51,12 @@ import {
 import {
   agentHeartbeatIsFresh,
   appendAgentCancellation,
+  appendAgentConnectionEvent,
   appendProgress,
   prepareStore,
   randomId,
   readActiveDraft,
+  readAgentConnectionEvents,
   readAgentHeartbeat,
   readComments,
   readProgress,
@@ -75,6 +77,10 @@ import { diffRevisions } from "./revision-diff.js";
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const HEARTBEAT_INTERVAL_MS = 750;
+
+/** Quotes one trusted local path as one POSIX-shell argument. */
+const shellArgument = (value: string): string =>
+  `'${value.replaceAll("'", `'"'"'`)}'`;
 
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
@@ -206,6 +212,15 @@ export const startReviewRuntime = async ({
   readonly planPath: string;
 }): Promise<ReviewRuntime> => {
   const resolvedPlanPath = resolve(planPath);
+  const agentCommand = `node ${shellArgument(
+    resolve(process.argv[1] ?? "bin/big-plan.mjs"),
+  )} agent ${shellArgument(resolvedPlanPath)}`;
+  const recoveryPrompt = [
+    `Reconnect to my existing Big Plan review for ${resolvedPlanPath}.`,
+    `Run ${agentCommand}.`,
+    "Read the prompt_file path it prints and follow that prompt in this agent session.",
+    "Keep the connection loop running so the review remains live.",
+  ].join(" ");
   const planId = derivePlanId({ planPath: resolvedPlanPath });
   const sessionId = randomId(8);
   const token = randomBytes(32).toString("base64url");
@@ -224,10 +239,6 @@ export const startReviewRuntime = async ({
   // re-anchor; it simply refuses to forget what it once addressed.
   const blocks = new Map<string, BlockMapEntry>();
   let progressSeq = 0;
-  const connectionLog: Array<{
-    readonly connected: boolean;
-    readonly at: string;
-  }> = [];
   let lastConnectionState: boolean | undefined;
 
   const validate = (value: unknown): ReadonlyArray<ReviewComment> =>
@@ -449,14 +460,22 @@ export const startReviewRuntime = async ({
       const exchange = await readAgentExchange({ store, sessionId, planId });
       const latestResponse = exchange.responses.at(-1);
       const session = await agentSession();
-      if (session.connected !== lastConnectionState) {
-        lastConnectionState = session.connected === true;
-        connectionLog.push({
-          connected: lastConnectionState,
-          at: new Date().toISOString(),
+      const connected = session.connected === true;
+      if (connected !== lastConnectionState) {
+        lastConnectionState = connected;
+        await appendAgentConnectionEvent({
+          store,
+          event: {
+            sessionId,
+            connected,
+            at: new Date().toISOString(),
+          },
         });
-        if (connectionLog.length > 50) connectionLog.shift();
       }
+      const connectionLog = await readAgentConnectionEvents({
+        store,
+        sessionId,
+      });
       sendJson({
         response,
         status: 200,
@@ -468,9 +487,12 @@ export const startReviewRuntime = async ({
           sourceRevision:
             latestResponse?.sourceRevision ?? initialSourceRevision,
           ...exchange,
-          connected: session.connected,
+          connected,
           agent: session,
-          connectionLog: [...connectionLog].reverse(),
+          connectionLog,
+          plan: resolvedPlanPath,
+          agentCommand,
+          recoveryPrompt,
         },
       });
       return;

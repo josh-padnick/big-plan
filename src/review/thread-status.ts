@@ -37,7 +37,7 @@ export const deriveAgentIndicator = ({
 }): "ok" | "alert" | "hidden" => {
   if (!hasRuntime) return "hidden";
   if (healthKey !== undefined && healthKey !== "working") return "alert";
-  return agentConnected ? "ok" : "hidden";
+  return agentConnected ? "ok" : "alert";
 };
 
 type ThreadStatusInput = {
