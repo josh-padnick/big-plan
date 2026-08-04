@@ -894,7 +894,7 @@ import {
   toggle.append(icon(MESSAGE_SQUARE_TEXT_ICON), feedbackLabel, toggleCount);
   const sendButton = el("button", {
     class:
-      "[width:100%] [padding:0.45rem_0.7rem] [border:1px_solid_var(--accent-c)] [border-radius:0.4rem] [background:var(--accent-c)] [color:var(--bg)] [font-size:0.8125rem] [font-weight:600] [cursor:pointer]",
+      "[display:inline-flex] [width:auto] [min-height:1.85rem] [align-items:center] [padding:0.32rem_0.65rem] [border:1px_solid_var(--accent-c)] [border-radius:0.4rem] [background:var(--accent-c)] [color:var(--bg)] [font-size:0.8125rem] [font-weight:600] [white-space:nowrap] [cursor:pointer]",
     type: "button",
     "data-review-send": true,
     hidden: true,

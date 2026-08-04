@@ -1182,6 +1182,10 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(page.locator("[data-review-send]")).toHaveText(
       "Send all to agent",
     );
+    const toolbarSendWidth = await page
+      .locator("[data-review-send]")
+      .evaluate((button) => button.getBoundingClientRect().width);
+    expect(toolbarSendWidth).toBeLessThan(180);
     for (const theme of ["light", "dark"]) {
       await page.evaluate(
         (nextTheme) =>
