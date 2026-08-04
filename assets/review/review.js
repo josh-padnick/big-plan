@@ -4162,9 +4162,7 @@ import {
               : `Working · ${relativeCommentTime(
                   pendingRequest?.createdAt || comment.createdAt,
                 )}`
-            : lifecycle === "blocked" || lifecycle === "offline"
-              ? "Blocked · sends automatically on reconnect"
-              : "Queued";
+            : "Queued";
       children.push(
         el("p", {
           class: COMMENT_WRAP_CLASSES,
