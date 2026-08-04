@@ -193,6 +193,23 @@ describe("review runtime document", () => {
       planId: runtime.planId,
     });
   });
+
+  it("should keep a manually refreshed valid revision stable while an agent response is older", async () => {
+    const revised = PLAN.replace(
+      "The runtime serves this document and nothing else.",
+      "The runtime serves this valid revised document and nothing else.",
+    );
+    await writeFile(runtime.planPath, revised);
+    const document = await fetch(runtime.url);
+    expect(document.status).toBe(200);
+    expect(await document.text()).toContain("valid revised document");
+    const answer: unknown = await (await call({ path: "/api/agent" })).json();
+    expect(answer).toMatchObject({
+      sourceRevision: deriveSourceRevision(revised),
+    });
+    await writeFile(runtime.planPath, PLAN);
+    expect((await fetch(runtime.url)).status).toBe(200);
+  });
 });
 
 describe("review runtime feedback", () => {
@@ -383,7 +400,11 @@ describe("review runtime feedback", () => {
       connectionLog: [
         { connected: false, at: expect.any(String) },
         { connected: true, at: expect.any(String) },
-        { connected: false, at: expect.any(String) },
+        {
+          connected: false,
+          at: expect.any(String),
+          reason: "Heartbeat timed out",
+        },
       ],
     });
     const lines = (

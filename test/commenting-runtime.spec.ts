@@ -500,8 +500,43 @@ test("should preserve and send a floating review across reload and viewport chan
     });
     await expect(ok).toBeVisible({ timeout: 8_000 });
     await expect(alert).toBeHidden();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      const dot = await ok
+        .locator("[data-review-agent-ok-dot]")
+        .evaluate((node) => {
+          const style = getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          return {
+            width: rect.width,
+            height: rect.height,
+            border: style.borderTopWidth,
+            halo: style.boxShadow,
+          };
+        });
+      expect(dot).toMatchObject({ width: 6, height: 6, border: "0px" });
+      expect(dot.halo).toContain("0px 0px 0px 2px");
+    }
     await ok.click();
     await expect(page.locator('[data-review-panel="agent"]')).toBeVisible();
+    const connectionState = page.locator("[data-review-connection-state]");
+    await expect
+      .poll(() =>
+        connectionState.evaluate((node) => {
+          const style = getComputedStyle(node);
+          return [
+            style.borderTopWidth,
+            style.borderRightWidth,
+            style.borderBottomWidth,
+            style.borderLeftWidth,
+          ];
+        }),
+      )
+      .toEqual(["1px", "1px", "1px", "1px"]);
     const history = page.locator("[data-review-connection-history]");
     await history.locator("summary").click();
     await expect(history).toHaveAttribute("open", "");
@@ -519,13 +554,38 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(page.locator("[data-review-recovery-prompt]")).toContainText(
       "Reconnect to my existing Big Plan review",
     );
+    await expect
+      .poll(() =>
+        connectionState.evaluate((node) => {
+          const style = getComputedStyle(node);
+          return [
+            style.borderTopWidth,
+            style.borderRightWidth,
+            style.borderBottomWidth,
+            style.borderLeftWidth,
+          ];
+        }),
+      )
+      .toEqual(["1px", "1px", "1px", "1px"]);
+    await expect(history.locator("summary")).toContainText("Connection log");
+    await expect(
+      history.locator("[data-review-connection-summary]"),
+    ).toContainText("DISCONNECTED");
+    await expect(
+      history.locator("[data-review-connection-current]"),
+    ).toContainText("Current");
     const events = history.locator("li");
     await expect(events).toHaveCount(3);
-    await expect(events).toHaveText([
-      /Disconnected · /,
-      /Connected · /,
-      /Disconnected · /,
-    ]);
+    await expect(events.nth(0)).toContainText("Disconnected");
+    await expect(events.nth(1)).toContainText("Connected");
+    await expect(events.nth(2)).toContainText("Disconnected");
+    await expect(events.nth(0)).toContainText("Heartbeat timed out");
+    const eventTimes = await events
+      .locator("time")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => Date.parse(node.getAttribute("datetime") || "")),
+      );
+    expect(eventTimes).toEqual([...eventTimes].sort((a, b) => b - a));
     for (const timestamp of await history.locator("time").all()) {
       expect(
         Number.isNaN(
@@ -533,8 +593,64 @@ test("should preserve and send a floating review across reload and viewport chan
         ),
       ).toBe(false);
     }
+    const prompt = page.locator("[data-review-recovery-prompt] code");
+    const selectedPrompt = await prompt.evaluate((node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      return selection?.toString() || "";
+    });
+    await page.waitForTimeout(1_800);
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(
+      selectedPrompt,
+    );
+    await page
+      .context()
+      .grantPermissions(["clipboard-read", "clipboard-write"]);
+    for (const selector of [
+      '[data-review-copy="data-review-recovery-prompt"]',
+      '[data-review-copy="data-review-recovery-command"]',
+    ]) {
+      const copy = page.locator(selector);
+      for (const theme of ["light", "dark"]) {
+        await page.evaluate(
+          (nextTheme) =>
+            document.documentElement.setAttribute("data-theme", nextTheme),
+          theme,
+        );
+        await copy.hover();
+        await copy.focus();
+        await expect(copy).toBeFocused();
+        const box = await copy.boundingBox();
+        if (box === null) throw new Error("The copy control has no target");
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.up();
+      }
+      await copy.click();
+      await expect(copy).toContainText("Copied");
+    }
     await page.locator('[data-review-tab="comments"]').click();
     await page.locator("[data-review-hide]").click();
+  });
+
+  await test.step("closing the sidebar preserves the reader's current position", async () => {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await toggle.click();
+    await expect(tray).toBeVisible();
+    await page.locator("#delivery").scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(0);
+    const beforeClose = await page.evaluate(() => window.scrollY);
+    await page.locator("[data-review-hide]").click();
+    await expect(tray).toBeHidden();
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeCloseTo(beforeClose, 0);
+    await page.evaluate(() => window.scrollTo(0, 0));
   });
 
   await test.step("a whole-paragraph selection always offers the same floating composer", async () => {
@@ -785,6 +901,37 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(page.locator("html")).toHaveAttribute(
       "data-review-focus-highlight-count",
       "0",
+    );
+    const secondCard = page.locator("[data-review-thread-card]").last();
+    const sourcePoint = await row
+      .locator("td")
+      .last()
+      .evaluate((cell) => {
+        const range = document.createRange();
+        range.selectNodeContents(cell);
+        const rect = Array.from(range.getClientRects()).find(
+          (candidate) => candidate.width > 0 && candidate.height > 0,
+        );
+        if (rect === undefined) {
+          throw new Error("The highlighted source has no text rectangle");
+        }
+        return {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        };
+      });
+    await page.mouse.move(sourcePoint.x, sourcePoint.y);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-focus-highlight-count",
+      "1",
+    );
+    await expect(secondCard).toHaveAttribute(
+      "data-review-comment-emphasized",
+      "",
+    );
+    await page.mouse.move(1, 80);
+    await expect(secondCard).not.toHaveAttribute(
+      "data-review-comment-emphasized",
     );
   });
 
@@ -1286,15 +1433,17 @@ test("should preserve and send a floating review across reload and viewport chan
       "Review persistence",
     );
     await expect(page.locator("[data-review-toggle]")).toBeVisible();
-    const revised = original
-      .replace(
-        "Content hash of the snapshot",
-        "Stable content hash of the canonical snapshot",
-      )
-      .replace(
-        "Position in this plan's history",
-        "One-based position in this plan's history",
-      );
+    const revised =
+      original
+        .replace(
+          "Content hash of the snapshot",
+          "Stable content hash of the canonical snapshot",
+        )
+        .replace(
+          "Position in this plan's history",
+          "One-based position in this plan's history",
+        ) +
+      "\n\nOperators can inspect the persisted feedback package during review.\n";
     expect(revised).not.toBe(original);
     await writeFile(session.plan, revised);
     const exchange = await readAgentExchange({
@@ -1364,7 +1513,10 @@ test("should preserve and send a floating review across reload and viewport chan
       },
       request,
       commentsById: commentsFromExchange(exchange),
-      changedBlocks: new Set(changeTargets),
+      changedBlocks: new Set([
+        ...changeTargets,
+        "section/delivery/paragraph-2",
+      ]),
       currentRevision: deriveSourceRevision(revised),
       now: new Date().toISOString(),
     });
@@ -2738,6 +2890,10 @@ Ship the live review loop behind the explicit review command.
 
     await trayThread.locator("[data-review-thread-minimize]").click();
     await expect(trayThread).not.toHaveAttribute("data-review-row-expanded");
+    const attachedOtherChanges = page.locator(
+      `[data-review-other-changes] [data-review-comment-id="${commentId}"]`,
+    );
+    await expect(attachedOtherChanges).not.toHaveCount(0);
     const savedResolve = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/drafts") &&
@@ -2755,6 +2911,7 @@ Ship the live review loop behind the explicit review command.
         `[data-review-resolved-group] [data-review-sent-row][data-review-comment-id="${commentId}"]`,
       ),
     ).toHaveCount(1);
+    await expect(attachedOtherChanges).toHaveCount(0);
     await expect(tray).toBeVisible();
   });
 
@@ -2810,7 +2967,7 @@ Ship the live review loop behind the explicit review command.
       await page.locator("[data-review-hide]").click();
     }
     const paragraph = page.locator(
-      '[data-block-section="Delivery"][data-block-kind="paragraph"]',
+      '[data-block-id="section/delivery/paragraph-1"]',
     );
     const selectionCountBefore = Number(
       (await page
@@ -2849,9 +3006,7 @@ Ship the live review loop behind the explicit review command.
     );
     await expect(page.locator("[data-review-draft-stale]")).toHaveCount(0);
     await expect(
-      page.locator(
-        '[data-block-section="Delivery"][data-block-kind="paragraph"]',
-      ),
+      page.locator('[data-block-id="section/delivery/paragraph-1"]'),
     ).not.toHaveAttribute("data-review-anchor-changed");
 
     const changed = moved.replace(
@@ -2869,9 +3024,7 @@ Ship the live review loop behind the explicit review command.
       "The text changed since you drafted this.",
     );
     await expect(
-      page.locator(
-        '[data-block-section="Delivery"][data-block-kind="paragraph"]',
-      ),
+      page.locator('[data-block-id="section/delivery/paragraph-1"]'),
     ).toHaveAttribute("data-review-anchor-changed", "");
   });
 });

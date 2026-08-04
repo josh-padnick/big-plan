@@ -228,6 +228,7 @@ export const startReviewRuntime = async ({
   await prepareStore(store);
   const initialSource = await readFile(resolvedPlanPath, "utf8");
   const initialSourceRevision = deriveSourceRevision(initialSource);
+  let servedSourceRevision = initialSourceRevision;
   await writeRevisionSnapshot({
     store,
     revision: initialSourceRevision,
@@ -274,6 +275,7 @@ export const startReviewRuntime = async ({
 
   const renderPlan = async (): Promise<string> => {
     const markdown = await readFile(resolvedPlanPath, "utf8");
+    const revision = deriveSourceRevision(markdown);
     const firstPass = renderDocument({
       markdown,
       fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
@@ -282,7 +284,7 @@ export const startReviewRuntime = async ({
     for (const block of firstPass.blocks) {
       blocks.set(block.id, block);
     }
-    return renderDocument({
+    const rendered = renderDocument({
       markdown,
       fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
       identity: {
@@ -292,6 +294,11 @@ export const startReviewRuntime = async ({
         reviewBootstrap: await readBootstrap(markdown),
       },
     }).html;
+    // A successful document render is itself a safe revision rendezvous.
+    // Remember it so a manual refresh cannot be told to reload away from the
+    // exact valid source it just received while an agent response is older.
+    servedSourceRevision = revision;
+    return rendered;
   };
 
   const handleDocument = async (response: ServerResponse): Promise<void> => {
@@ -462,6 +469,10 @@ export const startReviewRuntime = async ({
       const session = await agentSession();
       const connected = session.connected === true;
       if (connected !== lastConnectionState) {
+        const reason =
+          lastConnectionState === true && !connected
+            ? "Heartbeat timed out"
+            : undefined;
         lastConnectionState = connected;
         await appendAgentConnectionEvent({
           store,
@@ -469,6 +480,7 @@ export const startReviewRuntime = async ({
             sessionId,
             connected,
             at: new Date().toISOString(),
+            ...(reason === undefined ? {} : { reason }),
           },
         });
       }
@@ -480,12 +492,15 @@ export const startReviewRuntime = async ({
         response,
         status: 200,
         value: {
-          // The browser reloads only revisions the response command has
-          // rendered, linted, and accepted. Watching the raw file here would
-          // navigate the reviewer onto a transient parse error while an agent
-          // is midway through editing the authoritative MDX.
+          // A response revision is reloadable only while it is still the
+          // source on disk. Otherwise keep the browser on the latest revision
+          // this server successfully rendered; this also makes a manual
+          // refresh a stable rendezvous during an in-progress agent edit.
           sourceRevision:
-            latestResponse?.sourceRevision ?? initialSourceRevision,
+            latestResponse?.sourceRevision ===
+            deriveSourceRevision(await readFile(resolvedPlanPath, "utf8"))
+              ? latestResponse.sourceRevision
+              : servedSourceRevision,
           ...exchange,
           connected,
           agent: session,

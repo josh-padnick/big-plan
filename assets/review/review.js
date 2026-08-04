@@ -22,6 +22,7 @@ import { CHECK_ICON } from "../../src/icons/lucide/check.js";
 import { CHEVRON_LEFT_ICON } from "../../src/icons/lucide/chevron-left.js";
 import { CHEVRON_RIGHT_ICON } from "../../src/icons/lucide/chevron-right.js";
 import { CIRCLE_X_ICON } from "../../src/icons/lucide/circle-x.js";
+import { COPY_ICON } from "../../src/icons/lucide/copy.js";
 import { HOURGLASS_ICON } from "../../src/icons/lucide/hourglass.js";
 import { MESSAGE_SQUARE_TEXT_ICON } from "../../src/icons/lucide/message-square-text.js";
 import { MESSAGES_SQUARE_ICON } from "../../src/icons/lucide/messages-square.js";
@@ -328,6 +329,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   let pollFailures = 0;
   let runtimeOffline = false;
   let lastHealthSignature = "";
+  let connectionPanelSignature = "";
 
   const newId = () => {
     const bytes = new Uint8Array(8);
@@ -635,6 +637,15 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
             typeof entry.at === "string" &&
             !Number.isNaN(Date.parse(entry.at)),
         )
+        .map((entry) => ({
+          connected: entry.connected,
+          at: new Date(entry.at).toISOString(),
+          ...(typeof entry.reason === "string" &&
+          entry.reason.trim() !== "" &&
+          entry.reason.length <= 160
+            ? { reason: entry.reason }
+            : {}),
+        }))
         .slice(0, MESSAGE_LIMIT),
       plan:
         typeof value.plan === "string" && value.plan.length <= BODY_LIMIT
@@ -1263,17 +1274,11 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
 
   // -------------------------------------------------------------- tray render
 
-  let readingPosition = window.scrollY;
-  let restoreReadingPosition = true;
-
   const setRailOpen = (open) => {
     if (open === !rail.hidden) {
       return;
     }
-    if (open && rail.hidden) {
-      readingPosition = window.scrollY;
-      restoreReadingPosition = true;
-    }
+    const readingPosition = window.scrollY;
     rail.hidden = !open;
     backdrop.hidden = !open;
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
@@ -1293,7 +1298,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     // position defeats scroll anchoring caused by the desktop width change
     // and makes the below-1280 overlay reversible by construction.
     requestAnimationFrame(() => {
-      if (restoreReadingPosition) window.scrollTo(0, readingPosition);
+      window.scrollTo(0, readingPosition);
       if (!compose.hidden && composeTarget) positionCompose(composeTarget);
       positionThreadCards();
     });
@@ -1301,8 +1306,281 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
 
   const railIsOpen = () => !rail.hidden;
 
+  const compactDuration = (milliseconds) => {
+    const seconds = Math.max(0, Math.floor(milliseconds / 1_000));
+    if (seconds < 60) return seconds + "s";
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    if (minutes < 60) {
+      return minutes + "m " + String(remainder).padStart(2, "0") + "s";
+    }
+    const hours = Math.floor(minutes / 60);
+    return hours + "h " + String(minutes % 60).padStart(2, "0") + "m";
+  };
+
+  const relativeSignal = (at) => {
+    const seconds = Math.max(0, Math.round((Date.now() - at) / 1_000));
+    return seconds < 2 ? "just now" : seconds + "s ago";
+  };
+
+  const selectionTouches = (node) => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      return false;
+    }
+    return (
+      (selection.anchorNode && node.contains(selection.anchorNode)) ||
+      (selection.focusNode && node.contains(selection.focusNode)) ||
+      selection.containsNode(node, true)
+    );
+  };
+
+  const setLiveText = (node, text) => {
+    if (node.textContent === text || selectionTouches(node)) return;
+    node.textContent = text;
+  };
+
+  const refreshConnectionTimes = () => {
+    for (const node of connectionPanel?.querySelectorAll(
+      "[data-review-agent-heartbeat]",
+    ) || []) {
+      node.setAttribute("data-review-relative-at", String(agentHeartbeatAt));
+    }
+    for (const node of connectionPanel?.querySelectorAll(
+      "[data-review-relative-at]",
+    ) || []) {
+      const at = Number(node.getAttribute("data-review-relative-at"));
+      if (Number.isFinite(at)) setLiveText(node, relativeSignal(at));
+    }
+    for (const node of connectionPanel?.querySelectorAll(
+      "[data-review-duration-start]",
+    ) || []) {
+      const start = Number(node.getAttribute("data-review-duration-start"));
+      const endAttribute = node.getAttribute("data-review-duration-end");
+      const end = endAttribute === null ? Date.now() : Number(endAttribute);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+      const duration = compactDuration(end - start);
+      const prefix = node.getAttribute("data-review-duration-prefix") || "";
+      const suffix = node.getAttribute("data-review-duration-suffix") || "";
+      setLiveText(node, prefix + duration + suffix);
+    }
+  };
+
+  const copyBlock = ({ attribute, text }) => {
+    const button = el("button", {
+      type: "button",
+      "data-review-copy": attribute,
+      "aria-label": "Copy to clipboard",
+    });
+    button.append(icon(COPY_ICON), el("span", { text: "Copy" }));
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(text);
+        button.replaceChildren(
+          icon(CHECK_ICON),
+          el("span", { text: "Copied" }),
+        );
+        button.setAttribute("aria-label", "Copied to clipboard");
+        setTimeout(() => {
+          button.replaceChildren(icon(COPY_ICON), el("span", { text: "Copy" }));
+          button.setAttribute("aria-label", "Copy to clipboard");
+        }, 1_500);
+      } catch (error) {
+        const message = "Couldn’t copy: " + describeError(error);
+        announce(message);
+        button.setAttribute("aria-label", message);
+      }
+    });
+    return el("div", { "data-review-copy-block": attribute }, [
+      el("pre", { [attribute]: true }, [el("code", { text })]),
+      button,
+    ]);
+  };
+
+  const connectionLogView = ({ historyWasOpen }) => {
+    const events = agentConnectionLog
+      .map((entry) => ({ ...entry, atMs: Date.parse(entry.at) }))
+      .filter((entry) => Number.isFinite(entry.atMs))
+      .sort((left, right) => left.atMs - right.atMs);
+    const latest = events.at(-1);
+    let disconnects = 0;
+    let reconnects = 0;
+    let hasConnected = false;
+    events.forEach((entry, index) => {
+      if (!entry.connected && events[index - 1]?.connected) disconnects += 1;
+      if (
+        entry.connected &&
+        hasConnected &&
+        events[index - 1]?.connected === false
+      ) {
+        reconnects += 1;
+      }
+      if (entry.connected) hasConnected = true;
+    });
+    const title = el("span", { text: "Connection log" });
+    const count = el("span", {
+      "data-review-connection-count": true,
+      text: String(events.length),
+      "aria-label": events.length + " event" + (events.length === 1 ? "" : "s"),
+    });
+    const details = el(
+      "details",
+      {
+        "data-review-connection-history": true,
+        ...(historyWasOpen ? { open: true } : {}),
+      },
+      [el("summary", {}, [title, count])],
+    );
+    if (events.length === 0) {
+      details.appendChild(
+        el("p", { text: "No connection events recorded yet." }),
+      );
+      return details;
+    }
+
+    const latestAt = latest?.atMs || Date.now();
+    const lastSignalAt = agentHeartbeatAt > 0 ? agentHeartbeatAt : latestAt;
+    const summary = el("dl", { "data-review-connection-summary": true }, [
+      el("div", {}, [
+        el("dt", { text: "State" }),
+        el("dd", {
+          "data-state": agentConnected ? "connected" : "disconnected",
+          text: agentConnected ? "CONNECTED" : "DISCONNECTED",
+        }),
+      ]),
+      el("div", {}, [
+        el("dt", { text: "Since" }),
+        el("dd", {}, [
+          el("time", {
+            datetime: latest?.at,
+            text: new Intl.DateTimeFormat(undefined, {
+              hour: "numeric",
+              minute: "2-digit",
+              second: "2-digit",
+            }).format(new Date(latestAt)),
+          }),
+        ]),
+      ]),
+      el("div", {}, [
+        el("dt", { text: "Last signal" }),
+        el("dd", {
+          "data-review-agent-heartbeat": true,
+          "data-review-relative-at": lastSignalAt,
+          text: relativeSignal(lastSignalAt),
+        }),
+      ]),
+      el("div", {}, [
+        el("dt", { text: "Events" }),
+        el("dd", {
+          text: disconnects + " disconnects · " + reconnects + " reconnects",
+        }),
+      ]),
+    ]);
+    details.appendChild(summary);
+
+    const groups = new Map();
+    for (const [reverseIndex, entry] of [...events].reverse().entries()) {
+      const index = events.length - reverseIndex - 1;
+      const date = new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+      }).format(new Date(entry.atMs));
+      if (!groups.has(date)) groups.set(date, []);
+      const next = events[index + 1];
+      const durationEnd = next?.atMs;
+      const reconnectsKnownSession = events
+        .slice(0, index)
+        .some((previous) => previous.connected);
+      const durationPrefix = entry.connected
+        ? "Connected for "
+        : next?.connected
+          ? reconnectsKnownSession
+            ? "Reconnected after "
+            : "Connected after "
+          : "Offline for ";
+      const durationSuffix =
+        !entry.connected && next?.connected ? " offline" : "";
+      groups.get(date).push(
+        el(
+          "li",
+          {
+            "data-review-connection-event": entry.connected
+              ? "connected"
+              : "disconnected",
+            ...(reverseIndex === 0
+              ? { "data-review-connection-current": true }
+              : {}),
+          },
+          [
+            el("span", {
+              "data-review-connection-marker": true,
+              "aria-hidden": "true",
+            }),
+            el("time", {
+              datetime: entry.at,
+              text: new Intl.DateTimeFormat(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit",
+              }).format(new Date(entry.atMs)),
+            }),
+            el("strong", {
+              text: entry.connected ? "Connected" : "Disconnected",
+            }),
+            ...(reverseIndex === 0
+              ? [el("span", { "data-review-current": true, text: "Current" })]
+              : []),
+            el("span", {
+              "data-review-connection-duration": true,
+              "data-review-duration-start": entry.atMs,
+              ...(durationEnd === undefined
+                ? {}
+                : { "data-review-duration-end": durationEnd }),
+              "data-review-duration-prefix": durationPrefix,
+              "data-review-duration-suffix": durationSuffix,
+              text:
+                durationPrefix +
+                compactDuration((durationEnd ?? Date.now()) - entry.atMs) +
+                durationSuffix,
+            }),
+            ...(entry.reason
+              ? [
+                  el("span", {
+                    "data-review-connection-reason": true,
+                    text: entry.reason,
+                  }),
+                ]
+              : []),
+          ],
+        ),
+      );
+    }
+    for (const [date, rows] of groups) {
+      details.append(
+        el("section", { "data-review-connection-day": true }, [
+          el("h3", { text: date }),
+          el("ol", {}, rows),
+        ]),
+      );
+    }
+    return details;
+  };
+
   const renderConnectionPanel = () => {
     if (!connectionPanel) return;
+    const signature = JSON.stringify({
+      connected: agentConnected,
+      runtimeOffline,
+      state: agentSessionState,
+      log: agentConnectionLog,
+      plan: agentPlanPath,
+      command: agentCommand,
+      recoveryPrompt: agentRecoveryPrompt,
+    });
+    if (signature === connectionPanelSignature) {
+      refreshConnectionTimes();
+      return;
+    }
+    connectionPanelSignature = signature;
     const historyWasOpen =
       connectionPanel.querySelector("[data-review-connection-history]")
         ?.open === true;
@@ -1327,12 +1605,14 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
             text: agentSessionState === "working" ? "Working" : "Waiting",
           }),
         ]),
-        el("p", {
-          text:
-            "Last signal " +
-            Math.max(0, Math.round((Date.now() - agentHeartbeatAt) / 1_000)) +
-            "s ago",
-        }),
+        el("p", {}, [
+          document.createTextNode("Last signal "),
+          el("span", {
+            "data-review-agent-heartbeat": true,
+            "data-review-relative-at": agentHeartbeatAt,
+            text: relativeSignal(agentHeartbeatAt),
+          }),
+        ]),
       );
     } else if (runtimeOffline) {
       state.append(
@@ -1351,57 +1631,24 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         el("p", {
           text: "To reconnect this running review, paste this exact prompt into your coding agent:",
         }),
-        el("pre", { "data-review-recovery-prompt": true }, [
-          el("code", {
-            text:
-              agentRecoveryPrompt ||
-              "Ask your coding agent to reconnect to this Big Plan review and keep its feedback loop running.",
-          }),
-        ]),
+        copyBlock({
+          attribute: "data-review-recovery-prompt",
+          text:
+            agentRecoveryPrompt ||
+            "Ask your coding agent to reconnect to this Big Plan review and keep its feedback loop running.",
+        }),
         el("p", {
           text: "Or run this exact connector command yourself from the Big Plan repository:",
         }),
-        el("pre", { "data-review-recovery-command": true }, [
-          el("code", {
-            text:
-              agentCommand ||
-              "node bin/big-plan.mjs agent " + (agentPlanPath || "<plan.mdx>"),
-          }),
-        ]),
+        copyBlock({
+          attribute: "data-review-recovery-command",
+          text:
+            agentCommand ||
+            "node bin/big-plan.mjs agent " + (agentPlanPath || "<plan.mdx>"),
+        }),
       );
     }
-    const history = el(
-      "details",
-      {
-        "data-review-connection-history": true,
-        ...(historyWasOpen ? { open: true } : {}),
-      },
-      [
-        el("summary", { text: "Connection history" }),
-        el("p", {
-          text: "Immutable events recorded since this review session started.",
-        }),
-        el(
-          "ol",
-          {},
-          agentConnectionLog.map((entry) =>
-            el("li", {}, [
-              el("span", {
-                text: entry.connected ? "Connected" : "Disconnected",
-              }),
-              document.createTextNode(" · "),
-              el("time", {
-                datetime: entry.at,
-                text: new Intl.DateTimeFormat(undefined, {
-                  dateStyle: "medium",
-                  timeStyle: "medium",
-                }).format(new Date(entry.at)),
-              }),
-            ]),
-          ),
-        ),
-      ],
-    );
+    const history = connectionLogView({ historyWasOpen });
     connectionPanel.replaceChildren(state, history);
   };
 
@@ -1560,7 +1807,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   };
 
   const focusTarget = (comment, options = {}) => {
-    if (railIsOpen()) restoreReadingPosition = false;
     const block = anchorStateFor(comment).block;
     const destination = block || document.body;
     const scroll = () => {
@@ -1642,6 +1888,27 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       }
     }
     return null;
+  };
+
+  const syncCommentEmphasis = () => {
+    for (const node of document.querySelectorAll(
+      "[data-review-comment-emphasized]",
+    )) {
+      node.removeAttribute("data-review-comment-emphasized");
+    }
+    if (emphasizedCommentId === null) return;
+    for (const node of document.querySelectorAll(
+      '[data-review-comment-id="' + cssEscape(emphasizedCommentId) + '"]',
+    )) {
+      node.setAttribute("data-review-comment-emphasized", "");
+    }
+  };
+
+  const setEmphasizedComment = (commentId) => {
+    if (commentId === emphasizedCommentId) return;
+    emphasizedCommentId = commentId;
+    paintTargetHighlights();
+    syncCommentEmphasis();
   };
 
   // The document-to-tray half of comment navigation changes only the tray's
@@ -2608,7 +2875,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     }
     expandedThreadIds.add(comment.id);
     editingId = null;
-    if (railIsOpen()) restoreReadingPosition = false;
     renderTray();
     requestAnimationFrame(() => {
       focusTarget(comment, { keepRailOpen: railIsOpen() });
@@ -2895,7 +3161,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     if (diffLens?.comment?.id === commentId) clearDiffLens();
   };
 
-  const appendDiffRun = ({ container, run, comment, oldOffset, tagged }) => {
+  const appendDiffRun = ({ container, run, comment, oldOffset }) => {
     const codeState = { active: false };
     const nodeFor = (text, marked) => {
       const node = el("span", {
@@ -2912,15 +3178,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
             ? el("code", { text: part })
             : document.createTextNode(part),
         );
-      }
-      if (marked && !tagged.value) {
-        node.appendChild(
-          el("span", {
-            "data-review-diff-comment-tag": true,
-            text: "your comment",
-          }),
-        );
-        tagged.value = true;
       }
       return hasContent ? node : null;
     };
@@ -3000,7 +3257,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
             markedText: location.oldText,
           }),
           oldOffset: { value: 0 },
-          tagged: { value: false },
         });
       } else {
         appendDiffRun({
@@ -3008,7 +3264,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           run: { op: "del", text: oldText },
           comment: null,
           oldOffset: { value: 0 },
-          tagged: { value: false },
         });
       }
     });
@@ -3028,7 +3283,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       },
       comment: null,
       oldOffset: { value: 0 },
-      tagged: { value: false },
     });
     body.append(was, now);
   };
@@ -3067,7 +3321,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         run: { op: "del", text: bandText({ location, side: "old" }) },
         comment: null,
         oldOffset: { value: 0 },
-        tagged: { value: false },
       });
       body.append(
         oldRow,
@@ -3131,7 +3384,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       return;
     }
     const oldOffset = { value: 0 };
-    const tagged = { value: false };
     const markedComment = commentAtMarkedOffsets({
       comment: attributedComment,
       markedText: location.oldText,
@@ -3142,7 +3394,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         run,
         comment: markedComment,
         oldOffset,
-        tagged,
       });
       if (run.op !== "ins") oldOffset.value += run.text.length;
     }
@@ -3913,14 +4164,15 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
 
   const bindCommentAssociation = (node, comment) => {
     const emphasize = () => {
-      emphasizedCommentId = comment.id;
-      paintTargetHighlights();
+      setEmphasizedComment(comment.id);
     };
     const relax = () => {
       if (emphasizedCommentId !== comment.id) return;
-      emphasizedCommentId = null;
-      paintTargetHighlights();
+      setEmphasizedComment(null);
     };
+    if (emphasizedCommentId === comment.id) {
+      node.setAttribute("data-review-comment-emphasized", "");
+    }
     node.addEventListener("pointerenter", emphasize);
     node.addEventListener("pointerleave", relax);
     node.addEventListener("focusin", emphasize);
@@ -4466,6 +4718,10 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     const otherChanges = [];
     const seenRequests = new Set();
     for (const comment of sent) {
+      // Round-level changes stay attached to the thread that caused them.
+      // Resolving that thread removes its unattributed companion changes from
+      // the active review summary with the rest of the conversation.
+      if (resolvedCommentIds.has(comment.id)) continue;
       for (const event of outcomeEventsFor(comment)) {
         if (event.key !== "changed" || seenRequests.has(event.requestId)) {
           continue;
@@ -4530,7 +4786,9 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
               button.addEventListener("click", () => {
                 void openDiffLens(comment, event, index);
               });
-              return el("li", {}, [button]);
+              return el("li", { "data-review-comment-id": comment.id }, [
+                button,
+              ]);
             }),
           ),
         ]),
@@ -4651,6 +4909,27 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     renderTray();
   });
 
+  // CSS highlights have no DOM event target. Hit-test pointer coordinates
+  // through the same anchor ranges used by click navigation so source hover
+  // can emphasize both sides of the document ↔ comment association.
+  document.addEventListener("pointermove", (event) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest("[data-review-root]")
+    ) {
+      return;
+    }
+    const comment = commentAtDocumentPoint({
+      target: event.target,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    setEmphasizedComment(comment?.id || null);
+  });
+  document.addEventListener("pointerleave", () => {
+    setEmphasizedComment(null);
+  });
+
   document.addEventListener("click", (event) => {
     const comment = commentAtDocumentPoint({
       target: event.target,
@@ -4663,7 +4942,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       revealCommentInTray(comment);
       return;
     }
-    emphasizedCommentId = comment.id;
+    setEmphasizedComment(comment.id);
     if (sent.some((entry) => entry.id === comment.id)) {
       expandedThreadIds.add(comment.id);
     } else {

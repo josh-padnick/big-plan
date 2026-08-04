@@ -57,6 +57,7 @@ export type AgentConnectionEvent = {
   readonly sessionId: string;
   readonly connected: boolean;
   readonly at: string;
+  readonly reason?: string;
 };
 
 /** Where one plan's review state lives. */
@@ -544,6 +545,12 @@ const asAgentConnectionEvent = ({
     sessionId,
     connected: value.connected,
     at: new Date(value.at).toISOString(),
+    ...("reason" in value &&
+    typeof value.reason === "string" &&
+    value.reason.trim() !== "" &&
+    value.reason.length <= 160
+      ? { reason: value.reason }
+      : {}),
   };
 };
 
