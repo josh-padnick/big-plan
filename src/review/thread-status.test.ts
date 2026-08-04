@@ -16,7 +16,7 @@ describe("deriveThreadStatus", () => {
       stage: "waiting",
       tone: "neutral",
       badge: "Waiting",
-      headline: "Waiting for the agent",
+      headline: "Waiting for an agent",
       showsSpinner: false,
       showsSetup: false,
     });
@@ -26,7 +26,7 @@ describe("deriveThreadStatus", () => {
       stage: "blocked",
       tone: "warning",
       badge: "Blocked",
-      headline: "No agent connected",
+      headline: "Blocked - no agent connected",
       showsSpinner: false,
       showsSetup: true,
     });

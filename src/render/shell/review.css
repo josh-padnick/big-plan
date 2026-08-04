@@ -440,12 +440,35 @@ button[data-review-row-target]:active {
   margin-top: 0.75rem;
 }
 [data-review-outcome-group] h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
   margin: 0 0 0.45rem;
   color: var(--muted-c);
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+[data-review-outcome-group] h3 svg {
+  width: 0.78rem;
+  height: 0.78rem;
+}
+[data-review-outcome-group="blocked"] h3 {
+  color: var(--callout-warning-c);
+}
+[data-review-outcome-group-count] {
+  display: inline-flex;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--surface-c);
+  font-size: 0.5625rem;
+  font-variant-numeric: tabular-nums;
 }
 [data-review-outcome-group] ol {
   margin: 0;
@@ -455,6 +478,17 @@ button[data-review-row-target]:active {
 [data-review-sent-row] {
   background: transparent;
   border-left-width: 2px;
+}
+[data-review-sent-row][data-review-row-expanded] {
+  background: var(--surface-c);
+}
+[data-review-sent-row][data-review-row-expanded] > [data-review-row-head] {
+  margin: -0.55rem -0.6rem 0.55rem;
+  padding: 0.4rem 0.45rem 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--edge-c);
+  border-radius: 0.45rem 0.45rem 0 0;
+  background: color-mix(in srgb, var(--surface-c) 55%, var(--bg));
+  cursor: pointer;
 }
 /* A resolved comment is still a distinct card: its head is a real top bar,
    not a line that reads as another headline in the content. */
@@ -502,6 +536,22 @@ button[data-review-row-target]:active {
 [data-review-row-icons] button svg {
   width: 0.85rem;
   height: 0.85rem;
+}
+[data-review-row-substate] {
+  display: inline-flex;
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-c);
+}
+[data-review-row-substate="stalled"] {
+  color: var(--callout-warning-c);
+}
+[data-review-row-substate] svg {
+  width: 0.78rem;
+  height: 0.78rem;
 }
 [data-review-row-sending],
 [data-review-thread-sending] {
@@ -1166,11 +1216,6 @@ button[data-review-row-target]:active {
   border-radius: 0.55rem 0.55rem 0 0;
   background: var(--surface-c);
 }
-[data-review-tray-thread] [data-review-thread-toolbar] {
-  margin: -0.15rem 0 0.55rem;
-  border: 1px solid var(--edge-c);
-  border-radius: 0.4rem;
-}
 [data-review-thread-toolbar-title] {
   display: flex;
   min-width: 0;
@@ -1546,12 +1591,6 @@ button:focus-visible > [data-review-icon-tooltip] {
   border-color: var(--diff-remove-c) !important;
   color: var(--diff-remove-c) !important;
   font-weight: 650;
-}
-
-[data-review-tray-thread] {
-  margin-top: 0.55rem;
-  padding-top: 0.15rem;
-  border-top: 1px solid var(--edge-c);
 }
 
 [data-review-spinner] {

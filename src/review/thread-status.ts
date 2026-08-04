@@ -38,8 +38,8 @@ type ThreadStatusInput = {
 const stalledHint =
   "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This thread updates by itself once the agent resumes.";
 
-const queuedHint =
-  "Your comment is queued in this plan's review session and stays queued until an agent connects. Keep reviewing.";
+const blockedHint =
+  "Your comment is saved and sends itself as soon as an agent reconnects. Nothing is lost.";
 
 /** Resolves one thread to exactly one user-facing lifecycle state. */
 export const deriveThreadStatus = ({
@@ -111,7 +111,7 @@ export const deriveThreadStatus = ({
         stage: "waiting",
         tone: "neutral",
         badge: "Waiting",
-        headline: "Waiting for the agent",
+        headline: "Waiting for an agent",
         showsSpinner: false,
         showsSetup: false,
       };
@@ -120,8 +120,8 @@ export const deriveThreadStatus = ({
       stage: "blocked",
       tone: "warning",
       badge: "Blocked",
-      headline: "No agent connected",
-      hint: queuedHint,
+      headline: "Blocked - no agent connected",
+      hint: blockedHint,
       showsSpinner: false,
       showsSetup: true,
     };

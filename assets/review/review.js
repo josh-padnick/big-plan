@@ -33,6 +33,10 @@ import { TRIANGLE_ALERT_ICON } from "../../src/icons/lucide/triangle-alert.js";
 import { UNDO_2_ICON } from "../../src/icons/lucide/undo-2.js";
 import { X_ICON } from "../../src/icons/lucide/x.js";
 import { diffRunSimilarity } from "../../src/review/revision-diff.js";
+import {
+  pendingThreadGroup,
+  threadSubstate,
+} from "../../src/review/thread-group.js";
 import { deriveThreadStatus } from "../../src/review/thread-status.js";
 
 (() => {
@@ -1449,7 +1453,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     if (options.spin === true) badge.appendChild(spinner());
     if (state === "waiting") badge.appendChild(icon(HOURGLASS_ICON));
     if (state === "blocked") badge.appendChild(icon(TRIANGLE_ALERT_ICON));
-    if (!(options.iconOnly === true && state === "waiting")) {
+    if (options.iconOnly !== true) {
       badge.appendChild(document.createTextNode(outcome.label));
     }
     return badge;
@@ -1760,7 +1764,14 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
 
   const anchorContextLine = (comment) => {
     const anchor = anchorStateFor(comment);
-    if (anchor.kind !== "changed" || comment.target.type !== "selection") {
+    const changed = outcomeEventsFor(comment).some(
+      (event) => event.key === "changed",
+    );
+    if (
+      !changed ||
+      anchor.kind !== "changed" ||
+      comment.target.type !== "selection"
+    ) {
       return null;
     }
     return el("p", {
@@ -2874,7 +2885,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     return button;
   };
 
-  const threadToolbar = (comment, options = {}) => {
+  const threadToolbarActions = (comment, options = {}) => {
     const resolved = options.resolved === true;
     const revertAction = outcomeEventsFor(comment).some(
       (event) => event.key === "changed",
@@ -2891,10 +2902,12 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
         attribute: "data-review-thread-minimize",
         label: "Minimize thread",
         glyph: MINIMIZE_2_ICON,
-        action: () => {
-          expandedThreadIds.delete(comment.id);
-          renderTray();
-        },
+        action:
+          options.minimize ||
+          (() => {
+            expandedThreadIds.delete(comment.id);
+            renderTray();
+          }),
       }),
     ];
     actions.push(
@@ -2917,14 +2930,17 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
           }),
     );
     if (revertAction) actions.push(revertAction);
+    return el("div", { "data-review-thread-toolbar-actions": true }, actions);
+  };
+
+  const threadToolbar = (comment, options = {}) => {
     return el("div", { "data-review-thread-toolbar": true }, [
       el("div", { "data-review-thread-toolbar-title": true }, [
-        outcomeBadge(outcomeFor(comment)),
         el("span", {
-          text: resolved ? "Resolved comment" : shortEcho(comment.body, 52),
+          text: slideTitleFor(comment.target),
         }),
       ]),
-      el("div", { "data-review-thread-toolbar-actions": true }, actions),
+      threadToolbarActions(comment, options),
     ]);
   };
 
@@ -2984,49 +3000,96 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   const sentRow = (comment, options = {}) => {
     const resolved = options.resolved === true;
     const outcome = outcomeFor(comment);
+    const expanded = expandedThreadIds.has(comment.id);
+    const collapse = () => {
+      expandedThreadIds.delete(comment.id);
+      renderTray();
+      requestAnimationFrame(() => {
+        sentList
+          .querySelector(
+            '[data-review-comment-id="' +
+              comment.id +
+              '"] [data-review-row-target]',
+          )
+          ?.focus();
+      });
+    };
+    const toggleThread = () => {
+      if (expanded) {
+        collapse();
+        return;
+      }
+      if (resolved) {
+        expandedThreadIds.add(comment.id);
+        renderTray();
+        return;
+      }
+      openThreadAt(comment);
+    };
     const jump = el("button", {
       type: "button",
       "data-review-row-target": true,
       text: slideTitleFor(comment.target),
-      title: "Jump to and expand this thread",
+      "aria-expanded": expanded ? "true" : "false",
+      "aria-label":
+        (expanded ? "Collapse" : "Open") +
+        " thread on " +
+        slideTitleFor(comment.target) +
+        ": " +
+        shortEcho(comment.body),
+      title: expanded
+        ? "Collapse this thread"
+        : resolved
+          ? "Open this resolved thread"
+          : "Jump to and expand this thread",
     });
-    jump.addEventListener("click", () => {
-      if (!resolved) {
-        openThreadAt(comment);
+    jump.addEventListener("click", toggleThread);
+    const rowHeadChildren = [jump];
+    if (expanded) {
+      rowHeadChildren.push(
+        threadToolbarActions(comment, { resolved, minimize: collapse }),
+      );
+    } else {
+      const substate = threadSubstate(outcome.status?.stage);
+      if (substate !== null) {
+        const slot = el("span", {
+          "data-review-row-substate": substate,
+          "aria-label":
+            substate === "working" ? "Agent working" : "Agent progress stalled",
+        });
+        slot.appendChild(
+          substate === "working" ? spinner() : icon(TRIANGLE_ALERT_ICON),
+        );
+        rowHeadChildren.push(slot);
+      }
+    }
+    const rowHead = el(
+      "div",
+      { "data-review-row-head": true },
+      rowHeadChildren,
+    );
+    rowHead.addEventListener("click", (event) => {
+      if (event.target instanceof Element && event.target.closest("button")) {
         return;
       }
-      expandedThreadIds.add(comment.id);
-      renderTray();
+      toggleThread();
     });
-    if (resolved) jump.title = "Open this resolved thread";
-    const children = [
-      el("div", { "data-review-row-head": true }, [
-        jump,
-        outcomeBadge(outcome, {
-          spin:
-            !expandedThreadIds.has(comment.id) &&
-            outcome.status?.stage === "working",
-        }),
-      ]),
-      el("p", {
-        "data-review-row-body": true,
-        text: shortEcho(comment.body),
-      }),
-    ];
-    if (expandedThreadIds.has(comment.id)) {
+    const children = [rowHead];
+    if (expanded) children.push(...conversationNodes(comment));
+    else
       children.push(
-        el("div", { "data-review-tray-thread": true }, [
-          threadToolbar(comment, { resolved }),
-          ...conversationNodes(comment),
-        ]),
+        el("p", {
+          "data-review-row-body": true,
+          text: shortEcho(comment.body),
+        }),
       );
-    }
     return el(
       "li",
       {
         "data-review-row": true,
         "data-review-sent-row": true,
         ...(resolved ? { "data-review-resolved-row": true } : {}),
+        ...(expanded ? { "data-review-row-expanded": true } : {}),
         "data-review-comment-id": comment.id,
         "data-review-outcome": outcome.key,
         ...(outcome.status
@@ -3058,6 +3121,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     }
     if (state === "sent") {
       const outcome = outcomeFor(comment);
+      card.setAttribute("data-review-outcome", outcome.key);
       if (outcome.status) {
         card.setAttribute("data-review-lifecycle", outcome.status.stage);
       }
@@ -3078,7 +3142,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
         [
           outcomeBadge(outcome, {
             spin: outcome.status?.stage === "working",
-            iconOnly: outcome.status?.stage === "waiting",
+            iconOnly: outcome.key === "waiting",
           }),
           el("span", {
             "data-review-thread-echo": true,
@@ -3361,6 +3425,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
 
   const renderSentIndex = () => {
     const counts = outcomeCounts();
+    const pendingGroup = pendingThreadGroup(agentConnected);
     responseSummary.textContent =
       "Latest round · " +
       counts.changed +
@@ -3370,23 +3435,41 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       counts.outside +
       " outside this plan · " +
       counts.waiting +
-      " awaiting agent";
+      " " +
+      pendingGroup.label.toLowerCase();
     const groups = [
       { key: "question", label: "Needs your answer" },
       { key: "changed", label: "Changed" },
       { key: "outside", label: "Outside this plan" },
-      { key: "waiting", label: "Awaiting agent" },
+      {
+        key: "waiting",
+        label: pendingGroup.label,
+        displayKey: pendingGroup.key,
+        glyph:
+          pendingGroup.key === "waiting" ? HOURGLASS_ICON : TRIANGLE_ALERT_ICON,
+      },
     ];
     const renderedGroups = groups
-      .map(({ key, label }) => {
+      .map(({ key, label, displayKey = key, glyph }) => {
         const comments = sent.filter(
           (comment) =>
             !resolvedCommentIds.has(comment.id) &&
             outcomeFor(comment).key === key,
         );
         if (comments.length === 0) return null;
-        return el("section", { "data-review-outcome-group": key }, [
-          el("h3", { text: label }),
+        const heading = el("h3", {}, [
+          ...(glyph === undefined ? [] : [icon(glyph)]),
+          el("span", { text: label }),
+          document.createTextNode(" "),
+          el("span", {
+            "data-review-outcome-group-count": true,
+            "aria-label":
+              comments.length + " thread" + (comments.length === 1 ? "" : "s"),
+            text: String(comments.length),
+          }),
+        ]);
+        return el("section", { "data-review-outcome-group": displayKey }, [
+          heading,
           el("ol", {}, comments.map(sentRow)),
         ]);
       })
