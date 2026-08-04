@@ -4054,6 +4054,42 @@ import {
     return node;
   };
 
+  const NATIVE_INTERACTIVE_SELECTOR = [
+    "a[href]",
+    "button",
+    "input",
+    "textarea",
+    "select",
+    "label",
+    "summary",
+    "details",
+    '[contenteditable]:not([contenteditable="false"])',
+    '[role="button"]',
+    '[role="checkbox"]',
+    '[role="combobox"]',
+    '[role="link"]',
+    '[role="listbox"]',
+    '[role="menuitem"]',
+    '[role="option"]',
+    '[role="radio"]',
+    '[role="slider"]',
+    '[role="spinbutton"]',
+    '[role="switch"]',
+    '[role="tab"]',
+    '[role="textbox"]',
+  ].join(",");
+
+  // Container-wide opening is a collapsed-row convenience only. This guard
+  // keeps future native controls from accidentally becoming row navigation.
+  const isNativeInteractiveTarget = (event) =>
+    event
+      .composedPath()
+      .some(
+        (candidate) =>
+          candidate instanceof Element &&
+          candidate.matches(NATIVE_INTERACTIVE_SELECTOR),
+      );
+
   const sentRow = (comment, options = {}) => {
     const resolved = options.resolved === true;
     const outcome = outcomeFor(comment);
@@ -4208,12 +4244,12 @@ import {
       },
       children,
     );
-    row.addEventListener("click", (event) => {
-      if (event.target instanceof Element && event.target.closest("button")) {
-        return;
-      }
-      toggleThread();
-    });
+    if (!expanded) {
+      row.addEventListener("click", (event) => {
+        if (isNativeInteractiveTarget(event)) return;
+        toggleThread();
+      });
+    }
     return bindCommentAssociation(row, comment);
   };
 
