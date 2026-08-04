@@ -1222,6 +1222,61 @@ button[data-review-row-target]:active {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+[data-review-message-body="structured"] {
+  min-width: 0;
+  color: var(--ink-c);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+[data-review-message-body="structured"] :is(p, ul, ol, blockquote, pre) {
+  margin: 0.3rem 0 0;
+}
+[data-review-message-body="structured"] :is(ul, ol) {
+  padding-left: 1.15rem;
+}
+[data-review-message-body="structured"] ul {
+  list-style: disc;
+}
+[data-review-message-body="structured"] ol {
+  list-style: decimal;
+}
+[data-review-message-body="structured"] blockquote {
+  padding-left: 0.55rem;
+  border-left: 2px solid var(--edge-c);
+  color: var(--muted-c);
+}
+[data-review-message-body="structured"] :not(pre) > code {
+  padding: 0.08em 0.28em;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.25rem;
+  background: var(--surface-c);
+  font: 0.9em var(--font-mono);
+}
+[data-review-message-body="structured"] pre {
+  position: relative;
+  max-width: 100%;
+  padding: 0.55rem;
+  border: 1px solid var(--edge-c);
+  border-radius: 0.3rem;
+  background: var(--surface-c);
+  overflow-x: auto;
+}
+[data-review-message-body="structured"] pre code {
+  font: 0.6875rem/1.45 var(--font-mono);
+  white-space: pre;
+}
+[data-review-message-body="structured"] a {
+  color: var(--accent-c);
+  text-decoration: underline;
+}
+[data-review-code-language] {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--muted-c);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+}
 [data-review-see-change] {
   margin-top: 0.45rem;
   padding: 0.2rem 0.45rem;

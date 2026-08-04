@@ -79,15 +79,26 @@ export const describeTarget = (comment: ReviewComment): string => {
 const commentSection = ({
   comment,
   index,
+  blockIds,
 }: {
   readonly comment: ReviewComment;
   readonly index: number;
+  readonly blockIds: ReadonlyArray<string>;
 }): string => {
   const heading = `## ${index + 1}. ${describeTarget(comment)}`;
+  const slideScope =
+    comment.target.type === "slide" ? comment.target.scope : undefined;
   const address =
     comment.target.type === "document"
       ? "Target: the plan as a whole"
-      : `Target: \`${comment.target.blockId}\` (${comment.target.kind})`;
+      : comment.target.type === "slide"
+        ? [
+            `Target: the whole slide "${comment.target.section ?? comment.target.label}" - every block under \`${comment.target.scope}/\``,
+            ...blockIds
+              .filter((id) => id.startsWith(`${slideScope}/`))
+              .map((id) => `- \`${id}\``),
+          ].join("\n")
+        : `Target: \`${comment.target.blockId}\` (${comment.target.kind})`;
   const quote =
     (comment.target.type === "selection" || comment.target.type === "lines") &&
     comment.target.quote !== ""
@@ -97,7 +108,10 @@ const commentSection = ({
 };
 
 /** Renders the agent-facing brief for one package. */
-export const renderBrief = (feedback: FeedbackPackage): string => {
+export const renderBrief = (
+  feedback: FeedbackPackage,
+  blockIds: ReadonlyArray<string> = [],
+): string => {
   const header = [
     `# Plan feedback · ${feedback.createdAt}`,
     "",
@@ -110,7 +124,7 @@ export const renderBrief = (feedback: FeedbackPackage): string => {
     "",
   ].join("\n");
   const sections = feedback.comments
-    .map((comment, index) => commentSection({ comment, index }))
+    .map((comment, index) => commentSection({ comment, index, blockIds }))
     .join("\n");
   const closing = [
     "## What applying this package means",

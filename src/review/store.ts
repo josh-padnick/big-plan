@@ -27,6 +27,7 @@ const FILE_MODE = 0o600;
 const PROGRESS_STATES = new Set(["waiting", "live", "done", "failed"]);
 const PROGRESS_TEXT_LIMIT = 160;
 const PROGRESS_EVENT_LIMIT = 200;
+const EXCHANGE_FILE_LIMIT = 400;
 
 /** One relayed agent progress event, after checking. */
 export type ProgressEvent = {
@@ -63,6 +64,7 @@ export type ReviewStore = {
   readonly sessionPath: string;
   readonly heartbeatPath: string;
   readonly agentHeartbeatPath: string;
+  readonly agentCancellationsPath: string;
 };
 
 // The one place a review path is constructed. Callers name a leaf, never a
@@ -131,6 +133,10 @@ export const reviewStoreFor = ({
     agentHeartbeatPath: inside({
       base: agentDirectory,
       leaf: "presence.json",
+    }),
+    agentCancellationsPath: inside({
+      base: agentDirectory,
+      leaf: "cancellations.json",
     }),
   };
 };
@@ -436,6 +442,62 @@ export const writeAgentResponseValue = async ({
       requestId,
     }),
     value,
+  });
+};
+
+export type AgentCancellation = {
+  readonly requestId: string;
+  readonly at: string;
+};
+
+/** Reads the durable reviewer-authored request cancellations. */
+export const readAgentCancellations = async ({
+  store,
+}: {
+  readonly store: ReviewStore;
+}): Promise<ReadonlyArray<AgentCancellation>> => {
+  const value = await readJson(store.agentCancellationsPath);
+  if (!Array.isArray(value)) return [];
+  const accepted: Array<AgentCancellation> = [];
+  for (const entry of value.slice(0, EXCHANGE_FILE_LIMIT)) {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      Array.isArray(entry) ||
+      !("requestId" in entry) ||
+      typeof entry.requestId !== "string" ||
+      !/^[a-f0-9]{16}$/.test(entry.requestId) ||
+      !("at" in entry) ||
+      typeof entry.at !== "string" ||
+      Number.isNaN(Date.parse(entry.at))
+    ) {
+      continue;
+    }
+    if (!accepted.some(({ requestId }) => requestId === entry.requestId)) {
+      accepted.push({
+        requestId: entry.requestId,
+        at: new Date(entry.at).toISOString(),
+      });
+    }
+  }
+  return accepted;
+};
+
+/** Appends one cancellation without allowing duplicate cancellation facts. */
+export const appendAgentCancellation = async ({
+  store,
+  cancellation,
+}: {
+  readonly store: ReviewStore;
+  readonly cancellation: AgentCancellation;
+}): Promise<void> => {
+  const existing = await readAgentCancellations({ store });
+  if (existing.some(({ requestId }) => requestId === cancellation.requestId)) {
+    return;
+  }
+  await writeJson({
+    path: store.agentCancellationsPath,
+    value: [...existing, cancellation],
   });
 };
 

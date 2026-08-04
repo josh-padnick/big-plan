@@ -75,11 +75,13 @@ describe("validateComments acceptance", () => {
       commentOn({
         type: "slide",
         blockId: "section/status-quo/paragraph-1",
+        scope: "section/status-quo",
       }),
     );
     expect(comment?.target).toEqual({
       type: "slide",
       blockId: "section/status-quo/paragraph-1",
+      scope: "section/status-quo",
       kind: "paragraph",
       label: "Today's reality",
       section: "Status quo",

@@ -1186,7 +1186,14 @@ test("should preserve and send a floating review across reload and viewport chan
               : index === 1
                 ? "Should numbering begin at zero or one?"
                 : "This delivery request belongs to implementation, not this plan revision.",
-          ...(index === 0 ? { changeTargets } : {}),
+          ...(index === 0
+            ? {
+                changes: changeTargets.map((target) => ({
+                  target,
+                  summary: "Clarified the canonical snapshot guarantee",
+                })),
+              }
+            : {}),
         })),
       },
       request,
@@ -1420,7 +1427,12 @@ test("should preserve and send a floating review across reload and viewport chan
               commentId,
               state: "changed",
               message: "I made the stability guarantee explicit.",
-              changeTargets: [blockId],
+              changes: [
+                {
+                  target: blockId,
+                  summary: "Made the stability guarantee explicit",
+                },
+              ],
             },
           ],
         },
@@ -2511,7 +2523,12 @@ Ship the live review loop behind the explicit review command.
               commentId,
               state: "changed",
               message: "I reverted this thread's plan changes.",
-              changeTargets: [blockId],
+              changes: [
+                {
+                  target: blockId,
+                  summary: "Reverted this thread's plan changes",
+                },
+              ],
             },
           ],
         },

@@ -96,6 +96,59 @@ import {
     return node;
   };
 
+  const messageBody = (nodes, fallback) => {
+    const renderNode = (node) => {
+      if (node.type === "text") {
+        return document.createTextNode(node.value);
+      }
+      if (node.type === "inlineCode") {
+        return el("code", { text: node.value });
+      }
+      if (node.type === "code") {
+        return el("pre", {}, [
+          ...(node.language
+            ? [
+                el("span", {
+                  "data-review-code-language": true,
+                  text: node.language,
+                }),
+              ]
+            : []),
+          el("code", { text: node.value }),
+        ]);
+      }
+      const children = (node.children || []).map(renderNode);
+      if (node.type === "paragraph") return el("p", {}, children);
+      if (node.type === "strong") return el("strong", {}, children);
+      if (node.type === "emphasis") return el("em", {}, children);
+      if (node.type === "blockquote") return el("blockquote", {}, children);
+      if (node.type === "listItem") return el("li", {}, children);
+      if (node.type === "list") {
+        return el(node.ordered ? "ol" : "ul", {}, children);
+      }
+      if (node.type === "link") {
+        return el(
+          "a",
+          {
+            href: node.url,
+            target: "_blank",
+            rel: "noopener noreferrer",
+          },
+          children,
+        );
+      }
+      return document.createTextNode("");
+    };
+    const checked = checkedMessageNodes(nodes);
+    return checked
+      ? el(
+          "div",
+          { "data-review-message-body": "structured" },
+          checked.map(renderNode),
+        )
+      : el("p", { text: fallback });
+  };
+
   const icon = (definition) => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 24 24");
@@ -234,6 +287,7 @@ import {
   let planChatMessages = [];
   let agentRequests = [];
   let agentResponses = [];
+  let agentCancelledIds = [];
   let agentConnected = false;
   let agentHeartbeatAt = 0;
   let sourceRevision = "";
@@ -326,6 +380,7 @@ import {
     agent: {
       requests: [],
       responses: [],
+      cancelledIds: [],
       connected: false,
       state: null,
       updatedAtMs: 0,
@@ -425,6 +480,58 @@ import {
         value.body.trim() !== "" &&
         value.body.length <= BODY_LIMIT));
 
+  const checkedMessageNodes = (value) => {
+    if (!Array.isArray(value)) return null;
+    let count = 0;
+    const check = (node, depth) => {
+      count += 1;
+      if (
+        count > 500 ||
+        depth > 6 ||
+        node === null ||
+        typeof node !== "object"
+      ) {
+        return false;
+      }
+      const children = () =>
+        Array.isArray(node.children) &&
+        node.children.every((child) => check(child, depth + 1));
+      if (node.type === "text" || node.type === "inlineCode") {
+        return typeof node.value === "string";
+      }
+      if (node.type === "code") {
+        return (
+          typeof node.value === "string" &&
+          (node.language === undefined || typeof node.language === "string")
+        );
+      }
+      if (node.type === "link") {
+        if (typeof node.url !== "string" || node.url.length > 1000)
+          return false;
+        try {
+          const url = new URL(node.url);
+          if (url.protocol !== "http:" && url.protocol !== "https:")
+            return false;
+        } catch {
+          return false;
+        }
+        return children();
+      }
+      if (node.type === "list") {
+        return typeof node.ordered === "boolean" && children();
+      }
+      return (
+        (node.type === "paragraph" ||
+          node.type === "strong" ||
+          node.type === "emphasis" ||
+          node.type === "blockquote" ||
+          node.type === "listItem") &&
+        children()
+      );
+    };
+    return value.every((node) => check(node, 1)) ? value : null;
+  };
+
   const isAgentOutcome = (value) =>
     value !== null &&
     typeof value === "object" &&
@@ -435,12 +542,24 @@ import {
     typeof value.message === "string" &&
     value.message.trim() !== "" &&
     value.message.length <= BODY_LIMIT &&
-    (value.changeTargets === undefined ||
-      (Array.isArray(value.changeTargets) &&
-        value.changeTargets.length > 0 &&
-        value.changeTargets.every(
-          (target) => typeof target === "string" && target.length <= 300,
+    (value.messageNodes === undefined ||
+      checkedMessageNodes(value.messageNodes) !== null) &&
+    (value.changes === undefined ||
+      (Array.isArray(value.changes) &&
+        value.changes.length > 0 &&
+        value.changes.every(
+          (change) =>
+            change !== null &&
+            typeof change === "object" &&
+            typeof change.target === "string" &&
+            change.target.length <= 300 &&
+            typeof change.summary === "string" &&
+            change.summary.trim() !== "" &&
+            change.summary.length <= 90,
         )));
+
+  const eventTargets = (event) =>
+    (event?.changes || []).map((change) => change.target);
 
   const isAgentResponse = (value) =>
     value !== null &&
@@ -454,7 +573,9 @@ import {
     (value.kind === "chat"
       ? typeof value.message === "string" &&
         value.message.trim() !== "" &&
-        value.message.length <= BODY_LIMIT
+        value.message.length <= BODY_LIMIT &&
+        (value.messageNodes === undefined ||
+          checkedMessageNodes(value.messageNodes) !== null)
       : Array.isArray(value.outcomes) && value.outcomes.every(isAgentOutcome));
 
   const checkedAgentSnapshot = (value) => {
@@ -473,6 +594,12 @@ import {
         .slice(0, MESSAGE_LIMIT),
       responses: (Array.isArray(value.responses) ? value.responses : [])
         .filter(isAgentResponse)
+        .slice(0, MESSAGE_LIMIT),
+      cancelledIds: (Array.isArray(value.cancelledIds)
+        ? value.cancelledIds
+        : []
+      )
+        .filter(isExchangeId)
         .slice(0, MESSAGE_LIMIT),
       connected: value.connected === true,
       state:
@@ -557,6 +684,7 @@ import {
   }
   agentRequests = diskState.agent.requests;
   agentResponses = diskState.agent.responses;
+  agentCancelledIds = diskState.agent.cancelledIds;
   agentConnected = diskState.agent.connected;
   agentHeartbeatAt = diskState.agent.updatedAtMs;
   sourceRevision = diskState.sourceRevision;
@@ -1511,7 +1639,7 @@ import {
       .filter((event) => event.key === "changed")
       .at(-1);
     const changedTargets = [];
-    for (const blockId of latestChanged?.changeTargets || []) {
+    for (const blockId of eventTargets(latestChanged)) {
       const block = document.querySelector(
         '[data-block-id="' + cssEscape(blockId) + '"]',
       );
@@ -1706,7 +1834,11 @@ import {
     const answered = new Set(
       agentResponses.map((response) => response.requestId),
     );
-    return agentRequests.filter((request) => !answered.has(request.requestId));
+    const cancelled = new Set(agentCancelledIds);
+    return agentRequests.filter(
+      (request) =>
+        !answered.has(request.requestId) && !cancelled.has(request.requestId),
+    );
   };
 
   const observeRequests = () => {
@@ -1888,7 +2020,8 @@ import {
         key: outcome.state,
         label: OUTCOME_LABELS[outcome.state],
         reply: outcome.message,
-        changeTargets: outcome.changeTargets || [],
+        messageNodes: checkedMessageNodes(outcome.messageNodes),
+        changes: outcome.changes || [],
         createdAt: response.createdAt,
         requestId: response.requestId,
         fromRevision: request?.sourceRevision || "",
@@ -2323,7 +2456,7 @@ import {
 
   const locationsForEvent = (event) => {
     const locations = revisionDiffs.get(event.requestId) || [];
-    const targets = event.changeTargets || [];
+    const targets = eventTargets(event);
     const selected =
       targets.length === 0
         ? locations
@@ -2910,7 +3043,7 @@ import {
         requestId: request.requestId,
         fromRevision: request.sourceRevision,
         toRevision: response.sourceRevision,
-        changeTargets: [],
+        changes: [],
       });
     }
     return events;
@@ -3031,7 +3164,7 @@ import {
       loaded.length > 0
         ? loaded
         : groupLocationsIntoPlaces(
-            (event.changeTargets || []).map((target) => {
+            eventTargets(event).map((target) => {
               const block = document.querySelector(
                 '[data-block-id="' + cssEscape(target) + '"]',
               );
@@ -3081,7 +3214,7 @@ import {
           text: relativeCommentTime(createdAt),
         }),
       ]),
-      el("p", { text: outcome.message }),
+      messageBody(outcome.messageNodes, outcome.message),
     ]);
     if (outcome.state === "changed" && event) {
       const controls = changeControls(comment, event);
@@ -3933,13 +4066,14 @@ import {
           continue;
         }
         seenRequests.add(event.requestId);
-        const attributed = new Set(event.changeTargets || []);
+        const attributed = new Set(eventTargets(event));
         const locations = revisionDiffs.get(event.requestId) || [];
         const roundEvent = {
           ...event,
-          changeTargets: locations
+          changes: locations
             .map((location) => location.newBlockId || location.oldBlockId)
-            .filter(Boolean),
+            .filter(Boolean)
+            .map((target) => ({ target, summary: "Changed block" })),
         };
         groupLocationsIntoPlaces(locationsForEvent(roundEvent)).forEach(
           (place, index) => {
@@ -4242,6 +4376,7 @@ import {
     JSON.stringify({
       type: target?.type,
       blockId: target?.blockId,
+      scope: target?.scope,
       endBlockId: target?.endBlockId,
       start: target?.start,
       end: target?.end,
@@ -4674,6 +4809,11 @@ import {
       const target = {
         type: "slide",
         blockId: first.getAttribute("data-block-id"),
+        scope: first
+          .getAttribute("data-block-id")
+          .split("/")
+          .slice(0, -1)
+          .join("/"),
         kind: kindFor(first),
         label: labelFor(first),
         section: first.getAttribute("data-block-section") || "",
@@ -4777,6 +4917,7 @@ import {
         messages.push({
           role: "agent",
           body: response.message,
+          messageNodes: checkedMessageNodes(response.messageNodes),
           createdAt: response.createdAt,
           event:
             request.sourceRevision !== response.sourceRevision
@@ -4785,7 +4926,7 @@ import {
                   requestId: request.requestId,
                   fromRevision: request.sourceRevision,
                   toRevision: response.sourceRevision,
-                  changeTargets: [],
+                  changes: [],
                 }
               : null,
         });
@@ -4821,8 +4962,10 @@ import {
           threadStatusStrip(status),
         ]);
       }
-      const body = el("p", {});
-      body.appendChild(document.createTextNode(message.body));
+      const body =
+        message.role === "agent"
+          ? messageBody(message.messageNodes, message.body)
+          : el("p", { text: message.body });
       const turn = el("li", { "data-review-chat-message": message.role }, [
         el("div", { "data-review-turn-meta": true }, [
           el("strong", {
@@ -5035,10 +5178,11 @@ import {
 
   // ----------------------------------------------------------------- progress
 
-  const exchangeSignature = ({ requests, responses }) =>
+  const exchangeSignature = ({ requests, responses, cancelledIds = [] }) =>
     JSON.stringify([
       requests.map((request) => request.requestId),
       responses.map((response) => [response.requestId, response.createdAt]),
+      cancelledIds,
     ]);
 
   const reloadForSourceRevision = () => {
@@ -5068,9 +5212,11 @@ import {
       exchangeSignature({
         requests: agentRequests,
         responses: agentResponses,
+        cancelledIds: agentCancelledIds,
       });
     agentRequests = checked.requests;
     agentResponses = checked.responses;
+    agentCancelledIds = checked.cancelledIds;
     agentConnected = checked.connected;
     agentHeartbeatAt = checked.updatedAtMs;
     if (changed || connectionChanged) {

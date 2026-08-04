@@ -293,6 +293,31 @@ describe("review runtime feedback", () => {
     });
   });
 
+  it("should durably cancel an unanswered request and skip it in the queue", async () => {
+    const exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const request = exchange.requests.find((entry) => entry.kind === "reply");
+    if (request === undefined) throw new Error("Missing reply request");
+    const response = await call({
+      path: "/api/agent-requests/cancel",
+      method: "POST",
+      body: { requestId: request.requestId },
+    });
+    expect(response.status).toBe(200);
+    const updated = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    expect(updated.cancelledIds).toContain(request.requestId);
+    expect(nextPendingAgentRequest(updated)?.requestId).not.toBe(
+      request.requestId,
+    );
+  });
+
   it("should expose only validated live agent exchange state", async () => {
     const answer: unknown = await (await call({ path: "/api/agent" })).json();
     expect(answer).toMatchObject({
@@ -303,6 +328,7 @@ describe("review runtime feedback", () => {
       ],
       responses: [],
       connected: false,
+      connectionLog: [{ connected: false }],
     });
     if (
       typeof answer !== "object" ||

@@ -261,12 +261,15 @@ For each returned work item:
   )} "<one short line>"\` when you start each meaningful step - reading the request, deciding an outcome, editing the plan, validating. One line per step, present tense, no repeats.
 3. When revising prose, keep related sentences in one paragraph; never leave a blank line between every sentence.
 4. For every anchored comment, choose exactly one outcome:
-   - changed: revise the plan source, explain the revision, and list every changed render block id in changeTargets, in presentation order.
+   - changed: revise the plan source, explain the revision, and list every changed render block in changes, each with a reviewer-facing summary of what changed there (outcome, not mechanics), in presentation order.
    - question: do not guess; ask the precise question the reviewer must answer.
    - outside: explain why the request is beyond revising this plan.
 5. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
 6. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates the revised MDX and the complete response before publishing it to the reviewer.
 7. Repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
+
+Write outcome and chat messages in plain Markdown - bold, italics, inline code, fenced code, links, and lists render for the reviewer; images and HTML do not.
+If respond reports that the reviewer cancelled a request, discard your draft, revert plan edits made for it, and run agent next.
 
 Never edit rendered HTML. Never invent a Changed outcome without changing the plan source.`;
   await writeAgentPrompt({ store: session.store, prompt });
@@ -418,6 +421,20 @@ const respond = async ({
     sessionId: session.sessionId,
     planId: session.planId,
   });
+  const answered = new Set(
+    snapshot.responses.map((response) => response.requestId),
+  );
+  const queueHead = snapshot.requests.find(
+    (candidate) => !answered.has(candidate.requestId),
+  );
+  if (
+    queueHead !== undefined &&
+    snapshot.cancelledIds.includes(queueHead.requestId)
+  ) {
+    return fail(
+      "The reviewer cancelled this request. Discard your draft, revert any plan edits you made for it, and run agent next.",
+    );
+  }
   const request = nextPendingAgentRequest(snapshot);
   if (request === undefined) {
     return fail("There is no pending agent request to answer");

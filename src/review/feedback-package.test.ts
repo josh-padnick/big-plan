@@ -63,6 +63,7 @@ describe("agent brief containment", () => {
         target: {
           type: "slide",
           blockId: "section/background/heading-1",
+          scope: "section/background",
           kind: "heading",
           label: "Background",
           section: "Background",

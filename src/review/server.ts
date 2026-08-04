@@ -50,6 +50,7 @@ import {
 } from "./agent-exchange.js";
 import {
   agentHeartbeatIsFresh,
+  appendAgentCancellation,
   appendProgress,
   prepareStore,
   randomId,
@@ -104,6 +105,7 @@ const API_ROUTES: ReadonlyArray<Route> = [
   { method: "POST", path: "/api/feedback" },
   { method: "GET", path: "/api/agent" },
   { method: "POST", path: "/api/agent-requests" },
+  { method: "POST", path: "/api/agent-requests/cancel" },
   { method: "GET", path: "/api/progress" },
   { method: "GET", path: "/api/revision-diff" },
 ];
@@ -222,6 +224,11 @@ export const startReviewRuntime = async ({
   // re-anchor; it simply refuses to forget what it once addressed.
   const blocks = new Map<string, BlockMapEntry>();
   let progressSeq = 0;
+  const connectionLog: Array<{
+    readonly connected: boolean;
+    readonly at: string;
+  }> = [];
+  let lastConnectionState: boolean | undefined;
 
   const validate = (value: unknown): ReadonlyArray<ReviewComment> =>
     validateComments({ value, blocks, now: new Date().toISOString() });
@@ -386,7 +393,7 @@ export const startReviewRuntime = async ({
       const written = await writeFeedbackPackage({
         store,
         feedback,
-        brief: renderBrief(feedback),
+        brief: renderBrief(feedback, Array.from(blocks.keys())),
       });
       const source = await readFile(resolvedPlanPath, "utf8");
       const revision = deriveSourceRevision(source);
@@ -442,6 +449,14 @@ export const startReviewRuntime = async ({
       const exchange = await readAgentExchange({ store, sessionId, planId });
       const latestResponse = exchange.responses.at(-1);
       const session = await agentSession();
+      if (session.connected !== lastConnectionState) {
+        lastConnectionState = session.connected === true;
+        connectionLog.push({
+          connected: lastConnectionState,
+          at: new Date().toISOString(),
+        });
+        if (connectionLog.length > 50) connectionLog.shift();
+      }
       sendJson({
         response,
         status: 200,
@@ -455,7 +470,61 @@ export const startReviewRuntime = async ({
           ...exchange,
           connected: session.connected,
           agent: session,
+          connectionLog: [...connectionLog].reverse(),
         },
+      });
+      return;
+    }
+    if (route.path === "/api/agent-requests/cancel") {
+      const body = await readBody(request);
+      const payload =
+        typeof body === "object" && body !== null
+          ? (body as Readonly<Record<string, unknown>>)
+          : {};
+      const requestId = payload.requestId;
+      const exchange = await readAgentExchange({ store, sessionId, planId });
+      const known =
+        typeof requestId === "string" &&
+        exchange.requests.some((entry) => entry.requestId === requestId);
+      if (!known) {
+        refuse({
+          response,
+          status: 400,
+          reason: "The request is unknown",
+        });
+        return;
+      }
+      if (exchange.responses.some((entry) => entry.requestId === requestId)) {
+        refuse({
+          response,
+          status: 409,
+          reason: "The request was already answered - too late to cancel",
+        });
+        return;
+      }
+      await appendAgentCancellation({
+        store,
+        cancellation: {
+          requestId,
+          at: new Date().toISOString(),
+        },
+      });
+      progressSeq += 1;
+      await appendProgress({
+        store,
+        event: {
+          sessionId,
+          seq: progressSeq,
+          step: "Request cancelled by reviewer",
+          state: "done",
+          requestId,
+          at: new Date().toISOString(),
+        },
+      });
+      sendJson({
+        response,
+        status: 200,
+        value: { requestId, cancelled: true },
       });
       return;
     }

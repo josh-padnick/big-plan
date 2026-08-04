@@ -7,6 +7,12 @@ import { createHash } from "node:crypto";
 import type { CommentTarget, ReviewComment } from "./comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import {
+  parseMessageMarkdown,
+  validateMessageNodes,
+} from "./message-markdown.js";
+import type { MessageNode } from "./message-markdown.js";
+import {
+  readAgentCancellations,
   readAgentRequestValues,
   readAgentResponseValues,
   writeAgentRequestValue,
@@ -55,7 +61,11 @@ export type AgentOutcome = {
   readonly commentId: string;
   readonly state: AgentOutcomeState;
   readonly message: string;
-  readonly changeTargets?: ReadonlyArray<string>;
+  readonly messageNodes?: ReadonlyArray<MessageNode>;
+  readonly changes?: ReadonlyArray<{
+    readonly target: string;
+    readonly summary: string;
+  }>;
 };
 
 type AgentResponseBase = {
@@ -75,6 +85,7 @@ export type AgentThreadResponse = AgentResponseBase & {
 export type AgentChatResponse = AgentResponseBase & {
   readonly kind: "chat";
   readonly message: string;
+  readonly messageNodes?: ReadonlyArray<MessageNode>;
 };
 
 export type AgentResponse = AgentThreadResponse | AgentChatResponse;
@@ -82,6 +93,7 @@ export type AgentResponse = AgentThreadResponse | AgentChatResponse;
 export type AgentExchangeSnapshot = {
   readonly requests: ReadonlyArray<AgentRequest>;
   readonly responses: ReadonlyArray<AgentResponse>;
+  readonly cancelledIds: ReadonlyArray<string>;
 };
 
 export class AgentExchangeRejected extends Error {
@@ -188,8 +200,19 @@ const target = (value: unknown): CommentTarget => {
         }
       : {}),
   };
-  if (value.type === "block" || value.type === "slide") {
+  if (value.type === "block") {
     return { type: value.type, ...identity };
+  }
+  if (value.type === "slide") {
+    const expectedScope = value.blockId.split("/").slice(0, -1).join("/");
+    if (
+      typeof value.scope !== "string" ||
+      value.scope !== expectedScope ||
+      !BLOCK_ID.test(value.scope)
+    ) {
+      throw new AgentExchangeRejected("A stored slide scope is invalid");
+    }
+    return { type: value.type, ...identity, scope: value.scope };
   }
   if (
     typeof value.start !== "number" ||
@@ -356,8 +379,12 @@ const outcome = ({
     state,
     message: text({ value: value.message, field: "message" }),
   };
+  const withMessage = {
+    ...result,
+    messageNodes: parseMessageMarkdown(result.message),
+  };
   if (state !== "changed") {
-    return result;
+    return withMessage;
   }
   if (currentRevision === request.sourceRevision) {
     throw new AgentExchangeRejected(
@@ -365,33 +392,45 @@ const outcome = ({
     );
   }
   if (
-    !Array.isArray(value.changeTargets) ||
-    value.changeTargets.length === 0 ||
-    value.changeTargets.length > MESSAGE_LIMIT
+    !Array.isArray(value.changes) ||
+    value.changes.length === 0 ||
+    value.changes.length > MESSAGE_LIMIT
   ) {
     throw new AgentExchangeRejected(
       'A "changed" outcome must list at least one changed block',
     );
   }
-  const changeTargets = value.changeTargets.map((entry) => {
+  const changes = value.changes.map((entry) => {
+    if (!isRecord(entry)) {
+      throw new AgentExchangeRejected(
+        'Every "changes" entry must contain a target and summary',
+      );
+    }
     const changeTarget = text({
-      value: entry,
-      field: "changeTargets",
+      value: entry.target,
+      field: "changes.target",
       limit: 300,
     });
     if (!BLOCK_ID.test(changeTarget) || !changedBlocks.has(changeTarget)) {
       throw new AgentExchangeRejected(
-        'Every "changeTargets" entry must name a block changed by this revision',
+        'Every "changes.target" must name a block changed by this revision',
       );
     }
-    return changeTarget;
+    return {
+      target: changeTarget,
+      summary: text({
+        value: entry.summary,
+        field: "changes.summary",
+        limit: 90,
+      }),
+    };
   });
-  if (new Set(changeTargets).size !== changeTargets.length) {
+  if (new Set(changes.map(({ target }) => target)).size !== changes.length) {
     throw new AgentExchangeRejected(
-      '"changeTargets" cannot contain duplicates',
+      '"changes" cannot contain duplicate targets',
     );
   }
-  return { ...result, changeTargets };
+  return { ...withMessage, changes };
 };
 
 /** Validates an agent-authored draft and fills trusted session metadata. */
@@ -420,10 +459,12 @@ export const validateAgentResponseDraft = ({
   }
   const base = responseBase({ request, currentRevision, now });
   if (request.kind === "chat") {
+    const message = text({ value: value.message, field: "message" });
     return {
       ...base,
       kind: "chat",
-      message: text({ value: value.message, field: "message" }),
+      message,
+      messageNodes: parseMessageMarkdown(message),
     };
   }
   if (!Array.isArray(value.outcomes)) {
@@ -482,10 +523,14 @@ const validateStoredResponse = ({
     createdAt: timestamp(value.createdAt),
   };
   if (request.kind === "chat") {
+    const message = text({ value: value.message, field: "message" });
     return {
       ...base,
       kind: "chat",
-      message: text({ value: value.message, field: "message" }),
+      message,
+      ...(value.messageNodes === undefined
+        ? {}
+        : { messageNodes: validateMessageNodes(value.messageNodes) }),
     };
   }
   if (!Array.isArray(value.outcomes)) {
@@ -508,20 +553,46 @@ const validateStoredResponse = ({
       commentId: checkedCommentId,
       state: entry.state,
       message: text({ value: entry.message, field: "message" }),
+      ...(entry.messageNodes === undefined
+        ? {}
+        : { messageNodes: validateMessageNodes(entry.messageNodes) }),
     };
     if (entry.state !== "changed") {
       return result;
     }
     if (
-      !Array.isArray(entry.changeTargets) ||
-      entry.changeTargets.length === 0 ||
-      entry.changeTargets.some(
-        (target) => typeof target !== "string" || !BLOCK_ID.test(target),
+      !Array.isArray(entry.changes) ||
+      entry.changes.length === 0 ||
+      entry.changes.some(
+        (change) =>
+          !isRecord(change) ||
+          typeof change.target !== "string" ||
+          !BLOCK_ID.test(change.target) ||
+          typeof change.summary !== "string" ||
+          change.summary.trim() === "" ||
+          change.summary.trim().length > 90,
       )
     ) {
-      throw new AgentExchangeRejected("Stored change targets are invalid");
+      throw new AgentExchangeRejected("Stored changes are invalid");
     }
-    return { ...result, changeTargets: entry.changeTargets };
+    const changes = entry.changes.map((change) => {
+      if (!isRecord(change)) {
+        throw new AgentExchangeRejected("Stored changes are invalid");
+      }
+      return {
+        target: text({
+          value: change.target,
+          field: "changes.target",
+          limit: 300,
+        }),
+        summary: text({
+          value: change.summary,
+          field: "changes.summary",
+          limit: 90,
+        }),
+      };
+    });
+    return { ...result, changes };
   });
   const actual = outcomes.map((entry) => entry.commentId);
   if (
@@ -707,7 +778,10 @@ export const readAgentExchange = async ({
   responses.sort((left, right) =>
     left.createdAt.localeCompare(right.createdAt),
   );
-  return { requests, responses };
+  const cancelledIds = (await readAgentCancellations({ store }))
+    .map(({ requestId }) => requestId)
+    .filter((requestId) => requestById.has(requestId));
+  return { requests, responses, cancelledIds };
 };
 
 /** Returns the oldest request that does not yet have a validated response. */
@@ -717,7 +791,11 @@ export const nextPendingAgentRequest = (
   const answered = new Set(
     snapshot.responses.map((response) => response.requestId),
   );
-  return snapshot.requests.find((request) => !answered.has(request.requestId));
+  const cancelled = new Set(snapshot.cancelledIds);
+  return snapshot.requests.find(
+    (request) =>
+      !answered.has(request.requestId) && !cancelled.has(request.requestId),
+  );
 };
 
 /** Collects the original comments needed to validate a reply response. */
@@ -755,7 +833,12 @@ export const responseTemplateFor = (
       commentId,
       state: "changed",
       message: "Explain the concrete revision or why another outcome applies.",
-      changeTargets: ["replace-with-each-changed-block-id"],
+      changes: [
+        {
+          target: "replace-with-each-changed-block-id",
+          summary: "Summarize the reviewer-visible outcome in 90 characters",
+        },
+      ],
     })),
   };
 };

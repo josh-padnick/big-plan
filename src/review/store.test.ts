@@ -4,10 +4,12 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   agentHeartbeatIsFresh,
+  appendAgentCancellation,
   appendProgress,
   prepareStore,
   readActiveDraft,
   readAgentHeartbeat,
+  readAgentCancellations,
   readProgress,
   readResolvedCommentIds,
   readRevisionSnapshot,
@@ -54,6 +56,7 @@ describe("review store placement", () => {
       store.sessionPath,
       store.heartbeatPath,
       store.agentHeartbeatPath,
+      store.agentCancellationsPath,
     ]) {
       expect(path.startsWith(join(directory, ".big-plan"))).toBe(true);
     }
@@ -71,6 +74,30 @@ describe("review store placement", () => {
     expect(() =>
       reviewStoreFor({ planPath, planId: "../../../../etc" }),
     ).toThrow(/outside/);
+  });
+});
+
+describe("review store request cancellations", () => {
+  it("should append a cancellation once and ignore malformed disk entries", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const cancellation = {
+      requestId: "1111111111111111",
+      at: "2026-08-04T12:00:00.000Z",
+    };
+    await appendAgentCancellation({ store, cancellation });
+    await appendAgentCancellation({ store, cancellation });
+    await expect(readAgentCancellations({ store })).resolves.toEqual([
+      cancellation,
+    ]);
+    await writeFile(
+      store.agentCancellationsPath,
+      JSON.stringify([cancellation, { requestId: "../../bad", at: "never" }]),
+    );
+    await expect(readAgentCancellations({ store })).resolves.toEqual([
+      cancellation,
+    ]);
   });
 });
 

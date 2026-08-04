@@ -61,6 +61,7 @@ const request = feedbackAgentRequest({
 const snapshot = (): AgentExchangeSnapshot => ({
   requests: [request],
   responses: [],
+  cancelledIds: [],
 });
 
 describe("agent exchange response contract", () => {
@@ -87,7 +88,7 @@ describe("agent exchange response contract", () => {
               commentId,
               state: "changed",
               message: "Revised the approach.",
-              changeTargets: [blockId],
+              changes: [{ target: blockId, summary: "Clarified the approach" }],
             },
           ],
         },
@@ -110,7 +111,7 @@ describe("agent exchange response contract", () => {
               commentId,
               state: "changed",
               message: "Revised the approach.",
-              changeTargets: [blockId],
+              changes: [{ target: blockId, summary: "Clarified the approach" }],
             },
           ],
         },
@@ -128,7 +129,7 @@ describe("agent exchange response contract", () => {
         {
           commentId,
           state: "changed",
-          changeTargets: [blockId],
+          changes: [{ target: blockId, summary: "Clarified the approach" }],
         },
       ],
     });
@@ -144,7 +145,12 @@ describe("agent exchange response contract", () => {
               commentId,
               state: "changed",
               message: "Revised the approach.",
-              changeTargets: ["section/approach/paragraph-2"],
+              changes: [
+                {
+                  target: "section/approach/paragraph-2",
+                  summary: "Clarified the second paragraph",
+                },
+              ],
             },
           ],
         },
@@ -168,7 +174,10 @@ describe("agent exchange response contract", () => {
               commentId,
               state: "changed",
               message: "Revised both places.",
-              changeTargets: [blockId, secondBlock],
+              changes: [
+                { target: blockId, summary: "Clarified the approach" },
+                { target: secondBlock, summary: "Tightened the follow-up" },
+              ],
             },
           ],
         },
@@ -178,7 +187,9 @@ describe("agent exchange response contract", () => {
         currentRevision: deriveSourceRevision(after),
         now: "2026-08-02T12:01:00.000Z",
       }).outcomes[0],
-    ).toMatchObject({ changeTargets: [blockId, secondBlock] });
+    ).toMatchObject({
+      changes: [{ target: blockId }, { target: secondBlock }],
+    });
   });
 
   it("should make a reviewer reply the next pending request", () => {
@@ -209,11 +220,14 @@ describe("agent exchange response contract", () => {
                 commentId,
                 state: "changed",
                 message: "Revised the approach.",
-                changeTargets: [blockId],
+                changes: [
+                  { target: blockId, summary: "Clarified the approach" },
+                ],
               },
             ],
           },
         ],
+        cancelledIds: [],
       }),
     ).toEqual(reply);
   });
@@ -240,7 +254,11 @@ describe("agent exchange filesystem", () => {
         comments: [
           {
             ...comment,
-            target: { ...comment.target, type: "slide" },
+            target: {
+              ...comment.target,
+              type: "slide",
+              scope: "section/approach",
+            },
           },
         ],
       }),
@@ -253,7 +271,11 @@ describe("agent exchange filesystem", () => {
       planId,
     });
     expect(exchange.requests[0]).toMatchObject({
-      comments: [{ target: { type: "slide", blockId } }],
+      comments: [
+        {
+          target: { type: "slide", blockId, scope: "section/approach" },
+        },
+      ],
     });
   });
 
@@ -272,7 +294,7 @@ describe("agent exchange filesystem", () => {
             commentId,
             state: "changed",
             message: "Revised the approach.",
-            changeTargets: [blockId],
+            changes: [{ target: blockId, summary: "Clarified the approach" }],
           },
         ],
       },
@@ -292,6 +314,7 @@ describe("agent exchange filesystem", () => {
     ).toEqual({
       requests: [request],
       responses: [response],
+      cancelledIds: [],
     });
   });
 });
