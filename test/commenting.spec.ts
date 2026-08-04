@@ -50,7 +50,7 @@ test("should comment on a slide and a passage, then revise before sending", asyn
     await expect(affordance).toBeVisible();
     await expect(affordance).toHaveAttribute(
       "aria-label",
-      "Comment on the selected text",
+      "Comment on the whole slide",
     );
   });
 

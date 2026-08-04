@@ -54,6 +54,7 @@ export type ReviewStore = {
   readonly resolvedPath: string;
   readonly sessionPath: string;
   readonly heartbeatPath: string;
+  readonly agentHeartbeatPath: string;
 };
 
 // The one place a review path is constructed. Callers name a leaf, never a
@@ -119,6 +120,10 @@ export const reviewStoreFor = ({
     resolvedPath: inside({ base: reviewDirectory, leaf: "resolved.json" }),
     sessionPath: inside({ base: root, leaf: "session.json" }),
     heartbeatPath: inside({ base: root, leaf: "session-heartbeat.json" }),
+    agentHeartbeatPath: inside({
+      base: agentDirectory,
+      leaf: "presence.json",
+    }),
   };
 };
 
@@ -606,4 +611,60 @@ export const sessionHeartbeatIsFresh = async ({
     now - value.updatedAtMs >= 0 &&
     now - value.updatedAtMs <= maximumAgeMs
   );
+};
+
+/** Records that the coding-agent loop is available for this review session. */
+export const writeAgentHeartbeat = async ({
+  store,
+  sessionId,
+  state,
+  now = Date.now(),
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly state: "waiting" | "working";
+  readonly now?: number;
+}): Promise<void> => {
+  await writeJson({
+    path: store.agentHeartbeatPath,
+    value: { sessionId, state, updatedAtMs: now },
+  });
+};
+
+/**
+ * Checks the agent's renewable lease. Waiting loops refresh frequently;
+ * claimed work gets a longer lease so queued follow-up requests stay Waiting.
+ */
+export const agentHeartbeatIsFresh = async ({
+  store,
+  sessionId,
+  now = Date.now(),
+  waitingMaximumAgeMs = 3_000,
+  workingMaximumAgeMs = 90_000,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly now?: number;
+  readonly waitingMaximumAgeMs?: number;
+  readonly workingMaximumAgeMs?: number;
+}): Promise<boolean> => {
+  const value = await readJson(store.agentHeartbeatPath);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("sessionId" in value) ||
+    value.sessionId !== sessionId ||
+    !("state" in value) ||
+    (value.state !== "waiting" && value.state !== "working") ||
+    !("updatedAtMs" in value) ||
+    typeof value.updatedAtMs !== "number" ||
+    !Number.isFinite(value.updatedAtMs)
+  ) {
+    return false;
+  }
+  const age = now - value.updatedAtMs;
+  const maximumAge =
+    value.state === "waiting" ? waitingMaximumAgeMs : workingMaximumAgeMs;
+  return age >= 0 && age <= maximumAge;
 };

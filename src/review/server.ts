@@ -49,6 +49,7 @@ import {
   writeAgentRequest,
 } from "./agent-exchange.js";
 import {
+  agentHeartbeatIsFresh,
   appendProgress,
   prepareStore,
   randomId,
@@ -223,6 +224,8 @@ export const startReviewRuntime = async ({
 
   const validate = (value: unknown): ReadonlyArray<ReviewComment> =>
     validateComments({ value, blocks, now: new Date().toISOString() });
+  const agentConnected = (): Promise<boolean> =>
+    agentHeartbeatIsFresh({ store, sessionId });
 
   const readBootstrap = async (markdown: string): Promise<string> =>
     JSON.stringify({
@@ -236,7 +239,10 @@ export const startReviewRuntime = async ({
         store,
         validate: validateResolvedCommentIds,
       }),
-      agent: await readAgentExchange({ store, sessionId, planId }),
+      agent: {
+        ...(await readAgentExchange({ store, sessionId, planId })),
+        connected: await agentConnected(),
+      },
       sourceRevision: deriveSourceRevision(markdown),
     });
 
@@ -417,6 +423,7 @@ export const startReviewRuntime = async ({
           package: written.jsonPath,
           brief: written.briefPath,
           agentRequest,
+          agentConnected: await agentConnected(),
         },
       });
       return;
@@ -435,6 +442,7 @@ export const startReviewRuntime = async ({
           sourceRevision:
             latestResponse?.sourceRevision ?? initialSourceRevision,
           ...exchange,
+          connected: await agentConnected(),
         },
       });
       return;
@@ -501,6 +509,7 @@ export const startReviewRuntime = async ({
           requestId: agentRequest.requestId,
           kind: agentRequest.kind,
           request: agentRequest,
+          agentConnected: await agentConnected(),
         },
       });
       return;

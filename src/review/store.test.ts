@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  agentHeartbeatIsFresh,
   appendProgress,
   prepareStore,
   readActiveDraft,
@@ -12,6 +13,7 @@ import {
   reviewStoreFor,
   sessionHeartbeatIsFresh,
   writeActiveDraft,
+  writeAgentHeartbeat,
   writeResolvedCommentIds,
   writeRevisionSnapshot,
   writeSessionHeartbeat,
@@ -50,6 +52,7 @@ describe("review store placement", () => {
       store.resolvedPath,
       store.sessionPath,
       store.heartbeatPath,
+      store.agentHeartbeatPath,
     ]) {
       expect(path.startsWith(join(directory, ".big-plan"))).toBe(true);
     }
@@ -185,6 +188,47 @@ describe("review store session heartbeat", () => {
         now: 14_000,
       }),
     ).resolves.toBe(false);
+  });
+});
+
+describe("review store agent heartbeat", () => {
+  it("should use a short waiting lease and a longer claimed-work lease", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "agent-session",
+      state: "waiting",
+      now: 1_000,
+    });
+    await expect(
+      agentHeartbeatIsFresh({
+        store,
+        sessionId: "agent-session",
+        now: 3_999,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      agentHeartbeatIsFresh({
+        store,
+        sessionId: "agent-session",
+        now: 4_001,
+      }),
+    ).resolves.toBe(false);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "agent-session",
+      state: "working",
+      now: 1_000,
+    });
+    await expect(
+      agentHeartbeatIsFresh({
+        store,
+        sessionId: "agent-session",
+        now: 91_000,
+      }),
+    ).resolves.toBe(true);
   });
 });
 

@@ -5,7 +5,8 @@
 export type ThreadStatusStage =
   | "staged"
   | "sending"
-  | "sent"
+  | "waiting"
+  | "blocked"
   | "working"
   | "stalled"
   | "errored"
@@ -27,6 +28,7 @@ type ThreadStatusInput = {
   readonly phase: "staged" | "sending" | "pending" | "outcome" | "resolved";
   readonly surface: "thread" | "chat";
   readonly runtimeOffline?: boolean;
+  readonly agentConnected?: boolean;
   readonly pickedUp?: boolean;
   readonly quietForMs?: number;
   readonly failedStep?: string;
@@ -44,6 +46,7 @@ export const deriveThreadStatus = ({
   phase,
   surface,
   runtimeOffline = false,
+  agentConnected = false,
   pickedUp = false,
   quietForMs = 0,
   failedStep,
@@ -103,11 +106,21 @@ export const deriveThreadStatus = ({
     };
   }
   if (!pickedUp) {
+    if (agentConnected) {
+      return {
+        stage: "waiting",
+        tone: "neutral",
+        badge: "Waiting",
+        headline: "Waiting for the agent",
+        showsSpinner: false,
+        showsSetup: false,
+      };
+    }
     return {
-      stage: "sent",
-      tone: "neutral",
-      badge: "Sent",
-      headline: "Waiting for an agent",
+      stage: "blocked",
+      tone: "warning",
+      badge: "Blocked",
+      headline: "No agent connected",
       hint: queuedHint,
       showsSpinner: false,
       showsSetup: true,

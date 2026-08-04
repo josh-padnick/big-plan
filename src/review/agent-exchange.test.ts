@@ -224,6 +224,39 @@ describe("agent exchange response contract", () => {
 });
 
 describe("agent exchange filesystem", () => {
+  it("should preserve a semantic whole-slide target in the durable queue", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-slide-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, before);
+    const store = reviewStoreFor({ planPath, planId });
+    await prepareStore(store);
+    const slideRequest = feedbackAgentRequest({
+      feedback: buildFeedbackPackage({
+        sessionId,
+        packageId,
+        planId,
+        planPath,
+        createdAt: "2026-08-02T12:00:00.000Z",
+        comments: [
+          {
+            ...comment,
+            target: { ...comment.target, type: "slide" },
+          },
+        ],
+      }),
+      sourceRevision: deriveSourceRevision(before),
+    });
+    await writeAgentRequest({ store, request: slideRequest });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId,
+      planId,
+    });
+    expect(exchange.requests[0]).toMatchObject({
+      comments: [{ target: { type: "slide", blockId } }],
+    });
+  });
+
   it("should round-trip validated requests and responses under the plan store", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-"));
     const planPath = join(directory, "plan.mdx");

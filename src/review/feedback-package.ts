@@ -55,6 +55,9 @@ export const describeTarget = (comment: ReviewComment): string => {
   if (target.type === "document") {
     return "Whole plan";
   }
+  if (target.type === "slide") {
+    return `${target.section ?? target.label} · whole slide`;
+  }
   const location =
     target.section === undefined
       ? target.label

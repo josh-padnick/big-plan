@@ -5,14 +5,28 @@ import { describe, expect, it } from "vitest";
 import { deriveThreadStatus } from "./thread-status.js";
 
 describe("deriveThreadStatus", () => {
-  it("should keep a queued request neutral until an agent picks it up", () => {
+  it("should distinguish a connected queue from a recoverable blocked queue", () => {
+    expect(
+      deriveThreadStatus({
+        phase: "pending",
+        surface: "thread",
+        agentConnected: true,
+      }),
+    ).toMatchObject({
+      stage: "waiting",
+      tone: "neutral",
+      badge: "Waiting",
+      headline: "Waiting for the agent",
+      showsSpinner: false,
+      showsSetup: false,
+    });
     expect(
       deriveThreadStatus({ phase: "pending", surface: "thread" }),
     ).toMatchObject({
-      stage: "sent",
-      tone: "neutral",
-      badge: "Sent",
-      headline: "Waiting for an agent",
+      stage: "blocked",
+      tone: "warning",
+      badge: "Blocked",
+      headline: "No agent connected",
       showsSpinner: false,
       showsSetup: true,
     });

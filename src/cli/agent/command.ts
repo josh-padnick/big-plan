@@ -30,6 +30,7 @@ import {
   readRevisionSnapshot,
   reviewStoreFor,
   sessionHeartbeatIsFresh,
+  writeAgentHeartbeat,
   writeAgentPrompt,
   writeRevisionSnapshot,
 } from "../../review/store.js";
@@ -302,6 +303,11 @@ const nextWork = async ({
     sessionId: session.sessionId,
     planId: session.planId,
   });
+  await writeAgentHeartbeat({
+    store: session.store,
+    sessionId: session.sessionId,
+    state: "waiting",
+  });
   let request = nextPendingAgentRequest(snapshot);
   while (request === undefined && shouldWait) {
     if (
@@ -314,6 +320,11 @@ const nextWork = async ({
         "The review server stopped while the agent was waiting for feedback",
       );
     }
+    await writeAgentHeartbeat({
+      store: session.store,
+      sessionId: session.sessionId,
+      state: "waiting",
+    });
     await wait(500);
     snapshot = await readAgentExchange({
       store: session.store,
@@ -329,6 +340,11 @@ const nextWork = async ({
       help: ["Run again with --wait to wait for the reviewer's next message"],
     };
   }
+  await writeAgentHeartbeat({
+    store: session.store,
+    sessionId: session.sessionId,
+    state: "working",
+  });
   const progress = await readProgress({
     store: session.store,
     sessionId: session.sessionId,
@@ -473,6 +489,14 @@ const respond = async ({
               response.outcomes.length === 1 ? "" : "s"
             }`,
     },
+  });
+  // The agent is between turns now. A short lease prevents a completed
+  // one-shot command from looking connected unless it follows the printed
+  // `next --wait` instruction and renews its presence.
+  await writeAgentHeartbeat({
+    store: session.store,
+    sessionId: session.sessionId,
+    state: "waiting",
   });
   return {
     responded: request.requestId,

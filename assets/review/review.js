@@ -58,7 +58,6 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   // How long a pending request may sit unclaimed before the UI says no agent
   // is connected, and how long a claimed request may go without any new
   // progress before the UI says the agent has gone quiet.
-  const AGENT_PICKUP_GRACE_MS = 20_000;
   const AGENT_QUIET_MS = 90_000;
   const FLOAT_TOP = 52;
   const FLOAT_GAP = 8;
@@ -146,6 +145,8 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   // relationship to the plan explicit.
   const describeTarget = (target) => {
     if (target.type === "document") return "Whole plan";
+    if (target.type === "slide")
+      return (target.section || target.label || "Plan") + " · Whole slide";
     const kind = target.kind ? readableKind(target.kind) : "Block";
     const location = [target.section, target.label]
       .filter((part) => typeof part === "string" && part !== "")
@@ -221,6 +222,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   let planChatMessages = [];
   let agentRequests = [];
   let agentResponses = [];
+  let agentConnected = false;
   let sourceRevision = "";
   let progressSeq = 0;
   let liveProgressSeq = 0;
@@ -231,7 +233,6 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   let revertCandidateId = null;
   let submitRightAway = false;
   let showAgentActivity = true;
-  let openChatSetupOnRender = false;
   const revisionDiffs = new Map();
   const chatDigestExpansion = new Map();
   const changeGroupExpansion = new Map();
@@ -418,7 +419,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
 
   const checkedAgentSnapshot = (value) => {
     if (value === null || typeof value !== "object") {
-      return { requests: [], responses: [] };
+      return { requests: [], responses: [], connected: false };
     }
     return {
       requests: (Array.isArray(value.requests) ? value.requests : [])
@@ -427,6 +428,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       responses: (Array.isArray(value.responses) ? value.responses : [])
         .filter(isAgentResponse)
         .slice(0, MESSAGE_LIMIT),
+      connected: value.connected === true,
     };
   };
 
@@ -498,6 +500,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   }
   agentRequests = diskState.agent.requests;
   agentResponses = diskState.agent.responses;
+  agentConnected = diskState.agent.connected;
   sourceRevision = diskState.sourceRevision;
   for (const id of reloadState?.expanded || []) {
     expandedThreadIds.add(id);
@@ -582,9 +585,8 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     "data-review-agent-alert": true,
     hidden: true,
   });
-  agentAlert.append(icon(CIRCLE_X_ICON), agentAlertLabel);
+  agentAlert.append(icon(TRIANGLE_ALERT_ICON), agentAlertLabel);
   agentAlert.addEventListener("click", () => {
-    openChatSetupOnRender = true;
     setRailOpen(true);
     setActiveTab("chat");
     renderPlanChat();
@@ -755,7 +757,10 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     },
     [agentPanel],
   );
-  rail.append(tabList, commentsPanel, chatPanel);
+  const railHeader = el("header", { "data-review-rail-header": true }, [
+    tabList,
+  ]);
+  rail.append(railHeader, commentsPanel, chatPanel);
 
   const affordance = el("button", {
     type: "button",
@@ -1186,6 +1191,12 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       : null;
   };
 
+  const visualAnchorForTarget = (target) => {
+    const block = blockForTarget(target);
+    if (target?.type !== "slide") return block;
+    return block?.closest("[data-slide]")?.querySelector("[data-slide-kicker]");
+  };
+
   // Turns a renderer-relative character offset back into a DOM boundary. The
   // review chrome never enters a block, so these offsets remain stable while
   // comments and the sidebar are mounted around the document.
@@ -1352,6 +1363,10 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       block.removeAttribute("data-review-active-highlight");
       block.removeAttribute("data-review-anchor-changed");
     }
+    for (const kicker of document.querySelectorAll("[data-slide-kicker]")) {
+      kicker.removeAttribute("data-review-comment-highlight");
+      kicker.removeAttribute("data-review-active-highlight");
+    }
     const commentRanges = [];
     const lensBlocks = diffLens
       ? diffLens.hiddenBlocks.concat(diffLens.movedBlocks)
@@ -1359,6 +1374,14 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     for (const comment of drafts.concat(sent)) {
       if (resolvedCommentIds.has(comment.id)) continue;
       const anchor = anchorStateFor(comment);
+      const visualAnchor =
+        comment.target.type === "slide"
+          ? visualAnchorForTarget(comment.target)
+          : null;
+      if (visualAnchor && !lensBlocks.includes(anchor.block)) {
+        visualAnchor.setAttribute("data-review-comment-highlight", "");
+        continue;
+      }
       if (anchor.kind === "range" && !lensBlocks.includes(anchor.block)) {
         commentRanges.push(anchor.range);
       } else if (anchor.block && !lensBlocks.includes(anchor.block)) {
@@ -1371,7 +1394,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     const activeTarget = composeTarget || pendingSelection;
     const activeRange = activeTarget ? rangeForTarget(activeTarget) : null;
     if (activeTarget && !activeRange) {
-      blockForTarget(activeTarget)?.setAttribute(
+      visualAnchorForTarget(activeTarget)?.setAttribute(
         "data-review-active-highlight",
         "",
       );
@@ -1408,7 +1431,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     changed: "Changed",
     question: "Needs your answer",
     outside: "Outside this plan",
-    waiting: "Sent",
+    waiting: "Waiting",
   };
 
   const spinner = () =>
@@ -1418,11 +1441,17 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     });
 
   const outcomeBadge = (outcome, options = {}) => {
+    const state = outcome.status?.stage || outcome.key;
     const badge = el("span", {
-      "data-review-outcome-state": outcome.key,
+      "data-review-outcome-state": state,
+      ...(options.iconOnly === true ? { "aria-label": outcome.label } : {}),
     });
     if (options.spin === true) badge.appendChild(spinner());
-    badge.appendChild(document.createTextNode(outcome.label));
+    if (state === "waiting") badge.appendChild(icon(HOURGLASS_ICON));
+    if (state === "blocked") badge.appendChild(icon(TRIANGLE_ALERT_ICON));
+    if (!(options.iconOnly === true && state === "waiting")) {
+      badge.appendChild(document.createTextNode(outcome.label));
+    }
     return badge;
   };
 
@@ -1510,7 +1539,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       (entry) => liveProgressSeq > entry.liveSeqAtSeen,
     );
     if (!pickedUp) {
-      if (now - oldestAt < AGENT_PICKUP_GRACE_MS) return { key: "working" };
+      if (agentConnected) return { key: "working" };
       return {
         key: "unavailable",
         headline: "No agent connected",
@@ -1555,6 +1584,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       phase: "pending",
       surface: surfaceName,
       runtimeOffline,
+      agentConnected,
       pickedUp,
       quietForMs: pickedUp
         ? Date.now() - Math.max(lastProgressAdvanceAt, seen?.at || Date.now())
@@ -1613,6 +1643,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
         status: deriveThreadStatus({
           phase: "pending",
           surface: "thread",
+          agentConnected,
         }),
       }
     );
@@ -1632,15 +1663,16 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   };
 
   const statusIcon = (status) => {
-    if (status.stage === "sent") return icon(HOURGLASS_ICON);
-    if (status.stage === "stalled") return icon(TRIANGLE_ALERT_ICON);
+    if (status.stage === "waiting") return icon(HOURGLASS_ICON);
+    if (status.stage === "blocked" || status.stage === "stalled")
+      return icon(TRIANGLE_ALERT_ICON);
     if (status.stage === "errored" || status.stage === "offline") {
       return icon(CIRCLE_X_ICON);
     }
     return null;
   };
 
-  const threadStatusStrip = (status, options = {}) => {
+  const threadStatusStrip = (status) => {
     if (!status.headline) return null;
     const events = status.stage === "working" ? currentActivityEvents() : [];
     const row = el("div", { "data-review-status-row": true });
@@ -1685,7 +1717,6 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
         "details",
         {
           "data-review-status-setup": true,
-          ...(options.openSetup === true ? { open: true } : {}),
         },
         [
           el("summary", { text: "Show setup instructions" }),
@@ -1902,6 +1933,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
         method: "POST",
         body: { kind: "reply", commentId: comment.id, body },
       });
+      agentConnected = answer.agentConnected === true;
       if (isAgentRequest(answer.request)) {
         agentRequests = agentRequests.concat([answer.request]);
       }
@@ -3046,6 +3078,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
         [
           outcomeBadge(outcome, {
             spin: outcome.status?.stage === "working",
+            iconOnly: outcome.status?.stage === "waiting",
           }),
           el("span", {
             "data-review-thread-echo": true,
@@ -3217,7 +3250,9 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   };
 
   const floatingBlockForTarget = (target) =>
-    target?.type === "document" ? blocks[0] || null : blockForTarget(target);
+    target?.type === "document"
+      ? blocks[0] || null
+      : visualAnchorForTarget(target);
 
   const floatingBlockForComment = (comment) => {
     if (diffLens?.comment?.id === comment.id && diffLens.container) {
@@ -3225,7 +3260,9 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     }
     return comment.target?.type === "document"
       ? blocks[0] || null
-      : anchorStateFor(comment).block;
+      : comment.target?.type === "slide"
+        ? visualAnchorForTarget(comment.target)
+        : anchorStateFor(comment).block;
   };
 
   const floatLeftForBlock = (block, width) => {
@@ -3544,6 +3581,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
           body: "Revert all plan changes made in response to this comment.",
         },
       });
+      agentConnected = answer.agentConnected === true;
       if (isAgentRequest(answer.request)) {
         agentRequests = agentRequests.concat([answer.request]);
       }
@@ -3648,7 +3686,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   };
 
   const positionCompose = (target) => {
-    const block = blockForTarget(target);
+    const block = visualAnchorForTarget(target);
     if (!block) {
       compose.removeAttribute("style");
       compose.setAttribute("data-review-compose-centered", "");
@@ -3897,18 +3935,36 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
         text: "Select slide",
       }),
     );
+    selector.addEventListener("mouseup", (event) => {
+      event.stopPropagation();
+    });
     selector.addEventListener("click", () => {
       const slideBlocks = Array.from(slide.querySelectorAll("[data-block-id]"));
       const first = slideBlocks[0];
-      const last = slideBlocks[slideBlocks.length - 1];
-      if (!first || !last) return;
-      const range = document.createRange();
-      range.setStart(first, 0);
-      range.setEnd(last, last.childNodes.length);
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      offerSelection();
+      const kicker = slide.querySelector("[data-slide-kicker]");
+      if (!first || !kicker) return;
+      window.getSelection()?.removeAllRanges();
+      pendingSelection = {
+        type: "slide",
+        blockId: first.getAttribute("data-block-id"),
+        kind: kindFor(first),
+        label: labelFor(first),
+        section: first.getAttribute("data-block-section") || "",
+      };
+      attachLabel.hidden = false;
+      attachInput.checked = false;
+      paintTargetHighlights();
+      if (compose.hidden) {
+        const rect = kicker.getBoundingClientRect();
+        affordance.hidden = false;
+        affordance.setAttribute("data-review-mode", "selection");
+        affordanceLabel.hidden = false;
+        affordance.setAttribute("aria-label", "Comment on the whole slide");
+        affordance.style.top = Math.max(FLOAT_TOP, rect.top - 40) + "px";
+        const width = affordance.offsetWidth || 108;
+        affordance.style.left =
+          Math.max(12, Math.min(rect.left, rightLimit() - width - 12)) + "px";
+      }
       announce("Selected all content in " + title + ".");
     });
     slide.setAttribute("data-review-slide-selectable", "");
@@ -3927,6 +3983,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     selectionOfferTimer = window.setTimeout(() => {
       selectionOfferTimer = null;
       if (!compose.hidden || document.activeElement === affordance) return;
+      if (pendingSelection?.type === "slide") return;
       offerSelection();
     }, 0);
   });
@@ -4027,12 +4084,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
 
   const renderPlanChat = () => {
     const messages = hasRuntime ? livePlanChatMessages() : planChatMessages;
-    const openSetup = openChatSetupOnRender;
-    const connectionRequest =
-      openSetup && !messages.some((message) => message.role === "waiting")
-        ? pendingRequestList().at(-1)
-        : undefined;
-    if (messages.length === 0 && connectionRequest === undefined) {
+    if (messages.length === 0) {
       planChatList.replaceChildren(
         el("li", {
           "data-review-chat-empty": true,
@@ -4045,7 +4097,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       if (message.role === "waiting") {
         const status = pendingStatusFor(message.request, "chat");
         return el("li", { "data-review-chat-message": "waiting" }, [
-          threadStatusStrip(status, { openSetup }),
+          threadStatusStrip(status),
         ]);
       }
       const body = el("p", {});
@@ -4070,17 +4122,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       }
       return turn;
     });
-    if (connectionRequest !== undefined) {
-      rendered.push(
-        el("li", { "data-review-chat-message": "waiting" }, [
-          threadStatusStrip(pendingStatusFor(connectionRequest, "chat"), {
-            openSetup: true,
-          }),
-        ]),
-      );
-    }
     planChatList.replaceChildren(...rendered);
-    openChatSetupOnRender = false;
   };
 
   const syncPlanChatValidity = () => {
@@ -4113,6 +4155,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
         method: "POST",
         body: { kind: "chat", body },
       });
+      agentConnected = answer.agentConnected === true;
       if (isAgentRequest(answer.request)) {
         agentRequests = agentRequests.concat([answer.request]);
       }
@@ -4202,6 +4245,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
         method: "POST",
         body: { comments: selected },
       });
+      agentConnected = answer.agentConnected === true;
       const submittedIds = new Set(selected.map((comment) => comment.id));
       sent = sent.concat(selected);
       if (isAgentRequest(answer.agentRequest)) {
@@ -4291,6 +4335,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
 
   const applyAgentSnapshot = (answer) => {
     const checked = checkedAgentSnapshot(answer);
+    const connectionChanged = checked.connected !== agentConnected;
     const changed =
       exchangeSignature(checked) !==
       exchangeSignature({
@@ -4299,7 +4344,8 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       });
     agentRequests = checked.requests;
     agentResponses = checked.responses;
-    if (changed) {
+    agentConnected = checked.connected;
+    if (changed || connectionChanged) {
       renderTray();
       void hydrateRevisionDiffs();
     }

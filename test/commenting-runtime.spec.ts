@@ -168,14 +168,44 @@ test("should preserve and send a floating review across reload and viewport chan
     await selector.click();
     await expect(affordance).toHaveAttribute(
       "aria-label",
-      "Comment on the selected text",
+      "Comment on the whole slide",
     );
     await expect(page.locator("html")).toHaveAttribute(
       "data-review-active-selection-highlight",
-      "true",
+      "false",
     );
-    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await expect(
+      selector
+        .locator("xpath=ancestor::*[@data-slide]")
+        .locator("[data-slide-kicker]"),
+    ).toHaveAttribute("data-review-active-highlight", "");
+    await page.getByRole("heading", { level: 1 }).click();
     await expect(affordance).toBeHidden();
+  });
+
+  await test.step("the rendered feedback header owns a durable bottom border", async () => {
+    await toggle.click();
+    const header = page.locator("[data-review-rail-header]");
+    await expect(header).toBeVisible();
+    await expect
+      .poll(() =>
+        header.evaluate((node) => {
+          const style = getComputedStyle(node);
+          return {
+            width: style.borderBottomWidth,
+            style: style.borderBottomStyle,
+            transparent:
+              style.borderBottomColor === "rgba(0, 0, 0, 0)" ||
+              style.borderBottomColor === "transparent",
+          };
+        }),
+      )
+      .toEqual({
+        width: "1px",
+        style: "solid",
+        transparent: false,
+      });
+    await page.locator("[data-review-hide]").click();
   });
 
   await test.step("the selection Comment control dismisses instead of drifting on scroll", async () => {
@@ -645,8 +675,16 @@ test("should preserve and send a floating review across reload and viewport chan
     await affordance.click();
     await expect(page.locator("html")).toHaveAttribute(
       "data-review-active-selection-highlight",
-      "true",
+      "false",
     );
+    const selectedSlide = selector.locator("xpath=ancestor::*[@data-slide]");
+    await expect(selectedSlide.locator("[data-slide-kicker]")).toHaveAttribute(
+      "data-review-active-highlight",
+      "",
+    );
+    await expect(
+      selectedSlide.locator("[data-block-kind='heading']"),
+    ).not.toHaveAttribute("data-review-active-highlight", "");
     await expect(page.locator("[data-review-compose-save]")).toBeDisabled();
     await page.locator("[data-review-compose-input]").press("Control+Enter");
     await expect(compose).toBeVisible();
@@ -730,20 +768,25 @@ test("should preserve and send a floating review across reload and viewport chan
 
   await test.step("sent comments wait for a real agent instead of inventing outcomes", async () => {
     await expect(
-      page.locator('[data-review-outcome-state="waiting"]'),
+      page.locator('[data-review-outcome-state="blocked"]'),
     ).toHaveCount(6);
     await expect(page.locator("[data-review-thread-turn='agent']")).toHaveCount(
       0,
     );
     await expect(toggle.locator("[data-review-toggle-count]")).toBeHidden();
     await expect(page.locator("[data-review-agent-state]")).toHaveText(
-      "Agent working",
+      "No agent connected",
     );
     await expect(
       page.locator(
-        '[data-review-outcome-state="waiting"] [data-review-spinner]',
+        '[data-review-outcome-state="blocked"] [data-review-spinner]',
       ),
     ).toHaveCount(0);
+    await expect(
+      page.locator(
+        '[data-review-outcome-state="blocked"] svg[aria-hidden="true"]',
+      ),
+    ).toHaveCount(6);
   });
 
   await test.step("a real agent response revises the source and re-renders outcome threads live", async () => {
@@ -1282,14 +1325,17 @@ test("should preserve and send a floating review across reload and viewport chan
       question.locator('[data-review-thread-turn="agent"]'),
     ).toHaveCount(1);
     const status = question.locator("[data-review-thread-status]");
-    await expect(status).toHaveAttribute("data-review-thread-status", "sent");
-    await expect(status).toContainText("Waiting for an agent");
+    await expect(status).toHaveAttribute(
+      "data-review-thread-status",
+      "blocked",
+    );
+    await expect(status).toContainText("No agent connected");
     await expect(status.locator("[data-review-spinner]")).toHaveCount(0);
     await expect(page.locator("[data-review-agent-state]")).toHaveText(
-      "Agent working",
+      "No agent connected",
     );
     await expect(
-      question.locator('[data-review-outcome-state="waiting"]'),
+      question.locator('[data-review-outcome-state="blocked"]'),
     ).toBeVisible();
     await expect(question.locator("[data-review-thread-reply]")).toHaveCount(0);
     await expect(toggle.locator("[data-review-toggle-count]")).toBeHidden();
@@ -1390,13 +1436,16 @@ test("should preserve and send a floating review across reload and viewport chan
     );
     await expect(chatStatus).toHaveAttribute(
       "data-review-thread-status",
-      "sent",
+      "blocked",
     );
-    await expect(chatStatus).toContainText("Waiting for an agent");
+    await expect(chatStatus).toContainText("No agent connected");
+    await expect(
+      chatStatus.locator("[data-review-status-setup]"),
+    ).not.toHaveAttribute("open", "");
     await expect(chatStatus.locator("[data-review-spinner]")).toHaveCount(0);
     await expect(page.locator("[data-review-progress]")).toHaveCount(0);
     await expect(page.locator("[data-review-agent-state]")).toHaveText(
-      "Agent working",
+      "No agent connected",
     );
     await agentCommand(["next", session.plan]);
     await expect(

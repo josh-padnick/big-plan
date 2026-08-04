@@ -16,7 +16,7 @@ import {
 } from "../../review/agent-exchange.js";
 import { startReviewRuntime } from "../../review/server.js";
 import type { ReviewRuntime } from "../../review/server.js";
-import { readProgress } from "../../review/store.js";
+import { agentHeartbeatIsFresh, readProgress } from "../../review/store.js";
 import { renderDocument } from "../../render/render-document.js";
 import { agentCommand } from "./command.js";
 
@@ -164,7 +164,7 @@ describe("agent command", () => {
     }
   });
 
-  it("should return the oldest pending work and its response contract", async () => {
+  it("should pick up the oldest request queued before the agent connected", async () => {
     const result = await agentCommand(["next", runtime.planPath]);
     if (typeof result === "string") {
       throw new Error("agent next must return a structured record");
@@ -182,6 +182,12 @@ describe("agent command", () => {
     // The publish command is also pasted; single-quote quoting keeps it free
     // of double quotes, so structured output prints it without escaping.
     expect(String(result.respond_command)).not.toContain('"');
+    await expect(
+      agentHeartbeatIsFresh({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+      }),
+    ).resolves.toBe(true);
     if (typeof result.response_file !== "string") {
       throw new Error("The agent command did not provide a response path");
     }

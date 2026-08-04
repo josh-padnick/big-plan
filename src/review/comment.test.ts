@@ -70,6 +70,22 @@ describe("validateComments acceptance", () => {
     });
   });
 
+  it("should preserve a whole-slide target without collapsing it to its heading", () => {
+    const [comment] = validate(
+      commentOn({
+        type: "slide",
+        blockId: "section/status-quo/paragraph-1",
+      }),
+    );
+    expect(comment?.target).toEqual({
+      type: "slide",
+      blockId: "section/status-quo/paragraph-1",
+      kind: "paragraph",
+      label: "Today's reality",
+      section: "Status quo",
+    });
+  });
+
   it("should accept a selection spanning two known blocks", () => {
     const [comment] = validate(
       commentOn({

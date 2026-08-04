@@ -19,6 +19,13 @@ export type CommentTarget =
       readonly section?: string;
     }
   | {
+      readonly type: "slide";
+      readonly blockId: string;
+      readonly kind: string;
+      readonly label: string;
+      readonly section?: string;
+    }
+  | {
       readonly type: "selection";
       readonly blockId: string;
       readonly endBlockId?: string;
@@ -199,8 +206,8 @@ const validateTarget = ({
     label: block.label,
     ...(block.section === undefined ? {} : { section: block.section }),
   };
-  if (type === "block") {
-    return { type: "block", ...identity };
+  if (type === "block" || type === "slide") {
+    return { type, ...identity };
   }
   if (type === "selection" || type === "lines") {
     const start = asLineNumber({ value: target.start, field: "start" });

@@ -166,6 +166,7 @@ const target = (value: unknown): CommentTarget => {
   }
   if (
     (value.type !== "block" &&
+      value.type !== "slide" &&
       value.type !== "selection" &&
       value.type !== "lines") ||
     typeof value.blockId !== "string" ||
@@ -187,8 +188,8 @@ const target = (value: unknown): CommentTarget => {
         }
       : {}),
   };
-  if (value.type === "block") {
-    return { type: "block", ...identity };
+  if (value.type === "block" || value.type === "slide") {
+    return { type: value.type, ...identity };
   }
   if (
     typeof value.start !== "number" ||

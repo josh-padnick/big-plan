@@ -14,7 +14,7 @@ import {
 } from "./agent-exchange.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
-import { writeRevisionSnapshot } from "./store.js";
+import { writeAgentHeartbeat, writeRevisionSnapshot } from "./store.js";
 
 const PLAN = `# Review runtime plan
 
@@ -302,6 +302,7 @@ describe("review runtime feedback", () => {
         { kind: "reply", commentId: "55667788" },
       ],
       responses: [],
+      connected: false,
     });
     if (
       typeof answer !== "object" ||
@@ -319,6 +320,16 @@ describe("review runtime feedback", () => {
       sourceRevision: acceptedRevision,
     });
     await writeFile(runtime.planPath, PLAN);
+  });
+
+  it("should expose a fresh agent lease as connected", async () => {
+    await writeAgentHeartbeat({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      state: "waiting",
+    });
+    const answer: unknown = await (await call({ path: "/api/agent" })).json();
+    expect(answer).toMatchObject({ connected: true });
   });
 
   it("should serve a deterministic diff between retained revisions", async () => {
