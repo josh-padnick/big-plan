@@ -46,16 +46,16 @@ test("should comment on a slide and a passage, then revise before sending", asyn
     initialSelectorGap = geometry.gap;
     expect(initialSelectorGap).toBeCloseTo(8, 0);
     expect(geometry.topDelta).toBeCloseTo(12, 0);
-    await selector.click();
-    await expect(affordance).toBeVisible();
-    await expect(affordance).toHaveAttribute(
+    await expect(selector).toHaveAttribute(
       "aria-label",
-      "Comment on the whole slide",
+      "Comment on all content in Status quo",
     );
+    await selector.click();
+    await expect(page.locator("[data-review-compose]")).toBeVisible();
+    await expect(affordance).toBeHidden();
   });
 
   await test.step("saving the first comment floats its card and chips the block", async () => {
-    await affordance.click();
     await page
       .locator("[data-review-compose-input]")
       .fill("Say what breaks, not only what works.");

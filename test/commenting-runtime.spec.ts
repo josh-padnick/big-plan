@@ -172,16 +172,15 @@ test("should preserve and send a floating review across reload and viewport chan
         theme,
       );
       await selector.click();
-      await expect(affordance).toHaveAttribute(
-        "aria-label",
-        "Comment on the whole slide",
-      );
+      await expect(compose).toBeVisible();
+      await expect(affordance).toBeHidden();
       await expect(page.locator("html")).toHaveAttribute(
         "data-review-active-selection-highlight",
         "false",
       );
       await expect(kicker).toHaveAttribute("data-review-active-highlight", "");
       await page.keyboard.press("Escape");
+      await expect(compose).toBeHidden();
       await expect(affordance).toBeHidden();
       await expect(kicker).not.toHaveAttribute("data-review-active-highlight");
       await expect
@@ -837,11 +836,12 @@ test("should preserve and send a floating review across reload and viewport chan
     await page.locator("[data-review-compose-cancel]").click();
   });
 
-  await test.step("a slide select-all control enters the same validated flow", async () => {
+  await test.step("a slide comment control enters the same validated flow", async () => {
     const before = await page.locator("[data-review-drafts] li").count();
     const selector = page.locator("[data-review-slide-selector]").last();
     await selector.click();
-    await affordance.click();
+    await expect(compose).toBeVisible();
+    await expect(affordance).toBeHidden();
     await expect(page.locator("html")).toHaveAttribute(
       "data-review-active-selection-highlight",
       "false",
@@ -2091,7 +2091,6 @@ Ship the live review loop behind the explicit review command.
     const delivery = page.locator("[data-block-kind='paragraph']").last();
     await delivery.scrollIntoViewIfNeeded();
     await page.locator("[data-review-slide-selector]:visible").last().click();
-    await affordance.click();
     const preference = page.locator("[data-review-submit-immediately-input]");
     const preferenceLabel = page.locator("[data-review-submit-immediately]");
     await expect(preference).not.toBeChecked();
@@ -2111,7 +2110,6 @@ Ship the live review loop behind the explicit review command.
 
     await delivery.scrollIntoViewIfNeeded();
     await page.locator("[data-review-slide-selector]:visible").last().click();
-    await affordance.click();
     await expect(preference).toBeChecked();
     await preferenceLabel.click();
     await expect(preference).not.toBeChecked();

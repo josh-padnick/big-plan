@@ -27,7 +27,6 @@ import { MESSAGES_SQUARE_ICON } from "../../src/icons/lucide/messages-square.js"
 import { MINIMIZE_2_ICON } from "../../src/icons/lucide/minimize-2.js";
 import { PENCIL_ICON } from "../../src/icons/lucide/pencil.js";
 import { ROTATE_CCW_ICON } from "../../src/icons/lucide/rotate-ccw.js";
-import { SCAN_TEXT_ICON } from "../../src/icons/lucide/scan-text.js";
 import { TRASH_2_ICON } from "../../src/icons/lucide/trash-2.js";
 import { TRIANGLE_ALERT_ICON } from "../../src/icons/lucide/triangle-alert.js";
 import { UNDO_2_ICON } from "../../src/icons/lucide/undo-2.js";
@@ -4256,14 +4255,14 @@ import {
     const selector = el("button", {
       type: "button",
       "data-review-slide-selector": true,
-      "aria-label": "Select all content in " + title,
+      "aria-label": "Comment on all content in " + title,
     });
     selector.append(
-      icon(SCAN_TEXT_ICON),
+      icon(MESSAGE_SQUARE_TEXT_ICON),
       el("span", {
         "data-review-icon-tooltip": true,
         "aria-hidden": "true",
-        text: "Select slide",
+        text: "Comment on slide",
       }),
     );
     selector.addEventListener("mouseup", (event) => {
@@ -4274,29 +4273,21 @@ import {
       const first = slideBlocks[0];
       const kicker = slide.querySelector("[data-slide-kicker]");
       if (!first || !kicker) return;
+      if (!compose.hidden) closeCompose();
       window.getSelection()?.removeAllRanges();
-      pendingSelection = {
+      const target = {
         type: "slide",
         blockId: first.getAttribute("data-block-id"),
         kind: kindFor(first),
         label: labelFor(first),
         section: first.getAttribute("data-block-section") || "",
       };
+      pendingSelection = target;
       attachLabel.hidden = false;
       attachInput.checked = false;
       paintTargetHighlights();
-      if (compose.hidden) {
-        const rect = kicker.getBoundingClientRect();
-        affordance.hidden = false;
-        affordance.setAttribute("data-review-mode", "selection");
-        affordanceLabel.hidden = false;
-        affordance.setAttribute("aria-label", "Comment on the whole slide");
-        affordance.style.top = Math.max(FLOAT_TOP, rect.top - 40) + "px";
-        const width = affordance.offsetWidth || 108;
-        affordance.style.left =
-          Math.max(12, Math.min(rect.left, rightLimit() - width - 12)) + "px";
-      }
-      announce("Selected all content in " + title + ".");
+      openCompose(target);
+      announce("Commenting on all content in " + title + ".");
     });
     slide.setAttribute("data-review-slide-selectable", "");
     slide.appendChild(selector);
