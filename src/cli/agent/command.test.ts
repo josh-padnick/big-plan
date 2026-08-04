@@ -11,12 +11,17 @@ import { buildFeedbackPackage } from "../../review/feedback-package.js";
 import {
   deriveSourceRevision,
   feedbackAgentRequests,
+  messageAgentRequest,
   readAgentExchange,
   writeAgentRequest,
 } from "../../review/agent-exchange.js";
 import { startReviewRuntime } from "../../review/server.js";
 import type { ReviewRuntime } from "../../review/server.js";
-import { agentHeartbeatIsFresh, readProgress } from "../../review/store.js";
+import {
+  agentHeartbeatIsFresh,
+  appendAgentCancellation,
+  readProgress,
+} from "../../review/store.js";
 import { renderDocument } from "../../render/render-document.js";
 import { agentCommand } from "./command.js";
 
@@ -322,5 +327,178 @@ describe("agent command lifecycle", () => {
     await expect(agentCommand([planPath])).rejects.toThrow(
       /review server for this plan is not running/,
     );
+  });
+
+  it("should answer R2 after an older R1 cancellation", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-r1-r2-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nKeep later requests answerable.\n";
+    await writeFile(planPath, source);
+    const cancelledRuntime = await startReviewRuntime({ planPath });
+    const sourceRevision = deriveSourceRevision(source);
+    const request1 = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: cancelledRuntime.sessionId,
+      planId: cancelledRuntime.planId,
+      sourceRevision,
+      createdAt: "2026-08-04T14:00:00.000Z",
+      body: "Request one",
+    });
+    await writeAgentRequest({
+      store: cancelledRuntime.store,
+      request: request1,
+    });
+    await expect(
+      agentCommand(["next", cancelledRuntime.planPath]),
+    ).resolves.toMatchObject({
+      pending: true,
+      work: { requestId: request1.requestId },
+    });
+    await appendAgentCancellation({
+      store: cancelledRuntime.store,
+      cancellation: {
+        requestId: request1.requestId,
+        at: "2026-08-04T14:01:00.000Z",
+      },
+    });
+    const request2 = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: cancelledRuntime.sessionId,
+      planId: cancelledRuntime.planId,
+      sourceRevision,
+      createdAt: "2026-08-04T14:02:00.000Z",
+      body: "Request two",
+    });
+    await writeAgentRequest({
+      store: cancelledRuntime.store,
+      request: request2,
+    });
+    const pickup2 = await agentCommand(["next", cancelledRuntime.planPath]);
+    if (
+      typeof pickup2 === "string" ||
+      typeof pickup2.response_file !== "string"
+    ) {
+      throw new Error("R2 pickup did not provide a response file");
+    }
+    expect(pickup2).toMatchObject({
+      pending: true,
+      work: { requestId: request2.requestId },
+    });
+    await writeFile(
+      pickup2.response_file,
+      JSON.stringify({
+        requestId: request2.requestId,
+        message: "R2 completed.",
+      }),
+    );
+    await expect(
+      agentCommand([
+        "respond",
+        cancelledRuntime.planPath,
+        pickup2.response_file,
+      ]),
+    ).resolves.toMatchObject({ responded: request2.requestId });
+    await expect(
+      agentCommand(["next", cancelledRuntime.planPath]),
+    ).resolves.toMatchObject({ pending: false });
+    await cancelledRuntime.close();
+  });
+
+  it("should reject a late cancelled R1 response without poisoning R2", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-late-r1-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nReject only the cancelled response identity.\n";
+    await writeFile(planPath, source);
+    const cancelledRuntime = await startReviewRuntime({ planPath });
+    const sourceRevision = deriveSourceRevision(source);
+    const request1 = messageAgentRequest({
+      kind: "chat",
+      requestId: "eeeeeeeeeeeeeeee",
+      sessionId: cancelledRuntime.sessionId,
+      planId: cancelledRuntime.planId,
+      sourceRevision,
+      createdAt: "2026-08-04T15:00:00.000Z",
+      body: "Request one",
+    });
+    const request2 = messageAgentRequest({
+      kind: "chat",
+      requestId: "ffffffffffffffff",
+      sessionId: cancelledRuntime.sessionId,
+      planId: cancelledRuntime.planId,
+      sourceRevision,
+      createdAt: "2026-08-04T15:01:00.000Z",
+      body: "Request two",
+    });
+    await writeAgentRequest({
+      store: cancelledRuntime.store,
+      request: request1,
+    });
+    await writeAgentRequest({
+      store: cancelledRuntime.store,
+      request: request2,
+    });
+    const pickup1 = await agentCommand(["next", cancelledRuntime.planPath]);
+    if (
+      typeof pickup1 === "string" ||
+      typeof pickup1.response_file !== "string"
+    ) {
+      throw new Error("R1 pickup did not provide a response file");
+    }
+    expect(pickup1).toMatchObject({
+      pending: true,
+      work: { requestId: request1.requestId },
+    });
+    await appendAgentCancellation({
+      store: cancelledRuntime.store,
+      cancellation: {
+        requestId: request1.requestId,
+        at: "2026-08-04T15:02:00.000Z",
+      },
+    });
+    await writeFile(
+      pickup1.response_file,
+      JSON.stringify({
+        requestId: request1.requestId,
+        message: "This response arrived too late.",
+      }),
+    );
+    await expect(
+      agentCommand([
+        "respond",
+        cancelledRuntime.planPath,
+        pickup1.response_file,
+      ]),
+    ).rejects.toThrow(/reviewer cancelled this request/u);
+    const pickup2 = await agentCommand(["next", cancelledRuntime.planPath]);
+    if (
+      typeof pickup2 === "string" ||
+      typeof pickup2.response_file !== "string"
+    ) {
+      throw new Error("R2 pickup did not provide a response file");
+    }
+    expect(pickup2).toMatchObject({
+      pending: true,
+      work: { requestId: request2.requestId },
+    });
+    await writeFile(
+      pickup2.response_file,
+      JSON.stringify({
+        requestId: request2.requestId,
+        message: "R2 completed after R1 was cancelled.",
+      }),
+    );
+    await expect(
+      agentCommand([
+        "respond",
+        cancelledRuntime.planPath,
+        pickup2.response_file,
+      ]),
+    ).resolves.toMatchObject({ responded: request2.requestId });
+    await expect(
+      agentCommand(["next", cancelledRuntime.planPath]),
+    ).resolves.toMatchObject({ pending: false });
+    await cancelledRuntime.close();
   });
 });

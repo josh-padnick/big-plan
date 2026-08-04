@@ -418,29 +418,6 @@ const respond = async ({
   readonly responseArgument: string;
 }): Promise<Record<string, unknown>> => {
   const session = await readPlanSession(planArgument);
-  const snapshot = await readAgentExchange({
-    store: session.store,
-    sessionId: session.sessionId,
-    planId: session.planId,
-  });
-  const answered = new Set(
-    snapshot.responses.map((response) => response.requestId),
-  );
-  const queueHead = snapshot.requests.find(
-    (candidate) => !answered.has(candidate.requestId),
-  );
-  if (
-    queueHead !== undefined &&
-    snapshot.cancelledIds.includes(queueHead.requestId)
-  ) {
-    return fail(
-      "The reviewer cancelled this request. Discard your draft, revert any plan edits you made for it, and run agent next.",
-    );
-  }
-  const request = nextPendingAgentRequest(snapshot);
-  if (request === undefined) {
-    return fail("There is no pending agent request to answer");
-  }
   let responseDraft: unknown;
   try {
     responseDraft = JSON.parse(
@@ -448,6 +425,32 @@ const respond = async ({
     );
   } catch (error: unknown) {
     return fail(`Cannot read the response JSON: ${String(error)}`);
+  }
+  const snapshot = await readAgentExchange({
+    store: session.store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  if (!isRecord(responseDraft) || typeof responseDraft.requestId !== "string") {
+    return fail("The response JSON must name its requestId");
+  }
+  const request = snapshot.requests.find(
+    (candidate) => candidate.requestId === responseDraft.requestId,
+  );
+  if (request === undefined) {
+    return fail("The response does not name a request in this review session");
+  }
+  if (snapshot.cancelledIds.includes(request.requestId)) {
+    return fail(
+      "The reviewer cancelled this request. Discard your draft, revert any plan edits you made for it, and run agent next.",
+    );
+  }
+  const pending = nextPendingAgentRequest(snapshot);
+  if (pending === undefined) {
+    return fail("There is no pending agent request to answer");
+  }
+  if (pending.requestId !== request.requestId) {
+    return fail("The response does not answer the next pending agent request");
   }
   let markdown: string;
   try {
