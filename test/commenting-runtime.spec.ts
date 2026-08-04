@@ -113,7 +113,6 @@ test("should preserve and send a floating review across reload and viewport chan
     await page.mouse.up();
     expect(active).not.toBe(hover);
   };
-
   await test.step("the toolbar entry reads as a toggle rather than a pill", async () => {
     await expect(toggle).toBeVisible();
     await expect
@@ -212,6 +211,31 @@ test("should preserve and send a floating review across reload and viewport chan
       );
       await selector.click();
       await expect(compose).toBeVisible();
+      await expect(compose).toHaveAttribute(
+        "data-review-compose-placement",
+        "before-slide",
+      );
+      await expect
+        .poll(() =>
+          compose.evaluate((node) => {
+            const slideNode = node.nextElementSibling;
+            const composeRect = node.getBoundingClientRect();
+            const slideRect = slideNode?.getBoundingClientRect();
+            return {
+              precedesSlide: slideNode?.hasAttribute("data-slide") === true,
+              aboveSlide:
+                slideRect !== undefined &&
+                composeRect.bottom <= slideRect.top + 1,
+              visible:
+                composeRect.bottom > 44 && composeRect.top < window.innerHeight,
+            };
+          }),
+        )
+        .toEqual({
+          precedesSlide: true,
+          aboveSlide: true,
+          visible: true,
+        });
       await expect(affordance).toBeHidden();
       await expect(page.locator("html")).toHaveAttribute(
         "data-review-active-selection-highlight",
@@ -234,6 +258,44 @@ test("should preserve and send a floating review across reload and viewport chan
     await page.evaluate(() =>
       document.documentElement.removeAttribute("data-theme"),
     );
+  });
+
+  await test.step("inline composers stay near the gesture for first, last, and tall slide targets", async () => {
+    await page.setViewportSize({ width: 1180, height: 520 });
+    const selectors = page.locator("[data-review-slide-selector]");
+    const candidateIndexes = [0, (await selectors.count()) - 1];
+    const heights = await page.locator("[data-slide]").evaluateAll((slides) =>
+      slides.map((slide, index) => ({
+        index,
+        height: slide.getBoundingClientRect().height,
+      })),
+    );
+    const tallIndex = heights.sort(
+      (left, right) => right.height - left.height,
+    )[0]?.index;
+    if (tallIndex !== undefined) candidateIndexes.push(tallIndex);
+    for (const index of [...new Set(candidateIndexes)]) {
+      const selector = selectors.nth(index);
+      await selector.scrollIntoViewIfNeeded();
+      await selector.click();
+      await expect(compose).toHaveAttribute(
+        "data-review-compose-placement",
+        "before-slide",
+      );
+      const geometry = await compose.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          top: rect.top,
+          bottom: rect.bottom,
+          viewport: window.innerHeight,
+        };
+      });
+      expect(geometry.bottom).toBeGreaterThan(44);
+      expect(geometry.top).toBeLessThan(geometry.viewport);
+      await page.keyboard.press("Escape");
+    }
+
+    await page.setViewportSize({ width: 1440, height: 900 });
   });
 
   await test.step("the page toolbar owns one full-width bottom border", async () => {
@@ -760,8 +822,9 @@ test("should preserve and send a floating review across reload and viewport chan
     ).not.toContain("text-decoration");
 
     const longBody =
-      "This deliberately long comment proves that the floating thread stays compact until the reviewer asks for the rest. " +
-      "It includes enough detail to pass the collapse threshold while remaining plain reviewer text that can be edited or removed safely.";
+      "This deliberately long first paragraph proves that the floating thread stays compact until the reviewer asks for the rest.\n\n" +
+      "unbroken-review-token-".repeat(24) +
+      " closes the second paragraph without widening its bubble.";
     await page.locator("[data-review-compose-input]").fill(longBody);
     await page.locator("[data-review-compose-save]").click();
     const card = page.locator("[data-review-thread-card]").first();
@@ -842,6 +905,16 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(card.locator("[data-review-thread-body]")).toHaveText(
       longBody,
     );
+    await expect
+      .poll(() =>
+        card.evaluate((node) => ({
+          cardContained: node.scrollWidth <= node.clientWidth,
+          bodyContained: Array.from(
+            node.querySelectorAll("[data-review-thread-body]"),
+          ).every((body) => body.scrollWidth <= body.clientWidth),
+        })),
+      )
+      .toEqual({ cardContained: true, bodyContained: true });
     await expect(page.locator("html")).toHaveAttribute(
       "data-review-selection-highlight-count",
       "1",
@@ -1542,7 +1615,7 @@ test("should preserve and send a floating review across reload and viewport chan
       page.locator(
         '[data-review-outcome-group="queued"] [data-review-thread-resolve]',
       ),
-    ).toHaveCount(0);
+    ).toHaveCount(3);
     await expect(
       page.locator('[data-review-outcome-state="blocked"]'),
     ).toHaveCount(3);
@@ -1576,6 +1649,104 @@ test("should preserve and send a floating review across reload and viewport chan
       blockedCard.locator('[data-review-thread-turn="user"] time'),
     ).toContainText(/^Queued · /);
     await blockedCard.locator("[data-review-thread-minimize]").click();
+    await agentCommand(["next", session.plan]);
+    await expect(
+      page.locator('[data-review-outcome-group="working"] [data-review-row]'),
+    ).toHaveCount(1, { timeout: 10_000 });
+    for (let index = 0; index < 12; index += 1) {
+      await agentCommand([
+        "note",
+        session.plan,
+        `Working update ${String(index + 1).padStart(2, "0")}`,
+      ]);
+    }
+    const workingCard = page
+      .locator(
+        '[data-review-thread-state="sent"][data-review-lifecycle="working"]',
+      )
+      .first();
+    await workingCard.locator("[data-review-thread-summary-toggle]").click();
+    const cardActivityToggle = workingCard.locator(
+      "[data-review-status-activity-toggle]",
+    );
+    await expect(cardActivityToggle).toBeVisible({ timeout: 10_000 });
+    if ((await cardActivityToggle.getAttribute("aria-expanded")) === "false") {
+      await cardActivityToggle.click();
+    }
+    const cardActivity = workingCard.locator("[data-review-status-activity]");
+    await expect(cardActivity.locator("li")).toHaveCount(8, {
+      timeout: 10_000,
+    });
+    const cardScroll = await cardActivity.evaluate((node) => {
+      node.scrollTop = Math.min(24, node.scrollHeight - node.clientHeight);
+      return {
+        top: node.scrollTop,
+        scrollable: node.scrollHeight > node.clientHeight,
+      };
+    });
+    expect(cardScroll.scrollable).toBe(true);
+    expect(cardScroll.top).toBeGreaterThan(0);
+    await agentCommand(["note", session.plan, "Working update 14"]);
+    await expect(cardActivity.locator("li")).toHaveCount(8, {
+      timeout: 10_000,
+    });
+    await expect
+      .poll(() => cardActivity.evaluate((node) => node.scrollTop))
+      .toBe(cardScroll.top);
+    const cancelRequest = workingCard.locator("[data-review-cancel-request]");
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await cancelRequest.hover();
+      await expect(cancelRequest).toHaveCSS("cursor", "pointer");
+      const hover = await cancelRequest.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      );
+      expect(hover).not.toBe("rgba(0, 0, 0, 0)");
+      await cancelRequest.focus();
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Shift+Tab");
+      await expect
+        .poll(() =>
+          cancelRequest.evaluate((node) => node.matches(":focus-visible")),
+        )
+        .toBe(true);
+      const box = await cancelRequest.boundingBox();
+      if (box === null) throw new Error("Cancel request has no pointer target");
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      const active = await cancelRequest.evaluate(
+        (node) => getComputedStyle(node).opacity,
+      );
+      await page.mouse.move(1, 1);
+      await page.mouse.up();
+      expect(active).not.toBe("1");
+    }
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("data-theme", "light"),
+    );
+
+    await toggle.click();
+    const trayWorkingRow = page
+      .locator('[data-review-outcome-group="working"] [data-review-row]')
+      .first();
+    await trayWorkingRow.locator("[data-review-row-target]").click();
+    const trayActivity = trayWorkingRow.locator(
+      "[data-review-status-activity]",
+    );
+    await expect(trayActivity).toBeVisible();
+    await expect
+      .poll(() =>
+        trayActivity.evaluate((node) => ({
+          overflow: getComputedStyle(node).overflowY,
+          contained: node.scrollHeight <= node.clientHeight,
+        })),
+      )
+      .toEqual({ overflow: "visible", contained: true });
+    await page.locator("[data-review-hide]").click();
   });
 
   await test.step("a real agent response revises the source and re-renders outcome threads live", async () => {
@@ -1690,6 +1861,11 @@ test("should preserve and send a floating review across reload and viewport chan
     if (questionRequest?.kind !== "feedback") {
       throw new Error("The second serialized comment was not queued");
     }
+    const queuedLabels = page.locator(
+      '[data-review-outcome-group="queued"] [data-review-row-secondary]',
+    );
+    await expect(queuedLabels).toHaveCount(2, { timeout: 10_000 });
+    await expect(queuedLabels).toHaveText(["Queued", "Queued"]);
     await writeAgentResponse({
       store,
       response: validateAgentResponseDraft({
@@ -2068,7 +2244,7 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(page.locator("[data-review-thread-expanded]")).toHaveCount(0);
   });
 
-  await test.step("floating composers and expanded threads never overlap neighboring controls", async () => {
+  await test.step("composers and expanded threads never overlap neighboring controls", async () => {
     await page.setViewportSize({ width: 1440, height: 520 });
     await page
       .locator('[data-block-label="versionId"]')
@@ -2118,44 +2294,42 @@ test("should preserve and send a floating review across reload and viewport chan
       .locator("[data-review-thread-expanded] [data-review-thread-minimize]")
       .click();
 
-    const cardTopsBeforeCompose = await page
-      .locator("[data-review-thread-card]:not([hidden])")
-      .evaluateAll((nodes) =>
-        Object.fromEntries(
-          nodes.map((node) => [
-            node.getAttribute("data-review-comment-id"),
-            {
-              top: Number.parseFloat((node as HTMLElement).style.top),
-              height: node.getBoundingClientRect().height,
-            },
-          ]),
-        ),
-      );
-    expect(Object.keys(cardTopsBeforeCompose).length).toBeGreaterThan(0);
     await page.locator("[data-review-slide-selector]").last().click();
-    await expect(compose).toHaveAttribute("data-review-compose-floating", "");
-    const cardTopsAfterCompose = await page
+    await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+    await expect(compose).toHaveAttribute(
+      "data-review-compose-placement",
+      "before-slide",
+    );
+    const composeRect = await compose.boundingBox();
+    const selectedSlideRect = await page
+      .locator('[data-review-slide-highlight="active"]')
+      .boundingBox();
+    if (composeRect === null || selectedSlideRect === null) {
+      throw new Error("The whole-slide composer has no document placement");
+    }
+    expect(composeRect.y + composeRect.height).toBeLessThanOrEqual(
+      selectedSlideRect.y,
+    );
+    const cardRectsAfterCompose = await page
       .locator("[data-review-thread-card]:not([hidden])")
       .evaluateAll((nodes) =>
-        Object.fromEntries(
-          nodes.map((node) => [
-            node.getAttribute("data-review-comment-id"),
-            {
-              top: Number.parseFloat((node as HTMLElement).style.top),
-              height: node.getBoundingClientRect().height,
-            },
-          ]),
-        ),
+        nodes.map((node) => {
+          const rect = node.getBoundingClientRect();
+          return {
+            left: rect.left,
+            right: rect.right,
+            top: rect.top,
+            bottom: rect.bottom,
+          };
+        }),
       );
-    const composeTop = await compose.evaluate((node) =>
-      Number.parseFloat(node.style.top),
-    );
-    const cardsAboveCompose = Object.entries(cardTopsBeforeCompose).filter(
-      ([, geometry]) => geometry.top + geometry.height + 8 <= composeTop,
-    );
-    expect(cardsAboveCompose.length).toBeGreaterThan(0);
-    for (const [id, geometry] of cardsAboveCompose) {
-      expect(cardTopsAfterCompose[id]?.top).toBe(geometry.top);
+    for (const card of cardRectsAfterCompose) {
+      expect(
+        card.left < composeRect.x + composeRect.width &&
+          card.right > composeRect.x &&
+          card.top < composeRect.y + composeRect.height &&
+          card.bottom > composeRect.y,
+      ).toBe(false);
     }
     await page.locator("[data-review-compose-cancel]").click();
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -2446,7 +2620,6 @@ test("should preserve and send a floating review across reload and viewport chan
       await expect(row.locator("[data-review-row-body]")).toHaveCount(0);
       await expect(row.getByText(commentText, { exact: true })).toHaveCount(1);
       await expect(row.locator("[data-review-outcome-state]")).toHaveCount(0);
-
       await page.waitForTimeout(700);
       const beforeCollapse = await page.evaluate(() => window.scrollY);
       await target.click();
@@ -3011,6 +3184,22 @@ Ship the live review loop behind the explicit review command.
     await expect(
       trayThread.locator("[data-review-thread-resolve]"),
     ).toBeVisible();
+    const resolutionFooter = trayThread.locator(
+      "[data-review-thread-resolution]",
+    );
+    await expect(resolutionFooter).toBeVisible();
+    await expect(
+      resolutionFooter.locator("[data-review-thread-keep-open]"),
+    ).toHaveText("Keep open");
+    const footerResolve = resolutionFooter.locator(
+      "[data-review-thread-resolve-footer]",
+    );
+    await expect(footerResolve).toHaveText("Resolve thread");
+    const replyField = trayThread.locator("[data-review-thread-reply]");
+    await replyField.fill("One final note before resolving.");
+    await expect(footerResolve).toHaveText("Reply & resolve");
+    await replyField.fill("");
+    await expect(footerResolve).toHaveText("Resolve thread");
     for (const theme of ["light", "dark"]) {
       await page.evaluate(
         (nextTheme) =>
@@ -3021,6 +3210,8 @@ Ship the live review loop behind the explicit review command.
         "[data-review-thread-minimize]",
         "[data-review-thread-resolve]",
         "[data-review-thread-revert]",
+        "[data-review-thread-keep-open]",
+        "[data-review-thread-resolve-footer]",
       ]) {
         const button = trayThread.locator(control);
         await button.hover();
@@ -3052,6 +3243,14 @@ Ship the live review loop behind the explicit review command.
     await page.evaluate(() =>
       document.documentElement.setAttribute("data-theme", "light"),
     );
+    const beforeKeepOpen = await page.evaluate(() => window.scrollY);
+    await resolutionFooter.locator("[data-review-thread-keep-open]").click();
+    await expect(trayThread).not.toHaveAttribute("data-review-row-expanded");
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeCloseTo(beforeKeepOpen, 0);
+    await changedRow.click();
+    await expect(trayThread).toHaveAttribute("data-review-row-expanded", "");
     const historicalChange = trayThread
       .locator("[data-review-see-change]")
       .first();
@@ -3180,16 +3379,36 @@ Ship the live review loop behind the explicit review command.
       page.locator('[data-block-label="versionId"]'),
     ).not.toHaveAttribute("data-review-anchor-changed");
 
-    await trayThread.locator("[data-review-thread-minimize]").click();
-    await expect(trayThread).not.toHaveAttribute("data-review-row-expanded");
     await expect(page.locator("[data-review-other-changes]")).toHaveCount(0);
     const savedResolve = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/drafts") &&
         response.request().method() === "PUT",
     );
-    await trayThread.locator("[data-review-thread-resolve]").click();
+    const beforeResolve = await page.evaluate(() => window.scrollY);
+    await trayThread.locator("[data-review-thread-resolve-footer]").click();
     expect((await savedResolve).ok()).toBe(true);
+    await expect(page.locator("[data-review-toast]")).toBeVisible();
+    await expect(page.locator("[data-review-toast]")).toContainText("Resolved");
+    await expect(page.locator("[data-review-toast-action]")).toHaveText("Undo");
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeCloseTo(beforeResolve, 0);
+    const savedUndo = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/drafts") &&
+        response.request().method() === "PUT",
+    );
+    await page.locator("[data-review-toast-action]").click();
+    expect((await savedUndo).ok()).toBe(true);
+    await expect(trayThread).toHaveAttribute("data-review-row-expanded", "");
+    const savedFinalResolve = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/drafts") &&
+        response.request().method() === "PUT",
+    );
+    await trayThread.locator("[data-review-thread-resolve-footer]").click();
+    expect((await savedFinalResolve).ok()).toBe(true);
     await expect(
       page.locator(
         `[data-review-outcome-group] [data-review-sent-row][data-review-comment-id="${commentId}"]`,
@@ -3213,6 +3432,21 @@ Ship the live review loop behind the explicit review command.
     await expect(
       page.locator("[data-review-resolved-group] summary"),
     ).toHaveText("Resolved (1)");
+    await expect(page.locator("[data-review-empty]")).toBeVisible();
+    await expect
+      .poll(() =>
+        page.locator("[data-review-sent]").evaluate((sent) => {
+          const resolved = sent.querySelector("[data-review-resolved-group]");
+          return {
+            outer: getComputedStyle(sent).borderTopWidth,
+            inner:
+              resolved === null
+                ? "missing"
+                : getComputedStyle(resolved).borderTopWidth,
+          };
+        }),
+      )
+      .toEqual({ outer: "1px", inner: "0px" });
     await page.locator("[data-review-resolved-group] summary").click();
     const resolvedRow = page.locator("[data-review-resolved-group] li");
     await expect(resolvedRow).toHaveCount(1);
@@ -3330,6 +3564,11 @@ test("should preserve footnote navigation inside a selected slide", async ({
   const selector = page.locator("[data-review-slide-selector]").first();
   const selectedSlide = selector.locator("xpath=ancestor::*[@data-slide]");
   await selector.click();
+  const compose = page.locator("[data-review-compose]");
+  await expect(compose).toHaveAttribute(
+    "data-review-compose-placement",
+    "before-slide",
+  );
   await page
     .locator("[data-review-compose-input]")
     .fill("Keep the footnote reachable while this slide is selected.");
@@ -3354,4 +3593,19 @@ test("should preserve footnote navigation inside a selected slide", async ({
     await footnote.locator("[data-footnote-backref]").click();
     await expect(footnoteLink).toBeInViewport();
   }
+  const footnoteParagraph = footnoteLink.locator("xpath=ancestor::p");
+  await footnoteParagraph.click({ clickCount: 3 });
+  const affordance = page.locator("[data-review-affordance]");
+  await expect(affordance).toBeVisible();
+  await affordance.click();
+  await expect(compose).toBeVisible();
+  await expect
+    .poll(() =>
+      compose.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return rect.bottom > 44 && rect.top < window.innerHeight;
+      }),
+    )
+    .toBe(true);
+  await page.keyboard.press("Escape");
 });

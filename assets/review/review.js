@@ -73,6 +73,8 @@ import {
   const REVIEW_CONTROL_TOP = 52;
   const FLOAT_EDGE = 12;
   const FLOAT_CONTENT_GAP = 12;
+  const COMMENT_WRAP_CLASSES =
+    "min-w-0 max-w-full whitespace-pre-wrap [overflow-wrap:anywhere]";
 
   // ---------------------------------------------------------------- elements
 
@@ -141,10 +143,13 @@ import {
     return checked
       ? el(
           "div",
-          { "data-review-message-body": "structured" },
+          {
+            class: COMMENT_WRAP_CLASSES,
+            "data-review-message-body": "structured",
+          },
           checked.map(renderNode),
         )
-      : el("p", { text: fallback });
+      : el("p", { class: COMMENT_WRAP_CLASSES, text: fallback });
   };
 
   const icon = (definition) => {
@@ -1171,6 +1176,7 @@ import {
   const compose = el(
     "div",
     {
+      class: "data-[review-compose-centered]:fixed!",
       "data-review-compose": true,
       role: "dialog",
       "aria-label": "Add a comment",
@@ -1204,6 +1210,12 @@ import {
     "aria-label": "Comment anchors",
   });
   const live = el("p", { "data-review-live": true, "aria-live": "polite" });
+  const toast = el("div", {
+    class:
+      "fixed bottom-4 left-1/2 z-[70] hidden -translate-x-1/2 items-center gap-3 rounded-md border border-edge bg-[var(--ink-c)] px-3 py-2 text-xs font-semibold text-[var(--bg)] shadow-lg",
+    "data-review-toast": true,
+    role: "status",
+  });
   const backdrop = el("button", {
     type: "button",
     "data-review-backdrop": true,
@@ -1293,6 +1305,7 @@ import {
     markerLayer,
     deleteDialog,
     revertDialog,
+    toast,
     live,
   ]);
   document.body.appendChild(surface);
@@ -1321,6 +1334,27 @@ import {
 
   const announce = (message) => {
     live.textContent = message;
+  };
+
+  const showToast = ({ message, actionLabel, action }) => {
+    const actionButton = el("button", {
+      type: "button",
+      class:
+        "cursor-pointer rounded-sm underline underline-offset-2 hover:opacity-80 active:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--bg)]",
+      "data-review-toast-action": true,
+      text: actionLabel,
+    });
+    actionButton.addEventListener("click", () => {
+      toast.classList.add("hidden");
+      toast.classList.remove("flex");
+      void action();
+    });
+    toast.replaceChildren(
+      el("span", { "data-review-toast-message": true, text: message }),
+      actionButton,
+    );
+    toast.classList.remove("hidden");
+    toast.classList.add("flex");
   };
 
   // -------------------------------------------------------------- tray render
@@ -2618,7 +2652,7 @@ import {
     }
   };
 
-  const threadStatusStrip = (status) => {
+  const threadStatusStrip = (status, options = {}) => {
     if (!status.headline) return null;
     const events =
       status.stage === "working" ? currentActivityEvents(status.requestId) : [];
@@ -2671,7 +2705,14 @@ import {
       strip.appendChild(
         el(
           "ol",
-          { "data-review-status-activity": true },
+          {
+            class:
+              options.surface === "tray" ? "max-h-none! overflow-visible!" : "",
+            "data-review-status-activity": true,
+            ...(options.surface === "card" && options.commentId
+              ? { "data-review-activity-owner": options.commentId }
+              : {}),
+          },
           events.map((event) => {
             const item = el("li", {}, [
               el("span", {
@@ -2701,6 +2742,8 @@ import {
     ) {
       const cancel = el("button", {
         type: "button",
+        class:
+          "-mx-1 cursor-pointer rounded-sm px-1 transition-colors hover:bg-[color-mix(in_srgb,currentColor_10%,transparent)] active:opacity-65 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-current",
         "data-review-cancel-request": true,
         text: "Cancel request",
       });
@@ -2831,7 +2874,11 @@ import {
           jump,
           outcomeBadge({ key: "waiting", label: "Sending" }, { spin: true }),
         ]),
-        el("p", { "data-review-row-body": true, text: comment.body }),
+        el("p", {
+          class: COMMENT_WRAP_CLASSES,
+          "data-review-row-body": true,
+          text: comment.body,
+        }),
       ]);
     }
 
@@ -2855,7 +2902,11 @@ import {
       ]);
       return el("li", rowAttributes, [
         el("div", { "data-review-row-head": true }, [jump, iconActions]),
-        el("p", { "data-review-row-body": true, text: comment.body }),
+        el("p", {
+          class: COMMENT_WRAP_CLASSES,
+          "data-review-row-body": true,
+          text: comment.body,
+        }),
         stagedAnchorNotice(comment),
         submitErrorNote(comment),
         el(
@@ -2921,10 +2972,10 @@ import {
 
   const sendThreadReply = async (comment, field, button) => {
     const body = field.value.trim();
-    if (body === "") return;
+    if (body === "") return false;
     if (!hasRuntime) {
       announce("Start the local review runtime to reply to the agent.");
-      return;
+      return false;
     }
     button.disabled = true;
     try {
@@ -2944,6 +2995,7 @@ import {
       announce("Reply sent to the coding agent.");
       renderTray();
       startProgress();
+      return true;
     } catch (error) {
       showInlineError(
         button,
@@ -2953,6 +3005,7 @@ import {
       );
       announce(describeError(error));
       button.disabled = false;
+      return false;
     }
   };
 
@@ -3518,16 +3571,23 @@ import {
   };
 
   const agentTurn = (outcome, createdAt, comment, event) => {
-    const node = el("div", { "data-review-thread-turn": "agent" }, [
-      el("div", { "data-review-turn-meta": true }, [
-        el("strong", { text: "Agent" }),
-        el("time", {
-          datetime: createdAt,
-          text: relativeCommentTime(createdAt),
-        }),
-      ]),
-      messageBody(outcome.messageNodes, outcome.message),
-    ]);
+    const node = el(
+      "div",
+      {
+        class: "min-w-0 max-w-full",
+        "data-review-thread-turn": "agent",
+      },
+      [
+        el("div", { "data-review-turn-meta": true }, [
+          el("strong", { text: "Agent" }),
+          el("time", {
+            datetime: createdAt,
+            text: relativeCommentTime(createdAt),
+          }),
+        ]),
+        messageBody(outcome.messageNodes, outcome.message),
+      ],
+    );
     if (outcome.state === "changed" && event) {
       const controls = changeControls(comment, event);
       if (controls) node.appendChild(controls);
@@ -3549,7 +3609,7 @@ import {
       text: "You cancelled this request.",
     });
 
-  const conversationNodes = (comment) => {
+  const conversationNodes = (comment, options = {}) => {
     const outcome = outcomeFor(comment);
     const initialRequest = agentRequests.find(
       (request) =>
@@ -3558,22 +3618,29 @@ import {
         request.comments.some((entry) => entry.id === comment.id),
     );
     const nodes = [
-      el("div", { "data-review-thread-turn": "user" }, [
-        el("div", { "data-review-turn-meta": true }, [
-          el("strong", { text: "You" }),
-          el("time", {
-            datetime: initialRequest?.createdAt || comment.createdAt,
-            text:
-              requestDeliveryLabel(initialRequest) +
-              " · " +
-              relativeCommentTime(
-                initialRequest?.createdAt || comment.createdAt,
-              ),
-          }),
-        ]),
-        el("p", { text: comment.body }),
-        anchorContextLine(comment),
-      ]),
+      el(
+        "div",
+        {
+          class: "min-w-0 max-w-full",
+          "data-review-thread-turn": "user",
+        },
+        [
+          el("div", { "data-review-turn-meta": true }, [
+            el("strong", { text: "You" }),
+            el("time", {
+              datetime: initialRequest?.createdAt || comment.createdAt,
+              text:
+                requestDeliveryLabel(initialRequest) +
+                " · " +
+                relativeCommentTime(
+                  initialRequest?.createdAt || comment.createdAt,
+                ),
+            }),
+          ]),
+          el("p", { class: COMMENT_WRAP_CLASSES, text: comment.body }),
+          anchorContextLine(comment),
+        ],
+      ),
     ];
     if (
       initialRequest &&
@@ -3609,19 +3676,26 @@ import {
         continue;
       }
       nodes.push(
-        el("div", { "data-review-thread-turn": "user" }, [
-          el("div", { "data-review-turn-meta": true }, [
-            el("strong", { text: "You" }),
-            el("time", {
-              datetime: request.createdAt,
-              text:
-                requestDeliveryLabel(request) +
-                " · " +
-                relativeCommentTime(request.createdAt),
-            }),
-          ]),
-          el("p", { text: request.body }),
-        ]),
+        el(
+          "div",
+          {
+            class: "min-w-0 max-w-full",
+            "data-review-thread-turn": "user",
+          },
+          [
+            el("div", { "data-review-turn-meta": true }, [
+              el("strong", { text: "You" }),
+              el("time", {
+                datetime: request.createdAt,
+                text:
+                  requestDeliveryLabel(request) +
+                  " · " +
+                  relativeCommentTime(request.createdAt),
+              }),
+            ]),
+            el("p", { class: COMMENT_WRAP_CLASSES, text: request.body }),
+          ],
+        ),
       );
       if (agentCancelledIds.includes(request.requestId)) {
         nodes.push(cancelledRequestLine());
@@ -3642,8 +3716,12 @@ import {
     }
 
     if (outcome.key === "waiting") {
-      const strip = threadStatusStrip(outcome.status);
+      const strip = threadStatusStrip(outcome.status, {
+        surface: options.surface,
+        commentId: comment.id,
+      });
       if (strip) nodes.push(strip);
+      nodes.push(threadResolutionFooter({ comment }));
       return nodes;
     }
 
@@ -3692,6 +3770,13 @@ import {
         sendReply,
       ]),
     );
+    nodes.push(
+      threadResolutionFooter({
+        comment,
+        replyField: field,
+        replyButton: sendReply,
+      }),
+    );
     return nodes;
   };
 
@@ -3700,7 +3785,7 @@ import {
     revertDialog.showModal();
   };
 
-  const resolveThreadIds = async (ids) => {
+  const resolveThreadIds = async (ids, options = {}) => {
     if (diffLens?.comment && ids.includes(diffLens.comment.id)) {
       clearDiffLens();
     }
@@ -3712,15 +3797,28 @@ import {
       expandedThreadIds.delete(id);
       expandedCommentIds.delete(id);
     }
-    announce(
+    const resolvedMessage =
       ids.length === 1
         ? "Comment resolved."
-        : "Resolved " + ids.length + " comments.",
-    );
+        : "Resolved " + ids.length + " comments.";
+    announce(resolvedMessage);
     renderTray();
     try {
       await persist();
       sendNote.textContent = "";
+      if (ids.length === 1 && options.toast !== false) {
+        showToast({
+          message: "Resolved",
+          actionLabel: "Undo",
+          action: async () => {
+            resolvedCommentIds.delete(ids[0]);
+            expandedThreadIds.add(ids[0]);
+            announce("Comment reopened.");
+            renderTray();
+            await save();
+          },
+        });
+      }
     } catch (error) {
       resolvedCommentIds.clear();
       previousResolved.forEach((id) => resolvedCommentIds.add(id));
@@ -3743,6 +3841,57 @@ import {
     announce("Comment reopened.");
     renderTray();
     await save();
+  };
+
+  const keepThreadOpen = (comment) => {
+    clearCommentLensIfOwned(comment.id);
+    expandedThreadIds.delete(comment.id);
+    renderTray();
+  };
+
+  const threadResolutionFooter = ({ comment, replyField, replyButton }) => {
+    const keepOpen = el("button", {
+      type: "button",
+      class:
+        "cursor-pointer rounded-sm px-2 py-1 text-xs font-semibold text-muted hover:bg-[var(--review-control-hover)] hover:text-ink active:bg-[var(--review-control-active)] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent",
+      "data-review-thread-keep-open": true,
+      text: "Keep open",
+    });
+    const resolve = el("button", {
+      type: "button",
+      class:
+        "cursor-pointer rounded-sm border border-accent bg-accent px-2 py-1 text-xs font-semibold text-[var(--bg)] hover:brightness-110 active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+      "data-review-thread-resolve-footer": true,
+      text: "Resolve thread",
+    });
+    const syncLabel = () => {
+      resolve.textContent =
+        replyField?.value.trim() === "" ? "Resolve thread" : "Reply & resolve";
+    };
+    replyField?.addEventListener("input", syncLabel);
+    keepOpen.addEventListener("click", () => keepThreadOpen(comment));
+    resolve.addEventListener("click", async () => {
+      const hasReply = replyField?.value.trim() !== "";
+      if (hasReply) {
+        const sentReply = await sendThreadReply(
+          comment,
+          replyField,
+          replyButton,
+        );
+        if (!sentReply) return;
+      }
+      await resolveThread(comment);
+    });
+    syncLabel();
+    return el(
+      "footer",
+      {
+        class:
+          "mt-3 flex items-center justify-end gap-2 border-t border-edge pt-3",
+        "data-review-thread-resolution": true,
+      },
+      [keepOpen, resolve],
+    );
   };
 
   const toolbarButton = ({ attribute, label, glyph, action }) => {
@@ -3787,7 +3936,7 @@ import {
           },
         }),
       );
-    } else if (outcomeFor(comment).key !== "waiting") {
+    } else {
       actions.push(
         toolbarButton({
           attribute: "data-review-thread-resolve",
@@ -3998,20 +4147,9 @@ import {
     );
     const children = [rowHead];
     if (expanded) {
-      children.push(...conversationNodes(comment));
+      children.push(...conversationNodes(comment, { surface: "tray" }));
     } else {
       const pendingRequest = pendingRequestForComment(comment);
-      const queuedRequests = agentRequests.filter(
-        (request) =>
-          !agentResponses.some(
-            (response) => response.requestId === request.requestId,
-          ) && !agentCancelledIds.includes(request.requestId),
-      );
-      const queueIndex = pendingRequest
-        ? queuedRequests.findIndex(
-            (request) => request.requestId === pendingRequest.requestId,
-          )
-        : -1;
       const latestOutcome = outcomeEventsFor(comment).at(-1);
       const secondary =
         rowState === "ready"
@@ -4026,13 +4164,10 @@ import {
                 )}`
             : lifecycle === "blocked" || lifecycle === "offline"
               ? "Blocked · sends automatically on reconnect"
-              : `Queued${
-                  queueIndex >= 0
-                    ? ` · position ${queueIndex + 1} of ${queuedRequests.length}`
-                    : ""
-                }`;
+              : "Queued";
       children.push(
         el("p", {
+          class: COMMENT_WRAP_CLASSES,
           "data-review-row-body": true,
           text: shortEcho(comment.body),
         }),
@@ -4100,7 +4235,11 @@ import {
             outcomeBadge({ key: "waiting", label: "Sending" }, { spin: true }),
           ]),
         ]),
-        el("p", { "data-review-thread-body": true, text: comment.body }),
+        el("p", {
+          class: COMMENT_WRAP_CLASSES,
+          "data-review-thread-body": true,
+          text: comment.body,
+        }),
       );
       return card;
     }
@@ -4159,7 +4298,10 @@ import {
       });
       if (expanded) {
         card.setAttribute("data-review-thread-expanded", "");
-        card.append(threadToolbar(comment), ...conversationNodes(comment));
+        card.append(
+          threadToolbar(comment),
+          ...conversationNodes(comment, { surface: "card" }),
+        );
       } else {
         card.setAttribute("data-review-thread-collapsed", "");
         card.append(summary, threadQuickActions(comment));
@@ -4245,6 +4387,7 @@ import {
     const isLong = comment.body.length > LONG_COMMENT_LIMIT;
     const expanded = expandedCommentIds.has(comment.id);
     const body = el("p", {
+      class: COMMENT_WRAP_CLASSES,
       "data-review-thread-body": true,
     });
     if (isLong && !expanded) {
@@ -4391,6 +4534,14 @@ import {
   };
 
   const renderThreads = () => {
+    const anchoredActivityScroll = new Map(
+      Array.from(
+        threadLayer.querySelectorAll("[data-review-activity-owner]"),
+      ).map((node) => [
+        node.getAttribute("data-review-activity-owner"),
+        node.scrollTop,
+      ]),
+    );
     document
       .querySelectorAll("[data-review-thread-inline]")
       .forEach((card) => card.remove());
@@ -4409,6 +4560,14 @@ import {
       ...cards,
       ...(floatingCompose === null ? [] : [floatingCompose]),
     );
+    for (const activity of threadLayer.querySelectorAll(
+      "[data-review-activity-owner]",
+    )) {
+      const owner = activity.getAttribute("data-review-activity-owner");
+      if (owner !== null && anchoredActivityScroll.has(owner)) {
+        activity.scrollTop = anchoredActivityScroll.get(owner);
+      }
+    }
     if (window.innerWidth < 1280) {
       for (const card of cards) {
         const id = card.getAttribute("data-review-comment-id");
@@ -4509,10 +4668,12 @@ import {
       resolvedCommentIds.has(comment.id),
     );
     if (resolved.length > 0) {
+      const followsActiveGroup = renderedGroups.length > 0;
       renderedGroups.push(
         el(
           "details",
           {
+            class: followsActiveGroup ? "" : "mt-0! border-t-0! pt-0!",
             "data-review-resolved-group": true,
             open: resolved.some((comment) => expandedThreadIds.has(comment.id)),
           },
@@ -4851,6 +5012,7 @@ import {
     compose.removeAttribute("data-review-compose-inline");
     compose.removeAttribute("data-review-compose-floating");
     compose.removeAttribute("data-review-compose-centered");
+    compose.removeAttribute("data-review-compose-placement");
     compose.removeAttribute("style");
     if (compose.parentElement !== surface) surface.appendChild(compose);
     paintTargetHighlights();
@@ -4863,14 +5025,16 @@ import {
     if (!block) {
       compose.removeAttribute("style");
       compose.setAttribute("data-review-compose-centered", "");
+      compose.setAttribute("data-review-compose-placement", "centered");
       return;
     }
-    if (window.innerWidth >= 1280 && !railIsOpen()) {
+    if (target.type !== "slide" && window.innerWidth >= 1280 && !railIsOpen()) {
       if (compose.parentElement !== threadLayer)
         threadLayer.appendChild(compose);
       compose.removeAttribute("data-review-compose-inline");
       compose.removeAttribute("data-review-compose-centered");
       compose.setAttribute("data-review-compose-floating", "");
+      compose.setAttribute("data-review-compose-placement", "floating");
       positionThreadCards();
       return;
     }
@@ -4882,19 +5046,46 @@ import {
         : null;
     const slide =
       target.type === "slide" ? block.closest("[data-slide]") : null;
-    const insertionBlock = slide || endBlock || block;
+    const insertionBlock = endBlock || block;
     // A table row cannot legally own a div sibling inside tbody, so its
     // scroll container is the insertion anchor.
-    const anchor =
+    const trailingAnchor =
       insertionBlock.tagName === "TR"
         ? insertionBlock.closest("[data-table-scroll-container]") ||
           insertionBlock
         : insertionBlock;
+    const leadingAnchor =
+      block.tagName === "TR"
+        ? block.closest("[data-table-scroll-container]") || block
+        : block;
     compose.removeAttribute("style");
     compose.removeAttribute("data-review-compose-centered");
     compose.removeAttribute("data-review-compose-floating");
     compose.setAttribute("data-review-compose-inline", "");
-    anchor.after(compose);
+    if (slide) {
+      slide.before(compose);
+      compose.setAttribute("data-review-compose-placement", "before-slide");
+      return;
+    }
+    const composeHeight = compose.offsetHeight;
+    const startRect = leadingAnchor.getBoundingClientRect();
+    const endRect = trailingAnchor.getBoundingClientRect();
+    const roomBelow = window.innerHeight - endRect.bottom;
+    const roomAbove = startRect.top - REVIEW_CONTROL_TOP;
+    if (roomBelow >= composeHeight + FLOAT_CONTENT_GAP) {
+      trailingAnchor.after(compose);
+      compose.setAttribute("data-review-compose-placement", "after-selection");
+      return;
+    }
+    if (roomAbove >= composeHeight + FLOAT_CONTENT_GAP) {
+      leadingAnchor.before(compose);
+      compose.setAttribute("data-review-compose-placement", "before-selection");
+      return;
+    }
+    if (compose.parentElement !== surface) surface.appendChild(compose);
+    compose.removeAttribute("data-review-compose-inline");
+    compose.setAttribute("data-review-compose-centered", "");
+    compose.setAttribute("data-review-compose-placement", "centered");
   };
 
   const normalizedComposeBody = () => composeInput.value.trim();
@@ -5343,13 +5534,13 @@ import {
       if (message.role === "waiting") {
         const status = pendingStatusFor(message.request, "chat");
         return el("li", { "data-review-chat-message": "waiting" }, [
-          threadStatusStrip(status),
+          threadStatusStrip(status, { surface: "tray" }),
         ]);
       }
       const body =
         message.role === "agent"
           ? messageBody(message.messageNodes, message.body)
-          : el("p", { text: message.body });
+          : el("p", { class: COMMENT_WRAP_CLASSES, text: message.body });
       const turn = el("li", { "data-review-chat-message": message.role }, [
         el("div", { "data-review-turn-meta": true }, [
           el("strong", {
