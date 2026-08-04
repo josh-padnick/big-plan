@@ -375,7 +375,16 @@ test("should preserve and send a floating review across reload and viewport chan
             .find((text) => text.includes("big-plan-review-comments")),
         ),
       )
-      .not.toContain("text-decoration");
+      .toContain("text-decoration:underline");
+    expect(
+      await page.evaluate(
+        () =>
+          Array.from(document.head.querySelectorAll("style"))
+            .map((style) => style.textContent ?? "")
+            .find((text) => text.includes("big-plan-review-comments"))
+            ?.split("::highlight(big-plan-review-active)")[1],
+      ),
+    ).not.toContain("text-decoration");
 
     const longBody =
       "This deliberately long comment proves that the floating thread stays compact until the reviewer asks for the rest. " +
@@ -2224,6 +2233,12 @@ Ship the live review loop behind the explicit review command.
     await trayThread.locator("[data-review-thread-minimize]").click();
     await expect(trayThread).not.toHaveAttribute("data-review-row-expanded");
     await expect(trayThread.locator("[data-review-row-body]")).toBeVisible();
+    await expect(
+      trayThread.locator("[data-review-thread-resolve]"),
+    ).toBeVisible();
+    await expect(
+      trayThread.locator("[data-review-thread-revert]"),
+    ).toBeVisible();
     await expect(tray).toBeVisible();
 
     await changedRow.click();
@@ -2308,6 +2323,8 @@ Ship the live review loop behind the explicit review command.
       page.locator('[data-block-label="versionId"]'),
     ).not.toHaveAttribute("data-review-anchor-changed");
 
+    await trayThread.locator("[data-review-thread-minimize]").click();
+    await expect(trayThread).not.toHaveAttribute("data-review-row-expanded");
     const savedResolve = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/drafts") &&
@@ -2340,7 +2357,6 @@ Ship the live review loop behind the explicit review command.
     await page.locator("[data-review-resolved-group] summary").click();
     const resolvedRow = page.locator("[data-review-resolved-group] li");
     await expect(resolvedRow).toHaveCount(1);
-    await resolvedRow.locator("[data-review-row-target]").click();
     await expect(
       resolvedRow.locator("[data-review-thread-unresolve]"),
     ).toBeVisible();

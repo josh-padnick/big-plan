@@ -687,9 +687,19 @@ import {
     text: "Select text to comment, or use a slide selector to select it all.",
   });
   const responseSummary = el("p", { "data-review-round-summary": true });
+  const resolveAllButton = el("button", {
+    type: "button",
+    "data-review-resolve-all": true,
+    text: "Resolve all",
+    hidden: true,
+  });
+  const roundHead = el("div", { "data-review-round-head": true }, [
+    responseSummary,
+    resolveAllButton,
+  ]);
   const sentList = el("div", { "data-review-sent-list": true });
   const sentGroup = el("section", { "data-review-sent": true, hidden: true }, [
-    responseSummary,
+    roundHead,
     sentList,
   ]);
 
@@ -3100,14 +3110,39 @@ import {
     revertDialog.showModal();
   };
 
-  const resolveThread = async (comment) => {
-    resolvedCommentIds.add(comment.id);
-    expandedThreadIds.delete(comment.id);
-    expandedCommentIds.delete(comment.id);
-    announce("Comment resolved.");
+  const resolveThreadIds = async (ids) => {
+    const previousResolved = new Set(resolvedCommentIds);
+    const previousExpandedThreads = new Set(expandedThreadIds);
+    const previousExpandedComments = new Set(expandedCommentIds);
+    for (const id of ids) {
+      resolvedCommentIds.add(id);
+      expandedThreadIds.delete(id);
+      expandedCommentIds.delete(id);
+    }
+    announce(
+      ids.length === 1
+        ? "Comment resolved."
+        : "Resolved " + ids.length + " comments.",
+    );
     renderTray();
-    await save();
+    try {
+      await persist();
+      sendNote.textContent = "";
+    } catch (error) {
+      resolvedCommentIds.clear();
+      previousResolved.forEach((id) => resolvedCommentIds.add(id));
+      expandedThreadIds.clear();
+      previousExpandedThreads.forEach((id) => expandedThreadIds.add(id));
+      expandedCommentIds.clear();
+      previousExpandedComments.forEach((id) => expandedCommentIds.add(id));
+      const message = "Couldn’t resolve: " + describeError(error);
+      sendNote.textContent = message;
+      announce(message);
+      renderTray();
+    }
   };
+
+  const resolveThread = async (comment) => resolveThreadIds([comment.id]);
 
   const unresolveThread = async (comment) => {
     resolvedCommentIds.delete(comment.id);
@@ -3135,7 +3170,7 @@ import {
     return button;
   };
 
-  const threadToolbarActions = (comment, options = {}) => {
+  const threadQuickActions = (comment, options = {}) => {
     const resolved = options.resolved === true;
     const revertAction = outcomeEventsFor(comment).some(
       (event) => event.key === "changed",
@@ -3148,19 +3183,6 @@ import {
         })
       : null;
     const actions = [
-      toolbarButton({
-        attribute: "data-review-thread-minimize",
-        label: "Minimize thread",
-        glyph: MINIMIZE_2_ICON,
-        action:
-          options.minimize ||
-          (() => {
-            expandedThreadIds.delete(comment.id);
-            renderTray();
-          }),
-      }),
-    ];
-    actions.push(
       resolved
         ? toolbarButton({
             attribute: "data-review-thread-unresolve",
@@ -3178,9 +3200,26 @@ import {
               void resolveThread(comment);
             },
           }),
-    );
+    ];
     if (revertAction) actions.push(revertAction);
     return el("div", { "data-review-thread-toolbar-actions": true }, actions);
+  };
+
+  const threadToolbarActions = (comment, options = {}) => {
+    const minimize = toolbarButton({
+      attribute: "data-review-thread-minimize",
+      label: "Minimize thread",
+      glyph: MINIMIZE_2_ICON,
+      action:
+        options.minimize ||
+        (() => {
+          expandedThreadIds.delete(comment.id);
+          renderTray();
+        }),
+    });
+    const quickActions = threadQuickActions(comment, options);
+    quickActions.prepend(minimize);
+    return quickActions;
   };
 
   const threadToolbar = (comment, options = {}) => {
@@ -3312,6 +3351,7 @@ import {
         );
         rowHeadChildren.push(slot);
       }
+      rowHeadChildren.push(threadQuickActions(comment, { resolved }));
     }
     const rowHead = el(
       "div",
@@ -3419,7 +3459,8 @@ import {
         card.setAttribute("data-review-thread-expanded", "");
         card.append(threadToolbar(comment), ...conversationNodes(comment));
       } else {
-        card.appendChild(summary);
+        card.setAttribute("data-review-thread-collapsed", "");
+        card.append(summary, threadQuickActions(comment));
       }
       return card;
     }
@@ -3688,6 +3729,8 @@ import {
       counts.waiting +
       " " +
       pendingGroup.label.toLowerCase();
+    resolveAllButton.hidden =
+      counts.changed + counts.question + counts.outside === 0;
     const groups = [
       { key: "question", label: "Needs your answer" },
       { key: "changed", label: "Changed" },
@@ -3823,6 +3866,17 @@ import {
     }
     sentList.replaceChildren(...renderedGroups);
   };
+
+  resolveAllButton.addEventListener("click", () => {
+    const ids = sent
+      .filter(
+        (comment) =>
+          !resolvedCommentIds.has(comment.id) &&
+          outcomeFor(comment).key !== "waiting",
+      )
+      .map((comment) => comment.id);
+    if (ids.length > 0) void resolveThreadIds(ids);
+  });
 
   const renderTray = () => {
     draftList.replaceChildren(...drafts.map(draftRow));
