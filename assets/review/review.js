@@ -46,6 +46,7 @@ import {
   deriveThreadStatus,
   sessionQuietMs,
 } from "../../src/review/thread-status.js";
+import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
 
 (() => {
   "use strict";
@@ -71,8 +72,7 @@ import {
   // is connected, and how long a claimed request may go without any new
   // progress before the UI says the agent has gone quiet.
   const AGENT_QUIET_MS = 90_000;
-  const FLOAT_TOP = 52;
-  const FLOAT_GAP = 8;
+  const REVIEW_CONTROL_TOP = 52;
   const FLOAT_EDGE = 12;
   const FLOAT_CONTENT_GAP = 12;
 
@@ -314,7 +314,6 @@ import {
   const submittingIds = new Set();
   const submitErrorById = new Map();
   const requestSeenAt = new Map();
-  const composePinnedIds = new Set();
   let emphasizedCommentId = null;
   let lastProgressAdvanceAt = 0;
   let pollFailures = 0;
@@ -1014,19 +1013,6 @@ import {
     [composeSaveLabel],
   );
   attachShortcutTooltip(composeSave, "Add comment");
-  const composeContext = el("div", {
-    "data-review-compose-context": true,
-    hidden: true,
-  });
-  const composeContextText = el("span", {
-    "data-review-compose-context-text": true,
-  });
-  const composeContextJump = el("button", {
-    type: "button",
-    "data-review-compose-context-jump": true,
-    text: "Back to target",
-  });
-  composeContext.append(composeContextText, composeContextJump);
   // The one visible action mirrors the submit-right-away preference, so the
   // button always names what clicking it will actually do.
   const syncComposeSaveLabel = () => {
@@ -1066,7 +1052,6 @@ import {
       hidden: true,
     },
     [
-      composeContext,
       el("label", {
         for: "big-plan-review-compose",
         "data-review-field-label": true,
@@ -1292,11 +1277,11 @@ import {
       const visible =
         window.innerWidth < 1280 &&
         marker.hasAttribute("data-review-marker-active") &&
-        rect.bottom >= FLOAT_TOP &&
+        rect.bottom >= REVIEW_CONTROL_TOP &&
         rect.top <= window.innerHeight;
       marker.hidden = !visible;
       if (!visible) continue;
-      marker.style.top = Math.max(FLOAT_TOP, rect.top) + "px";
+      marker.style.top = Math.max(REVIEW_CONTROL_TOP, rect.top) + "px";
       marker.style.left =
         Math.max(4, rect.left - marker.offsetWidth - 8) + "px";
     }
@@ -1446,6 +1431,11 @@ import {
     return block?.closest("[data-slide]")?.querySelector("[data-slide-kicker]");
   };
 
+  const slideForTarget = (target) =>
+    target?.type === "slide"
+      ? blockForTarget(target)?.closest("[data-slide]") || null
+      : null;
+
   const pointInside = ({ x, y, rect }) =>
     x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 
@@ -1457,11 +1447,9 @@ import {
     if (target.closest("[data-review-root]")) return null;
     for (const comment of drafts.concat(sent)) {
       if (resolvedCommentIds.has(comment.id)) continue;
-      const visualAnchor = visualAnchorForTarget(comment.target);
       if (
         comment.target.type === "slide" &&
-        visualAnchor &&
-        (visualAnchor === target || visualAnchor.contains(target))
+        slideForTarget(comment.target)?.contains(target)
       ) {
         return comment;
       }
@@ -1694,6 +1682,10 @@ import {
       kicker.removeAttribute("data-review-active-highlight");
       kicker.removeAttribute("data-review-comment-focus");
     }
+    for (const slide of document.querySelectorAll("[data-slide]")) {
+      slide.removeAttribute("data-review-slide-highlight");
+      slide.removeAttribute("data-review-slide-focus");
+    }
     const commentRanges = [];
     const focusRanges = [];
     const lensBlocks = diffLens
@@ -1708,8 +1700,15 @@ import {
           : null;
       if (visualAnchor && !lensBlocks.includes(anchor.block)) {
         visualAnchor.setAttribute("data-review-comment-highlight", "");
+        slideForTarget(comment.target)?.setAttribute(
+          "data-review-slide-highlight",
+          "comment",
+        );
         if (comment.id === emphasizedCommentId) {
-          visualAnchor.setAttribute("data-review-comment-focus", "");
+          slideForTarget(comment.target)?.setAttribute(
+            "data-review-slide-focus",
+            "",
+          );
         }
         continue;
       }
@@ -1729,10 +1728,21 @@ import {
     const activeTarget = composeTarget || pendingSelection;
     const activeRange = activeTarget ? rangeForTarget(activeTarget) : null;
     if (activeTarget && !activeRange) {
-      visualAnchorForTarget(activeTarget)?.setAttribute(
-        "data-review-active-highlight",
-        "",
-      );
+      if (activeTarget.type === "slide") {
+        slideForTarget(activeTarget)?.setAttribute(
+          "data-review-slide-highlight",
+          "active",
+        );
+        visualAnchorForTarget(activeTarget)?.setAttribute(
+          "data-review-comment-highlight",
+          "",
+        );
+      } else {
+        visualAnchorForTarget(activeTarget)?.setAttribute(
+          "data-review-active-highlight",
+          "",
+        );
+      }
     }
     root.setAttribute(
       "data-review-selection-highlight-count",
@@ -3931,13 +3941,8 @@ import {
     const cards = Array.from(
       threadLayer.querySelectorAll("[data-review-thread-card]"),
     );
-    const composeBottom =
-      canFloat &&
-      !compose.hidden &&
-      compose.hasAttribute("data-review-compose-floating")
-        ? compose.getBoundingClientRect().bottom
-        : FLOAT_TOP - FLOAT_GAP;
-    let previousBottom = Math.max(FLOAT_TOP - FLOAT_GAP, composeBottom);
+    const entries = [];
+    const nodes = new Map();
     for (const card of cards) {
       const id = card.getAttribute("data-review-comment-id");
       const comment = drafts
@@ -3945,29 +3950,42 @@ import {
         .find((candidate) => candidate.id === id);
       const block = comment ? floatingBlockForComment(comment) : null;
       const rect = block?.getBoundingClientRect();
-      const visible =
-        canFloat &&
-        ((rect !== undefined &&
-          rect !== null &&
-          rect.bottom >= FLOAT_TOP &&
-          rect.top <= window.innerHeight) ||
-          composePinnedIds.has(id));
+      const visible = canFloat && block !== null && rect !== undefined;
       card.hidden = !visible;
-      if (!visible) continue;
-      // Fit before stacking. A viewport clamp after this constraint can pull
-      // a later chip back over an expanded card or composer and cover its
-      // textarea and Reply button.
-      const fittedTop = Math.max(
-        FLOAT_TOP,
-        Math.min(
-          rect?.top ?? FLOAT_TOP,
-          window.innerHeight - card.offsetHeight - FLOAT_EDGE,
-        ),
-      );
-      const top = Math.max(fittedTop, previousBottom + FLOAT_GAP);
-      card.style.top = top + "px";
+      if (!visible || !id) continue;
       card.style.left = floatLeftForBlock(block, card.offsetWidth) + "px";
-      previousBottom = Number.parseFloat(card.style.top) + card.offsetHeight;
+      entries.push({
+        id,
+        anchorTop: rect.top + window.scrollY,
+        height: card.offsetHeight,
+      });
+      nodes.set(id, card);
+    }
+    if (
+      canFloat &&
+      !compose.hidden &&
+      composeTarget &&
+      compose.hasAttribute("data-review-compose-floating")
+    ) {
+      const block = visualAnchorForTarget(composeTarget);
+      const rect = block?.getBoundingClientRect();
+      if (block && rect) {
+        if (compose.parentElement !== threadLayer) {
+          threadLayer.appendChild(compose);
+        }
+        compose.style.left =
+          floatLeftFor(composeTarget, compose.offsetWidth) + "px";
+        entries.push({
+          id: "compose",
+          anchorTop: rect.top + window.scrollY,
+          height: compose.offsetHeight,
+        });
+        nodes.set("compose", compose);
+      }
+    }
+    for (const { id, top } of layoutAnchoredCards(entries)) {
+      const node = nodes.get(id);
+      if (node) node.style.top = top + "px";
     }
   };
 
@@ -3984,7 +4002,12 @@ import {
       return leftTop - rightTop;
     });
     const cards = entries.map(threadCard);
-    threadLayer.replaceChildren(...cards);
+    const floatingCompose =
+      compose.parentElement === threadLayer && !compose.hidden ? compose : null;
+    threadLayer.replaceChildren(
+      ...cards,
+      ...(floatingCompose === null ? [] : [floatingCompose]),
+    );
     if (window.innerWidth < 1280) {
       for (const card of cards) {
         const id = card.getAttribute("data-review-comment-id");
@@ -4232,6 +4255,7 @@ import {
     if (
       target instanceof Element &&
       (target.closest("[data-review-thread-card]") ||
+        target.closest("[data-review-compose]") ||
         target.closest("[data-review-row]") ||
         target.closest("[data-review-marker]") ||
         target.closest("[data-review-diff-stepper]") ||
@@ -4395,13 +4419,6 @@ import {
   };
 
   const openCompose = (target) => {
-    composePinnedIds.clear();
-    for (const card of threadLayer.querySelectorAll(
-      "[data-review-thread-card]:not([hidden])",
-    )) {
-      const id = card.getAttribute("data-review-comment-id");
-      if (id) composePinnedIds.add(id);
-    }
     composeTarget = target;
     pendingSelection = null;
     window.getSelection()?.removeAllRanges();
@@ -4439,8 +4456,6 @@ import {
     compose.removeAttribute("data-review-compose-centered");
     compose.removeAttribute("style");
     if (compose.parentElement !== surface) surface.appendChild(compose);
-    composeContext.hidden = true;
-    composePinnedIds.clear();
     paintTargetHighlights();
     syncFloatingMode();
     positionThreadCards();
@@ -4454,45 +4469,33 @@ import {
       return;
     }
     if (window.innerWidth >= 1280 && !railIsOpen()) {
-      if (compose.parentElement !== surface) surface.appendChild(compose);
+      if (compose.parentElement !== threadLayer)
+        threadLayer.appendChild(compose);
       compose.removeAttribute("data-review-compose-inline");
       compose.removeAttribute("data-review-compose-centered");
       compose.setAttribute("data-review-compose-floating", "");
-      const rect = block.getBoundingClientRect();
-      const detached =
-        rect.bottom < FLOAT_TOP || rect.top > window.innerHeight - FLOAT_EDGE;
-      compose.toggleAttribute("data-review-compose-detached", detached);
-      composeContext.hidden = !detached;
-      if (detached) {
-        composeContextText.textContent =
-          "Commenting on " +
-          slideTitleFor(target) +
-          " while its target is off screen.";
-      }
-      compose.style.top =
-        Math.max(
-          FLOAT_TOP,
-          Math.min(
-            rect.top,
-            window.innerHeight - compose.offsetHeight - FLOAT_EDGE,
-          ),
-        ) + "px";
-      compose.style.left = floatLeftFor(target, compose.offsetWidth) + "px";
+      positionThreadCards();
       return;
     }
+    const endBlock =
+      target.type === "selection" && target.endBlockId
+        ? document.querySelector(
+            '[data-block-id="' + cssEscape(target.endBlockId) + '"]',
+          )
+        : null;
+    const slide =
+      target.type === "slide" ? block.closest("[data-slide]") : null;
+    const insertionBlock = slide || endBlock || block;
     // A table row cannot legally own a div sibling inside tbody, so its
-    // scroll container is the insertion anchor. Every other authored block
-    // can place the editor immediately after itself. Either way the editor is
-    // in flow and pushes following content instead of painting over it.
+    // scroll container is the insertion anchor.
     const anchor =
-      block.tagName === "TR"
-        ? block.closest("[data-table-scroll-container]") || block
-        : block;
+      insertionBlock.tagName === "TR"
+        ? insertionBlock.closest("[data-table-scroll-container]") ||
+          insertionBlock
+        : insertionBlock;
     compose.removeAttribute("style");
     compose.removeAttribute("data-review-compose-centered");
     compose.removeAttribute("data-review-compose-floating");
-    compose.removeAttribute("data-review-compose-detached");
-    composeContext.hidden = true;
     compose.setAttribute("data-review-compose-inline", "");
     anchor.after(compose);
   };
@@ -4534,15 +4537,6 @@ import {
 
   composeSave.addEventListener("click", saveCompose);
   composeCancel.addEventListener("click", closeCompose);
-  composeContextJump.addEventListener("click", () => {
-    if (!composeTarget) return;
-    visualAnchorForTarget(composeTarget)?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
-    announce("Returned to the comment target.");
-    requestAnimationFrame(() => positionCompose(composeTarget));
-  });
   submitImmediatelyInput.addEventListener("change", () => {
     submitRightAway = submitImmediatelyInput.checked;
     syncComposeSaveLabel();
@@ -4746,7 +4740,7 @@ import {
     const hasGutter = gutterLeft >= 12;
     affordance.style.top =
       Math.max(
-        FLOAT_TOP,
+        REVIEW_CONTROL_TOP,
         Math.min(
           hasGutter ? rect.top : rect.bottom + 8,
           window.innerHeight - affordance.offsetHeight - FLOAT_EDGE,
@@ -5237,8 +5231,11 @@ import {
     const answered = new Set(
       agentResponses.map((response) => response.requestId),
     );
-    return agentRequests.filter((request) => !answered.has(request.requestId))
-      .length;
+    const cancelled = new Set(agentCancelledIds);
+    return agentRequests.filter(
+      (request) =>
+        !answered.has(request.requestId) && !cancelled.has(request.requestId),
+    ).length;
   };
 
   const renderProgress = (events) => {
@@ -5433,7 +5430,6 @@ import {
   window.addEventListener(
     "scroll",
     () => {
-      if (!compose.hidden && composeTarget) positionCompose(composeTarget);
       if (pendingSelection) {
         pendingSelection = null;
         attachLabel.hidden = true;
@@ -5441,11 +5437,19 @@ import {
         window.getSelection()?.removeAllRanges();
         paintTargetHighlights();
       }
-      positionThreadCards();
       positionMarkers();
     },
     { passive: true },
   );
+  const anchoredChromeObserver =
+    typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(() => {
+          if (window.innerWidth >= 1280 && !railIsOpen()) {
+            positionThreadCards();
+          }
+        });
+  anchoredChromeObserver?.observe(document.body);
 
   // --------------------------------------------------------------------- boot
 

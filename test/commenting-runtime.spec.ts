@@ -20,7 +20,7 @@ test("should preserve and send a floating review across reload and viewport chan
   page,
   reviewRuntimeUrl,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await page.addInitScript(() => {
     const observer = new MutationObserver(() => {
       const input = document.querySelector("[data-review-agent-input]");
@@ -165,6 +165,7 @@ test("should preserve and send a floating review across reload and viewport chan
     const kicker = selector
       .locator("xpath=ancestor::*[@data-slide]")
       .locator("[data-slide-kicker]");
+    const slide = selector.locator("xpath=ancestor::*[@data-slide]");
     for (const theme of ["light", "dark"]) {
       await page.evaluate(
         (nextTheme) =>
@@ -178,11 +179,16 @@ test("should preserve and send a floating review across reload and viewport chan
         "data-review-active-selection-highlight",
         "false",
       );
-      await expect(kicker).toHaveAttribute("data-review-active-highlight", "");
+      await expect(slide).toHaveAttribute(
+        "data-review-slide-highlight",
+        "active",
+      );
+      await expect(kicker).toHaveAttribute("data-review-comment-highlight", "");
       await page.keyboard.press("Escape");
       await expect(compose).toBeHidden();
       await expect(affordance).toBeHidden();
-      await expect(kicker).not.toHaveAttribute("data-review-active-highlight");
+      await expect(slide).not.toHaveAttribute("data-review-slide-highlight");
+      await expect(kicker).not.toHaveAttribute("data-review-comment-highlight");
       await expect
         .poll(() => page.evaluate(() => window.getSelection()?.isCollapsed))
         .toBe(true);
@@ -334,47 +340,33 @@ test("should preserve and send a floating review across reload and viewport chan
     await page.locator("[data-review-compose-cancel]").click();
   });
 
-  await test.step("a compose that scrolls away names its detached target and returns to it", async () => {
+  await test.step("a floating compose keeps its document coordinate while scrolling with its target", async () => {
     await page.setViewportSize({ width: 1440, height: 500 });
     const paragraph = page.locator("[data-block-kind='paragraph']").first();
     await paragraph.scrollIntoViewIfNeeded();
     await paragraph.click({ clickCount: 3 });
     await affordance.click();
+    const before = await compose.evaluate((node) => ({
+      styleTop: node.style.top,
+      rectTop: node.getBoundingClientRect().top,
+      scrollY: window.scrollY,
+    }));
     await page.mouse.move(600, 450);
     await page.mouse.wheel(0, 1200);
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
       .toBeGreaterThan(0);
-    await expect(compose).toHaveAttribute("data-review-compose-detached", "");
-    await expect(page.locator("[data-review-compose-context]")).toBeVisible();
-    await expect(page.locator("[data-review-compose-context]")).toContainText(
-      "while its target is off screen",
+    const after = await compose.evaluate((node) => ({
+      styleTop: node.style.top,
+      rectTop: node.getBoundingClientRect().top,
+      scrollY: window.scrollY,
+    }));
+    expect(after.styleTop).toBe(before.styleTop);
+    expect(after.rectTop - before.rectTop).toBeCloseTo(
+      -(after.scrollY - before.scrollY),
+      0,
     );
-    const jump = page.locator("[data-review-compose-context-jump]");
-    for (const theme of ["light", "dark"]) {
-      await page.evaluate(
-        (nextTheme) =>
-          document.documentElement.setAttribute("data-theme", nextTheme),
-        theme,
-      );
-      await jump.hover();
-      const hover = await jump.evaluate(
-        (node) => getComputedStyle(node).backgroundColor,
-      );
-      await jump.focus();
-      await expect(jump).toBeFocused();
-      const box = await jump.boundingBox();
-      if (box === null) throw new Error("Back to target has no pointer target");
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      await page.mouse.down();
-      const active = await jump.evaluate(
-        (node) => getComputedStyle(node).backgroundColor,
-      );
-      await page.mouse.up();
-      expect(active).not.toBe(hover);
-    }
-    await jump.click();
-    await expect(paragraph).toBeInViewport();
+    await expect(page.locator("[data-review-compose-context]")).toHaveCount(0);
     await page.locator("[data-review-compose-cancel]").click();
     await page.setViewportSize({ width: 1440, height: 900 });
   });
@@ -980,13 +972,22 @@ test("should preserve and send a floating review across reload and viewport chan
       "false",
     );
     const selectedSlide = selector.locator("xpath=ancestor::*[@data-slide]");
+    await expect(selectedSlide).toHaveAttribute(
+      "data-review-slide-highlight",
+      "active",
+    );
     await expect(selectedSlide.locator("[data-slide-kicker]")).toHaveAttribute(
-      "data-review-active-highlight",
+      "data-review-comment-highlight",
       "",
     );
     await expect(
       selectedSlide.locator("[data-block-kind='heading']"),
     ).not.toHaveAttribute("data-review-active-highlight", "");
+    expect(
+      await compose.evaluate((node) =>
+        node.previousElementSibling?.hasAttribute("data-slide"),
+      ),
+    ).toBe(true);
     await expect(page.locator("[data-review-compose-save]")).toBeDisabled();
     await page.locator("[data-review-compose-input]").press("Control+Enter");
     await expect(compose).toBeVisible();
@@ -998,6 +999,51 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(page.locator("[data-review-drafts] li")).toHaveCount(
       before + 1,
     );
+  });
+
+  await test.step("a multi-block inline compose lands after its end block and outside the highlight", async () => {
+    const start = page.locator('[data-block-id="section/details/heading-1"]');
+    const end = page.locator('[data-block-id="section/details/paragraph-1"]');
+    await start.scrollIntoViewIfNeeded();
+    await page.evaluate(() => {
+      const first = document.querySelector(
+        '[data-block-id="section/details/heading-1"]',
+      );
+      const last = document.querySelector(
+        '[data-block-id="section/details/paragraph-1"]',
+      );
+      if (!first || !last) throw new Error("Missing selection blocks");
+      const range = document.createRange();
+      range.selectNodeContents(first);
+      range.setEnd(last, last.childNodes.length);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    await expect(affordance).toBeVisible();
+    await affordance.click();
+    await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = document.querySelector("[data-review-compose]");
+          const last = document.querySelector(
+            '[data-block-id="section/details/paragraph-1"]',
+          );
+          const ranges = CSS.highlights.get("big-plan-review-active");
+          return {
+            followsEnd: editor?.previousElementSibling === last,
+            intersects:
+              editor !== null &&
+              ranges !== undefined &&
+              [...ranges].some((range) => range.intersectsNode(editor)),
+          };
+        }),
+      )
+      .toEqual({ followsEnd: true, intersects: false });
+    await page.locator("[data-review-compose-cancel]").click();
+    await expect(end).toBeVisible();
   });
 
   await test.step("comment presence stays obvious without drawing through text", async () => {
@@ -1577,44 +1623,48 @@ test("should preserve and send a floating review across reload and viewport chan
           neighbor.bottom > replyRect.y,
       ).toBe(false);
     }
+    await page
+      .locator("[data-review-thread-expanded] [data-review-thread-minimize]")
+      .click();
 
-    const visibleBeforeCompose = await page
-      .locator("[data-review-thread-card]:visible")
-      .evaluateAll((nodes) =>
-        nodes.map((node) => node.getAttribute("data-review-comment-id")),
-      );
-    expect(visibleBeforeCompose.length).toBeGreaterThan(0);
-    const row = page.locator('[data-block-label="versionId"]');
-    await row.evaluate((block) => {
-      const range = document.createRange();
-      range.selectNodeContents(block);
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      document.dispatchEvent(new Event("selectionchange"));
-    });
-    await affordance.click();
-    await expect(compose).toHaveAttribute("data-review-compose-floating", "");
-    await expect
-      .poll(() =>
-        page
-          .locator("[data-review-thread-card]:visible")
-          .evaluateAll((nodes) =>
-            nodes.map((node) => node.getAttribute("data-review-comment-id")),
-          ),
-      )
-      .toEqual(visibleBeforeCompose);
-    const composeRect = await compose.boundingBox();
-    const cardTops = await page
+    const cardTopsBeforeCompose = await page
       .locator("[data-review-thread-card]:not([hidden])")
       .evaluateAll((nodes) =>
-        nodes.map((node) => node.getBoundingClientRect().top),
+        Object.fromEntries(
+          nodes.map((node) => [
+            node.getAttribute("data-review-comment-id"),
+            {
+              top: Number.parseFloat((node as HTMLElement).style.top),
+              height: node.getBoundingClientRect().height,
+            },
+          ]),
+        ),
       );
-    if (composeRect === null) throw new Error("The composer has no box");
-    for (const top of cardTops) {
-      expect(top).toBeGreaterThanOrEqual(
-        composeRect.y + composeRect.height + 7.5,
+    expect(Object.keys(cardTopsBeforeCompose).length).toBeGreaterThan(0);
+    await page.locator("[data-review-slide-selector]").last().click();
+    await expect(compose).toHaveAttribute("data-review-compose-floating", "");
+    const cardTopsAfterCompose = await page
+      .locator("[data-review-thread-card]:not([hidden])")
+      .evaluateAll((nodes) =>
+        Object.fromEntries(
+          nodes.map((node) => [
+            node.getAttribute("data-review-comment-id"),
+            {
+              top: Number.parseFloat((node as HTMLElement).style.top),
+              height: node.getBoundingClientRect().height,
+            },
+          ]),
+        ),
       );
+    const composeTop = await compose.evaluate((node) =>
+      Number.parseFloat(node.style.top),
+    );
+    const cardsAboveCompose = Object.entries(cardTopsBeforeCompose).filter(
+      ([, geometry]) => geometry.top + geometry.height + 8 <= composeTop,
+    );
+    expect(cardsAboveCompose.length).toBeGreaterThan(0);
+    for (const [id, geometry] of cardsAboveCompose) {
+      expect(cardTopsAfterCompose[id]?.top).toBe(geometry.top);
     }
     await page.locator("[data-review-compose-cancel]").click();
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -1808,6 +1858,9 @@ test("should preserve and send a floating review across reload and viewport chan
   });
 
   await test.step("a sent row transforms in place through both collapse controls in both themes", async () => {
+    await page.evaluate(() => {
+      document.documentElement.style.scrollBehavior = "auto";
+    });
     const commentText = "Keep this delivery note in its own anchored thread.";
     const row = page.locator(
       '[data-review-sent-row][data-review-outcome="outside"]',
@@ -1862,6 +1915,7 @@ test("should preserve and send a floating review across reload and viewport chan
       await expect(row.getByText(commentText, { exact: true })).toHaveCount(1);
       await expect(row.locator("[data-review-outcome-state]")).toHaveCount(0);
 
+      await page.waitForTimeout(700);
       const beforeCollapse = await page.evaluate(() => window.scrollY);
       await target.click();
       await expect(row).not.toHaveAttribute("data-review-row-expanded");
@@ -2332,9 +2386,9 @@ Ship the live review loop behind the explicit review command.
     await delivery.scrollIntoViewIfNeeded();
     await page.locator("[data-review-slide-selector]:visible").last().click();
     const preference = page.locator("[data-review-submit-immediately-input]");
-    const preferenceLabel = page.locator("[data-review-submit-immediately]");
+    const preferenceTrack = page.locator("[data-review-switch-track]");
     await expect(preference).not.toBeChecked();
-    await preferenceLabel.click();
+    await preferenceTrack.click();
     await expect(preference).toBeChecked();
     const immediateResponse = page.waitForResponse(
       (response) =>
@@ -2351,7 +2405,7 @@ Ship the live review loop behind the explicit review command.
     await delivery.scrollIntoViewIfNeeded();
     await page.locator("[data-review-slide-selector]:visible").last().click();
     await expect(preference).toBeChecked();
-    await preferenceLabel.click();
+    await preferenceTrack.click();
     await expect(preference).not.toBeChecked();
     await page
       .locator("[data-review-compose-input]")

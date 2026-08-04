@@ -27,7 +27,7 @@ elements exist and the document is exactly the document it always was.
   );
 }
 [data-review-root] {
-  position: relative;
+  position: static;
   z-index: 40;
 }
 
@@ -287,6 +287,7 @@ elements exist and the document is exactly the document it always was.
 [data-review-panel="chat"] {
   flex: 1 1 auto;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 [data-review-panel][hidden] {
   display: none;
@@ -339,6 +340,7 @@ elements exist and the document is exactly the document it always was.
 [data-review-scroll] {
   flex: 1 1 auto;
   overflow-y: auto;
+  overscroll-behavior: contain;
   /* Extra bottom room so the last row clears the send bar rather than ending
      flush against it at the scroll boundary. */
   padding: 0.7rem 0.9rem 1.2rem;
@@ -906,13 +908,16 @@ button[data-review-row-target]:active {
 /* ------------------------------------------------------- floating threads */
 
 [data-review-thread-layer] {
-  position: fixed;
-  inset: 0;
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 0;
   z-index: 44;
   pointer-events: none;
 }
 [data-review-thread-card] {
-  position: fixed;
+  position: absolute;
   right: auto;
   width: 17rem;
   padding: 0.65rem;
@@ -930,11 +935,17 @@ button[data-review-row-target]:active {
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.1);
 }
 [data-review-thread-state="sent"][data-review-thread-expanded] {
+  max-height: min(72vh, 34rem);
   padding: 0.65rem;
   box-shadow: 0 10px 32px rgb(0 0 0 / 0.16);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-[data-review-thread-collapsed] {
-  position: fixed;
+[data-review-thread-expanded] [data-review-thread-toolbar] {
+  position: sticky;
+  top: -0.65rem;
+  z-index: 1;
+  background: var(--bg);
 }
 [data-review-thread-collapsed] > [data-review-thread-toolbar-actions] {
   position: absolute;
@@ -1113,6 +1124,7 @@ button[data-review-row-target]:active {
   color: var(--ink-c);
   list-style: disc;
   overflow-y: auto;
+  overscroll-behavior: contain;
   line-height: 1.35;
 }
 [data-review-status-activity] li {
@@ -1587,7 +1599,7 @@ button:focus-visible > [data-review-icon-tooltip] {
 /* ---------------------------------------------------------------- compose */
 
 [data-review-compose] {
-  position: fixed;
+  position: absolute;
   right: auto;
   z-index: 47;
   width: 17rem;
@@ -1596,6 +1608,7 @@ button:focus-visible > [data-review-icon-tooltip] {
   border-radius: 0.6rem;
   background: var(--bg);
   box-shadow: 0 8px 28px rgb(0 0 0 / 0.16);
+  pointer-events: auto;
 }
 [data-review-compose][hidden] {
   display: none;
@@ -1619,34 +1632,6 @@ button:focus-visible > [data-review-icon-tooltip] {
   margin: 0.35rem 0 0;
   color: var(--muted-c);
   font-size: 0.6875rem;
-}
-[data-review-compose-context] {
-  display: grid;
-  gap: 0.35rem;
-  margin: -0.1rem 0 0.65rem;
-  padding: 0.55rem;
-  border: 1px solid var(--callout-warning-c);
-  border-radius: 0.45rem;
-  background: color-mix(in srgb, var(--callout-warning-c) 9%, var(--bg));
-  color: var(--muted-c);
-  font-size: 0.72rem;
-}
-[data-review-compose-context][hidden] {
-  display: none;
-}
-[data-review-compose-context-jump] {
-  width: fit-content;
-  padding: 0.18rem 0.35rem;
-  border-radius: 0.3rem;
-  color: var(--accent-c);
-  font-weight: 650;
-  cursor: pointer;
-}
-[data-review-compose-context-jump]:hover {
-  background: var(--review-control-hover);
-}
-[data-review-compose-context-jump]:active {
-  background: var(--review-control-active);
 }
 [data-review-selection-notice] {
   position: fixed;
@@ -1937,6 +1922,16 @@ button[disabled] > [data-review-kbd-tooltip] {
 }
 [data-slide-kicker][data-review-comment-highlight] {
   box-shadow: inset 0 -2px 0 var(--annotation-c);
+}
+[data-slide][data-review-slide-highlight] {
+  background: color-mix(in srgb, var(--annotation-bg) 18%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--annotation-c) 52%, transparent);
+  outline-offset: 6px;
+}
+[data-slide][data-review-slide-highlight="active"],
+[data-slide][data-review-slide-focus] {
+  background: color-mix(in srgb, var(--annotation-bg) 34%, transparent);
+  outline: 2px solid var(--accent-c);
 }
 [data-review-active-highlight] {
   background: var(--annotation-bg);
@@ -2460,6 +2455,7 @@ tr[data-review-diff-lens] > td {
 ) {
   max-height: 14rem;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 [data-review-diff-stepper] {
