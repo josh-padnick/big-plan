@@ -1201,6 +1201,82 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     return block?.closest("[data-slide]")?.querySelector("[data-slide-kicker]");
   };
 
+  const pointInside = ({ x, y, rect }) =>
+    x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+
+  // CSS highlights do not create clickable DOM. Resolve a document click back
+  // through the same anchor model that painted the highlight, including a
+  // precise range hit for text selections and the kicker for whole slides.
+  const commentAtDocumentPoint = ({ target, x, y }) => {
+    if (!(target instanceof Element)) return null;
+    if (target.closest("[data-review-root]")) return null;
+    for (const comment of drafts.concat(sent)) {
+      if (resolvedCommentIds.has(comment.id)) continue;
+      const visualAnchor = visualAnchorForTarget(comment.target);
+      if (
+        comment.target.type === "slide" &&
+        visualAnchor &&
+        (visualAnchor === target || visualAnchor.contains(target))
+      ) {
+        return comment;
+      }
+      const anchor = anchorStateFor(comment);
+      if (
+        anchor.kind === "range" &&
+        Array.from(anchor.range.getClientRects()).some((rect) =>
+          pointInside({ x, y, rect }),
+        )
+      ) {
+        return comment;
+      }
+      if (
+        anchor.kind !== "range" &&
+        anchor.block &&
+        anchor.block.contains(target) &&
+        anchor.block.hasAttribute("data-review-comment-highlight")
+      ) {
+        return comment;
+      }
+    }
+    return null;
+  };
+
+  // The document-to-tray half of comment navigation changes only the tray's
+  // scroll container; the reader's document position remains untouched.
+  const revealCommentInTray = (comment) => {
+    const documentTop = window.scrollY;
+    setActiveTab("comments");
+    setRailOpen(true);
+    renderTray();
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: documentTop, behavior: "auto" });
+      const row = rail.querySelector(
+        '[data-review-comment-id="' + cssEscape(comment.id) + '"]',
+      );
+      const scroller = rail.querySelector("[data-review-scroll]");
+      if (!row || !scroller) return;
+      for (const previous of rail.querySelectorAll(
+        "[data-review-tray-target]",
+      )) {
+        previous.removeAttribute("data-review-tray-target");
+      }
+      row.setAttribute("data-review-tray-target", "");
+      const rowRect = row.getBoundingClientRect();
+      const scrollRect = scroller.getBoundingClientRect();
+      const centered =
+        scroller.scrollTop +
+        rowRect.top -
+        scrollRect.top -
+        (scroller.clientHeight - rowRect.height) / 2;
+      scroller.scrollTo({ top: Math.max(0, centered), behavior: "smooth" });
+      setTimeout(() => row.removeAttribute("data-review-tray-target"), 1400);
+      announce("Comment shown in Feedback.");
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: documentTop, behavior: "auto" });
+      });
+    });
+  };
+
   // Turns a renderer-relative character offset back into a DOM boundary. The
   // review chrome never enters a block, so these offsets remain stable while
   // comments and the sidebar are mounted around the document.
@@ -1810,6 +1886,10 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
 
   const draftRow = (comment) => {
     const isEditing = comment.id === editingId;
+    const rowAttributes = {
+      "data-review-row": true,
+      "data-review-comment-id": comment.id,
+    };
     const jump = el("button", {
       type: "button",
       "data-review-row-target": true,
@@ -1823,17 +1903,13 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     });
 
     if (submittingIds.has(comment.id)) {
-      return el(
-        "li",
-        { "data-review-row": true, "data-review-row-sending": true },
-        [
-          el("div", { "data-review-row-head": true }, [
-            jump,
-            outcomeBadge({ key: "waiting", label: "Sending" }, { spin: true }),
-          ]),
-          el("p", { "data-review-row-body": true, text: comment.body }),
-        ],
-      );
+      return el("li", { ...rowAttributes, "data-review-row-sending": true }, [
+        el("div", { "data-review-row-head": true }, [
+          jump,
+          outcomeBadge({ key: "waiting", label: "Sending" }, { spin: true }),
+        ]),
+        el("p", { "data-review-row-body": true, text: comment.body }),
+      ]);
     }
 
     if (!isEditing) {
@@ -1866,7 +1942,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
           action: () => openDeleteDialog(comment),
         }),
       ]);
-      return el("li", { "data-review-row": true }, [
+      return el("li", rowAttributes, [
         el("div", { "data-review-row-head": true }, [jump, state, iconActions]),
         el("p", { "data-review-row-body": true, text: comment.body }),
         stagedAnchorNotice(comment),
@@ -1906,15 +1982,11 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       }
       if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) commit();
     });
-    const row = el(
-      "li",
-      { "data-review-row": true, "data-review-editing": true },
-      [
-        el("div", { "data-review-row-head": true }, [jump, state]),
-        field,
-        el("div", { "data-review-row-actions": true }, [cancel, confirm]),
-      ],
-    );
+    const row = el("li", { ...rowAttributes, "data-review-editing": true }, [
+      el("div", { "data-review-row-head": true }, [jump, state]),
+      field,
+      el("div", { "data-review-row-actions": true }, [cancel, confirm]),
+    ]);
     if (railIsOpen()) setTimeout(() => field.focus(), 0);
     return row;
   };
@@ -3592,17 +3664,33 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
           ? `Comments, ${pending} staged`
           : "Comments",
     );
-    toggleCount.textContent = needs > 0 ? String(needs) : "";
+    const toolbarCount = pending > 0 ? pending : needs;
+    const toolbarCountKind =
+      pending > 0 ? "staged" : needs > 0 ? "needs" : "idle";
+    toggleCount.textContent = toolbarCount > 0 ? String(toolbarCount) : "";
+    toggleCount.setAttribute("data-review-toggle-count-kind", toolbarCountKind);
+    toggleCount.setAttribute(
+      "aria-label",
+      pending > 0
+        ? `${pending} staged comment${pending === 1 ? "" : "s"} waiting submission`
+        : needs > 0
+          ? `${needs} comment${needs === 1 ? "" : "s"} needs your answer`
+          : "",
+    );
     toggle.setAttribute(
       "data-review-has-pending",
-      needs > 0 ? "true" : "false",
+      toolbarCount > 0 ? "true" : "false",
     );
     toggle.setAttribute("data-review-needs-answer", String(needs));
     toggle.setAttribute(
       "aria-label",
       (railIsOpen() ? "Close" : "Open") +
         " feedback sidebar" +
-        (needs > 0 ? ", " + needs + " needs your answer" : ""),
+        (pending > 0
+          ? `, ${pending} staged waiting submission`
+          : needs > 0
+            ? `, ${needs} needs your answer`
+            : ""),
     );
     sendButton.disabled = pending === 0;
     sentGroup.hidden = sent.length === 0;
@@ -3628,6 +3716,18 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     }
     expandedThreadIds.clear();
     renderTray();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!railIsOpen()) return;
+    const comment = commentAtDocumentPoint({
+      target: event.target,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    if (!comment) return;
+    event.preventDefault();
+    revealCommentInTray(comment);
   });
 
   deleteCancel.addEventListener("click", () => deleteDialog.close());
@@ -3864,6 +3964,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     if (event.key === "Escape") {
       event.stopPropagation();
       closeCompose();
+      clearReviewSelection();
     }
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
@@ -4000,6 +4101,24 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       Math.max(12, Math.min(rect.left, rightLimit() - width - 12)) + "px";
   };
 
+  let selectionOfferTimer = null;
+
+  // Escape returns both native and semantic selection flows to the same quiet
+  // reading state. Clearing only the Range would leave a whole-slide target
+  // behind; clearing only pendingSelection would leave native selection blue.
+  const clearReviewSelection = () => {
+    if (selectionOfferTimer !== null) {
+      window.clearTimeout(selectionOfferTimer);
+      selectionOfferTimer = null;
+    }
+    pendingSelection = null;
+    attachLabel.hidden = true;
+    attachInput.checked = false;
+    affordance.hidden = true;
+    window.getSelection()?.removeAllRanges();
+    paintTargetHighlights();
+  };
+
   for (const slide of document.querySelectorAll("[data-slide]")) {
     const title =
       slide
@@ -4058,7 +4177,6 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   document.addEventListener("keyup", (event) => {
     if (event.shiftKey || event.key === "Shift") setTimeout(offerSelection, 0);
   });
-  let selectionOfferTimer = null;
   document.addEventListener("selectionchange", () => {
     if (selectionOfferTimer !== null) {
       window.clearTimeout(selectionOfferTimer);
@@ -4612,7 +4730,15 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       event.preventDefault();
       clearDiffLens();
     } else if (event.key === "Escape" && !compose.hidden) {
+      event.preventDefault();
       closeCompose();
+      clearReviewSelection();
+    } else if (
+      event.key === "Escape" &&
+      (pendingSelection !== null || !window.getSelection()?.isCollapsed)
+    ) {
+      event.preventDefault();
+      clearReviewSelection();
     }
   });
 

@@ -162,29 +162,72 @@ test("should preserve and send a floating review across reload and viewport chan
       await page.mouse.up();
       expect(active).not.toBe(hover);
     }
+    const kicker = selector
+      .locator("xpath=ancestor::*[@data-slide]")
+      .locator("[data-slide-kicker]");
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await selector.click();
+      await expect(affordance).toHaveAttribute(
+        "aria-label",
+        "Comment on the whole slide",
+      );
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-review-active-selection-highlight",
+        "false",
+      );
+      await expect(kicker).toHaveAttribute("data-review-active-highlight", "");
+      await page.keyboard.press("Escape");
+      await expect(affordance).toBeHidden();
+      await expect(kicker).not.toHaveAttribute("data-review-active-highlight");
+      await expect
+        .poll(() => page.evaluate(() => window.getSelection()?.isCollapsed))
+        .toBe(true);
+    }
     await page.evaluate(() =>
       document.documentElement.removeAttribute("data-theme"),
     );
-    await selector.click();
-    await expect(affordance).toHaveAttribute(
-      "aria-label",
-      "Comment on the whole slide",
-    );
-    await expect(page.locator("html")).toHaveAttribute(
-      "data-review-active-selection-highlight",
-      "false",
-    );
-    await expect(
-      selector
-        .locator("xpath=ancestor::*[@data-slide]")
-        .locator("[data-slide-kicker]"),
-    ).toHaveAttribute("data-review-active-highlight", "");
-    await page.getByRole("heading", { level: 1 }).click();
-    await expect(affordance).toBeHidden();
   });
 
-  await test.step("the rendered feedback header owns a durable bottom border", async () => {
+  await test.step("the page toolbar owns one full-width bottom border", async () => {
     await toggle.click();
+    const toolbar = page.locator("[data-review-toolbar]");
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await expect
+        .poll(() =>
+          toolbar.evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            const style = getComputedStyle(node);
+            return {
+              left: rect.left,
+              right: rect.right,
+              viewport: window.innerWidth,
+              width: style.borderBottomWidth,
+              style: style.borderBottomStyle,
+              transparent:
+                style.borderBottomColor === "rgba(0, 0, 0, 0)" ||
+                style.borderBottomColor === "transparent",
+            };
+          }),
+        )
+        .toEqual({
+          left: 0,
+          right: 1440,
+          viewport: 1440,
+          width: "1px",
+          style: "solid",
+          transparent: false,
+        });
+    }
     const header = page.locator("[data-review-rail-header]");
     await expect(header).toBeVisible();
     await expect
@@ -205,7 +248,39 @@ test("should preserve and send a floating review across reload and viewport chan
         style: "solid",
         transparent: false,
       });
+    await page.evaluate(() =>
+      document.documentElement.removeAttribute("data-theme"),
+    );
     await page.locator("[data-review-hide]").click();
+  });
+
+  await test.step("Escape cancels a manual text selection in both themes", async () => {
+    const paragraph = page.locator("[data-block-kind='paragraph']").first();
+    await paragraph.scrollIntoViewIfNeeded();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await paragraph.click({ clickCount: 3 });
+      await expect(affordance).toHaveAttribute(
+        "aria-label",
+        "Comment on the selected text",
+      );
+      await page.keyboard.press("Escape");
+      await expect(affordance).toBeHidden();
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-review-active-selection-highlight",
+        "false",
+      );
+      await expect
+        .poll(() => page.evaluate(() => window.getSelection()?.isCollapsed))
+        .toBe(true);
+    }
+    await page.evaluate(() =>
+      document.documentElement.removeAttribute("data-theme"),
+    );
   });
 
   await test.step("the selection Comment control dismisses instead of drifting on scroll", async () => {
@@ -488,7 +563,9 @@ test("should preserve and send a floating review across reload and viewport chan
       });
     await expect
       .poll(() =>
-        tray.evaluate((node) => getComputedStyle(node).borderTopWidth),
+        page
+          .locator("[data-review-toolbar]")
+          .evaluate((node) => getComputedStyle(node).borderBottomWidth),
       )
       .toBe("1px");
     const titles = page.locator(
@@ -501,6 +578,40 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       page.locator('[data-review-drafts] [data-review-comment-state="staged"]'),
     ).toHaveCount(2);
+    const stagedCount = toggle.locator("[data-review-toggle-count]");
+    await expect(stagedCount).toHaveText("2");
+    await expect(stagedCount).toHaveAttribute(
+      "aria-label",
+      "2 staged comments waiting submission",
+    );
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      const badge = await stagedCount.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        return {
+          width: rect.width,
+          height: rect.height,
+          radius: style.borderRadius,
+          border: style.borderTopWidth,
+          transparent:
+            style.borderTopColor === "rgba(0, 0, 0, 0)" ||
+            style.borderTopColor === "transparent",
+        };
+      });
+      expect(badge.width).toBeGreaterThanOrEqual(badge.height);
+      expect(badge.height).toBeGreaterThanOrEqual(18);
+      expect(badge.radius).not.toBe("0px");
+      expect(badge.border).toBe("1px");
+      expect(badge.transparent).toBe(false);
+    }
+    await page.evaluate(() =>
+      document.documentElement.removeAttribute("data-theme"),
+    );
 
     await page.setViewportSize({ width: 1440, height: 500 });
     await page.locator("#delivery").scrollIntoViewIfNeeded();
@@ -512,6 +623,57 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
       .not.toBeCloseTo(before, 0);
+    await expect
+      .poll(() =>
+        page.locator('[data-block-label="versionId"]').evaluate((node) => {
+          const rect = node.getBoundingClientRect();
+          return rect.top + rect.height / 2;
+        }),
+      )
+      .toBeCloseTo(250, 0);
+
+    const documentBefore = await page.evaluate(() => window.scrollY);
+    const scroller = page.locator("[data-review-scroll]");
+    await scroller.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    const firstCommentId = await page
+      .locator("[data-review-drafts] [data-review-row]")
+      .first()
+      .getAttribute("data-review-comment-id");
+    if (firstCommentId === null) {
+      throw new Error("The first staged comment has no stable row id");
+    }
+    const selectedCell = page
+      .locator('[data-block-label="versionId"] td')
+      .last();
+    const cellBox = await selectedCell.boundingBox();
+    if (cellBox === null) {
+      throw new Error("The highlighted table cell has no pointer target");
+    }
+    await page.mouse.click(cellBox.x + 20, cellBox.y + cellBox.height / 2);
+    const trayTarget = page.locator(
+      `[data-review-comment-id="${firstCommentId}"][data-review-tray-target]`,
+    );
+    await expect(trayTarget).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeCloseTo(documentBefore, 0);
+    await expect
+      .poll(() =>
+        trayTarget.evaluate((node) => {
+          const row = node.getBoundingClientRect();
+          const scroll = node
+            .closest("[data-review-scroll]")
+            ?.getBoundingClientRect();
+          return (
+            scroll !== undefined &&
+            row.top >= scroll.top &&
+            row.bottom <= scroll.bottom
+          );
+        }),
+      )
+      .toBe(true);
     await page.setViewportSize({ width: 1440, height: 900 });
   });
 

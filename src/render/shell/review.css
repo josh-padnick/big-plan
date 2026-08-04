@@ -40,12 +40,20 @@ elements exist and the document is exactly the document it always was.
 [data-review-toolbar] {
   position: fixed;
   top: 0;
-  right: 1rem;
+  right: 0;
+  left: 0;
   z-index: 45;
   display: flex;
   height: 2.75rem;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.35rem;
+  padding-right: 1rem;
+  border-bottom: 1px solid var(--edge-c);
+  pointer-events: none;
+}
+[data-review-toolbar] > * {
+  pointer-events: auto;
 }
 /* The tray's entry point reads as toolbar chrome, not a pill-shaped action.
    It stays a real button for keyboard and screen-reader semantics. */
@@ -98,10 +106,17 @@ elements exist and the document is exactly the document it always was.
   flex: 0 0 auto;
 }
 [data-review-toggle-count] {
-  min-width: 0.8rem;
-  padding-left: 0.1rem;
+  display: inline-flex;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.28rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-size: 0.625rem;
+  font-weight: 700;
   text-align: center;
 }
 [data-review-toggle-count]:empty {
@@ -126,7 +141,6 @@ elements exist and the document is exactly the document it always was.
   display: flex;
   width: min(22rem, 100vw);
   flex-direction: column;
-  border-top: 1px solid var(--edge-c);
   border-left: 1px solid var(--edge-c);
   background: var(--bg);
   box-shadow: -8px 0 24px rgb(0 0 0 / 0.06);
@@ -320,6 +334,10 @@ elements exist and the document is exactly the document it always was.
   border: 1px solid var(--edge-c);
   border-radius: 0.5rem;
   background: var(--surface-c);
+}
+[data-review-row][data-review-tray-target] {
+  outline: 2px solid var(--annotation-c);
+  outline-offset: 2px;
 }
 [data-review-row-head] {
   display: flex;

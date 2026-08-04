@@ -64,7 +64,7 @@ test("should comment on a slide and a passage, then revise before sending", asyn
     await expect(page.locator("[data-review-thread-card]")).toBeVisible();
     await expect(rows).toHaveCount(1);
     await expect(page.locator("[data-review-annotated]")).toHaveCount(1);
-    await expect(page.locator("[data-review-toggle-count]")).toBeHidden();
+    await expect(page.locator("[data-review-toggle-count]")).toHaveText("1");
     const geometry = await page
       .locator("[data-review-slide-selector]")
       .first()
@@ -142,10 +142,10 @@ test("should comment on a slide and a passage, then revise before sending", asyn
     await expect(page.locator("[data-review-annotated]")).toHaveCount(1);
   });
 
-  await test.step("the tray hides on demand without making drafts a persistent signal", async () => {
+  await test.step("the tray hides on demand while preserving the staged count", async () => {
     await page.locator("[data-review-hide]").click();
     await expect(tray).toBeHidden();
-    await expect(page.locator("[data-review-toggle-count]")).toBeHidden();
+    await expect(page.locator("[data-review-toggle-count]")).toHaveText("1");
     await page.locator("[data-review-toggle]").click();
     await expect(tray).toBeVisible();
   });
