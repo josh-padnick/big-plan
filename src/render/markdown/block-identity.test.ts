@@ -98,6 +98,13 @@ describe("block identity scopes", () => {
 });
 
 describe("block identity kinds and labels", () => {
+  it("should retain inline-code boundaries separately from plain anchor text", () => {
+    const { blocks } = compile("## One\n\nUse `timeout` now.\n");
+    const paragraph = blocks.find((block) => block.kind === "paragraph");
+    expect(paragraph?.text).toBe("Use timeout now.");
+    expect(paragraph?.markedText).toBe("Use \u0011timeout\u0011 now.");
+  });
+
   it("should name a component by its own heading when it has one", () => {
     const { blocks } = compile(DECISION_FIXTURE);
     const decision = blocks.find((block) => block.kind === "decision");

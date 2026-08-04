@@ -9,6 +9,7 @@ import {
   diffRevisions,
   diffRunSimilarity,
   diffWords,
+  markedOffsetForPlainOffset,
 } from "./revision-diff.js";
 
 const block = ({
@@ -25,6 +26,7 @@ const block = ({
   label: text,
   section: "Approach",
   text,
+  markedText: text,
 });
 
 describe("revision word diff", () => {
@@ -122,6 +124,42 @@ describe("revision word diff", () => {
 
   it("should treat two empty revisions as identical", () => {
     expect(diffRunSimilarity([])).toBe(1);
+  });
+
+  it("should keep focused edits inline and move high-churn rewrites to bands", () => {
+    expect(
+      diffPresentationMode([
+        { op: "same", text: "The " },
+        { op: "del", text: "worker " },
+        { op: "ins", text: "processor " },
+        { op: "same", text: "classifies " },
+        { op: "del", text: "responses " },
+        { op: "ins", text: "failures " },
+        { op: "same", text: "into " },
+        { op: "del", text: "retryable " },
+        { op: "ins", text: "bounded " },
+        { op: "same", text: "and " },
+        { op: "del", text: "terminal " },
+        { op: "ins", text: "explicit " },
+        { op: "same", text: "outcomes." },
+      ]),
+    ).toBe("bands");
+    expect(
+      diffPresentationMode([
+        { op: "same", text: "Keep this detailed sentence and change only " },
+        { op: "del", text: "two old" },
+        { op: "ins", text: "two new" },
+        { op: "same", text: " words at the end." },
+      ]),
+    ).toBe("inline");
+  });
+
+  it("should translate plain offsets across inline-code sentinels", () => {
+    const markedText = `Use \u0011timeout\u0011 now.`;
+    expect(markedOffsetForPlainOffset({ markedText, plainOffset: 4 })).toBe(4);
+    expect(markedOffsetForPlainOffset({ markedText, plainOffset: 11 })).toBe(
+      12,
+    );
   });
 });
 

@@ -36,6 +36,8 @@ import {
   diffKindShowsComment,
   diffPresentationMode,
   diffRunSimilarity,
+  INLINE_CODE_SENTINEL,
+  markedOffsetForPlainOffset,
 } from "../../src/review/revision-diff.js";
 import {
   pendingThreadGroup,
@@ -2530,7 +2532,10 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   const fullChangeLabel = (location) => {
     if (!location.label.endsWith("…")) return location.label;
     const side = location.newText.trim() === "" ? "old" : "new";
-    const fullText = bandText({ location, side }).replace(/\s+/g, " ").trim();
+    const fullText = bandText({ location, side })
+      .replaceAll(INLINE_CODE_SENTINEL, "")
+      .replace(/\s+/g, " ")
+      .trim();
     return fullText === "" ? location.label.slice(0, -1) : fullText;
   };
 
@@ -2643,12 +2648,23 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   };
 
   const appendDiffRun = ({ container, run, comment, oldOffset, tagged }) => {
+    const codeState = { active: false };
     const nodeFor = (text, marked) => {
       const node = el("span", {
         "data-review-diff-op": run.op,
         ...(marked ? { "data-review-diff-comment": true } : {}),
-        text,
       });
+      let hasContent = false;
+      for (const [index, part] of text.split(INLINE_CODE_SENTINEL).entries()) {
+        if (index > 0) codeState.active = !codeState.active;
+        if (part === "") continue;
+        hasContent = true;
+        node.appendChild(
+          codeState.active
+            ? el("code", { text: part })
+            : document.createTextNode(part),
+        );
+      }
       if (marked && !tagged.value) {
         node.appendChild(
           el("span", {
@@ -2658,14 +2674,19 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         );
         tagged.value = true;
       }
-      return node;
+      return hasContent ? node : null;
+    };
+    const appendNode = (text, marked) => {
+      if (text === "") return;
+      const node = nodeFor(text, marked);
+      if (node) container.appendChild(node);
     };
     if (
       run.op !== "del" ||
       comment?.target.type !== "selection" ||
       run.text === ""
     ) {
-      container.appendChild(nodeFor(run.text, false));
+      appendNode(run.text, false);
       return;
     }
     const runStart = oldOffset.value;
@@ -2673,14 +2694,32 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     const markStart = Math.max(runStart, comment.target.start);
     const markEnd = Math.min(runEnd, comment.target.end);
     if (markStart >= markEnd) {
-      container.appendChild(nodeFor(run.text, false));
+      appendNode(run.text, false);
       return;
     }
     const localStart = markStart - runStart;
     const localEnd = markEnd - runStart;
-    container.appendChild(nodeFor(run.text.slice(0, localStart), false));
-    container.appendChild(nodeFor(run.text.slice(localStart, localEnd), true));
-    container.appendChild(nodeFor(run.text.slice(localEnd), false));
+    appendNode(run.text.slice(0, localStart), false);
+    appendNode(run.text.slice(localStart, localEnd), true);
+    appendNode(run.text.slice(localEnd), false);
+  };
+
+  const commentAtMarkedOffsets = ({ comment, markedText }) => {
+    if (comment?.target.type !== "selection") return comment;
+    return {
+      ...comment,
+      target: {
+        ...comment.target,
+        start: markedOffsetForPlainOffset({
+          markedText,
+          plainOffset: comment.target.start,
+        }),
+        end: markedOffsetForPlainOffset({
+          markedText,
+          plainOffset: comment.target.end,
+        }),
+      },
+    };
   };
 
   const appendWholesalePlace = ({ body, place, comment }) => {
@@ -2708,36 +2747,41 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         appendDiffRun({
           container: was,
           run: { op: "del", text: oldText },
-          comment,
+          comment: commentAtMarkedOffsets({
+            comment,
+            markedText: location.oldText,
+          }),
           oldOffset: { value: 0 },
           tagged: { value: false },
         });
       } else {
-        was.appendChild(
-          el("span", {
-            "data-review-diff-op": "del",
-            text: oldText,
-          }),
-        );
+        appendDiffRun({
+          container: was,
+          run: { op: "del", text: oldText },
+          comment: null,
+          oldOffset: { value: 0 },
+          tagged: { value: false },
+        });
       }
     });
-    const now = el(
-      "div",
-      {
-        "data-review-diff-now": true,
-        "data-review-diff-band-kind": bandKind,
+    const now = el("div", {
+      "data-review-diff-now": true,
+      "data-review-diff-band-kind": bandKind,
+    });
+    now.appendChild(el("strong", { text: "Now" }));
+    appendDiffRun({
+      container: now,
+      run: {
+        op: "ins",
+        text: place.locations
+          .map((location) => bandText({ location, side: "new" }))
+          .filter(Boolean)
+          .join("\n\n"),
       },
-      [
-        el("strong", { text: "Now" }),
-        el("span", {
-          "data-review-diff-op": "ins",
-          text: place.locations
-            .map((location) => bandText({ location, side: "new" }))
-            .filter(Boolean)
-            .join("\n\n"),
-        }),
-      ],
-    );
+      comment: null,
+      oldOffset: { value: 0 },
+      tagged: { value: false },
+    });
     body.append(was, now);
   };
 
@@ -2811,7 +2855,12 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           },
           [
             el("strong", { text: "Was" }),
-            el("span", { text: bandText({ location, side: "old" }) }),
+            el("span", {
+              text: bandText({ location, side: "old" }).replaceAll(
+                INLINE_CODE_SENTINEL,
+                "",
+              ),
+            }),
           ],
         ),
         el(
@@ -2822,7 +2871,12 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           },
           [
             el("strong", { text: "Now" }),
-            el("span", { text: bandText({ location, side: "new" }) }),
+            el("span", {
+              text: bandText({ location, side: "new" }).replaceAll(
+                INLINE_CODE_SENTINEL,
+                "",
+              ),
+            }),
           ],
         ),
       );
@@ -2830,11 +2884,15 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     }
     const oldOffset = { value: 0 };
     const tagged = { value: false };
+    const markedComment = commentAtMarkedOffsets({
+      comment: attributedComment,
+      markedText: location.oldText,
+    });
     for (const run of location.runs) {
       appendDiffRun({
         container: body,
         run,
-        comment: attributedComment,
+        comment: markedComment,
         oldOffset,
         tagged,
       });

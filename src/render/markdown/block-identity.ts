@@ -27,6 +27,9 @@ export type BlockDescriptor = {
   // Plain authored presentation text is retained for revision alignment and
   // diffing. It never enters an id or path and is not exposed as markup.
   readonly text: string;
+  // Diff presentation retains inline-code boundaries without changing the
+  // plain-text offsets used by comment anchors.
+  readonly markedText: string;
 };
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
@@ -63,6 +66,29 @@ const textOf = (node: Element): string => {
       const hidden = Array.isArray(className) && className.includes("sr-only");
       if (!hidden) {
         text += textOf(child);
+      }
+    }
+  }
+  return text;
+};
+
+const INLINE_CODE_SENTINEL = "\u0011";
+
+// Keeps only the formatting boundary the revision lens must reconstruct.
+const markedTextOf = (node: Element): string => {
+  let text = "";
+  for (const child of node.children) {
+    if (child.type === "text") {
+      text += child.value;
+    } else if (isElement(child)) {
+      const className = child.properties.className;
+      const hidden = Array.isArray(className) && className.includes("sr-only");
+      if (!hidden) {
+        const childText = markedTextOf(child);
+        text +=
+          child.tagName === "code"
+            ? `${INLINE_CODE_SENTINEL}${childText}${INLINE_CODE_SENTINEL}`
+            : childText;
       }
     }
   }
@@ -295,6 +321,7 @@ const stampTableRows = ({
         label: label.length > 0 ? label : "Table row",
         section,
         text: textOf(candidate),
+        markedText: markedTextOf(candidate),
       });
     },
   });
@@ -342,7 +369,14 @@ const stampScope = ({
     child.properties["data-block-kind"] = kind;
     child.properties["data-block-label"] = label;
     child.properties["data-block-section"] = section;
-    blocks.push({ id, kind, label, section, text: textOf(child) });
+    blocks.push({
+      id,
+      kind,
+      label,
+      section,
+      text: textOf(child),
+      markedText: markedTextOf(child),
+    });
     if (kind === "code" || kind.startsWith("code-")) {
       stampCodeLines(child);
     } else if (kind === "table") {

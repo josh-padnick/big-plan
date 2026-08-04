@@ -8,6 +8,7 @@ type RevisionBlock = {
   readonly label: string;
   readonly section: string;
   readonly text: string;
+  readonly markedText: string;
 };
 
 export type DiffRun = {
@@ -29,6 +30,28 @@ export type RevisionDiffLocation = {
   readonly afterBlockId?: string;
 };
 
+export const INLINE_CODE_SENTINEL = "\u0011";
+
+/** Translates a plain comment offset into sentinel-marked diff coordinates. */
+export const markedOffsetForPlainOffset = ({
+  markedText,
+  plainOffset,
+}: {
+  readonly markedText: string;
+  readonly plainOffset: number;
+}): number => {
+  let plainCursor = 0;
+  for (
+    let markedCursor = 0;
+    markedCursor < markedText.length;
+    markedCursor += 1
+  ) {
+    if (plainCursor === plainOffset) return markedCursor;
+    if (markedText[markedCursor] !== INLINE_CODE_SENTINEL) plainCursor += 1;
+  }
+  return markedText.length;
+};
+
 /** Formats one diff band without leaking table cell newlines into the lens. */
 export const bandText = ({
   location,
@@ -42,6 +65,7 @@ export const bandText = ({
     return value;
   }
   return value
+    .replaceAll(INLINE_CODE_SENTINEL, "")
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line !== "")
@@ -81,7 +105,20 @@ export const diffRunSimilarity = (runs: ReadonlyArray<DiffRun>): number => {
 /** Chooses bands when word interleaving would make a substantial rewrite hard to read. */
 export const diffPresentationMode = (
   runs: ReadonlyArray<DiffRun>,
-): "inline" | "bands" => (diffRunSimilarity(runs) < 0.32 ? "bands" : "inline");
+): "inline" | "bands" => {
+  const changedRuns = runs.filter((run) => run.op !== "same").length;
+  const sameCharacters = runs
+    .filter((run) => run.op === "same")
+    .reduce(
+      (total, run) =>
+        total + run.text.replaceAll(INLINE_CODE_SENTINEL, "").length,
+      0,
+    );
+  return diffRunSimilarity(runs) < 0.32 ||
+    changedRuns > Math.max(6, sameCharacters / 24)
+    ? "bands"
+    : "inline";
+};
 
 const normalized = (value: string): string =>
   value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
@@ -270,9 +307,12 @@ export const diffRevisions = ({
           kind: newBlock.kind,
           label: newBlock.label,
           section: newBlock.section,
-          oldText: oldBlock.text,
-          newText: newBlock.text,
-          runs: diffWords({ before: oldBlock.text, after: newBlock.text }),
+          oldText: oldBlock.markedText,
+          newText: newBlock.markedText,
+          runs: diffWords({
+            before: oldBlock.markedText,
+            after: newBlock.markedText,
+          }),
         });
         paired += 1;
       }
@@ -291,9 +331,9 @@ export const diffRevisions = ({
           kind: oldBlock.kind,
           label: oldBlock.label,
           section: oldBlock.section,
-          oldText: oldBlock.text,
+          oldText: oldBlock.markedText,
           newText: "",
-          runs: [{ op: "del", text: oldBlock.text }],
+          runs: [{ op: "del", text: oldBlock.markedText }],
           ...(afterBlock === undefined ? {} : { afterBlockId: afterBlock.id }),
           ...(beforeBlock === undefined
             ? {}
@@ -310,8 +350,8 @@ export const diffRevisions = ({
           label: newBlock.label,
           section: newBlock.section,
           oldText: "",
-          newText: newBlock.text,
-          runs: [{ op: "ins", text: newBlock.text }],
+          newText: newBlock.markedText,
+          runs: [{ op: "ins", text: newBlock.markedText }],
         });
       }
       oldStart = oldEnd + 1;
