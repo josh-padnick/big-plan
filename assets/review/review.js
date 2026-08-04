@@ -17,6 +17,7 @@
 //     the runtime that served this document; a document opened from file://
 //     makes no request at all and keeps drafts locally.
 
+import { ACTIVITY_ICON } from "../../src/icons/lucide/activity.js";
 import { CHECK_ICON } from "../../src/icons/lucide/check.js";
 import { CHEVRON_LEFT_ICON } from "../../src/icons/lucide/chevron-left.js";
 import { CHEVRON_RIGHT_ICON } from "../../src/icons/lucide/chevron-right.js";
@@ -293,6 +294,8 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   let agentCancelledIds = [];
   let agentConnected = false;
   let agentHeartbeatAt = 0;
+  let agentSessionState = null;
+  let agentConnectionLog = [];
   let sourceRevision = "";
   let progressSeq = 0;
   let liveProgressSeq = 0;
@@ -361,7 +364,10 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       return {
         scrollY: Math.max(0, value.scrollY),
         expanded: value.expanded.filter(isExchangeId),
-        tab: value.tab === "chat" ? "chat" : "comments",
+        tab:
+          value.tab === "chat" || value.tab === "agent"
+            ? value.tab
+            : "comments",
         railOpen: value.railOpen === true,
       };
     } catch {
@@ -386,6 +392,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       connected: false,
       state: null,
       updatedAtMs: 0,
+      connectionLog: [],
     },
     sourceRevision: "",
   });
@@ -613,6 +620,19 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         Number.isFinite(heartbeat.updatedAtMs)
           ? heartbeat.updatedAtMs
           : 0,
+      connectionLog: (Array.isArray(value.connectionLog)
+        ? value.connectionLog
+        : []
+      )
+        .filter(
+          (entry) =>
+            entry !== null &&
+            typeof entry === "object" &&
+            typeof entry.connected === "boolean" &&
+            typeof entry.at === "string" &&
+            !Number.isNaN(Date.parse(entry.at)),
+        )
+        .slice(0, 50),
     };
   };
 
@@ -689,6 +709,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   agentCancelledIds = diskState.agent.cancelledIds;
   agentConnected = diskState.agent.connected;
   agentHeartbeatAt = diskState.agent.updatedAtMs;
+  agentSessionState = diskState.agent.state;
   sourceRevision = diskState.sourceRevision;
   for (const id of reloadState?.expanded || []) {
     expandedThreadIds.add(id);
@@ -776,8 +797,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   agentAlert.append(icon(TRIANGLE_ALERT_ICON), agentAlertLabel);
   agentAlert.addEventListener("click", () => {
     setRailOpen(true);
-    setActiveTab("chat");
-    renderPlanChat();
+    setActiveTab("agent");
   });
   const agentOk = el("button", {
     type: "button",
@@ -798,8 +818,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   );
   agentOk.addEventListener("click", () => {
     setRailOpen(true);
-    setActiveTab("chat");
-    renderPlanChat();
+    setActiveTab("agent");
   });
 
   const toggle = el("button", {
@@ -947,9 +966,20 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     "aria-controls": "big-plan-review-chat",
   });
   chatTab.append(icon(MESSAGES_SQUARE_ICON), el("span", { text: "Chat" }));
+  const connectionTab = hasRuntime
+    ? el("button", {
+        type: "button",
+        role: "tab",
+        "data-review-tab": "agent",
+        "aria-selected": "false",
+        "aria-controls": "big-plan-review-agent",
+      })
+    : null;
+  connectionTab?.append(icon(ACTIVITY_ICON), el("span", { text: "Agent" }));
   const tabList = el("div", { "data-review-tabs": true, role: "tablist" }, [
     commentsTab,
     chatTab,
+    connectionTab,
     hideButton,
   ]);
   const commentsPanel = el(
@@ -978,10 +1008,19 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     },
     [agentPanel],
   );
+  const connectionPanel = hasRuntime
+    ? el("section", {
+        id: "big-plan-review-agent",
+        "data-review-panel": "agent",
+        role: "tabpanel",
+        hidden: true,
+      })
+    : null;
   const railHeader = el("header", { "data-review-rail-header": true }, [
     tabList,
   ]);
   rail.append(railHeader, commentsPanel, chatPanel);
+  if (connectionPanel) rail.appendChild(connectionPanel);
 
   const affordance = el("button", {
     type: "button",
@@ -1247,19 +1286,114 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
 
   const railIsOpen = () => !rail.hidden;
 
+  const renderConnectionPanel = () => {
+    if (!connectionPanel) return;
+    const state = el("section", {
+      "data-review-connection-state": agentConnected
+        ? "connected"
+        : runtimeOffline
+          ? "offline"
+          : "disconnected",
+      "data-tone": agentConnected ? "connected" : "danger",
+    });
+    if (agentConnected) {
+      state.append(
+        el("div", { "data-review-connection-title": true }, [
+          el("span", {
+            "data-review-connection-dot": true,
+            "aria-hidden": "true",
+          }),
+          el("strong", { text: "Agent session active" }),
+          el("span", {
+            "data-review-connection-phase": true,
+            text: agentSessionState === "working" ? "Working" : "Waiting",
+          }),
+        ]),
+        el("p", {
+          text:
+            "Last signal " +
+            Math.max(0, Math.round((Date.now() - agentHeartbeatAt) / 1_000)) +
+            "s ago",
+        }),
+      );
+    } else if (runtimeOffline) {
+      state.append(
+        el("strong", { text: "The review server is unreachable" }),
+        appendInlineCode(
+          el("p", {}),
+          "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
+        ),
+      );
+    } else {
+      state.append(
+        el("strong", { text: "No agent is connected to this review session." }),
+        el("p", {
+          text: "Your comments still save and queue here; nothing is sent until an agent reconnects.",
+        }),
+        el("p", { text: "To restore the connection:" }),
+        el("ol", {}, [
+          appendInlineCode(
+            el("li", {}),
+            "Keep `big-plan review` running in its terminal.",
+          ),
+          appendInlineCode(
+            el("li", {}),
+            "In a second terminal run `big-plan agent <plan.mdx>`.",
+          ),
+          el("li", {
+            text: "Paste the command it prints into codex or claude.",
+          }),
+        ]),
+      );
+    }
+    const history = el("details", { "data-review-connection-history": true }, [
+      el("summary", { text: "Connection history" }),
+      el("p", { text: "Since this review session started." }),
+      el(
+        "ol",
+        {},
+        agentConnectionLog.map((entry) =>
+          el("li", {}, [
+            el("span", {
+              text: entry.connected ? "Connected" : "Disconnected",
+            }),
+            document.createTextNode(" · "),
+            el("time", {
+              datetime: entry.at,
+              text: new Intl.DateTimeFormat(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+              }).format(new Date(entry.at)),
+            }),
+          ]),
+        ),
+      ),
+    ]);
+    connectionPanel.replaceChildren(state, history);
+  };
+
   const setActiveTab = (tab) => {
-    const commentsActive = tab === "comments";
+    const active = tab === "agent" && !connectionTab ? "comments" : tab;
+    const commentsActive = active === "comments";
+    const chatActive = active === "chat";
     commentsTab.setAttribute(
       "aria-selected",
       commentsActive ? "true" : "false",
     );
-    chatTab.setAttribute("aria-selected", commentsActive ? "false" : "true");
+    chatTab.setAttribute("aria-selected", chatActive ? "true" : "false");
+    connectionTab?.setAttribute(
+      "aria-selected",
+      active === "agent" ? "true" : "false",
+    );
     commentsPanel.hidden = !commentsActive;
-    chatPanel.hidden = commentsActive;
+    chatPanel.hidden = !chatActive;
+    if (connectionPanel) connectionPanel.hidden = active !== "agent";
+    if (active === "agent") renderConnectionPanel();
   };
 
   commentsTab.addEventListener("click", () => setActiveTab("comments"));
   chatTab.addEventListener("click", () => setActiveTab("chat"));
+  connectionTab?.addEventListener("click", () => setActiveTab("agent"));
   backdrop.addEventListener("click", () => setRailOpen(false));
 
   const chipCounts = () => {
@@ -5115,12 +5249,11 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     if (messages.length === 0) {
       const empty = el("li", { "data-review-chat-empty": true }, [
         el("p", {
-          text: "Ask about the plan as a whole. Anchored comment threads stay beside their source.",
+          text: hasRuntime
+            ? "Ask about the plan as a whole. Connection status and setup are in the Agent tab."
+            : "Ask about the plan as a whole. Anchored comment threads stay beside their source.",
         }),
       ]);
-      if (hasRuntime && (!agentConnected || runtimeOffline)) {
-        empty.appendChild(setupInstructions());
-      }
       planChatList.replaceChildren(empty);
       return;
     }
@@ -5367,7 +5500,12 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           JSON.stringify({
             scrollY: window.scrollY,
             expanded: Array.from(expandedThreadIds),
-            tab: chatPanel.hidden ? "comments" : "chat",
+            tab:
+              connectionPanel && !connectionPanel.hidden
+                ? "agent"
+                : chatPanel.hidden
+                  ? "comments"
+                  : "chat",
             railOpen: railIsOpen(),
           }),
         );
@@ -5393,10 +5531,13 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     agentCancelledIds = checked.cancelledIds;
     agentConnected = checked.connected;
     agentHeartbeatAt = checked.updatedAtMs;
+    agentSessionState = checked.state;
+    agentConnectionLog = checked.connectionLog;
     if (changed || connectionChanged) {
       renderTray();
       void hydrateRevisionDiffs();
     }
+    if (connectionPanel && !connectionPanel.hidden) renderConnectionPanel();
     const pending = pendingAgentRequestCount();
     if (needsAnswerCount() > 0) {
       setAgentState("Needs your answer", "ready");
