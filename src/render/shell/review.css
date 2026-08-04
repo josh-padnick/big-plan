@@ -1783,6 +1783,9 @@ button[disabled] > [data-review-kbd-tooltip] {
   outline: 1px solid color-mix(in srgb, var(--annotation-c) 52%, transparent);
   outline-offset: 3px;
 }
+[data-slide-kicker][data-review-comment-highlight] {
+  box-shadow: inset 0 -2px 0 var(--annotation-c);
+}
 [data-review-active-highlight] {
   background: var(--annotation-bg);
   outline: 2px solid var(--accent-c);

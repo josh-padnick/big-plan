@@ -1017,7 +1017,11 @@ import {
     el("style", {
       text:
         "::highlight(big-plan-review-comments){" +
-        "background-color:var(--annotation-bg)}" +
+        "background-color:color-mix(in srgb,var(--annotation-bg) 55%,transparent);" +
+        "text-decoration:underline;" +
+        "text-decoration-color:var(--annotation-c);" +
+        "text-decoration-thickness:2px;" +
+        "text-underline-offset:.16em}" +
         "::highlight(big-plan-review-active){" +
         "background-color:var(--annotation-bg)}",
     }),
