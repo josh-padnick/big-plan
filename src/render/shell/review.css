@@ -1,10 +1,13 @@
 /*
 The commenting chrome: the tray rail, the compose card, selection affordance,
-and the chips that mark an annotated block. Every element styled here is
-created live by assets/review/review.js rather than authored as markup, and
-the chips are drawn from an attribute through a pseudo-element, so this is
-stylesheet work by the rule rather than by preference: there is no authored
-markup to carry a utility class.
+and the chips that mark an annotated block.
+
+CSS escape hatch: this branch predates the repository's styling-contract
+reconciliation, and the dynamic review view still has a large unlayered legacy
+stylesheet whose selectors override Tailwind utilities on the same elements.
+Keep review-chrome styling together here until that contract lands; then move
+owned-element rules to colocated utilities and retain CSS only for genuine
+selector, highlight, token, and document-wide behavior.
 
 Nothing here is load-bearing for reading. With scripts disabled none of these
 elements exist and the document is exactly the document it always was.
