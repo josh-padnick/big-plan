@@ -146,7 +146,9 @@ import {
       ? el(
           "div",
           {
-            class: COMMENT_WRAP_CLASSES,
+            class:
+              COMMENT_WRAP_CLASSES +
+              " data-[review-message-body=structured]:[min-width:0] data-[review-message-body=structured]:[color:var(--ink-c)] data-[review-message-body=structured]:[font-size:0.75rem] data-[review-message-body=structured]:[line-height:1.45] data-[review-message-body=structured]:[overflow-wrap:anywhere]",
             "data-review-message-body": "structured",
           },
           checked.map(renderNode),
@@ -835,7 +837,7 @@ import {
   const agentAlertLabel = el("span", { text: "No agent connected" });
   const agentAlert = el("button", {
     class:
-      "[display:inline-flex] [min-height:1.85rem] [align-items:center] [gap:0.4rem] [padding:0.32rem_0.4rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.2] [cursor:pointer] [color:var(--callout-danger-c)] [font-size:0.75rem] [font-weight:650] [white-space:nowrap]",
+      "[display:inline-flex] [min-height:1.85rem] [align-items:center] [gap:0.4rem] [padding:0.32rem_0.4rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.2] [cursor:pointer] [color:var(--callout-danger-c)] [font-size:0.75rem] [font-weight:650] [white-space:nowrap] hover:[background:var(--callout-danger-bg)] active:[background:color-mix(in_srgb,_var(--callout-danger-bg)_80%,_var(--ink-c))]",
     type: "button",
     "data-review-agent-alert": true,
     hidden: true,
@@ -847,7 +849,7 @@ import {
   });
   const agentOk = el("button", {
     class:
-      "[display:inline-flex] [min-height:1.85rem] [align-items:center] [gap:0.4rem] [padding:0.32rem_0.4rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.2] [cursor:pointer] [position:relative] [width:1.85rem] [justify-content:center]",
+      "[display:inline-flex] [min-height:1.85rem] [align-items:center] [gap:0.4rem] [padding:0.32rem_0.4rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.2] [cursor:pointer] [position:relative] [width:1.85rem] [justify-content:center] hover:[background:var(--review-control-hover)] active:[background:var(--review-control-active)]",
     type: "button",
     "data-review-agent-ok": true,
     "aria-label": "Agent session active",
@@ -875,7 +877,7 @@ import {
 
   const toggle = el("button", {
     class:
-      "[display:inline-flex] [min-height:1.85rem] [align-items:center] [gap:0.4rem] [padding:0.32rem_0.4rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.2] [cursor:pointer]",
+      "[display:inline-flex] [min-height:1.85rem] [align-items:center] [gap:0.4rem] [padding:0.32rem_0.4rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.2] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--ink-c)] active:[background:var(--review-control-active)] aria-expanded:[border-radius:0.375rem] aria-expanded:[background:color-mix(in_srgb,_var(--diff-add-c)_9%,_var(--bg))] aria-expanded:[box-shadow:inset_0_0_0_1px_color-mix(in_srgb,_var(--diff-add-c)_26%,_transparent)] aria-expanded:[color:var(--diff-add-c)] data-[review-has-pending=true]:[color:var(--accent-c)]",
     type: "button",
     "data-review-toggle": true,
     "aria-expanded": "false",
@@ -884,7 +886,7 @@ import {
   });
   const toggleCount = el("span", {
     class:
-      "[display:inline-flex] [min-width:1.15rem] [height:1.15rem] [align-items:center] [justify-content:center] [padding:0_0.28rem] [border:1px_solid_currentColor] [border-radius:999px] [font-variant-numeric:tabular-nums] [font-size:0.625rem] [font-weight:700] [text-align:center]",
+      "[display:inline-flex] [min-width:1.15rem] [height:1.15rem] [align-items:center] [justify-content:center] [padding:0_0.28rem] [border:1px_solid_currentColor] [border-radius:999px] [font-variant-numeric:tabular-nums] [font-size:0.625rem] [font-weight:700] [text-align:center] empty:[display:none] data-[review-toggle-count-kind=needs]:[border-color:var(--callout-warning-c)] data-[review-toggle-count-kind=needs]:[background:var(--callout-warning-bg)] data-[review-toggle-count-kind=needs]:[color:var(--callout-warning-c)]",
     "data-review-toggle-count": true,
     text: "0",
   });
@@ -944,13 +946,13 @@ import {
 
   const countLabel = el("span", {
     class:
-      "[display:inline-flex] [min-width:1.15rem] [height:1.15rem] [align-items:center] [justify-content:center] [padding:0_0.28rem] [border-radius:999px] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.625rem] [font-weight:750] [font-variant-numeric:tabular-nums]",
+      "[display:inline-flex] [min-width:1.15rem] [height:1.15rem] [align-items:center] [justify-content:center] [padding:0_0.28rem] [border-radius:999px] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.625rem] [font-weight:750] [font-variant-numeric:tabular-nums] empty:[display:none]",
     "data-review-count": true,
     text: "Nothing pending",
   });
   const hideButton = el("button", {
     class:
-      "[display:inline-flex] [padding:0.2rem] [border-radius:0.3rem] [color:var(--muted-c)] [cursor:pointer]",
+      "[display:inline-flex] [padding:0.2rem] [border-radius:0.3rem] [color:var(--muted-c)] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--ink-c)] active:[background:var(--review-control-active)]",
     type: "button",
     "data-review-hide": true,
     "aria-label": "Hide feedback",
@@ -1003,7 +1005,7 @@ import {
   });
   const resolveAllButton = el("button", {
     class:
-      "[flex:0_0_auto] [padding:0] [border:0] [background:transparent] [color:var(--muted-c)] [font-size:0.72rem] [cursor:pointer]",
+      "[flex:0_0_auto] [padding:0] [border:0] [background:transparent] [color:var(--muted-c)] [font-size:0.72rem] [cursor:pointer] hover:[color:var(--ink-c)] hover:[text-decoration:underline] focus-visible:[color:var(--ink-c)] focus-visible:[text-decoration:underline] active:[color:var(--accent-c)]",
     type: "button",
     "data-review-resolve-all": true,
     text: "Resolve all",
@@ -1035,7 +1037,7 @@ import {
 
   const sendNote = el("p", {
     class:
-      "[margin:0.45rem_0_0] [color:var(--muted-c)] [font-size:0.75rem] [line-height:1.45] [overflow-wrap:anywhere]",
+      "[margin:0.45rem_0_0] [color:var(--muted-c)] [font-size:0.75rem] [line-height:1.45] [overflow-wrap:anywhere] empty:[display:none]",
     "data-review-send-note": true,
   });
   const sendBar = el(
@@ -1051,14 +1053,14 @@ import {
 
   const agentState = el("span", {
     class:
-      "[margin-left:auto] [padding:0.1rem_0.45rem] [border-radius:999px] [font-size:0.6875rem] [font-weight:600] [white-space:nowrap]",
+      "[margin-left:auto] [padding:0.1rem_0.45rem] [border-radius:999px] [font-size:0.6875rem] [font-weight:600] [white-space:nowrap] data-[tone=idle]:[background:var(--callout-warning-bg)] data-[tone=idle]:[color:var(--callout-warning-c)] data-[tone=working]:[background:var(--callout-note-bg)] data-[tone=working]:[color:var(--callout-note-c)] data-[tone=ready]:[background:var(--diff-add-bg)] data-[tone=ready]:[color:var(--diff-add-c)] data-[tone=failed]:[background:var(--callout-danger-bg)] data-[tone=failed]:[color:var(--callout-danger-c)]",
     "data-review-agent-state": true,
     "data-tone": "idle",
     text: "Waiting for you",
   });
   const agentInput = el("textarea", {
     class:
-      "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical]",
+      "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px]",
     "data-review-agent-input": true,
     id: "big-plan-review-agent-note",
     rows: "3",
@@ -1089,7 +1091,7 @@ import {
   );
   const agentSave = el("button", {
     class:
-      "[margin-top:0.45rem] [padding:0.3rem_0.65rem] [border:1px_solid_var(--edge-c)] [border-radius:0.35rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.75rem] [cursor:pointer] [position:relative]",
+      "[margin-top:0.45rem] [padding:0.3rem_0.65rem] [border:1px_solid_var(--edge-c)] [border-radius:0.35rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.75rem] [cursor:pointer] [position:relative] hover:[background:var(--review-control-hover)] hover:[border-color:var(--accent-c)] hover:[color:var(--accent-c)] active:[background:var(--review-control-active)]",
     type: "button",
     "data-review-agent-save": true,
     text: "Send",
@@ -1143,7 +1145,7 @@ import {
 
   const commentsTab = el("button", {
     class:
-      "[display:inline-flex] [align-items:center] [gap:0.35rem] [padding:0.42rem_0.52rem] [border-top-width:0] [border-right-width:0] [border-bottom-width:2px] [border-left-width:0] [border-bottom-style:solid] [border-bottom-color:transparent] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:650] [cursor:pointer]",
+      "[display:inline-flex] [align-items:center] [gap:0.35rem] [padding:0.42rem_0.52rem] [border-top-width:0] [border-right-width:0] [border-bottom-width:2px] [border-left-width:0] [border-bottom-style:solid] [border-bottom-color:transparent] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:650] [cursor:pointer] hover:[background:var(--review-control-hover)] active:[background:var(--review-control-active)] aria-selected:[border-bottom-color:var(--accent-c)] aria-selected:[color:var(--ink-c)]",
     type: "button",
     role: "tab",
     "data-review-tab": "comments",
@@ -1157,7 +1159,7 @@ import {
   );
   const chatTab = el("button", {
     class:
-      "[display:inline-flex] [align-items:center] [gap:0.35rem] [padding:0.42rem_0.52rem] [border-top-width:0] [border-right-width:0] [border-bottom-width:2px] [border-left-width:0] [border-bottom-style:solid] [border-bottom-color:transparent] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:650] [cursor:pointer]",
+      "[display:inline-flex] [align-items:center] [gap:0.35rem] [padding:0.42rem_0.52rem] [border-top-width:0] [border-right-width:0] [border-bottom-width:2px] [border-left-width:0] [border-bottom-style:solid] [border-bottom-color:transparent] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:650] [cursor:pointer] hover:[background:var(--review-control-hover)] active:[background:var(--review-control-active)] aria-selected:[border-bottom-color:var(--accent-c)] aria-selected:[color:var(--ink-c)]",
     type: "button",
     role: "tab",
     "data-review-tab": "chat",
@@ -1168,7 +1170,7 @@ import {
   const connectionTab = hasRuntime
     ? el("button", {
         class:
-          "[display:inline-flex] [align-items:center] [gap:0.35rem] [padding:0.42rem_0.52rem] [border-top-width:0] [border-right-width:0] [border-bottom-width:2px] [border-left-width:0] [border-bottom-style:solid] [border-bottom-color:transparent] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:650] [cursor:pointer]",
+          "[display:inline-flex] [align-items:center] [gap:0.35rem] [padding:0.42rem_0.52rem] [border-top-width:0] [border-right-width:0] [border-bottom-width:2px] [border-left-width:0] [border-bottom-style:solid] [border-bottom-color:transparent] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:650] [cursor:pointer] hover:[background:var(--review-control-hover)] active:[background:var(--review-control-active)] aria-selected:[border-bottom-color:var(--accent-c)] aria-selected:[color:var(--ink-c)]",
         type: "button",
         role: "tab",
         "data-review-tab": "agent",
@@ -1190,7 +1192,8 @@ import {
   const commentsPanel = el(
     "section",
     {
-      class: "[min-height:0]",
+      class:
+        "[min-height:0] data-[review-panel=comments]:[display:flex] data-[review-panel=comments]:[flex:1_1_auto] data-[review-panel=comments]:[flex-direction:column] data-[review-panel=chat]:[flex:1_1_auto] data-[review-panel=chat]:[overflow-y:auto] data-[review-panel=chat]:[overscroll-behavior:contain] data-[review-panel=agent]:[flex:1_1_auto] data-[review-panel=agent]:[padding:0.9rem] data-[review-panel=agent]:[overflow-y:auto] data-[review-panel=agent]:[overscroll-behavior:contain]",
       id: "big-plan-review-comments",
       "data-review-panel": "comments",
       role: "tabpanel",
@@ -1210,7 +1213,8 @@ import {
   const chatPanel = el(
     "section",
     {
-      class: "[min-height:0]",
+      class:
+        "[min-height:0] data-[review-panel=comments]:[display:flex] data-[review-panel=comments]:[flex:1_1_auto] data-[review-panel=comments]:[flex-direction:column] data-[review-panel=chat]:[flex:1_1_auto] data-[review-panel=chat]:[overflow-y:auto] data-[review-panel=chat]:[overscroll-behavior:contain] data-[review-panel=agent]:[flex:1_1_auto] data-[review-panel=agent]:[padding:0.9rem] data-[review-panel=agent]:[overflow-y:auto] data-[review-panel=agent]:[overscroll-behavior:contain]",
       id: "big-plan-review-chat",
       "data-review-panel": "chat",
       role: "tabpanel",
@@ -1220,7 +1224,8 @@ import {
   );
   const connectionPanel = hasRuntime
     ? el("section", {
-        class: "[min-height:0]",
+        class:
+          "[min-height:0] data-[review-panel=comments]:[display:flex] data-[review-panel=comments]:[flex:1_1_auto] data-[review-panel=comments]:[flex-direction:column] data-[review-panel=chat]:[flex:1_1_auto] data-[review-panel=chat]:[overflow-y:auto] data-[review-panel=chat]:[overscroll-behavior:contain] data-[review-panel=agent]:[flex:1_1_auto] data-[review-panel=agent]:[padding:0.9rem] data-[review-panel=agent]:[overflow-y:auto] data-[review-panel=agent]:[overscroll-behavior:contain]",
         id: "big-plan-review-agent",
         "data-review-panel": "agent",
         role: "tabpanel",
@@ -1240,7 +1245,7 @@ import {
 
   const affordance = el("button", {
     class:
-      "[position:fixed] [z-index:46] [display:inline-flex] [align-items:center] [gap:0.3rem] [padding:0.2rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.75rem] [cursor:pointer] [box-shadow:0_2px_8px_rgb(0_0_0_/_0.08)]",
+      "[position:fixed] [z-index:46] [display:inline-flex] [align-items:center] [gap:0.3rem] [padding:0.2rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.75rem] [cursor:pointer] [box-shadow:0_2px_8px_rgb(0_0_0_/_0.08)] hover:[background:var(--review-control-hover)] hover:[border-color:var(--accent-c)] hover:[color:var(--accent-c)] focus-visible:[background:var(--review-control-hover)] focus-visible:[border-color:var(--accent-c)] focus-visible:[color:var(--accent-c)] active:[background:var(--review-control-active)]",
     type: "button",
     "data-review-affordance": true,
     hidden: true,
@@ -1249,7 +1254,7 @@ import {
   affordance.append(icon(MESSAGE_SQUARE_TEXT_ICON), affordanceLabel);
   const composeInput = el("textarea", {
     class:
-      "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical]",
+      "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px]",
     "data-review-compose-input": true,
     id: "big-plan-review-compose",
     rows: "4",
@@ -1629,7 +1634,7 @@ import {
   const copyBlock = ({ attribute, text }) => {
     const button = el("button", {
       class:
-        "[position:absolute] [top:0.38rem] [right:0.38rem] [display:inline-flex] [align-items:center] [gap:0.25rem] [padding:0.2rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.625rem] [line-height:1] [cursor:pointer]",
+        "[position:absolute] [top:0.38rem] [right:0.38rem] [display:inline-flex] [align-items:center] [gap:0.25rem] [padding:0.2rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.625rem] [line-height:1] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--ink-c)] active:[background:var(--review-control-active)]",
       type: "button",
       "data-review-copy": attribute,
       "aria-label": "Copy to clipboard",
@@ -1881,7 +1886,7 @@ import {
         ?.open === true;
     const state = el("section", {
       class:
-        "[display:grid] [gap:0.55rem] [padding:0.8rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [font-size:0.75rem] [line-height:1.5]",
+        "[display:grid] [gap:0.55rem] [padding:0.8rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [font-size:0.75rem] [line-height:1.5] data-[tone=danger]:[border-color:var(--callout-danger-c)] data-[tone=danger]:[background:var(--callout-danger-bg)] data-[tone=danger]:[color:var(--callout-danger-c)] data-[tone=connected]:[border-color:var(--diff-add-c)] data-[tone=connected]:[background:var(--diff-add-bg)] data-[tone=connected]:[color:var(--diff-add-c)]",
       "data-review-connection-state": agentConnected
         ? "connected"
         : runtimeOffline
@@ -2017,7 +2022,7 @@ import {
     if (existing) return existing;
     const marker = el("button", {
       class:
-        "[position:fixed] [z-index:42] [display:inline-flex] [min-width:1.65rem] [height:1.65rem] [align-items:center] [justify-content:center] [gap:0.28rem] [padding:0_0.48rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--bg)] [color:var(--accent-c)] [cursor:pointer] [box-shadow:0_2px_8px_rgb(0_0_0_/_0.08)]",
+        "[position:fixed] [z-index:42] [display:inline-flex] [min-width:1.65rem] [height:1.65rem] [align-items:center] [justify-content:center] [gap:0.28rem] [padding:0_0.48rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--bg)] [color:var(--accent-c)] [cursor:pointer] [box-shadow:0_2px_8px_rgb(0_0_0_/_0.08)] hover:[background:var(--review-control-hover)] hover:[border-color:var(--accent-c)] active:[background:var(--review-control-active)]",
       type: "button",
       "data-review-marker": true,
     });
@@ -2911,7 +2916,7 @@ import {
     if (events.length > 0) {
       const activityButton = el("button", {
         class:
-          "[display:inline-flex] [min-width:0] [flex:1_1_auto] [align-items:center] [justify-content:space-between] [gap:0.45rem] [padding:0.12rem_0.2rem] [border-radius:0.25rem] [color:currentcolor] [cursor:pointer]",
+          "[display:inline-flex] [min-width:0] [flex:1_1_auto] [align-items:center] [justify-content:space-between] [gap:0.45rem] [padding:0.12rem_0.2rem] [border-radius:0.25rem] [color:currentcolor] [cursor:pointer] hover:[background:color-mix(in_srgb,_currentcolor_12%,_transparent)] focus-visible:[background:color-mix(in_srgb,_currentcolor_12%,_transparent)]",
         type: "button",
         "data-review-status-activity-toggle": true,
         "aria-expanded": showAgentActivity ? "true" : "false",
@@ -2934,7 +2939,7 @@ import {
     }
     const strip = el("div", {
       class:
-        "[display:grid] [gap:0.3rem] [margin:0.35rem_0] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-left-width:3px] [border-radius:0.4rem] [background:color-mix(in_srgb,_var(--surface-c)_60%,_var(--bg))] [color:var(--muted-c)] [font-size:0.6875rem] [line-height:1.4]",
+        "[display:grid] [gap:0.3rem] [margin:0.35rem_0] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-left-width:3px] [border-radius:0.4rem] [background:color-mix(in_srgb,_var(--surface-c)_60%,_var(--bg))] [color:var(--muted-c)] [font-size:0.6875rem] [line-height:1.4] data-[tone=working]:[border-color:var(--callout-note-c)] data-[tone=working]:[background:var(--callout-note-bg)] data-[tone=working]:[color:var(--callout-note-c)] data-[tone=warning]:[border-color:var(--callout-warning-c)] data-[tone=warning]:[background:var(--callout-warning-bg)] data-[tone=warning]:[color:var(--callout-warning-c)] data-[tone=danger]:[border-color:var(--callout-danger-c)] data-[tone=danger]:[background:var(--callout-danger-bg)] data-[tone=danger]:[color:var(--callout-danger-c)]",
       "data-review-thread-status": status.stage,
       "data-tone": status.tone,
       ...(status.waitingBusy ? { "data-waiting-busy": true } : {}),
@@ -3085,7 +3090,7 @@ import {
     const sendAll = el("button", {
       type: "button",
       class:
-        "active:opacity-60 [border-color:transparent]! [background:transparent]! [color:var(--annotation-c)]! [font-weight:650]",
+        "active:opacity-60 [border-color:transparent]! [background:transparent]! [color:var(--annotation-c)]! [font-weight:650] hover:[text-decoration:underline] hover:[text-underline-offset:0.15em] active:[opacity:0.65]",
       "data-review-thread-submit-all": true,
       text: `Send all ${drafts.length}`,
     });
@@ -3227,7 +3232,7 @@ import {
 
     const field = el("textarea", {
       class:
-        "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical]",
+        "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px]",
       "data-review-row-input": true,
       rows: "3",
       value: comment.body,
@@ -3542,6 +3547,8 @@ import {
       const fallback = side === "was" ? location.oldText : location.newText;
       if (!content && !fallback) return [];
       const snapshot = el("div", {
+        class:
+          "data-[review-diff-op=del]:[background:var(--diff-remove-bg)] data-[review-diff-op=del]:[color:var(--diff-remove-c)] data-[review-diff-op=ins]:[background:var(--diff-add-bg)] data-[review-diff-op=ins]:[color:var(--diff-add-c)]",
         "data-review-diff-snapshot": true,
         "data-review-diff-kind": location.kind,
         "data-review-diff-op": side === "was" ? "del" : "ins",
@@ -3556,7 +3563,7 @@ import {
       "section",
       {
         class:
-          "[display:grid] [grid-template-columns:3rem_minmax(0,_1fr)] [gap:0.55rem] [padding:0.45rem_0.55rem] [overflow:hidden]",
+          "[display:grid] [grid-template-columns:3rem_minmax(0,_1fr)] [gap:0.55rem] [padding:0.45rem_0.55rem] [overflow:hidden] data-[review-diff-side=was]:[background:var(--diff-remove-bg)] data-[review-diff-side=was]:[color:var(--diff-remove-c)] data-[review-diff-side=now]:[background:var(--diff-add-bg)] data-[review-diff-side=now]:[color:var(--diff-add-c)]",
         "data-review-diff-side": side,
       },
       [
@@ -3590,7 +3597,7 @@ import {
     );
     const container = el(containerTag, {
       class:
-        "[position:relative] [box-sizing:border-box] [width:100%] [margin:0_0_0.35rem] [padding:0.85rem_1rem_0.8rem] [border:1px_dashed_var(--annotation-c)] [border-radius:0.45rem] [background:var(--diff-content-bg)] [color:var(--text-c)]",
+        "[position:relative] [box-sizing:border-box] [width:100%] [margin:0_0_0.35rem] [padding:0.85rem_1rem_0.8rem] [border:1px_dashed_var(--annotation-c)] [border-radius:0.45rem] [background:var(--diff-content-bg)] [color:var(--text-c)] data-[review-diff-status=added]:[border-color:var(--diff-add-c)] data-[review-diff-status=added]:[background:var(--diff-add-bg)] data-[review-diff-status=removed]:[border-color:var(--diff-remove-c)] data-[review-diff-status=removed]:[background:var(--diff-remove-bg)]",
       "data-review-diff-lens": true,
       "data-review-diff-status":
         statuses.size === 1 ? place.locations[0]?.status : "changed",
@@ -3855,7 +3862,7 @@ import {
         "button",
         {
           class:
-            "[display:flex] [width:100%] [align-items:center] [gap:0.3rem] [padding:0.34rem_0.5rem] [border:0] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.66rem] [font-weight:700] [text-align:left] [cursor:pointer]",
+            "[display:flex] [width:100%] [align-items:center] [gap:0.3rem] [padding:0.34rem_0.5rem] [border:0] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.66rem] [font-weight:700] [text-align:left] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--ink-c)] active:[background:var(--review-control-active)]",
           type: "button",
           "data-review-change-group": true,
           "aria-expanded": expanded ? "true" : "false",
@@ -3886,7 +3893,7 @@ import {
         const current = active && diffLens && diffLens.index === index;
         const row = el("button", {
           class:
-            "[display:flex] [width:100%] [min-width:0] [align-items:start] [gap:0.4rem] [padding:0.34rem_0.5rem_0.34rem_1.35rem] [border:0] [background:transparent] [color:var(--text-c)] [text-align:left] [cursor:pointer]",
+            "[display:flex] [width:100%] [min-width:0] [align-items:start] [gap:0.4rem] [padding:0.34rem_0.5rem_0.34rem_1.35rem] [border:0] [background:transparent] [color:var(--text-c)] [text-align:left] [cursor:pointer] hover:[background:var(--review-control-hover)] active:[background:var(--review-control-active)] aria-current:[background:color-mix(in_srgb,_var(--annotation-bg)_45%,_transparent)] aria-current:[box-shadow:inset_3px_0_0_var(--annotation-c)]",
           type: "button",
           "data-review-change-row": true,
           "data-place-id": placeId,
@@ -3939,7 +3946,7 @@ import {
     );
     const see = el("button", {
       class:
-        "[margin-top:0.45rem] [padding:0.2rem_0.45rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--bg)] [color:var(--accent-c)] [font-size:0.6875rem] [font-weight:650] [cursor:pointer]",
+        "[margin-top:0.45rem] [padding:0.2rem_0.45rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--bg)] [color:var(--accent-c)] [font-size:0.6875rem] [font-weight:650] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[border-color:var(--accent-c)] active:[background:var(--review-control-active)]",
       type: "button",
       "data-review-see-change": true,
       text: active
@@ -3968,7 +3975,7 @@ import {
       "div",
       {
         class:
-          "min-w-0 max-w-full [width:calc(100%_-_1rem)] [margin-top:0.45rem] [padding:0.48rem_0.52rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem]",
+          "min-w-0 max-w-full [width:calc(100%_-_1rem)] [margin-top:0.45rem] [padding:0.48rem_0.52rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] data-[review-thread-turn=user]:[margin-left:1rem] data-[review-thread-turn=user]:[border-right:2px_solid_var(--annotation-c)] data-[review-thread-turn=user]:[background:color-mix(in_srgb,_var(--annotation-bg)_30%,_var(--bg))] data-[review-thread-turn=agent]:[margin-right:1rem] data-[review-thread-turn=agent]:[border-left:2px_solid_var(--callout-note-c)] data-[review-thread-turn=agent]:[background:color-mix(in_srgb,_var(--callout-note-bg)_46%,_var(--bg))]",
         "data-review-thread-turn": "agent",
       },
       [
@@ -4026,7 +4033,7 @@ import {
         "div",
         {
           class:
-            "min-w-0 max-w-full [width:calc(100%_-_1rem)] [margin-top:0.45rem] [padding:0.48rem_0.52rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem]",
+            "min-w-0 max-w-full [width:calc(100%_-_1rem)] [margin-top:0.45rem] [padding:0.48rem_0.52rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] data-[review-thread-turn=user]:[margin-left:1rem] data-[review-thread-turn=user]:[border-right:2px_solid_var(--annotation-c)] data-[review-thread-turn=user]:[background:color-mix(in_srgb,_var(--annotation-bg)_30%,_var(--bg))] data-[review-thread-turn=agent]:[margin-right:1rem] data-[review-thread-turn=agent]:[border-left:2px_solid_var(--callout-note-c)] data-[review-thread-turn=agent]:[background:color-mix(in_srgb,_var(--callout-note-bg)_46%,_var(--bg))]",
           "data-review-thread-turn": "user",
         },
         [
@@ -4093,7 +4100,7 @@ import {
           "div",
           {
             class:
-              "min-w-0 max-w-full [width:calc(100%_-_1rem)] [margin-top:0.45rem] [padding:0.48rem_0.52rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem]",
+              "min-w-0 max-w-full [width:calc(100%_-_1rem)] [margin-top:0.45rem] [padding:0.48rem_0.52rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] data-[review-thread-turn=user]:[margin-left:1rem] data-[review-thread-turn=user]:[border-right:2px_solid_var(--annotation-c)] data-[review-thread-turn=user]:[background:color-mix(in_srgb,_var(--annotation-bg)_30%,_var(--bg))] data-[review-thread-turn=agent]:[margin-right:1rem] data-[review-thread-turn=agent]:[border-left:2px_solid_var(--callout-note-c)] data-[review-thread-turn=agent]:[background:color-mix(in_srgb,_var(--callout-note-bg)_46%,_var(--bg))]",
             "data-review-thread-turn": "user",
           },
           [
@@ -4149,7 +4156,7 @@ import {
 
     const field = el("textarea", {
       class:
-        "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical] [min-height:3.25rem] [resize:vertical]",
+        "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical] [min-height:3.25rem] [resize:vertical] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px]",
       "data-review-thread-reply": true,
       rows: "3",
       maxlength: String(BODY_LIMIT),
@@ -4502,7 +4509,7 @@ import {
           [
             el("span", {
               class:
-                "[flex:0_0_auto] [padding:0.05rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [color:var(--muted-c)] [font-size:0.5625rem] [font-weight:700] [letter-spacing:0.06em] [text-transform:uppercase]",
+                "[flex:0_0_auto] [padding:0.05rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [color:var(--muted-c)] [font-size:0.5625rem] [font-weight:700] [letter-spacing:0.06em] [text-transform:uppercase] data-[review-comment-state=staged]:[border-color:color-mix(in_srgb,_var(--annotation-c)_50%,_var(--edge-c))] data-[review-comment-state=staged]:[color:var(--annotation-c)]",
               "data-review-comment-state": "staged",
               text: "Staged",
             }),
@@ -4669,7 +4676,7 @@ import {
       if (substate !== null) {
         const slot = el("span", {
           class:
-            "[display:inline-flex] [width:1.2rem] [height:1.2rem] [flex:0_0_auto] [align-items:center] [justify-content:center] [color:var(--muted-c)]",
+            "[display:inline-flex] [width:1.2rem] [height:1.2rem] [flex:0_0_auto] [align-items:center] [justify-content:center] [color:var(--muted-c)] data-[review-row-substate=stalled]:[color:var(--callout-warning-c)]",
           "data-review-row-substate": substate,
           "aria-label":
             substate === "working" ? "Agent working" : "Agent progress stalled",
@@ -4729,7 +4736,7 @@ import {
       if (rowState === "ready" && changedEvent !== undefined) {
         const reviewChange = el("button", {
           class:
-            "[margin-top:0.45rem] [padding:0.28rem_0.5rem] [border:1px_solid_var(--annotation-c)] [border-radius:0.35rem] [background:color-mix(in_srgb,_var(--annotation-c)_9%,_var(--bg))] [color:var(--annotation-c)] [cursor:pointer] [font-size:0.6875rem] [font-weight:700]",
+            "[margin-top:0.45rem] [padding:0.28rem_0.5rem] [border:1px_solid_var(--annotation-c)] [border-radius:0.35rem] [background:color-mix(in_srgb,_var(--annotation-c)_9%,_var(--bg))] [color:var(--annotation-c)] [cursor:pointer] [font-size:0.6875rem] [font-weight:700] hover:[background:color-mix(in_srgb,_var(--annotation-c)_14%,_var(--bg))] active:[background:color-mix(in_srgb,_var(--annotation-c)_20%,_var(--bg))]",
           type: "button",
           "data-review-row-review-change": true,
           text: "Review change",
@@ -4747,7 +4754,7 @@ import {
       "li",
       {
         class:
-          "[margin-bottom:0.55rem] [padding:0.55rem_0.6rem] [border:1px_solid_var(--edge-c)] [border-radius:0.5rem] [background:var(--surface-c)] [cursor:pointer] [transition:border-color_100ms_ease,_background-color_100ms_ease] [background:transparent] [display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.18rem] [padding:0.45rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-left-width:2px] [border-radius:0.4rem] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.6875rem]",
+          "[margin-bottom:0.55rem] [padding:0.55rem_0.6rem] [border:1px_solid_var(--edge-c)] [border-radius:0.5rem] [background:var(--surface-c)] [cursor:pointer] [transition:border-color_100ms_ease,_background-color_100ms_ease] [background:transparent] [display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.18rem] [padding:0.45rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-left-width:2px] [border-radius:0.4rem] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.6875rem] hover:[border-color:color-mix(in_srgb,_var(--muted-c)_45%,_var(--edge-c))] hover:[background:color-mix(in_srgb,_var(--surface-c)_94%,_var(--ink-c))] data-[review-outcome=changed]:[border-left-color:var(--diff-add-c)] data-[review-outcome=question]:[border-left-color:var(--callout-warning-c)] data-[review-outcome=outside]:[border-left-color:var(--muted-c)] data-[review-outcome=waiting]:[border-left-color:var(--muted-c)] data-[review-outcome=cancelled]:[border-left-color:var(--muted-c)]",
         "data-review-row": true,
         "data-review-sent-row": true,
         "data-review-row-state": rowState,
@@ -4761,7 +4768,11 @@ import {
         "data-review-comment-id": comment.id,
         "data-review-outcome": outcome.key,
         ...(outcome.status
-          ? { "data-review-lifecycle": outcome.status.stage }
+          ? {
+              class:
+                "data-[review-lifecycle=blocked]:[border-left-color:var(--callout-warning-c)]",
+              "data-review-lifecycle": outcome.status.stage,
+            }
           : {}),
       },
       children,
@@ -4779,7 +4790,7 @@ import {
     const isEditing = state === "staged" && comment.id === editingId;
     const card = el("article", {
       class:
-        "[position:absolute] [right:auto] [width:17rem] [padding:0.65rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_3px_14px_rgb(0_0_0_/_0.1)] [pointer-events:auto]",
+        "[position:absolute] [right:auto] [width:17rem] [padding:0.65rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_3px_14px_rgb(0_0_0_/_0.1)] [pointer-events:auto] data-[review-thread-state=sent]:[padding:0.28rem] data-[review-thread-state=sent]:[box-shadow:0_4px_16px_rgb(0_0_0_/_0.1)]",
       "data-review-thread-card": true,
       "data-review-thread-state": state,
       "data-review-comment-id": comment.id,
@@ -4930,7 +4941,7 @@ import {
         [
           el("span", {
             class:
-              "[flex:0_0_auto] [padding:0.05rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [color:var(--muted-c)] [font-size:0.5625rem] [font-weight:700] [letter-spacing:0.06em] [text-transform:uppercase]",
+              "[flex:0_0_auto] [padding:0.05rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [color:var(--muted-c)] [font-size:0.5625rem] [font-weight:700] [letter-spacing:0.06em] [text-transform:uppercase] data-[review-comment-state=staged]:[border-color:color-mix(in_srgb,_var(--annotation-c)_50%,_var(--edge-c))] data-[review-comment-state=staged]:[color:var(--annotation-c)]",
             "data-review-comment-state": "staged",
             text: "Staged",
           }),
@@ -4950,7 +4961,7 @@ import {
     if (isEditing) {
       const field = el("textarea", {
         class:
-          "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical]",
+          "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px]",
         "data-review-thread-input": true,
         rows: "4",
         value: comment.body,
@@ -5017,7 +5028,7 @@ import {
       );
       const more = el("button", {
         class:
-          "[display:inline] [padding:0] [border:0] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:600] [cursor:pointer]",
+          "[display:inline] [padding:0] [border:0] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:600] [cursor:pointer] hover:[color:var(--accent-c)] hover:[text-decoration:underline] active:[color:var(--ink-c)]",
         type: "button",
         "data-review-thread-more": true,
         text: "… more",
@@ -5984,7 +5995,7 @@ import {
         ?.getAttribute("data-block-section") || "this slide";
     const selector = el("button", {
       class:
-        "[position:absolute] [top:calc(0.75rem_-_1px)] [right:calc(100%_+_0.5625rem)] [z-index:44] [display:inline-flex] [width:1.4rem] [height:1.4rem] [align-items:center] [justify-content:center] [padding:0] [border:1px_solid_transparent] [border-radius:0.3rem] [background:color-mix(in_srgb,_var(--bg)_88%,_transparent)] [color:color-mix(in_srgb,_var(--muted-c)_72%,_transparent)] [cursor:pointer]",
+        "[position:absolute] [top:calc(0.75rem_-_1px)] [right:calc(100%_+_0.5625rem)] [z-index:44] [display:inline-flex] [width:1.4rem] [height:1.4rem] [align-items:center] [justify-content:center] [padding:0] [border:1px_solid_transparent] [border-radius:0.3rem] [background:color-mix(in_srgb,_var(--bg)_88%,_transparent)] [color:color-mix(in_srgb,_var(--muted-c)_72%,_transparent)] [cursor:pointer] hover:[border-color:var(--edge-c)] hover:[background:var(--review-control-hover)] hover:[color:var(--accent-c)] focus-visible:[border-color:var(--edge-c)] focus-visible:[background:var(--review-control-hover)] focus-visible:[color:var(--accent-c)] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px] active:[background:var(--review-control-active)]",
       type: "button",
       "data-review-slide-selector": true,
       "aria-label": "Comment on all content in " + title,
@@ -6063,7 +6074,7 @@ import {
       "button",
       {
         class:
-          "[display:flex] [width:100%] [align-items:center] [gap:0.3rem] [padding:0.18rem_0.25rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.68rem] [font-weight:750] [text-align:left] [cursor:pointer]",
+          "[display:flex] [width:100%] [align-items:center] [gap:0.3rem] [padding:0.18rem_0.25rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.68rem] [font-weight:750] [text-align:left] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--accent-c)] active:[background:var(--review-control-active)]",
         type: "button",
         "data-review-chat-change-toggle": true,
         "aria-expanded": expanded ? "true" : "false",
@@ -6090,7 +6101,7 @@ import {
     );
     const see = el("button", {
       class:
-        "[margin-top:0.45rem] [padding:0.2rem_0.45rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--bg)] [color:var(--accent-c)] [font-size:0.6875rem] [font-weight:650] [cursor:pointer]",
+        "[margin-top:0.45rem] [padding:0.2rem_0.45rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--bg)] [color:var(--accent-c)] [font-size:0.6875rem] [font-weight:650] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[border-color:var(--accent-c)] active:[background:var(--review-control-active)]",
       type: "button",
       "data-review-see-change": true,
       text: active
@@ -6188,7 +6199,7 @@ import {
           "li",
           {
             class:
-              "[width:calc(100%_-_1.5rem)] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [min-width:0]",
+              "[width:calc(100%_-_1.5rem)] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [min-width:0] data-[review-chat-message=user]:[margin-left:1.5rem] data-[review-chat-message=user]:[border-right:2px_solid_var(--annotation-c)] data-[review-chat-message=user]:[background:color-mix(in_srgb,_var(--annotation-bg)_30%,_var(--bg))] data-[review-chat-message=agent]:[margin-right:1.5rem] data-[review-chat-message=agent]:[border-left:2px_solid_var(--callout-note-c)] data-[review-chat-message=agent]:[background:color-mix(in_srgb,_var(--callout-note-bg)_46%,_var(--bg))] data-[review-chat-message=waiting]:[border-style:dashed] data-[review-chat-message=waiting]:[color:var(--muted-c)]",
             "data-review-chat-message": "cancelled",
           },
           [cancelledRequestLine()],
@@ -6200,7 +6211,7 @@ import {
           "li",
           {
             class:
-              "[width:calc(100%_-_1.5rem)] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [min-width:0]",
+              "[width:calc(100%_-_1.5rem)] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [min-width:0] data-[review-chat-message=user]:[margin-left:1.5rem] data-[review-chat-message=user]:[border-right:2px_solid_var(--annotation-c)] data-[review-chat-message=user]:[background:color-mix(in_srgb,_var(--annotation-bg)_30%,_var(--bg))] data-[review-chat-message=agent]:[margin-right:1.5rem] data-[review-chat-message=agent]:[border-left:2px_solid_var(--callout-note-c)] data-[review-chat-message=agent]:[background:color-mix(in_srgb,_var(--callout-note-bg)_46%,_var(--bg))] data-[review-chat-message=waiting]:[border-style:dashed] data-[review-chat-message=waiting]:[color:var(--muted-c)]",
             "data-review-chat-message": "waiting",
           },
           [threadStatusStrip(status, { surface: "tray" })],
@@ -6214,7 +6225,7 @@ import {
         "li",
         {
           class:
-            "[width:calc(100%_-_1.5rem)] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [min-width:0]",
+            "[width:calc(100%_-_1.5rem)] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [min-width:0] data-[review-chat-message=user]:[margin-left:1.5rem] data-[review-chat-message=user]:[border-right:2px_solid_var(--annotation-c)] data-[review-chat-message=user]:[background:color-mix(in_srgb,_var(--annotation-bg)_30%,_var(--bg))] data-[review-chat-message=agent]:[margin-right:1.5rem] data-[review-chat-message=agent]:[border-left:2px_solid_var(--callout-note-c)] data-[review-chat-message=agent]:[background:color-mix(in_srgb,_var(--callout-note-bg)_46%,_var(--bg))] data-[review-chat-message=waiting]:[border-style:dashed] data-[review-chat-message=waiting]:[color:var(--muted-c)]",
           "data-review-chat-message": message.role,
         },
         [
