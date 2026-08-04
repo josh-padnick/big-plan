@@ -143,15 +143,6 @@ marks and a plan diff never jitters.
     font-size: 0.75rem;
     color: var(--color-muted);
   }
-  .wireframe-screen {
-    outline: 4px solid transparent;
-    outline-offset: 4px;
-    border-radius: var(--radius-md);
-  }
-  .wireframe[data-wireframe-engaged]:not([data-figure-maximized])
-    .wireframe-screen[data-wireframe-current] {
-    outline-color: color-mix(in srgb, var(--color-muted) 38%, transparent);
-  }
   .wireframe-screen-name {
     font-weight: 600;
     letter-spacing: 0.02em;
@@ -425,6 +416,13 @@ marks and a plan diff never jitters.
        scrolling instead of reflowing into a false device width. */
     zoom: 1;
     overflow: hidden;
+    outline: 4px solid transparent;
+    outline-offset: -4px;
+  }
+  .wireframe[data-wireframe-engaged]:not([data-figure-maximized])
+    .wireframe-screen[data-wireframe-current]
+    .wireframe-frame {
+    outline-color: color-mix(in srgb, var(--color-muted) 38%, transparent);
   }
 
   .wireframe-frame[data-wireframe-device="desktop"] {

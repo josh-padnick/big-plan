@@ -945,12 +945,28 @@ test("should let the page wheel natively past every resting wireframe until a cl
       "[data-wireframe-screen]:visible .wireframe-frame-viewport",
     );
     const desktopFrame = desktopScreen.locator(".wireframe-frame");
+    const desktopArtboard = desktopFrame.locator(".wireframe-artboard");
+    const desktopCanvas = desktopArtboard.locator(".wireframe-canvas");
     const desktopCaption = desktopScreen.locator(".wireframe-screen-caption");
+    const desktopToolbar = desktopScreen.locator(".wireframe-frame-toolbar");
+    const desktopStage = desktopScreen.locator(".wireframe-frame-stage");
     await desktopWireframe.scrollIntoViewIfNeeded();
     await desktopCaption.hover();
     const screenBeforeEngagement = await desktopScreen.screenshot();
     const frameBeforeEngagement = await desktopFrame.screenshot();
+    const captionBeforeEngagement = await desktopCaption.screenshot();
+    const toolbarBoxBeforeEngagement = await boxOf(desktopToolbar);
     const frameBoxBeforeEngagement = await boxOf(desktopFrame);
+    const artboardBoxBeforeEngagement = await boxOf(desktopArtboard);
+    const canvasBoxBeforeEngagement = await boxOf(desktopCanvas);
+    const canvasInteriorBeforeEngagement = await page.screenshot({
+      clip: {
+        x: canvasBoxBeforeEngagement.x + 2,
+        y: canvasBoxBeforeEngagement.y + 2,
+        width: canvasBoxBeforeEngagement.width - 4,
+        height: canvasBoxBeforeEngagement.height - 4,
+      },
+    });
     const desktopViewportBox = await boxOf(desktopViewport);
     await page.mouse.click(
       desktopViewportBox.x + desktopViewportBox.width / 2,
@@ -962,13 +978,48 @@ test("should let the page wheel natively past every resting wireframe until a cl
     );
     await desktopCaption.hover();
     const frameBoxAfterEngagement = await boxOf(desktopFrame);
+    const artboardBoxAfterEngagement = await boxOf(desktopArtboard);
+    const canvasBoxAfterEngagement = await boxOf(desktopCanvas);
     const frameAfterEngagement = await desktopFrame.screenshot();
     const screenAfterEngagement = await desktopScreen.screenshot();
+    const captionAfterEngagement = await desktopCaption.screenshot();
+    const toolbarBoxAfterEngagement = await boxOf(desktopToolbar);
+    const canvasInteriorAfterEngagement = await page.screenshot({
+      clip: {
+        x: canvasBoxAfterEngagement.x + 2,
+        y: canvasBoxAfterEngagement.y + 2,
+        width: canvasBoxAfterEngagement.width - 4,
+        height: canvasBoxAfterEngagement.height - 4,
+      },
+    });
     expect(frameBoxAfterEngagement).toEqual(frameBoxBeforeEngagement);
-    expect(frameAfterEngagement.equals(frameBeforeEngagement)).toBe(true);
+    expect(artboardBoxAfterEngagement).toEqual(artboardBoxBeforeEngagement);
+    expect(canvasBoxAfterEngagement).toEqual(canvasBoxBeforeEngagement);
+    expect(
+      canvasInteriorAfterEngagement.equals(canvasInteriorBeforeEngagement),
+    ).toBe(true);
+    expect(frameAfterEngagement.equals(frameBeforeEngagement)).toBe(false);
     expect(screenAfterEngagement.equals(screenBeforeEngagement)).toBe(false);
-    await expect(desktopScreen).toHaveCSS("outline-width", "4px");
-    await expect(desktopScreen).toHaveCSS("outline-style", "solid");
+    expect(captionAfterEngagement.equals(captionBeforeEngagement)).toBe(true);
+    expect(toolbarBoxAfterEngagement).toEqual(toolbarBoxBeforeEngagement);
+    await expect(desktopScreen).toHaveCSS("outline-style", "none");
+    await expect(desktopStage).toHaveCSS("outline-style", "none");
+    await expect(desktopFrame).toHaveCSS("outline-style", "solid");
+    expect(
+      await desktopFrame.evaluate((element) =>
+        Number.parseFloat(getComputedStyle(element).outlineWidth),
+      ),
+    ).toBeGreaterThan(3.5);
+    expect(
+      await desktopFrame.evaluate((element) =>
+        Number.parseFloat(getComputedStyle(element).outlineOffset),
+      ),
+    ).toBeLessThan(-3.5);
+    expect(
+      await desktopFrame.evaluate(
+        (element) => getComputedStyle(element).borderRadius,
+      ),
+    ).not.toBe("0px");
 
     const conversation = desktopWireframe.locator(
       '[data-wireframe-screen="d-ticket"] [data-wireframe-span="main"] > .wireframe-panel-body',
