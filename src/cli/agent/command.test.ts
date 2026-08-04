@@ -116,6 +116,9 @@ describe("agent command", () => {
     expect(prompt).toContain("agent next");
     expect(prompt).toContain("agent note");
     expect(prompt).toContain("One line per step, present tense, no repeats");
+    expect(prompt).toContain(
+      "keep related sentences in one paragraph; never leave a blank line between every sentence",
+    );
     expect(prompt).toContain(runtime.planPath);
   });
 
