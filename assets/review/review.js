@@ -883,6 +883,10 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     text: "Send all comments to agent",
   });
   const sendNote = el("p", { "data-review-send-note": true });
+  const sendBar = el("div", { "data-review-send-bar": true, hidden: true }, [
+    sendButton,
+    sendNote,
+  ]);
 
   const agentState = el("span", {
     "data-review-agent-state": true,
@@ -992,10 +996,10 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     [
       el("div", { "data-review-scroll": true }, [
         draftList,
+        sendBar,
         emptyNote,
         sentGroup,
       ]),
-      el("div", { "data-review-send-bar": true }, [sendButton, sendNote]),
     ],
   );
   const chatPanel = el(
@@ -4333,41 +4337,65 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   const renderSentIndex = () => {
     const counts = outcomeCounts();
     const pendingGroup = pendingThreadGroup(agentConnected);
+    const workingCount = sent.filter((comment) => {
+      if (resolvedCommentIds.has(comment.id)) return false;
+      const stage = outcomeFor(comment).status?.stage;
+      return stage === "working" || stage === "stalled";
+    }).length;
+    const waitingCount = Math.max(0, counts.waiting - workingCount);
     responseSummary.textContent =
       "Latest round · " +
-      counts.changed +
-      " changed · " +
       counts.question +
       " needs your answer · " +
+      workingCount +
+      " working · " +
+      waitingCount +
+      " " +
+      pendingGroup.label.toLowerCase() +
+      " · " +
+      counts.changed +
+      " changed · " +
       counts.outside +
       " outside this plan · " +
-      counts.waiting +
-      " " +
-      pendingGroup.label.toLowerCase();
+      counts.cancelled +
+      " cancelled";
     resolveAllButton.hidden =
       counts.changed + counts.question + counts.outside === 0;
     const groups = [
       { key: "question", label: "Needs your answer" },
-      { key: "changed", label: "Changed" },
-      { key: "outside", label: "Outside this plan" },
-      { key: "cancelled", label: "Cancelled" },
+      {
+        key: "working",
+        label: "Working",
+        spin: true,
+        match: (outcome) =>
+          outcome.status?.stage === "working" ||
+          outcome.status?.stage === "stalled",
+      },
       {
         key: "waiting",
         label: pendingGroup.label,
         displayKey: pendingGroup.key,
         glyph:
           pendingGroup.key === "waiting" ? HOURGLASS_ICON : TRIANGLE_ALERT_ICON,
+        match: (outcome) =>
+          outcome.key === "waiting" &&
+          outcome.status?.stage !== "working" &&
+          outcome.status?.stage !== "stalled",
       },
+      { key: "changed", label: "Changed" },
+      { key: "outside", label: "Outside this plan" },
+      { key: "cancelled", label: "Cancelled" },
     ];
     const renderedGroups = groups
-      .map(({ key, label, displayKey = key, glyph }) => {
-        const comments = sent.filter(
-          (comment) =>
-            !resolvedCommentIds.has(comment.id) &&
-            outcomeFor(comment).key === key,
-        );
+      .map(({ key, label, displayKey = key, glyph, spin, match }) => {
+        const comments = sent.filter((comment) => {
+          if (resolvedCommentIds.has(comment.id)) return false;
+          const outcome = outcomeFor(comment);
+          return match ? match(outcome) : outcome.key === key;
+        });
         if (comments.length === 0) return null;
         const heading = el("h3", {}, [
+          ...(spin === true ? [spinner()] : []),
           ...(glyph === undefined ? [] : [icon(glyph)]),
           el("span", { text: label }),
           document.createTextNode(" "),
@@ -4543,6 +4571,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
             : ""),
     );
     sendButton.disabled = pending === 0;
+    sendBar.hidden = pending === 0 && sendNote.textContent.trim().length === 0;
     sentGroup.hidden = sent.length === 0;
     renderSentIndex();
     renderPlanChat();
@@ -5399,6 +5428,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       sendNote.textContent =
         "Start the local review runtime with `big-plan review " +
         "<plan.mdx>` to send. Your drafts are saved here meanwhile.";
+      sendBar.hidden = false;
       return false;
     }
     trigger.disabled = true;
@@ -5441,6 +5471,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         " to the agent as " +
         answer.packageId +
         ".";
+      sendBar.hidden = false;
       announce("Feedback queued for the agent.");
       setActiveTab("comments");
       if (closeRailAfter) setRailOpen(false);

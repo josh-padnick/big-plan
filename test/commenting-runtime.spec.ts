@@ -1833,7 +1833,7 @@ test("should preserve and send a floating review across reload and viewport chan
     await toggle.click();
     await expect(tray).toBeVisible();
     await expect(page.locator("[data-review-round-summary]")).toHaveText(
-      "Latest round · 1 changed · 1 needs your answer · 1 outside this plan · 0 blocked",
+      "Latest round · 1 needs your answer · 0 working · 0 blocked · 1 changed · 1 outside this plan · 0 cancelled",
     );
     expect(
       await page.locator("[data-review-outcome-group] h3").allTextContents(),
@@ -1945,10 +1945,10 @@ test("should preserve and send a floating review across reload and viewport chan
     await page.locator('[data-review-tab="chat"]').click();
     await expect(
       page.locator("[data-review-chat-empty] [data-review-status-setup]"),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await expect(
-      page.locator("[data-review-chat-empty] [data-review-status-setup]"),
-    ).not.toHaveAttribute("open", "");
+      page.locator("[data-review-chat-empty]"),
+    ).toContainText("Connection status and setup are in the Agent tab");
     const sentCount = await page
       .locator("[data-review-thread-summary]")
       .count();
