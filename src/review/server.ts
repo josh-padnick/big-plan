@@ -54,6 +54,7 @@ import {
   prepareStore,
   randomId,
   readActiveDraft,
+  readAgentHeartbeat,
   readComments,
   readProgress,
   readResolvedCommentIds,
@@ -226,6 +227,13 @@ export const startReviewRuntime = async ({
     validateComments({ value, blocks, now: new Date().toISOString() });
   const agentConnected = (): Promise<boolean> =>
     agentHeartbeatIsFresh({ store, sessionId });
+  const agentSession = async (): Promise<Readonly<Record<string, unknown>>> => {
+    const heartbeat = await readAgentHeartbeat({ store, sessionId });
+    return {
+      connected: await agentConnected(),
+      ...(heartbeat === undefined ? {} : heartbeat),
+    };
+  };
 
   const readBootstrap = async (markdown: string): Promise<string> =>
     JSON.stringify({
@@ -241,7 +249,7 @@ export const startReviewRuntime = async ({
       }),
       agent: {
         ...(await readAgentExchange({ store, sessionId, planId })),
-        connected: await agentConnected(),
+        ...(await agentSession()),
       },
       sourceRevision: deriveSourceRevision(markdown),
     });
@@ -433,6 +441,7 @@ export const startReviewRuntime = async ({
     if (route.path === "/api/agent") {
       const exchange = await readAgentExchange({ store, sessionId, planId });
       const latestResponse = exchange.responses.at(-1);
+      const session = await agentSession();
       sendJson({
         response,
         status: 200,
@@ -444,7 +453,8 @@ export const startReviewRuntime = async ({
           sourceRevision:
             latestResponse?.sourceRevision ?? initialSourceRevision,
           ...exchange,
-          connected: await agentConnected(),
+          connected: session.connected,
+          agent: session,
         },
       });
       return;

@@ -37,7 +37,10 @@ import {
   pendingThreadGroup,
   threadSubstate,
 } from "../../src/review/thread-group.js";
-import { deriveThreadStatus } from "../../src/review/thread-status.js";
+import {
+  deriveThreadStatus,
+  sessionQuietMs,
+} from "../../src/review/thread-status.js";
 
 (() => {
   "use strict";
@@ -227,6 +230,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   let agentRequests = [];
   let agentResponses = [];
   let agentConnected = false;
+  let agentHeartbeatAt = 0;
   let sourceRevision = "";
   let progressSeq = 0;
   let liveProgressSeq = 0;
@@ -311,7 +315,13 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     threadReplies: {},
     planChatMessages: [],
     resolvedCommentIds: [],
-    agent: { requests: [], responses: [] },
+    agent: {
+      requests: [],
+      responses: [],
+      connected: false,
+      state: null,
+      updatedAtMs: 0,
+    },
     sourceRevision: "",
   });
 
@@ -423,8 +433,14 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
 
   const checkedAgentSnapshot = (value) => {
     if (value === null || typeof value !== "object") {
-      return { requests: [], responses: [], connected: false };
+      return emptyStoredState().agent;
     }
+    const heartbeat =
+      value.agent !== null &&
+      typeof value.agent === "object" &&
+      !Array.isArray(value.agent)
+        ? value.agent
+        : value;
     return {
       requests: (Array.isArray(value.requests) ? value.requests : [])
         .filter(isAgentRequest)
@@ -433,6 +449,15 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
         .filter(isAgentResponse)
         .slice(0, MESSAGE_LIMIT),
       connected: value.connected === true,
+      state:
+        heartbeat.state === "waiting" || heartbeat.state === "working"
+          ? heartbeat.state
+          : null,
+      updatedAtMs:
+        typeof heartbeat.updatedAtMs === "number" &&
+        Number.isFinite(heartbeat.updatedAtMs)
+          ? heartbeat.updatedAtMs
+          : 0,
     };
   };
 
@@ -505,6 +530,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   agentRequests = diskState.agent.requests;
   agentResponses = diskState.agent.responses;
   agentConnected = diskState.agent.connected;
+  agentHeartbeatAt = diskState.agent.updatedAtMs;
   sourceRevision = diskState.sourceRevision;
   for (const id of reloadState?.expanded || []) {
     expandedThreadIds.add(id);
@@ -1527,6 +1553,9 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       ...(options.iconOnly === true ? { "aria-label": outcome.label } : {}),
     });
     if (options.spin === true) badge.appendChild(spinner());
+    if (options.waitingBusy === true) {
+      badge.setAttribute("data-waiting-busy", "");
+    }
     if (state === "waiting") badge.appendChild(icon(HOURGLASS_ICON));
     if (state === "blocked") badge.appendChild(icon(TRIANGLE_ALERT_ICON));
     if (options.iconOnly !== true) {
@@ -1539,14 +1568,26 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     (event.state === "live" || event.state === "waiting") &&
     !/^(reply sent to agent|plan question sent to agent)$/i.test(event.step);
 
-  const currentActivityEvents = () => {
-    return progressEvents
-      .filter(
-        (event) =>
-          isAgentWorkEvent(event) &&
-          !/feedback package received/i.test(event.step),
-      )
-      .slice(-8);
+  const currentActivityEvents = (requestId) => {
+    const deduped = [];
+    for (const event of progressEvents) {
+      if (
+        !isAgentWorkEvent(event) ||
+        /feedback package received/i.test(event.step) ||
+        (requestId && event.requestId !== requestId)
+      ) {
+        continue;
+      }
+      const previous = deduped[deduped.length - 1];
+      if (
+        previous &&
+        previous.step.toLocaleLowerCase() === event.step.toLocaleLowerCase()
+      ) {
+        continue;
+      }
+      deduped.push(event);
+    }
+    return deduped.slice(-8);
   };
 
   // ------------------------------------------------------------ agent health
@@ -1579,6 +1620,41 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     }
   };
 
+  const requestPickedUp = (request) => {
+    const seen = requestSeenAt.get(request.requestId);
+    const attributed = progressEvents.some(
+      (event) =>
+        isAgentWorkEvent(event) && event.requestId === request.requestId,
+    );
+    const legacy =
+      seen !== undefined &&
+      progressEvents.some(
+        (event) =>
+          isAgentWorkEvent(event) &&
+          typeof event.requestId !== "string" &&
+          event.seq > seen.liveSeqAtSeen,
+      );
+    return attributed || legacy;
+  };
+
+  const sessionShowsLife = (now = Date.now()) =>
+    agentConnected ||
+    now - Math.max(lastProgressAdvanceAt, agentHeartbeatAt) <= AGENT_QUIET_MS;
+
+  const failedEventFor = (request) => {
+    const seen = requestSeenAt.get(request.requestId);
+    return progressEvents
+      .filter(
+        (event) =>
+          event.state === "failed" &&
+          (event.requestId === request.requestId ||
+            (typeof event.requestId !== "string" &&
+              seen !== undefined &&
+              event.seq > seen.seqAtSeen)),
+      )
+      .at(-1);
+  };
+
   const agentHealth = () => {
     if (!hasRuntime) return null;
     if (runtimeOffline) {
@@ -1591,34 +1667,20 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     observeRequests();
     const pending = pendingRequestList();
     if (pending.length === 0) return null;
-    const latest = progressEvents[progressEvents.length - 1];
-    if (
-      latest &&
-      latest.state === "failed" &&
-      pending.some((request) => {
-        const seen = requestSeenAt.get(request.requestId);
-        return seen !== undefined && latest.seq > seen.seqAtSeen;
-      })
-    ) {
+    const failed = pending.map(failedEventFor).filter(Boolean).at(-1);
+    if (failed) {
       return {
         key: "errored",
         headline: "The agent reported a problem",
         hint:
-          latest.step +
-          (latest.detail ? " - " + latest.detail : "") +
+          failed.step +
+          (failed.detail ? " - " + failed.detail : "") +
           ". Reply again or restart `big-plan agent`.",
       };
     }
     const now = Date.now();
-    const seen = pending
-      .map((request) => requestSeenAt.get(request.requestId))
-      .filter(Boolean);
-    const oldestAt =
-      seen.length > 0 ? Math.min(...seen.map((entry) => entry.at)) : now;
-    const pickedUp = seen.some(
-      (entry) => liveProgressSeq > entry.liveSeqAtSeen,
-    );
-    if (!pickedUp) {
+    const pickedUp = pending.filter(requestPickedUp);
+    if (pickedUp.length === 0) {
       if (agentConnected) return { key: "working" };
       return {
         key: "unavailable",
@@ -1626,7 +1688,17 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
         hint: "This request is queued until an agent connects.",
       };
     }
-    const quietFor = now - Math.max(lastProgressAdvanceAt, oldestAt);
+    const seen = pickedUp
+      .map((request) => requestSeenAt.get(request.requestId))
+      .filter(Boolean);
+    const oldestAt =
+      seen.length > 0 ? Math.min(...seen.map((entry) => entry.at)) : now;
+    const quietFor = sessionQuietMs({
+      now,
+      lastProgressAdvanceAt,
+      heartbeatAt: agentHeartbeatAt,
+      seenAt: oldestAt,
+    });
     if (quietFor > AGENT_QUIET_MS) {
       const minutes = Math.max(1, Math.round(quietFor / 60_000));
       return {
@@ -1658,26 +1730,41 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   const pendingStatusFor = (request, surfaceName) => {
     observeRequests();
     const seen = requestSeenAt.get(request.requestId);
-    const latest = progressEvents[progressEvents.length - 1];
-    const pickedUp = seen !== undefined && liveProgressSeq > seen.liveSeqAtSeen;
-    return deriveThreadStatus({
-      phase: "pending",
-      surface: surfaceName,
-      runtimeOffline,
-      agentConnected,
-      pickedUp,
-      quietForMs: pickedUp
-        ? Date.now() - Math.max(lastProgressAdvanceAt, seen?.at || Date.now())
-        : 0,
-      ...(latest?.state === "failed" &&
-      seen !== undefined &&
-      latest.seq > seen.seqAtSeen
-        ? {
-            failedStep: latest.step,
-            failedDetail: latest.detail || "",
-          }
-        : {}),
-    });
+    const pickedUp = requestPickedUp(request);
+    const sessionBusy =
+      !pickedUp &&
+      pendingRequestList().some(
+        (candidate) =>
+          candidate.requestId !== request.requestId &&
+          requestPickedUp(candidate),
+      ) &&
+      sessionShowsLife();
+    const failed = failedEventFor(request);
+    return {
+      ...deriveThreadStatus({
+        phase: "pending",
+        surface: surfaceName,
+        runtimeOffline,
+        agentConnected,
+        pickedUp,
+        sessionBusy,
+        quietForMs: pickedUp
+          ? sessionQuietMs({
+              now: Date.now(),
+              lastProgressAdvanceAt,
+              heartbeatAt: agentHeartbeatAt,
+              seenAt: seen?.at || Date.now(),
+            })
+          : 0,
+        ...(failed
+          ? {
+              failedStep: failed.step,
+              failedDetail: failed.detail || "",
+            }
+          : {}),
+      }),
+      requestId: request.requestId,
+    };
   };
 
   const outcomeEventsFor = (comment) => {
@@ -1754,7 +1841,8 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
 
   const threadStatusStrip = (status) => {
     if (!status.headline) return null;
-    const events = status.stage === "working" ? currentActivityEvents() : [];
+    const events =
+      status.stage === "working" ? currentActivityEvents(status.requestId) : [];
     const row = el("div", { "data-review-status-row": true });
     if (status.showsSpinner) row.appendChild(spinner());
     else {
@@ -1782,6 +1870,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     const strip = el("div", {
       "data-review-thread-status": status.stage,
       "data-tone": status.tone,
+      ...(status.waitingBusy ? { "data-waiting-busy": true } : {}),
     });
     strip.appendChild(row);
     if (status.hint) {
@@ -1813,11 +1902,25 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
         el(
           "ol",
           { "data-review-status-activity": true },
-          events.map((event) =>
-            el("li", {
-              text: event.step + (event.detail ? " — " + event.detail : ""),
-            }),
-          ),
+          events.map((event) => {
+            const item = el("li", {}, [
+              el("span", {
+                text: event.step + (event.detail ? " — " + event.detail : ""),
+              }),
+            ]);
+            if (
+              typeof event.at === "string" &&
+              !Number.isNaN(Date.parse(event.at))
+            ) {
+              item.appendChild(
+                el("time", {
+                  datetime: event.at,
+                  text: relativeCommentTime(event.at),
+                }),
+              );
+            }
+            return item;
+          }),
         ),
       );
     }
@@ -3215,6 +3318,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
           outcomeBadge(outcome, {
             spin: outcome.status?.stage === "working",
             iconOnly: outcome.key === "waiting",
+            waitingBusy: outcome.status?.waitingBusy,
           }),
           el("span", {
             "data-review-thread-echo": true,
@@ -4546,6 +4650,7 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     agentRequests = checked.requests;
     agentResponses = checked.responses;
     agentConnected = checked.connected;
+    agentHeartbeatAt = checked.updatedAtMs;
     if (changed || connectionChanged) {
       renderTray();
       void hydrateRevisionDiffs();

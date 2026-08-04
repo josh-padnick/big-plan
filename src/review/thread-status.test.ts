@@ -2,10 +2,23 @@
 
 import { describe, expect, it } from "vitest";
 
-import { deriveThreadStatus } from "./thread-status.js";
+import { deriveThreadStatus, sessionQuietMs } from "./thread-status.js";
 
 describe("deriveThreadStatus", () => {
   it("should distinguish a connected queue from a recoverable blocked queue", () => {
+    expect(
+      deriveThreadStatus({
+        phase: "pending",
+        surface: "thread",
+        agentConnected: true,
+        sessionBusy: true,
+      }),
+    ).toMatchObject({
+      stage: "waiting",
+      headline: "Waiting - the agent is working on another request",
+      showsSpinner: false,
+      waitingBusy: true,
+    });
     expect(
       deriveThreadStatus({
         phase: "pending",
@@ -32,6 +45,25 @@ describe("deriveThreadStatus", () => {
     });
   });
 
+  it("should measure session quiet from the newest liveness signal", () => {
+    expect(
+      sessionQuietMs({
+        now: 200_000,
+        lastProgressAdvanceAt: 20_000,
+        heartbeatAt: 150_000,
+        seenAt: 10_000,
+      }),
+    ).toBe(50_000);
+    expect(
+      sessionQuietMs({
+        now: 200_000,
+        lastProgressAdvanceAt: 220_000,
+        heartbeatAt: 0,
+        seenAt: 0,
+      }),
+    ).toBe(0);
+  });
+
   it("should show one working spinner after live progress arrives", () => {
     expect(
       deriveThreadStatus({
@@ -53,9 +85,13 @@ describe("deriveThreadStatus", () => {
         phase: "pending",
         surface: "thread",
         pickedUp: true,
+        agentConnected: true,
         quietForMs: 120_000,
-      }).stage,
-    ).toBe("stalled");
+      }),
+    ).toMatchObject({
+      stage: "stalled",
+      hint: expect.stringMatching(/^The agent session is still connected\./u),
+    });
     expect(
       deriveThreadStatus({
         phase: "pending",

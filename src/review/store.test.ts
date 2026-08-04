@@ -7,6 +7,7 @@ import {
   appendProgress,
   prepareStore,
   readActiveDraft,
+  readAgentHeartbeat,
   readProgress,
   readResolvedCommentIds,
   readRevisionSnapshot,
@@ -202,6 +203,12 @@ describe("review store agent heartbeat", () => {
       state: "waiting",
       now: 1_000,
     });
+    await expect(
+      readAgentHeartbeat({ store, sessionId: "agent-session" }),
+    ).resolves.toEqual({ state: "waiting", updatedAtMs: 1_000 });
+    await expect(
+      readAgentHeartbeat({ store, sessionId: "another-session" }),
+    ).resolves.toBeUndefined();
     await expect(
       agentHeartbeatIsFresh({
         store,

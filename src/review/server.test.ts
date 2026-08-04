@@ -329,7 +329,14 @@ describe("review runtime feedback", () => {
       state: "waiting",
     });
     const answer: unknown = await (await call({ path: "/api/agent" })).json();
-    expect(answer).toMatchObject({ connected: true });
+    expect(answer).toMatchObject({
+      connected: true,
+      agent: {
+        connected: true,
+        state: "waiting",
+        updatedAtMs: expect.any(Number),
+      },
+    });
   });
 
   it("should serve a deterministic diff between retained revisions", async () => {

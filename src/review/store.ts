@@ -39,6 +39,12 @@ export type ProgressEvent = {
   readonly at?: string;
 };
 
+/** The last renewable coding-agent lease, whether or not it is still fresh. */
+export type AgentHeartbeat = {
+  readonly state: "waiting" | "working";
+  readonly updatedAtMs: number;
+};
+
 /** Where one plan's review state lives. */
 export type ReviewStore = {
   readonly root: string;
@@ -637,6 +643,32 @@ export const writeAgentHeartbeat = async ({
   });
 };
 
+/** Reads the validated coding-agent lease without applying an age cutoff. */
+export const readAgentHeartbeat = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<AgentHeartbeat | undefined> => {
+  const value = await readJson(store.agentHeartbeatPath);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("sessionId" in value) ||
+    value.sessionId !== sessionId ||
+    !("state" in value) ||
+    (value.state !== "waiting" && value.state !== "working") ||
+    !("updatedAtMs" in value) ||
+    typeof value.updatedAtMs !== "number" ||
+    !Number.isFinite(value.updatedAtMs)
+  ) {
+    return undefined;
+  }
+  return { state: value.state, updatedAtMs: value.updatedAtMs };
+};
+
 /**
  * Checks the agent's renewable lease. Waiting loops refresh frequently;
  * claimed work gets a longer lease so queued follow-up requests stay Waiting.
@@ -654,21 +686,8 @@ export const agentHeartbeatIsFresh = async ({
   readonly waitingMaximumAgeMs?: number;
   readonly workingMaximumAgeMs?: number;
 }): Promise<boolean> => {
-  const value = await readJson(store.agentHeartbeatPath);
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    !("sessionId" in value) ||
-    value.sessionId !== sessionId ||
-    !("state" in value) ||
-    (value.state !== "waiting" && value.state !== "working") ||
-    !("updatedAtMs" in value) ||
-    typeof value.updatedAtMs !== "number" ||
-    !Number.isFinite(value.updatedAtMs)
-  ) {
-    return false;
-  }
+  const value = await readAgentHeartbeat({ store, sessionId });
+  if (value === undefined) return false;
   const age = now - value.updatedAtMs;
   const maximumAge =
     value.state === "waiting" ? waitingMaximumAgeMs : workingMaximumAgeMs;

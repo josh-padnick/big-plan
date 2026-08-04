@@ -1037,6 +1037,22 @@ button[data-review-row-target]:active {
   overflow-y: auto;
   line-height: 1.35;
 }
+[data-review-status-activity] li {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+[data-review-status-activity] li > span {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+[data-review-status-activity] time {
+  flex: 0 0 auto;
+  color: var(--muted-c);
+  font-size: 0.625rem;
+}
 [data-review-action-error] {
   grid-column: 1 / -1;
   margin: 0.35rem 0 0;
@@ -1633,12 +1649,30 @@ button:focus-visible > [data-review-icon-tooltip] {
     transform: rotate(360deg);
   }
 }
+@keyframes big-plan-review-hourglass {
+  0%,
+  70% {
+    transform: rotate(0);
+  }
+  85%,
+  100% {
+    transform: rotate(180deg);
+  }
+}
+[data-review-thread-status="waiting"][data-waiting-busy] svg,
+[data-review-outcome-state="waiting"][data-waiting-busy] svg {
+  animation: 2.4s ease-in-out infinite big-plan-review-hourglass;
+}
 @media (prefers-reduced-motion: reduce) {
   [data-review-spinner] {
     animation-duration: 1.8s;
   }
   [data-review-switch-track]::after {
     transition: none;
+  }
+  [data-review-thread-status="waiting"][data-waiting-busy] svg,
+  [data-review-outcome-state="waiting"][data-waiting-busy] svg {
+    animation: none;
   }
 }
 

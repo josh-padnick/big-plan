@@ -22,6 +22,7 @@ export type ThreadStatus = {
   readonly hint?: string;
   readonly showsSpinner: boolean;
   readonly showsSetup: boolean;
+  readonly waitingBusy?: boolean;
 };
 
 type ThreadStatusInput = {
@@ -30,6 +31,7 @@ type ThreadStatusInput = {
   readonly runtimeOffline?: boolean;
   readonly agentConnected?: boolean;
   readonly pickedUp?: boolean;
+  readonly sessionBusy?: boolean;
   readonly quietForMs?: number;
   readonly failedStep?: string;
   readonly failedDetail?: string;
@@ -41,6 +43,20 @@ const stalledHint =
 const blockedHint =
   "Your comment is saved and sends itself as soon as an agent reconnects. Nothing is lost.";
 
+/** Measures session-wide quiet from the newest trustworthy liveness signal. */
+export const sessionQuietMs = ({
+  now,
+  lastProgressAdvanceAt,
+  heartbeatAt,
+  seenAt,
+}: {
+  readonly now: number;
+  readonly lastProgressAdvanceAt: number;
+  readonly heartbeatAt: number;
+  readonly seenAt: number;
+}): number =>
+  Math.max(0, now - Math.max(lastProgressAdvanceAt, heartbeatAt, seenAt));
+
 /** Resolves one thread to exactly one user-facing lifecycle state. */
 export const deriveThreadStatus = ({
   phase,
@@ -48,6 +64,7 @@ export const deriveThreadStatus = ({
   runtimeOffline = false,
   agentConnected = false,
   pickedUp = false,
+  sessionBusy = false,
   quietForMs = 0,
   failedStep,
   failedDetail,
@@ -107,6 +124,17 @@ export const deriveThreadStatus = ({
   }
   if (!pickedUp) {
     if (agentConnected) {
+      if (sessionBusy) {
+        return {
+          stage: "waiting",
+          tone: "neutral",
+          badge: "Waiting",
+          headline: "Waiting - the agent is working on another request",
+          showsSpinner: false,
+          showsSetup: false,
+          waitingBusy: true,
+        };
+      }
       return {
         stage: "waiting",
         tone: "neutral",
@@ -134,6 +162,11 @@ export const deriveThreadStatus = ({
       headline:
         "No progress for " + Math.max(1, Math.round(quietForMs / 60_000)) + "m",
       hint: stalledHint,
+      ...(agentConnected
+        ? {
+            hint: "The agent session is still connected. " + stalledHint,
+          }
+        : {}),
       showsSpinner: false,
       showsSetup: false,
     };
