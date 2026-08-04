@@ -31,7 +31,11 @@ import { TRASH_2_ICON } from "../../src/icons/lucide/trash-2.js";
 import { TRIANGLE_ALERT_ICON } from "../../src/icons/lucide/triangle-alert.js";
 import { UNDO_2_ICON } from "../../src/icons/lucide/undo-2.js";
 import { X_ICON } from "../../src/icons/lucide/x.js";
-import { diffRunSimilarity } from "../../src/review/revision-diff.js";
+import {
+  bandText,
+  diffKindShowsComment,
+  diffRunSimilarity,
+} from "../../src/review/revision-diff.js";
 import {
   pendingThreadGroup,
   threadSubstate,
@@ -2440,20 +2444,30 @@ import {
   };
 
   const appendWholesalePlace = ({ body, place, comment }) => {
-    const was = el("div", { "data-review-diff-was": true }, [
-      el("strong", { text: "Was" }),
-    ]);
+    const kinds = new Set(place.locations.map((location) => location.kind));
+    const bandKind =
+      kinds.size === 1 ? place.locations[0]?.kind || "place" : "place";
+    const was = el(
+      "div",
+      {
+        "data-review-diff-was": true,
+        "data-review-diff-band-kind": bandKind,
+      },
+      [el("strong", { text: "Was" })],
+    );
     place.locations.forEach((location, index) => {
-      if (!location.oldText) return;
+      const oldText = bandText({ location, side: "old" });
+      if (!oldText) return;
       if (index > 0) was.appendChild(document.createTextNode("\n\n"));
       if (
         comment?.target.type === "selection" &&
+        diffKindShowsComment(location.kind) &&
         !comment.target.endBlockId &&
         location.oldBlockId === comment.target.blockId
       ) {
         appendDiffRun({
           container: was,
-          run: { op: "del", text: location.oldText },
+          run: { op: "del", text: oldText },
           comment,
           oldOffset: { value: 0 },
           tagged: { value: false },
@@ -2462,51 +2476,71 @@ import {
         was.appendChild(
           el("span", {
             "data-review-diff-op": "del",
-            text: location.oldText,
+            text: oldText,
           }),
         );
       }
     });
-    const now = el("div", { "data-review-diff-now": true }, [
-      el("strong", { text: "Now" }),
-      el("span", {
-        "data-review-diff-op": "ins",
-        text: place.locations
-          .map((location) => location.newText)
-          .filter(Boolean)
-          .join("\n\n"),
-      }),
-    ]);
+    const now = el(
+      "div",
+      {
+        "data-review-diff-now": true,
+        "data-review-diff-band-kind": bandKind,
+      },
+      [
+        el("strong", { text: "Now" }),
+        el("span", {
+          "data-review-diff-op": "ins",
+          text: place.locations
+            .map((location) => bandText({ location, side: "new" }))
+            .filter(Boolean)
+            .join("\n\n"),
+        }),
+      ],
+    );
     body.append(was, now);
   };
 
   const appendDiffLocation = ({ body, location, comment }) => {
     const attributedComment =
       comment &&
+      diffKindShowsComment(location.kind) &&
       (location.oldBlockId === comment.target.blockId ||
         location.newBlockId === comment.target.blockId)
         ? comment
         : null;
     if (location.status === "changed" && location.kind === "table-row") {
-      const oldRow = el("div", { "data-review-diff-was": true }, [
-        el("strong", { text: "Was" }),
-      ]);
+      const oldRow = el(
+        "div",
+        {
+          "data-review-diff-was": true,
+          "data-review-diff-band-kind": location.kind,
+        },
+        [el("strong", { text: "Was" })],
+      );
       appendDiffRun({
         container: oldRow,
-        run: { op: "del", text: location.oldText },
-        comment: attributedComment,
+        run: { op: "del", text: bandText({ location, side: "old" }) },
+        comment: null,
         oldOffset: { value: 0 },
         tagged: { value: false },
       });
       body.append(
         oldRow,
-        el("div", { "data-review-diff-now": true }, [
-          el("strong", { text: "Now" }),
-          el("span", {
-            "data-review-diff-op": "ins",
-            text: location.newText,
-          }),
-        ]),
+        el(
+          "div",
+          {
+            "data-review-diff-now": true,
+            "data-review-diff-band-kind": location.kind,
+          },
+          [
+            el("strong", { text: "Now" }),
+            el("span", {
+              "data-review-diff-op": "ins",
+              text: bandText({ location, side: "new" }),
+            }),
+          ],
+        ),
       );
       return;
     }
@@ -2517,14 +2551,28 @@ import {
       )
     ) {
       body.append(
-        el("div", { "data-review-diff-was": true }, [
-          el("strong", { text: "Was" }),
-          el("span", { text: location.oldText }),
-        ]),
-        el("div", { "data-review-diff-now": true }, [
-          el("strong", { text: "Now" }),
-          el("span", { text: location.newText }),
-        ]),
+        el(
+          "div",
+          {
+            "data-review-diff-was": true,
+            "data-review-diff-band-kind": location.kind,
+          },
+          [
+            el("strong", { text: "Was" }),
+            el("span", { text: bandText({ location, side: "old" }) }),
+          ],
+        ),
+        el(
+          "div",
+          {
+            "data-review-diff-now": true,
+            "data-review-diff-band-kind": location.kind,
+          },
+          [
+            el("strong", { text: "Now" }),
+            el("span", { text: bandText({ location, side: "new" }) }),
+          ],
+        ),
       );
       return;
     }

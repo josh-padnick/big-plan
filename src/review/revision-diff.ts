@@ -29,6 +29,32 @@ export type RevisionDiffLocation = {
   readonly afterBlockId?: string;
 };
 
+/** Formats one diff band without leaking table cell newlines into the lens. */
+export const bandText = ({
+  location,
+  side,
+}: {
+  readonly location: Pick<RevisionDiffLocation, "kind" | "oldText" | "newText">;
+  readonly side: "old" | "new";
+}): string => {
+  const value = side === "old" ? location.oldText : location.newText;
+  if (location.kind !== "table" && location.kind !== "table-row") {
+    return value;
+  }
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    .join(" · ");
+};
+
+/** Keeps inline comment attribution only where it clarifies prose diffs. */
+export const diffKindShowsComment = (kind: string): boolean =>
+  kind !== "table" &&
+  kind !== "table-row" &&
+  kind !== "code" &&
+  !kind.includes("diff");
+
 /** Measures how much text survives a diff, independent of insert/delete size. */
 export const diffRunSimilarity = (runs: ReadonlyArray<DiffRun>): number => {
   const meaningfulLength = (value: string): number =>

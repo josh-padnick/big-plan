@@ -1137,9 +1137,22 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       lens.locator('[data-review-diff-op="ins"]').filter({ hasText: "Stable" }),
     ).toHaveCount(1);
-    await expect(lens.locator("[data-review-diff-comment-tag]")).toHaveText(
-      "your comment",
+    await expect(lens.locator("[data-review-diff-comment-tag]")).toHaveCount(0);
+    await expect(
+      lens.locator('[data-review-diff-band-kind="table-row"]'),
+    ).toHaveCount(4);
+    const tableWasBands = lens.locator("[data-review-diff-was]");
+    await expect(tableWasBands).toHaveCount(2);
+    await expect(tableWasBands.first()).toContainText(
+      "versionId · Content hash of the snapshot",
     );
+    await expect(tableWasBands.last()).toContainText(
+      "number · Position in this plan's history",
+    );
+    for (const text of await tableWasBands.allTextContents()) {
+      expect(text.replace("Was", "").split("\n")).toHaveLength(1);
+    }
+    expect((await lens.boundingBox())?.height ?? 0).toBeLessThan(600);
     await expect(stepper.locator("[data-review-diff-position]")).toHaveText(
       "Change 1 of 1 · 1 · Details",
     );

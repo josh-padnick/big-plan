@@ -2287,17 +2287,12 @@ tr[data-review-diff-lens] > td {
   color: var(--diff-add-c);
 }
 
-/* A table's extracted text is one line per cell; letting it keep pre-wrap
-   would render a tall column of fragments. Collapse it to flowing text and
-   cap the band's height so a wide table stays a compact, scrollable summary. */
-:is([data-review-diff-kind="table"], [data-review-diff-kind="table-row"])
-  :is([data-review-diff-was], [data-review-diff-now])
-  span {
-  white-space: normal;
-}
-
-:is([data-review-diff-kind="table"], [data-review-diff-kind="table-row"])
-  :is([data-review-diff-was], [data-review-diff-now]) {
+/* Table bands carry their own kind even when several locations are grouped
+   into a place, so the compact cap cannot disappear behind container kind. */
+:is(
+  [data-review-diff-band-kind="table"],
+  [data-review-diff-band-kind="table-row"]
+) {
   max-height: 14rem;
   overflow: auto;
 }

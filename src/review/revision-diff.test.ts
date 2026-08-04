@@ -3,6 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  bandText,
+  diffKindShowsComment,
   diffRevisions,
   diffRunSimilarity,
   diffWords,
@@ -25,6 +27,43 @@ const block = ({
 });
 
 describe("revision word diff", () => {
+  it("should flow table cells inside a diff band without changing prose", () => {
+    expect(
+      bandText({
+        location: {
+          kind: "table-row",
+          oldText: "\ntimeout\n504\n\ntransient\n",
+          newText: "",
+        },
+        side: "old",
+      }),
+    ).toBe("timeout · 504 · transient");
+    expect(
+      bandText({
+        location: {
+          kind: "table",
+          oldText: "",
+          newText: "\nfield\n\nmeaning\n",
+        },
+        side: "new",
+      }),
+    ).toBe("field · meaning");
+    expect(
+      bandText({
+        location: {
+          kind: "paragraph",
+          oldText: "First line.\nSecond line.",
+          newText: "",
+        },
+        side: "old",
+      }),
+    ).toBe("First line.\nSecond line.");
+    expect(diffKindShowsComment("paragraph")).toBe(true);
+    expect(diffKindShowsComment("code")).toBe(false);
+    expect(diffKindShowsComment("code-diff")).toBe(false);
+    expect(diffKindShowsComment("table-row")).toBe(false);
+  });
+
   it("should preserve unchanged words around a replacement", () => {
     expect(
       diffWords({
