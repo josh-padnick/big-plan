@@ -1234,9 +1234,12 @@ test("should preserve and send a floating review across reload and viewport chan
                 : "This delivery request belongs to implementation, not this plan revision.",
           ...(index === 0
             ? {
-                changes: changeTargets.map((target) => ({
+                changes: changeTargets.map((target, changeIndex) => ({
                   target,
-                  summary: "Clarified the canonical snapshot guarantee",
+                  summary:
+                    changeIndex === 0
+                      ? "Clarified the canonical snapshot guarantee"
+                      : "Clarified the history position",
                 })),
               }
             : {}),
@@ -1279,9 +1282,10 @@ test("should preserve and send a floating review across reload and viewport chan
     );
     await expect(
       changed.locator("[data-review-change-list] strong"),
-    ).toHaveText("1 change across 1 slide");
-    const changeRow = changed.locator("[data-review-change-row]");
-    await expect(changeRow).toHaveCount(1);
+    ).toHaveText("2 changes across 1 slide");
+    const changeRows = changed.locator("[data-review-change-row]");
+    await expect(changeRows).toHaveCount(2);
+    const changeRow = changeRows.first();
     const wrapMetrics = await changeRow.evaluate((row) => {
       row.style.width = "7rem";
       const label = row.querySelector("[data-review-change-label]");
@@ -1298,9 +1302,10 @@ test("should preserve and send a floating review across reload and viewport chan
     expect(wrapMetrics.whiteSpace).toBe("normal");
     expect(wrapMetrics.rowFits).toBe(true);
     expect(wrapMetrics.labelHeight).toBeGreaterThan(wrapMetrics.lineHeight);
-    await expect(
-      changeRow.locator("[data-review-change-label]"),
-    ).not.toContainText("…");
+    await expect(changeRows.locator("[data-review-change-label]")).toHaveText([
+      "Clarified the canonical snapshot guarantee",
+      "Clarified the history position",
+    ]);
     await expect(changed.locator("[data-review-see-change]")).toHaveText(
       "See the change",
     );

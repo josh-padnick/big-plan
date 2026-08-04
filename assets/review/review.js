@@ -2530,16 +2530,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     return true;
   };
 
-  const fullChangeLabel = (location) => {
-    if (!location.label.endsWith("…")) return location.label;
-    const side = location.newText.trim() === "" ? "old" : "new";
-    const fullText = bandText({ location, side })
-      .replaceAll(INLINE_CODE_SENTINEL, "")
-      .replace(/\s+/g, " ")
-      .trim();
-    return fullText === "" ? location.label.slice(0, -1) : fullText;
-  };
-
   // A place is a contiguous run of changed locations within one slide. This
   // keeps chat and anchored-comment diffs on one calm, literal vocabulary.
   const groupLocationsIntoPlaces = (locations) => {
@@ -2569,7 +2559,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       groups.push({
         locations: [location],
         section: location.section,
-        label: fullChangeLabel(location),
+        label: location.label,
         note: placeKindNote([location]),
         slideTitle: slideTitleFor({
           type: "block",
@@ -3143,12 +3133,38 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   // The change list is a navigator, not a card stack: slides are the grouping,
   // changes are quiet rows beneath their slide, inactive slides collapse, and
   // the selected row carries the only strong accent. Details stay in the lens.
-  const changeSummaryText = (places) => {
+  const summariesForPlace = ({ event, place }) =>
+    (event.changes || []).filter((change) =>
+      place.locations.some((location) =>
+        diffLocationMatchesTarget({
+          location,
+          target: change.target,
+        }),
+      ),
+    );
+
+  const changeEntriesForPlace = ({ event, place, index }) => {
+    const changes = summariesForPlace({ event, place });
+    return changes.length > 0
+      ? changes.map((change) => ({
+          index,
+          label: change.summary,
+          note: place.note,
+        }))
+      : [{ index, label: place.label, note: place.note }];
+  };
+
+  const changeSummaryText = ({ places, event }) => {
     const slides = new Set(places.map((place) => place.slideTitle)).size;
+    const count = places.reduce(
+      (total, place, index) =>
+        total + changeEntriesForPlace({ event, place, index }).length,
+      0,
+    );
     return (
-      places.length +
+      count +
       " change" +
-      (places.length === 1 ? "" : "s") +
+      (count === 1 ? "" : "s") +
       " across " +
       slides +
       " slide" +
@@ -3159,11 +3175,12 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   const changeNavigator = ({ comment, event, places, active }) => {
     const groups = [];
     places.forEach((place, index) => {
+      const entries = changeEntriesForPlace({ event, place, index });
       const previous = groups[groups.length - 1];
       if (previous && previous.title === place.slideTitle) {
-        previous.entries.push({ place, index });
+        previous.entries.push(...entries);
       } else {
-        groups.push({ title: place.slideTitle, entries: [{ place, index }] });
+        groups.push({ title: place.slideTitle, entries });
       }
     });
     const activeSlide =
@@ -3203,7 +3220,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       });
       nav.appendChild(header);
       if (!expanded) continue;
-      for (const { place, index } of group.entries) {
+      for (const { index, label, note } of group.entries) {
         const current = active && diffLens && diffLens.index === index;
         const row = el("button", {
           type: "button",
@@ -3211,11 +3228,11 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           ...(current ? { "aria-current": "true" } : {}),
         });
         row.appendChild(
-          el("span", { "data-review-change-label": true, text: place.label }),
+          el("span", { "data-review-change-label": true, text: label }),
         );
-        if (place.note && place.note !== "reworded") {
+        if (note && note !== "reworded") {
           row.appendChild(
-            el("span", { "data-review-change-kind": true, text: place.note }),
+            el("span", { "data-review-change-kind": true, text: note }),
           );
         }
         row.addEventListener("click", () => {
@@ -3255,7 +3272,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       diffLens?.comment?.id === comment.id &&
       diffLens?.event.requestId === event.requestId;
     const list = el("div", { "data-review-change-list": true }, [
-      el("strong", { text: changeSummaryText(rows) }),
+      el("strong", { text: changeSummaryText({ places: rows, event }) }),
       changeNavigator({ comment, event, places: rows, active }),
     ]);
     const see = el("button", {
@@ -4918,7 +4935,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       },
       [
         icon(CHEVRON_RIGHT_ICON),
-        el("span", { text: changeSummaryText(places) }),
+        el("span", { text: changeSummaryText({ places, event }) }),
       ],
     );
     disclosure.addEventListener("click", () => {
