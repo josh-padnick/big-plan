@@ -78,6 +78,11 @@ export const diffRunSimilarity = (runs: ReadonlyArray<DiffRun>): number => {
   return length === 0 ? 1 : same / length;
 };
 
+/** Chooses bands when word interleaving would make a substantial rewrite hard to read. */
+export const diffPresentationMode = (
+  runs: ReadonlyArray<DiffRun>,
+): "inline" | "bands" => (diffRunSimilarity(runs) < 0.32 ? "bands" : "inline");
+
 const normalized = (value: string): string =>
   value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 

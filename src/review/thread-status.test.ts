@@ -134,13 +134,14 @@ describe("deriveThreadStatus", () => {
         failedDetail: "Usage exhausted",
       }).stage,
     ).toBe("errored");
-    expect(
-      deriveThreadStatus({
-        phase: "pending",
-        surface: "thread",
-        runtimeOffline: true,
-      }).stage,
-    ).toBe("offline");
+    const offline = deriveThreadStatus({
+      phase: "pending",
+      surface: "thread",
+      runtimeOffline: true,
+    });
+    expect(offline.stage).toBe("offline");
+    expect(offline.hint).toContain("open the new URL it prints");
+    expect(offline.hint).toContain("All comments are safe");
   });
 
   it("should never add status chrome after an outcome or resolution", () => {

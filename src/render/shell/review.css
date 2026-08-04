@@ -1565,6 +1565,51 @@ button:focus-visible > [data-review-icon-tooltip] {
   color: var(--muted-c);
   font-size: 0.6875rem;
 }
+[data-review-compose-context] {
+  display: grid;
+  gap: 0.35rem;
+  margin: -0.1rem 0 0.65rem;
+  padding: 0.55rem;
+  border: 1px solid var(--callout-warning-c);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--callout-warning-c) 9%, var(--bg));
+  color: var(--muted-c);
+  font-size: 0.72rem;
+}
+[data-review-compose-context][hidden] {
+  display: none;
+}
+[data-review-compose-context-jump] {
+  width: fit-content;
+  padding: 0.18rem 0.35rem;
+  border-radius: 0.3rem;
+  color: var(--accent-c);
+  font-weight: 650;
+  cursor: pointer;
+}
+[data-review-compose-context-jump]:hover {
+  background: var(--review-control-hover);
+}
+[data-review-compose-context-jump]:active {
+  background: var(--review-control-active);
+}
+[data-review-selection-notice] {
+  position: fixed;
+  z-index: 49;
+  right: 1rem;
+  bottom: 1rem;
+  width: min(24rem, calc(100vw - 2rem));
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--callout-warning-c);
+  border-radius: 0.55rem;
+  background: var(--bg);
+  color: var(--ink-c);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.16);
+  font-size: 0.78rem;
+}
+[data-review-selection-notice][hidden] {
+  display: none;
+}
 [data-review-submit-immediately] {
   display: flex;
   align-items: center;
@@ -1840,6 +1885,11 @@ button[disabled] > [data-review-kbd-tooltip] {
 }
 [data-review-active-highlight] {
   background: var(--annotation-bg);
+  outline: 2px solid var(--accent-c);
+  outline-offset: 3px;
+}
+[data-review-comment-focus] {
+  background: color-mix(in srgb, var(--annotation-bg) 88%, transparent);
   outline: 2px solid var(--accent-c);
   outline-offset: 3px;
 }
@@ -2330,6 +2380,11 @@ tr[data-review-diff-lens] > td {
   grid-template-columns: 3rem minmax(0, 1fr);
   gap: 0.55rem;
   padding: 0.45rem 0.55rem;
+}
+[data-review-diff-lens] del:not([data-review-diff-op]) {
+  color: var(--muted-c);
+  text-decoration-style: double;
+  text-decoration-color: currentColor;
 }
 
 [data-review-diff-was] {

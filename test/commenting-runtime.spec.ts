@@ -20,7 +20,7 @@ test("should preserve and send a floating review across reload and viewport chan
   page,
   reviewRuntimeUrl,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   await page.addInitScript(() => {
     const observer = new MutationObserver(() => {
       const input = document.querySelector("[data-review-agent-input]");
@@ -282,6 +282,103 @@ test("should preserve and send a floating review across reload and viewport chan
     );
   });
 
+  await test.step("cross-slide text remains commentable instead of being silently cleared", async () => {
+    await page.evaluate(() => {
+      const slides = Array.from(document.querySelectorAll("[data-slide]"));
+      const first = slides.at(0)?.querySelector("[data-block-id]");
+      const second = slides.at(1)?.querySelector("[data-block-id]");
+      const textNode = (root: Element | null | undefined) => {
+        if (!root) return null;
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        return walker.nextNode();
+      };
+      const start = textNode(first);
+      const end = textNode(second);
+      if (!start || !end) throw new Error("Fixture needs two text slides");
+      const range = document.createRange();
+      range.setStart(start, Math.max(0, (start.textContent?.length ?? 0) - 4));
+      range.setEnd(end, Math.min(8, end.textContent?.length ?? 0));
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    await expect(affordance).toHaveAttribute(
+      "aria-label",
+      "Comment on the selected text",
+    );
+    await expect(page.locator("[data-review-selection-notice]")).toBeHidden();
+    await expect
+      .poll(() => page.evaluate(() => window.getSelection()?.isCollapsed))
+      .toBe(false);
+    await affordance.click();
+    await expect(compose).toBeVisible();
+    await page.locator("[data-review-compose-cancel]").click();
+  });
+
+  await test.step("Escape preserves a typed compose draft for the same target", async () => {
+    const paragraph = page.locator("[data-block-kind='paragraph']").first();
+    await paragraph.scrollIntoViewIfNeeded();
+    await paragraph.click({ clickCount: 3 });
+    await affordance.click();
+    await page
+      .locator("[data-review-compose-input]")
+      .fill("Keep this unfinished thought safe.");
+    await page.keyboard.press("Escape");
+    await expect(compose).toBeHidden();
+    await paragraph.click({ clickCount: 3 });
+    await affordance.click();
+    await expect(page.locator("[data-review-compose-input]")).toHaveValue(
+      "Keep this unfinished thought safe.",
+    );
+    await page.locator("[data-review-compose-cancel]").click();
+  });
+
+  await test.step("a compose that scrolls away names its detached target and returns to it", async () => {
+    await page.setViewportSize({ width: 1440, height: 500 });
+    const paragraph = page.locator("[data-block-kind='paragraph']").first();
+    await paragraph.scrollIntoViewIfNeeded();
+    await paragraph.click({ clickCount: 3 });
+    await affordance.click();
+    await page.mouse.move(600, 450);
+    await page.mouse.wheel(0, 1200);
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(0);
+    await expect(compose).toHaveAttribute("data-review-compose-detached", "");
+    await expect(page.locator("[data-review-compose-context]")).toBeVisible();
+    await expect(page.locator("[data-review-compose-context]")).toContainText(
+      "while its target is off screen",
+    );
+    const jump = page.locator("[data-review-compose-context-jump]");
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await jump.hover();
+      const hover = await jump.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      );
+      await jump.focus();
+      await expect(jump).toBeFocused();
+      const box = await jump.boundingBox();
+      if (box === null) throw new Error("Back to target has no pointer target");
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      const active = await jump.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      );
+      await page.mouse.up();
+      expect(active).not.toBe(hover);
+    }
+    await jump.click();
+    await expect(paragraph).toBeInViewport();
+    await page.locator("[data-review-compose-cancel]").click();
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
   await test.step("the selection Comment control dismisses instead of drifting on scroll", async () => {
     await page.setViewportSize({ width: 1440, height: 500 });
     const paragraph = page.locator("[data-block-kind='paragraph']").first();
@@ -338,6 +435,22 @@ test("should preserve and send a floating review across reload and viewport chan
       "aria-label",
       "Comment on the selected text",
     );
+    const placement = await affordance.evaluate((node) => {
+      const control = node.getBoundingClientRect();
+      const selection = window.getSelection();
+      const range =
+        selection && selection.rangeCount > 0
+          ? selection.getRangeAt(0).getBoundingClientRect()
+          : new DOMRect();
+      return {
+        overlaps:
+          control.left < range.right &&
+          control.right > range.left &&
+          control.top < range.bottom &&
+          control.bottom > range.top,
+      };
+    });
+    expect(placement.overlaps).toBe(false);
     await affordance.click();
     await expect(compose).toHaveAttribute("data-review-compose-floating", "");
     await expect(
@@ -552,6 +665,17 @@ test("should preserve and send a floating review across reload and viewport chan
       page.locator('[data-review-comment-state="staged"]'),
     ).toHaveCount(4);
     await expect(page.locator("[data-review-thread-card]")).toHaveCount(2);
+    const firstCard = page.locator("[data-review-thread-card]").first();
+    await firstCard.hover();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-focus-highlight-count",
+      "1",
+    );
+    await page.mouse.move(1, 80);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-focus-highlight-count",
+      "0",
+    );
   });
 
   await test.step("the sidebar has a top edge and complete clickable staged lifecycle", async () => {
@@ -941,6 +1065,9 @@ test("should preserve and send a floating review across reload and viewport chan
     expect(brief).toContain("versionId");
     expect(brief).toContain("number");
     expect(brief).toContain("delivery note");
+    await expect(page.locator("[data-review-send-note]")).toContainText(
+      /^Queued 3 to the agent as /,
+    );
     await page.locator("[data-review-hide]").click();
   });
 
@@ -978,6 +1105,14 @@ test("should preserve and send a floating review across reload and viewport chan
         '[data-review-outcome-state="blocked"] svg[aria-hidden="true"]',
       ),
     ).toHaveCount(3);
+    const blockedCard = page
+      .locator('[data-review-thread-state="sent"]')
+      .first();
+    await blockedCard.locator("[data-review-thread-summary]").click();
+    await expect(
+      blockedCard.locator('[data-review-thread-turn="user"] time'),
+    ).toContainText(/^Queued · /);
+    await blockedCard.locator("[data-review-thread-minimize]").click();
   });
 
   await test.step("a real agent response revises the source and re-renders outcome threads live", async () => {
@@ -1326,7 +1461,21 @@ test("should preserve and send a floating review across reload and viewport chan
     await page
       .locator("[data-review-diff-exit]")
       .evaluate((button) => button.click());
-    await restored.locator("[data-review-see-change]").last().click();
+    await expect(page.locator("[data-review-diff-lens]")).toBeHidden();
+    await expect(
+      page.locator("[data-review-diff-stepper] [data-review-diff-position]"),
+    ).toHaveText("Change 1 of 1 · 1 · Details");
+    await expect(page.locator("[data-review-diff-stepper]")).toBeVisible();
+    await expect(page.locator("[data-review-diff-exit]")).toHaveText(
+      "Show changes",
+    );
+    await page.locator("[data-review-diff-exit]").click();
+    await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
+    await page.locator("[data-review-diff-hide]").click();
+    await restored
+      .locator("[data-review-see-change]")
+      .last()
+      .evaluate((button) => button.click());
     await expect(
       page.locator('[data-review-diff-op="del"]').filter({ hasText: "Stable" }),
     ).toHaveCount(1);
@@ -1336,7 +1485,7 @@ test("should preserve and send a floating review across reload and viewport chan
         .filter({ hasText: "Immutable" }),
     ).toHaveCount(1);
     await page
-      .locator("[data-review-diff-exit]")
+      .locator("[data-review-diff-hide]")
       .evaluate((button) => button.click());
   });
 
@@ -1417,6 +1566,12 @@ test("should preserve and send a floating review across reload and viewport chan
       ).toBe(false);
     }
 
+    const visibleBeforeCompose = await page
+      .locator("[data-review-thread-card]:visible")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => node.getAttribute("data-review-comment-id")),
+      );
+    expect(visibleBeforeCompose.length).toBeGreaterThan(0);
     const row = page.locator('[data-block-label="versionId"]');
     await row.evaluate((block) => {
       const range = document.createRange();
@@ -1428,6 +1583,15 @@ test("should preserve and send a floating review across reload and viewport chan
     });
     await affordance.click();
     await expect(compose).toHaveAttribute("data-review-compose-floating", "");
+    await expect
+      .poll(() =>
+        page
+          .locator("[data-review-thread-card]:visible")
+          .evaluateAll((nodes) =>
+            nodes.map((node) => node.getAttribute("data-review-comment-id")),
+          ),
+      )
+      .toEqual(visibleBeforeCompose);
     const composeRect = await compose.boundingBox();
     const cardTops = await page
       .locator("[data-review-thread-card]:not([hidden])")
@@ -1708,6 +1872,12 @@ test("should preserve and send a floating review across reload and viewport chan
   await test.step("plan-wide chat stays separate and reaches the same real agent exchange", async () => {
     await expect(tray).toBeVisible();
     await page.locator('[data-review-tab="chat"]').click();
+    await expect(
+      page.locator("[data-review-chat-empty] [data-review-status-setup]"),
+    ).toBeVisible();
+    await expect(
+      page.locator("[data-review-chat-empty] [data-review-status-setup]"),
+    ).not.toHaveAttribute("open", "");
     const sentCount = await page
       .locator("[data-review-thread-summary]")
       .count();
@@ -1948,6 +2118,22 @@ Ship the live review loop behind the explicit review command.
       "aria-selected",
       "true",
     );
+    if (chatPlaces > 1) {
+      await page.locator("[data-review-diff-next]").click();
+      await expect(page.locator("[data-review-diff-position]")).toContainText(
+        `Change 2 of ${chatPlaces} ·`,
+      );
+      await page.locator("[data-review-diff-exit]").click();
+      await expect(page.locator("[data-review-diff-lens]")).toBeHidden();
+      await expect(page.locator("[data-review-diff-position]")).toContainText(
+        `Change 2 of ${chatPlaces} ·`,
+      );
+      await page.locator("[data-review-diff-exit]").click();
+      await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
+      await expect(page.locator("[data-review-diff-position]")).toContainText(
+        `Change 2 of ${chatPlaces} ·`,
+      );
+    }
     await digest.locator("[data-review-see-change]").click();
     await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
     await expect(page.locator("[data-review-diff-hidden]")).toHaveCount(0);

@@ -34,6 +34,7 @@ import { X_ICON } from "../../src/icons/lucide/x.js";
 import {
   bandText,
   diffKindShowsComment,
+  diffPresentationMode,
   diffRunSimilarity,
 } from "../../src/review/revision-diff.js";
 import {
@@ -174,31 +175,30 @@ import {
     return location + " · " + kind;
   };
 
-  // The deck transform marks top-level and nested slides but intentionally
-  // does not bake display numbers into content. Derive the reader-facing
-  // outline once from document order so tray titles can say "3.1 · Backoff"
-  // without making that number part of the authoritative plan.
+  // Major headings are the outline authority. Counting only [data-slide]
+  // wrappers is incorrect because a parent with subslides may be flattened
+  // away by the deck transform while its h2 remains in the document.
   const slideNumberBySection = new Map();
   let majorSlide = 0;
-  let minorSlide = 0;
+  for (const heading of document.querySelectorAll(
+    "main h2[data-block-section]",
+  )) {
+    if (heading.closest("section.footnotes")) continue;
+    const section = heading.getAttribute("data-block-section");
+    if (!section || section === "Overview") continue;
+    majorSlide += 1;
+    slideNumberBySection.set(section, String(majorSlide));
+  }
   for (const slide of document.querySelectorAll("[data-slide]")) {
-    if (slide.hasAttribute("data-subslide")) {
-      minorSlide += 1;
-    } else {
-      majorSlide += 1;
-      minorSlide = 0;
-    }
+    if (!slide.hasAttribute("data-subslide")) continue;
     const section = slide
       .querySelector("[data-block-section]")
       ?.getAttribute("data-block-section");
-    if (section) {
-      slideNumberBySection.set(
-        section,
-        slide.hasAttribute("data-subslide")
-          ? majorSlide + "." + minorSlide
-          : String(majorSlide),
-      );
-    }
+    const kicker = slide
+      .querySelector("[data-slide-kicker]")
+      ?.textContent?.trim();
+    const number = kicker?.match(/^(\d+(?:\.\d+)*)\s*\//)?.[1];
+    if (section && number) slideNumberBySection.set(section, number);
   }
 
   // Comment chrome names the numbered slide, not the renderer's full
@@ -229,6 +229,7 @@ import {
   let composeTarget = null;
   let pendingSelection = null;
   let activeDraft = "";
+  let composeDrafts = {};
   let threadReplies = {};
   let planChatMessages = [];
   let agentRequests = [];
@@ -259,6 +260,8 @@ import {
   const submittingIds = new Set();
   const submitErrorById = new Map();
   const requestSeenAt = new Map();
+  const composePinnedIds = new Set();
+  let emphasizedCommentId = null;
   let lastProgressAdvanceAt = 0;
   let pollFailures = 0;
   let runtimeOffline = false;
@@ -316,6 +319,7 @@ import {
     drafts: [],
     sent: [],
     activeDraft: "",
+    composeDrafts: {},
     threadReplies: {},
     planChatMessages: [],
     resolvedCommentIds: [],
@@ -368,12 +372,30 @@ import {
     return checked;
   };
 
+  const checkedComposeDrafts = (value) => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      return {};
+    }
+    const checked = {};
+    for (const [key, body] of Object.entries(value).slice(0, MESSAGE_LIMIT)) {
+      if (
+        key.length <= 1200 &&
+        typeof body === "string" &&
+        body.length <= BODY_LIMIT
+      ) {
+        checked[key] = body;
+      }
+    }
+    return checked;
+  };
+
   const checkedStoredState = (value) => {
     if (!isStoredState(value)) return emptyStoredState();
     return {
       drafts: value.drafts.filter(isComment),
       sent: value.sent.filter(isComment),
       activeDraft: value.activeDraft.slice(0, BODY_LIMIT),
+      composeDrafts: checkedComposeDrafts(value.composeDrafts),
       threadReplies: checkedThreadReplies(value.threadReplies),
       planChatMessages: checkedMessages(value.planChatMessages),
       resolvedCommentIds: (Array.isArray(value.resolvedCommentIds)
@@ -484,6 +506,7 @@ import {
           drafts,
           sent,
           activeDraft,
+          composeDrafts,
           threadReplies,
           planChatMessages,
         }),
@@ -526,6 +549,7 @@ import {
     browserState.activeDraft !== ""
       ? browserState.activeDraft
       : diskState.activeDraft;
+  composeDrafts = browserState.composeDrafts;
   threadReplies = browserState.threadReplies;
   planChatMessages = browserState.planChatMessages;
   for (const id of diskState.resolvedCommentIds) {
@@ -862,6 +886,19 @@ import {
     [composeSaveLabel],
   );
   attachShortcutTooltip(composeSave, "Add comment");
+  const composeContext = el("div", {
+    "data-review-compose-context": true,
+    hidden: true,
+  });
+  const composeContextText = el("span", {
+    "data-review-compose-context-text": true,
+  });
+  const composeContextJump = el("button", {
+    type: "button",
+    "data-review-compose-context-jump": true,
+    text: "Back to target",
+  });
+  composeContext.append(composeContextText, composeContextJump);
   // The one visible action mirrors the submit-right-away preference, so the
   // button always names what clicking it will actually do.
   const syncComposeSaveLabel = () => {
@@ -901,6 +938,7 @@ import {
       hidden: true,
     },
     [
+      composeContext,
       el("label", {
         for: "big-plan-review-compose",
         "data-review-field-label": true,
@@ -928,6 +966,11 @@ import {
     "aria-label": "Comment anchors",
   });
   const live = el("p", { "data-review-live": true, "aria-live": "polite" });
+  const selectionNotice = el("p", {
+    "data-review-selection-notice": true,
+    "aria-live": "polite",
+    hidden: true,
+  });
   const backdrop = el("button", {
     type: "button",
     "data-review-backdrop": true,
@@ -1012,6 +1055,7 @@ import {
     toolbar,
     rail,
     affordance,
+    selectionNotice,
     threadLayer,
     compose,
     markerLayer,
@@ -1021,7 +1065,7 @@ import {
   ]);
   document.body.appendChild(surface);
   // Tailwind's delivery optimizer does not yet parse the standardized
-  // ::highlight() pseudo-element, so these two rules live with the browser
+  // ::highlight() pseudo-element, so these named-highlight rules live with the browser
   // behavior that creates their named Highlight ranges.
   document.head.appendChild(
     el("style", {
@@ -1031,6 +1075,12 @@ import {
         "text-decoration:underline;" +
         "text-decoration-color:var(--annotation-c);" +
         "text-decoration-thickness:2px;" +
+        "text-underline-offset:.16em}" +
+        "::highlight(big-plan-review-focus){" +
+        "background-color:color-mix(in srgb,var(--annotation-bg) 92%,transparent);" +
+        "text-decoration:underline;" +
+        "text-decoration-color:var(--accent-c);" +
+        "text-decoration-thickness:3px;" +
         "text-underline-offset:.16em}" +
         "::highlight(big-plan-review-active){" +
         "background-color:var(--annotation-bg)}",
@@ -1508,13 +1558,16 @@ import {
     for (const block of blocks) {
       block.removeAttribute("data-review-comment-highlight");
       block.removeAttribute("data-review-active-highlight");
+      block.removeAttribute("data-review-comment-focus");
       block.removeAttribute("data-review-anchor-changed");
     }
     for (const kicker of document.querySelectorAll("[data-slide-kicker]")) {
       kicker.removeAttribute("data-review-comment-highlight");
       kicker.removeAttribute("data-review-active-highlight");
+      kicker.removeAttribute("data-review-comment-focus");
     }
     const commentRanges = [];
+    const focusRanges = [];
     const lensBlocks = diffLens
       ? diffLens.hiddenBlocks.concat(diffLens.movedBlocks)
       : [];
@@ -1527,12 +1580,19 @@ import {
           : null;
       if (visualAnchor && !lensBlocks.includes(anchor.block)) {
         visualAnchor.setAttribute("data-review-comment-highlight", "");
+        if (comment.id === emphasizedCommentId) {
+          visualAnchor.setAttribute("data-review-comment-focus", "");
+        }
         continue;
       }
       if (anchor.kind === "range" && !lensBlocks.includes(anchor.block)) {
         commentRanges.push(anchor.range);
+        if (comment.id === emphasizedCommentId) focusRanges.push(anchor.range);
       } else if (anchor.block && !lensBlocks.includes(anchor.block)) {
         anchor.block.setAttribute("data-review-comment-highlight", "");
+        if (comment.id === emphasizedCommentId) {
+          anchor.block.setAttribute("data-review-comment-focus", "");
+        }
         if (anchor.kind === "changed") {
           anchor.block.setAttribute("data-review-anchor-changed", "");
         }
@@ -1554,7 +1614,12 @@ import {
       "data-review-active-selection-highlight",
       activeRange === null ? "false" : "true",
     );
+    root.setAttribute(
+      "data-review-focus-highlight-count",
+      String(focusRanges.length),
+    );
     setNamedHighlight("big-plan-review-comments", commentRanges);
+    setNamedHighlight("big-plan-review-focus", focusRanges);
     setNamedHighlight(
       "big-plan-review-active",
       activeRange === null ? [] : [activeRange],
@@ -1702,7 +1767,7 @@ import {
       return {
         key: "offline",
         headline: "The review server is unreachable",
-        hint: "Restart `big-plan review` in its terminal, then reload this page. Your comments are saved locally.",
+        hint: "Restart `big-plan review` in its terminal, then open the new URL it prints. All comments are safe.",
       };
     }
     observeRequests();
@@ -1880,6 +1945,25 @@ import {
     return null;
   };
 
+  const setupInstructions = () =>
+    el(
+      "details",
+      {
+        "data-review-status-setup": true,
+      },
+      [
+        el("summary", { text: "Show setup instructions" }),
+        appendInlineCode(
+          el("p", {}),
+          "Keep `big-plan review` running. In a second terminal, run `big-plan agent` and start the command it prints.",
+        ),
+        appendInlineCode(
+          el("p", {}),
+          "If the review server stopped, restart `big-plan review`, then open the new URL it prints. Your comments remain saved.",
+        ),
+      ],
+    );
+
   const threadStatusStrip = (status) => {
     if (!status.headline) return null;
     const events =
@@ -1923,20 +2007,7 @@ import {
       );
     }
     if (status.showsSetup) {
-      const setup = el(
-        "details",
-        {
-          "data-review-status-setup": true,
-        },
-        [
-          el("summary", { text: "Show setup instructions" }),
-          appendInlineCode(
-            el("p", {}),
-            "Keep `big-plan review` running. In a second terminal, run `big-plan agent` and start the command it prints.",
-          ),
-        ],
-      );
-      strip.appendChild(setup);
+      strip.appendChild(setupInstructions());
     }
     if (events.length > 0 && showAgentActivity) {
       strip.appendChild(
@@ -2400,7 +2471,12 @@ import {
     "data-review-diff-exit": true,
     text: "Show current text",
   });
-  diffStepper.append(diffPrevious, diffPosition, diffNext, diffExit);
+  const diffHide = el("button", {
+    type: "button",
+    "data-review-diff-hide": true,
+    text: "Hide changes",
+  });
+  diffStepper.append(diffPrevious, diffPosition, diffNext, diffExit, diffHide);
   document.body.appendChild(diffStepper);
 
   // Added content is temporarily moved into the lens so its real formatting
@@ -2530,6 +2606,18 @@ import {
         location.newBlockId === comment.target.blockId)
         ? comment
         : null;
+    if (
+      location.status === "changed" &&
+      ["paragraph", "heading", "quote", "list"].includes(location.kind) &&
+      diffPresentationMode(location.runs) === "bands"
+    ) {
+      appendWholesalePlace({
+        body,
+        place: { locations: [location] },
+        comment: attributedComment,
+      });
+      return;
+    }
     if (location.status === "changed" && location.kind === "table-row") {
       const oldRow = el(
         "div",
@@ -2734,6 +2822,7 @@ import {
       container,
       hiddenBlocks,
       movedBlocks,
+      showingCurrent: false,
     };
     diffPosition.textContent =
       "Change " +
@@ -2744,6 +2833,7 @@ import {
       place.slideTitle;
     diffPrevious.disabled = index === 0;
     diffNext.disabled = index === places.length - 1;
+    diffExit.textContent = "Show current text";
     diffStepper.hidden = false;
     renderTray();
     container.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -2776,7 +2866,28 @@ import {
       index: diffLens.index + 1,
     });
   });
-  diffExit.addEventListener("click", clearDiffLens);
+  diffExit.addEventListener("click", () => {
+    if (!diffLens) return;
+    if (!diffLens.showingCurrent) {
+      restoreMovedBlocksBeforeLens(diffLens);
+      for (const block of diffLens.hiddenBlocks) {
+        block.removeAttribute("hidden");
+        block.removeAttribute("data-review-diff-hidden");
+      }
+      diffLens.container.hidden = true;
+      diffLens.showingCurrent = true;
+      diffExit.textContent = "Show changes";
+      paintTargetHighlights();
+      return;
+    }
+    const { comment, event, index } = diffLens;
+    const scrollY = window.scrollY;
+    renderDiffLocation({ comment, event, index });
+    requestAnimationFrame(() =>
+      window.scrollTo({ top: scrollY, behavior: "auto" }),
+    );
+  });
+  diffHide.addEventListener("click", clearDiffLens);
 
   const chatChangeEvents = () => {
     const events = [];
@@ -2979,6 +3090,14 @@ import {
     return node;
   };
 
+  const requestDeliveryLabel = (request) => {
+    if (!request) return "Saved";
+    const answered = agentResponses.some(
+      (response) => response.requestId === request.requestId,
+    );
+    return answered || requestPickedUp(request) ? "Sent" : "Queued";
+  };
+
   const conversationNodes = (comment) => {
     const outcome = outcomeFor(comment);
     const initialRequest = agentRequests.find(
@@ -2994,7 +3113,8 @@ import {
           el("time", {
             datetime: initialRequest?.createdAt || comment.createdAt,
             text:
-              "Sent · " +
+              requestDeliveryLabel(initialRequest) +
+              " · " +
               relativeCommentTime(
                 initialRequest?.createdAt || comment.createdAt,
               ),
@@ -3037,7 +3157,10 @@ import {
             el("strong", { text: "You" }),
             el("time", {
               datetime: request.createdAt,
-              text: "Sent · " + relativeCommentTime(request.createdAt),
+              text:
+                requestDeliveryLabel(request) +
+                " · " +
+                relativeCommentTime(request.createdAt),
             }),
           ]),
           el("p", { text: request.body }),
@@ -3293,6 +3416,25 @@ import {
     return el("p", { "data-review-action-error": true, text: message });
   };
 
+  const bindCommentAssociation = (node, comment) => {
+    const emphasize = () => {
+      emphasizedCommentId = comment.id;
+      paintTargetHighlights();
+    };
+    const relax = () => {
+      if (emphasizedCommentId !== comment.id) return;
+      emphasizedCommentId = null;
+      paintTargetHighlights();
+    };
+    node.addEventListener("pointerenter", emphasize);
+    node.addEventListener("pointerleave", relax);
+    node.addEventListener("focusin", emphasize);
+    node.addEventListener("focusout", (event) => {
+      if (!node.contains(event.relatedTarget)) relax();
+    });
+    return node;
+  };
+
   const sentRow = (comment, options = {}) => {
     const resolved = options.resolved === true;
     const outcome = outcomeFor(comment);
@@ -3380,20 +3522,23 @@ import {
           text: shortEcho(comment.body),
         }),
       );
-    return el(
-      "li",
-      {
-        "data-review-row": true,
-        "data-review-sent-row": true,
-        ...(resolved ? { "data-review-resolved-row": true } : {}),
-        ...(expanded ? { "data-review-row-expanded": true } : {}),
-        "data-review-comment-id": comment.id,
-        "data-review-outcome": outcome.key,
-        ...(outcome.status
-          ? { "data-review-lifecycle": outcome.status.stage }
-          : {}),
-      },
-      children,
+    return bindCommentAssociation(
+      el(
+        "li",
+        {
+          "data-review-row": true,
+          "data-review-sent-row": true,
+          ...(resolved ? { "data-review-resolved-row": true } : {}),
+          ...(expanded ? { "data-review-row-expanded": true } : {}),
+          "data-review-comment-id": comment.id,
+          "data-review-outcome": outcome.key,
+          ...(outcome.status
+            ? { "data-review-lifecycle": outcome.status.stage }
+            : {}),
+        },
+        children,
+      ),
+      comment,
     );
   };
 
@@ -3404,6 +3549,7 @@ import {
       "data-review-thread-state": state,
       "data-review-comment-id": comment.id,
     });
+    bindCommentAssociation(card, comment);
     if (state === "staged" && submittingIds.has(comment.id)) {
       card.setAttribute("data-review-thread-sending", "");
       card.append(
@@ -3668,10 +3814,11 @@ import {
       const rect = block?.getBoundingClientRect();
       const visible =
         canFloat &&
-        rect !== undefined &&
-        rect !== null &&
-        rect.bottom >= FLOAT_TOP &&
-        rect.top <= window.innerHeight;
+        ((rect !== undefined &&
+          rect !== null &&
+          rect.bottom >= FLOAT_TOP &&
+          rect.top <= window.innerHeight) ||
+          composePinnedIds.has(id));
       card.hidden = !visible;
       if (!visible) continue;
       // Fit before stacking. A viewport clamp after this constraint can pull
@@ -3679,7 +3826,10 @@ import {
       // textarea and Reply button.
       const fittedTop = Math.max(
         FLOAT_TOP,
-        Math.min(rect.top, window.innerHeight - card.offsetHeight - FLOAT_EDGE),
+        Math.min(
+          rect?.top ?? FLOAT_TOP,
+          window.innerHeight - card.offsetHeight - FLOAT_EDGE,
+        ),
       );
       const top = Math.max(fittedTop, previousBottom + FLOAT_GAP);
       card.style.top = top + "px";
@@ -3950,6 +4100,7 @@ import {
       (target.closest("[data-review-thread-card]") ||
         target.closest("[data-review-row]") ||
         target.closest("[data-review-marker]") ||
+        target.closest("[data-review-diff-stepper]") ||
         target.closest("dialog"))
     ) {
       return;
@@ -3959,7 +4110,6 @@ import {
   });
 
   document.addEventListener("click", (event) => {
-    if (!railIsOpen()) return;
     const comment = commentAtDocumentPoint({
       target: event.target,
       x: event.clientX,
@@ -3967,7 +4117,29 @@ import {
     });
     if (!comment) return;
     event.preventDefault();
-    revealCommentInTray(comment);
+    if (railIsOpen()) {
+      revealCommentInTray(comment);
+      return;
+    }
+    emphasizedCommentId = comment.id;
+    if (sent.some((entry) => entry.id === comment.id)) {
+      expandedThreadIds.add(comment.id);
+    } else {
+      minimizedDraftIds.delete(comment.id);
+    }
+    renderTray();
+    requestAnimationFrame(() => {
+      threadLayer
+        .querySelector(
+          '[data-review-comment-id="' +
+            cssEscape(comment.id) +
+            '"] button, ' +
+            '[data-review-comment-id="' +
+            cssEscape(comment.id) +
+            '"] textarea',
+        )
+        ?.focus();
+    });
   });
 
   deleteCancel.addEventListener("click", () => deleteDialog.close());
@@ -4034,8 +4206,13 @@ import {
     }
   };
 
-  const describeError = (error) =>
-    error && error.message ? String(error.message) : "Something went wrong.";
+  const describeError = (error) => {
+    const message =
+      error && error.message ? String(error.message) : "Something went wrong.";
+    return /failed to fetch|fetch failed|networkerror/i.test(message)
+      ? "The review server is offline."
+      : message;
+  };
 
   // A failed action must say so where the click happened. The note lands
   // beside the triggering control and survives until the next render.
@@ -4061,6 +4238,16 @@ import {
 
   // ---------------------------------------------------------------- composing
 
+  const composeDraftKey = (target) =>
+    JSON.stringify({
+      type: target?.type,
+      blockId: target?.blockId,
+      endBlockId: target?.endBlockId,
+      start: target?.start,
+      end: target?.end,
+      quote: target?.quote,
+    });
+
   const addDraft = (target, body) => {
     const comment = {
       id: newId(),
@@ -4073,6 +4260,13 @@ import {
   };
 
   const openCompose = (target) => {
+    composePinnedIds.clear();
+    for (const card of threadLayer.querySelectorAll(
+      "[data-review-thread-card]:not([hidden])",
+    )) {
+      const id = card.getAttribute("data-review-comment-id");
+      if (id) composePinnedIds.add(id);
+    }
     composeTarget = target;
     pendingSelection = null;
     window.getSelection()?.removeAllRanges();
@@ -4080,8 +4274,8 @@ import {
     // The affordance did its job; leaving it up would float a second control
     // over the card the reviewer is now typing in.
     affordance.hidden = true;
-    composeInput.value = "";
-    composeSave.disabled = true;
+    composeInput.value = composeDrafts[composeDraftKey(target)] || "";
+    syncComposeValidity();
     compose.hidden = false;
     const before = window.scrollY;
     syncFloatingMode();
@@ -4097,6 +4291,12 @@ import {
   };
 
   const closeCompose = () => {
+    if (composeTarget) {
+      const key = composeDraftKey(composeTarget);
+      if (composeInput.value.trim() === "") delete composeDrafts[key];
+      else composeDrafts[key] = composeInput.value.slice(0, BODY_LIMIT);
+      writeLocalState();
+    }
     compose.hidden = true;
     composeTarget = null;
     compose.removeAttribute("data-review-compose-inline");
@@ -4104,6 +4304,8 @@ import {
     compose.removeAttribute("data-review-compose-centered");
     compose.removeAttribute("style");
     if (compose.parentElement !== surface) surface.appendChild(compose);
+    composeContext.hidden = true;
+    composePinnedIds.clear();
     paintTargetHighlights();
     syncFloatingMode();
     positionThreadCards();
@@ -4122,6 +4324,16 @@ import {
       compose.removeAttribute("data-review-compose-centered");
       compose.setAttribute("data-review-compose-floating", "");
       const rect = block.getBoundingClientRect();
+      const detached =
+        rect.bottom < FLOAT_TOP || rect.top > window.innerHeight - FLOAT_EDGE;
+      compose.toggleAttribute("data-review-compose-detached", detached);
+      composeContext.hidden = !detached;
+      if (detached) {
+        composeContextText.textContent =
+          "Commenting on " +
+          slideTitleFor(target) +
+          " while its target is off screen.";
+      }
       compose.style.top =
         Math.max(
           FLOAT_TOP,
@@ -4144,6 +4356,8 @@ import {
     compose.removeAttribute("style");
     compose.removeAttribute("data-review-compose-centered");
     compose.removeAttribute("data-review-compose-floating");
+    compose.removeAttribute("data-review-compose-detached");
+    composeContext.hidden = true;
     compose.setAttribute("data-review-compose-inline", "");
     anchor.after(compose);
   };
@@ -4161,6 +4375,8 @@ import {
     // here, so the shortcut cannot bypass the button's disabled state.
     if (body === "" || composeTarget === null) return;
     const comment = addDraft(composeTarget, body);
+    delete composeDrafts[composeDraftKey(composeTarget)];
+    composeInput.value = "";
     // With submit-right-away on, the very first paint of this comment must
     // already say "Sending", never a staged card with its own Submit button.
     if (submitRightAway && hasRuntime) submittingIds.add(comment.id);
@@ -4183,6 +4399,15 @@ import {
 
   composeSave.addEventListener("click", saveCompose);
   composeCancel.addEventListener("click", closeCompose);
+  composeContextJump.addEventListener("click", () => {
+    if (!composeTarget) return;
+    visualAnchorForTarget(composeTarget)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    announce("Returned to the comment target.");
+    requestAnimationFrame(() => positionCompose(composeTarget));
+  });
   submitImmediatelyInput.addEventListener("change", () => {
     submitRightAway = submitImmediatelyInput.checked;
     syncComposeSaveLabel();
@@ -4200,7 +4425,14 @@ import {
         : "New comments will wait for batch submission.",
     );
   });
-  composeInput.addEventListener("input", syncComposeValidity);
+  composeInput.addEventListener("input", () => {
+    syncComposeValidity();
+    if (!composeTarget) return;
+    const key = composeDraftKey(composeTarget);
+    if (composeInput.value === "") delete composeDrafts[key];
+    else composeDrafts[key] = composeInput.value.slice(0, BODY_LIMIT);
+    writeLocalState();
+  });
   composeInput.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       event.stopPropagation();
@@ -4231,6 +4463,7 @@ import {
   // of what the reviewer highlighted - never as an instruction, and never as
   // markup: it is read with toString() and written with textContent.
   const anchorFromSelection = () => {
+    selectionFailure = "";
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
       return null;
@@ -4251,7 +4484,29 @@ import {
           return false;
         }
       });
-    if (!block || surface.contains(block)) return null;
+    if (!block || surface.contains(block)) {
+      selectionFailure =
+        "That selection cannot be attached to plan content. Select text within the document.";
+      return null;
+    }
+    if (!startBlock || !endBlock) {
+      const touchedSlides = new Set(
+        Array.from(document.querySelectorAll("[data-slide]"))
+          .filter((slide) => {
+            try {
+              return range.intersectsNode(slide);
+            } catch {
+              return false;
+            }
+          })
+          .map((slide) => slide),
+      );
+      if (touchedSlides.size > 1) {
+        selectionFailure =
+          "A comment cannot include slide chrome. Select plan text across the slides instead.";
+        return null;
+      }
+    }
 
     const lineTarget =
       startBlock === endBlock ? lineRangeFor(range, block) : null;
@@ -4323,8 +4578,18 @@ import {
         paintTargetHighlights();
       }
       attachLabel.hidden = true;
+      const nativeSelection = window.getSelection();
+      const shouldExplain =
+        selectionFailure !== "" &&
+        nativeSelection !== null &&
+        !nativeSelection.isCollapsed;
+      selectionNotice.hidden = !shouldExplain;
+      selectionNotice.textContent = shouldExplain ? selectionFailure : "";
+      if (shouldExplain) announce(selectionFailure);
       return;
     }
+    selectionNotice.hidden = true;
+    selectionNotice.textContent = "";
     pendingSelection = anchor;
     attachLabel.hidden = false;
     attachInput.checked = false;
@@ -4336,13 +4601,29 @@ import {
     affordance.setAttribute("data-review-mode", "selection");
     affordanceLabel.hidden = false;
     affordance.setAttribute("aria-label", "Comment on the selected text");
-    affordance.style.top = Math.max(FLOAT_TOP, rect.top - 40) + "px";
     const width = affordance.offsetWidth || 108;
-    affordance.style.left =
-      Math.max(12, Math.min(rect.left, rightLimit() - width - 12)) + "px";
+    const startBlock = blockForTarget(anchor);
+    const slide = startBlock?.closest("[data-slide]");
+    const slideRect = slide?.getBoundingClientRect();
+    const gutterLeft = slideRect
+      ? Math.min(slideRect.left, rect.left) - width - 10
+      : -1;
+    const hasGutter = gutterLeft >= 12;
+    affordance.style.top =
+      Math.max(
+        FLOAT_TOP,
+        Math.min(
+          hasGutter ? rect.top : rect.bottom + 8,
+          window.innerHeight - affordance.offsetHeight - FLOAT_EDGE,
+        ),
+      ) + "px";
+    affordance.style.left = hasGutter
+      ? gutterLeft + "px"
+      : Math.max(12, Math.min(rect.left, rightLimit() - width - 12)) + "px";
   };
 
   let selectionOfferTimer = null;
+  let selectionFailure = "";
 
   // Escape returns both native and semantic selection flows to the same quiet
   // reading state. Clearing only the Range would leave a whole-slide target
@@ -4356,6 +4637,8 @@ import {
     attachLabel.hidden = true;
     attachInput.checked = false;
     affordance.hidden = true;
+    selectionNotice.hidden = true;
+    selectionNotice.textContent = "";
     window.getSelection()?.removeAllRanges();
     paintTargetHighlights();
   };
@@ -4485,6 +4768,7 @@ import {
         role: "user",
         body: request.body,
         createdAt: request.createdAt,
+        request,
       });
       const response = agentResponses.find(
         (entry) => entry.requestId === request.requestId,
@@ -4519,12 +4803,15 @@ import {
   const renderPlanChat = () => {
     const messages = hasRuntime ? livePlanChatMessages() : planChatMessages;
     if (messages.length === 0) {
-      planChatList.replaceChildren(
-        el("li", {
-          "data-review-chat-empty": true,
+      const empty = el("li", { "data-review-chat-empty": true }, [
+        el("p", {
           text: "Ask about the plan as a whole. Anchored comment threads stay beside their source.",
         }),
-      );
+      ]);
+      if (hasRuntime && (!agentConnected || runtimeOffline)) {
+        empty.appendChild(setupInstructions());
+      }
+      planChatList.replaceChildren(empty);
       return;
     }
     const rendered = messages.map((message) => {
@@ -4544,8 +4831,9 @@ import {
           el("time", {
             datetime: message.createdAt,
             text:
-              (message.role === "user" ? "Sent · " : "") +
-              relativeCommentTime(message.createdAt),
+              (message.role === "user"
+                ? requestDeliveryLabel(message.request) + " · "
+                : "") + relativeCommentTime(message.createdAt),
           }),
         ]),
         body,
@@ -4693,14 +4981,17 @@ import {
       activeDraft = agentInput.value;
       renderTray();
       await persist();
-      setAgentState("Agent working", "working");
+      setAgentState(
+        agentConnected ? "Waiting for agent" : "No agent connected",
+        agentConnected ? "idle" : "failed",
+      );
       sendNote.textContent =
-        "Sent " +
+        "Queued " +
         answer.comments +
         " to the agent as " +
         answer.packageId +
         ".";
-      announce("Feedback sent to the agent.");
+      announce("Feedback queued for the agent.");
       setActiveTab("comments");
       if (closeRailAfter) setRailOpen(false);
       startProgress();
@@ -4714,10 +5005,12 @@ import {
           comment.id,
           "Couldn’t send: " +
             describeError(error) +
-            " Your comment is still staged.",
+            " Your comment is still staged. Restart `big-plan review`, then open the new URL it prints.",
         );
       }
-      sendNote.textContent = describeError(error);
+      sendNote.textContent =
+        describeError(error) +
+        " Restart `big-plan review`, then open the new URL it prints. Your comments are safe.";
       trigger.disabled = false;
       announce("Sending failed. The comment stays staged.");
       renderTray();

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   bandText,
   diffKindShowsComment,
+  diffPresentationMode,
   diffRevisions,
   diffRunSimilarity,
   diffWords,
@@ -98,6 +99,25 @@ describe("revision word diff", () => {
         }),
       ),
     ).toBeGreaterThan(0.2);
+  });
+
+  it("should use separate before and after bands for a substantial rewrite", () => {
+    expect(
+      diffPresentationMode(
+        diffWords({
+          before: "Retries use an exponential delay after every failure.",
+          after: "Operators replay bounded queues during the recovery window.",
+        }),
+      ),
+    ).toBe("bands");
+    expect(
+      diffPresentationMode(
+        diffWords({
+          before: "Keep the first version.",
+          after: "Keep the stable version.",
+        }),
+      ),
+    ).toBe("inline");
   });
 
   it("should treat two empty revisions as identical", () => {

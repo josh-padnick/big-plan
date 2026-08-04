@@ -117,7 +117,7 @@ export const deriveThreadStatus = ({
       tone: "danger",
       badge: "Working",
       headline: "The review server is unreachable",
-      hint: "Restart `big-plan review`, then reload this page. Your comments are saved locally.",
+      hint: "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
       showsSpinner: false,
       showsSetup: false,
     };
