@@ -764,11 +764,6 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
   });
   const affordanceLabel = el("span", { text: "Comment" });
   affordance.append(icon(MESSAGE_SQUARE_TEXT_ICON), affordanceLabel);
-  const slideSelectorLayer = el("div", {
-    "data-review-slide-selector-layer": true,
-    "aria-label": "Select slide content",
-  });
-
   const composeInput = el("textarea", {
     "data-review-compose-input": true,
     id: "big-plan-review-compose",
@@ -945,7 +940,6 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     toolbar,
     rail,
     affordance,
-    slideSelectorLayer,
     threadLayer,
     compose,
     markerLayer,
@@ -3885,19 +3879,6 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       Math.max(12, Math.min(rect.left, rightLimit() - width - 12)) + "px";
   };
 
-  const slideSelectors = new Map();
-  const positionSlideSelectors = () => {
-    for (const [slide, button] of slideSelectors) {
-      const rect = slide.getBoundingClientRect();
-      const visible =
-        rect.bottom >= FLOAT_TOP && rect.top <= window.innerHeight;
-      button.hidden = !visible;
-      if (!visible) continue;
-      button.style.top = Math.max(FLOAT_TOP + 4, rect.top + 12) + "px";
-      button.style.left = Math.max(4, rect.left - 30) + "px";
-    }
-  };
-
   for (const slide of document.querySelectorAll("[data-slide]")) {
     const title =
       slide
@@ -3930,10 +3911,9 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       offerSelection();
       announce("Selected all content in " + title + ".");
     });
-    slideSelectorLayer.appendChild(selector);
-    slideSelectors.set(slide, selector);
+    slide.setAttribute("data-review-slide-selectable", "");
+    slide.appendChild(selector);
   }
-  positionSlideSelectors();
 
   document.addEventListener("mouseup", () => setTimeout(offerSelection, 0));
   document.addEventListener("keyup", (event) => {
@@ -4515,7 +4495,6 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
     syncFloatingMode();
     renderThreads();
     positionMarkers();
-    positionSlideSelectors();
   });
   window.addEventListener(
     "scroll",
@@ -4530,7 +4509,6 @@ import { deriveThreadStatus } from "../../src/review/thread-status.js";
       }
       positionThreadCards();
       positionMarkers();
-      positionSlideSelectors();
     },
     { passive: true },
   );

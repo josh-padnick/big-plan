@@ -10,7 +10,8 @@ Nothing here is load-bearing for reading. With scripts disabled none of these
 elements exist and the document is exactly the document it always was.
 */
 
-[data-review-root] {
+[data-review-root],
+[data-slide][data-review-slide-selectable] {
   --review-control-hover: color-mix(
     in srgb,
     var(--surface-c) 88%,
@@ -21,6 +22,8 @@ elements exist and the document is exactly the document it always was.
     var(--surface-c) 78%,
     var(--ink-c)
   );
+}
+[data-review-root] {
   position: relative;
   z-index: 40;
 }
@@ -1278,8 +1281,16 @@ button[data-review-row-target]:active {
   height: 0.85rem;
 }
 
+/* The review runtime owns this opt-in attribute. It creates the selector's
+   containing block on the slide itself, so comments and rail layout changes
+   cannot leave a viewport-coordinate overlay behind. */
+[data-slide][data-review-slide-selectable] {
+  position: relative;
+}
 [data-review-slide-selector] {
-  position: fixed;
+  position: absolute;
+  top: calc(0.75rem - 1px);
+  right: calc(100% + 0.5625rem);
   z-index: 44;
   display: inline-flex;
   width: 1.4rem;
@@ -1298,6 +1309,10 @@ button[data-review-row-target]:active {
   border-color: var(--edge-c);
   background: var(--review-control-hover);
   color: var(--accent-c);
+}
+[data-review-slide-selector]:focus-visible {
+  outline: 1px solid var(--accent-c);
+  outline-offset: 2px;
 }
 [data-review-slide-selector]:active {
   background: var(--review-control-active);

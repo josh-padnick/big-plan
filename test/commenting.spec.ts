@@ -16,6 +16,7 @@ test("should comment on a slide and a passage, then revise before sending", asyn
   const tray = page.locator("[data-review-rail]");
   const affordance = page.locator("[data-review-affordance]");
   const rows = page.locator("[data-review-drafts] li");
+  let initialSelectorGap = 0;
 
   await test.step("reading stays quiet until the reviewer asks for more", async () => {
     await expect(tray).toBeHidden();
@@ -29,6 +30,22 @@ test("should comment on a slide and a passage, then revise before sending", asyn
     await expect(affordance).toBeHidden();
     const selector = page.locator("[data-review-slide-selector]").first();
     await expect(selector).toBeVisible();
+    const geometry = await selector.evaluate((node) => {
+      const slide = node.closest("[data-slide]");
+      if (slide === null) return null;
+      const slideRect = slide.getBoundingClientRect();
+      const selectorRect = node.getBoundingClientRect();
+      return {
+        gap: slideRect.left - selectorRect.right,
+        topDelta: selectorRect.top - slideRect.top,
+      };
+    });
+    if (geometry === null) {
+      throw new Error("The slide selector is not anchored to a slide");
+    }
+    initialSelectorGap = geometry.gap;
+    expect(initialSelectorGap).toBeCloseTo(8, 0);
+    expect(geometry.topDelta).toBeCloseTo(12, 0);
     await selector.click();
     await expect(affordance).toBeVisible();
     await expect(affordance).toHaveAttribute(
@@ -48,6 +65,24 @@ test("should comment on a slide and a passage, then revise before sending", asyn
     await expect(rows).toHaveCount(1);
     await expect(page.locator("[data-review-annotated]")).toHaveCount(1);
     await expect(page.locator("[data-review-toggle-count]")).toBeHidden();
+    const geometry = await page
+      .locator("[data-review-slide-selector]")
+      .first()
+      .evaluate((node) => {
+        const slide = node.closest("[data-slide]");
+        if (slide === null) return null;
+        const slideRect = slide.getBoundingClientRect();
+        const selectorRect = node.getBoundingClientRect();
+        return {
+          gap: slideRect.left - selectorRect.right,
+          topDelta: selectorRect.top - slideRect.top,
+        };
+      });
+    if (geometry === null) {
+      throw new Error("The slide selector lost its slide anchor");
+    }
+    expect(geometry.gap).toBeCloseTo(initialSelectorGap, 1);
+    expect(geometry.topDelta).toBeCloseTo(12, 0);
   });
 
   await test.step("highlighting a passage offers to comment on the selection", async () => {
