@@ -2312,7 +2312,6 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       const glyph = statusIcon(status);
       if (glyph) row.appendChild(glyph);
     }
-    row.appendChild(el("strong", { text: status.headline }));
     if (events.length > 0) {
       const activityButton = el("button", {
         type: "button",
@@ -2323,12 +2322,17 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
           : "Show agent activity",
         title: showAgentActivity ? "Hide activity" : "Show activity",
       });
-      activityButton.appendChild(icon(CHEVRON_RIGHT_ICON));
+      activityButton.append(
+        el("strong", { text: status.headline }),
+        icon(CHEVRON_RIGHT_ICON),
+      );
       activityButton.addEventListener("click", () => {
         showAgentActivity = !showAgentActivity;
         renderTray();
       });
       row.appendChild(activityButton);
+    } else {
+      row.appendChild(el("strong", { text: status.headline }));
     }
     const strip = el("div", {
       "data-review-thread-status": status.stage,
@@ -2360,7 +2364,8 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
             ]);
             if (
               typeof event.at === "string" &&
-              !Number.isNaN(Date.parse(event.at))
+              !Number.isNaN(Date.parse(event.at)) &&
+              relativeCommentTime(event.at) !== "Just now"
             ) {
               item.appendChild(
                 el("time", {
@@ -2568,6 +2573,9 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   };
 
   const openThreadAt = (comment) => {
+    if (diffLens?.comment && diffLens.comment.id !== comment.id) {
+      clearDiffLens();
+    }
     expandedThreadIds.add(comment.id);
     editingId = null;
     if (railIsOpen()) restoreReadingPosition = false;
@@ -2851,6 +2859,10 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     diffLens = null;
     diffStepper.hidden = true;
     renderTray();
+  };
+
+  const clearCommentLensIfOwned = (commentId) => {
+    if (diffLens?.comment?.id === commentId) clearDiffLens();
   };
 
   const appendDiffRun = ({ container, run, comment, oldOffset, tagged }) => {
@@ -3690,6 +3702,9 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
   };
 
   const resolveThreadIds = async (ids) => {
+    if (diffLens?.comment && ids.includes(diffLens.comment.id)) {
+      clearDiffLens();
+    }
     const previousResolved = new Set(resolvedCommentIds);
     const previousExpandedThreads = new Set(expandedThreadIds);
     const previousExpandedComments = new Set(expandedCommentIds);
@@ -3792,6 +3807,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       action:
         options.minimize ||
         (() => {
+          clearCommentLensIfOwned(comment.id);
           expandedThreadIds.delete(comment.id);
           renderTray();
         }),
@@ -3889,6 +3905,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     const outcome = outcomeFor(comment);
     const expanded = expandedThreadIds.has(comment.id);
     const collapse = () => {
+      clearCommentLensIfOwned(comment.id);
       expandedThreadIds.delete(comment.id);
       renderTray();
       requestAnimationFrame(() => {
@@ -4044,8 +4061,12 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         ],
       );
       summary.addEventListener("click", () => {
-        if (expanded) expandedThreadIds.delete(comment.id);
-        else expandedThreadIds.add(comment.id);
+        if (expanded) {
+          clearCommentLensIfOwned(comment.id);
+          expandedThreadIds.delete(comment.id);
+        } else {
+          expandedThreadIds.add(comment.id);
+        }
         renderTray();
         requestAnimationFrame(() => {
           threadLayer
@@ -4432,10 +4453,10 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
         groupLocationsIntoPlaces(locationsForEvent(roundEvent)).forEach(
           (place, index) => {
             if (
-              place.locations.some(
-                (location) =>
-                  attributed.has(location.newBlockId) ||
-                  attributed.has(location.oldBlockId),
+              place.locations.some((location) =>
+                Array.from(attributed).some((target) =>
+                  diffLocationMatchesTarget({ location, target }),
+                ),
               )
             ) {
               return;
@@ -4595,6 +4616,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
     ) {
       return;
     }
+    if (diffLens?.comment) clearDiffLens();
     expandedThreadIds.clear();
     renderTray();
   });
@@ -5195,6 +5217,7 @@ import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
       ],
     );
     disclosure.addEventListener("click", () => {
+      if (expanded && active) clearDiffLens();
       chatDigestExpansion.set(event.requestId, !expanded);
       renderPlanChat();
     });

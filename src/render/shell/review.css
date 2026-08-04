@@ -1183,6 +1183,9 @@ button[data-review-row-target]:active {
   font-weight: 650;
   cursor: pointer;
 }
+[data-review-status-setup] {
+  margin-top: 0.35rem;
+}
 [data-review-status-setup] summary:hover {
   color: var(--ink-c);
 }
@@ -1199,11 +1202,12 @@ button[data-review-row-target]:active {
 }
 [data-review-status-activity-toggle] {
   display: inline-flex;
-  width: 1.35rem;
-  height: 1.35rem;
-  flex: 0 0 auto;
+  min-width: 0;
+  flex: 1 1 auto;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  padding: 0.12rem 0.2rem;
   border-radius: 0.25rem;
   color: currentcolor;
   cursor: pointer;
@@ -1222,12 +1226,11 @@ button[data-review-row-target]:active {
 }
 [data-review-status-activity] {
   display: grid;
-  gap: 0.12rem;
   max-height: 9rem;
   margin: 0;
-  padding-left: 1.05rem;
+  padding-left: 0.2rem;
   color: var(--ink-c);
-  list-style: disc;
+  list-style: none;
   overflow-y: auto;
   overscroll-behavior: contain;
   line-height: 1.35;
@@ -1237,6 +1240,11 @@ button[data-review-row-target]:active {
   min-width: 0;
   align-items: baseline;
   gap: 0.4rem;
+}
+[data-review-status-activity] li + li {
+  margin-top: 0.16rem;
+  padding-top: 0.16rem;
+  border-top: 1px solid color-mix(in srgb, currentcolor 14%, transparent);
 }
 [data-review-status-activity] li > span {
   min-width: 0;
@@ -1414,12 +1422,11 @@ button[data-review-row-target]:active {
 }
 [data-review-thread-reply-box] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.4rem;
   margin-top: 0.55rem;
 }
 [data-review-thread-reply-box] label {
-  grid-column: 1 / -1;
   color: var(--muted-c);
   font-size: 0.6875rem;
   font-weight: 650;
@@ -1429,7 +1436,7 @@ button[data-review-row-target]:active {
   resize: vertical;
 }
 [data-review-thread-reply-send] {
-  align-self: end;
+  justify-self: end;
   padding: 0.35rem 0.55rem;
   border: 1px solid var(--accent-c);
   border-radius: 0.35rem;

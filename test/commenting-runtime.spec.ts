@@ -1946,9 +1946,9 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       page.locator("[data-review-chat-empty] [data-review-status-setup]"),
     ).toHaveCount(0);
-    await expect(
-      page.locator("[data-review-chat-empty]"),
-    ).toContainText("Connection status and setup are in the Agent tab");
+    await expect(page.locator("[data-review-chat-empty]")).toContainText(
+      "Connection status and setup are in the Agent tab",
+    );
     const sentCount = await page
       .locator("[data-review-thread-summary]")
       .count();
@@ -2001,6 +2001,21 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       chatStatus.locator("[data-review-status-activity]"),
     ).toBeVisible();
+    await expect(
+      chatStatus.locator("[data-review-status-activity] time", {
+        hasText: "Just now",
+      }),
+    ).toHaveCount(0);
+    const activityItems = chatStatus.locator(
+      "[data-review-status-activity] li",
+    );
+    if ((await activityItems.count()) > 1) {
+      expect(
+        await activityItems
+          .nth(1)
+          .evaluate((node) => getComputedStyle(node).borderTopWidth),
+      ).toBe("1px");
+    }
     const exchange = await readAgentExchange({
       store,
       sessionId: session.sessionId,
@@ -2505,9 +2520,8 @@ Ship the live review loop behind the explicit review command.
     await expect(page.locator("[data-review-diff-label]")).toContainText(
       "since revised again",
     );
-    await historicalChange.click();
-    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
     await trayThread.locator("[data-review-thread-minimize]").click();
+    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
     await expect(trayThread).not.toHaveAttribute("data-review-row-expanded");
     await expect(trayThread.locator("[data-review-row-body]")).toBeVisible();
     await expect(
@@ -2661,6 +2675,8 @@ Ship the live review loop behind the explicit review command.
     if ((await restoredRow.getAttribute("data-review-row-expanded")) === null) {
       await restoredRow.locator("[data-review-row-target]").click();
     }
+    await restoredRow.locator("[data-review-see-change]").first().click();
+    await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
     const savedReresolve = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/drafts") &&
@@ -2668,6 +2684,7 @@ Ship the live review loop behind the explicit review command.
     );
     await restoredRow.locator("[data-review-thread-resolve]").click();
     expect((await savedReresolve).ok()).toBe(true);
+    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
     await expect(page.locator("[data-review-resolved-group]")).toHaveCount(1);
   });
 
