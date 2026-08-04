@@ -1294,7 +1294,7 @@ import {
   };
   syncComposeSaveLabel();
   const submitImmediatelyInput = el("input", {
-    class: "[position:absolute] [width:1px] [height:1px] [opacity:0]",
+    class: "peer [position:absolute] [width:1px] [height:1px] [opacity:0]",
     type: "checkbox",
     role: "switch",
     "data-review-submit-immediately-input": true,
@@ -1313,7 +1313,7 @@ import {
       submitImmediatelyInput,
       el("span", {
         class:
-          "[position:relative] [width:1.8rem] [height:1rem] [flex:0_0_auto] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--surface-c)]",
+          "[position:relative] [width:1.8rem] [height:1rem] [flex:0_0_auto] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--surface-c)] peer-checked:[border-color:var(--diff-add-c)] peer-checked:[background:var(--diff-add-c)] peer-checked:after:[background:var(--bg)] peer-checked:after:[transform:translateX(0.8rem)] peer-focus-visible:[outline:1px_solid_var(--accent-c)] peer-focus-visible:[outline-offset:2px]",
         "data-review-switch-track": true,
       }),
       el("span", { text: "Submit right away" }),

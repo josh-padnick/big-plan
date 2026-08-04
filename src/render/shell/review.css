@@ -850,20 +850,6 @@ review script; this file contains only the cross-element and document behavior.
     content: "";
     transition: transform 120ms ease-out;
   }
-  [data-review-submit-immediately-input]:checked + [data-review-switch-track] {
-    border-color: var(--accent-c);
-    background: color-mix(in srgb, var(--accent-c) 22%, var(--bg));
-  }
-  [data-review-submit-immediately-input]:checked
-    + [data-review-switch-track]::after {
-    background: var(--accent-c);
-    transform: translateX(0.8rem);
-  }
-  [data-review-submit-immediately-input]:focus-visible
-    + [data-review-switch-track] {
-    outline: 1px solid var(--accent-c);
-    outline-offset: 2px;
-  }
   [data-review-compose-actions] button {
     padding: 0.25rem 0.6rem;
     border: 1px solid var(--edge-c);

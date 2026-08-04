@@ -3199,6 +3199,18 @@ Ship the live review loop behind the explicit review command.
     await expect(preference).not.toBeChecked();
     await preferenceTrack.click();
     await expect(preference).toBeChecked();
+    const activeTrackColors = await preferenceTrack.evaluate((track) => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--diff-add-c)";
+      document.body.appendChild(probe);
+      const expected = getComputedStyle(probe).color;
+      probe.remove();
+      return {
+        actual: getComputedStyle(track).backgroundColor,
+        expected,
+      };
+    });
+    expect(activeTrackColors.actual).toBe(activeTrackColors.expected);
     const immediateResponse = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/feedback") &&
