@@ -903,6 +903,18 @@ test("should preserve and send a floating review across reload and viewport chan
         "[data-review-thread-delete]",
       ]) {
         const button = card.locator(control);
+        const iconOnlyGeometry = await button.evaluate((node) => {
+          const box = node.getBoundingClientRect();
+          const tooltip = node.querySelector("[data-review-icon-tooltip]");
+          return {
+            width: box.width,
+            height: box.height,
+            tooltipPosition:
+              tooltip === null ? "" : getComputedStyle(tooltip).position,
+          };
+        });
+        expect(iconOnlyGeometry.width).toBeCloseTo(iconOnlyGeometry.height, 1);
+        expect(iconOnlyGeometry.tooltipPosition).toBe("absolute");
         await button.hover();
         await expect(
           button.locator("[data-review-icon-tooltip]"),

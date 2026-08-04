@@ -4337,6 +4337,8 @@ import {
 
   const toolbarButton = ({ attribute, label, glyph, action }) => {
     const button = el("button", {
+      class:
+        "group/review-icon relative inline-flex size-[1.65rem] flex-none overflow-visible",
       type: "button",
       [attribute]: true,
       "aria-label": label,
@@ -4345,7 +4347,7 @@ import {
       icon(glyph),
       el("span", {
         class:
-          "[position:absolute] [top:calc(100%_+_0.35rem)] [right:0] [z-index:60] [width:max-content] [max-width:11rem] [padding:0.22rem_0.42rem] [border-radius:0.25rem] [background:var(--ink-c)] [color:var(--bg)] [font-size:0.66rem] [font-weight:600] [line-height:1.35] [pointer-events:none] [opacity:0] [transform:translateY(-0.1rem)] [transition:opacity_70ms_ease,_transform_70ms_ease]",
+          "group-hover/review-icon:[opacity:1] group-hover/review-icon:[transform:translateY(0)] group-focus-visible/review-icon:[opacity:1] group-focus-visible/review-icon:[transform:translateY(0)] [position:absolute] [top:calc(100%_+_0.35rem)] [right:0] [z-index:60] [width:max-content] [max-width:11rem] [padding:0.22rem_0.42rem] [border-radius:0.25rem] [background:var(--ink-c)] [color:var(--bg)] [font-size:0.66rem] [font-weight:600] [line-height:1.35] [pointer-events:none] [opacity:0] [transform:translateY(-0.1rem)] [transition:opacity_70ms_ease,_transform_70ms_ease]",
         "data-review-icon-tooltip": true,
         "aria-hidden": "true",
         text: label,
