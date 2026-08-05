@@ -3673,6 +3673,14 @@ import { createToastManager } from "./toast.js";
     if (!place) return;
     clearDiffLens();
     const anchorBlock = anchorBlockForPlace(place);
+    const hasExactLiveAnchor = place.locations.some((location) => {
+      if (!location.newBlockId) return false;
+      return document.querySelector(
+        '[data-block-id="' + cssEscape(location.newBlockId) + '"]',
+      );
+    });
+    const historicalOnly =
+      event.toRevision !== sourceRevision && !hasExactLiveAnchor;
     const containerTag = anchorBlock?.tagName === "TR" ? "tr" : "div";
     const statuses = new Set(
       place.locations.map((location) => location.status),
@@ -3685,6 +3693,7 @@ import { createToastManager } from "./toast.js";
         statuses.size === 1 ? place.locations[0]?.status : "changed",
       "data-review-diff-kind":
         place.locations.length === 1 ? place.locations[0]?.kind : "place",
+      ...(historicalOnly ? { "data-review-diff-historical": true } : {}),
     });
     container.setAttribute("data-place-id", place.placeId);
     const content =
@@ -3695,8 +3704,8 @@ import { createToastManager } from "./toast.js";
           "[position:absolute] [top:-0.55rem] [left:0.75rem] [padding:0.12rem_0.38rem] [border:1px_solid_var(--annotation-c)] [border-radius:999px] [background:var(--bg)] [color:var(--annotation-c)] [font-size:0.58rem] [font-weight:750] [letter-spacing:0.04em] [text-transform:uppercase]",
         "data-review-diff-label": true,
         text:
-          "Diff vs. previous version" +
-          (event.toRevision !== sourceRevision ? " · since revised again" : ""),
+          (historicalOnly ? "Historical change" : "Diff vs. previous version") +
+          (event.toRevision !== sourceRevision ? " · plan revised again" : ""),
       }),
     );
     const body = el("div", {
@@ -3705,7 +3714,23 @@ import { createToastManager } from "./toast.js";
       "data-review-diff-body": true,
     });
     if (containerTag === "tr") container.appendChild(content);
-    if (anchorBlock) {
+    if (historicalOnly) {
+      const ownerSelector = comment
+        ? '[data-review-comment-id="' +
+          cssEscape(comment.id) +
+          '"] [data-review-change-controls]'
+        : "[data-review-chat-change-digest]";
+      const owner = [...document.querySelectorAll(ownerSelector)].find(
+        (candidate) => candidate.offsetParent !== null,
+      );
+      if (owner) owner.appendChild(container);
+      else
+        notifications.add({
+          title: "This change belongs to an earlier plan revision",
+          description:
+            "Open its comment thread to review the saved historical diff.",
+        });
+    } else if (anchorBlock) {
       if (
         place.locations[0]?.status === "removed" &&
         place.locations[0]?.beforeBlockId
@@ -3738,16 +3763,18 @@ import { createToastManager } from "./toast.js";
     if (was) body.appendChild(was);
     if (now) body.appendChild(now);
     content.appendChild(body);
-    const hiddenBlocks = place.locations.flatMap((location) => {
-      if (!location.newBlockId) return [];
-      const block = document.querySelector(
-        '[data-block-id="' + cssEscape(location.newBlockId) + '"]',
-      );
-      if (!(block instanceof HTMLElement)) return [];
-      block.setAttribute("hidden", "");
-      block.setAttribute("data-review-diff-hidden", "");
-      return [block];
-    });
+    const hiddenBlocks = historicalOnly
+      ? []
+      : place.locations.flatMap((location) => {
+          if (!location.newBlockId) return [];
+          const block = document.querySelector(
+            '[data-block-id="' + cssEscape(location.newBlockId) + '"]',
+          );
+          if (!(block instanceof HTMLElement)) return [];
+          block.setAttribute("hidden", "");
+          block.setAttribute("data-review-diff-hidden", "");
+          return [block];
+        });
     diffLens = {
       comment,
       event,
@@ -4353,11 +4380,11 @@ import { createToastManager } from "./toast.js";
           action: {
             label: "Undo",
             run: async () => {
-            resolvedCommentIds.delete(ids[0]);
-            expandedThreadIds.add(ids[0]);
-            announce("Comment reopened.");
-            renderTray();
-            await save();
+              resolvedCommentIds.delete(ids[0]);
+              expandedThreadIds.add(ids[0]);
+              announce("Comment reopened.");
+              renderTray();
+              await save();
             },
           },
         });
