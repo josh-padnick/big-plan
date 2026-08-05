@@ -14,9 +14,11 @@ import {
 import type { MessageNode } from "./message-markdown.js";
 import {
   readAgentCancellations,
+  readAgentClaimValues,
   readAgentRequestValues,
   readAgentResponseValues,
   writeAgentRequestValue,
+  writeAgentClaimValue,
   writeAgentResponseValue,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
@@ -743,6 +745,26 @@ export const writeAgentRequest = async ({
   });
 };
 
+/** Persists a request's immutable claim separately from its queued fact. */
+export const writeAgentClaim = async ({
+  store,
+  request,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentRequest;
+}): Promise<void> => {
+  if (request.claimedFromRevision === undefined) {
+    throw new AgentExchangeRejected(
+      "A claimed request needs a source revision",
+    );
+  }
+  await writeAgentClaimValue({
+    store,
+    requestId: request.requestId,
+    claimedFromRevision: request.claimedFromRevision,
+  });
+};
+
 /** Writes a response only after the exchange module has validated it. */
 export const writeAgentResponse = async ({
   store,
@@ -798,6 +820,29 @@ export const readAgentExchange = async ({
       Number(left.sessionId === sessionId)
     );
   });
+  const claims = new Map<string, string>();
+  for (const value of await readAgentClaimValues(store)) {
+    if (
+      isRecord(value) &&
+      typeof value.requestId === "string" &&
+      ID.test(value.requestId) &&
+      typeof value.claimedFromRevision === "string"
+    ) {
+      try {
+        claims.set(value.requestId, sourceRevision(value.claimedFromRevision));
+      } catch {
+        // One malformed claim cannot hide independent queued requests.
+      }
+    }
+  }
+  for (let index = 0; index < requests.length; index += 1) {
+    const request = requests[index];
+    if (request === undefined) continue;
+    const claimedFromRevision = claims.get(request.requestId);
+    if (claimedFromRevision !== undefined) {
+      requests[index] = { ...request, claimedFromRevision };
+    }
+  }
   const commentsById = new Map<string, ReviewComment>();
   for (const request of requests) {
     if (request.kind === "feedback") {

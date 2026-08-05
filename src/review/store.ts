@@ -14,17 +14,10 @@
 //    re-checked on read exactly as if they had arrived over the wire.
 
 import { randomBytes } from "node:crypto";
-import {
-  appendFile,
-  mkdir,
-  readdir,
-  readFile,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
-import type { ReviewComment } from "./comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
-import { replaceFileAtomically } from "./atomic-file.js";
+import { createFileExclusively, replaceFileAtomically } from "./atomic-file.js";
 
 const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
@@ -38,6 +31,7 @@ const EXCHANGE_FILE_LIMIT = 400;
 
 /** One relayed agent progress event, after checking. */
 export type ProgressEvent = {
+  readonly eventId: string;
   readonly sessionId: string;
   readonly seq: number;
   readonly step: string;
@@ -55,6 +49,7 @@ export type AgentHeartbeat = {
 
 /** One immutable connection transition recorded by the review runtime. */
 export type AgentConnectionEvent = {
+  readonly eventId?: string;
   readonly sessionId: string;
   readonly connected: boolean;
   readonly at: string;
@@ -69,18 +64,16 @@ export type ReviewStore = {
   readonly agentRequestDirectory: string;
   readonly agentResponseDirectory: string;
   readonly agentDraftDirectory: string;
+  readonly agentClaimDirectory: string;
   readonly agentPromptPath: string;
   readonly revisionDirectory: string;
-  readonly draftsPath: string;
-  readonly activeDraftPath: string;
-  readonly sentPath: string;
-  readonly progressPath: string;
-  readonly resolvedPath: string;
+  readonly reviewerStatePath: string;
+  readonly agentCancellationDirectory: string;
+  readonly progressDirectory: string;
+  readonly agentConnectionDirectory: string;
   readonly sessionPath: string;
   readonly heartbeatPath: string;
   readonly agentHeartbeatPath: string;
-  readonly agentCancellationsPath: string;
-  readonly agentConnectionEventsPath: string;
 };
 
 // The one place a review path is constructed. Callers name a leaf, never a
@@ -128,6 +121,10 @@ export const reviewStoreFor = ({
       base: agentDirectory,
       leaf: "drafts",
     }),
+    agentClaimDirectory: inside({
+      base: agentDirectory,
+      leaf: "claims",
+    }),
     agentPromptPath: inside({
       base: agentDirectory,
       leaf: "agent-prompt.md",
@@ -136,27 +133,27 @@ export const reviewStoreFor = ({
       base: reviewDirectory,
       leaf: "revisions",
     }),
-    draftsPath: inside({ base: reviewDirectory, leaf: "drafts.json" }),
-    activeDraftPath: inside({
+    reviewerStatePath: inside({
       base: reviewDirectory,
-      leaf: "active-draft.json",
+      leaf: "reviewer-state.json",
     }),
-    sentPath: inside({ base: reviewDirectory, leaf: "sent.json" }),
-    progressPath: inside({ base: reviewDirectory, leaf: "progress.jsonl" }),
-    resolvedPath: inside({ base: reviewDirectory, leaf: "resolved.json" }),
+    agentCancellationDirectory: inside({
+      base: agentDirectory,
+      leaf: "cancellations",
+    }),
+    progressDirectory: inside({
+      base: agentDirectory,
+      leaf: "progress",
+    }),
+    agentConnectionDirectory: inside({
+      base: agentDirectory,
+      leaf: "connections",
+    }),
     sessionPath: inside({ base: root, leaf: "session.json" }),
     heartbeatPath: inside({ base: root, leaf: "session-heartbeat.json" }),
     agentHeartbeatPath: inside({
       base: agentDirectory,
       leaf: "presence.json",
-    }),
-    agentCancellationsPath: inside({
-      base: agentDirectory,
-      leaf: "cancellations.json",
-    }),
-    agentConnectionEventsPath: inside({
-      base: agentDirectory,
-      leaf: "connection-events.jsonl",
     }),
   };
 };
@@ -183,10 +180,23 @@ export const prepareStore = async (store: ReviewStore): Promise<void> => {
     recursive: true,
     mode: DIRECTORY_MODE,
   });
+  await mkdir(store.agentClaimDirectory, {
+    recursive: true,
+    mode: DIRECTORY_MODE,
+  });
   await mkdir(store.revisionDirectory, {
     recursive: true,
     mode: DIRECTORY_MODE,
   });
+  await Promise.all(
+    [
+      store.agentCancellationDirectory,
+      store.progressDirectory,
+      store.agentConnectionDirectory,
+    ].map((directory) =>
+      mkdir(directory, { recursive: true, mode: DIRECTORY_MODE }),
+    ),
+  );
   const ignorePath = inside({ base: store.root, leaf: ".gitignore" });
   try {
     await readFile(ignorePath, "utf8");
@@ -204,6 +214,34 @@ const readJson = async (path: string): Promise<unknown> => {
   }
 };
 
+/** Reads one mutable JSON value while preserving invalid-state distinction. */
+export const readMutableJson = async ({
+  path,
+}: {
+  readonly path: string;
+}): Promise<
+  | { readonly kind: "missing" }
+  | { readonly kind: "invalid" }
+  | { readonly kind: "value"; readonly value: unknown }
+> => {
+  try {
+    return {
+      kind: "value",
+      value: JSON.parse(await readFile(path, "utf8")),
+    };
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return { kind: "missing" };
+    }
+    return { kind: "invalid" };
+  }
+};
+
 const writeJson = async ({
   path,
   value,
@@ -217,64 +255,14 @@ const writeJson = async ({
   });
 };
 
-/** Reads a stored comment list back through the caller's own validator. */
-export const readComments = async ({
-  path,
-  validate,
-}: {
-  readonly path: string;
-  readonly validate: (value: unknown) => ReadonlyArray<ReviewComment>;
-}): Promise<ReadonlyArray<ReviewComment>> => {
-  const stored = await readJson(path);
-  if (stored === undefined) {
-    return [];
-  }
-  try {
-    return validate(stored);
-  } catch {
-    // A file that no longer validates against this document is stale state,
-    // not an error the reviewer can act on.
-    return [];
-  }
-};
-
-/** Replaces the stored comment list at one path. */
-export const writeComments = async ({
-  path,
-  comments,
-}: {
-  readonly path: string;
-  readonly comments: ReadonlyArray<ReviewComment>;
-}): Promise<void> => {
-  await writeJson({ path, value: comments });
-};
-
-/** Reads the whole-plan field through the caller's bounded validator. */
-export const readActiveDraft = async ({
-  path,
-  validate,
-}: {
-  readonly path: string;
-  readonly validate: (value: unknown) => string;
-}): Promise<string> => {
-  const stored = await readJson(path);
-  try {
-    return validate(stored);
-  } catch {
-    return "";
-  }
-};
-
-/** Replaces the persisted whole-plan field without trimming reviewer text. */
-export const writeActiveDraft = async ({
+/** Atomically writes one validated mutable JSON representation. */
+export const writeMutableJson = async ({
   path,
   value,
 }: {
   readonly path: string;
-  readonly value: string;
-}): Promise<void> => {
-  await writeJson({ path, value });
-};
+  readonly value: unknown;
+}): Promise<void> => writeJson({ path, value });
 
 const revisionPath = ({
   store,
@@ -329,33 +317,6 @@ export const readRevisionSnapshot = async ({
   readonly revision: string;
 }): Promise<string> => readFile(revisionPath({ store, revision }), "utf8");
 
-/** Reads the durable set of locally resolved thread ids. */
-export const readResolvedCommentIds = async ({
-  store,
-  validate,
-}: {
-  readonly store: ReviewStore;
-  readonly validate: (value: unknown) => ReadonlyArray<string>;
-}): Promise<ReadonlyArray<string>> => {
-  const value = await readJson(store.resolvedPath);
-  try {
-    return validate(value);
-  } catch {
-    return [];
-  }
-};
-
-/** Replaces the durable resolved-thread set. */
-export const writeResolvedCommentIds = async ({
-  store,
-  ids,
-}: {
-  readonly store: ReviewStore;
-  readonly ids: ReadonlyArray<string>;
-}): Promise<void> => {
-  await writeJson({ path: store.resolvedPath, value: ids });
-};
-
 /**
  * Writes one feedback package and its brief under names the runtime generates,
  * so no reviewer or plan text ever reaches a filename.
@@ -379,8 +340,33 @@ export const writeFeedbackPackage = async ({
     base: store.feedbackDirectory,
     leaf: `${name}.md`,
   });
-  await writeJson({ path: jsonPath, value: feedback });
-  await writeFile(briefPath, brief, { mode: FILE_MODE });
+  const createIdempotently = async ({
+    path,
+    contents,
+  }: {
+    readonly path: string;
+    readonly contents: string;
+  }): Promise<void> => {
+    try {
+      await createFileExclusively({ path, contents });
+    } catch (error: unknown) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "EEXIST" &&
+        (await readFile(path, "utf8")) === contents
+      ) {
+        return;
+      }
+      throw error;
+    }
+  };
+  await createIdempotently({
+    path: jsonPath,
+    contents: `${JSON.stringify(feedback, null, 2)}\n`,
+  });
+  await createIdempotently({ path: briefPath, contents: brief });
   return { jsonPath, briefPath };
 };
 
@@ -416,6 +402,34 @@ const readJsonDirectory = async (
   return values;
 };
 
+/** Creates one opaque immutable JSON fact without replacing an existing id. */
+const createJsonRecord = async ({
+  directory,
+  id,
+  value,
+}: {
+  readonly directory: string;
+  readonly id: string;
+  readonly value: unknown;
+}): Promise<void> => {
+  const path = exchangePath({ directory, requestId: id });
+  const contents = `${JSON.stringify(value, null, 2)}\n`;
+  try {
+    await createFileExclusively({ path, contents });
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "EEXIST" &&
+      (await readFile(path, "utf8")) === contents
+    ) {
+      return;
+    }
+    throw error;
+  }
+};
+
 /** Reads every untrusted request value for validation by the exchange module. */
 export const readAgentRequestValues = async (
   store: ReviewStore,
@@ -428,6 +442,29 @@ export const readAgentResponseValues = async (
 ): Promise<ReadonlyArray<unknown>> =>
   readJsonDirectory(store.agentResponseDirectory);
 
+/** Reads immutable claim values for validation by the exchange module. */
+export const readAgentClaimValues = async (
+  store: ReviewStore,
+): Promise<ReadonlyArray<unknown>> =>
+  readJsonDirectory(store.agentClaimDirectory);
+
+/** Records the source revision visible when an agent first claims a request. */
+export const writeAgentClaimValue = async ({
+  store,
+  requestId,
+  claimedFromRevision,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+  readonly claimedFromRevision: string;
+}): Promise<void> => {
+  await createJsonRecord({
+    directory: store.agentClaimDirectory,
+    id: requestId,
+    value: { requestId, claimedFromRevision },
+  });
+};
+
 /** Writes one runtime-authored request under its validated opaque id. */
 export const writeAgentRequestValue = async ({
   store,
@@ -438,11 +475,9 @@ export const writeAgentRequestValue = async ({
   readonly requestId: string;
   readonly value: unknown;
 }): Promise<void> => {
-  await writeJson({
-    path: exchangePath({
-      directory: store.agentRequestDirectory,
-      requestId,
-    }),
+  await createJsonRecord({
+    directory: store.agentRequestDirectory,
+    id: requestId,
     value,
   });
 };
@@ -457,11 +492,9 @@ export const writeAgentResponseValue = async ({
   readonly requestId: string;
   readonly value: unknown;
 }): Promise<void> => {
-  await writeJson({
-    path: exchangePath({
-      directory: store.agentResponseDirectory,
-      requestId,
-    }),
+  await createJsonRecord({
+    directory: store.agentResponseDirectory,
+    id: requestId,
     value,
   });
 };
@@ -477,10 +510,9 @@ export const readAgentCancellations = async ({
 }: {
   readonly store: ReviewStore;
 }): Promise<ReadonlyArray<AgentCancellation>> => {
-  const value = await readJson(store.agentCancellationsPath);
-  if (!Array.isArray(value)) return [];
+  const values = await readJsonDirectory(store.agentCancellationDirectory);
   const accepted: Array<AgentCancellation> = [];
-  for (const entry of value.slice(0, EXCHANGE_FILE_LIMIT)) {
+  for (const entry of values.slice(0, EXCHANGE_FILE_LIMIT)) {
     if (
       typeof entry !== "object" ||
       entry === null ||
@@ -512,13 +544,20 @@ export const appendAgentCancellation = async ({
   readonly store: ReviewStore;
   readonly cancellation: AgentCancellation;
 }): Promise<void> => {
-  const existing = await readAgentCancellations({ store });
-  if (existing.some(({ requestId }) => requestId === cancellation.requestId)) {
-    return;
-  }
-  await writeJson({
-    path: store.agentCancellationsPath,
-    value: [...existing, cancellation],
+  await createJsonRecord({
+    directory: store.agentCancellationDirectory,
+    id: cancellation.requestId,
+    value: cancellation,
+  }).catch((error: unknown) => {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "EEXIST"
+    ) {
+      return;
+    }
+    throw error;
   });
 };
 
@@ -544,6 +583,11 @@ const asAgentConnectionEvent = ({
     return undefined;
   }
   return {
+    ...("eventId" in value &&
+    typeof value.eventId === "string" &&
+    /^[a-f0-9]{16}$/.test(value.eventId)
+      ? { eventId: value.eventId }
+      : {}),
     sessionId,
     connected: value.connected,
     at: new Date(value.at).toISOString(),
@@ -564,22 +608,18 @@ export const readAgentConnectionEvents = async ({
   readonly store: ReviewStore;
   readonly sessionId: string;
 }): Promise<ReadonlyArray<AgentConnectionEvent>> => {
-  const raw = await readFile(store.agentConnectionEventsPath, "utf8").catch(
-    () => "",
-  );
+  const values = await readJsonDirectory(store.agentConnectionDirectory);
   const accepted: Array<AgentConnectionEvent> = [];
-  for (const line of raw.split("\n")) {
-    if (line.trim() === "") continue;
-    let value: unknown;
-    try {
-      value = JSON.parse(line);
-    } catch {
-      continue;
-    }
+  for (const value of values) {
     const event = asAgentConnectionEvent({ value, sessionId });
     if (event !== undefined) accepted.push(event);
   }
-  return accepted;
+  return accepted.sort((left, right) => {
+    const chronological = left.at.localeCompare(right.at);
+    return chronological !== 0
+      ? chronological
+      : (left.eventId ?? "").localeCompare(right.eventId ?? "");
+  });
 };
 
 /** Appends one runtime-observed connection transition without rewriting history. */
@@ -590,11 +630,12 @@ export const appendAgentConnectionEvent = async ({
   readonly store: ReviewStore;
   readonly event: AgentConnectionEvent;
 }): Promise<void> => {
-  await appendFile(
-    store.agentConnectionEventsPath,
-    `${JSON.stringify(event)}\n`,
-    { mode: FILE_MODE },
-  );
+  const eventId = event.eventId ?? randomId();
+  await createJsonRecord({
+    directory: store.agentConnectionDirectory,
+    id: eventId,
+    value: { ...event, eventId },
+  });
 };
 
 /** Gives an agent a safe ignored path for authoring one response draft. */
@@ -644,7 +685,10 @@ const asProgressEvent = ({
   if (event.sessionId !== sessionId) {
     return undefined;
   }
-  if (typeof event.seq !== "number" || !Number.isInteger(event.seq)) {
+  if (
+    typeof event.eventId !== "string" ||
+    !/^[a-f0-9]{16}$/.test(event.eventId)
+  ) {
     return undefined;
   }
   if (typeof event.step !== "string" || typeof event.state !== "string") {
@@ -655,7 +699,8 @@ const asProgressEvent = ({
   }
   return {
     sessionId,
-    seq: event.seq,
+    eventId: event.eventId,
+    seq: 0,
     step: event.step.slice(0, PROGRESS_TEXT_LIMIT),
     state: event.state,
     ...(typeof event.detail === "string"
@@ -669,9 +714,8 @@ const asProgressEvent = ({
 };
 
 /**
- * Relays the agent's status channel: line-delimited events, kept only when
- * they belong to the running session and advance its sequence. A foreign or
- * out-of-order event is dropped rather than shown to the reviewer as live.
+ * Reads independent activity facts in semantic time order and derives their
+ * display sequence without coordinating writers.
  */
 export const readProgress = async ({
   store,
@@ -680,35 +724,22 @@ export const readProgress = async ({
   readonly store: ReviewStore;
   readonly sessionId: string;
 }): Promise<ReadonlyArray<ProgressEvent>> => {
-  let raw: string;
-  try {
-    raw = await readFile(store.progressPath, "utf8");
-  } catch {
-    return [];
-  }
+  const values = await readJsonDirectory(store.progressDirectory);
   const accepted: Array<ProgressEvent> = [];
-  let highest = 0;
-  for (const line of raw.split("\n")) {
-    if (line.trim() === "") {
-      continue;
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const event = asProgressEvent({ value: parsed, sessionId });
-    if (event === undefined || event.seq <= highest) {
-      continue;
-    }
-    highest = event.seq;
+  for (const value of values) {
+    const event = asProgressEvent({ value, sessionId });
+    if (event === undefined) continue;
     accepted.push(event);
-    if (accepted.length >= PROGRESS_EVENT_LIMIT) {
-      break;
-    }
   }
-  return accepted;
+  return accepted
+    .sort((left, right) => {
+      const chronological = (left.at ?? "").localeCompare(right.at ?? "");
+      return chronological !== 0
+        ? chronological
+        : left.eventId.localeCompare(right.eventId);
+    })
+    .slice(0, PROGRESS_EVENT_LIMIT)
+    .map((event, index) => ({ ...event, seq: index + 1 }));
 };
 
 /** Appends one runtime-authored event to the agent's status channel. */
@@ -717,11 +748,15 @@ export const appendProgress = async ({
   event,
 }: {
   readonly store: ReviewStore;
-  readonly event: ProgressEvent;
+  readonly event: Omit<ProgressEvent, "eventId" | "seq"> & {
+    readonly eventId?: string;
+  };
 }): Promise<void> => {
-  const existing = await readFile(store.progressPath, "utf8").catch(() => "");
-  await writeFile(store.progressPath, `${existing}${JSON.stringify(event)}\n`, {
-    mode: FILE_MODE,
+  const eventId = event.eventId ?? randomId();
+  await createJsonRecord({
+    directory: store.progressDirectory,
+    id: eventId,
+    value: { ...event, eventId },
   });
 };
 

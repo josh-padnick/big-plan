@@ -407,12 +407,9 @@ describe("review runtime feedback", () => {
         },
       ],
     });
-    const lines = (
-      await readFile(runtime.store.agentConnectionEventsPath, "utf8")
-    )
-      .trim()
-      .split("\n");
-    expect(lines).toHaveLength(3);
+    expect(await readdir(runtime.store.agentConnectionDirectory)).toHaveLength(
+      3,
+    );
   });
 
   it("should serve a deterministic diff between retained revisions", async () => {
