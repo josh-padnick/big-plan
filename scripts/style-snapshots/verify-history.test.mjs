@@ -497,6 +497,138 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
   }
 });
 
+test("should keep approved evidence scoped to the config active at that commit", async () => {
+  const initialCapture = {
+    name: "state",
+    selector: "article",
+    themes: ["light"],
+    viewports: [{ name: "desktop", width: 1440, height: 900 }],
+    actions: [],
+  };
+  const { repoRoot, configPath, config, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+    documents: [
+      {
+        name: "fixture",
+        source: "fixture.txt",
+        captures: [initialCapture],
+      },
+    ],
+  });
+  try {
+    const red = onePixelPng({ red: 255, green: 0, blue: 0 });
+    const blue = onePixelPng({ red: 0, green: 0, blue: 255 });
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const checkout = process.env.STYLE_SNAPSHOT_CHECKOUT;
+const output = process.env.STYLE_SNAPSHOT_OUTPUT_DIR;
+const config = JSON.parse(await readFile(process.env.STYLE_SNAPSHOT_CONFIG, "utf8"));
+const style = (await readFile(join(checkout, "style.txt"), "utf8")).trim();
+const colors = {
+  red: ${JSON.stringify(red.toString("base64"))},
+  blue: ${JSON.stringify(blue.toString("base64"))},
+};
+await mkdir(output, { recursive: true });
+for (const document of config.documents) {
+  for (const capture of document.captures) {
+    await writeFile(
+      join(output, capture.name + ".png"),
+      Buffer.from(colors[style], "base64"),
+    );
+  }
+}
+`,
+      "utf8",
+    );
+    const approvedSubject =
+      "style: move the configured pixel to blue [visual:approved]";
+    await writeFile(join(repoRoot, "style.txt"), "blue\n", "utf8");
+    await mkdir(join(repoRoot, ".style-snapshots", "manifests"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(repoRoot, ".style-snapshots", "manifests", "blue.json"),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          commitSubject: approvedSubject,
+          stylingFiles: [
+            {
+              path: "style.txt",
+              propertyDeltas: [{ property: "color", from: "red", to: "blue" }],
+            },
+          ],
+          captureChanges: [
+            {
+              capture: "state.png",
+              changedPixels: 1,
+              before: pngIdentity(red),
+              after: pngIdentity(blue),
+              propertyDeltas: [{ property: "color", from: "red", to: "blue" }],
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const approvedCommit = await commit({
+      repoRoot,
+      subject: approvedSubject,
+    });
+
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          ...config,
+          documents: [
+            {
+              ...config.documents[0],
+              captures: [
+                initialCapture,
+                { ...initialCapture, name: "future-state" },
+              ],
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const configCommit = await commit({
+      repoRoot,
+      subject: "test: add a future capture key [visual:empty]",
+    });
+
+    const results = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "commit-scoped-config",
+      }),
+    });
+    assert.deepEqual(
+      results.map(({ commit, changedCaptures }) => ({
+        commit,
+        changedCaptures,
+      })),
+      [
+        { commit: approvedCommit, changedCaptures: 1 },
+        { commit: configCommit, changedCaptures: 0 },
+      ],
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test("should retain relevance from every config revision", async () => {
   const { repoRoot, configPath, config, base } = await createMinimalRepository({
     stylingFilePatterns: ["^custom-pixel\\.txt$"],
