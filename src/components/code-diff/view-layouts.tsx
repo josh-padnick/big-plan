@@ -16,7 +16,7 @@ type AnchoredAnnotation = ResolvedCodeDiffAnnotation;
 
 // Shared by the unified and split hunk headers.
 const HUNK_HEADER_CLASSES =
-  "code-diff-hunk-header min-w-max whitespace-pre px-[0.65rem] py-[0.4rem] text-xs";
+  "code-diff-hunk-header min-w-max whitespace-pre bg-[var(--diff-hunk-bg)] px-[0.65rem] py-[0.4rem] text-xs text-[var(--diff-hunk-c)]";
 // Shared by unified and split line rows.
 const LINE_CLASSES = "code-diff-line grid min-w-max whitespace-pre";
 // Shared by unified and split annotation surrounds.
@@ -116,7 +116,7 @@ const LineNumberCell = ({
   readonly side: CodeDiffSide;
 }) => (
   <span
-    className="code-diff-line-number select-none px-[0.55rem] text-right"
+    className="code-diff-line-number select-none border-r border-edge px-[0.55rem] text-right text-muted"
     aria-hidden="true"
     data-diff-number={side}
   >
@@ -342,7 +342,10 @@ const DiffView = ({
   readonly showLineNumbers: boolean;
   readonly annotations: ReadonlyArray<AnchoredAnnotation>;
 }) => (
-  <div className="code-diff-view min-w-0" data-diff-content={view}>
+  <div
+    className="code-diff-view min-w-0 rounded-b-[calc(var(--radius-md)-1px)]"
+    data-diff-content={view}
+  >
     {diff.hunks.flatMap((hunk, hunkKey) =>
       view === "unified" ? (
         unifiedHunk({ hunk, showLineNumbers, annotations, hunkKey })

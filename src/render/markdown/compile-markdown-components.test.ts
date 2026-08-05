@@ -60,10 +60,10 @@ describe("compileMarkdown CodeDiff components", () => {
       '<span class="sr-only">2 added, 1 removed</span>',
     );
     expect(bodyHtml).toContain(
-      '<span class="code-diff-stat-add" aria-hidden="true">+2</span>',
+      '<span class="code-diff-stat-add text-[var(--diff-add-c)]" aria-hidden="true">+2</span>',
     );
     expect(bodyHtml).toContain(
-      '<span class="code-diff-stat-remove" aria-hidden="true">-1</span>',
+      '<span class="code-diff-stat-remove text-[var(--diff-remove-c)]" aria-hidden="true">-1</span>',
     );
     expect(bodyHtml).toContain(
       '<textarea hidden readonly data-diff-source="">',

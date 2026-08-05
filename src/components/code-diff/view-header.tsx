@@ -11,6 +11,10 @@ import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { FileIdentity } from "../_shared/file-identity/file-identity.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
+// /* off-scale */ Phase A preserves the legacy inset header radius, 0.55rem
+// caption padding, segmented-control radius, menu offset, and menu shadow
+// exactly. Phase B may regularize them against the product scale.
+
 // Shared by the view toggles and actions button. Hover and pressed colors are
 // utilities rather than stylesheet rules because a components-layer rule
 // loses to the resting bg-surface utility, which left these controls with no
@@ -58,10 +62,16 @@ const DiffStats = ({
     <span className="sr-only">
       {`${addedCount} added, ${removedCount} removed`}
     </span>
-    <span className="code-diff-stat-add" aria-hidden="true">
+    <span
+      className="code-diff-stat-add text-[var(--diff-add-c)]"
+      aria-hidden="true"
+    >
       {`+${addedCount}`}
     </span>
-    <span className="code-diff-stat-remove" aria-hidden="true">
+    <span
+      className="code-diff-stat-remove text-[var(--diff-remove-c)]"
+      aria-hidden="true"
+    >
       {`-${removedCount}`}
     </span>
   </span>
@@ -97,7 +107,7 @@ const ActionsMenu = () => (
       {lucideIconToReact({ icon: ELLIPSIS_ICON, hidden: false })}
     </button>
     <div
-      className="code-diff-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge p-1"
+      className="code-diff-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge bg-[var(--diff-header-bg)] p-1 shadow-[0_6px_18px_rgb(12_10_8_/_0.18)]"
       role="menu"
       aria-label="Diff actions"
       hidden
@@ -174,7 +184,7 @@ export const CodeDiffHeader = ({
   readonly removedCount: number;
   readonly showLineCounts: boolean;
 }) => (
-  <figcaption className="code-diff-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem]">
+  <figcaption className="code-diff-header flex min-w-0 items-center justify-between gap-3 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-[0.55rem] py-[0.3rem]">
     <FileIdentity filePath={filePath} />
     <span className="code-diff-controls flex shrink-0 items-center gap-1">
       {showLineCounts ? (
