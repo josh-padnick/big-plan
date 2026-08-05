@@ -9,12 +9,11 @@
 
 import { CHEVRONS_DOWN_UP_ICON } from "../../icons/lucide/chevrons-down-up.js";
 import { CHEVRONS_UP_DOWN_ICON } from "../../icons/lucide/chevrons-up-down.js";
-import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
-import { X_ICON } from "../../icons/lucide/x.js";
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
 import { lucideIconToHtml } from "./lucide-icon-html.js";
+import { REVIEW_SCRIPT } from "./review-script.js";
 import { VIEWER_SCRIPT } from "./viewer-script.js";
 
 // The shell's own navigation contract: plain text in, so the shell owes
@@ -139,26 +138,6 @@ const renderBulkCollapseControls = (layoutClasses = ""): string =>
 <button class="${COLLAPSE_ALL_BUTTON_CLASSES}" type="button" data-collapse-all aria-label="Collapse all sections" title="Collapse all">${lucideIconToHtml({ icon: CHEVRONS_DOWN_UP_ICON, className: "size-4" })}</button>
 </span>`;
 
-// The inert export carries one document-level draft composer. It ships hidden
-// because the viewer script owns both its interaction and optional storage;
-// a scripts-disabled review therefore remains readable without a dead control.
-const renderCommentDraftControl = (): string =>
-  `<span class="ml-auto" data-comment-draft-control hidden>
-<button class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-edge bg-paper px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-comment-draft-open aria-label="Add review comment" aria-expanded="false">${lucideIconToHtml({ icon: MESSAGE_SQUARE_ICON, className: "size-3.5" })}<span>Comment</span></button>
-<section class="fixed top-14 right-5 z-20 w-80 max-w-[calc(100vw-2.5rem)] rounded-md border border-edge bg-paper p-3 shadow-lg" data-comment-draft-panel aria-label="Review comment draft" hidden>
-<div class="mb-2 flex items-center justify-between gap-3">
-<p class="text-sm font-semibold">Review comment</p>
-<button class="inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-comment-draft-close aria-label="Close comment draft">${lucideIconToHtml({ icon: X_ICON, className: "size-3.5" })}</button>
-</div>
-<label class="mb-1 block text-xs font-medium text-muted" for="big-plan-comment-draft">Draft</label>
-<textarea class="block min-h-28 w-full resize-y rounded-md border border-edge bg-paper px-2.5 py-2 text-sm leading-normal text-ink focus-visible:border-accent focus-visible:outline-none" id="big-plan-comment-draft" data-comment-draft-input aria-label="Comment draft"></textarea>
-<div class="mt-2 flex items-center justify-between gap-3">
-<p class="min-w-0 text-xs text-muted" data-comment-draft-status aria-live="polite"></p>
-<button class="shrink-0 cursor-pointer rounded-md bg-accent px-2.5 py-1 text-xs font-semibold text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-comment-draft-save>Save draft</button>
-</div>
-</section>
-</span>`;
-
 // Builds the desktop sidebar navigation; its "Contents" label doubles as the
 // way back to the very top of the document.
 const renderDesktopToc = ({
@@ -233,6 +212,7 @@ export const renderShell = ({
   readonly contentHtml: string;
 }): ShellResult => {
   const hasToc = nav.length > 0;
+  const needsReviewScript = contentHtml.includes("data-block-id");
   const overviewId = createOverviewId(contentIds);
   const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-5 wide:px-6">
@@ -241,7 +221,6 @@ export const renderShell = ({
 <img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
 <p class="truncate text-center text-sm leading-none text-muted" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</p>
-${renderCommentDraftControl()}
 </div>
 </header>
 ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
@@ -253,7 +232,8 @@ ${contentHtml}
 </article>
 </main>
 </div>
-${VIEWER_SCRIPT}`;
+${VIEWER_SCRIPT}
+${needsReviewScript ? REVIEW_SCRIPT : ""}`;
   return {
     html,
     styles: GLOBAL_CSS,

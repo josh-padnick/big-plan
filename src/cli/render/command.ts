@@ -28,7 +28,7 @@ export const renderCommand = async (
       renderDocument({
         markdown,
         fallbackTitle,
-        planPath: inputPath,
+        identity: { planId: derivePlanId({ planPath: inputPath }) },
       }),
     // A document a human is asked to review must also pass authoring lint, so
     // a lint finding can never reach the reviewer through render.

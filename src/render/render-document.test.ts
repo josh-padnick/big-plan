@@ -3,7 +3,11 @@
 
 import { describe, expect, it } from "vitest";
 import { compilePlanModel } from "./compile-plan-model.js";
-import { renderDocument, validateDocument } from "./render-document.js";
+import {
+  derivePlanId,
+  renderDocument,
+  validateDocument,
+} from "./render-document.js";
 
 const TABLE_SCROLL_CONTAINER = "data-table-scroll-container";
 
@@ -162,10 +166,10 @@ The lede.
     expect(deckHtml).not.toContain("--reading-free-inline");
   });
 
-  it("should inline one stylesheet and one viewer script when rendering", () => {
+  it("should inline viewer and review scripts when rendering commentable content", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
-    // The shell's viewer behavior is the single script; plan content can never
-    // contribute another, and nothing external is referenced.
+    // The shell owns the viewer and review scripts; plan content can never
+    // contribute another script, and nothing external is referenced.
     expect(html.match(/<script>/g)).toHaveLength(2);
     expect(html).toContain("data-section-link");
     expect(html).toContain("data-block-id");
@@ -274,20 +278,24 @@ Tomorrow.
 });
 
 describe("renderDocument shell", () => {
-  it("should stamp a path-and-content identity only for filesystem-backed rendering", () => {
+  it("should stamp an explicit plan identity when filesystem delivery provides it", () => {
     const input = {
       markdown: "# Shared title\n\nA concise plan thesis.\n",
       fallbackTitle: "Plan",
     };
     const first = renderDocument({
       ...input,
-      planPath: "/plans/first.mdx",
+      identity: {
+        planId: derivePlanId({ planPath: "/plans/first.mdx" }),
+      },
     }).html;
     const second = renderDocument({
       ...input,
-      planPath: "/plans/second.mdx",
+      identity: {
+        planId: derivePlanId({ planPath: "/plans/second.mdx" }),
+      },
     }).html;
-    const idPattern = /data-plan-id="([a-f0-9]{32})"/;
+    const idPattern = /data-plan-id="([a-f0-9]{16})"/;
     const firstId = first.match(idPattern)?.[1];
     const secondId = second.match(idPattern)?.[1];
 
@@ -317,7 +325,7 @@ describe("renderDocument shell", () => {
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("</html>");
     expect(html).not.toContain("<nav");
-    expect(html).toMatch(/data-comment-draft-control hidden/);
+    expect(html).not.toMatch(/<span[^>]*data-comment-draft-control/);
     expect(html).toContain("<script>");
     // The no-TOC shell keeps the same figure-safe content column.
     expect(html).toContain("wide:grid-cols-[minmax(0,54.5rem)]");

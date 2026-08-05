@@ -17,7 +17,7 @@ import {
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
 export type { BlockDescriptor } from "./markdown/compile-markdown.js";
 import { renderPage } from "./page.js";
-import { derivePlanId } from "./plan-id.js";
+export { derivePlanId } from "./plan-id.js";
 import { serializeHtml } from "./serialize-html.js";
 import { renderShell } from "./shell/shell.js";
 
@@ -62,11 +62,11 @@ const rootAttributesFor = (
 const renderCompiledDocument = ({
   compiled,
   fallbackTitle,
-  planId,
+  identity,
 }: {
   readonly compiled: CompiledMarkdown;
   readonly fallbackTitle: string;
-  readonly planId?: string;
+  readonly identity: DocumentIdentity;
 }): RenderedDocument => {
   const { root, sections, elementIds, title, partIds, blocks } = compiled;
   const resolvedTitle = title ?? fallbackTitle;
@@ -97,7 +97,7 @@ const renderCompiledDocument = ({
     styles: shell.styles,
     bodyClassName: shell.bodyClassName,
     bodyHtml: shell.html,
-    planId,
+    rootAttributes: rootAttributesFor(identity),
   });
   return { html, title: resolvedTitle, sections, blocks };
 };
@@ -111,21 +111,17 @@ const renderCompiledDocument = ({
 export const renderDocument = ({
   markdown,
   fallbackTitle,
-  planPath,
+  identity = {},
 }: {
   readonly markdown: string;
   readonly fallbackTitle: string;
-  // Only filesystem-backed render delivery supplies a path. Omitting it keeps
-  // the pure renderer useful while deliberately disabling viewer persistence.
-  readonly planPath?: string;
+  readonly identity?: DocumentIdentity;
 }): RenderedDocument => {
   const compiled = compileMarkdown({ markdown });
   return renderCompiledDocument({
     compiled,
     fallbackTitle,
-    ...(planPath === undefined
-      ? {}
-      : { planId: derivePlanId({ planPath, planContent: markdown }) }),
+    identity,
   });
 };
 
