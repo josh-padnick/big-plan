@@ -4338,7 +4338,7 @@ import {
   const toolbarButton = ({ attribute, label, glyph, action }) => {
     const button = el("button", {
       class:
-        "group/review-icon relative inline-flex size-[1.65rem] flex-none overflow-visible",
+        "group/review-icon relative inline-flex size-[1.65rem] flex-none items-center justify-center overflow-visible p-0 leading-none",
       type: "button",
       [attribute]: true,
       "aria-label": label,

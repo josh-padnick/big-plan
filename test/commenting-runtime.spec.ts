@@ -905,15 +905,23 @@ test("should preserve and send a floating review across reload and viewport chan
         const button = card.locator(control);
         const iconOnlyGeometry = await button.evaluate((node) => {
           const box = node.getBoundingClientRect();
+          const glyph = node.querySelector("svg")?.getBoundingClientRect();
           const tooltip = node.querySelector("[data-review-icon-tooltip]");
           return {
             width: box.width,
             height: box.height,
+            centerDelta:
+              glyph === undefined
+                ? Number.POSITIVE_INFINITY
+                : Math.abs(
+                    glyph.top + glyph.height / 2 - (box.top + box.height / 2),
+                  ),
             tooltipPosition:
               tooltip === null ? "" : getComputedStyle(tooltip).position,
           };
         });
         expect(iconOnlyGeometry.width).toBeCloseTo(iconOnlyGeometry.height, 1);
+        expect(iconOnlyGeometry.centerDelta).toBeLessThanOrEqual(0.5);
         expect(iconOnlyGeometry.tooltipPosition).toBe("absolute");
         await button.hover();
         await expect(
@@ -3003,7 +3011,10 @@ Ship the live review loop behind the explicit review command.
         await page.keyboard.press("Tab");
         await expect(button).toBeFocused();
         await expect
-          .poll(() => button.evaluate((node) => node.matches(":focus-visible")))
+          .poll(
+            () => button.evaluate((node) => node.matches(":focus-visible")),
+            { message: `${control} exposes its keyboard focus state` },
+          )
           .toBe(true);
         const box = await button.boundingBox();
         if (box === null) throw new Error("The change control has no target");
