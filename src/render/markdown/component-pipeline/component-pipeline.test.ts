@@ -20,6 +20,7 @@ import { defineComponent } from "../../../components/_registration/define-compon
 import { defineRevisionAdapter } from "../../../components/_registration/revision-adapter.js";
 import type { ComponentRegistry } from "../../../components/_registration/registry.js";
 import { hastContentToReact } from "../../../components/_shared/hast-content/hast-content.js";
+import type { PendingComponentRevision } from "./component-revision-snapshot.js";
 import { rehypeRenderComponents } from "./deliver.js";
 import type { CollectedComponentModel } from "./deliver.js";
 import type { ReactHastAdapter } from "./react-hast-adapter.js";
@@ -95,12 +96,14 @@ const compileWithRegistry = ({
   registry,
   models,
   collectModels,
+  revisions,
   adapt,
 }: {
   readonly markdown: string;
   readonly registry: ComponentRegistry;
   readonly models?: Array<CollectedComponentModel>;
   readonly collectModels?: Array<CollectedComponentModel>;
+  readonly revisions?: Map<string, PendingComponentRevision>;
   readonly adapt?: ReactHastAdapter;
 }): {
   readonly root: Root;
@@ -125,6 +128,7 @@ const compileWithRegistry = ({
       registry,
       ...(models === undefined ? {} : { models }),
       ...(collectModels === undefined ? {} : { collectModels }),
+      ...(revisions === undefined ? {} : { revisions }),
       ...(adapt === undefined ? {} : { adapt }),
     });
   const root: Root = processor.runSync(processor.parse(markdown));
@@ -187,17 +191,22 @@ describe("scoped child dispatch", () => {
         revision: defineRevisionAdapter({ view: Outer }),
       }),
     } satisfies ComponentRegistry;
+    const revisions = new Map<string, PendingComponentRevision>();
 
     const { root, diagnostics } = compileWithRegistry({
       markdown: "<Outer>\n<Inner />\n</Outer>\n",
       registry,
+      revisions,
     });
 
     expect(diagnostics).toEqual([]);
     expect(compileInner).toHaveBeenCalledOnce();
     expect(compileOuter).toHaveBeenCalledOnce();
+    expect(
+      Array.from(revisions.values()).map(({ component }) => component),
+    ).toEqual(["Outer"]);
     expect(serializeHtml({ root })).toBe(
-      '<section data-component="Outer">React outer</section>',
+      '<section data-component="Outer" data-component-instance="component-1">React outer</section>',
     );
   });
 

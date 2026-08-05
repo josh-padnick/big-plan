@@ -141,6 +141,7 @@ const renderFlowElement = ({
   ids,
   delivery,
   materializeModel,
+  revisionOwned,
 }: {
   readonly node: MdxJsxFlowElement;
   readonly diagnostics: DiagnosticCollector;
@@ -148,6 +149,7 @@ const renderFlowElement = ({
   readonly ids: ComponentIdAllocator;
   readonly delivery: ComponentDelivery;
   readonly materializeModel: boolean;
+  readonly revisionOwned: boolean;
 }): Element | undefined => {
   const name = node.name;
   const definition = definitionFor({ name, registry });
@@ -169,6 +171,7 @@ const renderFlowElement = ({
     // presentation inside its parent body. Top-level model entries stop
     // before adaptation.
     materializeModels: delivery.kind === "model",
+    revisionOwned: false,
   });
   if (definition === undefined) {
     return undefined;
@@ -184,6 +187,7 @@ const renderFlowElement = ({
   const revisionInstance =
     delivery.kind === "html" &&
     delivery.revisions !== undefined &&
+    revisionOwned &&
     name !== null
       ? `component-${delivery.revisions.size + 1}`
       : undefined;
@@ -261,6 +265,7 @@ const renderChildren = ({
   ids,
   delivery,
   materializeModels,
+  revisionOwned,
 }: {
   readonly parent: ParentNode;
   readonly scopedDefinitions?: ScopedParentDefinition["scopedChildren"];
@@ -269,6 +274,7 @@ const renderChildren = ({
   readonly ids: ComponentIdAllocator;
   readonly delivery: ComponentDelivery;
   readonly materializeModels: boolean;
+  readonly revisionOwned: boolean;
 }): ReadonlyArray<ScopedChild> => {
   const scopedChildren: Array<ScopedChild> = [];
   let index = 0;
@@ -296,6 +302,7 @@ const renderChildren = ({
         ids,
         delivery,
         materializeModels,
+        revisionOwned: false,
       });
       scopedChildren.push({
         name: childName,
@@ -317,6 +324,7 @@ const renderChildren = ({
         ids,
         delivery,
         materializeModels,
+        revisionOwned,
       });
     }
     if (child.type === "mdxJsxFlowElement") {
@@ -327,6 +335,7 @@ const renderChildren = ({
         ids,
         delivery,
         materializeModel: materializeModels,
+        revisionOwned,
       });
       parent.children.splice(
         index,
@@ -403,6 +412,7 @@ export const rehypeRenderComponents =
       registry,
       ids: createComponentIdAllocator({ reservedIds }),
       materializeModels: false,
+      revisionOwned: true,
       delivery:
         models === undefined
           ? {
