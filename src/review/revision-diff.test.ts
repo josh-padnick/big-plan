@@ -209,13 +209,17 @@ describe("revision block alignment", () => {
       ],
     });
     expect(
-      locations.find((location) => location.oldText === "Remove at the boundary."),
+      locations.find(
+        (location) => location.oldText === "Remove at the boundary.",
+      ),
     ).toMatchObject({
       status: "removed",
       afterBlockId: "section/approach/heading-1",
     });
     expect(
-      locations.find((location) => location.oldText === "Remove at the boundary."),
+      locations.find(
+        (location) => location.oldText === "Remove at the boundary.",
+      ),
     ).not.toHaveProperty("beforeBlockId");
   });
 

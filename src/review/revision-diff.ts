@@ -321,8 +321,7 @@ export const diffRevisions = ({
   for (const [oldIndex, oldBlock] of before.entries()) {
     if (usedOld.has(oldIndex)) continue;
     const sameScopePairs = pairs.filter(
-      ([candidateOld]) =>
-        before.at(candidateOld)?.section === oldBlock.section,
+      ([candidateOld]) => before.at(candidateOld)?.section === oldBlock.section,
     );
     const previousPair = [...sameScopePairs]
       .filter(([candidateOld]) => candidateOld < oldIndex)

@@ -3773,9 +3773,9 @@ Ship the live review loop behind the explicit review command.
     await expect(
       trayThread.locator("[data-review-thread-next-steps]"),
     ).toContainText("Next steps");
-    await expect(
-      trayThread.locator("[data-review-see-change]"),
-    ).toContainText("See change");
+    await expect(trayThread.locator("[data-review-see-change]")).toContainText(
+      "See change",
+    );
     await expect(
       changeActions.locator("[data-review-thread-minimize]"),
     ).toBeVisible();
