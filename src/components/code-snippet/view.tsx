@@ -19,6 +19,8 @@ import {
 } from "../_model/figure-controls/figure-controls.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
+// /* off-scale */ Phase A preserves the legacy header/body radii, 0.6rem
+// body padding, and annotation-rail width exactly for the zero-pixel contract.
 const MenuItemButton = ({
   action,
   label,
@@ -58,7 +60,7 @@ const ActionsMenu = ({ filePath }: { readonly filePath?: string }) => (
       {lucideIconToReact({ icon: ELLIPSIS_ICON, hidden: false })}
     </button>
     <div
-      className="code-snippet-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge p-1"
+      className="code-snippet-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge bg-[var(--diff-header-bg)] p-1 shadow-[0_6px_18px_rgb(12_10_8/0.18)]"
       role="menu"
       aria-label="Code snippet actions"
       hidden
@@ -73,7 +75,7 @@ const ActionsMenu = ({ filePath }: { readonly filePath?: string }) => (
 );
 
 const SnippetHeader = ({ filePath }: { readonly filePath?: string }) => (
-  <figcaption className="code-snippet-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem]">
+  <figcaption className="code-snippet-header flex min-w-0 items-center justify-between gap-3 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-[0.55rem] py-[0.3rem]">
     {filePath === undefined ? (
       <span className="code-snippet-label text-xs font-semibold text-muted">
         Code snippet
@@ -99,12 +101,22 @@ const CodeLine = ({
   readonly lineNumber: number;
   readonly showLineNumbers: boolean;
   // Space-separated "start"/"end" range-boundary tokens ("middle" between
-  // them) so the stylesheet can cap the vertical range rail; undefined on
-  // unannotated rows.
+  // them) so the static utility variants can cap the vertical range rail;
+  // undefined on unannotated rows.
   readonly annotated: string | undefined;
 }) => (
   <div
-    className="code-snippet-line grid min-w-max whitespace-pre"
+    className={`code-snippet-line grid min-w-max whitespace-pre ${
+      showLineNumbers
+        ? "grid-cols-[4rem_minmax(max-content,1fr)]"
+        : "grid-cols-[minmax(max-content,1fr)]"
+    } ${
+      annotated === undefined
+        ? ""
+        : "relative bg-[color-mix(in_srgb,var(--annotation-c)_8%,transparent)] before:absolute before:inset-y-0 before:left-0 before:w-[0.1875rem] before:bg-[var(--annotation-c)] before:content-[''] [&.annotation-hover]:bg-[color-mix(in_srgb,var(--annotation-c)_16%,transparent)]"
+    } ${annotated?.includes("start") === true ? "before:rounded-t-full" : ""} ${
+      annotated?.includes("end") === true ? "before:rounded-b-full" : ""
+    }`}
     data-snippet-line={lineNumber}
     {...(annotated === undefined
       ? {}
@@ -112,7 +124,7 @@ const CodeLine = ({
   >
     {showLineNumbers ? (
       <span
-        className="code-snippet-line-number select-none px-[0.65rem] text-right"
+        className="code-snippet-line-number select-none border-r border-edge px-[0.65rem] text-right text-muted"
         aria-hidden="true"
         data-snippet-line-number={lineNumber}
       >
@@ -193,7 +205,7 @@ export const CodeSnippet = ({
   readonly model: CompiledCodeSnippet;
 }) => (
   <figure
-    className="code-snippet mb-5 min-w-0 rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]"
+    className="code-snippet mb-5 min-w-0 rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-[0.8125rem] leading-[1.5]"
     data-code-snippet=""
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "code" }}
     {...(model.filePath === undefined
@@ -205,7 +217,7 @@ export const CodeSnippet = ({
       {...(model.filePath === undefined ? {} : { filePath: model.filePath })}
     />
     <div
-      className="code-snippet-body min-w-0 overflow-x-auto"
+      className="code-snippet-body min-w-0 overflow-x-auto rounded-b-[calc(var(--radius-md)-1px)] py-[0.6rem]"
       {...{ [BODY_ATTRIBUTE]: "" }}
     >
       <SnippetRows

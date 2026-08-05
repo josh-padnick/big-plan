@@ -23,10 +23,12 @@ import { lucideIconToHast } from "./lucide-icon-hast.js";
 const isElement = (node: RootContent): node is Element =>
   node.type === "element";
 
+// /* off-scale */ Phase A preserves the legacy floating-control offsets and
+// z-index exactly; Phase B will choose their scale-backed replacements.
 // Matches the React edge's resting-quiet button so the two affordances are
 // the same affordance.
 const BUTTON_CLASSES =
-  "figure-control inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border border-edge bg-paper p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+  "figure-control inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border border-edge bg-paper p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:bg-edge focus-visible:text-ink focus-visible:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent-c)_20%,transparent)] focus-visible:outline-none [&_svg]:size-3.5";
 
 const maximizeButton = (): Element => {
   const label = maximizeLabel("code");
@@ -52,14 +54,38 @@ const codeFigure = (pre: Element): Element => ({
   type: "element",
   tagName: "figure",
   properties: {
-    className: ["code-figure"],
+    className: [
+      "code-figure",
+      "group/code-figure",
+      "relative",
+      "mb-5",
+      "[&>pre]:mb-0",
+    ],
     [MAXIMIZABLE_ATTRIBUTE]: "code",
   },
   children: [
     {
       type: "element",
       tagName: "div",
-      properties: { className: ["figure-control-bar"] },
+      properties: {
+        className: [
+          "figure-control-bar",
+          "absolute",
+          "top-[0.3rem]",
+          "right-[0.4rem]",
+          "z-[1]",
+          "flex",
+          "items-center",
+          "justify-end",
+          "gap-1",
+          "p-0",
+          "opacity-0",
+          "motion-safe:transition-opacity",
+          "motion-safe:duration-150",
+          "group-hover/code-figure:opacity-100",
+          "group-focus-within/code-figure:opacity-100",
+        ],
+      },
       children: [maximizeButton()],
     },
     { ...pre, properties: { ...pre.properties, [BODY_ATTRIBUTE]: "" } },
