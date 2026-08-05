@@ -5777,64 +5777,12 @@ import {
       compose.setAttribute("data-review-compose-placement", "centered");
       return;
     }
-    if (window.innerWidth >= 1280 && !railIsOpen()) {
-      if (compose.parentElement !== threadLayer)
-        threadLayer.appendChild(compose);
-      compose.removeAttribute("data-review-compose-inline");
-      compose.removeAttribute("data-review-compose-centered");
-      compose.setAttribute("data-review-compose-floating", "");
-      compose.setAttribute("data-review-compose-placement", "floating");
-      positionThreadCards();
-      return;
-    }
-    const endBlock =
-      target.type === "selection" && target.endBlockId
-        ? document.querySelector(
-            '[data-block-id="' + cssEscape(target.endBlockId) + '"]',
-          )
-        : null;
-    const slide =
-      target.type === "slide" ? block.closest("[data-slide]") : null;
-    const insertionBlock = endBlock || block;
-    // A table row cannot legally own a div sibling inside tbody, so its
-    // scroll container is the insertion anchor.
-    const trailingAnchor =
-      insertionBlock.tagName === "TR"
-        ? insertionBlock.closest("[data-table-scroll-container]") ||
-          insertionBlock
-        : insertionBlock;
-    const leadingAnchor =
-      block.tagName === "TR"
-        ? block.closest("[data-table-scroll-container]") || block
-        : block;
-    compose.removeAttribute("style");
-    compose.removeAttribute("data-review-compose-centered");
-    compose.removeAttribute("data-review-compose-floating");
-    compose.setAttribute("data-review-compose-inline", "");
-    if (slide) {
-      slide.before(compose);
-      compose.setAttribute("data-review-compose-placement", "before-slide");
-      return;
-    }
-    const composeHeight = compose.offsetHeight;
-    const startRect = leadingAnchor.getBoundingClientRect();
-    const endRect = trailingAnchor.getBoundingClientRect();
-    const roomBelow = window.innerHeight - endRect.bottom;
-    const roomAbove = startRect.top - REVIEW_CONTROL_TOP;
-    if (roomBelow >= composeHeight + FLOAT_CONTENT_GAP) {
-      trailingAnchor.after(compose);
-      compose.setAttribute("data-review-compose-placement", "after-selection");
-      return;
-    }
-    if (roomAbove >= composeHeight + FLOAT_CONTENT_GAP) {
-      leadingAnchor.before(compose);
-      compose.setAttribute("data-review-compose-placement", "before-selection");
-      return;
-    }
-    if (compose.parentElement !== surface) surface.appendChild(compose);
     compose.removeAttribute("data-review-compose-inline");
-    compose.setAttribute("data-review-compose-centered", "");
-    compose.setAttribute("data-review-compose-placement", "centered");
+    compose.removeAttribute("data-review-compose-centered");
+    if (compose.parentElement !== threadLayer) threadLayer.appendChild(compose);
+    compose.setAttribute("data-review-compose-floating", "");
+    compose.setAttribute("data-review-compose-placement", "floating");
+    positionThreadCards();
   };
 
   const normalizedComposeBody = () => composeInput.value.trim();
