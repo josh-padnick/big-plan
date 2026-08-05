@@ -938,7 +938,7 @@ import {
     "div",
     {
       class:
-        "[position:fixed] [top:0] [right:0] [left:0] [z-index:80] [display:flex] [height:2.75rem] [align-items:center] [justify-content:flex-end] [gap:0.35rem] [padding-right:1rem] [border-bottom:1px_solid_var(--edge-c)] [background:var(--bg)] [pointer-events:none]",
+        "fixed inset-x-0 top-0 z-80 flex h-11 items-center justify-end gap-[0.35rem] border-b border-edge bg-transparent pr-4 pointer-events-none",
       "data-review-toolbar": true,
     },
     [agentAlert, agentOk, toggle, sendButton, compactBatchMenu],
