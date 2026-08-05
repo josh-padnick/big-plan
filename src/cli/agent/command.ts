@@ -10,6 +10,7 @@ import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { shellQuote } from "../_shared/shell-quote.js";
 import {
   commentsFromExchange,
+  claimAgentRequest,
   deriveSourceRevision,
   effectiveSourceRevision,
   nextPendingAgentRequest,
@@ -366,11 +367,15 @@ const nextWork = async ({
     };
   }
   const claimedSource = await readFile(session.planPath, "utf8");
-  const claimedFromRevision = deriveSourceRevision(claimedSource);
-  if (request.claimedFromRevision !== claimedFromRevision) {
-    request = { ...request, claimedFromRevision };
+  const pickupRevision = deriveSourceRevision(claimedSource);
+  if (request.claimedFromRevision === undefined) {
+    request = claimAgentRequest({
+      request,
+      currentRevision: pickupRevision,
+    });
     await writeAgentRequest({ store: session.store, request });
   }
+  const claimedFromRevision = effectiveSourceRevision({ request, snapshot });
   await writeAgentHeartbeat({
     store: session.store,
     sessionId: session.sessionId,

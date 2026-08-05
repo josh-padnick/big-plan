@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./comment.js";
 import {
   AgentExchangeRejected,
+  claimAgentRequest,
   commentsFromExchange,
   deriveSourceRevision,
   effectiveSourceRevision,
@@ -131,6 +132,20 @@ describe("agent response request resolution", () => {
 });
 
 describe("agent exchange response contract", () => {
+  it("should keep a request claim immutable across repeated pickups", () => {
+    const firstClaim = claimAgentRequest({
+      request,
+      currentRevision: deriveSourceRevision(before),
+    });
+    const repeatedClaim = claimAgentRequest({
+      request: firstClaim,
+      currentRevision: deriveSourceRevision(after),
+    });
+    expect(repeatedClaim.claimedFromRevision).toBe(
+      deriveSourceRevision(before),
+    );
+  });
+
   it("should use each globally serialized request claim as its causal baseline", () => {
     const claimedRevision = deriveSourceRevision(after);
     const laterChat = {

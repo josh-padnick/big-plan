@@ -857,6 +857,25 @@ export const nextPendingAgentRequest = (
   );
 };
 
+/**
+ * Claims a serialized request against the source visible at pickup. Claim
+ * ownership is immutable: repeating `agent next` cannot move the baseline
+ * after an agent has begun editing.
+ */
+export const claimAgentRequest = ({
+  request,
+  currentRevision,
+}: {
+  readonly request: AgentRequest;
+  readonly currentRevision: string;
+}): AgentRequest =>
+  request.claimedFromRevision === undefined
+    ? {
+        ...request,
+        claimedFromRevision: sourceRevision(currentRevision),
+      }
+    : request;
+
 export type AgentResponseRequestResolution =
   | {
       readonly ok: true;
