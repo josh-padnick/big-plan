@@ -44,9 +44,9 @@ const COMPONENT_INTERACTIONS = {
       "drag column",
       "keyboard column reorder",
       "reset column layout",
+      "index chip jump and flash",
       "maximize",
     ],
-    deferred: ["index chip jump and flash"],
   },
   Decision: {
     selector: "[data-decision]",
@@ -306,6 +306,33 @@ test("should exercise every live component affordance with browser gestures", as
     await expect(schema).toHaveAttribute("data-figure-maximized", "");
     await maximize.click();
     await expect(schema).not.toHaveAttribute("data-figure-maximized");
+  });
+
+  await test.step("DatabaseTableSchema: jump from an index chip by pointer and keyboard", async () => {
+    const schema = page.locator("[data-database-table-schema]").first();
+    const marker = schema
+      .getByRole("button", {
+        name: "Jump to index 1",
+      })
+      .first();
+    const target = schema.locator('[data-schema-index="1"]');
+
+    await expect(marker).toHaveAttribute("aria-controls", /.+/u);
+    await marker.click();
+    await expect(target).toBeFocused();
+    await expect(target).toHaveClass(/table-schema-index-flash/u);
+
+    await marker.focus();
+    await page.keyboard.press("Enter");
+    await expect(target).toBeFocused();
+    await expect(target).toHaveClass(/table-schema-index-flash/u);
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await marker.click();
+    await expect(target).toBeFocused();
+    await expect(target).not.toHaveClass(/table-schema-index-flash/u);
+    await expect(target).toHaveCSS("transition-duration", "0s");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
   });
 
   await test.step("DataTable: filter, sort, menus, drag, and maximize", async () => {
