@@ -19,12 +19,12 @@ const COMPONENT_INTERACTIONS = {
   },
   CodeDiff: {
     selector: "[data-code-diff]",
-    affordances: ["maximize"],
-    deferred: ["unified/split view", "line-to-comment hover emphasis"],
+    affordances: ["maximize", "line-to-annotation hover emphasis"],
+    deferred: ["unified/split view"],
   },
   CodeSnippet: {
     selector: "[data-code-snippet]",
-    affordances: ["maximize"],
+    affordances: ["maximize", "line-to-annotation hover emphasis"],
   },
   DataTable: {
     selector: "[data-data-table]",
@@ -163,6 +163,36 @@ test("should exercise every live component affordance with browser gestures", as
     const rationale = analysis.locator("[data-decision-definition]").first();
     await rationale.locator("summary").hover();
     await expect(rationale).toHaveAttribute("open", "");
+  });
+
+  await test.step("CodeDiff: cross-highlight an annotation and its lines", async () => {
+    const diff = page.locator(COMPONENT_INTERACTIONS.CodeDiff.selector).first();
+    const annotation = diff.locator("[data-annotation-id]").first();
+    const annotationId = await annotation.getAttribute("data-annotation-id");
+    expect(annotationId).not.toBeNull();
+    const line = diff
+      .locator(`[data-annotation-anchor~="${annotationId ?? ""}"]`)
+      .first();
+
+    await line.hover();
+    await expect(annotation).toHaveClass(/annotation-hover/u);
+    await page.mouse.move(0, 0);
+    await annotation.hover();
+    await expect(line).toHaveClass(/annotation-hover/u);
+  });
+
+  await test.step("CodeSnippet: cross-highlight an annotation and its lines", async () => {
+    const snippet = page
+      .locator(COMPONENT_INTERACTIONS.CodeSnippet.selector)
+      .first();
+    const annotation = snippet.locator("[data-snippet-annotation]").first();
+    const line = snippet.locator("[data-snippet-annotated]").first();
+
+    await line.hover();
+    await expect(annotation).toHaveClass(/annotation-hover/u);
+    await page.mouse.move(0, 0);
+    await annotation.hover();
+    await expect(line).toHaveClass(/annotation-hover/u);
   });
 
   for (const figure of [

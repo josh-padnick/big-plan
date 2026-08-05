@@ -2,14 +2,14 @@
 // a scroll-spy that marks the section being read with aria-current on its TOC
 // links (falling back to the overview links above the first section), hover
 // popovers that float [data-info-popover] disclosures beside their triggers,
-// collapse toggles for deck parts, slides, and sub-slides, table-schema column
-// state, a document comment draft, DataTable sorting, filtering, text fit,
-// column layout and grouping, and one maximize behavior shared by every figure
-// family, a decision matrix's column highlight, rationale swap, and confirm
-// step, wireframe screen navigation driven entirely by renderer-emitted data
-// attributes plus true-width scaling, and the diagram leg in
-// ./diagram-script.ts. Plan content never
-// contributes script, and every affordance keeps a no-JS fallback.
+// annotation-to-code cross-highlighting, collapse toggles for deck parts,
+// slides, and sub-slides, table-schema column state, a document comment draft,
+// DataTable sorting, filtering, text fit, column layout and grouping, and one
+// maximize behavior shared by every figure family, a decision matrix's column
+// highlight, rationale swap, and confirm step, wireframe screen navigation
+// driven entirely by renderer-emitted data attributes plus true-width scaling,
+// and the diagram leg in ./diagram-script.ts. Plan content never contributes
+// script, and every affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
@@ -198,6 +198,60 @@ export const VIEWER_SCRIPT = `<script>
       },
       { capture: true, passive: true },
     );
+  }
+})();
+(() => {
+  // One shared enhancement links annotation cards to their covered code rows
+  // in both component families. The authored rows and cards remain complete
+  // without it; this leg changes emphasis only while the pointer relates them.
+  const linkHover = (card, targets) => {
+    const linked = Array.from(new Set([card, ...targets]));
+    const setHighlighted = (highlighted) => {
+      for (const element of linked) {
+        element.classList.toggle("annotation-hover", highlighted);
+      }
+    };
+    for (const element of linked) {
+      element.addEventListener("pointerenter", () => setHighlighted(true));
+      element.addEventListener("pointerleave", () => setHighlighted(false));
+    }
+  };
+
+  for (const diff of document.querySelectorAll("[data-code-diff]")) {
+    const lines = Array.from(
+      diff.querySelectorAll("[data-annotation-anchor]"),
+    );
+    for (const card of diff.querySelectorAll("[data-annotation-id]")) {
+      const id = card.getAttribute("data-annotation-id");
+      if (id === null || id === "") continue;
+      linkHover(
+        card,
+        lines.filter((line) =>
+          (line.getAttribute("data-annotation-anchor") || "")
+            .split(/\\s+/u)
+            .includes(id),
+        ),
+      );
+    }
+  }
+
+  for (const snippet of document.querySelectorAll("[data-code-snippet]")) {
+    const lines = Array.from(snippet.querySelectorAll("[data-snippet-line]"));
+    for (const card of snippet.querySelectorAll("[data-snippet-annotation]")) {
+      const range = /^(\\d+)(?:-(\\d+))?$/u.exec(
+        card.getAttribute("data-snippet-annotation") || "",
+      );
+      if (range === null) continue;
+      const start = Number(range[1]);
+      const end = Number(range[2] || range[1]);
+      linkHover(
+        card,
+        lines.filter((line) => {
+          const lineNumber = Number(line.getAttribute("data-snippet-line"));
+          return lineNumber >= start && lineNumber <= end;
+        }),
+      );
+    }
   }
 })();
 (() => {
