@@ -1,0 +1,326 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "fix(render): insulate components from prose styles [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "src/components/callout/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "max-width (Callout root)",
+          "from": "inherited incidentally from descendant prose selectors",
+          "to": "owned explicitly by the Callout surface"
+        }
+      ]
+    },
+    {
+      "path": "src/components/data-table/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "font-family (inline code cells)",
+          "from": "inherited incidentally from prose code selectors",
+          "to": "owned explicitly by DataTable"
+        }
+      ]
+    },
+    {
+      "path": "src/components/database-table-schema/styles.css",
+      "propertyDeltas": [
+        {
+          "property": "schema code override",
+          "from": "undoes generic prose code decoration by selector",
+          "to": "removed because component chrome is outside the prose boundary"
+        }
+      ]
+    },
+    {
+      "path": "src/components/database-table-schema/view-layouts.tsx",
+      "propertyDeltas": [
+        {
+          "property": "schema code and table presentation",
+          "from": "partly inherited from article prose",
+          "to": "owned explicitly by DatabaseTableSchema"
+        }
+      ]
+    },
+    {
+      "path": "src/components/quick-summary/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "max-width (QuickSummary root)",
+          "from": "inherited incidentally from descendant prose selectors",
+          "to": "owned explicitly by the QuickSummary surface"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "embedded stylesheet",
+          "from": "global article prose selectors reach component-owned markup",
+          "to": "prose selectors require the authored-prose marker"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/code-figure.test.ts",
+      "propertyDeltas": [
+        {
+          "property": "authored code expectation",
+          "from": "unmarked code figure content",
+          "to": "authored pre and code elements retain the prose marker"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/compile-markdown-components.test.ts",
+      "propertyDeltas": [
+        {
+          "property": "component prose-boundary expectations",
+          "from": "authored and component-owned semantic elements are indistinguishable",
+          "to": "authored descendants are marked while component chrome is not"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/compile-markdown-transforms.test.ts",
+      "propertyDeltas": [
+        {
+          "property": "authored transform expectations",
+          "from": "unmarked Markdown elements",
+          "to": "transformed Markdown elements retain the authored-prose marker"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/compile-markdown-validation.test.ts",
+      "propertyDeltas": [
+        {
+          "property": "validated Markdown expectation",
+          "from": "unmarked authored paragraph",
+          "to": "authored paragraph carries the prose marker"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/compile-markdown.ts",
+      "propertyDeltas": [
+        {
+          "property": "component delivery boundary",
+          "from": "prose CSS infers authorship from semantic tag names under article",
+          "to": "Markdown-origin elements are marked before registered components render"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/component-pipeline/component-pipeline.test.ts",
+      "propertyDeltas": [
+        {
+          "property": "pipeline output expectation",
+          "from": "unmarked authored component body",
+          "to": "authored component body carries the prose marker"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/deck-transform.test.ts",
+      "propertyDeltas": [
+        {
+          "property": "deck prose expectations",
+          "from": "unmarked authored headings and paragraphs",
+          "to": "authored deck elements carry the prose marker"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/mark-authored-prose.ts",
+      "propertyDeltas": [
+        {
+          "property": "authored prose boundary",
+          "from": "absent",
+          "to": "data-authored-prose marker applied before component rendering"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/prose.css",
+      "propertyDeltas": [
+        {
+          "property": "prose selector scope",
+          "from": "all matching semantic elements beneath article",
+          "to": "only elements explicitly marked as authored prose"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__document__desktop__dark.png",
+      "changedPixels": 2932268,
+      "before": {
+        "width": 872,
+        "height": 11554,
+        "sha256": "611cd5fa664ec386592046424b867775f6ffa4f086663decf272a9dd8ffe2eff"
+      },
+      "after": {
+        "width": 872,
+        "height": 11507,
+        "sha256": "af69455cf8e14e5eeaeefde7b2c3bde725df38b7d57dd465c33c59ee1ed90e7e"
+      },
+      "propertyDeltas": [
+        {
+          "property": "registered component width and rhythm",
+          "from": "component-owned lists and blocks inherit the 728px reading measure and prose margins",
+          "to": "component surfaces own their widths and rhythm; authored Markdown retains prose styling"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__light.png",
+      "changedPixels": 3033177,
+      "before": {
+        "width": 872,
+        "height": 11554,
+        "sha256": "f7740b4385d5b791684d612b96bd20f7db4357b94d0b0642a82aeaad5869a4a1"
+      },
+      "after": {
+        "width": 872,
+        "height": 11507,
+        "sha256": "6d09e303dd837804374630e12ed58be201e429752bf751446008af95643174a9"
+      },
+      "propertyDeltas": [
+        {
+          "property": "registered component width and rhythm",
+          "from": "component-owned lists and blocks inherit the 728px reading measure and prose margins",
+          "to": "component surfaces own their widths and rhythm; authored Markdown retains prose styling"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__dark.png",
+      "changedPixels": 1573757,
+      "before": {
+        "width": 350,
+        "height": 14583,
+        "sha256": "0bef63ee1e8abd15e1199ea9a3f33246131ecd27221baa3fbd394faf64e1a8d3"
+      },
+      "after": {
+        "width": 350,
+        "height": 14536,
+        "sha256": "bab95ef08eca71bfab33bc16b8f7fa1c0d213494adf609c39a442c3a839d0de4"
+      },
+      "propertyDeltas": [
+        {
+          "property": "registered component phone rhythm",
+          "from": "component chrome receives prose list and block spacing",
+          "to": "component chrome uses only component-owned rhythm"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__light.png",
+      "changedPixels": 1612859,
+      "before": {
+        "width": 350,
+        "height": 14583,
+        "sha256": "3c811b1417ab9a47cfa3685f7cb1cec2c5ce9696d1f37a3dcf107dee19454dad"
+      },
+      "after": {
+        "width": 350,
+        "height": 14536,
+        "sha256": "0bf81dea09ddff8efb801bc9a5dcbefa775dabbb012271119a4f63217fdbbf6e"
+      },
+      "propertyDeltas": [
+        {
+          "property": "registered component phone rhythm",
+          "from": "component chrome receives prose list and block spacing",
+          "to": "component chrome uses only component-owned rhythm"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__dark.png",
+      "changedPixels": 91835,
+      "before": {
+        "width": 872,
+        "height": 2712,
+        "sha256": "e755439298355c207371b93a96168f958cc5793e02f9e65f4ac9e7f648d39ad6"
+      },
+      "after": {
+        "width": 872,
+        "height": 2720,
+        "sha256": "23cdcf58a94ea2eeae6b15e5eeab161938e16036d67c4418c69711fad1fc02a3"
+      },
+      "propertyDeltas": [
+        {
+          "property": "deck component rhythm",
+          "from": "component-owned semantics receive prose flow styling",
+          "to": "only authored Markdown participates in prose flow"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__light.png",
+      "changedPixels": 92982,
+      "before": {
+        "width": 872,
+        "height": 2712,
+        "sha256": "49616941feed496dea2128a83d6fda8ad018a6f4817a365fb5722ef3b359a558"
+      },
+      "after": {
+        "width": 872,
+        "height": 2720,
+        "sha256": "9e238974ece57cf0f9c24e94e20292fbbf328b9fb4ea180853e30c25021da913"
+      },
+      "propertyDeltas": [
+        {
+          "property": "deck component rhythm",
+          "from": "component-owned semantics receive prose flow styling",
+          "to": "only authored Markdown participates in prose flow"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__dark.png",
+      "changedPixels": 74746,
+      "before": {
+        "width": 350,
+        "height": 3406,
+        "sha256": "dbd69c248bec443fbac1e208660d42c482fc065d355e6a6b7a901bb060cc85ed"
+      },
+      "after": {
+        "width": 350,
+        "height": 3414,
+        "sha256": "5637119ab63fed8f21468ee9d0a23d37e10f0780a9a57cae267917a2f0aa3d5b"
+      },
+      "propertyDeltas": [
+        {
+          "property": "deck component phone rhythm",
+          "from": "component-owned semantics receive prose flow styling",
+          "to": "only authored Markdown participates in prose flow"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__light.png",
+      "changedPixels": 75946,
+      "before": {
+        "width": 350,
+        "height": 3406,
+        "sha256": "c3cb5444baca671e2267a3c586d4748aa0fcc634034a75e724c47dc136c5cf5c"
+      },
+      "after": {
+        "width": 350,
+        "height": 3414,
+        "sha256": "cf8004e43ef158489cf1fc5eab4beed008f74b6784920ebc50f584e02ac598c6"
+      },
+      "propertyDeltas": [
+        {
+          "property": "deck component phone rhythm",
+          "from": "component-owned semantics receive prose flow styling",
+          "to": "only authored Markdown participates in prose flow"
+        }
+      ]
+    }
+  ]
+}

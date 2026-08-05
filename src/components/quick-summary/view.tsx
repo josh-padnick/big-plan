@@ -42,7 +42,7 @@ export const QuickSummary = ({
   return (
     <aside
       data-quick-summary
-      className="mb-8 rounded-lg border border-edge bg-surface px-5 py-4"
+      className="mb-8 max-w-[var(--measure)] rounded-lg border border-edge bg-surface px-5 py-4"
     >
       <p className="mb-3 text-[1.0625rem] font-semibold text-ink">
         Quick summary

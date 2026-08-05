@@ -3,6 +3,22 @@
 
 import { expect, test } from "./fixtures";
 
+test("should keep the schema index list out of the prose measure", async ({
+  page,
+  componentsViewerUrl,
+}) => {
+  await page.goto(componentsViewerUrl);
+  const list = page.locator(".table-schema-index-list").first();
+  const geometry = await list.evaluate((element) => ({
+    width: element.getBoundingClientRect().width,
+    parentWidth: element.parentElement?.getBoundingClientRect().width ?? 0,
+    maxWidth: getComputedStyle(element).maxWidth,
+  }));
+
+  expect(geometry.width).toBeCloseTo(geometry.parentWidth);
+  expect(geometry.maxWidth).toBe("none");
+});
+
 test("should distinguish every callout type when the component plan renders", async ({
   page,
   componentsViewerUrl,

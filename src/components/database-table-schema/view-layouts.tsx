@@ -19,6 +19,8 @@ const BADGE_CLASSES =
 // Shared by the Indexes and DDL band labels.
 const SECTION_LABEL_CLASSES =
   "table-schema-section-label m-0 text-[0.6875rem] font-medium uppercase tracking-wider text-muted";
+const CODE_CLASSES =
+  "rounded-none border-0 bg-transparent p-0 font-mono text-[0.875em] whitespace-nowrap";
 
 const GRID_HEADS: ReadonlyArray<{
   readonly label: string;
@@ -75,7 +77,7 @@ const ForeignKeyTarget = ({ target }: { readonly target: string }) => (
     <span className="table-schema-ref-arrow text-muted" aria-hidden="true">
       {"→"}
     </span>
-    <code>{target}</code>
+    <code className={CODE_CLASSES}>{target}</code>
   </span>
 );
 
@@ -152,14 +154,14 @@ const ConstraintsCell = ({
           ...(column.ref.onDelete === undefined
             ? []
             : [
-                <code key="on-delete" className="text-muted">
+                <code key="on-delete" className={`${CODE_CLASSES} text-muted`}>
                   {`ON DELETE ${column.ref.onDelete.toUpperCase()}`}
                 </code>,
               ]),
           ...(column.ref.onUpdate === undefined
             ? []
             : [
-                <code key="on-update" className="text-muted">
+                <code key="on-update" className={`${CODE_CLASSES} text-muted`}>
                   {`ON UPDATE ${column.ref.onUpdate.toUpperCase()}`}
                 </code>,
               ]),
@@ -168,7 +170,7 @@ const ConstraintsCell = ({
     column.check === undefined
       ? []
       : [
-          <code key="check" data-schema-check="">
+          <code key="check" className={CODE_CLASSES} data-schema-check="">
             {`CHECK (${column.check})`}
           </code>,
         ];
@@ -227,7 +229,7 @@ const ColumnRow = ({
     <ConstraintsCell column={column} markers={indexMarkers(column, indexes)} />
     <td className="table-schema-cell-default font-mono text-[0.8125rem]">
       {column.defaultValue === undefined ? null : (
-        <code>{column.defaultValue}</code>
+        <code className={CODE_CLASSES}>{column.defaultValue}</code>
       )}
     </td>
     <td className="table-schema-cell-comment text-xs leading-snug text-muted">
@@ -250,7 +252,7 @@ export const TableSchemaGrid = ({
     className="table-schema-scroll min-w-0 overflow-x-auto"
     data-table-scroll-container=""
   >
-    <table className="table-schema-grid w-full">
+    <table className="table-schema-grid w-full border-collapse">
       <thead>
         <tr>
           {GRID_HEADS.map(({ label, key }) => (
@@ -315,7 +317,7 @@ const IndexEntry = ({
         className="table-schema-index-definition block overflow-x-auto text-xs text-muted"
       >
         {separated([
-          <code key="columns">
+          <code key="columns" className={CODE_CLASSES}>
             {index.columns
               .map((column) => column.replaceAll("`", ""))
               .join(", ")}
@@ -329,7 +331,11 @@ const IndexEntry = ({
               ]),
           ...(index.where === undefined
             ? []
-            : [<code key="where">{`WHERE ${index.where}`}</code>]),
+            : [
+                <code key="where" className={CODE_CLASSES}>
+                  {`WHERE ${index.where}`}
+                </code>,
+              ]),
         ])}
       </span>
       {index.note === undefined ? null : (
