@@ -4535,13 +4535,7 @@ import { createToastManager } from "./toast.js";
             "[display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.4rem] [margin-top:0.55rem]",
           "data-review-thread-reply-box": true,
         },
-        [
-          el("label", {
-            text: outcome.key === "question" ? "Your answer" : "Reply",
-          }),
-          field,
-          sendReply,
-        ],
+        [field, sendReply],
       ),
     );
     return nodes;

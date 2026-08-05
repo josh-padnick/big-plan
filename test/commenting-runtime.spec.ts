@@ -3788,6 +3788,9 @@ Ship the live review loop behind the explicit review command.
     await expect(
       trayThread.locator("[data-review-thread-reply-resolve]"),
     ).toHaveCount(0);
+    await expect(
+      trayThread.locator("[data-review-thread-reply-box] label"),
+    ).toHaveCount(0);
     const replyField = trayThread.locator("[data-review-thread-reply]");
     await replyField.fill("One final note before resolving.");
     await expect(
