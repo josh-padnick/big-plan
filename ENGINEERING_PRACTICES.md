@@ -157,7 +157,9 @@ Follow these authoring rules:
 - Name tests `should ... when ...` so the promised behavior and triggering condition are visible from the title.
 - Avoid broad serialized snapshots. Prefer focused assertions that tell the reviewer what changed. The visual style-history system is a deliberate pixel-contract workflow governed by [CONTRIBUTING.md](CONTRIBUTING.md), not a general-purpose unit snapshot pattern.
 - Mock only an external boundary such as filesystem, process, or browser I/O; do not mock internal modules to manufacture an implementation-shaped test.
-- Keep browser specs independent and use user-facing roles, accessible names, and stable domain-scope identifiers. Use Playwright's auto-waiting actions and web-first assertions, never arbitrary sleeps.
+- Keep browser specs independent and use user-facing roles, accessible names, and stable domain-scope identifiers.
+  Use `data-*` attributes for unambiguous domain or component scoping when role and name alone cannot identify the scope, then locate controls within it by role and accessible name and assert their native or `aria-*` state.
+  Use Playwright's auto-waiting actions and web-first assertions, never arbitrary sleeps.
 - Every browser spec imports the repository fixture rather than `@playwright/test` directly so console errors and page failures remain part of the contract.
 - Add a browser journey only for a critical reader flow, cross-feature composition, or a regression no lower rung can express. Keep long journeys readable with named `test.step` phases.
 
@@ -171,7 +173,11 @@ Do not introduce React or another client framework into it.
 Existing React code is a static presentation-edge implementation detail; browser state and interaction rules must remain framework-neutral.
 
 - Keep rendering pure and put side effects in explicit event or lifecycle handlers. Each piece of state has one owner; derive secondary values rather than synchronizing duplicate mutable copies.
-- Prefer native semantic elements. Every interactive element needs the correct role, an accessible name, keyboard operation, visible focus, and state exposed through semantic `aria-*` or `data-*` attributes. Do not rely on color alone.
+- Prefer native semantic elements.
+  Every interactive element needs the correct role, an accessible name, keyboard operation, and visible focus.
+  Expose control state through native semantics or the appropriate `aria-*` attribute.
+  Use `data-*` only as an optional styling, scripting, or stable Playwright-scoping hook; never rely on it to communicate state to assistive technology.
+  Do not rely on color alone.
 - Give reusable UI modules capability names, not names coupled to their first caller. Express materially different modes as explicit variants rather than proliferating boolean flags.
 - Register global event listeners once, remove them when their owner is disposed, and keep handler identity stable. Mark touch and wheel listeners passive when they never call `preventDefault`.
 - Batch DOM reads before DOM writes to avoid layout thrashing. Defer non-critical work with the browser's scheduling primitives, load heavy or optional modules only when needed, and use statically analyzable asset paths.
@@ -191,7 +197,9 @@ Before using CSS, apply three tests to every declaration:
 3. **Local and legible.** Does the class explain the element and its condition without making a reviewer execute DOM traversal or a selector program? Short variants such as `before:block`, `has-[img]:p-4`, `print:hidden`, `motion-reduce:transition-none`, and `@sm:grid` can pass. Framework support alone does not make a long arbitrary variant maintainable.
 
 A rule that passes all three tests should normally use Tailwind utilities.
-Runtime state is not by itself a reason to use CSS: prefer semantic `aria-*` and `data-*` attributes while keeping every complete candidate static.
+Runtime state is not by itself a reason to use CSS.
+Style native or accessible state with the corresponding native or `aria-*` selector when it represents that state, and use `data-*` only for presentation or script state that has no native or ARIA contract.
+Keep every complete candidate static.
 
 CSS is the escape hatch for externally owned or generated markup, document-wide behavior, token or keyframe definitions, a selector relationship that is clearer as a selector, a shared visual primitive with no authored element of its own, or a case where utilities make local markup materially less legible.
 Component CSS requires a concrete ownership, selector, primitive-definition, document-wide, or readability reason - not merely state, a pseudo-element, `:has()`, print, motion, or a container query.
