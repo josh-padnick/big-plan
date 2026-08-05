@@ -1255,6 +1255,11 @@ test("should preserve and send a floating review across reload and viewport chan
       )
       .toBe("1px");
     const zOrder = await page.evaluate(() => ({
+      shellHeader: Number.parseInt(
+        getComputedStyle(document.querySelector("body > header") as Element)
+          .zIndex,
+        10,
+      ),
       toolbar: Number.parseInt(
         getComputedStyle(
           document.querySelector("[data-review-toolbar]") as Element,
@@ -1274,9 +1279,37 @@ test("should preserve and send a floating review across reload and viewport chan
         10,
       ),
     }));
+    expect(zOrder.shellHeader).toBe(2_147_483_647);
     expect(zOrder.toolbar).toBe(2_147_483_647);
     expect(zOrder.toolbar).toBeGreaterThan(zOrder.cards);
     expect(zOrder.toolbar).toBeGreaterThan(zOrder.slideSelector);
+    const topCard = page.locator("[data-review-thread-card]").first();
+    await topCard.evaluate((node) => {
+      const card = node as HTMLElement;
+      card.hidden = false;
+      card.style.top = "0px";
+    });
+    await expect
+      .poll(() =>
+        topCard.evaluate((node) => {
+          const rect = node.getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.left + 8, 20);
+          return {
+            cardAtToolbarHeight: rect.top < 44 && rect.bottom > 20,
+            topbarWins:
+              hit?.closest("body > header, [data-review-toolbar]") !== null,
+            cardWins: hit?.closest("[data-review-thread-card]") === node,
+          };
+        }),
+      )
+      .toEqual({
+        cardAtToolbarHeight: true,
+        topbarWins: true,
+        cardWins: false,
+      });
+    await topCard.evaluate((node) => {
+      (node as HTMLElement).removeAttribute("style");
+    });
     const titles = page.locator(
       "[data-review-drafts] [data-review-row-target]",
     );

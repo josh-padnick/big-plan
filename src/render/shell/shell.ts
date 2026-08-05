@@ -214,7 +214,7 @@ export const renderShell = ({
   const hasToc = nav.length > 0;
   const needsReviewScript = contentHtml.includes("data-block-id");
   const overviewId = createOverviewId(contentIds);
-  const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
+  const html = `<header class="sticky top-0 z-[2147483647] h-11 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-5 wide:px-6">
 <a class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
