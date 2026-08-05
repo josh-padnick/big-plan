@@ -5,11 +5,10 @@ the collapsible deck. deck-collapse.ts owns the DOM shape this relies on and
 documents the invariants; read it first.
 
 WHY ONE OWNER
-Card padding used to live in Tailwind utilities on the frame while gaps lived
-partly on the frame, partly on a wrapper, and partly in unlayered overrides
-that beat the utilities. A visible gap was therefore an emergent SUM across
-those layers, so no declared number stated the distance it produced and every
-tune moved several gaps at once. Two rules keep that from returning:
+Card padding and relationship gaps stay together here instead of being split
+between utilities and overrides. A visible gap otherwise becomes an emergent
+SUM across layers, so no declared number states the distance it produces and
+every tune moves several gaps at once. Two rules keep that from returning:
 
   1. A frame never carries a vertical margin. Every gap is declared once, by
      the container that owns the relationship, as `> * + * { margin-top }`.
@@ -49,10 +48,6 @@ stability follow from the layout instead of from hand-tuned insets.
     uniform by construction: height is always padding*2 + header chrome.
   */
   article .plan-card {
-    box-sizing: border-box;
-    border: 1px solid var(--edge-c);
-    border-radius: 0.75rem;
-    background: transparent;
     padding: var(--deck-pad-y) var(--deck-pad-x);
   }
   article .plan-slide.plan-card {
@@ -76,15 +71,6 @@ stability follow from the layout instead of from hand-tuned insets.
     Chrome only - deck-collapse.ts guarantees no body content lives here, so
     the pointer cursor never lies and this row's height never changes.
   */
-  article [data-collapse-header] {
-    /* Containing block for the toggle, which is positioned OUT OF FLOW so its
-       escape into the gutter cannot move the chrome. The header is otherwise
-       a plain block, so the kicker and title start at the card's content edge
-       - the same left edge as the body below them. */
-    position: relative;
-    cursor: pointer;
-    min-width: 0;
-  }
   article .plan-collapse-chrome {
     min-width: 0;
   }
@@ -205,14 +191,6 @@ stability follow from the layout instead of from hand-tuned insets.
   article > [data-collapsible] + .plan-part-group {
     margin-top: var(--deck-gap-part);
   }
-
-  /* In-slide heading identity: generated markup that carries no utilities. */
-  article .plan-collapse-chrome > h2 {
-    margin: 0;
-    border-bottom: none;
-    padding-bottom: 0;
-    font-size: 1.6rem;
-  }
 }
 
 @layer bp-state {
@@ -220,18 +198,5 @@ stability follow from the layout instead of from hand-tuned insets.
      utility on the generated body. */
   article [data-collapsible][data-collapsed] > [data-collapse-body] {
     display: none;
-  }
-}
-
-@layer components {
-  article .plan-collapse-chrome > h2,
-  article .plan-collapse-chrome > [data-slide-kicker] {
-    scroll-margin-top: 8rem;
-  }
-  @media (width < 56rem) {
-    article .plan-collapse-chrome > h2,
-    article .plan-collapse-chrome > [data-slide-kicker] {
-      scroll-margin-top: 10.75rem;
-    }
   }
 }
