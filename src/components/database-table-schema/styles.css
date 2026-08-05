@@ -1,18 +1,9 @@
 /* CSS escape hatch: selector relationships define the dense equal-height grid
-   and override generated prose-table markup. DatabaseTableSchema chrome:
-   header band, equal-height grid overrides, plain in-figure code,
-   badge tints, Indexes and DDL bands, tabs, column controls, index jumps, and
-   menu styles, colocated with the component that owns them. */
+   and override generated prose-table markup: plain in-figure code, grid and
+   band edge relationships, generated tabs, column controls, index jumps, and
+   menu state. Renderer-owned resting surfaces live with their JSX. */
 
 @layer components {
-  /* The figure paints its own background so the grid rows stay distinct. */
-  article [data-database-table-schema] {
-    background: var(--bg);
-  }
-  article .table-schema-header {
-    background: var(--diff-header-bg);
-    border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0;
-  }
   /* SQL fragments read as code, not chips: the prose inline-code chrome is
      figure chrome here, so it comes off inside the component. */
   article [data-database-table-schema] code {
@@ -61,9 +52,6 @@
   /* The bands are the deliberate visual break below the grid; only the last
      one closes the figure's rounded corner, and a hidden tab panel gives its
      place to the visible one. */
-  article .table-schema-section {
-    background: var(--color-surface);
-  }
   article .table-schema-section:last-child {
     border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
   }
@@ -145,23 +133,8 @@
   article .table-schema-ddl-body code {
     white-space: pre;
   }
-  article .table-schema-badge {
-    border-color: var(--color-edge);
-    color: var(--color-muted);
-  }
-  article .table-schema-badge[data-schema-badge="pk"] {
-    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
-    color: var(--color-accent);
-  }
-  article .table-schema-menu-list {
-    background: var(--diff-header-bg);
-    box-shadow: 0 6px 18px rgb(12 10 8 / 0.18);
-  }
   article .table-schema-menu-list[hidden],
   article .table-schema-button[hidden] {
     display: none;
-  }
-  article .table-schema-menu-separator {
-    background: var(--color-edge);
   }
 }
