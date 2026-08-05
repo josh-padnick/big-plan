@@ -699,7 +699,9 @@ import {
   const isCommentTarget = (value) => {
     if (value === null || typeof value !== "object") return false;
     if (value.type === "document") return true;
-    if (!["block", "selection", "lines"].includes(value.type)) return false;
+    if (!["block", "slide", "selection", "lines"].includes(value.type)) {
+      return false;
+    }
     if (
       typeof value.blockId !== "string" ||
       typeof value.kind !== "string" ||
@@ -709,6 +711,13 @@ import {
       return false;
     }
     if (value.type === "block") return true;
+    if (value.type === "slide") return typeof value.scope === "string";
+    if (
+      value.type === "selection" &&
+      ![undefined, "string"].includes(typeof value.endBlockId)
+    ) {
+      return false;
+    }
     return (
       Number.isSafeInteger(value.start) &&
       Number.isSafeInteger(value.end) &&
