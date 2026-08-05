@@ -32,4 +32,6 @@ The plan contains exact commands, the behaviors to exercise, and the boundaries 
 
 ## Split bridges
 
-To keep this early branch independently usable, it pulls stable identity reconciliation and nested sub-slide block identity forward from later #54 commits. It also aligns the browser-test persistence key and selector with the new foundation. The final stack branch reconciles these ordering bridges back to #54's exact completed tree.
+To keep this early branch independently usable, it pulls stable identity reconciliation and nested sub-slide block identity forward from later #54 commits. It also aligns the browser-test persistence key and selector with the new foundation.
+
+The separate `test(style-history): pin deterministic raster frames [visual:empty]` commit is temporary split scaffolding: it makes the earlier visual manifests reproducible while the stack is replayed. #59 retires it and replaces it with the single final capture bridge owned by the styling slice. The final stack branch reconciles every other ordering bridge back to #54's completed tree.

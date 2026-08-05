@@ -1,4 +1,5 @@
 > [!IMPORTANT]
+>
 > ## Superseded by the five-PR review stack
 >
 > This draft remains open as the historical source, but review and approval should proceed in this order:
@@ -11,7 +12,9 @@
 >
 > Each replacement PR targets `main`, declares its predecessor, includes independent green evidence, and links a rendered Big Plan review document. The final branch contains every change from this PR plus one authorized capture-harness bridge in #59.
 >
-> This PR's current head is red on `style-history`: its configuration declares 34 captures, but its harness produces only 32. The missing light/dark `expanded-thread-reply` captures promote a draft only in browser-local state; after reload, the production runtime correctly reads sent comments from server bootstrap state and therefore has no thread to expand. #59 repairs the harness without changing production runtime behavior.
+> **This PR's current head is red on `style-history`.** Its configuration declares 34 captures, but its harness produces only 32. The missing light/dark `expanded-thread-reply` captures promote a draft only in browser-local state; after reload, the production runtime correctly reads sent comments from server bootstrap state and therefore has no thread to expand.
+>
+> Its exact-pixel capture was also flaky: identical hosted runs alternated between two hashes that differed at eight one-channel pixels on two rounded-card corners because Skia selected CPU-specific antialias paths. #59 fixes both harness defects while preserving the zero-pixel rule: it uses a valid server bootstrap, pins deterministic raster settings, and writes only a repeated byte-identical settled frame. It does not change production runtime behavior.
 
 ## Scope
 
@@ -27,8 +30,11 @@ This is a living draft for captain code review while the final UI polish rounds 
 <!-- Macroscope's pull request summary starts here -->
 <!-- Macroscope will only edit the content between these invisible markers, and the markers themselves will not be visible in the GitHub rendered markdown. -->
 <!-- If you delete either of the start / end markers from your PR's description, Macroscope will append its summary at the bottom of the description. -->
+
 > [!NOTE]
+>
 > ### Add first-class plan commenting system with review server, agent protocol, and reviewer UI
+>
 > - Adds a `big-plan review <input.mdx>` CLI command that lints the document, starts a loopback HTTP server with a session token, and prints connection details plus a pasteable agent launcher command.
 > - Adds a `big-plan agent` CLI command that reads the live session, fetches the next pending feedback request, and writes a validated agent response back to the review store.
 > - The render pipeline now annotates output HTML with `data-block-*` attributes (via `rehypeBlockIdentity`) and returns a `blocks` array; the shell conditionally injects an embedded review script when commentable blocks are present.
@@ -42,12 +48,13 @@ This is a living draft for captain code review while the final UI polish rounds 
 > <summary>📊 <a href="https://app.macroscope.com">Macroscope</a> summarized 63789c6. 2 files reviewed, 0 issues evaluated, 0 issues filtered, 0 comments posted</summary>
 >
 > ### 🗂️ Filtered Issues
-> No issues evaluated.
 >
+> No issues evaluated.
 >
 > </details><!-- Macroscope's review summary ends here -->
 >
 > <!-- macroscope-ui-refresh -->
+
 <!-- Macroscope's pull request summary ends here -->
 <!-- devin-review-badge-begin -->
 

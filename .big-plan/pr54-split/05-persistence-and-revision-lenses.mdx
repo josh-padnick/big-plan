@@ -40,7 +40,7 @@ Harden every mutable review transition and preserve typed meaning across revisio
 ## Inherited product
 
 - Slices one through three establish the review server, live agent loop, and complete commenting workflow.
-- Slice four makes visual ownership and causal revision behavior mechanically explicit, and repairs the capture harness so its expanded sent-thread state is bootstrapped through the production ownership boundary.
+- Slice four makes visual ownership and causal revision behavior mechanically explicit, and repairs the capture harness so its expanded sent-thread state is bootstrapped through the production ownership boundary and exact pixels are stable across CPU variants.
 - This slice addresses the failure modes that appear only across interruptions, concurrent tabs, rebases, and typed component changes.
 
 ## Success looks like
@@ -87,7 +87,7 @@ Review the final slice in four passes:
 ## Review boundaries
 
 - This slice contains every source change from `origin/fm/bp-commenting-round3`.
-- Its final tree differs from that source head only by slice four's capture-harness bridge. Removing that one bridge patch produces the exact PR 54 tree.
+- Its final tree differs from that source head only by slice four's capture-harness bridge. That bridge produces the two missing expanded-thread captures and eliminates the eight-pixel Skia antialias flake without relaxing exact comparison. Removing that one bridge patch produces the exact PR 54 tree.
 - It adds no compatibility shim: Big Plan remains pre-release and updates every call site to the clean contract.
 - Historical preview reports and evidence land with the slice that produced them; they document the tested UX rather than defining runtime behavior.
 - Earlier slices contain narrow test, selector, generated-asset, and visual-evidence bridges so each intermediate branch remains green; all net final-tree bridges except the authorized capture fix reconcile back to PR 54.
