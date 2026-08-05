@@ -27,7 +27,7 @@
 
 ## Review status
 
-This is a living draft for captain code review while the final UI polish rounds continue. The validation pipeline has intentionally not run yet; it will run only after UX sign-off.
+Superseded; no further approval or validation work should target this draft. Its historical checks remain visible, including the current `lint` and `style-history` failures, while the five replacement drafts carry the independently green evidence.
 
 <!-- Macroscope's pull request summary starts here -->
 <!-- Macroscope will only edit the content between these invisible markers, and the markers themselves will not be visible in the GitHub rendered markdown. -->
