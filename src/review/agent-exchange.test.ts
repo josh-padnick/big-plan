@@ -11,6 +11,7 @@ import {
   AgentExchangeRejected,
   commentsFromExchange,
   deriveSourceRevision,
+  effectiveSourceRevision,
   feedbackAgentRequests,
   messageAgentRequest,
   nextPendingAgentRequest,
@@ -130,6 +131,77 @@ describe("agent response request resolution", () => {
 });
 
 describe("agent exchange response contract", () => {
+  it("should use each globally serialized request claim as its causal baseline", () => {
+    const claimedRevision = deriveSourceRevision(after);
+    const laterChat = {
+      ...messageAgentRequest({
+        kind: "chat",
+        requestId: "7777777777777777",
+        sessionId,
+        planId,
+        sourceRevision: deriveSourceRevision(before),
+        createdAt: "2026-08-02T12:01:00.000Z",
+        body: "Summarize only this revision.",
+      }),
+      claimedFromRevision: claimedRevision,
+    };
+    expect(
+      effectiveSourceRevision({
+        request: laterChat,
+        snapshot: {
+          requests: [request, laterChat],
+          responses: [],
+          cancelledIds: [request.requestId],
+        },
+      }),
+    ).toBe(claimedRevision);
+  });
+
+  it("should carry causal ownership across package and request kinds", () => {
+    const terminalRevision = deriveSourceRevision(after);
+    const laterReply = messageAgentRequest({
+      kind: "reply",
+      requestId: "7777777777777777",
+      sessionId,
+      planId,
+      sourceRevision: deriveSourceRevision(before),
+      createdAt: "2026-08-02T12:01:00.000Z",
+      body: "Follow up behind the queued package.",
+      commentId,
+    });
+    expect(
+      effectiveSourceRevision({
+        request: laterReply,
+        snapshot: {
+          requests: [request, laterReply],
+          responses: [
+            {
+              version: 1,
+              requestId: request.requestId,
+              sessionId,
+              planId,
+              sourceRevision: terminalRevision,
+              revisionPair: {
+                fromRevision: deriveSourceRevision(before),
+                toRevision: terminalRevision,
+              },
+              createdAt: "2026-08-02T12:00:30.000Z",
+              kind: "feedback",
+              outcomes: [
+                {
+                  commentId,
+                  state: "changed",
+                  message: "Changed.",
+                },
+              ],
+            },
+          ],
+          cancelledIds: [],
+        },
+      }),
+    ).toBe(terminalRevision);
+  });
+
   it("should serialize one ordered exchange per Send-all comment", () => {
     const secondComment = {
       ...comment,

@@ -35,6 +35,7 @@ type AgentRequestBase = {
   readonly sessionId: string;
   readonly planId: string;
   readonly sourceRevision: string;
+  readonly claimedFromRevision?: string;
   readonly createdAt: string;
 };
 
@@ -277,6 +278,11 @@ const requestBase = (
     sessionId: id(value.sessionId, "sessionId"),
     planId: id(value.planId, "planId"),
     sourceRevision: sourceRevision(value.sourceRevision),
+    ...(value.claimedFromRevision === undefined
+      ? {}
+      : {
+          claimedFromRevision: sourceRevision(value.claimedFromRevision),
+        }),
     createdAt: timestamp(value.createdAt),
   };
 };
@@ -552,6 +558,13 @@ const validateStoredResponse = ({
   if (base.revisionPair.toRevision !== base.sourceRevision) {
     throw new AgentExchangeRejected(
       "A stored revision pair must end at the response revision",
+    );
+  }
+  const expectedFromRevision =
+    request.claimedFromRevision ?? request.sourceRevision;
+  if (base.revisionPair.fromRevision !== expectedFromRevision) {
+    throw new AgentExchangeRejected(
+      "A stored revision pair must begin at the request claim revision",
     );
   }
   if (request.kind === "chat") {
@@ -909,22 +922,19 @@ export const effectiveSourceRevision = ({
   readonly request: AgentRequest;
   readonly snapshot: AgentExchangeSnapshot;
 }): string => {
-  if (request.kind !== "feedback" || request.batchIndex === 0) {
-    return request.sourceRevision;
+  if (request.claimedFromRevision !== undefined) {
+    return request.claimedFromRevision;
   }
-  const previous = snapshot.requests.find(
-    (candidate) =>
-      candidate.kind === "feedback" &&
-      candidate.packageId === request.packageId &&
-      candidate.batchIndex === request.batchIndex - 1,
+  const earlierRequestIds = new Set(
+    snapshot.requests
+      .slice(0, snapshot.requests.indexOf(request))
+      .map((candidate) => candidate.requestId),
   );
-  const response =
-    previous === undefined
-      ? undefined
-      : snapshot.responses.find(
-          (candidate) => candidate.requestId === previous.requestId,
-        );
-  return response?.revisionPair.toRevision ?? request.sourceRevision;
+  return (
+    snapshot.responses
+      .filter((response) => earlierRequestIds.has(response.requestId))
+      .at(-1)?.revisionPair.toRevision ?? request.sourceRevision
+  );
 };
 
 /** Collects the original comments needed to validate a reply response. */

@@ -17,6 +17,7 @@ import {
   resolveAgentResponseRequest,
   responseTemplateFor,
   validateAgentResponseDraft,
+  writeAgentRequest,
   writeAgentResponse,
 } from "../../review/agent-exchange.js";
 import type {
@@ -364,6 +365,12 @@ const nextWork = async ({
       help: ["Run again with --wait to wait for the reviewer's next message"],
     };
   }
+  const claimedSource = await readFile(session.planPath, "utf8");
+  const claimedFromRevision = deriveSourceRevision(claimedSource);
+  if (request.claimedFromRevision !== claimedFromRevision) {
+    request = { ...request, claimedFromRevision };
+    await writeAgentRequest({ store: session.store, request });
+  }
   await writeAgentHeartbeat({
     store: session.store,
     sessionId: session.sessionId,
@@ -401,7 +408,7 @@ const nextWork = async ({
     requestId: request.requestId,
   });
   const binPath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
-  const workRevision = effectiveSourceRevision({ request, snapshot });
+  const workRevision = claimedFromRevision;
   return {
     pending: true,
     plan: session.planPath,
