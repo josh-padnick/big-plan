@@ -4309,18 +4309,9 @@ import {
       sendReply,
       outcome.key === "question" ? "Send answer" : "Send reply",
     );
-    const replyAndResolve = el("button", {
-      type: "button",
-      class:
-        "cursor-pointer rounded-sm border border-accent bg-accent px-2 py-1 text-xs font-semibold text-[var(--bg)] hover:brightness-110 active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-      "data-review-thread-reply-resolve": true,
-      text: "Reply & resolve",
-      hidden: true,
-    });
     const syncReply = () => {
       const hasReply = field.value.trim() !== "";
       sendReply.disabled = !hasReply;
-      replyAndResolve.hidden = !hasReply;
     };
     field.addEventListener("input", () => {
       if (field.value === "") threadReplyDrafts.delete(comment.id);
@@ -4335,11 +4326,6 @@ import {
     });
     sendReply.addEventListener("click", () => {
       void sendThreadReply(comment, field, sendReply);
-    });
-    replyAndResolve.addEventListener("click", async () => {
-      const sentReply = await sendThreadReply(comment, field, sendReply);
-      if (!sentReply) return;
-      await resolveThread(comment);
     });
     syncReply();
     nodes.push(
@@ -4357,16 +4343,6 @@ import {
           field,
           sendReply,
         ],
-      ),
-    );
-    nodes.push(
-      el(
-        "div",
-        {
-          class: "mt-3 flex items-center justify-end",
-          "data-review-reply-resolution": true,
-        },
-        [replyAndResolve],
       ),
     );
     return nodes;
