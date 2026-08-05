@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -8,18 +8,14 @@ import {
   appendAgentConnectionEvent,
   appendProgress,
   prepareStore,
-  readActiveDraft,
   readAgentHeartbeat,
   readAgentCancellations,
   readAgentConnectionEvents,
   readProgress,
-  readResolvedCommentIds,
   readRevisionSnapshot,
   reviewStoreFor,
   sessionHeartbeatIsFresh,
-  writeActiveDraft,
   writeAgentHeartbeat,
-  writeResolvedCommentIds,
   writeRevisionSnapshot,
   writeSessionHeartbeat,
 } from "./store.js";
@@ -48,18 +44,16 @@ describe("review store placement", () => {
       store.agentRequestDirectory,
       store.agentResponseDirectory,
       store.agentDraftDirectory,
+      store.agentClaimDirectory,
       store.agentPromptPath,
       store.revisionDirectory,
-      store.draftsPath,
-      store.activeDraftPath,
-      store.sentPath,
-      store.progressPath,
-      store.resolvedPath,
+      store.reviewerStatePath,
+      store.agentCancellationDirectory,
+      store.progressDirectory,
+      store.agentConnectionDirectory,
       store.sessionPath,
       store.heartbeatPath,
       store.agentHeartbeatPath,
-      store.agentCancellationsPath,
-      store.agentConnectionEventsPath,
     ]) {
       expect(path.startsWith(join(directory, ".big-plan"))).toBe(true);
     }
@@ -69,7 +63,7 @@ describe("review store placement", () => {
     const { planPath } = await temporaryPlan();
     const one = reviewStoreFor({ planPath, planId: "aaaaaaaaaaaaaaaa" });
     const other = reviewStoreFor({ planPath, planId: "bbbbbbbbbbbbbbbb" });
-    expect(one.draftsPath).not.toBe(other.draftsPath);
+    expect(one.reviewerStatePath).not.toBe(other.reviewerStatePath);
   });
 
   it("should refuse a plan id that would climb out of the review directory", async () => {
@@ -95,8 +89,8 @@ describe("review store request cancellations", () => {
       cancellation,
     ]);
     await writeFile(
-      store.agentCancellationsPath,
-      JSON.stringify([cancellation, { requestId: "../../bad", at: "never" }]),
+      join(store.agentCancellationDirectory, "2222222222222222.json"),
+      JSON.stringify({ requestId: "../../bad", at: "never" }),
     );
     await expect(readAgentCancellations({ store })).resolves.toEqual([
       cancellation,
@@ -115,43 +109,6 @@ describe("review store revision history", () => {
     await expect(readRevisionSnapshot({ store, revision })).resolves.toBe(
       "# First\n",
     );
-  });
-
-  it("should persist resolved threads independently of browser storage", async () => {
-    const { planPath } = await temporaryPlan();
-    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
-    await prepareStore(store);
-    await writeResolvedCommentIds({
-      store,
-      ids: ["aabbccdd", "11223344"],
-    });
-    await expect(
-      readResolvedCommentIds({
-        store,
-        validate: (value) =>
-          Array.isArray(value)
-            ? value.filter((entry) => typeof entry === "string")
-            : [],
-      }),
-    ).resolves.toEqual(["aabbccdd", "11223344"]);
-  });
-});
-
-describe("review store active draft", () => {
-  it("should round-trip the unfinished whole-plan field without trimming", async () => {
-    const { planPath } = await temporaryPlan();
-    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
-    await prepareStore(store);
-    await writeActiveDraft({
-      path: store.activeDraftPath,
-      value: "  Unfinished thought.\n",
-    });
-    expect(
-      await readActiveDraft({
-        path: store.activeDraftPath,
-        validate: (value) => (typeof value === "string" ? value : ""),
-      }),
-    ).toBe("  Unfinished thought.\n");
   });
 });
 
@@ -301,66 +258,103 @@ describe("review store connection events", () => {
     await expect(
       readAgentConnectionEvents({ store, sessionId: "agent-session" }),
     ).resolves.toEqual([
-      {
+      expect.objectContaining({
         sessionId: "agent-session",
         connected: false,
         at: "2026-08-04T17:00:00.000Z",
-      },
-      {
+      }),
+      expect.objectContaining({
         sessionId: "agent-session",
         connected: true,
         at: "2026-08-04T17:00:01.000Z",
-      },
+      }),
     ]);
-    expect(
-      (await readFile(store.agentConnectionEventsPath, "utf8"))
-        .trim()
-        .split("\n"),
-    ).toHaveLength(3);
+    expect(await readdir(store.agentConnectionDirectory)).toHaveLength(3);
   });
 });
 
 describe("review store progress relay", () => {
-  const line = (value: unknown) => `${JSON.stringify(value)}\n`;
-
-  const storeWithProgress = async (contents: string) => {
+  const progressStore = async () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
     await prepareStore(store);
-    await writeFile(store.progressPath, contents);
     return store;
   };
 
   it("should relay an event that belongs to the running session", async () => {
-    const store = await storeWithProgress(
-      line({ sessionId: "s1", seq: 1, step: "Revising", state: "live" }),
-    );
+    const store = await progressStore();
+    await appendProgress({
+      store,
+      event: {
+        eventId: "1111111111111111",
+        sessionId: "s1",
+        step: "Revising",
+        state: "live",
+        at: "2026-08-04T17:00:00.000Z",
+      },
+    });
     expect(await readProgress({ store, sessionId: "s1" })).toEqual([
-      { sessionId: "s1", seq: 1, step: "Revising", state: "live" },
+      {
+        eventId: "1111111111111111",
+        sessionId: "s1",
+        seq: 1,
+        step: "Revising",
+        state: "live",
+        at: "2026-08-04T17:00:00.000Z",
+      },
     ]);
   });
 
   it("should drop an event written for another session", async () => {
-    const store = await storeWithProgress(
-      line({ sessionId: "other", seq: 1, step: "Ready", state: "done" }),
-    );
+    const store = await progressStore();
+    await appendProgress({
+      store,
+      event: {
+        eventId: "1111111111111111",
+        sessionId: "other",
+        step: "Ready",
+        state: "done",
+      },
+    });
     expect(await readProgress({ store, sessionId: "s1" })).toEqual([]);
   });
 
-  it("should drop an event that does not advance the sequence", async () => {
-    const store = await storeWithProgress(
-      line({ sessionId: "s1", seq: 2, step: "Revising", state: "live" }) +
-        line({ sessionId: "s1", seq: 1, step: "Replayed", state: "done" }),
-    );
+  it("should derive a stable sequence when writers publish concurrently", async () => {
+    const store = await progressStore();
+    await Promise.all([
+      appendProgress({
+        store,
+        event: {
+          eventId: "1111111111111111",
+          sessionId: "s1",
+          step: "Runtime",
+          state: "live",
+          at: "2026-08-04T17:00:00.000Z",
+        },
+      }),
+      appendProgress({
+        store,
+        event: {
+          eventId: "2222222222222222",
+          sessionId: "s1",
+          step: "Agent",
+          state: "done",
+          at: "2026-08-04T17:00:00.000Z",
+        },
+      }),
+    ]);
     const events = await readProgress({ store, sessionId: "s1" });
-    expect(events.map((event) => event.step)).toEqual(["Revising"]);
+    expect(events.map((event) => event.step)).toEqual(["Runtime", "Agent"]);
+    expect(events.map((event) => event.seq)).toEqual([1, 2]);
   });
 
   it("should drop an event carrying a state the surface cannot show", async () => {
-    const store = await storeWithProgress(
-      line({
+    const store = await progressStore();
+    await writeFile(
+      join(store.progressDirectory, "1111111111111111.json"),
+      JSON.stringify({
+        eventId: "1111111111111111",
         sessionId: "s1",
-        seq: 1,
         step: "Redirect",
         state: "navigate:https://evil.example.com",
       }),
@@ -368,25 +362,39 @@ describe("review store progress relay", () => {
     expect(await readProgress({ store, sessionId: "s1" })).toEqual([]);
   });
 
-  it("should survive a hand-edited status file rather than failing the session", async () => {
-    const store = await storeWithProgress(
-      "not json at all\n" +
-        line({ sessionId: "s1", seq: 1, step: "Revising", state: "live" }),
+  it("should isolate a malformed sibling rather than failing the session", async () => {
+    const store = await progressStore();
+    await writeFile(
+      join(store.progressDirectory, "1111111111111111.json"),
+      "not json at all\n",
     );
+    await appendProgress({
+      store,
+      event: {
+        eventId: "2222222222222222",
+        sessionId: "s1",
+        step: "Revising",
+        state: "live",
+      },
+    });
     expect(await readProgress({ store, sessionId: "s1" })).toHaveLength(1);
   });
 
   it("should bound the text a relayed event can carry", async () => {
-    const store = await storeWithProgress(
-      line({
+    const store = await progressStore();
+    await appendProgress({
+      store,
+      event: {
+        eventId: "1111111111111111",
         sessionId: "s1",
-        seq: 1,
         step: "x".repeat(500),
+        detail: "y".repeat(500),
         state: "live",
-      }),
-    );
+      },
+    });
     const [event] = await readProgress({ store, sessionId: "s1" });
     expect(event?.step.length).toBe(160);
+    expect(event?.detail?.length).toBe(160);
   });
 
   it("should read back an event the runtime itself appended", async () => {
@@ -396,8 +404,8 @@ describe("review store progress relay", () => {
     await appendProgress({
       store,
       event: {
+        eventId: "1111111111111111",
         sessionId: "s1",
-        seq: 1,
         step: "Feedback package received",
         state: "done",
         requestId: "request-1",

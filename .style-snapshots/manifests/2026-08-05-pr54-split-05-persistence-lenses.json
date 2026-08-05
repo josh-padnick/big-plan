@@ -1,0 +1,432 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "feat(review): harden persistence and typed revision lenses [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "package.json",
+      "propertyDeltas": [
+        {
+          "property": "review presentation contract owned by package.json",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation",
+          "to": "PR 5 persistence and typed revision-lens presentation"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "review presentation contract owned by src/render/global.generated.ts",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation",
+          "to": "PR 5 persistence and typed revision-lens presentation"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/block-identity.test.ts",
+      "propertyDeltas": [
+        {
+          "property": "review presentation contract owned by src/render/markdown/block-identity.test.ts",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation",
+          "to": "PR 5 persistence and typed revision-lens presentation"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/block-identity.ts",
+      "propertyDeltas": [
+        {
+          "property": "review presentation contract owned by src/render/markdown/block-identity.ts",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation",
+          "to": "PR 5 persistence and typed revision-lens presentation"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/compile-markdown.ts",
+      "propertyDeltas": [
+        {
+          "property": "review presentation contract owned by src/render/markdown/compile-markdown.ts",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation",
+          "to": "PR 5 persistence and typed revision-lens presentation"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/component-pipeline/component-pipeline.test.ts",
+      "propertyDeltas": [
+        {
+          "property": "review presentation contract owned by src/render/markdown/component-pipeline/component-pipeline.test.ts",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation",
+          "to": "PR 5 persistence and typed revision-lens presentation"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/component-pipeline/component-revision-snapshot.ts",
+      "propertyDeltas": [
+        {
+          "property": "review presentation contract owned by src/render/markdown/component-pipeline/component-revision-snapshot.ts",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation",
+          "to": "PR 5 persistence and typed revision-lens presentation"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/component-pipeline/deliver.ts",
+      "propertyDeltas": [
+        {
+          "property": "review presentation contract owned by src/render/markdown/component-pipeline/deliver.ts",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation",
+          "to": "PR 5 persistence and typed revision-lens presentation"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/component-pipeline/outline-placeholder.ts",
+      "propertyDeltas": [
+        {
+          "property": "review presentation contract owned by src/render/markdown/component-pipeline/outline-placeholder.ts",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation",
+          "to": "PR 5 persistence and typed revision-lens presentation"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/prose.css",
+      "propertyDeltas": [
+        {
+          "property": "review presentation contract owned by src/render/markdown/prose.css",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation",
+          "to": "PR 5 persistence and typed revision-lens presentation"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/review-script.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "review presentation contract owned by src/render/shell/review-script.generated.ts",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation",
+          "to": "PR 5 persistence and typed revision-lens presentation"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/review.css",
+      "propertyDeltas": [
+        {
+          "property": "review presentation contract owned by src/render/shell/review.css",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation",
+          "to": "PR 5 persistence and typed revision-lens presentation"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/shell.ts",
+      "propertyDeltas": [
+        {
+          "property": "review presentation contract owned by src/render/shell/shell.ts",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation",
+          "to": "PR 5 persistence and typed revision-lens presentation"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__document__desktop__dark.png",
+      "changedPixels": 1668810,
+      "before": {
+        "width": 872,
+        "height": 11470,
+        "sha256": "dc9266744eb4cc7556bd03d7217033df4bebf40afc3d061af61b31aa861b8cba"
+      },
+      "after": {
+        "width": 872,
+        "height": 11450,
+        "sha256": "7595386ad247d9185a505356a359407f22a983e8727f1446baa005b688d1b690"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for components__document__desktop__dark.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (dc9266744eb4cc7556bd03d7217033df4bebf40afc3d061af61b31aa861b8cba)",
+          "to": "PR 5 persistence and typed revision-lens presentation (7595386ad247d9185a505356a359407f22a983e8727f1446baa005b688d1b690)"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__light.png",
+      "changedPixels": 1672261,
+      "before": {
+        "width": 872,
+        "height": 11470,
+        "sha256": "7a1a6efeb99c8981d8f4679ad58a4f4384d2fdf6055ff5f22c769f7647b95d36"
+      },
+      "after": {
+        "width": 872,
+        "height": 11450,
+        "sha256": "c59b28858364089227afe074f67db4c6276eb99452e54c4b4bac4fde4f78b71f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for components__document__desktop__light.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (7a1a6efeb99c8981d8f4679ad58a4f4384d2fdf6055ff5f22c769f7647b95d36)",
+          "to": "PR 5 persistence and typed revision-lens presentation (c59b28858364089227afe074f67db4c6276eb99452e54c4b4bac4fde4f78b71f)"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__dark.png",
+      "changedPixels": 908328,
+      "before": {
+        "width": 350,
+        "height": 14312,
+        "sha256": "f8a0a34d896217cfe81f51a7b30ee2827051cc85bd08689f9863bd7670923bbc"
+      },
+      "after": {
+        "width": 350,
+        "height": 14292,
+        "sha256": "a51840a9756c59f2c4b83d710f6c310a16f4b4efbddcb49c2ea29ad957c25842"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for components__document__phone__dark.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (f8a0a34d896217cfe81f51a7b30ee2827051cc85bd08689f9863bd7670923bbc)",
+          "to": "PR 5 persistence and typed revision-lens presentation (a51840a9756c59f2c4b83d710f6c310a16f4b4efbddcb49c2ea29ad957c25842)"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__light.png",
+      "changedPixels": 909976,
+      "before": {
+        "width": 350,
+        "height": 14312,
+        "sha256": "a9c1bb0e4ebcb11d982aa6ac16d3cbfcd0eccec812007dfbb8eac9d258bb059e"
+      },
+      "after": {
+        "width": 350,
+        "height": 14292,
+        "sha256": "a6777f6469f446ad8207a3173b08324fa5c6878d573f549685c7e56e4fb6d08f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for components__document__phone__light.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (a9c1bb0e4ebcb11d982aa6ac16d3cbfcd0eccec812007dfbb8eac9d258bb059e)",
+          "to": "PR 5 persistence and typed revision-lens presentation (a6777f6469f446ad8207a3173b08324fa5c6878d573f549685c7e56e4fb6d08f)"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__dark.png",
+      "changedPixels": 26445,
+      "before": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "4c6825ffa9bc984a7afabb891b32a0ead130a05df5378a01e6526f9fc49664e6"
+      },
+      "after": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "6fc25497171f1740979b6b8de49f4e99adf6b18f1d2f7bae551a3bf047927b4e"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for components__maximized-code__desktop__dark.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (4c6825ffa9bc984a7afabb891b32a0ead130a05df5378a01e6526f9fc49664e6)",
+          "to": "PR 5 persistence and typed revision-lens presentation (6fc25497171f1740979b6b8de49f4e99adf6b18f1d2f7bae551a3bf047927b4e)"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__light.png",
+      "changedPixels": 26445,
+      "before": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "671aea6b720d32a3edf8e14846977aa58669c5f1471123a74ffa7d55e05b1742"
+      },
+      "after": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "c27f4e3df88c67c362e77fc7da8ad213e7a55adf3eccd8bf9e4a8499eafa7a22"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for components__maximized-code__desktop__light.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (671aea6b720d32a3edf8e14846977aa58669c5f1471123a74ffa7d55e05b1742)",
+          "to": "PR 5 persistence and typed revision-lens presentation (c27f4e3df88c67c362e77fc7da8ad213e7a55adf3eccd8bf9e4a8499eafa7a22)"
+        }
+      ]
+    },
+    {
+      "capture": "components__toolbar-over-slide-selector__desktop__dark.png",
+      "changedPixels": 2538,
+      "before": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "e9a5c0888ef0fa7fe5f7b1990174cfb492900b9a096607b57c57cc2892ca0e1d"
+      },
+      "after": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "182087bfb055054e687b9ac96929415982007838957046117dcc091de2658486"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for components__toolbar-over-slide-selector__desktop__dark.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (e9a5c0888ef0fa7fe5f7b1990174cfb492900b9a096607b57c57cc2892ca0e1d)",
+          "to": "PR 5 persistence and typed revision-lens presentation (182087bfb055054e687b9ac96929415982007838957046117dcc091de2658486)"
+        }
+      ]
+    },
+    {
+      "capture": "components__toolbar-over-slide-selector__desktop__light.png",
+      "changedPixels": 3013,
+      "before": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "5b798a2994dff7e6244466ec744b0972bf04394339dc623d7bc40f86018d955f"
+      },
+      "after": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "8c038a35688e5866b6d99d46b97c2e1e195dc37fcbc7951d1806e46bdd0594ac"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for components__toolbar-over-slide-selector__desktop__light.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (5b798a2994dff7e6244466ec744b0972bf04394339dc623d7bc40f86018d955f)",
+          "to": "PR 5 persistence and typed revision-lens presentation (8c038a35688e5866b6d99d46b97c2e1e195dc37fcbc7951d1806e46bdd0594ac)"
+        }
+      ]
+    },
+    {
+      "capture": "components__whole-slide-comment-right__desktop__dark.png",
+      "changedPixels": 10940,
+      "before": {
+        "width": 273,
+        "height": 233,
+        "sha256": "42992b4201dd661e94636e3271375909f236003a1443d8c944abfec44055daf7"
+      },
+      "after": {
+        "width": 251,
+        "height": 233,
+        "sha256": "2233409e3a0b83d1eaedfecf5e9275acb1fc138a890471f5aa582f9ffdc12166"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for components__whole-slide-comment-right__desktop__dark.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (42992b4201dd661e94636e3271375909f236003a1443d8c944abfec44055daf7)",
+          "to": "PR 5 persistence and typed revision-lens presentation (2233409e3a0b83d1eaedfecf5e9275acb1fc138a890471f5aa582f9ffdc12166)"
+        }
+      ]
+    },
+    {
+      "capture": "components__whole-slide-comment-right__desktop__light.png",
+      "changedPixels": 11023,
+      "before": {
+        "width": 273,
+        "height": 233,
+        "sha256": "6efd9ab4b23700e6ec9577e1d38ae5a33a48f87f59dc134c33f74c2dd4944e00"
+      },
+      "after": {
+        "width": 251,
+        "height": 233,
+        "sha256": "dcb0b23f846822fe43aaf88c59ce394c70b89fbdf970796dd6026c0bb20e9d14"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for components__whole-slide-comment-right__desktop__light.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (6efd9ab4b23700e6ec9577e1d38ae5a33a48f87f59dc134c33f74c2dd4944e00)",
+          "to": "PR 5 persistence and typed revision-lens presentation (dcb0b23f846822fe43aaf88c59ce394c70b89fbdf970796dd6026c0bb20e9d14)"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__dark.png",
+      "changedPixels": 49,
+      "before": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "c231e1551e4b1fc9c6c0cdf36e4c7e116c0025cd8c4e5ad813b7ef023c9b7621"
+      },
+      "after": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "35a640fbc3cbf6faabf8daa1f4870fb5cec746d66aaabfbb5b77483fdfd1a59c"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for deck__document__desktop__dark.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (c231e1551e4b1fc9c6c0cdf36e4c7e116c0025cd8c4e5ad813b7ef023c9b7621)",
+          "to": "PR 5 persistence and typed revision-lens presentation (35a640fbc3cbf6faabf8daa1f4870fb5cec746d66aaabfbb5b77483fdfd1a59c)"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__light.png",
+      "changedPixels": 49,
+      "before": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "0b7594b3657fee9a039f6b960a506da3063760f55f0ac0d7c7dcdd8e39549096"
+      },
+      "after": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "f460772ef173ad40b5645e7f0e361631379df274d53c47cad8cc3794989eb43a"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for deck__document__desktop__light.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (0b7594b3657fee9a039f6b960a506da3063760f55f0ac0d7c7dcdd8e39549096)",
+          "to": "PR 5 persistence and typed revision-lens presentation (f460772ef173ad40b5645e7f0e361631379df274d53c47cad8cc3794989eb43a)"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__dark.png",
+      "changedPixels": 49,
+      "before": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "941cc451ccf11b3657eb7931edaef7abe9f09991495075ac16d49788ae430d89"
+      },
+      "after": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "bfebdcc44da1a83cb41107e12533af4e2dd4552fa5fb850e55d4aa325ad15bc9"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for deck__document__phone__dark.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (941cc451ccf11b3657eb7931edaef7abe9f09991495075ac16d49788ae430d89)",
+          "to": "PR 5 persistence and typed revision-lens presentation (bfebdcc44da1a83cb41107e12533af4e2dd4552fa5fb850e55d4aa325ad15bc9)"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__light.png",
+      "changedPixels": 49,
+      "before": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "24a8c98e915f0fbfdb98366a278d09c9de104ae45429c6ea72408ef89d306a1d"
+      },
+      "after": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "f06c3888205860b813ec2b343c62404444089a9b1e42aacb4579cb2320c981ad"
+      },
+      "propertyDeltas": [
+        {
+          "property": "exact rendered pixels for deck__document__phone__light.png",
+          "from": "PR 4 Tailwind ownership and causal-diff presentation (24a8c98e915f0fbfdb98366a278d09c9de104ae45429c6ea72408ef89d306a1d)",
+          "to": "PR 5 persistence and typed revision-lens presentation (f06c3888205860b813ec2b343c62404444089a9b1e42aacb4579cb2320c981ad)"
+        }
+      ]
+    }
+  ]
+}

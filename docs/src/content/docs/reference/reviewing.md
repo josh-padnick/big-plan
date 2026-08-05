@@ -68,7 +68,10 @@ An expanded thread carries a compact icon toolbar in its top bar:
 - **Resolve** retires a concern you no longer need to see. Resolved threads stay
   findable and clickable in the sidebar after reload; **Unresolve** returns one
   to its prior outcome group and restores its plan anchor.
-- **Revert** appears after a changed outcome. Its confirmation sends the same coding-agent session a request to revert all plan changes made for that thread.
+- **Revert** appears after a changed outcome. Its confirmation applies the
+  inverse of that thread's stored revision pair directly to the plan, resolves
+  the thread, and notifies the connected agent so its context stays current.
+  Reverting does not create another agent request or approval cycle.
 
 A **Changed** response groups contiguous changed blocks into literal places and
 lists every place attributed to that comment.
@@ -77,8 +80,11 @@ The selected block temporarily becomes an old/new diff in the document, and a
 floating stepper moves through the places with the current slide in its
 position label. The launching control flips to **Hide changes** while the lens
 is open; that control, **Show current text**, or `Escape` exits without changing
-the authoritative plan. Older diffs say **since revised again** when their
-new side is no longer the plan's current revision.
+the authoritative plan. Typed components retain their native visual structure
+on both sides of the lens, so a changed diagram, table, code figure, or other
+component remains readable rather than collapsing into concatenated text.
+Older diffs say **since revised again** when their new side is no longer the
+plan's current revision.
 
 When a plan-wide Chat response advances the source revision, its agent turn
 gets the same computed change vocabulary without relying on agent-authored
@@ -166,17 +172,70 @@ A comment is a request the agent considers while revising, never an instruction 
 
 ## Where your review lives
 
-Everything the runtime writes sits in a `.big-plan/` directory beside the plan, created readable only by your own account and ignored by version control by default:
+The MDX plan on disk remains authoritative.
+Reviewing never moves that custody into the browser or into a database.
+Everything the runtime adds sits in a `.big-plan/` directory beside the plan,
+created readable only by your own account and ignored by version control by
+default.
 
-| What                                     | Where                               |
-| ---------------------------------------- | ----------------------------------- |
-| Drafts, active field, and sent comments  | `.big-plan/review/<plan-id>/`       |
-| Agent requests, responses, and drafts    | `.big-plan/review/<plan-id>/agent/` |
-| Feedback packages and briefs             | `.big-plan/feedback/`               |
-| The running session's descriptor         | `.big-plan/session.json`            |
-| The running session's liveness heartbeat | `.big-plan/session-heartbeat.json`  |
+| What                                             | Where                                            |
+| ------------------------------------------------ | ------------------------------------------------ |
+| Staged drafts, active field, resolutions         | `.big-plan/review/<plan-id>/reviewer-state.json` |
+| Immutable source revisions                       | `.big-plan/review/<plan-id>/revisions/`          |
+| Agent requests, responses, claims, cancellations | `.big-plan/review/<plan-id>/agent/`              |
+| Agent progress, connection history, and presence | `.big-plan/review/<plan-id>/agent/`              |
+| Feedback packages and human-readable briefs      | `.big-plan/feedback/`                            |
+| The running session's descriptor                 | `.big-plan/session.json`                         |
+| The running session's liveness heartbeat         | `.big-plan/session-heartbeat.json`               |
 
-Review state is namespaced by an id the renderer derives from the plan's own path, so two plans never share drafts even when they share a title.
+Review state is namespaced by an id derived from the plan's resolved path, so
+two plans never share drafts even when they share a title.
+The mutable reviewer snapshot has a monotonically increasing revision and is
+replaced atomically.
+Sent-comment history is not duplicated there: it is reconstructed from the
+validated immutable agent requests that own those comments.
+Requests, responses, source revisions, feedback packages, and activity events
+are written once under generated identifiers rather than updated in place.
+
+### Restart and interrupted-write recovery
+
+Closing and restarting `big-plan review` for the same plan reloads the staged
+drafts, active field, resolutions, sent threads, agent exchange, and activity
+from `.big-plan/`.
+The browser also keeps a local recovery mirror before asking the runtime to
+save, so an unsent draft survives a tab reload or a temporarily unavailable
+runtime and is adopted when that plan next opens through `big-plan review`.
+Reader-only preferences such as collapsed sections remain browser-local and
+are not part of the durable conversation record.
+
+Feedback submission commits durable facts before it removes draft ownership.
+If the runtime is interrupted between those steps, reopening reconciles the
+records by their stable comment and request ids: each comment returns either
+staged or sent exactly once, and an agent request is never duplicated.
+An unreferenced source revision or feedback package is harmless and may remain
+for diagnosis.
+
+The runtime validates everything it reads.
+One malformed immutable request, response, cancellation, or activity record is
+ignored without hiding independent valid records.
+The mutable `reviewer-state.json` is different because it is the single
+authority for staged work: if it is missing, the review starts at revision
+zero; if it is malformed, startup stops with its exact path instead of silently
+pretending the review is empty.
+Preserve that file for diagnosis, then restore a known-good copy or explicitly
+remove it only when you intend to discard its staged state.
+
+### Multiple tabs and save conflicts
+
+Each save includes the reviewer revision that tab read.
+If another tab has already advanced it, the runtime rejects the stale write
+instead of choosing a winner.
+The browser reloads the current validated snapshot and merges drafts with
+different ids.
+When both tabs changed the same comment, the stale tab keeps its local text as
+unsaved work, marks that comment with a conflict, and asks you to review it and
+save again.
+No conflicting comment body is silently overwritten.
 
 ## Trust boundaries
 

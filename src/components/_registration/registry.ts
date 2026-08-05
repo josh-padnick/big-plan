@@ -20,34 +20,37 @@ import { QUICK_SUMMARY_COMPONENT_DEFINITION } from "../quick-summary/definition.
 import { QUICK_DECISION_COMPONENT_DEFINITION } from "../quick-decision/definition.js";
 import { TABLE_OF_CONTENTS_COMPONENT_DEFINITION } from "../table-of-contents/definition.js";
 import { WIREFRAME_COMPONENT_DEFINITION } from "../wireframe/definition.js";
-import type { ComponentDefinition } from "./define-component.js";
+import type { ComponentDefinitionRuntime } from "./define-component.js";
 
-export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
-  {
-    Callout: CALLOUT_COMPONENT_DEFINITION,
-    CodeDiff: CODE_DIFF_COMPONENT_DEFINITION,
-    CodeSnippet: CODE_SNIPPET_COMPONENT_DEFINITION,
-    DataTable: DATA_TABLE_COMPONENT_DEFINITION,
-    DatabaseTableSchema: DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION,
-    Decision: DECISION_COMPONENT_DEFINITION,
-    DecisionAnalysis: DECISION_ANALYSIS_COMPONENT_DEFINITION,
-    FileTree: FILE_TREE_COMPONENT_DEFINITION,
-    FileTreeDiff: FILE_TREE_DIFF_COMPONENT_DEFINITION,
-    FlowDiagram: FLOW_DIAGRAM_COMPONENT_DEFINITION,
-    GraphqlOperation: GRAPHQL_OPERATION_COMPONENT_DEFINITION,
-    GrpcMethod: GRPC_METHOD_COMPONENT_DEFINITION,
-    HttpEndpoint: HTTP_ENDPOINT_COMPONENT_DEFINITION,
-    Part: PART_COMPONENT_DEFINITION,
-    QuickSummary: QUICK_SUMMARY_COMPONENT_DEFINITION,
-    QuickDecision: QUICK_DECISION_COMPONENT_DEFINITION,
-    TableOfContents: TABLE_OF_CONTENTS_COMPONENT_DEFINITION,
-    Wireframe: WIREFRAME_COMPONENT_DEFINITION,
-  };
+export const COMPONENT_REGISTRY = {
+  Callout: CALLOUT_COMPONENT_DEFINITION,
+  CodeDiff: CODE_DIFF_COMPONENT_DEFINITION,
+  CodeSnippet: CODE_SNIPPET_COMPONENT_DEFINITION,
+  DataTable: DATA_TABLE_COMPONENT_DEFINITION,
+  DatabaseTableSchema: DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION,
+  Decision: DECISION_COMPONENT_DEFINITION,
+  DecisionAnalysis: DECISION_ANALYSIS_COMPONENT_DEFINITION,
+  FileTree: FILE_TREE_COMPONENT_DEFINITION,
+  FileTreeDiff: FILE_TREE_DIFF_COMPONENT_DEFINITION,
+  FlowDiagram: FLOW_DIAGRAM_COMPONENT_DEFINITION,
+  GraphqlOperation: GRAPHQL_OPERATION_COMPONENT_DEFINITION,
+  GrpcMethod: GRPC_METHOD_COMPONENT_DEFINITION,
+  HttpEndpoint: HTTP_ENDPOINT_COMPONENT_DEFINITION,
+  Part: PART_COMPONENT_DEFINITION,
+  QuickSummary: QUICK_SUMMARY_COMPONENT_DEFINITION,
+  QuickDecision: QUICK_DECISION_COMPONENT_DEFINITION,
+  TableOfContents: TABLE_OF_CONTENTS_COMPONENT_DEFINITION,
+  Wireframe: WIREFRAME_COMPONENT_DEFINITION,
+} as const satisfies Readonly<Record<string, ComponentDefinitionRuntime>>;
 
-export type ComponentRegistry = Readonly<Record<string, ComponentDefinition>>;
+export type ComponentRegistry = Readonly<
+  Record<string, ComponentDefinitionRuntime>
+>;
 
 export type ScopedParentDefinition =
-  ComponentDefinition | ScopedChildDefinition;
+  ComponentDefinitionRuntime | ScopedChildDefinition;
+
+export type RegisteredComponentName = keyof typeof COMPONENT_REGISTRY;
 
 export const REGISTERED_COMPONENT_NAMES: ReadonlySet<string> = new Set(
   Object.keys(COMPONENT_REGISTRY),
@@ -60,7 +63,7 @@ export const definitionFor = ({
 }: {
   readonly name: string | null;
   readonly registry: ComponentRegistry;
-}): ComponentDefinition | undefined =>
+}): ComponentDefinitionRuntime | undefined =>
   name !== null && Object.hasOwn(registry, name) ? registry[name] : undefined;
 
 /** Finds one scoped child definition declared by its direct parent. */

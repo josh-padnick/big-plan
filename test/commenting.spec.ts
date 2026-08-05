@@ -199,3 +199,153 @@ test("should comment on a slide and a passage, then revise before sending", asyn
     await expect(rows).toHaveCount(1);
   });
 });
+
+test("should offer comments from nested sub-slide icons and text selections", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(deckViewerUrl);
+  const subSlide = page.locator("[data-subslide]").first();
+  const selector = subSlide.locator(":scope > [data-review-slide-selector]");
+  const compose = page.locator("[data-review-compose]");
+  const affordance = page.locator("[data-review-affordance]");
+
+  await test.step("the nested selector keeps complete interaction states in both themes", async () => {
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme });
+      await selector.hover();
+      await expect
+        .poll(() => selector.evaluate((node) => node.matches(":hover")))
+        .toBe(true);
+
+      await selector.focus();
+      const focusState = await selector.evaluate((node) => {
+        const style = getComputedStyle(node);
+        return {
+          focused: node.matches(":focus-visible"),
+          outlineStyle: style.outlineStyle,
+          outlineWidth: style.outlineWidth,
+        };
+      });
+      expect(focusState.focused).toBe(true);
+      expect(focusState.outlineStyle).not.toBe("none");
+      expect(focusState.outlineWidth).not.toBe("0px");
+
+      const box = await selector.boundingBox();
+      if (box === null) throw new Error("The nested selector has no hit box");
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await expect
+        .poll(() => selector.evaluate((node) => node.matches(":active")))
+        .toBe(true);
+      await page.mouse.up();
+    }
+  });
+
+  await test.step("the nested selector owns an addressable sub-slide", async () => {
+    await expect(subSlide.locator("[data-block-id]")).not.toHaveCount(0);
+    await expect(selector).toBeVisible();
+    const geometry = await selector.evaluate((node) => {
+      const slide = node.closest("[data-slide]");
+      if (slide === null) return null;
+      const slideRect = slide.getBoundingClientRect();
+      const selectorRect = node.getBoundingClientRect();
+      const kickerRect = slide
+        .querySelector("[data-slide-kicker]")
+        ?.getBoundingClientRect();
+      const toggleRect = slide
+        .querySelector(
+          ":scope > [data-collapse-header] > [data-collapse-toggle]",
+        )
+        ?.getBoundingClientRect();
+      return {
+        gap: slideRect.left - selectorRect.right,
+        gapToKicker:
+          kickerRect === undefined ? -1 : kickerRect.left - selectorRect.right,
+        overlapsToggle:
+          toggleRect !== undefined &&
+          selectorRect.left < toggleRect.right &&
+          selectorRect.right > toggleRect.left &&
+          selectorRect.top < toggleRect.bottom &&
+          selectorRect.bottom > toggleRect.top,
+        topDelta: selectorRect.top - slideRect.top,
+      };
+    });
+    expect(geometry?.gapToKicker).toBeGreaterThanOrEqual(0);
+    expect(geometry?.gapToKicker).toBeLessThanOrEqual(8);
+    expect(geometry?.overlapsToggle).toBe(false);
+    expect(geometry?.topDelta).toBeGreaterThanOrEqual(5);
+    expect(geometry?.topDelta).toBeLessThanOrEqual(8);
+    await selector.scrollIntoViewIfNeeded();
+    const before = await subSlide.evaluate((slide) => {
+      const title = document.querySelector("h1");
+      const article = document.querySelector("article");
+      const slideRect = slide.getBoundingClientRect();
+      return {
+        articleLeft: article?.getBoundingClientRect().left ?? -1,
+        bodyPaddingRight: getComputedStyle(document.body).paddingRight,
+        scrollY: window.scrollY,
+        slideLeft: slideRect.left,
+        slideTop: slideRect.top,
+        titleLeft: title?.getBoundingClientRect().left ?? -1,
+      };
+    });
+    await selector.click();
+    await expect(compose).toBeVisible();
+    await expect(compose).toHaveAttribute(
+      "data-review-compose-placement",
+      "floating",
+    );
+    await expect(page.locator("html")).not.toHaveAttribute(
+      "data-review-floating",
+    );
+    await expect
+      .poll(() =>
+        subSlide.evaluate((slide) => {
+          const title = document.querySelector("h1");
+          const article = document.querySelector("article");
+          const slideRect = slide.getBoundingClientRect();
+          return {
+            articleLeft: article?.getBoundingClientRect().left ?? -1,
+            bodyPaddingRight: getComputedStyle(document.body).paddingRight,
+            scrollY: window.scrollY,
+            slideLeft: slideRect.left,
+            slideTop: slideRect.top,
+            titleLeft: title?.getBoundingClientRect().left ?? -1,
+          };
+        }),
+      )
+      .toEqual(before);
+    await expect(subSlide).toHaveAttribute(
+      "data-review-slide-highlight",
+      "active",
+    );
+    await page.getByRole("button", { name: "Cancel" }).click();
+  });
+
+  await test.step("selected sub-slide text exposes the comment affordance", async () => {
+    const target = subSlide.locator("[data-block-kind='list'] li").first();
+    await target.evaluate((node) => {
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+      let text = walker.nextNode();
+      while (text !== null && (text.textContent?.trim().length ?? 0) === 0) {
+        text = walker.nextNode();
+      }
+      if (text === null) throw new Error("The nested block has no text");
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, Math.min(12, text.textContent?.length ?? 0));
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await expect(affordance).toHaveAttribute(
+      "aria-label",
+      "Comment on the selected text",
+    );
+    await affordance.click();
+    await expect(compose).toBeVisible();
+  });
+});

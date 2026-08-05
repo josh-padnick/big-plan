@@ -19,6 +19,10 @@ import {
   type ScopedParentDefinition,
 } from "../../../components/_registration/registry.js";
 import { COMPONENT_NAME_ATTRIBUTE } from "./component-name.js";
+import {
+  COMPONENT_INSTANCE_ATTRIBUTE,
+  type PendingComponentRevision,
+} from "./component-revision-snapshot.js";
 import { createOutlinePlaceholder } from "./outline-placeholder.js";
 import type { DeferredOutlinePresentations } from "./outline-placeholder.js";
 import { reactToHast } from "./react-hast-adapter.js";
@@ -43,6 +47,7 @@ type ComponentDelivery =
       readonly adapt: ReactHastAdapter;
       readonly collected?: Array<CollectedComponentModel>;
       readonly deferOutline?: DeferredOutlinePresentations;
+      readonly revisions?: Map<string, PendingComponentRevision>;
     }
   | {
       readonly kind: "model";
@@ -136,6 +141,7 @@ const renderFlowElement = ({
   ids,
   delivery,
   materializeModel,
+  revisionOwned,
 }: {
   readonly node: MdxJsxFlowElement;
   readonly diagnostics: DiagnosticCollector;
@@ -143,6 +149,7 @@ const renderFlowElement = ({
   readonly ids: ComponentIdAllocator;
   readonly delivery: ComponentDelivery;
   readonly materializeModel: boolean;
+  readonly revisionOwned: boolean;
 }): Element | undefined => {
   const name = node.name;
   const definition = definitionFor({ name, registry });
@@ -164,6 +171,7 @@ const renderFlowElement = ({
     // presentation inside its parent body. Top-level model entries stop
     // before adaptation.
     materializeModels: delivery.kind === "model",
+    revisionOwned: false,
   });
   if (definition === undefined) {
     return undefined;
@@ -176,6 +184,24 @@ const renderFlowElement = ({
     diagnostics,
     ids,
   });
+  const revisionInstance =
+    delivery.kind === "html" &&
+    delivery.revisions !== undefined &&
+    revisionOwned &&
+    name !== null
+      ? `component-${delivery.revisions.size + 1}`
+      : undefined;
+  if (
+    revisionInstance !== undefined &&
+    delivery.kind === "html" &&
+    delivery.revisions !== undefined &&
+    name !== null
+  ) {
+    delivery.revisions.set(revisionInstance, {
+      component: name,
+      materialize: compiled.materializeRevision,
+    });
+  }
   if (name !== null && delivery.collected !== undefined) {
     delivery.collected.push({
       component: name,
@@ -195,6 +221,9 @@ const renderFlowElement = ({
   const named = (element: Element | undefined): Element | undefined => {
     if (element !== undefined && name !== null) {
       element.properties[COMPONENT_NAME_ATTRIBUTE] = name;
+      if (revisionInstance !== undefined) {
+        element.properties[COMPONENT_INSTANCE_ATTRIBUTE] = revisionInstance;
+      }
     }
     return element;
   };
@@ -211,6 +240,9 @@ const renderFlowElement = ({
       index: delivery.deferOutline.length - 1,
       marker: compiled.outline.marker,
       ...(name === null ? {} : { component: name }),
+      ...(revisionInstance === undefined
+        ? {}
+        : { componentInstance: revisionInstance }),
     });
   }
   const rendered = named(delivery.adapt(compiled.presentation()));
@@ -233,6 +265,7 @@ const renderChildren = ({
   ids,
   delivery,
   materializeModels,
+  revisionOwned,
 }: {
   readonly parent: ParentNode;
   readonly scopedDefinitions?: ScopedParentDefinition["scopedChildren"];
@@ -241,6 +274,7 @@ const renderChildren = ({
   readonly ids: ComponentIdAllocator;
   readonly delivery: ComponentDelivery;
   readonly materializeModels: boolean;
+  readonly revisionOwned: boolean;
 }): ReadonlyArray<ScopedChild> => {
   const scopedChildren: Array<ScopedChild> = [];
   let index = 0;
@@ -268,6 +302,7 @@ const renderChildren = ({
         ids,
         delivery,
         materializeModels,
+        revisionOwned: false,
       });
       scopedChildren.push({
         name: childName,
@@ -289,6 +324,7 @@ const renderChildren = ({
         ids,
         delivery,
         materializeModels,
+        revisionOwned,
       });
     }
     if (child.type === "mdxJsxFlowElement") {
@@ -299,6 +335,7 @@ const renderChildren = ({
         ids,
         delivery,
         materializeModel: materializeModels,
+        revisionOwned,
       });
       parent.children.splice(
         index,
@@ -351,6 +388,7 @@ export const rehypeRenderComponents =
     models,
     collectModels,
     deferOutline,
+    revisions,
     adapt = reactToHast,
   }: {
     readonly diagnostics: DiagnosticCollector;
@@ -358,6 +396,7 @@ export const rehypeRenderComponents =
     readonly models?: Array<CollectedComponentModel>;
     readonly collectModels?: Array<CollectedComponentModel>;
     readonly deferOutline?: DeferredOutlinePresentations;
+    readonly revisions?: Map<string, PendingComponentRevision>;
     readonly adapt?: ReactHastAdapter;
   }) =>
   (tree: Root): void => {
@@ -373,6 +412,7 @@ export const rehypeRenderComponents =
       registry,
       ids: createComponentIdAllocator({ reservedIds }),
       materializeModels: false,
+      revisionOwned: true,
       delivery:
         models === undefined
           ? {
@@ -382,6 +422,7 @@ export const rehypeRenderComponents =
                 ? {}
                 : { collected: collectModels }),
               ...(deferOutline === undefined ? {} : { deferOutline }),
+              ...(revisions === undefined ? {} : { revisions }),
             }
           : { kind: "model", collected: models, adapt },
     });

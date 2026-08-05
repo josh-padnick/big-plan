@@ -5,6 +5,7 @@ import type { ScopedChildDefinition } from "../_authoring/contract.js";
 import { compileFlowDiagramComponent } from "./compile.js";
 import { FlowDiagram } from "./view.js";
 import { defineComponent } from "../_registration/define-component.js";
+import { defineRevisionAdapter } from "../_registration/revision-adapter.js";
 
 // A node body is the one-line relationship explanation; anything with
 // structure belongs in the surrounding slide, not inside a card.
@@ -59,5 +60,6 @@ const edge: ScopedChildDefinition = {
 export const FLOW_DIAGRAM_COMPONENT_DEFINITION = defineComponent({
   compile: compileFlowDiagramComponent,
   view: FlowDiagram,
+  revision: defineRevisionAdapter({ view: FlowDiagram }),
   scopedChildren: { Stage: stage, Edge: edge },
 });

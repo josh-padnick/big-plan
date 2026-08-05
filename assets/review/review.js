@@ -9,8 +9,9 @@
 //
 //  1. Reviewer text, quoted plan text, and agent progress text are DATA.
 //     Everything user- or agent-supplied reaches the page through textContent
-//     or a value property. This file never assigns innerHTML and never builds
-//     markup from a string.
+//     or a value property. The sole string-to-markup seam accepts only the
+//     server compiler's inert component revision snapshots, validates their
+//     root and every descendant, and never accepts reviewer or agent strings.
 //  2. The session token travels in a header, never in a URL, so it stays out
 //     of history, referrers, and any log that records paths.
 //  3. Nothing leaves the machine. Every request is a same-origin path against
@@ -35,10 +36,16 @@ import { UNDO_2_ICON } from "../../src/icons/lucide/undo-2.js";
 import { X_ICON } from "../../src/icons/lucide/x.js";
 import {
   deriveAgentIndicator,
+  deriveThreadOutcomeGroup,
   deriveThreadStatus,
   sessionQuietMs,
 } from "../../src/review/thread-status.js";
+import { deriveCurrentAgentActivity } from "../../src/review/agent-activity.js";
 import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
+import {
+  createInitialReviewState,
+  createReviewStateStore,
+} from "../../src/review/browser-state.js";
 import {
   commentTimeLabel,
   compactDurationLabel,
@@ -309,32 +316,34 @@ import { createToastManager } from "./toast.js";
 
   // ------------------------------------------------------------------- state
 
-  // Drafts are the reviewer's, unsent. Sent comments are kept for the session
-  // so "I know the agent has it" survives a scroll away from the tray.
-  let drafts = [];
-  let sent = [];
+  // Durable workflow collections move only through named state actions. This
+  // adapter keeps the existing rendering code reading familiar local names;
+  // DOM, selection, geometry, timers, and expansion state remain local below.
+  const reviewStateStore = createReviewStateStore(createInitialReviewState());
+  let drafts;
+  let sent;
   let editingId = null;
   let composeTarget = null;
   let pendingSelection = null;
-  let activeDraft = "";
-  let composeDrafts = {};
-  let threadReplies = {};
-  let planChatMessages = [];
-  let agentRequests = [];
-  let agentResponses = [];
-  let agentCancelledIds = [];
-  let agentConnected = false;
-  let agentHeartbeatAt = 0;
-  let agentSessionState = null;
-  let agentConnectionLog = [];
-  let agentPlanPath = "";
-  let agentCommand = "";
-  let agentRecoveryPrompt = "";
-  let sourceRevision = "";
+  let activeDraft;
+  let composeDrafts;
+  let threadReplies;
+  let planChatMessages;
+  let agentRequests;
+  let agentResponses;
+  let agentCancelledIds;
+  let agentConnected;
+  let agentHeartbeatAt;
+  let agentConnectionLog;
+  let agentPlanPath;
+  let agentCommand;
+  let agentRecoveryPrompt;
+  let sourceRevision;
+  let reviewerRevision;
   let progressSeq = 0;
   let liveProgressSeq = 0;
   let progressTimer = null;
-  let progressEvents = [];
+  let progressEvents;
   let runtimeConfirmed = false;
   let deleteCandidateId = null;
   let revertCandidateId = null;
@@ -347,70 +356,150 @@ import { createToastManager } from "./toast.js";
   const expandedCommentIds = new Set();
   const expandedThreadIds = new Set();
   const minimizedDraftIds = new Set();
-  const resolvedCommentIds = new Set();
+  let resolvedCommentIds;
   const threadReplyDrafts = new Map();
   // Honest in-flight and failure states: a comment mid-submit renders as
   // sending, a failed submit renders its error on the card, and the agent's
   // availability is derived rather than assumed.
-  const submittingIds = new Set();
-  const submitErrorById = new Map();
+  let submittingIds;
+  let submitErrorById;
   const requestSeenAt = new Map();
+
+  // Rebinds read aliases after each immutable transition. No workflow caller
+  // mutates these collections directly.
+  const syncReviewState = () => {
+    const state = reviewStateStore.getState();
+    drafts = state.drafts;
+    sent = state.sent;
+    activeDraft = state.activeDraft;
+    composeDrafts = state.composeDrafts;
+    threadReplies = state.threadReplies;
+    planChatMessages = state.planChatMessages;
+    agentRequests = state.agent.requests;
+    agentResponses = state.agent.responses;
+    agentCancelledIds = state.agent.cancelledIds;
+    agentConnected = state.agent.connected;
+    agentHeartbeatAt = state.agent.heartbeatAt;
+    agentConnectionLog = state.agent.connectionLog;
+    agentPlanPath = state.agent.planPath;
+    agentCommand = state.agent.command;
+    agentRecoveryPrompt = state.agent.recoveryPrompt;
+    sourceRevision = state.sourceRevision;
+    reviewerRevision = state.reviewerRevision;
+    progressEvents = state.progressEvents;
+    resolvedCommentIds = new Set(state.resolvedCommentIds);
+    submittingIds = new Set(state.submittingIds);
+    submitErrorById = new Map(Object.entries(state.submitErrors));
+  };
+  const dispatchReview = (action) => {
+    reviewStateStore.dispatch(action);
+    syncReviewState();
+  };
+  const currentAgentState = (overrides = {}) => ({
+    requests: agentRequests,
+    responses: agentResponses,
+    cancelledIds: agentCancelledIds,
+    connected: agentConnected,
+    heartbeatAt: agentHeartbeatAt,
+    connectionLog: agentConnectionLog,
+    planPath: agentPlanPath,
+    command: agentCommand,
+    recoveryPrompt: agentRecoveryPrompt,
+    ...overrides,
+  });
+  syncReviewState();
 
   // Poll-driven renders replace several nested lists. Preserve every keyed
   // scroll container through that shared remount boundary instead of adding
   // another surface-specific scrollTop patch each time a list grows.
   const preservedScrollPositions = new Map();
-  const restorePreservedScroll = () => {
+  const scrollPositionVersions = new Map();
+  const pendingScrollRestorations = new Map();
+  let scrollRestorationSequence = 0;
+  const captureScrollPositions = () => {
+    const positions = new Map();
     for (const node of document.querySelectorAll("[data-review-scroll-key]")) {
-      const position = preservedScrollPositions.get(
-        node.getAttribute("data-review-scroll-key"),
-      );
-      if (position) {
-        node.scrollTop = position.top;
-        node.scrollLeft = position.left;
-      }
+      const key = node.getAttribute("data-review-scroll-key");
+      if (key === null) continue;
+      const visible = node.getClientRects().length > 0;
+      const position = visible
+        ? { top: node.scrollTop, left: node.scrollLeft }
+        : preservedScrollPositions.get(key);
+      if (!position) continue;
+      if (visible) preservedScrollPositions.set(key, position);
+      positions.set(key, {
+        ...position,
+        version: scrollPositionVersions.get(key) || 0,
+      });
+    }
+    return positions;
+  };
+  const restoreCapturedScroll = (positions, sequence) => {
+    for (const node of document.querySelectorAll("[data-review-scroll-key]")) {
+      const key = node.getAttribute("data-review-scroll-key");
+      const position = positions.get(key);
+      if (!position) continue;
+      if (pendingScrollRestorations.get(key)?.sequence !== sequence) continue;
+      if ((scrollPositionVersions.get(key) || 0) !== position.version) continue;
+      node.scrollTop = position.top;
+      node.scrollLeft = position.left;
     }
   };
   const renderWithPreservedScroll = (render) => {
-    for (const node of document.querySelectorAll("[data-review-scroll-key]")) {
-      const key = node.getAttribute("data-review-scroll-key");
-      if (key !== null) {
-        preservedScrollPositions.set(key, {
-          top: node.scrollTop,
-          left: node.scrollLeft,
-        });
-      }
+    const positions = captureScrollPositions();
+    const sequence = ++scrollRestorationSequence;
+    for (const [key, position] of positions) {
+      pendingScrollRestorations.set(key, { sequence, position });
     }
     render();
-    restorePreservedScroll();
+    restoreCapturedScroll(positions, sequence);
     requestAnimationFrame(() => {
-      restorePreservedScroll();
+      restoreCapturedScroll(positions, sequence);
       // A replaced scroll owner may not expose its final scrollHeight until
       // the next layout pass (notably the connection-history disclosure).
-      requestAnimationFrame(restorePreservedScroll);
+      requestAnimationFrame(() => {
+        restoreCapturedScroll(positions, sequence);
+        for (const key of positions.keys()) {
+          if (pendingScrollRestorations.get(key)?.sequence === sequence) {
+            pendingScrollRestorations.delete(key);
+          }
+        }
+      });
     });
-    window.setTimeout(restorePreservedScroll, 50);
   };
   document.addEventListener(
     "scroll",
     (event) => {
       const node = event.target;
       if (
-        event.isTrusted &&
-        node instanceof HTMLElement &&
-        node.hasAttribute("data-review-scroll-key")
+        !(node instanceof HTMLElement) ||
+        !node.hasAttribute("data-review-scroll-key")
       ) {
-        preservedScrollPositions.set(
-          node.getAttribute("data-review-scroll-key"),
-          { top: node.scrollTop, left: node.scrollLeft },
-        );
+        return;
       }
+      const key = node.getAttribute("data-review-scroll-key");
+      const pending = pendingScrollRestorations.get(key);
+      if (pending) {
+        const atExpectedPosition =
+          node.scrollTop === pending.position.top &&
+          node.scrollLeft === pending.position.left;
+        const atTransientReset =
+          (pending.position.top > 0 && node.scrollTop === 0) ||
+          (pending.position.left > 0 && node.scrollLeft === 0);
+        if (atExpectedPosition || atTransientReset) return;
+        pendingScrollRestorations.delete(key);
+      }
+      preservedScrollPositions.set(key, {
+        top: node.scrollTop,
+        left: node.scrollLeft,
+      });
+      scrollPositionVersions.set(
+        key,
+        (scrollPositionVersions.get(key) || 0) + 1,
+      );
     },
     true,
   );
-  new MutationObserver(() => {
-    requestAnimationFrame(restorePreservedScroll);
-  }).observe(root, { childList: true, subtree: true });
   let emphasizedCommentId = null;
   let lastProgressAdvanceAt = 0;
   let pollFailures = 0;
@@ -454,6 +543,7 @@ import { createToastManager } from "./toast.js";
       connectionLog: [],
     },
     sourceRevision: "",
+    reviewerRevision: 0,
   });
 
   const isStoredState = (value) =>
@@ -531,6 +621,13 @@ import { createToastManager } from "./toast.js";
         /^[a-f0-9]{16,64}$/.test(value.sourceRevision)
           ? value.sourceRevision
           : "",
+      reviewerRevision:
+        Number.isInteger(value.revision) && value.revision >= 0
+          ? value.revision
+          : Number.isInteger(value.reviewerRevision) &&
+              value.reviewerRevision >= 0
+            ? value.reviewerRevision
+            : 0,
     };
   };
 
@@ -745,6 +842,7 @@ import { createToastManager } from "./toast.js";
           composeDrafts,
           threadReplies,
           planChatMessages,
+          reviewerRevision,
         }),
       );
     } catch {
@@ -776,28 +874,34 @@ import { createToastManager } from "./toast.js";
   // write; the server remains the durable owner across runtime restarts.
   const diskState = hasRuntime ? readBootstrapState() : emptyStoredState();
   const browserState = readLocalState();
-  const initialIds = new Set(diskState.drafts.map((draft) => draft.id));
-  drafts = diskState.drafts.concat(
-    browserState.drafts.filter((draft) => !initialIds.has(draft.id)),
-  );
-  sent = diskState.sent;
-  activeDraft =
-    browserState.activeDraft !== ""
-      ? browserState.activeDraft
-      : diskState.activeDraft;
-  composeDrafts = browserState.composeDrafts;
-  threadReplies = browserState.threadReplies;
-  planChatMessages = browserState.planChatMessages;
-  for (const id of diskState.resolvedCommentIds) {
-    resolvedCommentIds.add(id);
-  }
-  agentRequests = diskState.agent.requests;
-  agentResponses = diskState.agent.responses;
-  agentCancelledIds = diskState.agent.cancelledIds;
-  agentConnected = diskState.agent.connected;
-  agentHeartbeatAt = diskState.agent.updatedAtMs;
-  agentSessionState = diskState.agent.state;
-  sourceRevision = diskState.sourceRevision;
+  dispatchReview({
+    type: "offlineDraftsLoaded",
+    drafts: browserState.drafts,
+    activeDraft: browserState.activeDraft,
+    composeDrafts: browserState.composeDrafts,
+    threadReplies: browserState.threadReplies,
+    planChatMessages: browserState.planChatMessages,
+  });
+  dispatchReview({
+    type: "runtimeAdoptedDrafts",
+    drafts: diskState.drafts,
+    sent: diskState.sent,
+    activeDraft: diskState.activeDraft,
+    resolvedCommentIds: diskState.resolvedCommentIds,
+    sourceRevision: diskState.sourceRevision,
+    reviewerRevision: diskState.reviewerRevision,
+    agent: {
+      requests: diskState.agent.requests,
+      responses: diskState.agent.responses,
+      cancelledIds: diskState.agent.cancelledIds,
+      connected: diskState.agent.connected,
+      heartbeatAt: diskState.agent.updatedAtMs,
+      connectionLog: diskState.agent.connectionLog,
+      planPath: diskState.agent.plan || "",
+      command: diskState.agent.agentCommand || "",
+      recoveryPrompt: diskState.agent.recoveryPrompt || "",
+    },
+  });
   try {
     submitRightAway = localStorage.getItem(submitPreferenceKey) === "true";
   } catch {
@@ -809,6 +913,16 @@ import { createToastManager } from "./toast.js";
   // Every call is a same-origin path on the runtime that served this page.
   // The token rides a header; `same-origin` mode makes a redirect to another
   // origin a network error rather than a quiet exfiltration.
+  class ReviewerSaveConflict extends Error {
+    constructor(reviewer) {
+      super(
+        "This review changed in another tab. Your unsaved text is preserved; review the conflict, then save again.",
+      );
+      this.name = "ReviewerSaveConflict";
+      this.reviewer = reviewer;
+    }
+  }
+
   const call = async (path, options) => {
     const response = await fetch(path, {
       method: (options && options.method) || "GET",
@@ -824,12 +938,16 @@ import { createToastManager } from "./toast.js";
         ? { body: JSON.stringify(options.body) }
         : {}),
     });
+    const answer = await response.json();
+    if (response.status === 409 && answer?.conflict === true) {
+      throw new ReviewerSaveConflict(answer.reviewer);
+    }
     if (!response.ok) {
       throw new Error(
         "Review runtime refused the request (" + response.status + ")",
       );
     }
-    return response.json();
+    return answer;
   };
 
   // The runtime proves it is the process that minted this document's session
@@ -851,14 +969,71 @@ import { createToastManager } from "./toast.js";
       return;
     }
     await confirmRuntime();
-    await call("/api/drafts", {
-      method: "PUT",
-      body: {
-        drafts,
-        activeDraft,
-        resolvedCommentIds: Array.from(resolvedCommentIds),
-      },
-    });
+    try {
+      const answer = await call("/api/drafts", {
+        method: "PUT",
+        body: {
+          drafts,
+          activeDraft,
+          resolvedCommentIds: Array.from(resolvedCommentIds),
+          expectedRevision: reviewerRevision,
+        },
+      });
+      dispatchReview({
+        type: "reviewerRevisionChanged",
+        revision: answer.revision,
+      });
+      writeLocalState();
+    } catch (error) {
+      if (!(error instanceof ReviewerSaveConflict)) throw error;
+      const current = error.reviewer;
+      const serverDrafts = Array.isArray(current?.drafts)
+        ? current.drafts.filter(isComment)
+        : [];
+      const localById = new Map(drafts.map((draft) => [draft.id, draft]));
+      const conflictingIds = new Set();
+      const mergedDrafts = serverDrafts.map((serverDraft) => {
+        const localDraft = localById.get(serverDraft.id);
+        localById.delete(serverDraft.id);
+        if (
+          localDraft &&
+          (localDraft.body !== serverDraft.body ||
+            JSON.stringify(localDraft.target) !==
+              JSON.stringify(serverDraft.target))
+        ) {
+          conflictingIds.add(localDraft.id);
+          return localDraft;
+        }
+        return localDraft || serverDraft;
+      });
+      mergedDrafts.push(...localById.values());
+      const conflictRevision =
+        current && Number.isInteger(current.revision) && current.revision >= 0
+          ? current.revision
+          : reviewerRevision;
+      const errors = {};
+      for (const id of conflictingIds) {
+        errors[id] =
+          "This comment also changed in another tab. Your version is still unsaved; review it, then save again.";
+      }
+      dispatchReview({
+        type: "durableSaveConflicted",
+        drafts: mergedDrafts,
+        reviewerRevision: conflictRevision,
+        errors,
+      });
+      writeLocalState();
+      renderTray();
+      notifications.add({
+        title: "Review changed in another tab",
+        description:
+          conflictingIds.size > 0
+            ? "Your conflicting comment text is preserved. Review it, then save again."
+            : "The newer review state was merged with your unsaved work. Save again when ready.",
+        tone: "danger",
+      });
+      throw error;
+    }
   };
 
   // ------------------------------------------------------------------ layout
@@ -1366,7 +1541,7 @@ import { createToastManager } from "./toast.js";
     "div",
     {
       class:
-        "data-[review-compose-inline]:relative! data-[review-compose-inline]:[right:auto] data-[review-compose-inline]:[z-index:2]! data-[review-compose-inline]:[width:100%]! data-[review-compose-inline]:[margin:0.65rem_0_1rem] data-[review-compose-inline]:[box-shadow:0_4px_18px_rgb(0_0_0_/_0.11)] data-[review-compose-centered]:fixed! data-[review-compose-centered]:[top:50%] data-[review-compose-centered]:[right:auto] data-[review-compose-centered]:[left:50%] data-[review-compose-centered]:[width:min(24rem,calc(100vw-2rem))]! data-[review-compose-centered]:[transform:translate(-50%,-50%)] [position:absolute] [right:auto] [z-index:47] [width:17rem] [padding:0.75rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_8px_28px_rgb(0_0_0_/_0.16)] [pointer-events:auto]",
+        "data-[review-compose-inline]:relative! data-[review-compose-inline]:[right:auto] data-[review-compose-inline]:[z-index:2]! data-[review-compose-inline]:[width:min(100%,var(--review-compose-inline-width,100%))]! data-[review-compose-inline]:[margin:0.65rem_0_1rem] data-[review-compose-inline]:[margin-left:var(--review-compose-inline-offset,0)] data-[review-compose-inline]:[box-shadow:0_4px_18px_rgb(0_0_0_/_0.11)] data-[review-compose-centered]:fixed! data-[review-compose-centered]:[top:50%] data-[review-compose-centered]:[right:auto] data-[review-compose-centered]:[left:50%] data-[review-compose-centered]:[width:min(24rem,calc(100vw-2rem))]! data-[review-compose-centered]:[transform:translate(-50%,-50%)] [position:absolute] [right:auto] [z-index:47] [width:17rem] [padding:0.75rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_8px_28px_rgb(0_0_0_/_0.16)] [pointer-events:auto]",
       "data-review-compose": true,
       role: "dialog",
       "aria-label": "Add a comment",
@@ -1651,7 +1826,7 @@ import { createToastManager } from "./toast.js";
   const copyBlock = ({ attribute, text }) => {
     const button = el("button", {
       class:
-        "[position:absolute] [top:0.38rem] [right:0.38rem] [display:inline-flex] [align-items:center] [gap:0.25rem] [padding:0.2rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.625rem] [line-height:1] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--ink-c)] active:[background:var(--review-control-active)]",
+        "[position:absolute] [top:0.38rem] [right:0.38rem] [display:inline-flex] [align-items:center] [gap:0.25rem] [padding:0.2rem_0.35rem] [border:1px_solid_color-mix(in_srgb,var(--edge-c)_52%,transparent)] [border-radius:0.3rem] [background:color-mix(in_srgb,var(--surface-c)_72%,transparent)] [color:var(--muted-c)] [font-size:0.625rem] [line-height:1] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--ink-c)] active:[background:var(--review-control-active)]",
       type: "button",
       "data-review-copy": attribute,
       "aria-label": "Copy to clipboard",
@@ -1681,7 +1856,18 @@ import { createToastManager } from "./toast.js";
         class: "[position:relative] [min-width:0]",
         "data-review-copy-block": attribute,
       },
-      [el("pre", { [attribute]: true }, [el("code", { text })]), button],
+      [
+        el(
+          "pre",
+          {
+            class:
+              "[margin:0] [min-width:0] [overflow-x:auto] [padding:0.72rem_3.25rem_0.72rem_0.78rem] [border:1px_solid_color-mix(in_srgb,var(--edge-c)_46%,transparent)] [border-radius:0.375rem] [background:color-mix(in_srgb,var(--surface-c)_58%,transparent)] [color:var(--ink-c)] [font-family:var(--font-mono)] [font-size:0.75rem] [line-height:1.45] [white-space:pre-wrap] [overflow-wrap:anywhere]",
+            [attribute]: true,
+          },
+          [el("code", { text })],
+        ),
+        button,
+      ],
     );
   };
 
@@ -1884,10 +2070,28 @@ import { createToastManager } from "./toast.js";
 
   const renderConnectionPanel = () => {
     if (!connectionPanel) return;
-    const signature = JSON.stringify({
-      connected: agentConnected,
+    observeRequests();
+    const pendingRequest = pendingRequestList()[0];
+    const activity = deriveCurrentAgentActivity({
+      snapshot: {
+        requests: agentRequests,
+        responses: agentResponses,
+        cancelledIds: agentCancelledIds,
+      },
+      progressEvents,
+      agentConnected,
       runtimeOffline,
-      state: agentSessionState,
+      now: Date.now(),
+      heartbeatAt: agentHeartbeatAt,
+      requestSeenAt:
+        pendingRequest === undefined
+          ? undefined
+          : requestSeenAt.get(pendingRequest.requestId)?.at,
+    });
+    const signature = JSON.stringify({
+      activity,
+      connected: agentConnected,
+      heartbeat: agentHeartbeatAt,
       log: agentConnectionLog,
       plan: agentPlanPath,
       command: agentCommand,
@@ -1901,84 +2105,180 @@ import { createToastManager } from "./toast.js";
     const historyWasOpen =
       connectionPanel.querySelector("[data-review-connection-history]")
         ?.open === true;
-    const state = el("section", {
+    const label = el("p", {
       class:
-        "[display:grid] [gap:0.55rem] [font-size:0.75rem] [line-height:1.5]" +
-        (agentConnected
-          ? " [padding:0.8rem] [border:1px_solid_var(--diff-add-c)] [border-radius:0.45rem] [background:var(--diff-add-bg)] [color:var(--diff-add-c)]"
-          : runtimeOffline
-            ? " [padding:0.8rem] [border:1px_solid_var(--callout-danger-c)] [border-radius:0.45rem] [background:var(--callout-danger-bg)] [color:var(--callout-danger-c)]"
-            : ""),
-      "data-review-connection-state": agentConnected
-        ? "connected"
-        : runtimeOffline
-          ? "offline"
-          : "disconnected",
-      "data-tone": agentConnected
-        ? "connected"
-        : runtimeOffline
-          ? "offline"
-          : "disconnected",
+        "mb-2 text-[0.625rem] font-bold uppercase tracking-[0.12em] text-[var(--muted-c)]",
+      text: "Current activity",
     });
-    if (agentConnected) {
-      state.append(
-        el(
-          "div",
-          {
-            class: "[display:flex] [align-items:center] [gap:0.45rem]",
-            "data-review-connection-title": true,
-          },
-          [
-            el("span", {
+    const activityCard = el("article", {
+      class:
+        "grid min-w-0 gap-2 rounded-lg border border-[var(--edge-c)] bg-[var(--surface-c)] p-3 text-xs leading-[1.45] data-[tone=working]:border-[var(--callout-note-c)] data-[tone=working]:bg-[var(--callout-note-bg)] data-[tone=warning]:border-[var(--callout-warning-c)] data-[tone=warning]:bg-[var(--callout-warning-bg)] data-[tone=danger]:border-[var(--callout-danger-c)] data-[tone=danger]:bg-[var(--callout-danger-bg)]",
+      "data-review-current-activity": activity.state,
+      "data-tone": activity.tone,
+    });
+    const activityHead = el(
+      "div",
+      { class: "flex min-w-0 items-center gap-2" },
+      [
+        activity.state === "working"
+          ? spinner("agent-current-activity")
+          : el("span", {
               class:
-                "[width:6px] [height:6px] [border-radius:999px] [background:currentColor] [box-shadow:0_0_0_2px_color-mix(in_srgb,_var(--diff-add-c)_34%,_transparent)]",
-              "data-review-connection-dot": true,
+                "size-2 shrink-0 rounded-full border-2 border-current opacity-65",
               "aria-hidden": "true",
             }),
-            el("strong", { text: "Agent session active" }),
-            el("span", {
-              class:
-                "[margin-left:auto] [font-size:0.6875rem] [font-weight:700] [text-transform:uppercase]",
-              "data-review-connection-phase": true,
-              text: agentSessionState === "working" ? "Working" : "Waiting",
-            }),
-          ],
-        ),
-        el("p", {}, [
-          document.createTextNode("Last signal "),
+        el("strong", {
+          class: "min-w-0 flex-1 text-sm text-[var(--ink-c)]",
+          "data-review-current-activity-headline": true,
+          text: activity.headline,
+        }),
+        el("span", {
+          class:
+            "rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-[0.08em]",
+          "data-review-current-activity-badge": true,
+          text: activity.state,
+        }),
+      ],
+    );
+    activityCard.appendChild(activityHead);
+    if (activity.requestId !== undefined) {
+      const request = agentRequests.find(
+        (candidate) => candidate.requestId === activity.requestId,
+      );
+      const comment =
+        request?.kind === "feedback"
+          ? request.comments[0]
+          : request?.kind === "reply"
+            ? sent.find((candidate) => candidate.id === request.commentId)
+            : undefined;
+      if (comment) {
+        activityCard.appendChild(
+          el("strong", {
+            class:
+              "text-[0.625rem] uppercase tracking-[0.08em] text-[var(--ink-c)]",
+            "data-review-current-activity-target": true,
+            text: slideTitleFor(comment.target),
+          }),
+        );
+      }
+    }
+    const supporting =
+      activity.state === "working" ? activity.latestStep : activity.supporting;
+    activityCard.appendChild(
+      appendInlineCode(
+        el("p", {
+          class: "min-w-0 text-[var(--ink-c)] [overflow-wrap:anywhere]",
+          "data-review-current-activity-step": true,
+        }),
+        supporting,
+      ),
+    );
+    const activityFooter = el("div", {
+      class:
+        "flex min-w-0 items-center gap-2 border-t border-[color-mix(in_srgb,var(--edge-c)_70%,transparent)] pt-2 text-[0.625rem] text-[var(--muted-c)]",
+    });
+    if ("updatedAtMs" in activity) {
+      activityFooter.appendChild(
+        el("span", { "data-review-current-activity-updated": true }, [
+          document.createTextNode("Updated "),
           el("span", {
-            "data-review-agent-heartbeat": true,
-            "data-review-relative-at": agentHeartbeatAt,
-            text: relativeSignal(agentHeartbeatAt),
+            "data-review-relative-at": activity.updatedAtMs,
+            text: relativeSignal(activity.updatedAtMs),
           }),
         ]),
       );
-    } else if (runtimeOffline) {
-      state.append(
-        el("strong", { text: "The review server is unreachable" }),
-        appendInlineCode(
-          el("p", {}),
-          "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
-        ),
-      );
     } else {
-      state.append(
-        el(
-          "div",
-          {
+      activityFooter.appendChild(
+        el("span", {
+          text:
+            activity.state === "idle"
+              ? "No unanswered requests"
+              : "Current queue state",
+        }),
+      );
+    }
+    if (activity.requestId !== undefined) {
+      const viewThread = el("button", {
+        class:
+          "ml-auto cursor-pointer border-0 bg-transparent p-0 text-[0.625rem] font-bold text-[var(--accent-c)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-c)] active:opacity-65",
+        type: "button",
+        "data-review-current-activity-view": true,
+        text: "View thread →",
+      });
+      viewThread.addEventListener("click", () => {
+        const request = agentRequests.find(
+          (candidate) => candidate.requestId === activity.requestId,
+        );
+        if (request?.kind === "chat") {
+          setRailOpen(true);
+          setActiveTab("chat");
+          return;
+        }
+        const commentId =
+          request?.kind === "feedback"
+            ? request.comments[0]?.id
+            : request?.kind === "reply"
+              ? request.commentId
+              : undefined;
+        const comment = sent.find((candidate) => candidate.id === commentId);
+        if (!comment) return;
+        expandedThreadIds.add(comment.id);
+        revealCommentInTray(comment);
+      });
+      activityFooter.appendChild(viewThread);
+    }
+    activityCard.appendChild(activityFooter);
+
+    const connection = el(
+      "section",
+      {
+        class:
+          "mt-3 grid gap-2 rounded-md border border-[var(--edge-c)] px-3 py-2 text-[0.6875rem] text-[var(--muted-c)]",
+        "data-review-connection-state": agentConnected
+          ? "connected"
+          : runtimeOffline
+            ? "offline"
+            : "disconnected",
+      },
+      [
+        el("div", { class: "flex min-w-0 items-center gap-2" }, [
+          el("span", {
             class:
-              "grid gap-[0.55rem] rounded-[0.45rem] border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-[var(--callout-danger-c)]",
-            "data-review-connection-alert": true,
-          },
-          [
-            el("strong", {
-              text: "No agent is connected to this review session.",
-            }),
-            el("p", {
-              text: "Your comments still save and queue here; nothing is sent until an agent reconnects.",
-            }),
-          ],
-        ),
+              "size-[6px] shrink-0 rounded-full bg-current shadow-[0_0_0_2px_color-mix(in_srgb,currentColor_34%,transparent)]",
+            "data-review-connection-dot": true,
+            "aria-hidden": "true",
+          }),
+          el("strong", {
+            class: "text-[var(--ink-c)]",
+            text: agentConnected
+              ? "Agent session connected"
+              : runtimeOffline
+                ? "Review server offline"
+                : "Agent session disconnected",
+          }),
+          ...(agentHeartbeatAt > 0
+            ? [
+                el(
+                  "span",
+                  {
+                    class: "ml-auto",
+                    "data-review-agent-heartbeat": true,
+                  },
+                  [
+                    document.createTextNode("Last signal "),
+                    el("span", {
+                      "data-review-relative-at": agentHeartbeatAt,
+                      text: relativeSignal(agentHeartbeatAt),
+                    }),
+                  ],
+                ),
+              ]
+            : []),
+        ]),
+      ],
+    );
+    if (!agentConnected && !runtimeOffline) {
+      connection.append(
         el("p", {
           text: "To reconnect this running review, paste this exact prompt into your coding agent:",
         }),
@@ -2001,7 +2301,11 @@ import { createToastManager } from "./toast.js";
     }
     const history = connectionLogView({ historyWasOpen });
     renderWithPreservedScroll(() => {
-      connectionPanel.replaceChildren(state, history);
+      connectionPanel.replaceChildren(
+        el("section", {}, [label, activityCard]),
+        connection,
+        history,
+      );
     });
   };
 
@@ -2928,7 +3232,12 @@ import { createToastManager } from "./toast.js";
         body: { requestId },
       });
       if (!agentCancelledIds.includes(requestId)) {
-        agentCancelledIds = agentCancelledIds.concat([requestId]);
+        dispatchReview({
+          type: "agentExchangeUpdated",
+          agent: currentAgentState({
+            cancelledIds: agentCancelledIds.concat([requestId]),
+          }),
+        });
       }
       clearInlineError(trigger);
       announce("Agent request cancelled.");
@@ -2999,6 +3308,7 @@ import { createToastManager } from "./toast.js";
             "aria-live": "polite",
           },
           [
+            spinner("thread-current-activity"),
             el("span", {
               text: currentEvent
                 ? currentEvent.step +
@@ -3200,7 +3510,10 @@ import { createToastManager } from "./toast.js";
   const commitDraftEdit = async (comment, field) => {
     const body = field.value.trim();
     if (body === "") return;
-    comment.body = body;
+    dispatchReview({
+      type: "draftEdited",
+      draft: { ...comment, body },
+    });
     editingId = null;
     announce("Comment updated.");
     renderTray();
@@ -3403,10 +3716,15 @@ import { createToastManager } from "./toast.js";
         method: "POST",
         body: { kind: "reply", commentId: comment.id, body },
       });
-      agentConnected = answer.agentConnected === true;
-      if (isAgentRequest(answer.request)) {
-        agentRequests = agentRequests.concat([answer.request]);
-      }
+      dispatchReview({
+        type: "agentExchangeUpdated",
+        agent: currentAgentState({
+          connected: answer.agentConnected === true,
+          requests: isAgentRequest(answer.request)
+            ? agentRequests.concat([answer.request])
+            : agentRequests,
+        }),
+      });
       field.value = "";
       threadReplyDrafts.delete(comment.id);
       clearInlineError(button);
@@ -3429,30 +3747,65 @@ import { createToastManager } from "./toast.js";
     }
   };
 
+  const checkedRevisionSnapshot = (snapshot) => {
+    if (!snapshot || typeof snapshot !== "object") return null;
+    if (
+      snapshot.type === "markdown" &&
+      typeof snapshot.semanticHash === "string" &&
+      snapshot.content &&
+      typeof snapshot.content === "object"
+    ) {
+      return snapshot;
+    }
+    if (
+      snapshot.type === "component" &&
+      typeof snapshot.component === "string" &&
+      snapshot.component !== "" &&
+      typeof snapshot.semanticHash === "string" &&
+      typeof snapshot.html === "string"
+    ) {
+      return snapshot;
+    }
+    return null;
+  };
+
   const checkedDiffLocations = (value) =>
-    (Array.isArray(value) ? value : []).filter(
-      (location) =>
-        location &&
-        typeof location === "object" &&
-        (location.status === "changed" ||
-          location.status === "added" ||
-          location.status === "removed" ||
-          location.status === "moved") &&
-        typeof location.kind === "string" &&
-        typeof location.label === "string" &&
-        typeof location.section === "string" &&
-        typeof location.oldText === "string" &&
-        typeof location.newText === "string" &&
-        (location.parentBlockId === undefined ||
-          typeof location.parentBlockId === "string") &&
-        Array.isArray(location.runs) &&
-        location.runs.every(
+    (Array.isArray(value) ? value : []).flatMap((location) => {
+      if (
+        !location ||
+        typeof location !== "object" ||
+        (location.status !== "changed" &&
+          location.status !== "added" &&
+          location.status !== "removed" &&
+          location.status !== "moved") ||
+        typeof location.kind !== "string" ||
+        typeof location.label !== "string" ||
+        typeof location.section !== "string" ||
+        typeof location.oldText !== "string" ||
+        typeof location.newText !== "string" ||
+        (location.parentBlockId !== undefined &&
+          typeof location.parentBlockId !== "string") ||
+        !Array.isArray(location.runs) ||
+        !location.runs.every(
           (run) =>
             run &&
             (run.op === "same" || run.op === "del" || run.op === "ins") &&
             typeof run.text === "string",
-        ),
-    );
+        )
+      ) {
+        return [];
+      }
+      const oldSnapshot = checkedRevisionSnapshot(location.oldSnapshot);
+      const newSnapshot = checkedRevisionSnapshot(location.newSnapshot);
+      if (!oldSnapshot && !newSnapshot) return [];
+      return [
+        {
+          ...location,
+          ...(oldSnapshot ? { oldSnapshot } : {}),
+          ...(newSnapshot ? { newSnapshot } : {}),
+        },
+      ];
+    });
 
   const checkedRevisionChangeSet = (value) => {
     if (
@@ -3627,22 +3980,71 @@ import { createToastManager } from "./toast.js";
     return rendered;
   };
 
+  const trustedInertComponentFragment = (snapshot) => {
+    const template = document.createElement("template");
+    template.innerHTML = snapshot.html;
+    const root = template.content.firstElementChild;
+    if (
+      !root ||
+      template.content.childElementCount !== 1 ||
+      root.getAttribute("data-review-component-snapshot") !==
+        snapshot.component ||
+      !root.hasAttribute("data-review-snapshot-inert")
+    ) {
+      return null;
+    }
+    if (
+      root.matches(
+        "script,iframe,object,embed,form,input,textarea,select,button,[contenteditable],[id],[tabindex],a[href]",
+      ) ||
+      root.querySelector(
+        "script,iframe,object,embed,form,input,textarea,select,button,[contenteditable],[id],[tabindex],a[href]",
+      )
+    ) {
+      return null;
+    }
+    const forbiddenBehaviorAttributes = new Set([
+      "data-component",
+      "data-component-instance",
+      "data-controls",
+      "data-maximize",
+      "data-proposal",
+      "data-zoom",
+    ]);
+    for (const element of [root, ...root.querySelectorAll("*")]) {
+      for (const attribute of element.getAttributeNames()) {
+        if (
+          attribute.toLocaleLowerCase().startsWith("on") ||
+          forbiddenBehaviorAttributes.has(attribute)
+        ) {
+          return null;
+        }
+      }
+    }
+    return root;
+  };
+
   const diffSide = ({ label, locations, side }) => {
     const snapshots = locations.flatMap((location) => {
-      const content =
-        side === "was" ? location.oldContent : location.newContent;
-      const fallback = side === "was" ? location.oldText : location.newText;
-      if (!content && !fallback) return [];
+      const revisionSnapshot =
+        side === "was" ? location.oldSnapshot : location.newSnapshot;
+      if (!revisionSnapshot) return [];
       const snapshot = el("div", {
         class:
           "data-[review-diff-op=del]:[background:var(--diff-remove-bg)] data-[review-diff-op=del]:[color:var(--diff-remove-c)] data-[review-diff-op=ins]:[background:var(--diff-add-bg)] data-[review-diff-op=ins]:[color:var(--diff-add-c)]",
         "data-review-diff-snapshot": true,
         "data-review-diff-kind": location.kind,
         "data-review-diff-op": side === "was" ? "del" : "ins",
+        ...(revisionSnapshot.type === "component"
+          ? { "data-review-diff-component": revisionSnapshot.component }
+          : {}),
       });
-      const rendered = renderRevisionContent(content);
-      if (rendered) snapshot.appendChild(rendered);
-      else snapshot.appendChild(document.createTextNode(fallback));
+      const rendered =
+        revisionSnapshot.type === "component"
+          ? trustedInertComponentFragment(revisionSnapshot)
+          : renderRevisionContent(revisionSnapshot.content);
+      if (!rendered) return [];
+      snapshot.appendChild(rendered);
       return [snapshot];
     });
     if (snapshots.length === 0) return null;
@@ -4341,13 +4743,7 @@ import { createToastManager } from "./toast.js";
             "[display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.4rem] [margin-top:0.55rem]",
           "data-review-thread-reply-box": true,
         },
-        [
-          el("label", {
-            text: outcome.key === "question" ? "Your answer" : "Reply",
-          }),
-          field,
-          sendReply,
-        ],
+        [field, sendReply],
       ),
     );
     return nodes;
@@ -4366,7 +4762,7 @@ import { createToastManager } from "./toast.js";
     const previousExpandedThreads = new Set(expandedThreadIds);
     const previousExpandedComments = new Set(expandedCommentIds);
     for (const id of ids) {
-      resolvedCommentIds.add(id);
+      dispatchReview({ type: "threadResolved", id });
       expandedThreadIds.delete(id);
       expandedCommentIds.delete(id);
     }
@@ -4385,7 +4781,7 @@ import { createToastManager } from "./toast.js";
           action: {
             label: "Undo",
             run: async () => {
-              resolvedCommentIds.delete(ids[0]);
+              dispatchReview({ type: "threadReopened", id: ids[0] });
               expandedThreadIds.add(ids[0]);
               announce("Comment reopened.");
               renderTray();
@@ -4395,8 +4791,10 @@ import { createToastManager } from "./toast.js";
         });
       }
     } catch (error) {
-      resolvedCommentIds.clear();
-      previousResolved.forEach((id) => resolvedCommentIds.add(id));
+      dispatchReview({
+        type: "resolutionsReplaced",
+        ids: Array.from(previousResolved),
+      });
       expandedThreadIds.clear();
       previousExpandedThreads.forEach((id) => expandedThreadIds.add(id));
       expandedCommentIds.clear();
@@ -4416,7 +4814,7 @@ import { createToastManager } from "./toast.js";
   const resolveThread = async (comment) => resolveThreadIds([comment.id]);
 
   const unresolveThread = async (comment) => {
-    resolvedCommentIds.delete(comment.id);
+    dispatchReview({ type: "threadReopened", id: comment.id });
     expandedThreadIds.add(comment.id);
     announce("Comment reopened.");
     renderTray();
@@ -4690,12 +5088,10 @@ import { createToastManager } from "./toast.js";
     const resolved = options.resolved === true;
     const outcome = outcomeFor(comment);
     const lifecycle = outcome.status?.stage;
-    const rowState =
-      outcome.key !== "waiting"
-        ? "ready"
-        : lifecycle === "working" || lifecycle === "stalled"
-          ? "working"
-          : "queued";
+    const rowState = deriveThreadOutcomeGroup({
+      outcome: outcome.key,
+      lifecycle,
+    });
     const expanded = expandedThreadIds.has(comment.id);
     const collapse = () => {
       clearCommentLensIfOwned(comment.id);
@@ -4784,13 +5180,17 @@ import { createToastManager } from "./toast.js";
       const pendingRequest = pendingRequestForComment(comment);
       const latestOutcome = outcomeEventsFor(comment).at(-1);
       const secondary =
-        rowState === "ready"
-          ? `${outcome.label} · ${relativeCommentTime(
+        rowState === "needs-input"
+          ? `Needs your answer · ${relativeCommentTime(
               latestOutcome?.createdAt || comment.createdAt,
             )}`
-          : lifecycle === "stalled"
-            ? "Agent is quiet · check its terminal"
-            : "Agent is working · Just now";
+          : rowState === "ready"
+            ? `${outcome.label} · ${relativeCommentTime(
+                latestOutcome?.createdAt || comment.createdAt,
+              )}`
+            : lifecycle === "stalled"
+              ? "Agent is quiet · check its terminal"
+              : "Agent is working · Just now";
       children.push(
         el("p", {
           class:
@@ -4855,7 +5255,7 @@ import { createToastManager } from "./toast.js";
       }
     }
     const rowClasses =
-      "group/row mb-3 grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)] gap-[0.18rem] rounded-lg border border-[var(--edge-c)] bg-[var(--bg)] p-3 text-[0.6875rem] text-[var(--muted-c)] transition-[border-color,background-color] duration-100 hover:border-[color-mix(in_srgb,var(--muted-c)_55%,var(--edge-c))] focus-within:border-[var(--muted-c)] data-[review-row-state=working]:border-l-[3px] data-[review-row-state=working]:border-[var(--callout-note-c)] data-[review-row-state=working]:bg-[var(--callout-note-bg)] data-[review-row-state=queued]:border-l data-[review-row-state=ready]:border-l-2 data-[review-outcome=changed]:border-l-[var(--diff-add-c)] data-[review-outcome=question]:border-l-[var(--callout-warning-c)]" +
+      "group/row mb-3 grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)] gap-[0.18rem] rounded-lg border border-[var(--edge-c)] bg-[var(--bg)] p-3 text-[0.6875rem] text-[var(--muted-c)] transition-[border-color,background-color] duration-100 hover:border-[color-mix(in_srgb,var(--muted-c)_55%,var(--edge-c))] focus-within:border-[var(--muted-c)] data-[review-row-state=working]:border-l-[3px] data-[review-row-state=working]:border-[var(--callout-note-c)] data-[review-row-state=working]:bg-[var(--callout-note-bg)] data-[review-row-state=queued]:border-l data-[review-row-state=ready]:border-l-2 data-[review-row-state=needs-input]:border-l-[3px] data-[review-row-state=needs-input]:border-[var(--callout-warning-c)] data-[review-row-state=needs-input]:bg-[var(--callout-warning-bg)] data-[review-outcome=changed]:border-l-[var(--diff-add-c)] data-[review-outcome=question]:border-l-[var(--callout-warning-c)]" +
       (resolved ? " bg-[var(--surface-c)]" : "") +
       (outcome.status
         ? " data-[review-lifecycle=blocked]:border-l-[var(--callout-warning-c)]"
@@ -5186,9 +5586,8 @@ import { createToastManager } from "./toast.js";
     const shouldFloat =
       window.innerWidth >= 1280 &&
       !railIsOpen() &&
-      (!compose.hidden ||
-        drafts.length + sent.length > 0 ||
-        threadLayer.childElementCount > 0);
+      (drafts.length + sent.length > 0 ||
+        threadLayer.querySelector("[data-review-thread-card]") !== null);
     root.toggleAttribute("data-review-floating", shouldFloat);
   };
 
@@ -5225,10 +5624,9 @@ import { createToastManager } from "./toast.js";
 
   const positionThreadCards = () => {
     syncFloatingMode();
-    const canFloat =
-      window.innerWidth >= 1280 &&
-      !railIsOpen() &&
-      root.hasAttribute("data-review-floating");
+    const canUseThreadLayer = window.innerWidth >= 1280 && !railIsOpen();
+    const canFloatCards =
+      canUseThreadLayer && root.hasAttribute("data-review-floating");
     const cards = Array.from(
       threadLayer.querySelectorAll("[data-review-thread-card]"),
     );
@@ -5241,7 +5639,7 @@ import { createToastManager } from "./toast.js";
         .find((candidate) => candidate.id === id);
       const block = comment ? floatingBlockForComment(comment) : null;
       const rect = block?.getBoundingClientRect();
-      const visible = canFloat && block !== null && rect !== undefined;
+      const visible = canFloatCards && block !== null && rect !== undefined;
       card.hidden = !visible;
       if (!visible || !id) continue;
       card.style.left = floatLeftForBlock(block, card.offsetWidth) + "px";
@@ -5253,7 +5651,7 @@ import { createToastManager } from "./toast.js";
       nodes.set(id, card);
     }
     if (
-      canFloat &&
+      canUseThreadLayer &&
       !compose.hidden &&
       composeTarget &&
       compose.hasAttribute("data-review-compose-floating")
@@ -5263,6 +5661,17 @@ import { createToastManager } from "./toast.js";
       if (block && rect) {
         if (compose.parentElement !== threadLayer) {
           threadLayer.appendChild(compose);
+        }
+        // A transient composer does not reserve page width. Narrow only as
+        // much as the real right gutter requires so it remains wholly beside
+        // the slide without moving or covering the plan.
+        if (!root.hasAttribute("data-review-floating")) {
+          const available =
+            window.innerWidth - rect.right - FLOAT_CONTENT_GAP - FLOAT_EDGE;
+          compose.style.width =
+            Math.min(17 * 16, Math.max(12 * 16, available)) + "px";
+        } else {
+          compose.style.removeProperty("width");
         }
         compose.style.left =
           floatLeftFor(composeTarget, compose.offsetWidth) + "px";
@@ -5326,27 +5735,44 @@ import { createToastManager } from "./toast.js";
       counts.changed + counts.question + counts.outside === 0;
     const groups = [
       {
+        key: "needs-input",
+        label: "Needs input",
+        glyph: TRIANGLE_ALERT_ICON,
+        match: (outcome) =>
+          deriveThreadOutcomeGroup({
+            outcome: outcome.key,
+            lifecycle: outcome.status?.stage,
+          }) === "needs-input",
+      },
+      {
         key: "ready",
         label: "Ready for Review",
         glyph: CHECK_ICON,
-        match: (outcome) => outcome.key !== "waiting",
+        match: (outcome) =>
+          deriveThreadOutcomeGroup({
+            outcome: outcome.key,
+            lifecycle: outcome.status?.stage,
+          }) === "ready",
       },
       {
         key: "working",
         label: "Now Working",
         spin: true,
         match: (outcome) =>
-          outcome.status?.stage === "working" ||
-          outcome.status?.stage === "stalled",
+          deriveThreadOutcomeGroup({
+            outcome: outcome.key,
+            lifecycle: outcome.status?.stage,
+          }) === "working",
       },
       {
         key: "queued",
         label: "Queued",
         glyph: HOURGLASS_ICON,
         match: (outcome) =>
-          outcome.key === "waiting" &&
-          outcome.status?.stage !== "working" &&
-          outcome.status?.stage !== "stalled",
+          deriveThreadOutcomeGroup({
+            outcome: outcome.key,
+            lifecycle: outcome.status?.stage,
+          }) === "queued",
       },
     ];
     const renderedGroups = groups
@@ -5380,10 +5806,15 @@ import { createToastManager } from "./toast.js";
             }),
           ],
         );
-        return el("section", { "data-review-outcome-group": displayKey }, [
-          heading,
-          el("ol", {}, comments.map(sentRow)),
-        ]);
+        return el(
+          "section",
+          {
+            class:
+              key === "needs-input" ? "text-[var(--callout-warning-c)]" : "",
+            "data-review-outcome-group": displayKey,
+          },
+          [heading, el("ol", {}, comments.map(sentRow))],
+        );
       })
       .filter(Boolean);
     const resolved = sent.filter((comment) =>
@@ -5590,7 +6021,7 @@ import { createToastManager } from "./toast.js";
   deleteCancel.addEventListener("click", () => deleteDialog.close());
   deleteConfirm.addEventListener("click", async () => {
     if (deleteCandidateId === null) return;
-    drafts = drafts.filter((comment) => comment.id !== deleteCandidateId);
+    dispatchReview({ type: "draftRemoved", id: deleteCandidateId });
     expandedCommentIds.delete(deleteCandidateId);
     deleteCandidateId = null;
     deleteDialog.close();
@@ -5624,14 +6055,16 @@ import { createToastManager } from "./toast.js";
       ) {
         throw new Error("The local revert did not complete cleanly");
       }
-      resolvedCommentIds.add(comment.id);
+      dispatchReview({ type: "threadResolved", id: comment.id });
       expandedThreadIds.delete(comment.id);
       await save();
       announce("Changes reverted. The coding agent was notified.");
       revertDialog.close();
       const refreshedRevision = await refreshSourceDocument();
-      sourceRevision =
-        refreshedRevision || answer.sourceRevision || sourceRevision;
+      dispatchReview({
+        type: "sourceRevisionChanged",
+        revision: refreshedRevision || answer.sourceRevision || sourceRevision,
+      });
     } catch (error) {
       showInlineError(
         revertConfirm,
@@ -5709,7 +6142,7 @@ import { createToastManager } from "./toast.js";
       createdAt: new Date().toISOString(),
       target: target,
     };
-    drafts = drafts.concat([comment]);
+    dispatchReview({ type: "draftCreated", draft: comment });
     return comment;
   };
 
@@ -5740,8 +6173,14 @@ import { createToastManager } from "./toast.js";
   const closeCompose = () => {
     if (composeTarget) {
       const key = composeDraftKey(composeTarget);
-      if (composeInput.value.trim() === "") delete composeDrafts[key];
-      else composeDrafts[key] = composeInput.value.slice(0, BODY_LIMIT);
+      dispatchReview({
+        type: "composeDraftChanged",
+        key,
+        body:
+          composeInput.value.trim() === ""
+            ? ""
+            : composeInput.value.slice(0, BODY_LIMIT),
+      });
       writeLocalState();
     }
     compose.hidden = true;
@@ -5757,29 +6196,107 @@ import { createToastManager } from "./toast.js";
     positionThreadCards();
   };
 
+  // Inline composition is a sibling of its anchor, whose parent may be wider
+  // than the visible slide. Carry the anchor's measured column through static
+  // utility candidates so the editor cannot overhang the selected surface.
+  const alignInlineCompose = (anchor) => {
+    const parent = compose.parentElement;
+    if (!parent) return;
+    const visualColumn = anchor.closest("[data-slide]") || anchor;
+    const parentRect = parent.getBoundingClientRect();
+    const anchorRect = visualColumn.getBoundingClientRect();
+    compose.style.setProperty(
+      "--review-compose-inline-width",
+      Math.min(parentRect.width, anchorRect.width) + "px",
+    );
+    compose.style.setProperty(
+      "--review-compose-inline-offset",
+      Math.max(0, anchorRect.left - parentRect.left) + "px",
+    );
+  };
+
+  // Responsive fallbacks overlay the viewport rather than entering document
+  // flow, so opening a composer can never move the plan it annotates.
+  const centerCompose = () => {
+    if (compose.parentElement !== surface) surface.appendChild(compose);
+    compose.removeAttribute("style");
+    compose.removeAttribute("data-review-compose-inline");
+    compose.removeAttribute("data-review-compose-floating");
+    compose.setAttribute("data-review-compose-centered", "");
+    compose.setAttribute("data-review-compose-placement", "centered");
+    Object.assign(compose.style, {
+      position: "fixed",
+      top: "50%",
+      left: "50%",
+      right: "auto",
+      transform: "translate(-50%, -50%)",
+    });
+  };
+
   const positionCompose = (target) => {
     const block = visualAnchorForTarget(target);
     if (!block) {
-      compose.removeAttribute("style");
-      compose.setAttribute("data-review-compose-centered", "");
-      compose.setAttribute("data-review-compose-placement", "centered");
+      // This fallback must remain independently safe if generated utility
+      // ordering changes: a missing source anchor can never leave an
+      // absolutely positioned editor at the viewport origin.
+      centerCompose();
       return;
     }
-    if (window.innerWidth < 1280) {
-      if (compose.parentElement !== surface) surface.appendChild(compose);
+    if (window.innerWidth >= 1280 && !railIsOpen()) {
+      if (compose.parentElement !== threadLayer)
+        threadLayer.appendChild(compose);
       compose.removeAttribute("style");
       compose.removeAttribute("data-review-compose-inline");
-      compose.removeAttribute("data-review-compose-floating");
-      compose.setAttribute("data-review-compose-centered", "");
-      compose.setAttribute("data-review-compose-placement", "centered");
+      compose.removeAttribute("data-review-compose-centered");
+      compose.setAttribute("data-review-compose-floating", "");
+      compose.setAttribute("data-review-compose-placement", "floating");
+      positionThreadCards();
       return;
     }
-    compose.removeAttribute("data-review-compose-inline");
+    if (target.type === "slide") {
+      centerCompose();
+      return;
+    }
+    const endBlock =
+      target.type === "selection" && target.endBlockId
+        ? document.querySelector(
+            '[data-block-id="' + cssEscape(target.endBlockId) + '"]',
+          )
+        : null;
+    const insertionBlock = endBlock || block;
+    // A table row cannot legally own a div sibling inside tbody, so its
+    // scroll container is the insertion anchor.
+    const trailingAnchor =
+      insertionBlock.tagName === "TR"
+        ? insertionBlock.closest("[data-table-scroll-container]") ||
+          insertionBlock
+        : insertionBlock;
+    const leadingAnchor =
+      block.tagName === "TR"
+        ? block.closest("[data-table-scroll-container]") || block
+        : block;
+    compose.removeAttribute("style");
     compose.removeAttribute("data-review-compose-centered");
-    if (compose.parentElement !== threadLayer) threadLayer.appendChild(compose);
-    compose.setAttribute("data-review-compose-floating", "");
-    compose.setAttribute("data-review-compose-placement", "floating");
-    positionThreadCards();
+    compose.removeAttribute("data-review-compose-floating");
+    compose.setAttribute("data-review-compose-inline", "");
+    const composeHeight = compose.offsetHeight;
+    const startRect = leadingAnchor.getBoundingClientRect();
+    const endRect = trailingAnchor.getBoundingClientRect();
+    const roomBelow = window.innerHeight - endRect.bottom;
+    const roomAbove = startRect.top - REVIEW_CONTROL_TOP;
+    if (roomBelow >= composeHeight + FLOAT_CONTENT_GAP) {
+      trailingAnchor.after(compose);
+      compose.setAttribute("data-review-compose-placement", "after-selection");
+      alignInlineCompose(trailingAnchor);
+      return;
+    }
+    if (roomAbove >= composeHeight + FLOAT_CONTENT_GAP) {
+      leadingAnchor.before(compose);
+      compose.setAttribute("data-review-compose-placement", "before-selection");
+      alignInlineCompose(leadingAnchor);
+      return;
+    }
+    centerCompose();
   };
 
   const normalizedComposeBody = () => composeInput.value.trim();
@@ -5795,11 +6312,20 @@ import { createToastManager } from "./toast.js";
     // here, so the shortcut cannot bypass the button's disabled state.
     if (body === "" || composeTarget === null) return;
     const comment = addDraft(composeTarget, body);
-    delete composeDrafts[composeDraftKey(composeTarget)];
+    dispatchReview({
+      type: "composeDraftChanged",
+      key: composeDraftKey(composeTarget),
+      body: "",
+    });
     composeInput.value = "";
     // With submit-right-away on, the very first paint of this comment must
     // already say "Sending", never a staged card with its own Submit button.
-    if (submitRightAway && hasRuntime) submittingIds.add(comment.id);
+    if (submitRightAway && hasRuntime) {
+      dispatchReview({
+        type: "feedbackSubmissionStarted",
+        ids: [comment.id],
+      });
+    }
     announce(
       submitRightAway
         ? "Submitting comment on " + describeTarget(composeTarget) + "."
@@ -5840,8 +6366,14 @@ import { createToastManager } from "./toast.js";
     syncComposeValidity();
     if (!composeTarget) return;
     const key = composeDraftKey(composeTarget);
-    if (composeInput.value === "") delete composeDrafts[key];
-    else composeDrafts[key] = composeInput.value.slice(0, BODY_LIMIT);
+    dispatchReview({
+      type: "composeDraftChanged",
+      key,
+      body:
+        composeInput.value === ""
+          ? ""
+          : composeInput.value.slice(0, BODY_LIMIT),
+    });
     writeLocalState();
   });
   composeInput.addEventListener("keydown", (event) => {
@@ -6335,7 +6867,7 @@ import { createToastManager } from "./toast.js";
       announce("Draft saved on " + describeTarget(pendingSelection) + ".");
       attachInput.checked = false;
       agentInput.value = "";
-      activeDraft = "";
+      dispatchReview({ type: "activeDraftChanged", body: "" });
       syncPlanChatValidity();
       renderTray();
       await save();
@@ -6353,12 +6885,17 @@ import { createToastManager } from "./toast.js";
         method: "POST",
         body: { kind: "chat", body },
       });
-      agentConnected = answer.agentConnected === true;
-      if (isAgentRequest(answer.request)) {
-        agentRequests = agentRequests.concat([answer.request]);
-      }
+      dispatchReview({
+        type: "agentExchangeUpdated",
+        agent: currentAgentState({
+          connected: answer.agentConnected === true,
+          requests: isAgentRequest(answer.request)
+            ? agentRequests.concat([answer.request])
+            : agentRequests,
+        }),
+      });
       agentInput.value = "";
-      activeDraft = "";
+      dispatchReview({ type: "activeDraftChanged", body: "" });
       attachInput.checked = false;
       clearInlineError(agentSave);
       syncPlanChatValidity();
@@ -6383,7 +6920,10 @@ import { createToastManager } from "./toast.js";
   agentSave.addEventListener("click", sendPlanChat);
   let activeDraftTimer = null;
   agentInput.addEventListener("input", () => {
-    activeDraft = agentInput.value;
+    dispatchReview({
+      type: "activeDraftChanged",
+      body: agentInput.value,
+    });
     syncPlanChatValidity();
     writeLocalState();
     if (activeDraftTimer !== null) window.clearTimeout(activeDraftTimer);
@@ -6433,34 +6973,43 @@ import { createToastManager } from "./toast.js";
     sendNote.textContent = "";
     // The card says "Sending" for the whole round trip, so the submit-now
     // path never shows a staged view that implies nothing happened.
-    for (const comment of selected) {
-      submittingIds.add(comment.id);
-      submitErrorById.delete(comment.id);
-    }
+    dispatchReview({
+      type: "feedbackSubmissionStarted",
+      ids: selected.map((comment) => comment.id),
+    });
     renderTray();
     try {
       await confirmRuntime();
       const answer = await call("/api/feedback", {
         method: "POST",
-        body: { comments: selected },
+        body: {
+          comments: selected,
+          expectedRevision: reviewerRevision,
+        },
       });
-      agentConnected = answer.agentConnected === true;
       const submittedIds = new Set(selected.map((comment) => comment.id));
-      sent = sent.concat(selected);
       const submittedRequests = (
         Array.isArray(answer.agentRequests)
           ? answer.agentRequests
           : [answer.agentRequest]
       ).filter(isAgentRequest);
-      agentRequests = agentRequests.concat(submittedRequests);
-      drafts = drafts.filter((comment) => !submittedIds.has(comment.id));
+      dispatchReview({
+        type: "feedbackSubmissionAccepted",
+        submittedIds: Array.from(submittedIds),
+        sent: selected,
+        requests: submittedRequests,
+        reviewerRevision: answer.revision,
+        agentConnected: answer.agentConnected === true,
+      });
       for (const id of submittedIds) {
         minimizedDraftIds.delete(id);
-        submittingIds.delete(id);
       }
-      activeDraft = agentInput.value;
+      dispatchReview({
+        type: "activeDraftChanged",
+        body: agentInput.value,
+      });
       renderTray();
-      await persist();
+      writeLocalState();
       setAgentState(
         agentConnected ? "Waiting for agent" : "No agent connected",
         agentConnected ? "idle" : "failed",
@@ -6479,15 +7028,14 @@ import { createToastManager } from "./toast.js";
     } catch (error) {
       // A failed send returns the comment to staged with the failure written
       // on the card itself, never silently.
-      for (const comment of selected) {
-        submittingIds.delete(comment.id);
-        submitErrorById.set(
-          comment.id,
+      dispatchReview({
+        type: "feedbackSubmissionFailed",
+        ids: selected.map((comment) => comment.id),
+        message:
           "Couldn’t send: " +
-            describeError(error) +
-            " Your comment is still staged. Restart `big-plan review`, then open the new URL it prints.",
-        );
-      }
+          describeError(error) +
+          " Your comment is still staged. Restart `big-plan review`, then open the new URL it prints.",
+      });
       sendNote.textContent =
         describeError(error) +
         " Restart `big-plan review`, then open the new URL it prints. Your comments are safe.";
@@ -6510,6 +7058,8 @@ import { createToastManager } from "./toast.js";
     });
 
   sendButton.addEventListener("click", () => {
+    setRailOpen(true);
+    setActiveTab("comments");
     void submit();
   });
   sidebarSendButton.addEventListener("click", () => {
@@ -6756,16 +7306,20 @@ import { createToastManager } from "./toast.js";
         responses: agentResponses,
         cancelledIds: agentCancelledIds,
       });
-    agentRequests = checked.requests;
-    agentResponses = checked.responses;
-    agentCancelledIds = checked.cancelledIds;
-    agentConnected = checked.connected;
-    agentHeartbeatAt = checked.updatedAtMs;
-    agentSessionState = checked.state;
-    agentConnectionLog = checked.connectionLog;
-    agentPlanPath = checked.plan;
-    agentCommand = checked.agentCommand;
-    agentRecoveryPrompt = checked.recoveryPrompt;
+    dispatchReview({
+      type: "agentExchangeUpdated",
+      agent: {
+        requests: checked.requests,
+        responses: checked.responses,
+        cancelledIds: checked.cancelledIds,
+        connected: checked.connected,
+        heartbeatAt: checked.updatedAtMs,
+        connectionLog: checked.connectionLog,
+        planPath: checked.plan,
+        command: checked.agentCommand,
+        recoveryPrompt: checked.recoveryPrompt,
+      },
+    });
     if (changed || connectionChanged) {
       renderTray();
       void hydrateRevisionDiffs();
@@ -6794,7 +7348,7 @@ import { createToastManager } from "./toast.js";
 
   const renderProgress = (events) => {
     if (events.length === 0) return;
-    progressEvents = events;
+    dispatchReview({ type: "progressEventsObserved", events });
     // The old DONE/WAITING ledger had no readable story. The latest validated
     // event appears only where the reviewer is waiting: inside a chat turn or
     // an expanded anchored thread - including one expanded inside the tray,
@@ -6896,16 +7450,22 @@ import { createToastManager } from "./toast.js";
           exchange.sourceRevision !== sourceRevision
         ) {
           const refreshedRevision = await refreshSourceDocument();
-          sourceRevision =
-            refreshedRevision === ""
-              ? exchange.sourceRevision
-              : refreshedRevision;
+          dispatchReview({
+            type: "sourceRevisionChanged",
+            revision:
+              refreshedRevision === ""
+                ? exchange.sourceRevision
+                : refreshedRevision,
+          });
         }
         if (
           typeof exchange.sourceRevision === "string" &&
           sourceRevision === ""
         ) {
-          sourceRevision = exchange.sourceRevision;
+          dispatchReview({
+            type: "sourceRevisionChanged",
+            revision: exchange.sourceRevision,
+          });
         }
         // The runtime already drops foreign and out-of-order events; the
         // document checks the same two facts again rather than trusting that
@@ -6932,7 +7492,10 @@ import { createToastManager } from "./toast.js";
         }
         if (progressChanged) {
           progressSeq = latest;
-          progressEvents = timeline;
+          dispatchReview({
+            type: "progressEventsObserved",
+            events: timeline,
+          });
         }
         // On the first poll, establish the existing progress baseline before
         // pending requests are observed. Historical work must not claim a new
@@ -7035,28 +7598,42 @@ import { createToastManager } from "./toast.js";
       const answer = await call("/api/drafts");
       const known = new Set((answer.drafts || []).map((draft) => draft.id));
       const carried = readLocalState();
-      drafts = (answer.drafts || []).concat(
+      const adoptedDrafts = (answer.drafts || []).concat(
         carried.drafts.filter((draft) => !known.has(draft.id)),
       );
-      sent = answer.sent || [];
-      resolvedCommentIds.clear();
-      for (const id of answer.resolvedCommentIds || []) {
-        if (isExchangeId(id)) resolvedCommentIds.add(id);
-      }
-      threadReplies = carried.threadReplies;
-      planChatMessages = carried.planChatMessages;
-      activeDraft =
+      const adoptedResolved = (answer.resolvedCommentIds || []).filter(
+        isExchangeId,
+      );
+      const adoptedActiveDraft =
         carried.activeDraft !== ""
           ? carried.activeDraft
           : answer.activeDraft || activeDraft;
+      dispatchReview({
+        type: "durableSnapshotReplaced",
+        drafts: adoptedDrafts,
+        sent: answer.sent || [],
+        activeDraft: adoptedActiveDraft,
+        resolvedCommentIds: adoptedResolved,
+        reviewerRevision: answer.revision,
+      });
+      dispatchReview({
+        type: "conversationStateReplaced",
+        threadReplies: carried.threadReplies,
+        planChatMessages: carried.planChatMessages,
+      });
       agentInput.value = activeDraft;
-      await call("/api/drafts", {
+      const adopted = await call("/api/drafts", {
         method: "PUT",
         body: {
           drafts,
           activeDraft,
           resolvedCommentIds: Array.from(resolvedCommentIds),
+          expectedRevision: reviewerRevision,
         },
+      });
+      dispatchReview({
+        type: "reviewerRevisionChanged",
+        revision: adopted.revision,
       });
       writeLocalState();
       renderTray();
@@ -7066,11 +7643,19 @@ import { createToastManager } from "./toast.js";
     } catch (error) {
       sendNote.textContent = describeError(error);
       const carried = readLocalState();
-      drafts = carried.drafts;
-      sent = carried.sent;
-      threadReplies = carried.threadReplies;
-      planChatMessages = carried.planChatMessages;
-      activeDraft = carried.activeDraft;
+      dispatchReview({
+        type: "durableSnapshotReplaced",
+        drafts: carried.drafts,
+        sent: carried.sent,
+        activeDraft: carried.activeDraft,
+        resolvedCommentIds: carried.resolvedCommentIds,
+        reviewerRevision: carried.reviewerRevision,
+      });
+      dispatchReview({
+        type: "conversationStateReplaced",
+        threadReplies: carried.threadReplies,
+        planChatMessages: carried.planChatMessages,
+      });
       agentInput.value = activeDraft;
       renderTray();
     }

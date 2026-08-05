@@ -501,4 +501,65 @@ describe("agent command lifecycle", () => {
     ).resolves.toMatchObject({ pending: false });
     await cancelledRuntime.close();
   });
+
+  it("should pick up the next request promptly when a queued request is cancelled", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-cancel-wait-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nContinue promptly after cancellation.\n";
+    await writeFile(planPath, source);
+    const cancelledRuntime = await startReviewRuntime({ planPath });
+    const sourceRevision = deriveSourceRevision(source);
+    const pickupStartedAt = Date.now();
+    const pickupPromise = agentCommand([
+      "next",
+      cancelledRuntime.planPath,
+      "--wait",
+    ]);
+
+    await new Promise((settle) => {
+      setTimeout(settle, 20);
+    });
+    const request1 = messageAgentRequest({
+      kind: "chat",
+      requestId: "1111111111111111",
+      sessionId: cancelledRuntime.sessionId,
+      planId: cancelledRuntime.planId,
+      sourceRevision,
+      createdAt: "2026-08-04T16:00:00.000Z",
+      body: "Cancelled before pickup",
+    });
+    await writeAgentRequest({
+      store: cancelledRuntime.store,
+      request: request1,
+    });
+    await appendAgentCancellation({
+      store: cancelledRuntime.store,
+      cancellation: {
+        requestId: request1.requestId,
+        at: "2026-08-04T16:00:00.010Z",
+      },
+    });
+    const request2 = messageAgentRequest({
+      kind: "chat",
+      requestId: "2222222222222222",
+      sessionId: cancelledRuntime.sessionId,
+      planId: cancelledRuntime.planId,
+      sourceRevision,
+      createdAt: "2026-08-04T16:00:00.020Z",
+      body: "Pick this up next",
+    });
+    await writeAgentRequest({
+      store: cancelledRuntime.store,
+      request: request2,
+    });
+
+    await expect(pickupPromise).resolves.toMatchObject({
+      pending: true,
+      work: { requestId: request2.requestId },
+    });
+    expect(Date.now() - pickupStartedAt).toBeLessThan(750);
+    await cancelledRuntime.close();
+  });
 });

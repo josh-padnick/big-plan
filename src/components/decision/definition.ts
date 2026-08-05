@@ -2,6 +2,7 @@
 
 import { type ScopedChildDefinition } from "../_authoring/contract.js";
 import { defineComponent } from "../_registration/define-component.js";
+import { defineRevisionAdapter } from "../_registration/revision-adapter.js";
 import { compileDecisionComponent } from "./compile.js";
 import { Decision } from "./view.js";
 
@@ -17,6 +18,7 @@ const bodyPolicy = (name: string): ScopedChildDefinition["markdownBody"] => ({
 export const DECISION_COMPONENT_DEFINITION = defineComponent({
   compile: compileDecisionComponent,
   view: Decision,
+  revision: defineRevisionAdapter({ view: Decision }),
   scopedChildren: {
     Option: {
       kind: "scoped-child",

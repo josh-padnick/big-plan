@@ -25,6 +25,23 @@ export type ThreadStatus = {
   readonly waitingBusy?: boolean;
 };
 
+export type ThreadOutcomeGroup = "needs-input" | "ready" | "working" | "queued";
+
+/** Keeps completed questions distinct from completed work awaiting review. */
+export const deriveThreadOutcomeGroup = ({
+  outcome,
+  lifecycle,
+}: {
+  readonly outcome: "changed" | "question" | "outside" | "waiting";
+  readonly lifecycle?: ThreadStatusStage;
+}): ThreadOutcomeGroup => {
+  if (outcome === "question") return "needs-input";
+  if (outcome !== "waiting") return "ready";
+  return lifecycle === "working" || lifecycle === "stalled"
+    ? "working"
+    : "queued";
+};
+
 /** Chooses the one toolbar connection indicator allowed to be visible. */
 export const deriveAgentIndicator = ({
   hasRuntime,

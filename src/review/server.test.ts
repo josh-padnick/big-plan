@@ -12,9 +12,16 @@ import {
   nextPendingAgentRequest,
   readAgentExchange,
 } from "./agent-exchange.js";
-import { startReviewRuntime } from "./server.js";
+import { ReviewRuntimeAlreadyRunning, startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
-import { writeAgentHeartbeat, writeRevisionSnapshot } from "./store.js";
+import {
+  prepareStore,
+  reviewStoreFor,
+  writeAgentHeartbeat,
+  writeRevisionSnapshot,
+  writeSessionDescriptor,
+  writeSessionHeartbeat,
+} from "./store.js";
 
 const PLAN = `# Review runtime plan
 
@@ -100,6 +107,19 @@ const rawStatus = ({
     request.on("error", fail);
     request.end();
   });
+
+const currentReviewerRevision = async (): Promise<number> => {
+  const value: unknown = await (await call({ path: "/api/drafts" })).json();
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("revision" in value) ||
+    typeof value.revision !== "number"
+  ) {
+    throw new Error("The runtime did not return a reviewer revision");
+  }
+  return value.revision;
+};
 
 describe("review runtime transport", () => {
   it("should bind loopback on an ephemeral port when it starts", () => {
@@ -229,7 +249,12 @@ describe("review runtime feedback", () => {
         await call({
           path: "/api/drafts",
           method: "PUT",
-          body: { drafts, activeDraft: "", resolvedCommentIds: [] },
+          body: {
+            drafts,
+            activeDraft: "",
+            resolvedCommentIds: [],
+            expectedRevision: await currentReviewerRevision(),
+          },
         })
       ).status,
     ).toBe(200);
@@ -237,11 +262,51 @@ describe("review runtime feedback", () => {
     expect(answer).toMatchObject({ drafts: [{ id: "aabbccdd" }] });
   });
 
+  it("should preserve newer state when two tabs save one reviewer revision", async () => {
+    const expectedRevision = await currentReviewerRevision();
+    const first = await call({
+      path: "/api/drafts",
+      method: "PUT",
+      body: {
+        drafts: [],
+        activeDraft: "Saved by the first tab.",
+        resolvedCommentIds: [],
+        expectedRevision,
+      },
+    });
+    expect(first.status).toBe(200);
+
+    const stale = await call({
+      path: "/api/drafts",
+      method: "PUT",
+      body: {
+        drafts: [],
+        activeDraft: "Unsaved text from the stale tab.",
+        resolvedCommentIds: [],
+        expectedRevision,
+      },
+    });
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toMatchObject({
+      conflict: true,
+      reviewer: {
+        revision: expectedRevision + 1,
+        activeDraft: "Saved by the first tab.",
+      },
+    });
+    await expect(
+      (await call({ path: "/api/drafts" })).json(),
+    ).resolves.toMatchObject({
+      activeDraft: "Saved by the first tab.",
+    });
+  });
+
   it("should refuse a comment pointing at a block this document does not contain", async () => {
     const response = await call({
       path: "/api/feedback",
       method: "POST",
       body: {
+        expectedRevision: await currentReviewerRevision(),
         comments: [
           {
             id: "11223344",
@@ -260,6 +325,7 @@ describe("review runtime feedback", () => {
       path: "/api/feedback",
       method: "POST",
       body: {
+        expectedRevision: await currentReviewerRevision(),
         comments: [
           {
             id: "55667788",
@@ -407,12 +473,9 @@ describe("review runtime feedback", () => {
         },
       ],
     });
-    const lines = (
-      await readFile(runtime.store.agentConnectionEventsPath, "utf8")
-    )
-      .trim()
-      .split("\n");
-    expect(lines).toHaveLength(3);
+    expect(await readdir(runtime.store.agentConnectionDirectory)).toHaveLength(
+      3,
+    );
   });
 
   it("should serve a deterministic diff between retained revisions", async () => {
@@ -487,6 +550,46 @@ describe("review runtime feedback", () => {
 });
 
 describe("review runtime shutdown", () => {
+  it("should refuse a second runtime while the first heartbeat is fresh", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-single-runtime-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const first = await startReviewRuntime({ planPath });
+    await expect(startReviewRuntime({ planPath })).rejects.toBeInstanceOf(
+      ReviewRuntimeAlreadyRunning,
+    );
+    await first.close();
+    const replacement = await startReviewRuntime({ planPath });
+    await replacement.close();
+  });
+
+  it("should replace a runtime when its recorded heartbeat is stale", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-stale-runtime-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const planId = "2222222222222222";
+    const store = reviewStoreFor({ planPath, planId });
+    await prepareStore(store);
+    await writeSessionDescriptor({
+      store,
+      descriptor: {
+        sessionId: "1111111111111111",
+        planId,
+        plan: planPath,
+        url: "http://127.0.0.1:1/",
+      },
+    });
+    await writeSessionHeartbeat({
+      store,
+      sessionId: "1111111111111111",
+      running: true,
+      now: 0,
+    });
+
+    const replacement = await startReviewRuntime({ planPath });
+    await replacement.close();
+  });
+
   it("should stop listening when the reviewer closes it", async () => {
     for (const instance of running) {
       await instance.close();

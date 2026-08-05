@@ -16,7 +16,13 @@
 // `data-block-line` so a comment can name a line range the way an authored
 // Annotation does.
 
+import { createHash } from "node:crypto";
 import type { Element, ElementContent, Root, RootContent } from "hast";
+import {
+  COMPONENT_INSTANCE_ATTRIBUTE,
+  type ComponentRevisionSnapshot,
+  type MaterializedComponentRevision,
+} from "./component-pipeline/component-revision-snapshot.js";
 
 /** Authored structure retained at the revision boundary for faithful lenses. */
 export type ReviewContentNode =
@@ -57,6 +63,14 @@ export type ReviewContentNode =
       readonly children: ReadonlyArray<ReviewContentNode>;
     };
 
+export type MarkdownBlockSnapshot = {
+  readonly type: "markdown";
+  readonly semanticHash: string;
+  readonly content: ReviewContentNode;
+};
+
+export type BlockSnapshot = MarkdownBlockSnapshot | ComponentRevisionSnapshot;
+
 /** The document-order block descriptors one compile produced. */
 export type BlockDescriptor = {
   readonly id: string;
@@ -73,7 +87,7 @@ export type BlockDescriptor = {
   // text. Revision alignment uses it instead of treating rendered pixels as
   // source identity.
   readonly authoredText: string;
-  readonly content: ReviewContentNode;
+  readonly snapshot: BlockSnapshot;
   readonly parentBlockId?: string;
 };
 
@@ -197,6 +211,17 @@ const contentOf = (node: Element): ReviewContentNode => {
     return { type: "paragraph", children };
   }
   return { type: "group", children };
+};
+
+const markdownSnapshot = (node: Element): MarkdownBlockSnapshot => {
+  const content = contentOf(node);
+  return {
+    type: "markdown",
+    semanticHash: createHash("sha256")
+      .update(JSON.stringify(content))
+      .digest("hex"),
+    content,
+  };
 };
 
 // Keeps only the formatting boundary the revision lens must reconstruct.
@@ -342,9 +367,7 @@ const labelOf = ({
     // tray row reads "Storage engine" rather than "Decision".
     const heading = findDescendant({
       node,
-      match: (candidate) =>
-        HEADING_TAGS.has(candidate.tagName) ||
-        candidate.properties["data-decision-question"] !== undefined,
+      match: (candidate) => HEADING_TAGS.has(candidate.tagName),
     });
     const headingText = heading === undefined ? "" : summarize(textOf(heading));
     if (headingText.length > 0) {
@@ -452,7 +475,7 @@ const stampTableRows = ({
         text: textOf(candidate),
         markedText: markedTextOf(candidate),
         authoredText: textOf(candidate),
-        content: contentOf(candidate),
+        snapshot: markdownSnapshot(candidate),
         parentBlockId,
       });
     },
@@ -475,12 +498,17 @@ const stampScope = ({
   scope,
   section,
   blocks,
+  componentSnapshots,
   counter = new Map(),
 }: {
   readonly container: Element | Root;
   readonly scope: string;
   readonly section: string;
   readonly blocks: Array<BlockDescriptor>;
+  readonly componentSnapshots: ReadonlyMap<
+    string,
+    MaterializedComponentRevision
+  >;
   readonly counter?: ScopeCounter;
 }): void => {
   for (const child of container.children) {
@@ -492,15 +520,53 @@ const stampScope = ({
     }
     const kind = kindOf(child);
     if (kind === undefined) {
-      stampScope({ container: child, scope, section, blocks, counter });
+      stampScope({
+        container: child,
+        scope,
+        section,
+        blocks,
+        componentSnapshots,
+        counter,
+      });
       continue;
     }
-    const label = labelOf({ node: child, kind });
     const id = allocateId({ scope, kind, counter });
+    const component = componentName(child);
+    const instance = child.properties[COMPONENT_INSTANCE_ATTRIBUTE];
+    const materialized =
+      component === undefined || typeof instance !== "string"
+        ? undefined
+        : componentSnapshots.get(instance);
+    if (component !== undefined) {
+      if (
+        materialized === undefined ||
+        materialized.snapshot.component !== component
+      ) {
+        throw new Error(
+          `Internal error: component "${component}" has no exact revision snapshot`,
+        );
+      }
+      delete child.properties[COMPONENT_INSTANCE_ATTRIBUTE];
+    }
+    const semanticLabel =
+      materialized === undefined
+        ? ""
+        : summarize(
+            materialized.text
+              .split("\n")
+              .find((line) => line.trim().length > 0) ?? "",
+          );
+    const label =
+      semanticLabel.length > 0 ? semanticLabel : labelOf({ node: child, kind });
     child.properties["data-block-id"] = id;
     child.properties["data-block-kind"] = kind;
     child.properties["data-block-label"] = label;
     child.properties["data-block-section"] = section;
+    const authoredText =
+      materialized?.text ??
+      (kind === "heading"
+        ? textOf(child).replace(KICKER_PREFIX, "")
+        : textOf(child));
     blocks.push({
       id,
       kind,
@@ -508,11 +574,8 @@ const stampScope = ({
       section,
       text: textOf(child),
       markedText: markedTextOf(child),
-      authoredText:
-        kind === "heading"
-          ? textOf(child).replace(KICKER_PREFIX, "")
-          : textOf(child),
-      content: contentOf(child),
+      authoredText,
+      snapshot: materialized?.snapshot ?? markdownSnapshot(child),
     });
     if (kind === "code" || kind.startsWith("code-")) {
       stampCodeLines(child);
@@ -555,7 +618,16 @@ const scopeNameFor = ({
  * deck and reports the descriptors it minted.
  */
 export const rehypeBlockIdentity =
-  ({ blocks }: { readonly blocks?: Array<BlockDescriptor> } = {}) =>
+  ({
+    blocks,
+    componentSnapshots = new Map(),
+  }: {
+    readonly blocks?: Array<BlockDescriptor>;
+    readonly componentSnapshots?: ReadonlyMap<
+      string,
+      MaterializedComponentRevision
+    >;
+  } = {}) =>
   (tree: Root): void => {
     const collected: Array<BlockDescriptor> = [];
     // Everything above the first slide - the title, lede, summary card, and
@@ -574,6 +646,7 @@ export const rehypeBlockIdentity =
       scope: "document",
       section: "Overview",
       blocks: collected,
+      componentSnapshots,
     });
     let slideIndex = 0;
     // Sub-slides are nested inside their major slide after deck transforms.
@@ -605,7 +678,13 @@ export const rehypeBlockIdentity =
             sectionHeading === undefined
               ? `Section ${slideIndex}`
               : summarize(textOf(sectionHeading)).replace(KICKER_PREFIX, "");
-          stampScope({ container: child, scope, section, blocks: collected });
+          stampScope({
+            container: child,
+            scope,
+            section,
+            blocks: collected,
+            componentSnapshots,
+          });
         }
         visitScopes(child.children);
       }

@@ -18,7 +18,7 @@ import {
   resolveAgentResponseRequest,
   responseTemplateFor,
   validateAgentResponseDraft,
-  writeAgentRequest,
+  writeAgentClaim,
   writeAgentResponse,
 } from "../../review/agent-exchange.js";
 import type {
@@ -109,6 +109,8 @@ const wait = (milliseconds: number): Promise<void> =>
   new Promise((settle) => {
     setTimeout(settle, milliseconds);
   });
+
+const agentRequestPollIntervalMs = 100;
 
 const responseHistory = ({
   request,
@@ -337,7 +339,7 @@ const nextWork = async ({
       sessionId: session.sessionId,
       state: "waiting",
     });
-    await wait(500);
+    await wait(agentRequestPollIntervalMs);
     snapshot = await readAgentExchange({
       store: session.store,
       sessionId: session.sessionId,
@@ -373,7 +375,7 @@ const nextWork = async ({
       request,
       currentRevision: pickupRevision,
     });
-    await writeAgentRequest({ store: session.store, request });
+    await writeAgentClaim({ store: session.store, request });
   }
   const claimedFromRevision = effectiveSourceRevision({ request, snapshot });
   await writeAgentHeartbeat({
@@ -385,9 +387,6 @@ const nextWork = async ({
     store: session.store,
     event: {
       sessionId: session.sessionId,
-      seq:
-        progress.reduce((highest, event) => Math.max(highest, event.seq), 0) +
-        1,
       step:
         request.kind === "chat"
           ? "Picked up: plan question"
@@ -507,19 +506,10 @@ const respond = async ({
     now: new Date().toISOString(),
   });
   await writeAgentResponse({ store: session.store, response });
-  const progress = await readProgress({
-    store: session.store,
-    sessionId: session.sessionId,
-  });
-  const highest = progress.reduce(
-    (current, event) => Math.max(current, event.seq),
-    0,
-  );
   await appendProgress({
     store: session.store,
     event: {
       sessionId: session.sessionId,
-      seq: highest + 1,
       step: "Agent response ready",
       state: "done",
       requestId: request.requestId,
@@ -574,17 +564,10 @@ const note = async ({
     planId: session.planId,
   });
   const request = nextPendingAgentRequest(snapshot);
-  const progress = await readProgress({
-    store: session.store,
-    sessionId: session.sessionId,
-  });
   await appendProgress({
     store: session.store,
     event: {
       sessionId: session.sessionId,
-      seq:
-        progress.reduce((highest, event) => Math.max(highest, event.seq), 0) +
-        1,
       step,
       state: "live",
       ...(request === undefined ? {} : { requestId: request.requestId }),

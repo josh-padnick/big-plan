@@ -11,13 +11,14 @@ import {
   nextPendingAgentRequest,
   readAgentExchange,
   validateAgentResponseDraft,
-  writeAgentRequest,
+  writeAgentClaim,
   writeAgentResponse,
 } from "../src/review/agent-exchange.js";
 import { buildRevisionChangeSet } from "../src/review/revision-change-set.js";
 import { renderDocument } from "../src/render/render-document.js";
 import { agentCommand } from "../src/cli/agent/command.js";
 import {
+  appendProgress,
   reviewStoreFor,
   readProgress,
   writeAgentHeartbeat,
@@ -140,8 +141,6 @@ test("should preserve and send a floating review across reload and viewport chan
     await field.press("Control+A");
     await field.press("Shift+ArrowLeft");
     await expect(field).toBeFocused();
-    await expect(owner).toHaveAttribute(expandedAttribute, "");
-    await owner.locator("[data-review-thread-reply-box] label").click();
     await expect(owner).toHaveAttribute(expandedAttribute, "");
     const conversation = owner.locator("[data-review-thread-turn] p").first();
     const conversationBox = await conversation.boundingBox();
@@ -708,7 +707,7 @@ test("should preserve and send a floating review across reload and viewport chan
           };
         }),
       )
-      .toEqual({ outer: "0px", inner: "1px" });
+      .toEqual({ outer: "1px", inner: "missing" });
     const history = page.locator("[data-review-connection-history]");
     await history.locator("summary").click();
     await expect(history).toHaveAttribute("open", "");
@@ -750,7 +749,7 @@ test("should preserve and send a floating review across reload and viewport chan
           };
         }),
       )
-      .toEqual({ outer: "0px", inner: "1px" });
+      .toEqual({ outer: "1px", inner: "missing" });
     await expect(history.locator("summary")).toContainText("Connection log");
     await expect(
       history.locator("[data-review-connection-summary]"),
@@ -1256,6 +1255,11 @@ test("should preserve and send a floating review across reload and viewport chan
       )
       .toBe("1px");
     const zOrder = await page.evaluate(() => ({
+      shellHeader: Number.parseInt(
+        getComputedStyle(document.querySelector("body > header") as Element)
+          .zIndex,
+        10,
+      ),
       toolbar: Number.parseInt(
         getComputedStyle(
           document.querySelector("[data-review-toolbar]") as Element,
@@ -1275,9 +1279,37 @@ test("should preserve and send a floating review across reload and viewport chan
         10,
       ),
     }));
+    expect(zOrder.shellHeader).toBe(2_147_483_647);
     expect(zOrder.toolbar).toBe(2_147_483_647);
     expect(zOrder.toolbar).toBeGreaterThan(zOrder.cards);
     expect(zOrder.toolbar).toBeGreaterThan(zOrder.slideSelector);
+    const topCard = page.locator("[data-review-thread-card]").first();
+    await topCard.evaluate((node) => {
+      const card = node as HTMLElement;
+      card.hidden = false;
+      card.style.top = "0px";
+    });
+    await expect
+      .poll(() =>
+        topCard.evaluate((node) => {
+          const rect = node.getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.left + 8, 20);
+          return {
+            cardAtToolbarHeight: rect.top < 44 && rect.bottom > 20,
+            topbarWins:
+              hit?.closest("body > header, [data-review-toolbar]") !== null,
+            cardWins: hit?.closest("[data-review-thread-card]") === node,
+          };
+        }),
+      )
+      .toEqual({
+        cardAtToolbarHeight: true,
+        topbarWins: true,
+        cardWins: false,
+      });
+    await topCard.evaluate((node) => {
+      (node as HTMLElement).removeAttribute("style");
+    });
     const titles = page.locator(
       "[data-review-drafts] [data-review-row-target]",
     );
@@ -1615,7 +1647,8 @@ test("should preserve and send a floating review across reload and viewport chan
     const heading = page.locator("[data-block-kind='heading']").last();
     await heading.click({ clickCount: 3 });
     await affordance.click();
-    await expect(compose).toHaveAttribute(
+    await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+    await expect(compose).not.toHaveAttribute(
       "data-review-compose-placement",
       "centered",
     );
@@ -1657,6 +1690,7 @@ test("should preserve and send a floating review across reload and viewport chan
       "data-review-compose-placement",
       "centered",
     );
+    await expect(compose).not.toHaveAttribute("data-review-compose-inline", "");
     await expect(page.locator("[data-review-compose-save]")).toBeDisabled();
     await page.locator("[data-review-compose-input]").press("Control+Enter");
     await expect(compose).toBeVisible();
@@ -1692,18 +1726,14 @@ test("should preserve and send a floating review across reload and viewport chan
     });
     await expect(affordance).toBeVisible();
     await affordance.click();
-    await expect(compose).toHaveAttribute(
-      "data-review-compose-placement",
-      "centered",
-    );
+    await expect(compose).toHaveAttribute("data-review-compose-inline", "");
     await expect
       .poll(() =>
         page.evaluate(() => {
           const editor = document.querySelector("[data-review-compose]");
           const ranges = CSS.highlights.get("big-plan-review-active");
           return {
-            inReviewSurface:
-              editor?.parentElement?.hasAttribute("data-review-root") === true,
+            insideAuthoredBlock: editor?.closest("[data-block-id]") !== null,
             intersects:
               editor !== null &&
               ranges !== undefined &&
@@ -1711,7 +1741,7 @@ test("should preserve and send a floating review across reload and viewport chan
           };
         }),
       )
-      .toEqual({ inReviewSurface: true, intersects: false });
+      .toEqual({ insideAuthoredBlock: false, intersects: false });
     await page.locator("[data-review-compose-cancel]").click();
     await expect(end).toBeVisible();
   });
@@ -1753,6 +1783,8 @@ test("should preserve and send a floating review across reload and viewport chan
         response.url().endsWith("/api/feedback") &&
         response.request().method() === "POST",
     );
+    await page.locator("[data-review-hide]").click();
+    await expect(tray).toBeHidden();
     await page.locator("[data-review-send]").click();
     const response = await responsePromise;
     expect(response.ok()).toBe(true);
@@ -1760,6 +1792,10 @@ test("should preserve and send a floating review across reload and viewport chan
       .poll(() => page.evaluate(() => window.scrollY))
       .toBeCloseTo(before, 0);
     await expect(tray).toBeVisible();
+    await expect(page.locator('[data-review-tab="comments"]')).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     await expect(
       page.locator('[data-review-outcome-group="queued"] [data-review-row]'),
     ).toHaveCount(3);
@@ -2295,7 +2331,7 @@ test("should preserve and send a floating review across reload and viewport chan
       ...queuedQuestionRequest,
       claimedFromRevision: deriveSourceRevision(revised),
     };
-    await writeAgentRequest({ store, request: questionRequest });
+    await writeAgentClaim({ store, request: questionRequest });
     nextExchange = await readAgentExchange({
       store,
       sessionId: session.sessionId,
@@ -2342,7 +2378,7 @@ test("should preserve and send a floating review across reload and viewport chan
       ...queuedOutsideRequest,
       claimedFromRevision: deriveSourceRevision(revised),
     };
-    await writeAgentRequest({ store, request: outsideRequest });
+    await writeAgentClaim({ store, request: outsideRequest });
     nextExchange = await readAgentExchange({
       store,
       sessionId: session.sessionId,
@@ -3074,7 +3110,17 @@ test("should preserve and send a floating review across reload and viewport chan
       await page
         .locator("[data-review-sent-list] [data-review-outcome-group] h3")
         .allTextContents(),
-    ).toEqual(["Ready for Review 3"]);
+    ).toEqual(["Needs input 1", "Ready for Review 2"]);
+    const needsInput = page.locator(
+      '[data-review-outcome-group="needs-input"] [data-review-sent-row][data-review-outcome="question"]',
+    );
+    await expect(needsInput).toHaveAttribute(
+      "data-review-row-state",
+      "needs-input",
+    );
+    await expect(
+      needsInput.locator("[data-review-row-secondary]"),
+    ).toContainText("Needs your answer");
     await expect(
       page.locator(
         '[data-review-outcome-group="ready"] [data-review-sent-row][data-review-outcome="changed"] [data-review-row-review-change]',
@@ -3260,7 +3306,7 @@ test("should preserve and send a floating review across reload and viewport chan
       "data-review-thread-status",
       "working",
     );
-    await expect(chatStatus.locator("[data-review-spinner]")).toHaveCount(1);
+    await expect(chatStatus.locator("[data-review-spinner]")).toHaveCount(2);
     const activityToggle = chatStatus.locator(
       "[data-review-status-activity-toggle]",
     );
@@ -3636,7 +3682,7 @@ Ship the live review loop behind the explicit review command.
     await page.locator('[data-review-tab="comments"]').click();
     await page
       .locator(
-        '[data-review-outcome-group="ready"] [data-review-sent-row][data-review-outcome="question"] [data-review-row-target]',
+        '[data-review-outcome-group="needs-input"] [data-review-sent-row][data-review-outcome="question"] [data-review-row-target]',
       )
       .click();
     await expect(
@@ -3789,6 +3835,9 @@ Ship the live review loop behind the explicit review command.
     ).toBeVisible();
     await expect(
       trayThread.locator("[data-review-thread-reply-resolve]"),
+    ).toHaveCount(0);
+    await expect(
+      trayThread.locator("[data-review-thread-reply-box] label"),
     ).toHaveCount(0);
     const replyField = trayThread.locator("[data-review-thread-reply]");
     await replyField.fill("One final note before resolving.");
@@ -3976,6 +4025,7 @@ Ship the live review loop behind the explicit review command.
           resolvedCommentIds: state.sent.map(
             (comment: { readonly id: string }) => comment.id,
           ),
+          expectedRevision: state.revision,
         }),
       });
       return {
@@ -4008,13 +4058,20 @@ Ship the live review loop behind the explicit review command.
     await page.evaluate(async (state) => {
       const token =
         document.documentElement.getAttribute("data-review-token") ?? "";
+      const headers = {
+        "content-type": "application/json",
+        "x-big-plan-review-token": token,
+      };
+      const current = await fetch("/api/drafts", { headers }).then((response) =>
+        response.json(),
+      );
       await fetch("/api/drafts", {
         method: "PUT",
-        headers: {
-          "content-type": "application/json",
-          "x-big-plan-review-token": token,
-        },
-        body: JSON.stringify(state),
+        headers,
+        body: JSON.stringify({
+          ...state,
+          expectedRevision: current.revision,
+        }),
       });
     }, restoreResolutionState);
     await page.reload();
@@ -4159,6 +4216,287 @@ Ship the live review loop behind the explicit review command.
   });
 });
 
+test("should keep composition anchored across tray and missing-source states", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(reviewRuntimeUrl);
+  await expect(page.locator("html")).toHaveAttribute("data-review-ready", "");
+  const toggle = page.locator("[data-review-toggle]");
+  const compose = page.locator("[data-review-compose]");
+  const paragraph = page.locator(
+    '[data-block-id="section/details/paragraph-1"]',
+  );
+
+  await toggle.click();
+  await paragraph.evaluate((node) => {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+  await page.locator("[data-review-affordance]").click();
+  await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+  await expect
+    .poll(() =>
+      compose.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return rect.top > 0 && rect.left > 0 && getComputedStyle(node).position;
+      }),
+    )
+    .toBe("relative");
+
+  await page.setViewportSize({ width: 800, height: 900 });
+  await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+  await expect
+    .poll(async () => {
+      const slide = paragraph.locator("xpath=ancestor::*[@data-slide][1]");
+      const [composeBox, slideBox] = await Promise.all([
+        compose.boundingBox(),
+        slide.boundingBox(),
+      ]);
+      if (composeBox === null || slideBox === null) return null;
+      return {
+        containedLeft: composeBox.x >= slideBox.x - 1,
+        containedRight:
+          composeBox.x + composeBox.width <= slideBox.x + slideBox.width + 1,
+      };
+    })
+    .toEqual({ containedLeft: true, containedRight: true });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator("[data-review-hide]").click();
+  await expect(compose).toHaveAttribute(
+    "data-review-compose-placement",
+    "floating",
+  );
+  await toggle.click();
+  await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+
+  await paragraph.evaluate((node) => {
+    node.remove();
+    window.dispatchEvent(new Event("resize"));
+  });
+  await expect(compose).toHaveAttribute(
+    "data-review-compose-placement",
+    "centered",
+  );
+  await expect
+    .poll(() =>
+      compose.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          position: getComputedStyle(node).position,
+          centeredX: Math.abs(rect.left + rect.width / 2 - innerWidth / 2) < 2,
+          centeredY: Math.abs(rect.top + rect.height / 2 - innerHeight / 2) < 2,
+          stranded: rect.left === 0 && rect.top === 0,
+        };
+      }),
+    )
+    .toEqual({
+      position: "fixed",
+      centeredX: true,
+      centeredY: true,
+      stranded: false,
+    });
+});
+
+test("should present reconnect guidance as quiet copyable code wells", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  await expect(page.locator("html")).toHaveAttribute("data-review-ready", "");
+  await page.locator("[data-review-toggle]").click();
+  await page.locator('[data-review-tab="agent"]').click();
+  const wells = page.locator("[data-review-copy-block] pre");
+  await expect(wells).toHaveCount(2);
+
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate(
+      (nextTheme) =>
+        document.documentElement.setAttribute("data-theme", nextTheme),
+      theme,
+    );
+    for (const codeWell of await wells.all()) {
+      const treatment = await codeWell.evaluate((node) => {
+        const style = getComputedStyle(node);
+        return {
+          background: style.backgroundColor,
+          borderColor: style.borderTopColor,
+          borderWidth: style.borderTopWidth,
+          color: style.color,
+          overflowWrap: style.overflowWrap,
+          whiteSpace: style.whiteSpace,
+        };
+      });
+      expect(treatment.background).not.toBe("rgba(0, 0, 0, 0)");
+      expect(treatment.borderWidth).toBe("1px");
+      expect(treatment.borderColor).not.toBe(treatment.color);
+      expect(treatment.overflowWrap).toBe("anywhere");
+      expect(treatment.whiteSpace).toBe("pre-wrap");
+    }
+    const copy = page.locator("[data-review-copy]").first();
+    await copy.hover();
+    const hover = await copy.evaluate(
+      (node) => getComputedStyle(node).backgroundColor,
+    );
+    await copy.focus();
+    await expect(copy).toBeFocused();
+    const box = await copy.boundingBox();
+    if (box === null) throw new Error("The copy control has no pointer target");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    const active = await copy.evaluate(
+      (node) => getComputedStyle(node).backgroundColor,
+    );
+    await page.mouse.up();
+    expect(active).not.toBe(hover);
+  }
+});
+
+test("should present one live agent activity and navigate to its conversation", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(reviewRuntimeUrl);
+  await expect(page.locator("html")).toHaveAttribute("data-review-ready", "");
+  const session = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/session", {
+      headers: {
+        "x-big-plan-review-token": root.getAttribute("data-review-token") ?? "",
+      },
+    });
+    return response.json();
+  });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("sessionId" in session) ||
+    !("planId" in session) ||
+    !("plan" in session) ||
+    typeof session.sessionId !== "string" ||
+    typeof session.planId !== "string" ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error("The activity test needs the live session identity");
+  }
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+  });
+
+  await page.locator("[data-review-toggle]").click();
+  await page.locator('[data-review-tab="agent"]').click();
+  const activity = page.locator("[data-review-current-activity]");
+  await expect(activity).toHaveAttribute(
+    "data-review-current-activity",
+    "idle",
+  );
+  await expect(activity).toContainText("No agent work in progress");
+  await expect(activity).toContainText(
+    "The agent is connected and waiting for feedback.",
+  );
+
+  await page.locator('[data-review-tab="comments"]').click();
+  await page.locator("[data-review-slide-selector]").first().click();
+  await page
+    .locator("[data-review-compose-input]")
+    .fill("Restore the three Spanish sentences to English.");
+  await page.locator("[data-review-compose-save]").click();
+  await page.locator("[data-review-sidebar-send]").click();
+  await expect(page.locator("[data-review-sent-row]")).toHaveCount(1);
+  await page.locator('[data-review-tab="agent"]').click();
+  await expect(activity).toHaveAttribute(
+    "data-review-current-activity",
+    "waiting",
+  );
+  await expect(activity).toContainText("Waiting for agent");
+
+  const exchange = await readAgentExchange({
+    store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const pending = nextPendingAgentRequest(exchange);
+  if (pending === undefined) {
+    throw new Error("The activity test did not queue its feedback request");
+  }
+  await writeAgentClaim({
+    store,
+    request: {
+      ...pending,
+      claimedFromRevision: pending.sourceRevision,
+    },
+  });
+  await appendProgress({
+    store,
+    event: {
+      sessionId: session.sessionId,
+      requestId: pending.requestId,
+      step: "Reading the request",
+      state: "live",
+      at: new Date(Date.now() - 1_000).toISOString(),
+    },
+  });
+  await appendProgress({
+    store,
+    event: {
+      sessionId: session.sessionId,
+      requestId: pending.requestId,
+      step: "Restoring the Spanish sentences to English",
+      state: "live",
+      at: new Date().toISOString(),
+    },
+  });
+
+  await expect(activity).toHaveAttribute(
+    "data-review-current-activity",
+    "working",
+    { timeout: 10_000 },
+  );
+  await expect(activity).toContainText("Responding to a comment");
+  await expect(activity).toContainText(
+    "Restoring the Spanish sentences to English",
+  );
+  await expect(activity).not.toContainText("Reading the request");
+
+  const history = page.locator("[data-review-connection-history]");
+  await history.locator("summary").click();
+  await expect(history).toHaveAttribute("open", "");
+  await appendProgress({
+    store,
+    event: {
+      sessionId: session.sessionId,
+      requestId: pending.requestId,
+      step: "Validating the restored plan",
+      state: "live",
+      at: new Date(Date.now() + 1).toISOString(),
+    },
+  });
+  await expect(activity).toContainText("Validating the restored plan", {
+    timeout: 10_000,
+  });
+  await expect(history).toHaveAttribute("open", "");
+
+  await page.locator("[data-review-current-activity-view]").click();
+  await expect(page.locator('[data-review-tab="comments"]')).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.locator("[data-review-row-expanded]")).toHaveCount(1);
+});
+
 test("should preserve footnote navigation inside a selected slide", async ({
   page,
   footnoteReviewRuntimeUrl,
@@ -4232,4 +4570,80 @@ test("should preserve footnote navigation inside a selected slide", async ({
     )
     .toBe(true);
   await page.keyboard.press("Escape");
+});
+
+test("should preserve stale-tab text when a reviewer save conflicts", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  const staleTab = await page.context().newPage();
+  await staleTab.goto(reviewRuntimeUrl);
+  await expect(staleTab.locator("html")).toHaveAttribute(
+    "data-review-ready",
+    "",
+  );
+  await page.goto(reviewRuntimeUrl);
+  await expect(page.locator("html")).toHaveAttribute("data-review-ready", "");
+
+  const paragraph = staleTab.locator(
+    '[data-block-id="section/delivery/paragraph-1"]',
+  );
+  await paragraph.evaluate((block) => {
+    const range = document.createRange();
+    range.selectNodeContents(block);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+  await staleTab.locator("[data-review-affordance]").click();
+  const body = "Preserve this exact stale-tab reviewer text.";
+  await staleTab.locator("[data-review-compose-input]").fill(body);
+  const conflictedSave = staleTab.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT" &&
+      response.status() === 409,
+  );
+  await staleTab.locator("[data-review-compose-save]").click();
+  await conflictedSave;
+
+  await expect(staleTab.locator("[data-review-toast]")).toContainText(
+    "Review changed in another tab",
+  );
+  await expect(
+    staleTab.locator("[data-review-drafts] li").filter({ hasText: body }),
+  ).toHaveCount(1);
+  const beforeReload = await staleTab.evaluate(async (draftBody) => {
+    const token =
+      document.documentElement.getAttribute("data-review-token") ?? "";
+    const state = await fetch("/api/drafts", {
+      headers: { "x-big-plan-review-token": token },
+    }).then((response) => response.json());
+    return state.drafts.some(
+      (draft: { readonly body?: string }) => draft.body === draftBody,
+    );
+  }, body);
+  expect(beforeReload).toBe(false);
+
+  await staleTab.reload();
+  await expect(staleTab.locator("html")).toHaveAttribute(
+    "data-review-ready",
+    "",
+  );
+  await expect
+    .poll(() =>
+      staleTab.evaluate(async (draftBody) => {
+        const token =
+          document.documentElement.getAttribute("data-review-token") ?? "";
+        const state = await fetch("/api/drafts", {
+          headers: { "x-big-plan-review-token": token },
+        }).then((response) => response.json());
+        return state.drafts.some(
+          (draft: { readonly body?: string }) => draft.body === draftBody,
+        );
+      }, body),
+    )
+    .toBe(true);
+  await staleTab.close();
 });

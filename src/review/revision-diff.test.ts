@@ -27,6 +27,14 @@ const block = ({
   section,
   text,
   markedText: text,
+  snapshot: {
+    type: "markdown" as const,
+    semanticHash: text,
+    content: {
+      type: "paragraph",
+      children: [{ type: "text", value: text }],
+    },
+  },
   ...(parentBlockId === undefined ? {} : { parentBlockId }),
 });
 
