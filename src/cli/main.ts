@@ -33,11 +33,15 @@ Usage:
                                              writing an output file
   big-plan review <input.mdx>                 Serve the plan on loopback for
                                              interactive review with anchored
-                                             comments and real agent responses
-  big-plan agent <input.mdx>                  Print the ready-to-paste prompt
-                                             for a real coding-agent review
-                                             session; agent next and agent
-                                             respond drive its loop
+                                             comments and real agent responses;
+                                             keep it running in its own
+                                             terminal for the whole review
+  big-plan agent <input.mdx>                  Print the ready-to-paste command
+                                             that starts a real coding-agent
+                                             review session; run it in a
+                                             second terminal while review
+                                             stays up (agent next and agent
+                                             respond drive its loop)
 `;
 
 // Reads this package's own version for --version output, tolerating a missing

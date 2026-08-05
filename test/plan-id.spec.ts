@@ -50,8 +50,7 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     await expect(
       firstDataTable.locator('th[data-table-column="2"]'),
     ).toBeHidden();
-    await page.locator("[data-block-id]").first().hover();
-    await page.locator("[data-review-affordance]").click();
+    await page.locator("[data-review-slide-selector]").first().click();
     await page.locator("[data-review-compose-input]").fill("First plan draft");
     await page.locator("[data-review-compose-save]").click();
     await expect
@@ -117,8 +116,7 @@ test("should scope persisted viewer state to the stamped plan identity", async (
       secondDataTable.locator('th[data-table-column="2"]'),
     ).toBeVisible();
     await expect(page.locator("[data-review-row-body]")).toHaveCount(0);
-    await page.locator("[data-block-id]").first().hover();
-    await page.locator("[data-review-affordance]").click();
+    await page.locator("[data-review-slide-selector]").first().click();
     await expect(page.locator("[data-review-compose-input]")).toHaveValue("");
     await page.locator("[data-review-compose-cancel]").click();
 
@@ -138,8 +136,7 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     await expect(
       secondDataTable.locator('th[data-table-column="1"]'),
     ).toBeHidden();
-    await page.locator("[data-block-id]").first().hover();
-    await page.locator("[data-review-affordance]").click();
+    await page.locator("[data-review-slide-selector]").first().click();
     await page.locator("[data-review-compose-input]").fill("Second plan draft");
     await page.locator("[data-review-compose-save]").click();
     await secondSlide
@@ -220,8 +217,7 @@ for (const identity of ["absent", "empty"] as const) {
     await dataTable.getByRole("button", { name: "Choose columns" }).click();
     await dataTable.getByRole("menuitemcheckbox", { name: "Note" }).click();
     await expect(dataTable.locator('th[data-table-column="2"]')).toBeHidden();
-    await page.locator("[data-block-id]").first().hover();
-    await page.locator("[data-review-affordance]").click();
+    await page.locator("[data-review-slide-selector]").first().click();
     await page.locator("[data-review-compose-input]").fill("Memory-only draft");
     await page.locator("[data-review-compose-save]").click();
     await expect(page.locator("[data-review-row-body]")).toHaveText([

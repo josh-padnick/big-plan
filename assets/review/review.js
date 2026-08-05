@@ -17,14 +17,34 @@
 //     the runtime that served this document; a document opened from file://
 //     makes no request at all and keeps drafts locally.
 
+import { ACTIVITY_ICON } from "../../src/icons/lucide/activity.js";
 import { CHECK_ICON } from "../../src/icons/lucide/check.js";
+import { CHEVRON_LEFT_ICON } from "../../src/icons/lucide/chevron-left.js";
+import { CHEVRON_RIGHT_ICON } from "../../src/icons/lucide/chevron-right.js";
+import { CIRCLE_X_ICON } from "../../src/icons/lucide/circle-x.js";
+import { COPY_ICON } from "../../src/icons/lucide/copy.js";
+import { HOURGLASS_ICON } from "../../src/icons/lucide/hourglass.js";
 import { MESSAGE_SQUARE_TEXT_ICON } from "../../src/icons/lucide/message-square-text.js";
 import { MESSAGES_SQUARE_ICON } from "../../src/icons/lucide/messages-square.js";
 import { MINIMIZE_2_ICON } from "../../src/icons/lucide/minimize-2.js";
+import { PENCIL_ICON } from "../../src/icons/lucide/pencil.js";
 import { ROTATE_CCW_ICON } from "../../src/icons/lucide/rotate-ccw.js";
+import { TRASH_2_ICON } from "../../src/icons/lucide/trash-2.js";
+import { TRIANGLE_ALERT_ICON } from "../../src/icons/lucide/triangle-alert.js";
 import { UNDO_2_ICON } from "../../src/icons/lucide/undo-2.js";
 import { X_ICON } from "../../src/icons/lucide/x.js";
-import { diffRunSimilarity } from "../../src/review/revision-diff.js";
+import { threadSubstate } from "../../src/review/thread-group.js";
+import {
+  deriveAgentIndicator,
+  deriveThreadStatus,
+  sessionQuietMs,
+} from "../../src/review/thread-status.js";
+import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
+import {
+  commentTimeLabel,
+  compactDurationLabel,
+  relativeSignalLabel,
+} from "../../src/review/time-label.js";
 
 (() => {
   "use strict";
@@ -46,10 +66,15 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   const LONG_COMMENT_LIMIT = 180;
   const PROGRESS_INTERVAL_MS = 1500;
   const MESSAGE_LIMIT = 200;
-  const FLOAT_TOP = 52;
-  const FLOAT_GAP = 8;
+  // How long a pending request may sit unclaimed before the UI says no agent
+  // is connected, and how long a claimed request may go without any new
+  // progress before the UI says the agent has gone quiet.
+  const AGENT_QUIET_MS = 90_000;
+  const REVIEW_CONTROL_TOP = 52;
   const FLOAT_EDGE = 12;
   const FLOAT_CONTENT_GAP = 12;
+  const COMMENT_WRAP_CLASSES =
+    "min-w-0 max-w-full whitespace-pre-wrap [overflow-wrap:anywhere]";
 
   // ---------------------------------------------------------------- elements
 
@@ -71,6 +96,62 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     return node;
   };
 
+  const messageBody = (nodes, fallback) => {
+    const renderNode = (node) => {
+      if (node.type === "text") {
+        return document.createTextNode(node.value);
+      }
+      if (node.type === "inlineCode") {
+        return el("code", { text: node.value });
+      }
+      if (node.type === "code") {
+        return el("pre", {}, [
+          ...(node.language
+            ? [
+                el("span", {
+                  "data-review-code-language": true,
+                  text: node.language,
+                }),
+              ]
+            : []),
+          el("code", { text: node.value }),
+        ]);
+      }
+      const children = (node.children || []).map(renderNode);
+      if (node.type === "paragraph") return el("p", {}, children);
+      if (node.type === "strong") return el("strong", {}, children);
+      if (node.type === "emphasis") return el("em", {}, children);
+      if (node.type === "blockquote") return el("blockquote", {}, children);
+      if (node.type === "listItem") return el("li", {}, children);
+      if (node.type === "list") {
+        return el(node.ordered ? "ol" : "ul", {}, children);
+      }
+      if (node.type === "link") {
+        return el(
+          "a",
+          {
+            href: node.url,
+            target: "_blank",
+            rel: "noopener noreferrer",
+          },
+          children,
+        );
+      }
+      return document.createTextNode("");
+    };
+    const checked = checkedMessageNodes(nodes);
+    return checked
+      ? el(
+          "div",
+          {
+            class: COMMENT_WRAP_CLASSES,
+            "data-review-message-body": "structured",
+          },
+          checked.map(renderNode),
+        )
+      : el("p", { class: COMMENT_WRAP_CLASSES, text: fallback });
+  };
+
   const icon = (definition) => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 24 24");
@@ -88,6 +169,27 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       svg.appendChild(shape);
     }
     return svg;
+  };
+
+  // Shortcut discovery lives on the button itself: hovering or focusing any
+  // submit control shows its key combo as keycap chips beside the action name,
+  // so the shortcut is learnable exactly where the click happens.
+  const IS_MAC = /Mac|iP(hone|ad|od)/.test(navigator.platform || "");
+  const MOD_KEY_LABEL = IS_MAC ? "⌘" : "Ctrl";
+
+  const attachShortcutTooltip = (button, label) => {
+    button.appendChild(
+      el("span", { "data-review-kbd-tooltip": true, "aria-hidden": "true" }, [
+        el("kbd", { text: MOD_KEY_LABEL }),
+        el("kbd", { text: "Enter" }),
+        el("span", { text: label }),
+      ]),
+    );
+    button.setAttribute(
+      "aria-keyshortcuts",
+      (IS_MAC ? "Meta" : "Control") + "+Enter",
+    );
+    return button;
   };
 
   // ------------------------------------------------------------------ target
@@ -111,6 +213,8 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   // relationship to the plan explicit.
   const describeTarget = (target) => {
     if (target.type === "document") return "Whole plan";
+    if (target.type === "slide")
+      return (target.section || target.label || "Plan") + " · Whole slide";
     const kind = target.kind ? readableKind(target.kind) : "Block";
     const location = [target.section, target.label]
       .filter((part) => typeof part === "string" && part !== "")
@@ -127,31 +231,30 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     return location + " · " + kind;
   };
 
-  // The deck transform marks top-level and nested slides but intentionally
-  // does not bake display numbers into content. Derive the reader-facing
-  // outline once from document order so tray titles can say "3.1 · Backoff"
-  // without making that number part of the authoritative plan.
+  // Major headings are the outline authority. Counting only [data-slide]
+  // wrappers is incorrect because a parent with subslides may be flattened
+  // away by the deck transform while its h2 remains in the document.
   const slideNumberBySection = new Map();
   let majorSlide = 0;
-  let minorSlide = 0;
+  for (const heading of document.querySelectorAll(
+    "main h2[data-block-section]",
+  )) {
+    if (heading.closest("section.footnotes")) continue;
+    const section = heading.getAttribute("data-block-section");
+    if (!section || section === "Overview") continue;
+    majorSlide += 1;
+    slideNumberBySection.set(section, String(majorSlide));
+  }
   for (const slide of document.querySelectorAll("[data-slide]")) {
-    if (slide.hasAttribute("data-subslide")) {
-      minorSlide += 1;
-    } else {
-      majorSlide += 1;
-      minorSlide = 0;
-    }
+    if (!slide.hasAttribute("data-subslide")) continue;
     const section = slide
       .querySelector("[data-block-section]")
       ?.getAttribute("data-block-section");
-    if (section) {
-      slideNumberBySection.set(
-        section,
-        slide.hasAttribute("data-subslide")
-          ? majorSlide + "." + minorSlide
-          : String(majorSlide),
-      );
-    }
+    const kicker = slide
+      .querySelector("[data-slide-kicker]")
+      ?.textContent?.trim();
+    const number = kicker?.match(/^(\d+(?:\.\d+)*)\s*\//)?.[1];
+    if (section && number) slideNumberBySection.set(section, number);
   }
 
   // Comment chrome names the numbered slide, not the renderer's full
@@ -180,15 +283,24 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   let sent = [];
   let editingId = null;
   let composeTarget = null;
-  let cursorBlock = null;
   let pendingSelection = null;
   let activeDraft = "";
+  let composeDrafts = {};
   let threadReplies = {};
   let planChatMessages = [];
   let agentRequests = [];
   let agentResponses = [];
+  let agentCancelledIds = [];
+  let agentConnected = false;
+  let agentHeartbeatAt = 0;
+  let agentSessionState = null;
+  let agentConnectionLog = [];
+  let agentPlanPath = "";
+  let agentCommand = "";
+  let agentRecoveryPrompt = "";
   let sourceRevision = "";
   let progressSeq = 0;
+  let liveProgressSeq = 0;
   let progressTimer = null;
   let progressEvents = [];
   let runtimeConfirmed = false;
@@ -198,11 +310,24 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   let showAgentActivity = true;
   const revisionDiffs = new Map();
   const chatDigestExpansion = new Map();
+  const changeGroupExpansion = new Map();
   let diffLens = null;
   const expandedCommentIds = new Set();
   const expandedThreadIds = new Set();
   const minimizedDraftIds = new Set();
   const resolvedCommentIds = new Set();
+  // Honest in-flight and failure states: a comment mid-submit renders as
+  // sending, a failed submit renders its error on the card, and the agent's
+  // availability is derived rather than assumed.
+  const submittingIds = new Set();
+  const submitErrorById = new Map();
+  const requestSeenAt = new Map();
+  let emphasizedCommentId = null;
+  let lastProgressAdvanceAt = 0;
+  let pollFailures = 0;
+  let runtimeOffline = false;
+  let lastHealthSignature = "";
+  let connectionPanelSignature = "";
 
   const newId = () => {
     const bytes = new Uint8Array(8);
@@ -242,7 +367,10 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       return {
         scrollY: Math.max(0, value.scrollY),
         expanded: value.expanded.filter(isExchangeId),
-        tab: value.tab === "chat" ? "chat" : "comments",
+        tab:
+          value.tab === "chat" || value.tab === "agent"
+            ? value.tab
+            : "comments",
         railOpen: value.railOpen === true,
       };
     } catch {
@@ -256,10 +384,19 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     drafts: [],
     sent: [],
     activeDraft: "",
+    composeDrafts: {},
     threadReplies: {},
     planChatMessages: [],
     resolvedCommentIds: [],
-    agent: { requests: [], responses: [] },
+    agent: {
+      requests: [],
+      responses: [],
+      cancelledIds: [],
+      connected: false,
+      state: null,
+      updatedAtMs: 0,
+      connectionLog: [],
+    },
     sourceRevision: "",
   });
 
@@ -302,12 +439,30 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     return checked;
   };
 
+  const checkedComposeDrafts = (value) => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      return {};
+    }
+    const checked = {};
+    for (const [key, body] of Object.entries(value).slice(0, MESSAGE_LIMIT)) {
+      if (
+        key.length <= 1200 &&
+        typeof body === "string" &&
+        body.length <= BODY_LIMIT
+      ) {
+        checked[key] = body;
+      }
+    }
+    return checked;
+  };
+
   const checkedStoredState = (value) => {
     if (!isStoredState(value)) return emptyStoredState();
     return {
       drafts: value.drafts.filter(isComment),
       sent: value.sent.filter(isComment),
       activeDraft: value.activeDraft.slice(0, BODY_LIMIT),
+      composeDrafts: checkedComposeDrafts(value.composeDrafts),
       threadReplies: checkedThreadReplies(value.threadReplies),
       planChatMessages: checkedMessages(value.planChatMessages),
       resolvedCommentIds: (Array.isArray(value.resolvedCommentIds)
@@ -332,10 +487,68 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       value.kind === "chat") &&
     typeof value.createdAt === "string" &&
     !Number.isNaN(Date.parse(value.createdAt)) &&
-    (value.kind === "feedback" ||
-      (typeof value.body === "string" &&
+    (value.kind === "feedback"
+      ? Array.isArray(value.comments) &&
+        value.comments.length === 1 &&
+        Number.isInteger(value.batchIndex) &&
+        Number.isInteger(value.batchSize) &&
+        value.batchIndex >= 0 &&
+        value.batchIndex < value.batchSize
+      : typeof value.body === "string" &&
         value.body.trim() !== "" &&
-        value.body.length <= BODY_LIMIT));
+        value.body.length <= BODY_LIMIT);
+
+  const checkedMessageNodes = (value) => {
+    if (!Array.isArray(value)) return null;
+    let count = 0;
+    const check = (node, depth) => {
+      count += 1;
+      if (
+        count > 500 ||
+        depth > 6 ||
+        node === null ||
+        typeof node !== "object"
+      ) {
+        return false;
+      }
+      const children = () =>
+        Array.isArray(node.children) &&
+        node.children.every((child) => check(child, depth + 1));
+      if (node.type === "text" || node.type === "inlineCode") {
+        return typeof node.value === "string";
+      }
+      if (node.type === "code") {
+        return (
+          typeof node.value === "string" &&
+          (node.language === undefined || typeof node.language === "string")
+        );
+      }
+      if (node.type === "link") {
+        if (typeof node.url !== "string" || node.url.length > 1000)
+          return false;
+        try {
+          const url = new URL(node.url);
+          if (url.protocol !== "http:" && url.protocol !== "https:")
+            return false;
+        } catch {
+          return false;
+        }
+        return children();
+      }
+      if (node.type === "list") {
+        return typeof node.ordered === "boolean" && children();
+      }
+      return (
+        (node.type === "paragraph" ||
+          node.type === "strong" ||
+          node.type === "emphasis" ||
+          node.type === "blockquote" ||
+          node.type === "listItem") &&
+        children()
+      );
+    };
+    return value.every((node) => check(node, 1)) ? value : null;
+  };
 
   const isAgentOutcome = (value) =>
     value !== null &&
@@ -347,11 +560,18 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     typeof value.message === "string" &&
     value.message.trim() !== "" &&
     value.message.length <= BODY_LIMIT &&
-    (value.changeTargets === undefined ||
-      (Array.isArray(value.changeTargets) &&
-        value.changeTargets.length > 0 &&
-        value.changeTargets.every(
-          (target) => typeof target === "string" && target.length <= 300,
+    (value.messageNodes === undefined ||
+      checkedMessageNodes(value.messageNodes) !== null) &&
+    (value.changes === undefined ||
+      (Array.isArray(value.changes) &&
+        value.changes.every(
+          (change) =>
+            change !== null &&
+            typeof change === "object" &&
+            isExchangeId(change.placeId) &&
+            typeof change.summary === "string" &&
+            change.summary.trim() !== "" &&
+            change.summary.length <= 90,
         )));
 
   const isAgentResponse = (value) =>
@@ -363,16 +583,28 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       value.kind === "chat") &&
     typeof value.createdAt === "string" &&
     !Number.isNaN(Date.parse(value.createdAt)) &&
+    value.revisionPair !== null &&
+    typeof value.revisionPair === "object" &&
+    /^[a-f0-9]{16,64}$/.test(value.revisionPair.fromRevision || "") &&
+    /^[a-f0-9]{16,64}$/.test(value.revisionPair.toRevision || "") &&
     (value.kind === "chat"
       ? typeof value.message === "string" &&
         value.message.trim() !== "" &&
-        value.message.length <= BODY_LIMIT
+        value.message.length <= BODY_LIMIT &&
+        (value.messageNodes === undefined ||
+          checkedMessageNodes(value.messageNodes) !== null)
       : Array.isArray(value.outcomes) && value.outcomes.every(isAgentOutcome));
 
   const checkedAgentSnapshot = (value) => {
     if (value === null || typeof value !== "object") {
-      return { requests: [], responses: [] };
+      return emptyStoredState().agent;
     }
+    const heartbeat =
+      value.agent !== null &&
+      typeof value.agent === "object" &&
+      !Array.isArray(value.agent)
+        ? value.agent
+        : value;
     return {
       requests: (Array.isArray(value.requests) ? value.requests : [])
         .filter(isAgentRequest)
@@ -380,6 +612,58 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       responses: (Array.isArray(value.responses) ? value.responses : [])
         .filter(isAgentResponse)
         .slice(0, MESSAGE_LIMIT),
+      cancelledIds: (Array.isArray(value.cancelledIds)
+        ? value.cancelledIds
+        : []
+      )
+        .filter(isExchangeId)
+        .slice(0, MESSAGE_LIMIT),
+      connected: value.connected === true,
+      state:
+        heartbeat.state === "waiting" || heartbeat.state === "working"
+          ? heartbeat.state
+          : null,
+      updatedAtMs:
+        typeof heartbeat.updatedAtMs === "number" &&
+        Number.isFinite(heartbeat.updatedAtMs)
+          ? heartbeat.updatedAtMs
+          : 0,
+      connectionLog: (Array.isArray(value.connectionLog)
+        ? value.connectionLog
+        : []
+      )
+        .filter(
+          (entry) =>
+            entry !== null &&
+            typeof entry === "object" &&
+            typeof entry.connected === "boolean" &&
+            typeof entry.at === "string" &&
+            !Number.isNaN(Date.parse(entry.at)),
+        )
+        .map((entry) => ({
+          connected: entry.connected,
+          at: new Date(entry.at).toISOString(),
+          ...(typeof entry.reason === "string" &&
+          entry.reason.trim() !== "" &&
+          entry.reason.length <= 160
+            ? { reason: entry.reason }
+            : {}),
+        }))
+        .slice(0, MESSAGE_LIMIT),
+      plan:
+        typeof value.plan === "string" && value.plan.length <= BODY_LIMIT
+          ? value.plan
+          : "",
+      agentCommand:
+        typeof value.agentCommand === "string" &&
+        value.agentCommand.length <= BODY_LIMIT
+          ? value.agentCommand
+          : "",
+      recoveryPrompt:
+        typeof value.recoveryPrompt === "string" &&
+        value.recoveryPrompt.length <= BODY_LIMIT
+          ? value.recoveryPrompt
+          : "",
     };
   };
 
@@ -402,6 +686,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
           drafts,
           sent,
           activeDraft,
+          composeDrafts,
           threadReplies,
           planChatMessages,
         }),
@@ -465,6 +750,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     browserState.activeDraft !== ""
       ? browserState.activeDraft
       : diskState.activeDraft;
+  composeDrafts = browserState.composeDrafts;
   threadReplies = browserState.threadReplies;
   planChatMessages = browserState.planChatMessages;
   for (const id of diskState.resolvedCommentIds) {
@@ -472,6 +758,10 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   }
   agentRequests = diskState.agent.requests;
   agentResponses = diskState.agent.responses;
+  agentCancelledIds = diskState.agent.cancelledIds;
+  agentConnected = diskState.agent.connected;
+  agentHeartbeatAt = diskState.agent.updatedAtMs;
+  agentSessionState = diskState.agent.state;
   sourceRevision = diskState.sourceRevision;
   for (const id of reloadState?.expanded || []) {
     expandedThreadIds.add(id);
@@ -547,6 +837,42 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     hidden: true,
   });
 
+  // Connection trouble stays visible beside the Feedback toggle and links to
+  // the existing chat status surface; it does not introduce a second status
+  // model.
+  const agentAlertLabel = el("span", { text: "No agent connected" });
+  const agentAlert = el("button", {
+    type: "button",
+    "data-review-agent-alert": true,
+    hidden: true,
+  });
+  agentAlert.append(icon(TRIANGLE_ALERT_ICON), agentAlertLabel);
+  agentAlert.addEventListener("click", () => {
+    setRailOpen(true);
+    setActiveTab("agent");
+  });
+  const agentOk = el("button", {
+    type: "button",
+    "data-review-agent-ok": true,
+    "aria-label": "Agent session active",
+    hidden: true,
+  });
+  agentOk.append(
+    el("span", {
+      "data-review-agent-ok-dot": true,
+      "aria-hidden": "true",
+    }),
+    el("span", {
+      "data-review-icon-tooltip": true,
+      "aria-hidden": "true",
+      text: "Agent session active",
+    }),
+  );
+  agentOk.addEventListener("click", () => {
+    setRailOpen(true);
+    setActiveTab("agent");
+  });
+
   const toggle = el("button", {
     type: "button",
     "data-review-toggle": true,
@@ -558,11 +884,49 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     "data-review-toggle-count": true,
     text: "0",
   });
-  toggle.append(
-    icon(MESSAGE_SQUARE_TEXT_ICON),
-    el("span", { text: "Feedback" }),
-    toggleCount,
+  const feedbackLabel = el("span", { "data-review-toggle-label": true });
+  toggle.append(icon(MESSAGE_SQUARE_TEXT_ICON), feedbackLabel, toggleCount);
+  const sendButton = el("button", {
+    type: "button",
+    "data-review-send": true,
+    hidden: true,
+    text: "Send all to agent",
+  });
+  const compactBatchLabel = el("span", {
+    "data-review-batch-label": true,
+  });
+  const compactBatchMenu = el("details", {
+    "data-review-batch-menu": true,
+    hidden: true,
+  });
+  const compactBatchSummary = el("summary", {}, [
+    compactBatchLabel,
+    icon(CHEVRON_RIGHT_ICON),
+  ]);
+  const compactReviewButton = el("button", {
+    type: "button",
+    "data-review-batch-review": true,
+    text: "Review comments",
+  });
+  const compactSendButton = el("button", {
+    type: "button",
+    "data-review-batch-send": true,
+    text: "Send all to agent",
+  });
+  compactBatchMenu.append(
+    compactBatchSummary,
+    el("div", { "data-review-batch-actions": true }, [
+      compactReviewButton,
+      compactSendButton,
+    ]),
   );
+  const toolbar = el("div", { "data-review-toolbar": true }, [
+    agentAlert,
+    agentOk,
+    toggle,
+    sendButton,
+    compactBatchMenu,
+  ]);
 
   const countLabel = el("span", {
     "data-review-count": true,
@@ -576,35 +940,63 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   hideButton.appendChild(icon(X_ICON));
 
   const draftList = el("ol", { "data-review-drafts": true });
+  const draftGroupCount = el("span", {
+    "data-review-outcome-group-count": true,
+  });
+  const sidebarSendButton = el("button", {
+    type: "button",
+    class:
+      "mt-3 w-full cursor-pointer rounded-md border border-accent bg-accent px-3 py-2 text-[0.8125rem] font-semibold text-[var(--bg)] hover:brightness-110 active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+    "data-review-sidebar-send": true,
+    text: "Send all to agent",
+  });
+  const draftGroup = el(
+    "section",
+    {
+      "data-review-draft-group": true,
+      "data-review-outcome-group": "staged",
+      hidden: true,
+    },
+    [
+      el("h3", {}, [
+        el("span", { text: "Staged" }),
+        document.createTextNode(" "),
+        draftGroupCount,
+      ]),
+      draftList,
+      sidebarSendButton,
+    ],
+  );
   const emptyNote = el("p", {
     "data-review-empty": true,
-    text: "Hover a block and press Comment, or highlight any text, to start.",
+    text: "Select text to comment, or use a slide selector to select it all.",
   });
   const responseSummary = el("p", { "data-review-round-summary": true });
+  const resolveAllButton = el("button", {
+    type: "button",
+    "data-review-resolve-all": true,
+    text: "Resolve all",
+    hidden: true,
+  });
+  const roundHead = el("div", { "data-review-round-head": true }, [
+    responseSummary,
+    resolveAllButton,
+  ]);
   const sentList = el("div", { "data-review-sent-list": true });
   const sentGroup = el("section", { "data-review-sent": true, hidden: true }, [
-    responseSummary,
+    roundHead,
     sentList,
   ]);
 
-  const sendButton = el("button", {
-    type: "button",
-    "data-review-send": true,
-    disabled: true,
-    text: "Send all comments to agent",
-  });
   const sendNote = el("p", { "data-review-send-note": true });
+  const sendBar = el("div", { "data-review-send-bar": true, hidden: true }, [
+    sendNote,
+  ]);
 
   const agentState = el("span", {
     "data-review-agent-state": true,
     "data-tone": "idle",
     text: "Waiting for you",
-  });
-  const activityToggle = el("button", {
-    type: "button",
-    "data-review-activity-toggle": true,
-    hidden: true,
-    text: "Hide activity",
   });
   const agentInput = el("textarea", {
     "data-review-agent-input": true,
@@ -635,6 +1027,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     "data-review-agent-save": true,
     text: "Send",
   });
+  attachShortcutTooltip(agentSave, "Send message");
   const planChatList = el("ol", {
     "data-review-plan-chat": true,
     "aria-label": "Plan-wide conversation",
@@ -643,7 +1036,6 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   const agentPanel = el("section", { "data-review-agent": true }, [
     el("div", { "data-review-agent-head": true }, [
       el("h3", { text: "Plan-wide chat" }),
-      activityToggle,
       agentState,
     ]),
     el("p", {
@@ -683,9 +1075,20 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     "aria-controls": "big-plan-review-chat",
   });
   chatTab.append(icon(MESSAGES_SQUARE_ICON), el("span", { text: "Chat" }));
+  const connectionTab = hasRuntime
+    ? el("button", {
+        type: "button",
+        role: "tab",
+        "data-review-tab": "agent",
+        "aria-selected": "false",
+        "aria-controls": "big-plan-review-agent",
+      })
+    : null;
+  connectionTab?.append(icon(ACTIVITY_ICON), el("span", { text: "Agent" }));
   const tabList = el("div", { "data-review-tabs": true, role: "tablist" }, [
     commentsTab,
     chatTab,
+    connectionTab,
     hideButton,
   ]);
   const commentsPanel = el(
@@ -697,11 +1100,11 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     },
     [
       el("div", { "data-review-scroll": true }, [
-        draftList,
+        draftGroup,
+        sendBar,
         emptyNote,
         sentGroup,
       ]),
-      el("div", { "data-review-send-bar": true }, [sendButton, sendNote]),
     ],
   );
   const chatPanel = el(
@@ -714,18 +1117,27 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     },
     [agentPanel],
   );
-  rail.append(tabList, commentsPanel, chatPanel);
+  const connectionPanel = hasRuntime
+    ? el("section", {
+        id: "big-plan-review-agent",
+        "data-review-panel": "agent",
+        role: "tabpanel",
+        hidden: true,
+      })
+    : null;
+  const railHeader = el("header", { "data-review-rail-header": true }, [
+    tabList,
+  ]);
+  rail.append(railHeader, commentsPanel, chatPanel);
+  if (connectionPanel) rail.appendChild(connectionPanel);
 
   const affordance = el("button", {
     type: "button",
     "data-review-affordance": true,
     hidden: true,
   });
-  affordance.append(
-    icon(MESSAGE_SQUARE_TEXT_ICON),
-    el("span", { text: "Comment" }),
-  );
-
+  const affordanceLabel = el("span", { text: "Comment" });
+  affordance.append(icon(MESSAGE_SQUARE_TEXT_ICON), affordanceLabel);
   const composeInput = el("textarea", {
     "data-review-compose-input": true,
     id: "big-plan-review-compose",
@@ -738,12 +1150,31 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     "data-review-compose-cancel": true,
     text: "Cancel",
   });
-  const composeSave = el("button", {
-    type: "button",
-    "data-review-compose-save": true,
-    disabled: true,
+  const composeSaveLabel = el("span", {
+    "data-review-button-label": true,
     text: "Add Comment",
   });
+  const composeSave = el(
+    "button",
+    {
+      type: "button",
+      "data-review-compose-save": true,
+      disabled: true,
+    },
+    [composeSaveLabel],
+  );
+  attachShortcutTooltip(composeSave, "Add comment");
+  // The one visible action mirrors the submit-right-away preference, so the
+  // button always names what clicking it will actually do.
+  const syncComposeSaveLabel = () => {
+    const label = submitRightAway ? "Submit Now" : "Add Comment";
+    composeSaveLabel.textContent = label;
+    const tooltipLabel = composeSave.querySelector(
+      "[data-review-kbd-tooltip] > span",
+    );
+    if (tooltipLabel) tooltipLabel.textContent = label;
+  };
+  syncComposeSaveLabel();
   const submitImmediatelyInput = el("input", {
     type: "checkbox",
     role: "switch",
@@ -766,6 +1197,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   const compose = el(
     "div",
     {
+      class: "data-[review-compose-centered]:fixed!",
       "data-review-compose": true,
       role: "dialog",
       "aria-label": "Add a comment",
@@ -799,6 +1231,12 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     "aria-label": "Comment anchors",
   });
   const live = el("p", { "data-review-live": true, "aria-live": "polite" });
+  const toast = el("div", {
+    class:
+      "fixed bottom-4 left-1/2 z-[70] hidden -translate-x-1/2 items-center gap-3 rounded-md border border-edge bg-[var(--ink-c)] px-3 py-2 text-xs font-semibold text-[var(--bg)] shadow-lg",
+    "data-review-toast": true,
+    role: "status",
+  });
   const backdrop = el("button", {
     type: "button",
     "data-review-backdrop": true,
@@ -880,7 +1318,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   const surface = el("div", { "data-review-root": true }, [
     backdrop,
-    toggle,
+    toolbar,
     rail,
     affordance,
     threadLayer,
@@ -888,17 +1326,28 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     markerLayer,
     deleteDialog,
     revertDialog,
+    toast,
     live,
   ]);
   document.body.appendChild(surface);
   // Tailwind's delivery optimizer does not yet parse the standardized
-  // ::highlight() pseudo-element, so these two rules live with the browser
+  // ::highlight() pseudo-element, so these named-highlight rules live with the browser
   // behavior that creates their named Highlight ranges.
   document.head.appendChild(
     el("style", {
       text:
         "::highlight(big-plan-review-comments){" +
-        "background-color:var(--annotation-bg)}" +
+        "background-color:color-mix(in srgb,var(--annotation-bg) 55%,transparent);" +
+        "text-decoration:underline;" +
+        "text-decoration-color:var(--annotation-c);" +
+        "text-decoration-thickness:2px;" +
+        "text-underline-offset:.16em}" +
+        "::highlight(big-plan-review-focus){" +
+        "background-color:color-mix(in srgb,var(--annotation-c) 12%,transparent);" +
+        "text-decoration:underline;" +
+        "text-decoration-color:var(--annotation-c);" +
+        "text-decoration-thickness:2px;" +
+        "text-underline-offset:.16em}" +
         "::highlight(big-plan-review-active){" +
         "background-color:var(--annotation-bg)}",
     }),
@@ -908,19 +1357,34 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     live.textContent = message;
   };
 
-  // -------------------------------------------------------------- tray render
+  const showToast = ({ message, actionLabel, action }) => {
+    const actionButton = el("button", {
+      type: "button",
+      class:
+        "cursor-pointer rounded-sm underline underline-offset-2 hover:opacity-80 active:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--bg)]",
+      "data-review-toast-action": true,
+      text: actionLabel,
+    });
+    actionButton.addEventListener("click", () => {
+      toast.classList.add("hidden");
+      toast.classList.remove("flex");
+      void action();
+    });
+    toast.replaceChildren(
+      el("span", { "data-review-toast-message": true, text: message }),
+      actionButton,
+    );
+    toast.classList.remove("hidden");
+    toast.classList.add("flex");
+  };
 
-  let readingPosition = window.scrollY;
-  let restoreReadingPosition = true;
+  // -------------------------------------------------------------- tray render
 
   const setRailOpen = (open) => {
     if (open === !rail.hidden) {
       return;
     }
-    if (open && rail.hidden) {
-      readingPosition = window.scrollY;
-      restoreReadingPosition = true;
-    }
+    const readingPosition = window.scrollY;
     rail.hidden = !open;
     backdrop.hidden = !open;
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
@@ -940,7 +1404,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     // position defeats scroll anchoring caused by the desktop width change
     // and makes the below-1280 overlay reversible by construction.
     requestAnimationFrame(() => {
-      if (restoreReadingPosition) window.scrollTo(0, readingPosition);
+      window.scrollTo(0, readingPosition);
       if (!compose.hidden && composeTarget) positionCompose(composeTarget);
       positionThreadCards();
     });
@@ -948,19 +1412,361 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   const railIsOpen = () => !rail.hidden;
 
+  const relativeSignal = (at) => relativeSignalLabel({ now: Date.now(), at });
+
+  const selectionTouches = (node) => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      return false;
+    }
+    return (
+      (selection.anchorNode && node.contains(selection.anchorNode)) ||
+      (selection.focusNode && node.contains(selection.focusNode)) ||
+      selection.containsNode(node, true)
+    );
+  };
+
+  const setLiveText = (node, text) => {
+    if (node.textContent === text || selectionTouches(node)) return;
+    node.textContent = text;
+  };
+
+  const refreshConnectionTimes = () => {
+    for (const node of connectionPanel?.querySelectorAll(
+      "[data-review-agent-heartbeat]",
+    ) || []) {
+      node.setAttribute("data-review-relative-at", String(agentHeartbeatAt));
+    }
+    for (const node of connectionPanel?.querySelectorAll(
+      "[data-review-relative-at]",
+    ) || []) {
+      const at = Number(node.getAttribute("data-review-relative-at"));
+      setLiveText(node, relativeSignal(at));
+    }
+    for (const node of connectionPanel?.querySelectorAll(
+      "[data-review-duration-start]",
+    ) || []) {
+      const start = Number(node.getAttribute("data-review-duration-start"));
+      const endAttribute = node.getAttribute("data-review-duration-end");
+      const end = endAttribute === null ? Date.now() : Number(endAttribute);
+      const duration = compactDurationLabel({ start, end });
+      if (duration === null) continue;
+      const prefix = node.getAttribute("data-review-duration-prefix") || "";
+      const suffix = node.getAttribute("data-review-duration-suffix") || "";
+      setLiveText(node, prefix + duration + suffix);
+    }
+  };
+
+  const copyBlock = ({ attribute, text }) => {
+    const button = el("button", {
+      type: "button",
+      "data-review-copy": attribute,
+      "aria-label": "Copy to clipboard",
+    });
+    button.append(icon(COPY_ICON), el("span", { text: "Copy" }));
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(text);
+        button.replaceChildren(
+          icon(CHECK_ICON),
+          el("span", { text: "Copied" }),
+        );
+        button.setAttribute("aria-label", "Copied to clipboard");
+        setTimeout(() => {
+          button.replaceChildren(icon(COPY_ICON), el("span", { text: "Copy" }));
+          button.setAttribute("aria-label", "Copy to clipboard");
+        }, 1_500);
+      } catch (error) {
+        const message = "Couldn’t copy: " + describeError(error);
+        announce(message);
+        button.setAttribute("aria-label", message);
+      }
+    });
+    return el("div", { "data-review-copy-block": attribute }, [
+      el("pre", { [attribute]: true }, [el("code", { text })]),
+      button,
+    ]);
+  };
+
+  const connectionLogView = ({ historyWasOpen }) => {
+    const events = agentConnectionLog
+      .map((entry) => ({ ...entry, atMs: Date.parse(entry.at) }))
+      .filter((entry) => Number.isFinite(entry.atMs))
+      .sort((left, right) => left.atMs - right.atMs);
+    const latest = events.at(-1);
+    let disconnects = 0;
+    let reconnects = 0;
+    let hasConnected = false;
+    events.forEach((entry, index) => {
+      if (!entry.connected && events[index - 1]?.connected) disconnects += 1;
+      if (
+        entry.connected &&
+        hasConnected &&
+        events[index - 1]?.connected === false
+      ) {
+        reconnects += 1;
+      }
+      if (entry.connected) hasConnected = true;
+    });
+    const title = el("span", { text: "Connection log" });
+    const count = el("span", {
+      "data-review-connection-count": true,
+      text: String(events.length),
+      "aria-label": events.length + " event" + (events.length === 1 ? "" : "s"),
+    });
+    const details = el(
+      "details",
+      {
+        "data-review-connection-history": true,
+        ...(historyWasOpen ? { open: true } : {}),
+      },
+      [el("summary", {}, [title, count])],
+    );
+    if (events.length === 0) {
+      details.appendChild(
+        el("p", { text: "No connection events recorded yet." }),
+      );
+      return details;
+    }
+
+    const latestAt = latest?.atMs || Date.now();
+    const lastSignalAt = agentHeartbeatAt > 0 ? agentHeartbeatAt : latestAt;
+    const summary = el("dl", { "data-review-connection-summary": true }, [
+      el("div", {}, [
+        el("dt", { text: "State" }),
+        el("dd", {
+          "data-state": agentConnected ? "connected" : "disconnected",
+          text: agentConnected ? "CONNECTED" : "DISCONNECTED",
+        }),
+      ]),
+      el("div", {}, [
+        el("dt", { text: "Since" }),
+        el("dd", {}, [
+          el("time", {
+            datetime: latest?.at,
+            text: new Intl.DateTimeFormat(undefined, {
+              hour: "numeric",
+              minute: "2-digit",
+              second: "2-digit",
+            }).format(new Date(latestAt)),
+          }),
+        ]),
+      ]),
+      el("div", {}, [
+        el("dt", { text: "Last signal" }),
+        el("dd", {
+          "data-review-agent-heartbeat": true,
+          "data-review-relative-at": lastSignalAt,
+          text: relativeSignal(lastSignalAt),
+        }),
+      ]),
+      el("div", {}, [
+        el("dt", { text: "Events" }),
+        el("dd", {
+          text: disconnects + " disconnects · " + reconnects + " reconnects",
+        }),
+      ]),
+    ]);
+    details.appendChild(summary);
+
+    const groups = new Map();
+    for (const [reverseIndex, entry] of [...events].reverse().entries()) {
+      const index = events.length - reverseIndex - 1;
+      const date = new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+      }).format(new Date(entry.atMs));
+      if (!groups.has(date)) groups.set(date, []);
+      const next = events[index + 1];
+      const durationEnd = next?.atMs;
+      const reconnectsKnownSession = events
+        .slice(0, index)
+        .some((previous) => previous.connected);
+      const durationPrefix = entry.connected
+        ? "Connected for "
+        : next?.connected
+          ? reconnectsKnownSession
+            ? "Reconnected after "
+            : "Connected after "
+          : "Offline for ";
+      const durationSuffix =
+        !entry.connected && next?.connected ? " offline" : "";
+      const durationLabel =
+        compactDurationLabel({
+          start: entry.atMs,
+          end: durationEnd ?? Date.now(),
+        }) ?? "duration unavailable";
+      groups.get(date).push(
+        el(
+          "li",
+          {
+            "data-review-connection-event": entry.connected
+              ? "connected"
+              : "disconnected",
+            ...(reverseIndex === 0
+              ? { "data-review-connection-current": true }
+              : {}),
+          },
+          [
+            el("span", {
+              "data-review-connection-marker": true,
+              "aria-hidden": "true",
+            }),
+            el("time", {
+              datetime: entry.at,
+              text: new Intl.DateTimeFormat(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit",
+              }).format(new Date(entry.atMs)),
+            }),
+            el("strong", {
+              text: entry.connected ? "Connected" : "Disconnected",
+            }),
+            ...(reverseIndex === 0
+              ? [el("span", { "data-review-current": true, text: "Current" })]
+              : []),
+            el("span", {
+              "data-review-connection-duration": true,
+              "data-review-duration-start": entry.atMs,
+              ...(durationEnd === undefined
+                ? {}
+                : { "data-review-duration-end": durationEnd }),
+              "data-review-duration-prefix": durationPrefix,
+              "data-review-duration-suffix": durationSuffix,
+              text: durationPrefix + durationLabel + durationSuffix,
+            }),
+            ...(entry.reason
+              ? [
+                  el("span", {
+                    "data-review-connection-reason": true,
+                    text: entry.reason,
+                  }),
+                ]
+              : []),
+          ],
+        ),
+      );
+    }
+    for (const [date, rows] of groups) {
+      details.append(
+        el("section", { "data-review-connection-day": true }, [
+          el("h3", { text: date }),
+          el("ol", {}, rows),
+        ]),
+      );
+    }
+    return details;
+  };
+
+  const renderConnectionPanel = () => {
+    if (!connectionPanel) return;
+    const signature = JSON.stringify({
+      connected: agentConnected,
+      runtimeOffline,
+      state: agentSessionState,
+      log: agentConnectionLog,
+      plan: agentPlanPath,
+      command: agentCommand,
+      recoveryPrompt: agentRecoveryPrompt,
+    });
+    if (signature === connectionPanelSignature) {
+      refreshConnectionTimes();
+      return;
+    }
+    connectionPanelSignature = signature;
+    const historyWasOpen =
+      connectionPanel.querySelector("[data-review-connection-history]")
+        ?.open === true;
+    const state = el("section", {
+      "data-review-connection-state": agentConnected
+        ? "connected"
+        : runtimeOffline
+          ? "offline"
+          : "disconnected",
+      "data-tone": agentConnected ? "connected" : "danger",
+    });
+    if (agentConnected) {
+      state.append(
+        el("div", { "data-review-connection-title": true }, [
+          el("span", {
+            "data-review-connection-dot": true,
+            "aria-hidden": "true",
+          }),
+          el("strong", { text: "Agent session active" }),
+          el("span", {
+            "data-review-connection-phase": true,
+            text: agentSessionState === "working" ? "Working" : "Waiting",
+          }),
+        ]),
+        el("p", {}, [
+          document.createTextNode("Last signal "),
+          el("span", {
+            "data-review-agent-heartbeat": true,
+            "data-review-relative-at": agentHeartbeatAt,
+            text: relativeSignal(agentHeartbeatAt),
+          }),
+        ]),
+      );
+    } else if (runtimeOffline) {
+      state.append(
+        el("strong", { text: "The review server is unreachable" }),
+        appendInlineCode(
+          el("p", {}),
+          "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
+        ),
+      );
+    } else {
+      state.append(
+        el("strong", { text: "No agent is connected to this review session." }),
+        el("p", {
+          text: "Your comments still save and queue here; nothing is sent until an agent reconnects.",
+        }),
+        el("p", {
+          text: "To reconnect this running review, paste this exact prompt into your coding agent:",
+        }),
+        copyBlock({
+          attribute: "data-review-recovery-prompt",
+          text:
+            agentRecoveryPrompt ||
+            "Ask your coding agent to reconnect to this Big Plan review and keep its feedback loop running.",
+        }),
+        el("p", {
+          text: "Or run this exact connector command yourself from the Big Plan repository:",
+        }),
+        copyBlock({
+          attribute: "data-review-recovery-command",
+          text:
+            agentCommand ||
+            "node bin/big-plan.mjs agent " + (agentPlanPath || "<plan.mdx>"),
+        }),
+      );
+    }
+    const history = connectionLogView({ historyWasOpen });
+    connectionPanel.replaceChildren(state, history);
+  };
+
   const setActiveTab = (tab) => {
-    const commentsActive = tab === "comments";
+    const active = tab === "agent" && !connectionTab ? "comments" : tab;
+    const commentsActive = active === "comments";
+    const chatActive = active === "chat";
     commentsTab.setAttribute(
       "aria-selected",
       commentsActive ? "true" : "false",
     );
-    chatTab.setAttribute("aria-selected", commentsActive ? "false" : "true");
+    chatTab.setAttribute("aria-selected", chatActive ? "true" : "false");
+    connectionTab?.setAttribute(
+      "aria-selected",
+      active === "agent" ? "true" : "false",
+    );
     commentsPanel.hidden = !commentsActive;
-    chatPanel.hidden = commentsActive;
+    chatPanel.hidden = !chatActive;
+    if (connectionPanel) connectionPanel.hidden = active !== "agent";
+    if (active === "agent") renderConnectionPanel();
   };
 
   commentsTab.addEventListener("click", () => setActiveTab("comments"));
   chatTab.addEventListener("click", () => setActiveTab("chat"));
+  connectionTab?.addEventListener("click", () => setActiveTab("agent"));
   backdrop.addEventListener("click", () => setRailOpen(false));
 
   const chipCounts = () => {
@@ -981,11 +1787,11 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       const visible =
         window.innerWidth < 1280 &&
         marker.hasAttribute("data-review-marker-active") &&
-        rect.bottom >= FLOAT_TOP &&
+        rect.bottom >= REVIEW_CONTROL_TOP &&
         rect.top <= window.innerHeight;
       marker.hidden = !visible;
       if (!visible) continue;
-      marker.style.top = Math.max(FLOAT_TOP, rect.top) + "px";
+      marker.style.top = Math.max(REVIEW_CONTROL_TOP, rect.top) + "px";
       marker.style.left =
         Math.max(4, rect.left - marker.offsetWidth - 8) + "px";
     }
@@ -1094,7 +1900,6 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   };
 
   const focusTarget = (comment, options = {}) => {
-    if (railIsOpen()) restoreReadingPosition = false;
     const block = anchorStateFor(comment).block;
     const destination = block || document.body;
     const scroll = () => {
@@ -1129,6 +1934,112 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       : null;
   };
 
+  const visualAnchorForTarget = (target) => {
+    const block = blockForTarget(target);
+    if (target?.type !== "slide") return block;
+    return block?.closest("[data-slide]")?.querySelector("[data-slide-kicker]");
+  };
+
+  const slideForTarget = (target) =>
+    target?.type === "slide"
+      ? blockForTarget(target)?.closest("[data-slide]") || null
+      : null;
+
+  const pointInside = ({ x, y, rect }) =>
+    x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+
+  // CSS highlights do not create clickable DOM. Resolve a document click back
+  // through the same anchor model that painted the highlight, including a
+  // precise range hit for text selections and the kicker for whole slides.
+  const commentAtDocumentPoint = ({ target, x, y }) => {
+    if (!(target instanceof Element)) return null;
+    if (target.closest("[data-review-root]")) return null;
+    for (const comment of drafts.concat(sent)) {
+      if (resolvedCommentIds.has(comment.id)) continue;
+      if (
+        comment.target.type === "slide" &&
+        slideForTarget(comment.target)?.contains(target)
+      ) {
+        return comment;
+      }
+      const anchor = anchorStateFor(comment);
+      if (
+        anchor.kind === "range" &&
+        Array.from(anchor.range.getClientRects()).some((rect) =>
+          pointInside({ x, y, rect }),
+        )
+      ) {
+        return comment;
+      }
+      if (
+        anchor.kind !== "range" &&
+        anchor.block &&
+        anchor.block.contains(target) &&
+        anchor.block.hasAttribute("data-review-comment-highlight")
+      ) {
+        return comment;
+      }
+    }
+    return null;
+  };
+
+  const syncCommentEmphasis = () => {
+    for (const node of document.querySelectorAll(
+      "[data-review-comment-emphasized]",
+    )) {
+      node.removeAttribute("data-review-comment-emphasized");
+    }
+    if (emphasizedCommentId === null) return;
+    for (const node of document.querySelectorAll(
+      '[data-review-comment-id="' + cssEscape(emphasizedCommentId) + '"]',
+    )) {
+      node.setAttribute("data-review-comment-emphasized", "");
+    }
+  };
+
+  const setEmphasizedComment = (commentId) => {
+    if (commentId === emphasizedCommentId) return;
+    emphasizedCommentId = commentId;
+    paintTargetHighlights();
+    syncCommentEmphasis();
+  };
+
+  // The document-to-tray half of comment navigation changes only the tray's
+  // scroll container; the reader's document position remains untouched.
+  const revealCommentInTray = (comment) => {
+    const documentTop = window.scrollY;
+    setActiveTab("comments");
+    setRailOpen(true);
+    renderTray();
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: documentTop, behavior: "auto" });
+      const row = rail.querySelector(
+        '[data-review-comment-id="' + cssEscape(comment.id) + '"]',
+      );
+      const scroller = rail.querySelector("[data-review-scroll]");
+      if (!row || !scroller) return;
+      for (const previous of rail.querySelectorAll(
+        "[data-review-tray-target]",
+      )) {
+        previous.removeAttribute("data-review-tray-target");
+      }
+      row.setAttribute("data-review-tray-target", "");
+      const rowRect = row.getBoundingClientRect();
+      const scrollRect = scroller.getBoundingClientRect();
+      const centered =
+        scroller.scrollTop +
+        rowRect.top -
+        scrollRect.top -
+        (scroller.clientHeight - rowRect.height) / 2;
+      scroller.scrollTo({ top: Math.max(0, centered), behavior: "smooth" });
+      setTimeout(() => row.removeAttribute("data-review-tray-target"), 1400);
+      announce("Comment shown in Feedback.");
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: documentTop, behavior: "auto" });
+      });
+    });
+  };
+
   // Turns a renderer-relative character offset back into a DOM boundary. The
   // review chrome never enters a block, so these offsets remain stable while
   // comments and the sidebar are mounted around the document.
@@ -1148,12 +2059,29 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     return last === null ? null : { node: last, offset: last.data.length };
   };
 
+  /** Reads a Range through raw text nodes so list layout newlines add no drift. */
+  const rangeText = (range) => range.cloneContents().textContent || "";
+
+  /** Maps a DOM boundary to the same raw-text coordinate system as textBoundary. */
+  const textOffsetForBoundary = ({ block, container, offset }) => {
+    const prefix = document.createRange();
+    prefix.selectNodeContents(block);
+    prefix.setEnd(container, offset);
+    return rangeText(prefix).length;
+  };
+
   const rangeForTarget = (target) => {
     const block = blockForTarget(target);
     if (!block) return null;
     if (target.type === "selection") {
+      const endBlock = target.endBlockId
+        ? document.querySelector(
+            '[data-block-id="' + cssEscape(target.endBlockId) + '"]',
+          )
+        : block;
+      if (!endBlock) return null;
       const start = textBoundary(block, target.start);
-      const end = textBoundary(block, target.end);
+      const end = textBoundary(endBlock, target.end);
       if (!start || !end) return null;
       const range = document.createRange();
       range.setStart(start.node, start.offset);
@@ -1226,25 +2154,15 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         : { kind: "block", block: original };
     }
     const direct = rangeForTarget(target);
-    if (direct && direct.toString() === target.quote) {
+    if (
+      direct &&
+      (rangeText(direct) === target.quote ||
+        (target.endBlockId && rangeText(direct).startsWith(target.quote)))
+    ) {
       return { kind: "range", range: direct, block: original };
     }
     const candidates = [];
     if (original) candidates.push(original);
-    const events = outcomeEventsFor(comment);
-    const latestChanged = events
-      .filter((event) => event.key === "changed")
-      .at(-1);
-    const changedTargets = [];
-    for (const blockId of latestChanged?.changeTargets || []) {
-      const block = document.querySelector(
-        '[data-block-id="' + cssEscape(blockId) + '"]',
-      );
-      if (block) {
-        changedTargets.push(block);
-        if (!candidates.includes(block)) candidates.push(block);
-      }
-    }
     for (const block of scopeBlocksFor(target.blockId)) {
       if (!candidates.includes(block)) candidates.push(block);
     }
@@ -1252,11 +2170,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       const range = quoteRangeInBlock(block, target.quote, target.start);
       if (range) return { kind: "range", range, block };
     }
-    const successor =
-      changedTargets[0] ||
-      original ||
-      scopeBlocksFor(target.blockId)[0] ||
-      null;
+    const successor = original || scopeBlocksFor(target.blockId)[0] || null;
     return {
       kind: "changed",
       block: successor,
@@ -1283,19 +2197,44 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     for (const block of blocks) {
       block.removeAttribute("data-review-comment-highlight");
       block.removeAttribute("data-review-active-highlight");
+      block.removeAttribute("data-review-comment-focus");
       block.removeAttribute("data-review-anchor-changed");
     }
+    for (const slide of document.querySelectorAll("[data-slide]")) {
+      slide.removeAttribute("data-review-slide-highlight");
+      slide.removeAttribute("data-review-slide-focus");
+    }
     const commentRanges = [];
-    const lensBlocks = diffLens
-      ? diffLens.hiddenBlocks.concat(diffLens.movedBlocks)
-      : [];
+    const focusRanges = [];
+    const lensBlocks = diffLens?.hiddenBlocks ?? [];
     for (const comment of drafts.concat(sent)) {
       if (resolvedCommentIds.has(comment.id)) continue;
       const anchor = anchorStateFor(comment);
+      const visualAnchor =
+        comment.target.type === "slide"
+          ? visualAnchorForTarget(comment.target)
+          : null;
+      if (visualAnchor && !lensBlocks.includes(anchor.block)) {
+        slideForTarget(comment.target)?.setAttribute(
+          "data-review-slide-highlight",
+          "comment",
+        );
+        if (comment.id === emphasizedCommentId) {
+          slideForTarget(comment.target)?.setAttribute(
+            "data-review-slide-focus",
+            "",
+          );
+        }
+        continue;
+      }
       if (anchor.kind === "range" && !lensBlocks.includes(anchor.block)) {
         commentRanges.push(anchor.range);
+        if (comment.id === emphasizedCommentId) focusRanges.push(anchor.range);
       } else if (anchor.block && !lensBlocks.includes(anchor.block)) {
         anchor.block.setAttribute("data-review-comment-highlight", "");
+        if (comment.id === emphasizedCommentId) {
+          anchor.block.setAttribute("data-review-comment-focus", "");
+        }
         if (anchor.kind === "changed") {
           anchor.block.setAttribute("data-review-anchor-changed", "");
         }
@@ -1304,10 +2243,17 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     const activeTarget = composeTarget || pendingSelection;
     const activeRange = activeTarget ? rangeForTarget(activeTarget) : null;
     if (activeTarget && !activeRange) {
-      blockForTarget(activeTarget)?.setAttribute(
-        "data-review-active-highlight",
-        "",
-      );
+      if (activeTarget.type === "slide") {
+        slideForTarget(activeTarget)?.setAttribute(
+          "data-review-slide-highlight",
+          "active",
+        );
+      } else {
+        visualAnchorForTarget(activeTarget)?.setAttribute(
+          "data-review-active-highlight",
+          "",
+        );
+      }
     }
     root.setAttribute(
       "data-review-selection-highlight-count",
@@ -1317,7 +2263,12 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       "data-review-active-selection-highlight",
       activeRange === null ? "false" : "true",
     );
+    root.setAttribute(
+      "data-review-focus-highlight-count",
+      String(focusRanges.length),
+    );
     setNamedHighlight("big-plan-review-comments", commentRanges);
+    setNamedHighlight("big-plan-review-focus", focusRanges);
     setNamedHighlight(
       "big-plan-review-active",
       activeRange === null ? [] : [activeRange],
@@ -1325,23 +2276,23 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   };
 
   const relativeCommentTime = (createdAt) => {
-    const time = Date.parse(createdAt);
-    if (Number.isNaN(time)) return "Just now";
-    const elapsed = Date.now() - time;
-    if (elapsed < 60_000) return "Just now";
-    if (elapsed < 3_600_000)
-      return Math.max(1, Math.floor(elapsed / 60_000)) + "m";
-    return new Intl.DateTimeFormat(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(time));
+    return commentTimeLabel({
+      now: Date.now(),
+      at: Date.parse(createdAt),
+      absoluteLabel: (at) =>
+        new Intl.DateTimeFormat(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date(at)),
+    });
   };
 
   const OUTCOME_LABELS = {
     changed: "Changed",
     question: "Needs your answer",
     outside: "Outside this plan",
-    waiting: "With agent",
+    waiting: "Waiting",
+    cancelled: "Cancelled",
   };
 
   const spinner = () =>
@@ -1350,77 +2301,247 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       "aria-hidden": "true",
     });
 
-  const outcomeBadge = (outcome) => {
+  const outcomeBadge = (outcome, options = {}) => {
+    const state = outcome.status?.stage || outcome.key;
     const badge = el("span", {
-      "data-review-outcome-state": outcome.key,
+      "data-review-outcome-state": state,
+      ...(options.iconOnly === true ? { "aria-label": outcome.label } : {}),
     });
-    if (outcome.key === "waiting") badge.appendChild(spinner());
-    badge.appendChild(document.createTextNode(outcome.label));
+    if (options.spin === true) badge.appendChild(spinner());
+    if (options.waitingBusy === true) {
+      badge.setAttribute("data-waiting-busy", "");
+    }
+    if (state === "waiting") badge.appendChild(icon(HOURGLASS_ICON));
+    if (state === "blocked") badge.appendChild(icon(TRIANGLE_ALERT_ICON));
+    if (options.iconOnly !== true) {
+      badge.appendChild(document.createTextNode(outcome.label));
+    }
     return badge;
   };
 
-  const currentAgentActivity = () => {
-    const latest = progressEvents[progressEvents.length - 1];
-    if (!latest) return "Waiting for the coding agent to begin…";
-    const prefix =
-      latest.state === "live"
-        ? "Working"
-        : latest.state === "waiting"
-          ? "Queued"
-          : latest.state === "failed"
-            ? "Needs attention"
-            : "Latest";
-    return (
-      prefix + ": " + latest.step + (latest.detail ? " — " + latest.detail : "")
+  const isAgentWorkEvent = (event) =>
+    (event.state === "live" || event.state === "waiting") &&
+    !/^(reply sent to agent|plan question sent to agent)$/i.test(event.step);
+
+  const currentActivityEvents = (requestId) => {
+    const deduped = [];
+    for (const event of progressEvents) {
+      if (
+        !isAgentWorkEvent(event) ||
+        /feedback package received/i.test(event.step) ||
+        (requestId && event.requestId !== requestId)
+      ) {
+        continue;
+      }
+      const previous = deduped[deduped.length - 1];
+      if (
+        previous &&
+        previous.step.toLocaleLowerCase() === event.step.toLocaleLowerCase()
+      ) {
+        continue;
+      }
+      deduped.push(event);
+    }
+    return deduped.slice(-8);
+  };
+
+  // ------------------------------------------------------------ agent health
+
+  // A pending request is never allowed to look fine silently. The document
+  // derives the agent's condition from what it can actually observe - the
+  // runtime answering, work being picked up, progress still advancing - and
+  // names the failure honestly when any of those stop.
+  const pendingRequestList = () => {
+    const answered = new Set(
+      agentResponses.map((response) => response.requestId),
+    );
+    const cancelled = new Set(agentCancelledIds);
+    return agentRequests.filter(
+      (request) =>
+        !answered.has(request.requestId) && !cancelled.has(request.requestId),
     );
   };
 
-  const currentActivityEvents = () => {
-    let start = 0;
-    for (let index = progressEvents.length - 1; index >= 0; index -= 1) {
-      if (/agent response ready/i.test(progressEvents[index]?.step || "")) {
-        start = index + 1;
-        break;
+  const observeRequests = () => {
+    const pending = pendingRequestList();
+    const ids = new Set(pending.map((request) => request.requestId));
+    for (const request of pending) {
+      if (!requestSeenAt.has(request.requestId)) {
+        requestSeenAt.set(request.requestId, {
+          at: Date.now(),
+          seqAtSeen: progressSeq,
+          liveSeqAtSeen: liveProgressSeq,
+        });
       }
     }
-    return progressEvents.slice(start).slice(-4);
-  };
-
-  const activityDisclosure = () => {
-    if (!showAgentActivity) {
-      return el("p", { "data-review-thread-waiting": true }, [
-        spinner(),
-        document.createTextNode("Agent activity hidden"),
-      ]);
+    for (const id of Array.from(requestSeenAt.keys())) {
+      if (!ids.has(id)) requestSeenAt.delete(id);
     }
-    const events = currentActivityEvents();
-    const items =
-      events.length > 0
-        ? events.map((event) =>
-            el("li", {
-              text: event.step + (event.detail ? " — " + event.detail : ""),
-            }),
-          )
-        : [el("li", { text: currentAgentActivity() })];
-    return el(
-      "details",
-      {
-        "data-review-agent-activity": true,
-        "data-review-thread-waiting": true,
-        open: true,
-      },
-      [
-        el("summary", {}, [
-          spinner(),
-          document.createTextNode("Agent activity"),
-        ]),
-        el("ol", {}, items),
-      ],
-    );
   };
 
-  const waitingLine = () => {
-    return activityDisclosure();
+  const requestPickedUp = (request) => {
+    const seen = requestSeenAt.get(request.requestId);
+    const attributed = progressEvents.some(
+      (event) =>
+        isAgentWorkEvent(event) && event.requestId === request.requestId,
+    );
+    const legacy =
+      seen !== undefined &&
+      progressEvents.some(
+        (event) =>
+          isAgentWorkEvent(event) &&
+          typeof event.requestId !== "string" &&
+          event.seq > seen.liveSeqAtSeen,
+      );
+    return attributed || legacy;
+  };
+
+  const sessionShowsLife = (now = Date.now()) =>
+    agentConnected ||
+    now - Math.max(lastProgressAdvanceAt, agentHeartbeatAt) <= AGENT_QUIET_MS;
+
+  const failedEventFor = (request) => {
+    const seen = requestSeenAt.get(request.requestId);
+    return progressEvents
+      .filter(
+        (event) =>
+          event.state === "failed" &&
+          (event.requestId === request.requestId ||
+            (typeof event.requestId !== "string" &&
+              seen !== undefined &&
+              event.seq > seen.seqAtSeen)),
+      )
+      .at(-1);
+  };
+
+  const agentHealth = () => {
+    if (!hasRuntime) return null;
+    if (runtimeOffline) {
+      return {
+        key: "offline",
+        headline: "The review server is unreachable",
+        hint: "Restart `big-plan review` in its terminal, then open the new URL it prints. All comments are safe.",
+      };
+    }
+    observeRequests();
+    const pending = pendingRequestList();
+    if (pending.length === 0) return null;
+    const failed = pending.map(failedEventFor).filter(Boolean).at(-1);
+    if (failed) {
+      return {
+        key: "errored",
+        headline: "The agent reported a problem",
+        hint:
+          failed.step +
+          (failed.detail ? " - " + failed.detail : "") +
+          ". Reply again or restart `big-plan agent`.",
+      };
+    }
+    const now = Date.now();
+    const pickedUp = pending.filter(requestPickedUp);
+    if (pickedUp.length === 0) {
+      if (agentConnected) return { key: "working" };
+      return {
+        key: "unavailable",
+        headline: "No agent connected",
+        hint: "This request is queued until an agent connects.",
+      };
+    }
+    const seen = pickedUp
+      .map((request) => requestSeenAt.get(request.requestId))
+      .filter(Boolean);
+    const oldestAt =
+      seen.length > 0 ? Math.min(...seen.map((entry) => entry.at)) : now;
+    const quietFor = sessionQuietMs({
+      now,
+      lastProgressAdvanceAt,
+      heartbeatAt: agentHeartbeatAt,
+      seenAt: oldestAt,
+    });
+    if (quietFor > AGENT_QUIET_MS) {
+      const minutes = Math.max(1, Math.round(quietFor / 60_000));
+      return {
+        key: "quiet",
+        headline: "No progress for " + minutes + "m",
+        hint: "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This thread updates by itself once the agent resumes.",
+      };
+    }
+    return { key: "working" };
+  };
+
+  const pendingRequestForComment = (comment) => {
+    const answered = new Set(
+      agentResponses.map((response) => response.requestId),
+    );
+    const cancelled = new Set(agentCancelledIds);
+    return agentRequests
+      .filter((request) => {
+        if (
+          answered.has(request.requestId) ||
+          cancelled.has(request.requestId)
+        ) {
+          return false;
+        }
+        if (request.kind === "reply") return request.commentId === comment.id;
+        return (
+          request.kind === "feedback" &&
+          Array.isArray(request.comments) &&
+          request.comments.some((entry) => entry.id === comment.id)
+        );
+      })
+      .at(-1);
+  };
+
+  const requestBelongsToComment = ({ request, comment }) =>
+    request.kind === "reply"
+      ? request.commentId === comment.id
+      : request.kind === "feedback" &&
+        Array.isArray(request.comments) &&
+        request.comments.some((entry) => entry.id === comment.id);
+
+  const latestRequestForComment = (comment) =>
+    agentRequests
+      .filter((request) => requestBelongsToComment({ request, comment }))
+      .at(-1);
+
+  const pendingStatusFor = (request, surfaceName) => {
+    observeRequests();
+    const seen = requestSeenAt.get(request.requestId);
+    const pickedUp = requestPickedUp(request);
+    const sessionBusy =
+      !pickedUp &&
+      pendingRequestList().some(
+        (candidate) =>
+          candidate.requestId !== request.requestId &&
+          requestPickedUp(candidate),
+      ) &&
+      sessionShowsLife();
+    const failed = failedEventFor(request);
+    return {
+      ...deriveThreadStatus({
+        phase: "pending",
+        surface: surfaceName,
+        runtimeOffline,
+        agentConnected,
+        pickedUp,
+        sessionBusy,
+        quietForMs: pickedUp
+          ? sessionQuietMs({
+              now: Date.now(),
+              lastProgressAdvanceAt,
+              heartbeatAt: agentHeartbeatAt,
+              seenAt: seen?.at || Date.now(),
+            })
+          : 0,
+        ...(failed
+          ? {
+              failedStep: failed.step,
+              failedDetail: failed.detail || "",
+            }
+          : {}),
+      }),
+      requestId: request.requestId,
+    };
   };
 
   const outcomeEventsFor = (comment) => {
@@ -1438,11 +2559,14 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         key: outcome.state,
         label: OUTCOME_LABELS[outcome.state],
         reply: outcome.message,
-        changeTargets: outcome.changeTargets || [],
+        messageNodes: checkedMessageNodes(outcome.messageNodes),
+        changes: outcome.changes || [],
         createdAt: response.createdAt,
         requestId: response.requestId,
-        fromRevision: request?.sourceRevision || "",
-        toRevision: response.sourceRevision || "",
+        fromRevision:
+          response.revisionPair?.fromRevision || request?.sourceRevision || "",
+        toRevision:
+          response.revisionPair?.toRevision || response.sourceRevision || "",
       });
     }
     return events;
@@ -1450,33 +2574,219 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   const outcomeFor = (comment) => {
     const events = outcomeEventsFor(comment);
-    const answered = new Set(
-      agentResponses.map((response) => response.requestId),
-    );
-    const pendingReply = agentRequests.some(
-      (request) =>
-        request.kind === "reply" &&
-        request.commentId === comment.id &&
-        !answered.has(request.requestId),
-    );
-    if (pendingReply) {
+    const pending = pendingRequestForComment(comment);
+    if (pending) {
+      const status = pendingStatusFor(pending, "thread");
       return {
         key: "waiting",
-        label: OUTCOME_LABELS.waiting,
-        reply: "Waiting for the coding agent to answer this reply.",
+        label: status.badge,
+        status,
+      };
+    }
+    const latestRequest = latestRequestForComment(comment);
+    if (
+      latestRequest &&
+      agentCancelledIds.includes(latestRequest.requestId) &&
+      !agentResponses.some(
+        (response) => response.requestId === latestRequest.requestId,
+      )
+    ) {
+      return {
+        key: "cancelled",
+        label: OUTCOME_LABELS.cancelled,
       };
     }
     return (
       events[events.length - 1] || {
         key: "waiting",
         label: OUTCOME_LABELS.waiting,
-        reply: "Waiting for the coding agent to answer this comment.",
+        status: deriveThreadStatus({
+          phase: "pending",
+          surface: "thread",
+          agentConnected,
+        }),
       }
     );
   };
 
+  const appendInlineCode = (node, text) => {
+    const pieces = String(text).split("`");
+    pieces.forEach((piece, index) => {
+      if (piece === "") return;
+      node.appendChild(
+        index % 2 === 1
+          ? el("code", { text: piece })
+          : document.createTextNode(piece),
+      );
+    });
+    return node;
+  };
+
+  const statusIcon = (status) => {
+    if (status.stage === "waiting") return icon(HOURGLASS_ICON);
+    if (status.stage === "blocked" || status.stage === "stalled")
+      return icon(TRIANGLE_ALERT_ICON);
+    if (status.stage === "errored" || status.stage === "offline") {
+      return icon(CIRCLE_X_ICON);
+    }
+    return null;
+  };
+
+  const setupInstructions = () =>
+    el(
+      "details",
+      {
+        "data-review-status-setup": true,
+      },
+      [
+        el("summary", { text: "Show setup instructions" }),
+        appendInlineCode(
+          el("p", {}),
+          "Keep `big-plan review` running. In a second terminal, run `big-plan agent` and start the command it prints.",
+        ),
+        appendInlineCode(
+          el("p", {}),
+          "If the review server stopped, restart `big-plan review`, then open the new URL it prints. Your comments remain saved.",
+        ),
+      ],
+    );
+
+  const cancelAgentRequest = async ({ requestId, trigger }) => {
+    trigger.disabled = true;
+    try {
+      await confirmRuntime();
+      await call("/api/agent-requests/cancel", {
+        method: "POST",
+        body: { requestId },
+      });
+      if (!agentCancelledIds.includes(requestId)) {
+        agentCancelledIds = agentCancelledIds.concat([requestId]);
+      }
+      clearInlineError(trigger);
+      announce("Agent request cancelled.");
+      renderTray();
+      startProgress();
+    } catch (error) {
+      trigger.disabled = false;
+      showInlineError(trigger, "Couldn’t cancel: " + describeError(error));
+      announce(describeError(error));
+    }
+  };
+
+  const threadStatusStrip = (status, options = {}) => {
+    if (!status.headline) return null;
+    const events =
+      status.stage === "working" ? currentActivityEvents(status.requestId) : [];
+    const row = el("div", { "data-review-status-row": true });
+    if (status.showsSpinner) row.appendChild(spinner());
+    else {
+      const glyph = statusIcon(status);
+      if (glyph) row.appendChild(glyph);
+    }
+    if (events.length > 0) {
+      const activityButton = el("button", {
+        type: "button",
+        "data-review-status-activity-toggle": true,
+        "aria-expanded": showAgentActivity ? "true" : "false",
+        "aria-label": showAgentActivity
+          ? "Hide agent activity"
+          : "Show agent activity",
+        title: showAgentActivity ? "Hide activity" : "Show activity",
+      });
+      activityButton.append(
+        el("strong", { text: status.headline }),
+        icon(CHEVRON_RIGHT_ICON),
+      );
+      activityButton.addEventListener("click", () => {
+        showAgentActivity = !showAgentActivity;
+        renderTray();
+      });
+      row.appendChild(activityButton);
+    } else {
+      row.appendChild(el("strong", { text: status.headline }));
+    }
+    const strip = el("div", {
+      "data-review-thread-status": status.stage,
+      "data-tone": status.tone,
+      ...(status.waitingBusy ? { "data-waiting-busy": true } : {}),
+    });
+    strip.appendChild(row);
+    if (status.hint) {
+      strip.appendChild(
+        appendInlineCode(
+          el("p", { "data-review-status-hint": true }),
+          status.hint,
+        ),
+      );
+    }
+    if (status.showsSetup) {
+      strip.appendChild(setupInstructions());
+    }
+    if (events.length > 0 && showAgentActivity) {
+      strip.appendChild(
+        el(
+          "ol",
+          {
+            class:
+              options.surface === "tray" ? "max-h-none! overflow-visible!" : "",
+            "data-review-status-activity": true,
+            ...(options.surface === "card" && options.commentId
+              ? { "data-review-activity-owner": options.commentId }
+              : {}),
+          },
+          events.map((event) => {
+            const item = el("li", {}, [
+              el("span", {
+                text: event.step + (event.detail ? " — " + event.detail : ""),
+              }),
+            ]);
+            if (
+              typeof event.at === "string" &&
+              !Number.isNaN(Date.parse(event.at)) &&
+              relativeCommentTime(event.at) !== "Just now"
+            ) {
+              item.appendChild(
+                el("time", {
+                  datetime: event.at,
+                  text: relativeCommentTime(event.at),
+                }),
+              );
+            }
+            return item;
+          }),
+        ),
+      );
+    }
+    if (
+      status.requestId &&
+      ["waiting", "blocked", "working", "stalled"].includes(status.stage)
+    ) {
+      const cancel = el("button", {
+        type: "button",
+        class:
+          "-mx-1 cursor-pointer rounded-sm px-1 transition-colors hover:bg-[color-mix(in_srgb,currentColor_10%,transparent)] active:opacity-65 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-current",
+        "data-review-cancel-request": true,
+        text: "Cancel request",
+      });
+      cancel.addEventListener("click", () => {
+        void cancelAgentRequest({
+          requestId: status.requestId,
+          trigger: cancel,
+        });
+      });
+      strip.appendChild(cancel);
+    }
+    return strip;
+  };
+
   const outcomeCounts = () => {
-    const counts = { changed: 0, question: 0, outside: 0, waiting: 0 };
+    const counts = {
+      changed: 0,
+      question: 0,
+      outside: 0,
+      waiting: 0,
+      cancelled: 0,
+    };
     for (const comment of sent) {
       if (resolvedCommentIds.has(comment.id)) continue;
       counts[outcomeFor(comment).key] += 1;
@@ -1491,7 +2801,14 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   const anchorContextLine = (comment) => {
     const anchor = anchorStateFor(comment);
-    if (anchor.kind !== "changed" || comment.target.type !== "selection") {
+    const changed = outcomeEventsFor(comment).some(
+      (event) => event.key === "changed",
+    );
+    if (
+      !changed ||
+      anchor.kind !== "changed" ||
+      comment.target.type !== "selection"
+    ) {
       return null;
     }
     return el("p", {
@@ -1509,6 +2826,37 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       "data-review-draft-stale": true,
       text: "The text changed since you drafted this.",
     });
+  };
+
+  const stagedSubmitActions = ({ comment, surface }) => {
+    const sendThis = el("button", {
+      type: "button",
+      class: "active:opacity-60",
+      [`data-review-${surface}-submit`]: true,
+      text: "Send this",
+    });
+    sendThis.addEventListener("click", () => {
+      void submitComments({
+        comments: [comment],
+        closeRailAfter: false,
+        trigger: sendThis,
+      });
+    });
+    if (surface === "row") return [sendThis];
+    const sendAll = el("button", {
+      type: "button",
+      class: "active:opacity-60",
+      "data-review-thread-submit-all": true,
+      text: `Send all ${drafts.length}`,
+    });
+    sendAll.addEventListener("click", () => {
+      void submitComments({
+        comments: drafts,
+        closeRailAfter: false,
+        trigger: sendAll,
+      });
+    });
+    return [sendThis, sendAll];
   };
 
   const openDeleteDialog = (comment) => {
@@ -1530,6 +2878,10 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   const draftRow = (comment) => {
     const isEditing = comment.id === editingId;
+    const rowAttributes = {
+      "data-review-row": true,
+      "data-review-comment-id": comment.id,
+    };
     const jump = el("button", {
       type: "button",
       "data-review-row-target": true,
@@ -1537,48 +2889,52 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       title: "Jump to this target",
     });
     jump.addEventListener("click", () => focusTarget(comment));
-    const state = el("span", {
-      "data-review-comment-state": "staged",
-      text: "Staged",
-    });
+    if (submittingIds.has(comment.id)) {
+      return el("li", { ...rowAttributes, "data-review-row-sending": true }, [
+        el("div", { "data-review-row-head": true }, [
+          jump,
+          outcomeBadge({ key: "waiting", label: "Sending" }, { spin: true }),
+        ]),
+        el("p", {
+          class: COMMENT_WRAP_CLASSES,
+          "data-review-row-body": true,
+          text: comment.body,
+        }),
+      ]);
+    }
 
     if (!isEditing) {
-      const submitNow = el("button", {
-        type: "button",
-        "data-review-row-submit": true,
-        text: "Submit Now",
-      });
-      submitNow.addEventListener("click", () => {
-        void submitComments({
-          comments: [comment],
-          closeRailAfter: false,
-          trigger: submitNow,
-        });
-      });
-      const edit = el("button", {
-        type: "button",
-        "data-review-row-edit": true,
-        text: "Edit",
-      });
-      edit.addEventListener("click", () => {
-        editingId = comment.id;
-        renderTray();
-      });
-      const remove = el("button", {
-        type: "button",
-        "data-review-row-delete": true,
-        text: "Remove",
-      });
-      remove.addEventListener("click", () => openDeleteDialog(comment));
-      return el("li", { "data-review-row": true }, [
-        el("div", { "data-review-row-head": true }, [jump, state]),
-        el("p", { "data-review-row-body": true, text: comment.body }),
+      const iconActions = el("div", { "data-review-row-icons": true }, [
+        toolbarButton({
+          attribute: "data-review-row-edit",
+          label: "Edit comment",
+          glyph: PENCIL_ICON,
+          action: () => {
+            editingId = comment.id;
+            renderTray();
+          },
+        }),
+        toolbarButton({
+          attribute: "data-review-row-delete",
+          label: "Remove comment",
+          glyph: TRASH_2_ICON,
+          action: () => openDeleteDialog(comment),
+        }),
+      ]);
+      return el("li", rowAttributes, [
+        el("div", { "data-review-row-head": true }, [jump, iconActions]),
+        el("p", {
+          class: COMMENT_WRAP_CLASSES,
+          "data-review-row-body": true,
+          text: comment.body,
+        }),
         stagedAnchorNotice(comment),
-        el("div", { "data-review-row-actions": true }, [
-          submitNow,
-          edit,
-          remove,
-        ]),
+        submitErrorNote(comment),
+        el(
+          "div",
+          { "data-review-row-actions": true },
+          stagedSubmitActions({ comment, surface: "row" }),
+        ),
       ]);
     }
 
@@ -1603,6 +2959,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       "data-review-row-save": true,
       text: "Save",
     });
+    attachShortcutTooltip(confirm, "Save comment");
     const commit = () => commitDraftEdit(comment, field);
     confirm.addEventListener("click", commit);
     field.addEventListener("keydown", (event) => {
@@ -1612,23 +2969,21 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       }
       if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) commit();
     });
-    const row = el(
-      "li",
-      { "data-review-row": true, "data-review-editing": true },
-      [
-        el("div", { "data-review-row-head": true }, [jump, state]),
-        field,
-        el("div", { "data-review-row-actions": true }, [cancel, confirm]),
-      ],
-    );
+    const row = el("li", { ...rowAttributes, "data-review-editing": true }, [
+      el("div", { "data-review-row-head": true }, [jump]),
+      field,
+      el("div", { "data-review-row-actions": true }, [cancel, confirm]),
+    ]);
     if (railIsOpen()) setTimeout(() => field.focus(), 0);
     return row;
   };
 
   const openThreadAt = (comment) => {
+    if (diffLens?.comment && diffLens.comment.id !== comment.id) {
+      clearDiffLens();
+    }
     expandedThreadIds.add(comment.id);
     editingId = null;
-    if (railIsOpen()) restoreReadingPosition = false;
     renderTray();
     requestAnimationFrame(() => {
       focusTarget(comment, { keepRailOpen: railIsOpen() });
@@ -1638,10 +2993,10 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   const sendThreadReply = async (comment, field, button) => {
     const body = field.value.trim();
-    if (body === "") return;
+    if (body === "") return false;
     if (!hasRuntime) {
       announce("Start the local review runtime to reply to the agent.");
-      return;
+      return false;
     }
     button.disabled = true;
     try {
@@ -1650,18 +3005,28 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         method: "POST",
         body: { kind: "reply", commentId: comment.id, body },
       });
+      agentConnected = answer.agentConnected === true;
       if (isAgentRequest(answer.request)) {
         agentRequests = agentRequests.concat([answer.request]);
       }
       field.value = "";
+      clearInlineError(button);
       expandedThreadIds.add(comment.id);
-      setAgentState("With agent", "working");
+      setAgentState("Agent working", "working");
       announce("Reply sent to the coding agent.");
       renderTray();
       startProgress();
+      return true;
     } catch (error) {
+      showInlineError(
+        button,
+        "Couldn’t send: " +
+          describeError(error) +
+          " Your reply text is preserved — try again.",
+      );
       announce(describeError(error));
       button.disabled = false;
+      return false;
     }
   };
 
@@ -1672,12 +3037,15 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         typeof location === "object" &&
         (location.status === "changed" ||
           location.status === "added" ||
-          location.status === "removed") &&
+          location.status === "removed" ||
+          location.status === "moved") &&
         typeof location.kind === "string" &&
         typeof location.label === "string" &&
         typeof location.section === "string" &&
         typeof location.oldText === "string" &&
         typeof location.newText === "string" &&
+        (location.parentBlockId === undefined ||
+          typeof location.parentBlockId === "string") &&
         Array.isArray(location.runs) &&
         location.runs.every(
           (run) =>
@@ -1687,6 +3055,38 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         ),
     );
 
+  const checkedRevisionChangeSet = (value) => {
+    if (
+      !value ||
+      typeof value !== "object" ||
+      value.version !== 1 ||
+      typeof value.fromRevision !== "string" ||
+      typeof value.toRevision !== "string" ||
+      !Array.isArray(value.places)
+    ) {
+      return { version: 1, fromRevision: "", toRevision: "", places: [] };
+    }
+    return {
+      version: 1,
+      fromRevision: value.fromRevision,
+      toRevision: value.toRevision,
+      places: value.places.flatMap((place) => {
+        if (
+          !place ||
+          typeof place !== "object" ||
+          typeof place.placeId !== "string" ||
+          typeof place.label !== "string" ||
+          typeof place.section !== "string" ||
+          typeof place.note !== "string"
+        ) {
+          return [];
+        }
+        const locations = checkedDiffLocations(place.locations);
+        return locations.length === 0 ? [] : [{ ...place, locations }];
+      }),
+    };
+  };
+
   const loadRevisionDiff = async (event) => {
     if (
       !hasRuntime ||
@@ -1694,7 +3094,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       !event.fromRevision ||
       !event.toRevision
     ) {
-      return [];
+      return { version: 1, fromRevision: "", toRevision: "", places: [] };
     }
     if (revisionDiffs.has(event.requestId)) {
       return revisionDiffs.get(event.requestId);
@@ -1705,138 +3105,20 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         "&to=" +
         encodeURIComponent(event.toRevision),
     );
-    const locations = checkedDiffLocations(answer.locations);
-    revisionDiffs.set(event.requestId, locations);
-    return locations;
-  };
-
-  const blockOrder = new Map(
-    blocks.map((block, index) => [
-      block.getAttribute("data-block-id") || "",
-      index,
-    ]),
-  );
-
-  // Removed locations borrow a fractional slot from their surviving neighbor,
-  // so all-location chat diffs retain the document's reading order.
-  const locationPosition = (location) => {
-    if (location.newBlockId && blockOrder.has(location.newBlockId)) {
-      return blockOrder.get(location.newBlockId);
-    }
-    if (location.beforeBlockId && blockOrder.has(location.beforeBlockId)) {
-      return blockOrder.get(location.beforeBlockId) - 0.5;
-    }
-    if (location.afterBlockId && blockOrder.has(location.afterBlockId)) {
-      return blockOrder.get(location.afterBlockId) + 0.5;
-    }
-    return Number.MAX_SAFE_INTEGER;
-  };
-
-  const locationsForEvent = (event) => {
-    const locations = revisionDiffs.get(event.requestId) || [];
-    const targets = event.changeTargets || [];
-    const selected =
-      targets.length === 0
-        ? locations
-        : locations.filter((candidate) =>
-            targets.some(
-              (target) =>
-                candidate.newBlockId === target ||
-                candidate.oldBlockId === target,
-            ),
-          );
-    return [...selected].sort(
-      (left, right) => locationPosition(left) - locationPosition(right),
-    );
-  };
-
-  const runSimilarity = (locations) =>
-    diffRunSimilarity(locations.flatMap((location) => location.runs || []));
-
-  const placeKindNote = (locations) => {
-    if (locations.every((location) => location.status === "added")) {
-      return "added";
-    }
-    if (locations.every((location) => location.status === "removed")) {
-      return "removed";
-    }
-    if (locations.length > 1 && runSimilarity(locations) < 0.2) {
-      return "rewritten";
-    }
-    return locations.length === 1 ? diffKindNote(locations[0]) : "reworked";
-  };
-
-  const locationsAreContiguous = ({ previous, next, changedIds }) => {
-    if (previous.section !== next.section) return false;
-    const previousPosition = locationPosition(previous);
-    const nextPosition = locationPosition(next);
-    if (nextPosition - previousPosition <= 1) return true;
-    const first = Math.floor(previousPosition) + 1;
-    const last = Math.ceil(nextPosition);
-    for (let index = first; index < last; index += 1) {
-      const id = blocks[index]?.getAttribute("data-block-id");
-      if (id && !changedIds.has(id)) return false;
-    }
-    return true;
-  };
-
-  // A place is a contiguous run of changed locations within one slide. This
-  // keeps chat and anchored-comment diffs on one calm, literal vocabulary.
-  const groupLocationsIntoPlaces = (locations) => {
-    const changedIds = new Set(
-      locations
-        .map((location) => location.newBlockId)
-        .filter((id) => typeof id === "string"),
-    );
-    const groups = [];
-    for (const location of locations) {
-      const previous = groups.at(-1);
-      const previousLocation = previous?.locations.at(-1);
-      if (
-        previous &&
-        previousLocation &&
-        locationsAreContiguous({
-          previous: previousLocation,
-          next: location,
-          changedIds,
-        })
-      ) {
-        previous.locations.push(location);
-        previous.note = placeKindNote(previous.locations);
-        if (previous.note === "rewritten") previous.label = "Whole section";
-        continue;
-      }
-      groups.push({
-        locations: [location],
-        section: location.section,
-        label: location.label,
-        note: placeKindNote([location]),
-        slideTitle: slideTitleFor({
-          type: "block",
-          section: location.section,
-          label: location.label,
-        }),
-      });
-    }
-    return groups;
+    const changeSet = checkedRevisionChangeSet(answer.changeSet);
+    revisionDiffs.set(event.requestId, changeSet);
+    return changeSet;
   };
 
   const placesForEvent = (event) =>
-    groupLocationsIntoPlaces(locationsForEvent(event));
-
-  const diffKindNote = (location) => {
-    if (location.status === "added") return "added";
-    if (location.status === "removed") return "removed";
-    if (
-      location.kind === "table" ||
-      location.kind === "table-row" ||
-      location.kind === "code" ||
-      location.kind.includes("diff")
-    ) {
-      return "replaced";
-    }
-    return "reworded";
-  };
+    (revisionDiffs.get(event.requestId)?.places || []).map((place) => ({
+      ...place,
+      slideTitle: slideTitleFor({
+        type: "block",
+        section: place.section,
+        label: place.label,
+      }),
+    }));
 
   const diffStepper = el("div", {
     "data-review-diff-stepper": true,
@@ -1846,33 +3128,30 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     type: "button",
     "data-review-diff-previous": true,
     "aria-label": "Previous change",
-    text: "‹",
   });
+  diffPrevious.appendChild(icon(CHEVRON_LEFT_ICON));
   const diffPosition = el("span", { "data-review-diff-position": true });
   const diffNext = el("button", {
     type: "button",
     "data-review-diff-next": true,
     "aria-label": "Next change",
-    text: "›",
   });
+  diffNext.appendChild(icon(CHEVRON_RIGHT_ICON));
   const diffExit = el("button", {
     type: "button",
     "data-review-diff-exit": true,
     text: "Show current text",
   });
-  diffStepper.append(diffPrevious, diffPosition, diffNext, diffExit);
+  const diffHide = el("button", {
+    type: "button",
+    "data-review-diff-hide": true,
+    text: "Hide changes",
+  });
+  diffStepper.append(diffPrevious, diffPosition, diffNext, diffExit, diffHide);
   document.body.appendChild(diffStepper);
-
-  // Added content is temporarily moved into the lens so its real formatting
-  // remains visible. Restore it before removing the lens: removing first would
-  // take the authoritative current blocks with it.
-  const restoreMovedBlocksBeforeLens = ({ movedBlocks, container }) => {
-    for (const block of movedBlocks) container.before(block);
-  };
 
   const clearDiffLens = () => {
     if (!diffLens) return;
-    restoreMovedBlocksBeforeLens(diffLens);
     for (const block of diffLens.hiddenBlocks) {
       block.removeAttribute("hidden");
       block.removeAttribute("data-review-diff-hidden");
@@ -1883,147 +3162,8 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     renderTray();
   };
 
-  const appendDiffRun = ({ container, run, comment, oldOffset, tagged }) => {
-    const nodeFor = (text, marked) => {
-      const node = el("span", {
-        "data-review-diff-op": run.op,
-        ...(marked ? { "data-review-diff-comment": true } : {}),
-        text,
-      });
-      if (marked && !tagged.value) {
-        node.appendChild(
-          el("span", {
-            "data-review-diff-comment-tag": true,
-            text: "your comment",
-          }),
-        );
-        tagged.value = true;
-      }
-      return node;
-    };
-    if (
-      run.op !== "del" ||
-      comment?.target.type !== "selection" ||
-      run.text === ""
-    ) {
-      container.appendChild(nodeFor(run.text, false));
-      return;
-    }
-    const runStart = oldOffset.value;
-    const runEnd = runStart + run.text.length;
-    const markStart = Math.max(runStart, comment.target.start);
-    const markEnd = Math.min(runEnd, comment.target.end);
-    if (markStart >= markEnd) {
-      container.appendChild(nodeFor(run.text, false));
-      return;
-    }
-    const localStart = markStart - runStart;
-    const localEnd = markEnd - runStart;
-    container.appendChild(nodeFor(run.text.slice(0, localStart), false));
-    container.appendChild(nodeFor(run.text.slice(localStart, localEnd), true));
-    container.appendChild(nodeFor(run.text.slice(localEnd), false));
-  };
-
-  const appendWholesalePlace = ({ body, place, comment }) => {
-    const was = el("div", { "data-review-diff-was": true }, [
-      el("strong", { text: "Was" }),
-    ]);
-    place.locations.forEach((location, index) => {
-      if (!location.oldText) return;
-      if (index > 0) was.appendChild(document.createTextNode("\n\n"));
-      if (
-        comment?.target.type === "selection" &&
-        location.oldBlockId === comment.target.blockId
-      ) {
-        appendDiffRun({
-          container: was,
-          run: { op: "del", text: location.oldText },
-          comment,
-          oldOffset: { value: 0 },
-          tagged: { value: false },
-        });
-      } else {
-        was.appendChild(
-          el("span", {
-            "data-review-diff-op": "del",
-            text: location.oldText,
-          }),
-        );
-      }
-    });
-    const now = el("div", { "data-review-diff-now": true }, [
-      el("strong", { text: "Now" }),
-      el("span", {
-        "data-review-diff-op": "ins",
-        text: place.locations
-          .map((location) => location.newText)
-          .filter(Boolean)
-          .join("\n\n"),
-      }),
-    ]);
-    body.append(was, now);
-  };
-
-  const appendDiffLocation = ({ body, location, comment }) => {
-    const attributedComment =
-      comment &&
-      (location.oldBlockId === comment.target.blockId ||
-        location.newBlockId === comment.target.blockId)
-        ? comment
-        : null;
-    if (location.status === "changed" && location.kind === "table-row") {
-      const oldRow = el("div", { "data-review-diff-was": true }, [
-        el("strong", { text: "Was" }),
-      ]);
-      appendDiffRun({
-        container: oldRow,
-        run: { op: "del", text: location.oldText },
-        comment: attributedComment,
-        oldOffset: { value: 0 },
-        tagged: { value: false },
-      });
-      body.append(
-        oldRow,
-        el("div", { "data-review-diff-now": true }, [
-          el("strong", { text: "Now" }),
-          el("span", {
-            "data-review-diff-op": "ins",
-            text: location.newText,
-          }),
-        ]),
-      );
-      return;
-    }
-    if (
-      location.status === "changed" &&
-      !["paragraph", "heading", "quote", "list", "table-row", "code"].includes(
-        location.kind,
-      )
-    ) {
-      body.append(
-        el("div", { "data-review-diff-was": true }, [
-          el("strong", { text: "Was" }),
-          el("span", { text: location.oldText }),
-        ]),
-        el("div", { "data-review-diff-now": true }, [
-          el("strong", { text: "Now" }),
-          el("span", { text: location.newText }),
-        ]),
-      );
-      return;
-    }
-    const oldOffset = { value: 0 };
-    const tagged = { value: false };
-    for (const run of location.runs) {
-      appendDiffRun({
-        container: body,
-        run,
-        comment: attributedComment,
-        oldOffset,
-        tagged,
-      });
-      if (run.op !== "ins") oldOffset.value += run.text.length;
-    }
+  const clearCommentLensIfOwned = (commentId) => {
+    if (diffLens?.comment?.id === commentId) clearDiffLens();
   };
 
   const anchorBlockForPlace = (place) => {
@@ -2043,6 +3183,77 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     return null;
   };
 
+  const renderRevisionContent = (node) => {
+    if (!node || typeof node !== "object") return null;
+    if (node.type === "text") {
+      return typeof node.value === "string"
+        ? document.createTextNode(node.value)
+        : null;
+    }
+    const tags = {
+      paragraph: "p",
+      strong: "strong",
+      emphasis: "em",
+      "inline-code": "code",
+      code: "pre",
+      quote: "blockquote",
+      "list-item": "li",
+      group: "div",
+      list: node.ordered === true ? "ol" : "ul",
+      table: "table",
+      "table-row": "tr",
+      "table-cell": node.header === true ? "th" : "td",
+      link: "a",
+    };
+    const tag = tags[node.type];
+    if (!tag) return null;
+    const rendered = el(tag);
+    if (
+      node.type === "link" &&
+      typeof node.href === "string" &&
+      /^(?:https?:|#)/.test(node.href)
+    ) {
+      rendered.setAttribute("href", node.href);
+    }
+    for (const child of Array.isArray(node.children) ? node.children : []) {
+      const childNode = renderRevisionContent(child);
+      if (childNode) rendered.appendChild(childNode);
+    }
+    return rendered;
+  };
+
+  const diffSide = ({ label, locations, side }) => {
+    const snapshots = locations.flatMap((location) => {
+      const content =
+        side === "was" ? location.oldContent : location.newContent;
+      const fallback = side === "was" ? location.oldText : location.newText;
+      if (!content && !fallback) return [];
+      const snapshot = el("div", {
+        "data-review-diff-snapshot": true,
+        "data-review-diff-kind": location.kind,
+        "data-review-diff-op": side === "was" ? "del" : "ins",
+      });
+      const rendered = renderRevisionContent(content);
+      if (rendered) snapshot.appendChild(rendered);
+      else snapshot.appendChild(document.createTextNode(fallback));
+      return [snapshot];
+    });
+    if (snapshots.length === 0) return null;
+    return el("section", { "data-review-diff-side": side }, [
+      el("strong", {
+        "data-review-diff-side-label": true,
+        text: label,
+      }),
+      el(
+        "div",
+        {
+          "data-review-diff-side-content": true,
+        },
+        snapshots,
+      ),
+    ]);
+  };
+
   const renderDiffLocation = ({ comment, event, index }) => {
     const places = placesForEvent(event);
     const place = places[index];
@@ -2060,6 +3271,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       "data-review-diff-kind":
         place.locations.length === 1 ? place.locations[0]?.kind : "place",
     });
+    container.setAttribute("data-place-id", place.placeId);
     const content =
       containerTag === "tr" ? el("td", { colspan: "99" }) : container;
     content.appendChild(
@@ -2070,14 +3282,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
           (event.toRevision !== sourceRevision ? " · since revised again" : ""),
       }),
     );
-    const body = el(
-      place.locations.length === 1 && place.locations[0]?.kind === "code"
-        ? "pre"
-        : "div",
-      {
-        "data-review-diff-body": true,
-      },
-    );
+    const body = el("div", { "data-review-diff-body": true });
     if (containerTag === "tr") container.appendChild(content);
     if (anchorBlock) {
       if (
@@ -2094,53 +3299,34 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         anchorBlock.before(container);
       }
     } else {
-      document.querySelector("main")?.appendChild(container);
+      const firstDocumentBlock = document.querySelector("[data-block-id]");
+      if (firstDocumentBlock) firstDocumentBlock.before(container);
+      else document.querySelector("main")?.prepend(container);
     }
 
-    const hiddenBlocks = [];
-    const movedBlocks = [];
-    const allAdded = place.locations.every(
-      (location) => location.status === "added",
-    );
-    for (const location of place.locations) {
-      if (!location.newBlockId) continue;
+    const was = diffSide({
+      label: "Was",
+      locations: place.locations,
+      side: "was",
+    });
+    const now = diffSide({
+      label: "Now",
+      locations: place.locations,
+      side: "now",
+    });
+    if (was) body.appendChild(was);
+    if (now) body.appendChild(now);
+    content.appendChild(body);
+    const hiddenBlocks = place.locations.flatMap((location) => {
+      if (!location.newBlockId) return [];
       const block = document.querySelector(
         '[data-block-id="' + cssEscape(location.newBlockId) + '"]',
       );
-      if (!block) continue;
-      if (allAdded && containerTag !== "tr") {
-        movedBlocks.push(block);
-      } else {
-        block.setAttribute("hidden", "");
-        block.setAttribute("data-review-diff-hidden", "");
-        hiddenBlocks.push(block);
-      }
-    }
-
-    if (allAdded && movedBlocks.length > 0) {
-      const added = el("div", { "data-review-diff-added-run": true }, [
-        el("strong", { text: "Added" }),
-      ]);
-      for (const block of movedBlocks) added.appendChild(block);
-      body.appendChild(added);
-    } else if (
-      place.locations.length > 1 &&
-      runSimilarity(place.locations) < 0.2
-    ) {
-      appendWholesalePlace({ body, place, comment });
-    } else {
-      place.locations.forEach((location, locationIndex) => {
-        const locationBody = el("div", {
-          "data-review-diff-location": true,
-        });
-        appendDiffLocation({ body: locationBody, location, comment });
-        body.appendChild(locationBody);
-        if (locationIndex < place.locations.length - 1) {
-          body.appendChild(el("hr", { "data-review-diff-separator": true }));
-        }
-      });
-    }
-    content.appendChild(body);
+      if (!(block instanceof HTMLElement)) return [];
+      block.setAttribute("hidden", "");
+      block.setAttribute("data-review-diff-hidden", "");
+      return [block];
+    });
     diffLens = {
       comment,
       event,
@@ -2148,7 +3334,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       places,
       container,
       hiddenBlocks,
-      movedBlocks,
+      showingCurrent: false,
     };
     diffPosition.textContent =
       "Change " +
@@ -2159,6 +3345,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       place.slideTitle;
     diffPrevious.disabled = index === 0;
     diffNext.disabled = index === places.length - 1;
+    diffExit.textContent = "Show current text";
     diffStepper.hidden = false;
     renderTray();
     container.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -2191,7 +3378,27 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       index: diffLens.index + 1,
     });
   });
-  diffExit.addEventListener("click", clearDiffLens);
+  diffExit.addEventListener("click", () => {
+    if (!diffLens) return;
+    if (!diffLens.showingCurrent) {
+      for (const block of diffLens.hiddenBlocks) {
+        block.removeAttribute("hidden");
+        block.removeAttribute("data-review-diff-hidden");
+      }
+      diffLens.container.hidden = true;
+      diffLens.showingCurrent = true;
+      diffExit.textContent = "Show changes";
+      paintTargetHighlights();
+      return;
+    }
+    const { comment, event, index } = diffLens;
+    const scrollY = window.scrollY;
+    renderDiffLocation({ comment, event, index });
+    requestAnimationFrame(() =>
+      window.scrollTo({ top: scrollY, behavior: "auto" }),
+    );
+  });
+  diffHide.addEventListener("click", clearDiffLens);
 
   const chatChangeEvents = () => {
     const events = [];
@@ -2203,18 +3410,18 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       );
       if (
         !response ||
-        !request.sourceRevision ||
-        !response.sourceRevision ||
-        request.sourceRevision === response.sourceRevision
+        !response.revisionPair?.fromRevision ||
+        !response.revisionPair?.toRevision ||
+        response.revisionPair.fromRevision === response.revisionPair.toRevision
       ) {
         continue;
       }
       events.push({
         key: "changed",
         requestId: request.requestId,
-        fromRevision: request.sourceRevision,
-        toRevision: response.sourceRevision,
-        changeTargets: [],
+        fromRevision: response.revisionPair.fromRevision,
+        toRevision: response.revisionPair.toRevision,
+        changes: [],
       });
     }
     return events;
@@ -2242,67 +3449,132 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     renderTray();
   };
 
-  const changeControls = (comment, event) => {
-    const loaded = placesForEvent(event);
-    const rows =
-      loaded.length > 0
-        ? loaded
-        : groupLocationsIntoPlaces(
-            (event.changeTargets || []).map((target) => {
-              const block = document.querySelector(
-                '[data-block-id="' + cssEscape(target) + '"]',
-              );
-              return {
-                status: "changed",
-                newBlockId: target,
-                kind: block?.getAttribute("data-block-kind") || "block",
-                label:
-                  block?.getAttribute("data-block-label") || "Changed block",
-                section: block?.getAttribute("data-block-section") || "Plan",
-                oldText: "",
-                newText: block?.textContent || "",
-                runs: [],
-              };
-            }),
+  // The change list is a navigator, not a card stack: slides are the grouping,
+  // changes are quiet rows beneath their slide, inactive slides collapse, and
+  // the selected row carries the only strong accent. Details stay in the lens.
+  const summariesForPlace = ({ event, place }) =>
+    (event.changes || []).filter((change) => change.placeId === place.placeId);
+
+  const changeEntriesForPlace = ({ event, place, index }) => {
+    const changes = summariesForPlace({ event, place });
+    return changes.length > 0
+      ? changes.map((change) => ({
+          index,
+          placeId: place.placeId,
+          label: change.summary,
+          note: place.note,
+        }))
+      : [
+          {
+            index,
+            placeId: place.placeId,
+            label: place.label,
+            note: place.note,
+          },
+        ];
+  };
+
+  const changeSummaryText = ({ places, event }) => {
+    const slides = new Set(places.map((place) => place.slideTitle)).size;
+    const count = places.reduce(
+      (total, place, index) =>
+        total + changeEntriesForPlace({ event, place, index }).length,
+      0,
+    );
+    return (
+      count +
+      " change" +
+      (count === 1 ? "" : "s") +
+      " across " +
+      slides +
+      " slide" +
+      (slides === 1 ? "" : "s")
+    );
+  };
+
+  const changeNavigator = ({ comment, event, places, active }) => {
+    const groups = [];
+    places.forEach((place, index) => {
+      const entries = changeEntriesForPlace({ event, place, index });
+      const previous = groups[groups.length - 1];
+      if (previous && previous.title === place.slideTitle) {
+        previous.entries.push(...entries);
+      } else {
+        groups.push({ title: place.slideTitle, entries });
+      }
+    });
+    const activeSlide =
+      active && diffLens ? places[diffLens.index]?.slideTitle : null;
+    const nav = el("div", { "data-review-change-nav": true });
+    for (const group of groups) {
+      const key = event.requestId + ":" + group.title;
+      const stored = changeGroupExpansion.get(key);
+      const expanded =
+        stored !== undefined
+          ? stored
+          : groups.length === 1 ||
+            group.title === activeSlide ||
+            (activeSlide === null && places.length <= 5);
+      const header = el(
+        "button",
+        {
+          type: "button",
+          "data-review-change-group": true,
+          "aria-expanded": expanded ? "true" : "false",
+        },
+        [
+          icon(CHEVRON_RIGHT_ICON),
+          el("span", {
+            "data-review-change-group-title": true,
+            text: group.title,
+          }),
+          el("span", {
+            "data-review-change-group-count": true,
+            text: String(group.entries.length),
+          }),
+        ],
+      );
+      header.addEventListener("click", () => {
+        changeGroupExpansion.set(key, !expanded);
+        renderTray();
+      });
+      nav.appendChild(header);
+      if (!expanded) continue;
+      for (const { index, placeId, label, note } of group.entries) {
+        const current = active && diffLens && diffLens.index === index;
+        const row = el("button", {
+          type: "button",
+          "data-review-change-row": true,
+          "data-place-id": placeId,
+          ...(current ? { "aria-current": "true" } : {}),
+        });
+        row.appendChild(
+          el("span", { "data-review-change-label": true, text: label }),
+        );
+        if (note && note !== "reworded") {
+          row.appendChild(
+            el("span", { "data-review-change-kind": true, text: note }),
           );
+        }
+        row.addEventListener("click", () => {
+          void openDiffLens(comment, event, index);
+        });
+        nav.appendChild(row);
+      }
+    }
+    return nav;
+  };
+
+  const changeControls = (comment, event) => {
+    const rows = placesForEvent(event);
     if (rows.length === 0) return null;
     const active =
       diffLens?.comment?.id === comment.id &&
       diffLens?.event.requestId === event.requestId;
     const list = el("div", { "data-review-change-list": true }, [
-      el("strong", {
-        text:
-          "Changed " + rows.length + " place" + (rows.length === 1 ? "" : "s"),
-      }),
+      el("strong", { text: changeSummaryText({ places: rows, event }) }),
+      changeNavigator({ comment, event, places: rows, active }),
     ]);
-    rows.forEach((place, index) => {
-      const row = el("button", {
-        type: "button",
-        "data-review-change-row": true,
-        "aria-pressed": active && diffLens.index === index ? "true" : "false",
-        ...(active && diffLens.index === index
-          ? { "aria-current": "true" }
-          : {}),
-      });
-      row.append(
-        el("span", {
-          "data-review-change-slide": true,
-          text: place.slideTitle,
-        }),
-        el("span", {
-          "data-review-change-label": true,
-          text: place.label,
-        }),
-        el("span", {
-          "data-review-change-kind": true,
-          text: place.note,
-        }),
-      );
-      row.addEventListener("click", () => {
-        void openDiffLens(comment, event, index);
-      });
-      list.appendChild(row);
-    });
     const see = el("button", {
       type: "button",
       "data-review-see-change": true,
@@ -2320,16 +3592,23 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   };
 
   const agentTurn = (outcome, createdAt, comment, event) => {
-    const node = el("div", { "data-review-thread-turn": "agent" }, [
-      el("div", { "data-review-turn-meta": true }, [
-        el("strong", { text: "Agent" }),
-        el("time", {
-          datetime: createdAt,
-          text: relativeCommentTime(createdAt),
-        }),
-      ]),
-      el("p", { text: outcome.message }),
-    ]);
+    const node = el(
+      "div",
+      {
+        class: "min-w-0 max-w-full",
+        "data-review-thread-turn": "agent",
+      },
+      [
+        el("div", { "data-review-turn-meta": true }, [
+          el("strong", { text: "Agent" }),
+          el("time", {
+            datetime: createdAt,
+            text: relativeCommentTime(createdAt),
+          }),
+        ]),
+        messageBody(outcome.messageNodes, outcome.message),
+      ],
+    );
     if (outcome.state === "changed" && event) {
       const controls = changeControls(comment, event);
       if (controls) node.appendChild(controls);
@@ -2337,21 +3616,59 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     return node;
   };
 
-  const conversationNodes = (comment) => {
+  const requestDeliveryLabel = (request) => {
+    if (!request) return "Saved";
+    const answered = agentResponses.some(
+      (response) => response.requestId === request.requestId,
+    );
+    return answered || requestPickedUp(request) ? "Sent" : "Queued";
+  };
+
+  const cancelledRequestLine = () =>
+    el("p", {
+      "data-review-request-cancelled": true,
+      text: "You cancelled this request.",
+    });
+
+  const conversationNodes = (comment, options = {}) => {
     const outcome = outcomeFor(comment);
+    const initialRequest = agentRequests.find(
+      (request) =>
+        request.kind === "feedback" &&
+        Array.isArray(request.comments) &&
+        request.comments.some((entry) => entry.id === comment.id),
+    );
     const nodes = [
-      el("div", { "data-review-thread-turn": "user" }, [
-        el("div", { "data-review-turn-meta": true }, [
-          el("strong", { text: "You" }),
-          el("time", {
-            datetime: comment.createdAt,
-            text: relativeCommentTime(comment.createdAt),
-          }),
-        ]),
-        el("p", { text: comment.body }),
-        anchorContextLine(comment),
-      ]),
+      el(
+        "div",
+        {
+          class: "min-w-0 max-w-full",
+          "data-review-thread-turn": "user",
+        },
+        [
+          el("div", { "data-review-turn-meta": true }, [
+            el("strong", { text: "You" }),
+            el("time", {
+              datetime: initialRequest?.createdAt || comment.createdAt,
+              text:
+                requestDeliveryLabel(initialRequest) +
+                " · " +
+                relativeCommentTime(
+                  initialRequest?.createdAt || comment.createdAt,
+                ),
+            }),
+          ]),
+          el("p", { class: COMMENT_WRAP_CLASSES, text: comment.body }),
+          anchorContextLine(comment),
+        ],
+      ),
     ];
+    if (
+      initialRequest &&
+      agentCancelledIds.includes(initialRequest.requestId)
+    ) {
+      nodes.push(cancelledRequestLine());
+    }
 
     for (const request of agentRequests) {
       const response = agentResponses.find(
@@ -2380,17 +3697,30 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         continue;
       }
       nodes.push(
-        el("div", { "data-review-thread-turn": "user" }, [
-          el("div", { "data-review-turn-meta": true }, [
-            el("strong", { text: "You" }),
-            el("time", {
-              datetime: request.createdAt,
-              text: relativeCommentTime(request.createdAt),
-            }),
-          ]),
-          el("p", { text: request.body }),
-        ]),
+        el(
+          "div",
+          {
+            class: "min-w-0 max-w-full",
+            "data-review-thread-turn": "user",
+          },
+          [
+            el("div", { "data-review-turn-meta": true }, [
+              el("strong", { text: "You" }),
+              el("time", {
+                datetime: request.createdAt,
+                text:
+                  requestDeliveryLabel(request) +
+                  " · " +
+                  relativeCommentTime(request.createdAt),
+              }),
+            ]),
+            el("p", { class: COMMENT_WRAP_CLASSES, text: request.body }),
+          ],
+        ),
       );
+      if (agentCancelledIds.includes(request.requestId)) {
+        nodes.push(cancelledRequestLine());
+      }
       if (response && response.kind === "reply") {
         const responseOutcome = response.outcomes.find(
           (entry) => entry.commentId === comment.id,
@@ -2407,7 +3737,12 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     }
 
     if (outcome.key === "waiting") {
-      nodes.push(waitingLine());
+      const strip = threadStatusStrip(outcome.status, {
+        surface: options.surface,
+        commentId: comment.id,
+      });
+      if (strip) nodes.push(strip);
+      nodes.push(threadResolutionFooter({ comment }));
       return nodes;
     }
 
@@ -2430,6 +3765,10 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       disabled: true,
       text: outcome.key === "question" ? "Send answer" : "Reply",
     });
+    attachShortcutTooltip(
+      sendReply,
+      outcome.key === "question" ? "Send answer" : "Send reply",
+    );
     const syncReply = () => {
       sendReply.disabled = field.value.trim() === "";
     };
@@ -2452,6 +3791,13 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         sendReply,
       ]),
     );
+    nodes.push(
+      threadResolutionFooter({
+        comment,
+        replyField: field,
+        replyButton: sendReply,
+      }),
+    );
     return nodes;
   };
 
@@ -2460,14 +3806,55 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     revertDialog.showModal();
   };
 
-  const resolveThread = async (comment) => {
-    resolvedCommentIds.add(comment.id);
-    expandedThreadIds.delete(comment.id);
-    expandedCommentIds.delete(comment.id);
-    announce("Comment resolved.");
+  const resolveThreadIds = async (ids, options = {}) => {
+    if (diffLens?.comment && ids.includes(diffLens.comment.id)) {
+      clearDiffLens();
+    }
+    const previousResolved = new Set(resolvedCommentIds);
+    const previousExpandedThreads = new Set(expandedThreadIds);
+    const previousExpandedComments = new Set(expandedCommentIds);
+    for (const id of ids) {
+      resolvedCommentIds.add(id);
+      expandedThreadIds.delete(id);
+      expandedCommentIds.delete(id);
+    }
+    const resolvedMessage =
+      ids.length === 1
+        ? "Comment resolved."
+        : "Resolved " + ids.length + " comments.";
+    announce(resolvedMessage);
     renderTray();
-    await save();
+    try {
+      await persist();
+      sendNote.textContent = "";
+      if (ids.length === 1 && options.toast !== false) {
+        showToast({
+          message: "Resolved",
+          actionLabel: "Undo",
+          action: async () => {
+            resolvedCommentIds.delete(ids[0]);
+            expandedThreadIds.add(ids[0]);
+            announce("Comment reopened.");
+            renderTray();
+            await save();
+          },
+        });
+      }
+    } catch (error) {
+      resolvedCommentIds.clear();
+      previousResolved.forEach((id) => resolvedCommentIds.add(id));
+      expandedThreadIds.clear();
+      previousExpandedThreads.forEach((id) => expandedThreadIds.add(id));
+      expandedCommentIds.clear();
+      previousExpandedComments.forEach((id) => expandedCommentIds.add(id));
+      const message = "Couldn’t resolve: " + describeError(error);
+      sendNote.textContent = message;
+      announce(message);
+      renderTray();
+    }
   };
+
+  const resolveThread = async (comment) => resolveThreadIds([comment.id]);
 
   const unresolveThread = async (comment) => {
     resolvedCommentIds.delete(comment.id);
@@ -2477,19 +3864,76 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     await save();
   };
 
+  const keepThreadOpen = (comment) => {
+    clearCommentLensIfOwned(comment.id);
+    expandedThreadIds.delete(comment.id);
+    renderTray();
+  };
+
+  const threadResolutionFooter = ({ comment, replyField, replyButton }) => {
+    const keepOpen = el("button", {
+      type: "button",
+      class:
+        "cursor-pointer rounded-sm px-2 py-1 text-xs font-semibold text-muted hover:bg-[var(--review-control-hover)] hover:text-ink active:bg-[var(--review-control-active)] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent",
+      "data-review-thread-keep-open": true,
+      text: "Keep open",
+    });
+    const resolve = el("button", {
+      type: "button",
+      class:
+        "cursor-pointer rounded-sm border border-accent bg-accent px-2 py-1 text-xs font-semibold text-[var(--bg)] hover:brightness-110 active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+      "data-review-thread-resolve-footer": true,
+      text: "Resolve thread",
+    });
+    const syncLabel = () => {
+      resolve.textContent =
+        replyField?.value.trim() === "" ? "Resolve thread" : "Reply & resolve";
+    };
+    replyField?.addEventListener("input", syncLabel);
+    keepOpen.addEventListener("click", () => keepThreadOpen(comment));
+    resolve.addEventListener("click", async () => {
+      const hasReply = replyField?.value.trim() !== "";
+      if (hasReply) {
+        const sentReply = await sendThreadReply(
+          comment,
+          replyField,
+          replyButton,
+        );
+        if (!sentReply) return;
+      }
+      await resolveThread(comment);
+    });
+    syncLabel();
+    return el(
+      "footer",
+      {
+        class:
+          "mt-3 flex items-center justify-end gap-2 border-t border-edge pt-3",
+        "data-review-thread-resolution": true,
+      },
+      [keepOpen, resolve],
+    );
+  };
+
   const toolbarButton = ({ attribute, label, glyph, action }) => {
     const button = el("button", {
       type: "button",
       [attribute]: true,
       "aria-label": label,
-      title: label,
     });
-    button.appendChild(icon(glyph));
+    button.append(
+      icon(glyph),
+      el("span", {
+        "data-review-icon-tooltip": true,
+        "aria-hidden": "true",
+        text: label,
+      }),
+    );
     button.addEventListener("click", action);
     return button;
   };
 
-  const threadToolbar = (comment, options = {}) => {
+  const threadQuickActions = (comment, options = {}) => {
     const resolved = options.resolved === true;
     const revertAction = outcomeEventsFor(comment).some(
       (event) => event.key === "changed",
@@ -2501,94 +3945,333 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
           action: () => openRevertDialog(comment),
         })
       : null;
-    const actions = [
-      toolbarButton({
-        attribute: "data-review-thread-minimize",
-        label: "Minimize thread",
-        glyph: MINIMIZE_2_ICON,
-        action: () => {
+    const actions = [];
+    if (resolved) {
+      actions.push(
+        toolbarButton({
+          attribute: "data-review-thread-unresolve",
+          label: "Unresolve comment",
+          glyph: UNDO_2_ICON,
+          action: () => {
+            void unresolveThread(comment);
+          },
+        }),
+      );
+    } else {
+      actions.push(
+        toolbarButton({
+          attribute: "data-review-thread-resolve",
+          label: "Resolve comment",
+          glyph: CHECK_ICON,
+          action: () => {
+            void resolveThread(comment);
+          },
+        }),
+      );
+    }
+    if (revertAction) actions.push(revertAction);
+    return el("div", { "data-review-thread-toolbar-actions": true }, actions);
+  };
+
+  const threadToolbarActions = (comment, options = {}) => {
+    const minimize = toolbarButton({
+      attribute: "data-review-thread-minimize",
+      label: "Minimize thread",
+      glyph: MINIMIZE_2_ICON,
+      action:
+        options.minimize ||
+        (() => {
+          clearCommentLensIfOwned(comment.id);
           expandedThreadIds.delete(comment.id);
           renderTray();
-        },
-      }),
-    ];
-    actions.push(
-      resolved
-        ? toolbarButton({
-            attribute: "data-review-thread-unresolve",
-            label: "Unresolve comment",
-            glyph: UNDO_2_ICON,
-            action: () => {
-              void unresolveThread(comment);
-            },
-          })
-        : toolbarButton({
-            attribute: "data-review-thread-resolve",
-            label: "Resolve comment",
-            glyph: CHECK_ICON,
-            action: () => {
-              void resolveThread(comment);
-            },
-          }),
-    );
-    if (revertAction) actions.push(revertAction);
+        }),
+    });
+    const quickActions = threadQuickActions(comment, options);
+    quickActions.prepend(minimize);
+    return quickActions;
+  };
+
+  const threadToolbar = (comment, options = {}) => {
     return el("div", { "data-review-thread-toolbar": true }, [
       el("div", { "data-review-thread-toolbar-title": true }, [
-        outcomeBadge(outcomeFor(comment)),
         el("span", {
-          text: resolved ? "Resolved comment" : shortEcho(comment.body, 52),
+          text: slideTitleFor(comment.target),
         }),
       ]),
-      el("div", { "data-review-thread-toolbar-actions": true }, actions),
+      threadToolbarActions(comment, options),
     ]);
   };
+
+  // Staged cards share the sent-thread toolbar pattern: state and actions in
+  // one top bar, so the body carries exactly one button - Submit Now - and
+  // only while the comment has not been submitted.
+  const stagedToolbar = (comment, options = {}) => {
+    const actions =
+      options.withActions === false
+        ? []
+        : [
+            el("div", { "data-review-thread-toolbar-actions": true }, [
+              toolbarButton({
+                attribute: "data-review-thread-minimize",
+                label: "Minimize comment",
+                glyph: MINIMIZE_2_ICON,
+                action: () => {
+                  minimizedDraftIds.add(comment.id);
+                  renderTray();
+                },
+              }),
+              toolbarButton({
+                attribute: "data-review-thread-edit",
+                label: "Edit comment",
+                glyph: PENCIL_ICON,
+                action: () => {
+                  editingId = comment.id;
+                  renderTray();
+                },
+              }),
+              toolbarButton({
+                attribute: "data-review-thread-delete",
+                label: "Remove comment",
+                glyph: TRASH_2_ICON,
+                action: () => openDeleteDialog(comment),
+              }),
+            ]),
+          ];
+    return el("div", { "data-review-thread-toolbar": true }, [
+      el("div", { "data-review-thread-toolbar-title": true }, [
+        el("span", { "data-review-comment-state": "staged", text: "Staged" }),
+        el("time", {
+          datetime: comment.createdAt,
+          text: relativeCommentTime(comment.createdAt),
+        }),
+      ]),
+      ...actions,
+    ]);
+  };
+
+  const submitErrorNote = (comment) => {
+    const message = submitErrorById.get(comment.id);
+    if (!message) return null;
+    return el("p", { "data-review-action-error": true, text: message });
+  };
+
+  const bindCommentAssociation = (node, comment) => {
+    const emphasize = () => {
+      setEmphasizedComment(comment.id);
+    };
+    const relax = () => {
+      if (emphasizedCommentId !== comment.id) return;
+      setEmphasizedComment(null);
+    };
+    if (emphasizedCommentId === comment.id) {
+      node.setAttribute("data-review-comment-emphasized", "");
+    }
+    node.addEventListener("pointerenter", emphasize);
+    node.addEventListener("pointerleave", relax);
+    node.addEventListener("focusin", emphasize);
+    node.addEventListener("focusout", (event) => {
+      if (!node.contains(event.relatedTarget)) relax();
+    });
+    return node;
+  };
+
+  const NATIVE_INTERACTIVE_SELECTOR = [
+    "a[href]",
+    "button",
+    "input",
+    "textarea",
+    "select",
+    "label",
+    "summary",
+    "details",
+    '[contenteditable]:not([contenteditable="false"])',
+    '[role="button"]',
+    '[role="checkbox"]',
+    '[role="combobox"]',
+    '[role="link"]',
+    '[role="listbox"]',
+    '[role="menuitem"]',
+    '[role="option"]',
+    '[role="radio"]',
+    '[role="slider"]',
+    '[role="spinbutton"]',
+    '[role="switch"]',
+    '[role="tab"]',
+    '[role="textbox"]',
+  ].join(",");
+
+  // Container-wide opening is a collapsed-row convenience only. This guard
+  // keeps future native controls from accidentally becoming row navigation.
+  const isNativeInteractiveTarget = (event) =>
+    event
+      .composedPath()
+      .some(
+        (candidate) =>
+          candidate instanceof Element &&
+          candidate.matches(NATIVE_INTERACTIVE_SELECTOR),
+      );
 
   const sentRow = (comment, options = {}) => {
     const resolved = options.resolved === true;
     const outcome = outcomeFor(comment);
-    const jump = el("button", {
-      type: "button",
-      "data-review-row-target": true,
-      text: slideTitleFor(comment.target),
-      title: "Jump to and expand this thread",
-    });
-    jump.addEventListener("click", () => {
-      if (!resolved) {
-        openThreadAt(comment);
+    const lifecycle = outcome.status?.stage;
+    const rowState =
+      outcome.key !== "waiting"
+        ? "ready"
+        : lifecycle === "working" || lifecycle === "stalled"
+          ? "working"
+          : "queued";
+    const expanded = expandedThreadIds.has(comment.id);
+    const collapse = () => {
+      clearCommentLensIfOwned(comment.id);
+      expandedThreadIds.delete(comment.id);
+      renderTray();
+      requestAnimationFrame(() => {
+        sentList
+          .querySelector(
+            '[data-review-comment-id="' +
+              comment.id +
+              '"] [data-review-row-target]',
+          )
+          ?.focus();
+      });
+    };
+    const toggleThread = () => {
+      if (expanded) {
+        collapse();
         return;
       }
-      expandedThreadIds.add(comment.id);
-      renderTray();
-    });
-    if (resolved) jump.title = "Open this resolved thread";
-    const children = [
-      el("div", { "data-review-row-head": true }, [
-        jump,
-        outcomeBadge(outcome),
-      ]),
-      el("p", {
-        "data-review-row-body": true,
-        text: shortEcho(comment.body),
-      }),
-    ];
-    if (expandedThreadIds.has(comment.id)) {
-      children.push(
-        el("div", { "data-review-tray-thread": true }, [
-          threadToolbar(comment, { resolved }),
-          ...conversationNodes(comment),
+      if (resolved) {
+        expandedThreadIds.add(comment.id);
+        renderTray();
+        return;
+      }
+      openThreadAt(comment);
+    };
+    const jump = el(
+      "button",
+      {
+        type: "button",
+        "data-review-row-target": true,
+        "aria-expanded": expanded ? "true" : "false",
+        "aria-label":
+          (expanded ? "Collapse" : "Open") +
+          " thread on " +
+          slideTitleFor(comment.target) +
+          ": " +
+          shortEcho(comment.body),
+        title: expanded
+          ? "Collapse this thread"
+          : resolved
+            ? "Open this resolved thread"
+            : "Jump to and expand this thread",
+      },
+      [
+        el("span", {
+          "data-review-row-title": true,
+          text: slideTitleFor(comment.target),
+        }),
+        el("span", { "data-review-row-locator": true }, [
+          icon(CHEVRON_RIGHT_ICON),
         ]),
+      ],
+    );
+    jump.addEventListener("click", toggleThread);
+    const rowHeadChildren = [jump];
+    if (expanded) {
+      rowHeadChildren.push(
+        threadToolbarActions(comment, { resolved, minimize: collapse }),
       );
+    } else {
+      const substate = threadSubstate(outcome.status?.stage);
+      if (substate !== null) {
+        const slot = el("span", {
+          "data-review-row-substate": substate,
+          "aria-label":
+            substate === "working" ? "Agent working" : "Agent progress stalled",
+        });
+        slot.appendChild(
+          substate === "working" ? spinner() : icon(TRIANGLE_ALERT_ICON),
+        );
+        rowHeadChildren.push(slot);
+      }
+      rowHeadChildren.push(threadQuickActions(comment, { resolved }));
     }
-    return el(
+    const rowHead = el(
+      "div",
+      { "data-review-row-head": true },
+      rowHeadChildren,
+    );
+    const children = [rowHead];
+    if (expanded) {
+      children.push(...conversationNodes(comment, { surface: "tray" }));
+    } else {
+      const pendingRequest = pendingRequestForComment(comment);
+      const latestOutcome = outcomeEventsFor(comment).at(-1);
+      const secondary =
+        rowState === "ready"
+          ? `${outcome.label} · ${relativeCommentTime(
+              latestOutcome?.createdAt || comment.createdAt,
+            )}`
+          : rowState === "working"
+            ? lifecycle === "stalled"
+              ? "Agent quiet · check its terminal"
+              : `Working · ${relativeCommentTime(
+                  pendingRequest?.createdAt || comment.createdAt,
+                )}`
+            : "Queued";
+      children.push(
+        el("p", {
+          class: COMMENT_WRAP_CLASSES,
+          "data-review-row-body": true,
+          text: shortEcho(comment.body),
+        }),
+        el("p", {
+          "data-review-row-secondary": rowState,
+          text: secondary,
+        }),
+      );
+      const changedEvent = outcomeEventsFor(comment)
+        .filter((event) => event.key === "changed")
+        .at(-1);
+      if (rowState === "ready" && changedEvent !== undefined) {
+        const reviewChange = el("button", {
+          type: "button",
+          "data-review-row-review-change": true,
+          text: "Review change",
+        });
+        reviewChange.addEventListener("click", (event) => {
+          event.stopPropagation();
+          expandedThreadIds.add(comment.id);
+          renderTray();
+          void openDiffLens(comment, changedEvent);
+        });
+        children.push(reviewChange);
+      }
+    }
+    const row = el(
       "li",
       {
         "data-review-row": true,
         "data-review-sent-row": true,
+        "data-review-row-state": rowState,
+        ...(resolved ? { "data-review-resolved-row": true } : {}),
+        ...(expanded ? { "data-review-row-expanded": true } : {}),
         "data-review-comment-id": comment.id,
         "data-review-outcome": outcome.key,
+        ...(outcome.status
+          ? { "data-review-lifecycle": outcome.status.stage }
+          : {}),
       },
       children,
     );
+    if (!expanded) {
+      row.addEventListener("click", (event) => {
+        if (isNativeInteractiveTarget(event)) return;
+        toggleThread();
+      });
+    }
+    return bindCommentAssociation(row, comment);
   };
 
   const threadCard = ({ comment, state }) => {
@@ -2598,26 +4281,35 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       "data-review-thread-state": state,
       "data-review-comment-id": comment.id,
     });
-    const head = el("div", { "data-review-thread-head": true }, [
-      el("span", { "data-review-thread-avatar": true, text: "Y" }),
-      el("strong", { text: "You" }),
-      el("time", {
-        datetime: comment.createdAt,
-        text: relativeCommentTime(comment.createdAt),
-      }),
-      el("span", {
-        "data-review-comment-state": state,
-        text: state === "staged" ? "Staged" : "Sent",
-      }),
-    ]);
+    bindCommentAssociation(card, comment);
+    if (state === "staged" && submittingIds.has(comment.id)) {
+      card.setAttribute("data-review-thread-sending", "");
+      card.append(
+        el("div", { "data-review-thread-toolbar": true }, [
+          el("div", { "data-review-thread-toolbar-title": true }, [
+            outcomeBadge({ key: "waiting", label: "Sending" }, { spin: true }),
+          ]),
+        ]),
+        el("p", {
+          class: COMMENT_WRAP_CLASSES,
+          "data-review-thread-body": true,
+          text: comment.body,
+        }),
+      );
+      return card;
+    }
     if (state === "sent") {
       const outcome = outcomeFor(comment);
+      card.setAttribute("data-review-outcome", outcome.key);
+      if (outcome.status) {
+        card.setAttribute("data-review-lifecycle", outcome.status.stage);
+      }
       const expanded = expandedThreadIds.has(comment.id);
-      const summary = el(
+      const summaryToggle = el(
         "button",
         {
           type: "button",
-          "data-review-thread-summary": true,
+          "data-review-thread-summary-toggle": true,
           "aria-expanded": expanded ? "true" : "false",
           "aria-label":
             (expanded ? "Collapse" : "Open") +
@@ -2627,57 +4319,75 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
             shortEcho(comment.body),
         },
         [
-          outcomeBadge(outcome),
           el("span", {
             "data-review-thread-echo": true,
             text: shortEcho(comment.body),
           }),
         ],
       );
-      summary.addEventListener("click", () => {
-        if (expanded) expandedThreadIds.delete(comment.id);
-        else expandedThreadIds.add(comment.id);
+      const summary = el("div", { "data-review-thread-summary": true }, [
+        outcomeBadge(outcome, {
+          spin: outcome.status?.stage === "working",
+          iconOnly: outcome.key === "waiting",
+          waitingBusy: outcome.status?.waitingBusy,
+        }),
+        summaryToggle,
+      ]);
+      summaryToggle.addEventListener("click", () => {
+        if (expanded) {
+          clearCommentLensIfOwned(comment.id);
+          expandedThreadIds.delete(comment.id);
+        } else {
+          expandedThreadIds.add(comment.id);
+        }
         renderTray();
         requestAnimationFrame(() => {
           threadLayer
             .querySelector(
               '[data-review-comment-id="' +
                 comment.id +
-                '"] [data-review-thread-summary]',
+                '"] [data-review-thread-summary-toggle]',
             )
             ?.focus();
         });
       });
       if (expanded) {
         card.setAttribute("data-review-thread-expanded", "");
-        card.append(threadToolbar(comment), ...conversationNodes(comment));
+        card.append(
+          threadToolbar(comment),
+          ...conversationNodes(comment, { surface: "card" }),
+        );
       } else {
-        card.appendChild(summary);
+        card.setAttribute("data-review-thread-collapsed", "");
+        card.append(summary, threadQuickActions(comment));
       }
       return card;
     }
 
     if (minimizedDraftIds.has(comment.id)) {
-      const summary = el(
+      const summaryToggle = el(
         "button",
         {
           type: "button",
-          "data-review-thread-summary": true,
+          "data-review-thread-summary-toggle": true,
           "aria-expanded": "false",
           "aria-label": "Expand staged comment: " + shortEcho(comment.body),
         },
         [
-          el("span", {
-            "data-review-comment-state": "staged",
-            text: "Staged",
-          }),
           el("span", {
             "data-review-thread-echo": true,
             text: shortEcho(comment.body),
           }),
         ],
       );
-      summary.addEventListener("click", () => {
+      const summary = el("div", { "data-review-thread-summary": true }, [
+        el("span", {
+          "data-review-comment-state": "staged",
+          text: "Staged",
+        }),
+        summaryToggle,
+      ]);
+      summaryToggle.addEventListener("click", () => {
         minimizedDraftIds.delete(comment.id);
         renderTray();
       });
@@ -2685,7 +4395,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       return card;
     }
 
-    card.appendChild(head);
+    card.appendChild(stagedToolbar(comment, { withActions: !isEditing }));
 
     if (isEditing) {
       const field = el("textarea", {
@@ -2709,6 +4419,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         "data-review-thread-save": true,
         text: "Save",
       });
+      attachShortcutTooltip(confirm, "Save comment");
       confirm.addEventListener("click", () => commitDraftEdit(comment, field));
       field.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
@@ -2731,6 +4442,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     const isLong = comment.body.length > LONG_COMMENT_LIMIT;
     const expanded = expandedCommentIds.has(comment.id);
     const body = el("p", {
+      class: COMMENT_WRAP_CLASSES,
       "data-review-thread-body": true,
     });
     if (isLong && !expanded) {
@@ -2755,50 +4467,15 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     card.appendChild(body);
     const staleNotice = stagedAnchorNotice(comment);
     if (staleNotice) card.appendChild(staleNotice);
+    const errorNote = submitErrorNote(comment);
+    if (errorNote) card.appendChild(errorNote);
     if (state === "staged") {
-      const submitNow = el("button", {
-        type: "button",
-        "data-review-thread-submit": true,
-        text: "Submit Now",
-      });
-      submitNow.addEventListener("click", () => {
-        void submitComments({
-          comments: [comment],
-          closeRailAfter: false,
-          trigger: submitNow,
-        });
-      });
-      const minimize = el("button", {
-        type: "button",
-        "data-review-thread-minimize": true,
-        text: "Minimize",
-      });
-      minimize.addEventListener("click", () => {
-        minimizedDraftIds.add(comment.id);
-        renderTray();
-      });
-      const edit = el("button", {
-        type: "button",
-        "data-review-thread-edit": true,
-        text: "Edit",
-      });
-      edit.addEventListener("click", () => {
-        editingId = comment.id;
-        renderTray();
-      });
-      const remove = el("button", {
-        type: "button",
-        "data-review-thread-delete": true,
-        text: "Remove",
-      });
-      remove.addEventListener("click", () => openDeleteDialog(comment));
       card.appendChild(
-        el("div", { "data-review-thread-actions": true }, [
-          submitNow,
-          minimize,
-          edit,
-          remove,
-        ]),
+        el(
+          "div",
+          { "data-review-thread-actions": true },
+          stagedSubmitActions({ comment, surface: "thread" }),
+        ),
       );
     }
     return card;
@@ -2824,7 +4501,9 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   };
 
   const floatingBlockForTarget = (target) =>
-    target?.type === "document" ? blocks[0] || null : blockForTarget(target);
+    target?.type === "document"
+      ? blocks[0] || null
+      : visualAnchorForTarget(target);
 
   const floatingBlockForComment = (comment) => {
     if (diffLens?.comment?.id === comment.id && diffLens.container) {
@@ -2832,7 +4511,9 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     }
     return comment.target?.type === "document"
       ? blocks[0] || null
-      : anchorStateFor(comment).block;
+      : comment.target?.type === "slide"
+        ? visualAnchorForTarget(comment.target)
+        : anchorStateFor(comment).block;
   };
 
   const floatLeftForBlock = (block, width) => {
@@ -2859,13 +4540,8 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     const cards = Array.from(
       threadLayer.querySelectorAll("[data-review-thread-card]"),
     );
-    const composeBottom =
-      canFloat &&
-      !compose.hidden &&
-      compose.hasAttribute("data-review-compose-floating")
-        ? compose.getBoundingClientRect().bottom
-        : FLOAT_TOP - FLOAT_GAP;
-    let previousBottom = Math.max(FLOAT_TOP - FLOAT_GAP, composeBottom);
+    const entries = [];
+    const nodes = new Map();
     for (const card of cards) {
       const id = card.getAttribute("data-review-comment-id");
       const comment = drafts
@@ -2873,29 +4549,54 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         .find((candidate) => candidate.id === id);
       const block = comment ? floatingBlockForComment(comment) : null;
       const rect = block?.getBoundingClientRect();
-      const visible =
-        canFloat &&
-        rect !== undefined &&
-        rect !== null &&
-        rect.bottom >= FLOAT_TOP &&
-        rect.top <= window.innerHeight;
+      const visible = canFloat && block !== null && rect !== undefined;
       card.hidden = !visible;
-      if (!visible) continue;
-      // Fit before stacking. A viewport clamp after this constraint can pull
-      // a later chip back over an expanded card or composer and cover its
-      // textarea and Reply button.
-      const fittedTop = Math.max(
-        FLOAT_TOP,
-        Math.min(rect.top, window.innerHeight - card.offsetHeight - FLOAT_EDGE),
-      );
-      const top = Math.max(fittedTop, previousBottom + FLOAT_GAP);
-      card.style.top = top + "px";
+      if (!visible || !id) continue;
       card.style.left = floatLeftForBlock(block, card.offsetWidth) + "px";
-      previousBottom = Number.parseFloat(card.style.top) + card.offsetHeight;
+      entries.push({
+        id,
+        anchorTop: rect.top + window.scrollY,
+        height: card.offsetHeight,
+      });
+      nodes.set(id, card);
+    }
+    if (
+      canFloat &&
+      !compose.hidden &&
+      composeTarget &&
+      compose.hasAttribute("data-review-compose-floating")
+    ) {
+      const block = visualAnchorForTarget(composeTarget);
+      const rect = block?.getBoundingClientRect();
+      if (block && rect) {
+        if (compose.parentElement !== threadLayer) {
+          threadLayer.appendChild(compose);
+        }
+        compose.style.left =
+          floatLeftFor(composeTarget, compose.offsetWidth) + "px";
+        entries.push({
+          id: "compose",
+          anchorTop: rect.top + window.scrollY,
+          height: compose.offsetHeight,
+        });
+        nodes.set("compose", compose);
+      }
+    }
+    for (const { id, top } of layoutAnchoredCards(entries)) {
+      const node = nodes.get(id);
+      if (node) node.style.top = top + "px";
     }
   };
 
   const renderThreads = () => {
+    const anchoredActivityScroll = new Map(
+      Array.from(
+        threadLayer.querySelectorAll("[data-review-activity-owner]"),
+      ).map((node) => [
+        node.getAttribute("data-review-activity-owner"),
+        node.scrollTop,
+      ]),
+    );
     document
       .querySelectorAll("[data-review-thread-inline]")
       .forEach((card) => card.remove());
@@ -2908,7 +4609,20 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       return leftTop - rightTop;
     });
     const cards = entries.map(threadCard);
-    threadLayer.replaceChildren(...cards);
+    const floatingCompose =
+      compose.parentElement === threadLayer && !compose.hidden ? compose : null;
+    threadLayer.replaceChildren(
+      ...cards,
+      ...(floatingCompose === null ? [] : [floatingCompose]),
+    );
+    for (const activity of threadLayer.querySelectorAll(
+      "[data-review-activity-owner]",
+    )) {
+      const owner = activity.getAttribute("data-review-activity-owner");
+      if (owner !== null && anchoredActivityScroll.has(owner)) {
+        activity.scrollTop = anchoredActivityScroll.get(owner);
+      }
+    }
     if (window.innerWidth < 1280) {
       for (const card of cards) {
         const id = card.getAttribute("data-review-comment-id");
@@ -2931,120 +4645,90 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   const renderSentIndex = () => {
     const counts = outcomeCounts();
-    responseSummary.textContent =
-      "Latest round · " +
-      counts.changed +
-      " changed · " +
-      counts.question +
-      " needs your answer · " +
-      counts.outside +
-      " outside this plan · " +
-      counts.waiting +
-      " with agent";
+    const workingCount = sent.filter((comment) => {
+      if (resolvedCommentIds.has(comment.id)) return false;
+      const stage = outcomeFor(comment).status?.stage;
+      return stage === "working" || stage === "stalled";
+    }).length;
+    const waitingCount = Math.max(0, counts.waiting - workingCount);
+    const readyCount =
+      counts.question + counts.changed + counts.outside + counts.cancelled;
+    const summaryItems = [
+      { count: readyCount, label: "ready" },
+      { count: workingCount, label: "working" },
+      { count: waitingCount, label: "queued" },
+    ].filter((item) => item.count > 0);
+    responseSummary.replaceChildren(
+      ...summaryItems.map((item) =>
+        el("span", {
+          "data-review-round-chip": item.label,
+          text: `${item.count} ${item.label}`,
+        }),
+      ),
+    );
+    resolveAllButton.hidden =
+      counts.changed + counts.question + counts.outside === 0;
     const groups = [
-      { key: "question", label: "Needs your answer" },
-      { key: "changed", label: "Changed" },
-      { key: "outside", label: "Outside this plan" },
-      { key: "waiting", label: "With agent" },
+      {
+        key: "ready",
+        label: "Ready for Review",
+        glyph: CHECK_ICON,
+        match: (outcome) => outcome.key !== "waiting",
+      },
+      {
+        key: "working",
+        label: "Working",
+        spin: true,
+        match: (outcome) =>
+          outcome.status?.stage === "working" ||
+          outcome.status?.stage === "stalled",
+      },
+      {
+        key: "queued",
+        label: "Queued",
+        glyph: HOURGLASS_ICON,
+        match: (outcome) =>
+          outcome.key === "waiting" &&
+          outcome.status?.stage !== "working" &&
+          outcome.status?.stage !== "stalled",
+      },
     ];
     const renderedGroups = groups
-      .map(({ key, label }) => {
-        const comments = sent.filter(
-          (comment) =>
-            !resolvedCommentIds.has(comment.id) &&
-            outcomeFor(comment).key === key,
-        );
+      .map(({ key, label, displayKey = key, glyph, spin, match }) => {
+        const comments = sent.filter((comment) => {
+          if (resolvedCommentIds.has(comment.id)) return false;
+          const outcome = outcomeFor(comment);
+          return match ? match(outcome) : outcome.key === key;
+        });
         if (comments.length === 0) return null;
-        return el("section", { "data-review-outcome-group": key }, [
-          el("h3", { text: label }),
+        const heading = el("h3", {}, [
+          ...(spin === true ? [spinner()] : []),
+          ...(glyph === undefined ? [] : [icon(glyph)]),
+          el("span", { text: label }),
+          document.createTextNode(" "),
+          el("span", {
+            "data-review-outcome-group-count": true,
+            "aria-label":
+              comments.length + " thread" + (comments.length === 1 ? "" : "s"),
+            text: String(comments.length),
+          }),
+        ]);
+        return el("section", { "data-review-outcome-group": displayKey }, [
+          heading,
           el("ol", {}, comments.map(sentRow)),
         ]);
       })
       .filter(Boolean);
-    const otherChanges = [];
-    const seenRequests = new Set();
-    for (const comment of sent) {
-      for (const event of outcomeEventsFor(comment)) {
-        if (event.key !== "changed" || seenRequests.has(event.requestId)) {
-          continue;
-        }
-        seenRequests.add(event.requestId);
-        const attributed = new Set(event.changeTargets || []);
-        const locations = revisionDiffs.get(event.requestId) || [];
-        const roundEvent = {
-          ...event,
-          changeTargets: locations
-            .map((location) => location.newBlockId || location.oldBlockId)
-            .filter(Boolean),
-        };
-        groupLocationsIntoPlaces(locationsForEvent(roundEvent)).forEach(
-          (place, index) => {
-            if (
-              place.locations.some(
-                (location) =>
-                  attributed.has(location.newBlockId) ||
-                  attributed.has(location.oldBlockId),
-              )
-            ) {
-              return;
-            }
-            otherChanges.push({
-              comment,
-              event: roundEvent,
-              place,
-              index,
-            });
-          },
-        );
-      }
-    }
-    if (otherChanges.length > 0) {
-      renderedGroups.push(
-        el("section", { "data-review-other-changes": true }, [
-          el("h3", { text: "Other changes in this round" }),
-          el(
-            "ol",
-            {},
-            otherChanges.map(({ comment, event, place, index }) => {
-              const button = el("button", {
-                type: "button",
-                "data-review-change-row": true,
-              });
-              button.append(
-                el("span", {
-                  "data-review-change-slide": true,
-                  text: slideTitleFor({
-                    type: "block",
-                    section: place.section,
-                    label: place.label,
-                  }),
-                }),
-                el("span", {
-                  "data-review-change-label": true,
-                  text: place.label,
-                }),
-                el("span", {
-                  "data-review-change-kind": true,
-                  text: place.note,
-                }),
-              );
-              button.addEventListener("click", () => {
-                void openDiffLens(comment, event, index);
-              });
-              return el("li", {}, [button]);
-            }),
-          ),
-        ]),
-      );
-    }
     const resolved = sent.filter((comment) =>
       resolvedCommentIds.has(comment.id),
     );
     if (resolved.length > 0) {
+      const followsActiveGroup = renderedGroups.length > 0;
       renderedGroups.push(
         el(
           "details",
           {
+            class: followsActiveGroup ? "" : "mt-0! border-t-0! pt-0!",
             "data-review-resolved-group": true,
             open: resolved.some((comment) => expandedThreadIds.has(comment.id)),
           },
@@ -3063,6 +4747,17 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     }
     sentList.replaceChildren(...renderedGroups);
   };
+
+  resolveAllButton.addEventListener("click", () => {
+    const ids = sent
+      .filter(
+        (comment) =>
+          !resolvedCommentIds.has(comment.id) &&
+          outcomeFor(comment).key !== "waiting",
+      )
+      .map((comment) => comment.id);
+    if (ids.length > 0) void resolveThreadIds(ids);
+  });
 
   const renderTray = () => {
     draftList.replaceChildren(...drafts.map(draftRow));
@@ -3083,23 +4778,55 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
           ? `Comments, ${pending} staged`
           : "Comments",
     );
-    toggleCount.textContent = needs > 0 ? String(needs) : "";
+    const toolbarCount = pending > 0 ? pending : needs;
+    const toolbarCountKind =
+      pending > 0 ? "staged" : needs > 0 ? "needs" : "idle";
+    feedbackLabel.textContent = "Feedback";
+    toggleCount.textContent = toolbarCount > 0 ? String(toolbarCount) : "";
+    toggleCount.setAttribute("data-review-toggle-count-kind", toolbarCountKind);
+    toggleCount.setAttribute(
+      "aria-label",
+      pending > 0
+        ? `${pending} staged comment${pending === 1 ? "" : "s"} waiting submission`
+        : needs > 0
+          ? `${needs} comment${needs === 1 ? "" : "s"} needs your answer`
+          : "",
+    );
     toggle.setAttribute(
       "data-review-has-pending",
-      needs > 0 ? "true" : "false",
+      toolbarCount > 0 ? "true" : "false",
     );
     toggle.setAttribute("data-review-needs-answer", String(needs));
     toggle.setAttribute(
       "aria-label",
       (railIsOpen() ? "Close" : "Open") +
         " feedback sidebar" +
-        (needs > 0 ? ", " + needs + " needs your answer" : ""),
+        (pending > 0
+          ? `, ${pending} staged waiting submission`
+          : needs > 0
+            ? `, ${needs} needs your answer`
+            : ""),
     );
+    toolbar.setAttribute(
+      "data-review-batch-ready",
+      pending > 0 ? "true" : "false",
+    );
+    sendButton.hidden = pending === 0;
     sendButton.disabled = pending === 0;
+    draftGroup.hidden = pending === 0;
+    draftGroupCount.textContent = String(pending);
+    draftGroupCount.setAttribute(
+      "aria-label",
+      `${pending} staged comment${pending === 1 ? "" : "s"}`,
+    );
+    sidebarSendButton.disabled = pending === 0;
+    compactBatchMenu.hidden = pending === 0;
+    compactBatchLabel.textContent = `Send ${pending} comment${pending === 1 ? "" : "s"}`;
+    compactBatchMenu.open = false;
+    sendBar.hidden = sendNote.textContent.trim().length === 0;
     sentGroup.hidden = sent.length === 0;
     renderSentIndex();
     renderPlanChat();
-    syncActivityToggle();
     syncPlanChatValidity();
     paintChips();
     paintTargetHighlights();
@@ -3112,14 +4839,78 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     if (
       target instanceof Element &&
       (target.closest("[data-review-thread-card]") ||
+        target.closest("[data-review-compose]") ||
         target.closest("[data-review-row]") ||
         target.closest("[data-review-marker]") ||
+        target.closest("[data-review-diff-stepper]") ||
         target.closest("dialog"))
     ) {
       return;
     }
+    if (diffLens?.comment) clearDiffLens();
     expandedThreadIds.clear();
     renderTray();
+  });
+
+  // CSS highlights have no DOM event target. Hit-test pointer coordinates
+  // through the same anchor ranges used by click navigation so source hover
+  // can emphasize both sides of the document ↔ comment association.
+  document.addEventListener("pointermove", (event) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest("[data-review-root]")
+    ) {
+      return;
+    }
+    const comment = commentAtDocumentPoint({
+      target: event.target,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    setEmphasizedComment(comment?.id || null);
+  });
+  document.addEventListener("pointerleave", () => {
+    setEmphasizedComment(null);
+  });
+
+  document.addEventListener("click", (event) => {
+    const clickedElement =
+      event.target instanceof Element
+        ? event.target
+        : event.target?.parentElement;
+    // Named highlights are paint-only; their association hit-testing must not
+    // turn a real document link into a comment-card shortcut.
+    if (clickedElement?.closest("a[href]")) return;
+    const comment = commentAtDocumentPoint({
+      target: event.target,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    if (!comment) return;
+    event.preventDefault();
+    if (railIsOpen()) {
+      revealCommentInTray(comment);
+      return;
+    }
+    setEmphasizedComment(comment.id);
+    if (sent.some((entry) => entry.id === comment.id)) {
+      expandedThreadIds.add(comment.id);
+    } else {
+      minimizedDraftIds.delete(comment.id);
+    }
+    renderTray();
+    requestAnimationFrame(() => {
+      threadLayer
+        .querySelector(
+          '[data-review-comment-id="' +
+            cssEscape(comment.id) +
+            '"] button, ' +
+            '[data-review-comment-id="' +
+            cssEscape(comment.id) +
+            '"] textarea',
+        )
+        ?.focus();
+    });
   });
 
   deleteCancel.addEventListener("click", () => deleteDialog.close());
@@ -3156,16 +4947,18 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
           body: "Revert all plan changes made in response to this comment.",
         },
       });
+      agentConnected = answer.agentConnected === true;
       if (isAgentRequest(answer.request)) {
         agentRequests = agentRequests.concat([answer.request]);
       }
       expandedThreadIds.add(comment.id);
-      setAgentState("With agent", "working");
+      setAgentState("Agent working", "working");
       announce("Revert request sent to the coding agent.");
       revertDialog.close();
       renderTray();
       startProgress();
     } catch (error) {
+      showInlineError(revertConfirm, "Couldn’t send: " + describeError(error));
       announce(describeError(error));
       revertConfirm.disabled = false;
     }
@@ -3184,10 +4977,48 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     }
   };
 
-  const describeError = (error) =>
-    error && error.message ? String(error.message) : "Something went wrong.";
+  const describeError = (error) => {
+    const message =
+      error && error.message ? String(error.message) : "Something went wrong.";
+    return /failed to fetch|fetch failed|networkerror/i.test(message)
+      ? "The review server is offline."
+      : message;
+  };
+
+  // A failed action must say so where the click happened. The note lands
+  // beside the triggering control and survives until the next render.
+  const showInlineError = (anchorNode, message) => {
+    const parent = anchorNode.parentElement;
+    if (!parent) {
+      announce(message);
+      return;
+    }
+    let note = parent.querySelector("[data-review-action-error]");
+    if (!note) {
+      note = el("p", { "data-review-action-error": true });
+      parent.appendChild(note);
+    }
+    note.textContent = message;
+  };
+
+  const clearInlineError = (anchorNode) => {
+    anchorNode.parentElement
+      ?.querySelector("[data-review-action-error]")
+      ?.remove();
+  };
 
   // ---------------------------------------------------------------- composing
+
+  const composeDraftKey = (target) =>
+    JSON.stringify({
+      type: target?.type,
+      blockId: target?.blockId,
+      scope: target?.scope,
+      endBlockId: target?.endBlockId,
+      start: target?.start,
+      end: target?.end,
+      quote: target?.quote,
+    });
 
   const addDraft = (target, body) => {
     const comment = {
@@ -3203,12 +5034,13 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   const openCompose = (target) => {
     composeTarget = target;
     pendingSelection = null;
+    window.getSelection()?.removeAllRanges();
     attachLabel.hidden = true;
     // The affordance did its job; leaving it up would float a second control
     // over the card the reviewer is now typing in.
     affordance.hidden = true;
-    composeInput.value = "";
-    composeSave.disabled = true;
+    composeInput.value = composeDrafts[composeDraftKey(target)] || "";
+    syncComposeValidity();
     compose.hidden = false;
     const before = window.scrollY;
     syncFloatingMode();
@@ -3224,11 +5056,18 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   };
 
   const closeCompose = () => {
+    if (composeTarget) {
+      const key = composeDraftKey(composeTarget);
+      if (composeInput.value.trim() === "") delete composeDrafts[key];
+      else composeDrafts[key] = composeInput.value.slice(0, BODY_LIMIT);
+      writeLocalState();
+    }
     compose.hidden = true;
     composeTarget = null;
     compose.removeAttribute("data-review-compose-inline");
     compose.removeAttribute("data-review-compose-floating");
     compose.removeAttribute("data-review-compose-centered");
+    compose.removeAttribute("data-review-compose-placement");
     compose.removeAttribute("style");
     if (compose.parentElement !== surface) surface.appendChild(compose);
     paintTargetHighlights();
@@ -3237,34 +5076,40 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   };
 
   const positionCompose = (target) => {
-    const block = blockForTarget(target);
+    const block = visualAnchorForTarget(target);
     if (!block) {
       compose.removeAttribute("style");
       compose.setAttribute("data-review-compose-centered", "");
+      compose.setAttribute("data-review-compose-placement", "centered");
       return;
     }
-    if (window.innerWidth >= 1280 && !railIsOpen()) {
-      if (compose.parentElement !== surface) surface.appendChild(compose);
+    if (target.type !== "slide" && window.innerWidth >= 1280 && !railIsOpen()) {
+      if (compose.parentElement !== threadLayer)
+        threadLayer.appendChild(compose);
       compose.removeAttribute("data-review-compose-inline");
       compose.removeAttribute("data-review-compose-centered");
       compose.setAttribute("data-review-compose-floating", "");
-      const rect = block.getBoundingClientRect();
-      compose.style.top =
-        Math.max(
-          FLOAT_TOP,
-          Math.min(
-            rect.top,
-            window.innerHeight - compose.offsetHeight - FLOAT_EDGE,
-          ),
-        ) + "px";
-      compose.style.left = floatLeftFor(target, compose.offsetWidth) + "px";
+      compose.setAttribute("data-review-compose-placement", "floating");
+      positionThreadCards();
       return;
     }
+    const endBlock =
+      target.type === "selection" && target.endBlockId
+        ? document.querySelector(
+            '[data-block-id="' + cssEscape(target.endBlockId) + '"]',
+          )
+        : null;
+    const slide =
+      target.type === "slide" ? block.closest("[data-slide]") : null;
+    const insertionBlock = endBlock || block;
     // A table row cannot legally own a div sibling inside tbody, so its
-    // scroll container is the insertion anchor. Every other authored block
-    // can place the editor immediately after itself. Either way the editor is
-    // in flow and pushes following content instead of painting over it.
-    const anchor =
+    // scroll container is the insertion anchor.
+    const trailingAnchor =
+      insertionBlock.tagName === "TR"
+        ? insertionBlock.closest("[data-table-scroll-container]") ||
+          insertionBlock
+        : insertionBlock;
+    const leadingAnchor =
       block.tagName === "TR"
         ? block.closest("[data-table-scroll-container]") || block
         : block;
@@ -3272,7 +5117,30 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     compose.removeAttribute("data-review-compose-centered");
     compose.removeAttribute("data-review-compose-floating");
     compose.setAttribute("data-review-compose-inline", "");
-    anchor.after(compose);
+    if (slide) {
+      slide.before(compose);
+      compose.setAttribute("data-review-compose-placement", "before-slide");
+      return;
+    }
+    const composeHeight = compose.offsetHeight;
+    const startRect = leadingAnchor.getBoundingClientRect();
+    const endRect = trailingAnchor.getBoundingClientRect();
+    const roomBelow = window.innerHeight - endRect.bottom;
+    const roomAbove = startRect.top - REVIEW_CONTROL_TOP;
+    if (roomBelow >= composeHeight + FLOAT_CONTENT_GAP) {
+      trailingAnchor.after(compose);
+      compose.setAttribute("data-review-compose-placement", "after-selection");
+      return;
+    }
+    if (roomAbove >= composeHeight + FLOAT_CONTENT_GAP) {
+      leadingAnchor.before(compose);
+      compose.setAttribute("data-review-compose-placement", "before-selection");
+      return;
+    }
+    if (compose.parentElement !== surface) surface.appendChild(compose);
+    compose.removeAttribute("data-review-compose-inline");
+    compose.setAttribute("data-review-compose-centered", "");
+    compose.setAttribute("data-review-compose-placement", "centered");
   };
 
   const normalizedComposeBody = () => composeInput.value.trim();
@@ -3288,7 +5156,16 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     // here, so the shortcut cannot bypass the button's disabled state.
     if (body === "" || composeTarget === null) return;
     const comment = addDraft(composeTarget, body);
-    announce("Comment added on " + describeTarget(composeTarget) + ".");
+    delete composeDrafts[composeDraftKey(composeTarget)];
+    composeInput.value = "";
+    // With submit-right-away on, the very first paint of this comment must
+    // already say "Sending", never a staged card with its own Submit button.
+    if (submitRightAway && hasRuntime) submittingIds.add(comment.id);
+    announce(
+      submitRightAway
+        ? "Submitting comment on " + describeTarget(composeTarget) + "."
+        : "Comment added on " + describeTarget(composeTarget) + ".",
+    );
     closeCompose();
     renderTray();
     await save();
@@ -3305,6 +5182,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   composeCancel.addEventListener("click", closeCompose);
   submitImmediatelyInput.addEventListener("change", () => {
     submitRightAway = submitImmediatelyInput.checked;
+    syncComposeSaveLabel();
     try {
       localStorage.setItem(
         submitPreferenceKey,
@@ -3319,11 +5197,19 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         : "New comments will wait for batch submission.",
     );
   });
-  composeInput.addEventListener("input", syncComposeValidity);
+  composeInput.addEventListener("input", () => {
+    syncComposeValidity();
+    if (!composeTarget) return;
+    const key = composeDraftKey(composeTarget);
+    if (composeInput.value === "") delete composeDrafts[key];
+    else composeDrafts[key] = composeInput.value.slice(0, BODY_LIMIT);
+    writeLocalState();
+  });
   composeInput.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       event.stopPropagation();
       closeCompose();
+      clearReviewSelection();
     }
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
@@ -3333,86 +5219,13 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   // -------------------------------------------------------------- affordance
 
-  const targetForBlock = (block) => ({
-    type: "block",
-    blockId: block.getAttribute("data-block-id"),
-    kind: kindFor(block),
-    label: labelFor(block),
-    section: block.getAttribute("data-block-section") || "",
-  });
-
   // The right edge the floating chrome may reach: the window, or the tray's
   // own left edge while the tray is open, so a control never lands under it.
   const rightLimit = () =>
     railIsOpen() ? rail.getBoundingClientRect().left : window.innerWidth;
 
-  const showAffordance = (block) => {
-    if (!block || !compose.hidden) return;
-    if (railIsOpen() && window.innerWidth < 1280) {
-      affordance.hidden = true;
-      return;
-    }
-    cursorBlock = block;
-    const rect = block.getBoundingClientRect();
-    if (rect.bottom < FLOAT_TOP || rect.top > window.innerHeight) {
-      affordance.hidden = true;
-      return;
-    }
-    affordance.hidden = false;
-    affordance.setAttribute(
-      "aria-label",
-      "Comment on " + kindFor(block) + ": " + labelFor(block),
-    );
-    affordance.style.top = Math.max(FLOAT_TOP, rect.top) + "px";
-    const width = affordance.offsetWidth || 108;
-    affordance.style.left =
-      Math.min(rect.right + 8, rightLimit() - width - 12) + "px";
-  };
-
-  let affordanceDismissTimer = null;
-
-  const cancelAffordanceDismiss = () => {
-    if (affordanceDismissTimer === null) return;
-    window.clearTimeout(affordanceDismissTimer);
-    affordanceDismissTimer = null;
-  };
-
-  const hideAffordance = () => {
-    cancelAffordanceDismiss();
-    if (document.activeElement === affordance) return;
-    affordance.hidden = true;
-    if (!pendingSelection) cursorBlock = null;
-  };
-
-  const scheduleAffordanceDismiss = () => {
-    cancelAffordanceDismiss();
-    affordanceDismissTimer = window.setTimeout(() => {
-      affordanceDismissTimer = null;
-      if (!pendingSelection && !affordance.matches(":hover")) hideAffordance();
-    }, 100);
-  };
-
-  for (const block of blocks) {
-    block.addEventListener("pointerenter", (event) => {
-      if (event.pointerType === "touch") return;
-      if (pendingSelection) return;
-      cancelAffordanceDismiss();
-      showAffordance(block);
-    });
-    block.addEventListener("pointerleave", () => {
-      if (!pendingSelection) scheduleAffordanceDismiss();
-    });
-  }
-  affordance.addEventListener("pointerenter", cancelAffordanceDismiss);
-  affordance.addEventListener("pointerleave", scheduleAffordanceDismiss);
-  document.addEventListener("pointerleave", hideAffordance);
-
   affordance.addEventListener("click", () => {
-    if (pendingSelection) {
-      openCompose(pendingSelection);
-      return;
-    }
-    if (cursorBlock) openCompose(targetForBlock(cursorBlock));
+    if (pendingSelection) openCompose(pendingSelection);
   });
 
   // --------------------------------------------------------------- selection
@@ -3427,8 +5240,8 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       return null;
     }
     const range = selection.getRangeAt(0);
-    const selectedText = selection.toString();
-    const quote = selectedText.trim();
+    const rawText = rangeText(range);
+    const quote = rawText.trim();
     if (quote === "") return null;
     const startBlock = blockOf(range.startContainer);
     const endBlock = blockOf(range.endContainer);
@@ -3443,33 +5256,56 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         }
       });
     if (!block || surface.contains(block)) return null;
+    if (!startBlock || !endBlock) {
+      const touchedSlides = new Set(
+        Array.from(document.querySelectorAll("[data-slide]"))
+          .filter((slide) => {
+            try {
+              return range.intersectsNode(slide);
+            } catch {
+              return false;
+            }
+          })
+          .map((slide) => slide),
+      );
+      if (touchedSlides.size > 1) return null;
+    }
 
-    const lineTarget = lineRangeFor(range, block);
+    const lineTarget =
+      startBlock === endBlock ? lineRangeFor(range, block) : null;
     if (lineTarget) return lineTarget;
 
+    const leadingWhitespace = rawText.length - rawText.trimStart().length;
+    const trailingWhitespace = rawText.length - rawText.trimEnd().length;
     const blockLength = block.textContent?.length || 0;
-    let start = 0;
-    if (block.contains(range.startContainer)) {
-      const prefix = document.createRange();
-      prefix.selectNodeContents(block);
-      prefix.setEnd(range.startContainer, range.startOffset);
-      start = prefix.toString().length;
-    }
-    let end = blockLength;
-    if (block.contains(range.endContainer)) {
-      const throughEnd = document.createRange();
-      throughEnd.selectNodeContents(block);
-      throughEnd.setEnd(range.endContainer, range.endOffset);
-      end = throughEnd.toString().length;
-    }
+    let start = block.contains(range.startContainer)
+      ? textOffsetForBoundary({
+          block,
+          container: range.startContainer,
+          offset: range.startOffset,
+        })
+      : 0;
+    start += leadingWhitespace;
+    const rangeEndBlock = endBlock || block;
+    let end = rangeEndBlock.contains(range.endContainer)
+      ? textOffsetForBoundary({
+          block: rangeEndBlock,
+          container: range.endContainer,
+          offset: range.endOffset,
+        })
+      : rangeEndBlock.textContent?.length || blockLength;
+    end = Math.max(0, end - trailingWhitespace);
     return {
       type: "selection",
       blockId: block.getAttribute("data-block-id"),
+      ...(rangeEndBlock !== block
+        ? { endBlockId: rangeEndBlock.getAttribute("data-block-id") }
+        : {}),
       kind: kindFor(block),
       label: labelFor(block),
       section: block.getAttribute("data-block-section") || "",
       start: start,
-      end: Math.max(start, end),
+      end: rangeEndBlock === block ? Math.max(start, end) : end,
       quote: quote.slice(0, QUOTE_LIMIT),
     };
   };
@@ -3519,18 +5355,103 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     const selection = window.getSelection();
     const rect = selection.getRangeAt(0).getBoundingClientRect();
     affordance.hidden = false;
+    affordance.setAttribute("data-review-mode", "selection");
+    affordanceLabel.hidden = false;
     affordance.setAttribute("aria-label", "Comment on the selected text");
-    affordance.style.top = Math.max(FLOAT_TOP, rect.top - 40) + "px";
     const width = affordance.offsetWidth || 108;
-    affordance.style.left =
-      Math.max(12, Math.min(rect.left, rightLimit() - width - 12)) + "px";
+    const startBlock = blockForTarget(anchor);
+    const slide = startBlock?.closest("[data-slide]");
+    const slideRect = slide?.getBoundingClientRect();
+    const gutterLeft = slideRect
+      ? Math.min(slideRect.left, rect.left) - width - 10
+      : -1;
+    const hasGutter = gutterLeft >= 12;
+    affordance.style.top =
+      Math.max(
+        REVIEW_CONTROL_TOP,
+        Math.min(
+          hasGutter ? rect.top : rect.bottom + 8,
+          window.innerHeight - affordance.offsetHeight - FLOAT_EDGE,
+        ),
+      ) + "px";
+    affordance.style.left = hasGutter
+      ? gutterLeft + "px"
+      : Math.max(12, Math.min(rect.left, rightLimit() - width - 12)) + "px";
   };
+
+  let selectionOfferTimer = null;
+
+  // Escape returns both native and semantic selection flows to the same quiet
+  // reading state. Clearing only the Range would leave a whole-slide target
+  // behind; clearing only pendingSelection would leave native selection blue.
+  const clearReviewSelection = () => {
+    if (selectionOfferTimer !== null) {
+      window.clearTimeout(selectionOfferTimer);
+      selectionOfferTimer = null;
+    }
+    pendingSelection = null;
+    attachLabel.hidden = true;
+    attachInput.checked = false;
+    affordance.hidden = true;
+    window.getSelection()?.removeAllRanges();
+    paintTargetHighlights();
+  };
+
+  for (const slide of document.querySelectorAll("[data-slide]")) {
+    const title =
+      slide
+        .querySelector("[data-block-section]")
+        ?.getAttribute("data-block-section") || "this slide";
+    const selector = el("button", {
+      type: "button",
+      "data-review-slide-selector": true,
+      "aria-label": "Comment on all content in " + title,
+    });
+    selector.append(
+      icon(MESSAGE_SQUARE_TEXT_ICON),
+      el("span", {
+        "data-review-icon-tooltip": true,
+        "aria-hidden": "true",
+        text: "Comment on slide",
+      }),
+    );
+    selector.addEventListener("mouseup", (event) => {
+      event.stopPropagation();
+    });
+    selector.addEventListener("click", () => {
+      const slideBlocks = Array.from(slide.querySelectorAll("[data-block-id]"));
+      const first = slideBlocks[0];
+      const kicker = slide.querySelector("[data-slide-kicker]");
+      if (!first || !kicker) return;
+      if (!compose.hidden) closeCompose();
+      window.getSelection()?.removeAllRanges();
+      const target = {
+        type: "slide",
+        blockId: first.getAttribute("data-block-id"),
+        scope: first
+          .getAttribute("data-block-id")
+          .split("/")
+          .slice(0, -1)
+          .join("/"),
+        kind: kindFor(first),
+        label: labelFor(first),
+        section: first.getAttribute("data-block-section") || "",
+      };
+      pendingSelection = target;
+      attachLabel.hidden = false;
+      attachInput.checked = false;
+      paintTargetHighlights();
+      openCompose(target);
+      announce("Commenting on all content in " + title + ".");
+    });
+    slide.setAttribute("data-review-slide-selectable", "");
+    slide.appendChild(selector);
+  }
 
   document.addEventListener("mouseup", () => setTimeout(offerSelection, 0));
   document.addEventListener("keyup", (event) => {
     if (event.shiftKey || event.key === "Shift") setTimeout(offerSelection, 0);
   });
-  let selectionOfferTimer = null;
   document.addEventListener("selectionchange", () => {
     if (selectionOfferTimer !== null) {
       window.clearTimeout(selectionOfferTimer);
@@ -3538,6 +5459,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     selectionOfferTimer = window.setTimeout(() => {
       selectionOfferTimer = null;
       if (!compose.hidden || document.activeElement === affordance) return;
+      if (pendingSelection?.type === "slide") return;
       offerSelection();
     }, 0);
   });
@@ -3547,68 +5469,37 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   const chatChangeControls = (event) => {
     const places = placesForEvent(event);
     if (places.length === 0) return null;
-    const slideCount = new Set(places.map((place) => place.slideTitle)).size;
     const expanded = chatDigestExpansion.has(event.requestId)
       ? chatDigestExpansion.get(event.requestId)
       : places.length <= 3;
     const active =
       diffLens?.comment === null &&
       diffLens?.event.requestId === event.requestId;
-    const disclosure = el("button", {
-      type: "button",
-      "data-review-chat-change-toggle": true,
-      "aria-expanded": expanded ? "true" : "false",
-      text:
-        "Changed " +
-        places.length +
-        " place" +
-        (places.length === 1 ? "" : "s") +
-        " across " +
-        slideCount +
-        " slide" +
-        (slideCount === 1 ? "" : "s"),
-    });
+    const disclosure = el(
+      "button",
+      {
+        type: "button",
+        "data-review-chat-change-toggle": true,
+        "aria-expanded": expanded ? "true" : "false",
+      },
+      [
+        icon(CHEVRON_RIGHT_ICON),
+        el("span", { text: changeSummaryText({ places, event }) }),
+      ],
+    );
     disclosure.addEventListener("click", () => {
+      if (expanded && active) clearDiffLens();
       chatDigestExpansion.set(event.requestId, !expanded);
       renderPlanChat();
     });
-    const list = el("div", {
-      "data-review-chat-change-list": true,
-      ...(expanded ? {} : { hidden: true }),
-    });
-    let previousSlide = "";
-    places.forEach((place, index) => {
-      if (place.slideTitle !== previousSlide) {
-        previousSlide = place.slideTitle;
-        list.appendChild(
-          el("strong", {
-            "data-review-change-slide-header": true,
-            text: place.slideTitle,
-          }),
-        );
-      }
-      const row = el("button", {
-        type: "button",
-        "data-review-change-row": true,
-        ...(active && diffLens.index === index
-          ? { "aria-current": "true" }
-          : {}),
-      });
-      row.append(
-        el("span", {
-          "data-review-change-label": true,
-          text: place.label,
-        }),
-        el("span", {
-          "data-review-change-kind": true,
-          text: place.note,
-        }),
-      );
-      row.addEventListener("click", () => {
-        void openDiffLens(null, event, index);
-      });
-      list.appendChild(row);
-    });
+    const list = el(
+      "div",
+      {
+        "data-review-chat-change-list": true,
+        ...(expanded ? {} : { hidden: true }),
+      },
+      [changeNavigator({ comment: null, event, places, active })],
+    );
     const see = el("button", {
       type: "button",
       "data-review-see-change": true,
@@ -3637,6 +5528,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         role: "user",
         body: request.body,
         createdAt: request.createdAt,
+        request,
       });
       const response = agentResponses.find(
         (entry) => entry.requestId === request.requestId,
@@ -3645,6 +5537,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         messages.push({
           role: "agent",
           body: response.message,
+          messageNodes: checkedMessageNodes(response.messageNodes),
           createdAt: response.createdAt,
           event:
             request.sourceRevision !== response.sourceRevision
@@ -3653,15 +5546,21 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
                   requestId: request.requestId,
                   fromRevision: request.sourceRevision,
                   toRevision: response.sourceRevision,
-                  changeTargets: [],
+                  changes: [],
                 }
               : null,
+        });
+      } else if (agentCancelledIds.includes(request.requestId)) {
+        messages.push({
+          role: "cancelled",
+          createdAt: request.createdAt,
+          request,
         });
       } else {
         messages.push({
           role: "waiting",
-          body: currentAgentActivity(),
           createdAt: request.createdAt,
+          request,
         });
       }
     }
@@ -3671,45 +5570,54 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   const renderPlanChat = () => {
     const messages = hasRuntime ? livePlanChatMessages() : planChatMessages;
     if (messages.length === 0) {
-      planChatList.replaceChildren(
-        el("li", {
-          "data-review-chat-empty": true,
-          text: "Ask about the plan as a whole. Anchored comment threads stay beside their source.",
+      const empty = el("li", { "data-review-chat-empty": true }, [
+        el("p", {
+          text: hasRuntime
+            ? "Ask about the plan as a whole. Connection status and setup are in the Agent tab."
+            : "Ask about the plan as a whole. Anchored comment threads stay beside their source.",
         }),
-      );
+      ]);
+      planChatList.replaceChildren(empty);
       return;
     }
-    planChatList.replaceChildren(
-      ...messages.map((message) => {
-        if (message.role === "waiting") {
-          return el("li", { "data-review-chat-message": "waiting" }, [
-            el("div", { "data-review-turn-meta": true }, [
-              el("strong", { text: "Agent status" }),
-            ]),
-            activityDisclosure(),
-          ]);
-        }
-        const body = el("p", {});
-        body.appendChild(document.createTextNode(message.body));
-        const turn = el("li", { "data-review-chat-message": message.role }, [
-          el("div", { "data-review-turn-meta": true }, [
-            el("strong", {
-              text: message.role === "user" ? "You" : "Agent",
-            }),
-            el("time", {
-              datetime: message.createdAt,
-              text: relativeCommentTime(message.createdAt),
-            }),
-          ]),
-          body,
+    const rendered = messages.map((message) => {
+      if (message.role === "cancelled") {
+        return el("li", { "data-review-chat-message": "cancelled" }, [
+          cancelledRequestLine(),
         ]);
-        if (message.role === "agent" && message.event) {
-          const controls = chatChangeControls(message.event);
-          if (controls) turn.appendChild(controls);
-        }
-        return turn;
-      }),
-    );
+      }
+      if (message.role === "waiting") {
+        const status = pendingStatusFor(message.request, "chat");
+        return el("li", { "data-review-chat-message": "waiting" }, [
+          threadStatusStrip(status, { surface: "tray" }),
+        ]);
+      }
+      const body =
+        message.role === "agent"
+          ? messageBody(message.messageNodes, message.body)
+          : el("p", { class: COMMENT_WRAP_CLASSES, text: message.body });
+      const turn = el("li", { "data-review-chat-message": message.role }, [
+        el("div", { "data-review-turn-meta": true }, [
+          el("strong", {
+            text: message.role === "user" ? "You" : "Agent",
+          }),
+          el("time", {
+            datetime: message.createdAt,
+            text:
+              (message.role === "user"
+                ? requestDeliveryLabel(message.request) + " · "
+                : "") + relativeCommentTime(message.createdAt),
+          }),
+        ]),
+        body,
+      ]);
+      if (message.role === "agent" && message.event) {
+        const controls = chatChangeControls(message.event);
+        if (controls) turn.appendChild(controls);
+      }
+      return turn;
+    });
+    planChatList.replaceChildren(...rendered);
   };
 
   const syncPlanChatValidity = () => {
@@ -3742,21 +5650,28 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         method: "POST",
         body: { kind: "chat", body },
       });
+      agentConnected = answer.agentConnected === true;
       if (isAgentRequest(answer.request)) {
         agentRequests = agentRequests.concat([answer.request]);
       }
       agentInput.value = "";
       activeDraft = "";
       attachInput.checked = false;
+      clearInlineError(agentSave);
       syncPlanChatValidity();
       writeLocalState();
       renderPlanChat();
-      syncActivityToggle();
-      setAgentState("With agent", "working");
+      setAgentState("Agent working", "working");
       announce("Plan-wide question sent to the coding agent.");
       await save();
       startProgress();
     } catch (error) {
+      showInlineError(
+        agentSave,
+        "Couldn’t send: " +
+          describeError(error) +
+          " Your message is preserved — try again.",
+      );
       announce(describeError(error));
       agentSave.disabled = false;
     }
@@ -3787,10 +5702,16 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   // pending, so a reviewer who has already sent never has to open the tray to
   // learn whether anything is happening.
   const setAgentState = (text, tone) => {
-    agentState.textContent = text;
-    agentState.setAttribute("data-tone", tone);
-    toggle.setAttribute("data-review-agent-tone", tone);
-    toggle.title = "Open feedback sidebar (Alt+C)";
+    if (agentState.textContent !== text) agentState.textContent = text;
+    if (agentState.getAttribute("data-tone") !== tone) {
+      agentState.setAttribute("data-tone", tone);
+    }
+    if (toggle.getAttribute("data-review-agent-tone") !== tone) {
+      toggle.setAttribute("data-review-agent-tone", tone);
+    }
+    if (toggle.title !== "Open feedback sidebar (Alt+C)") {
+      toggle.title = "Open feedback sidebar (Alt+C)";
+    }
   };
 
   const submitComments = async ({ comments, closeRailAfter, trigger }) => {
@@ -3801,42 +5722,76 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       sendNote.textContent =
         "Start the local review runtime with `big-plan review " +
         "<plan.mdx>` to send. Your drafts are saved here meanwhile.";
+      sendBar.hidden = false;
       return false;
     }
     trigger.disabled = true;
     sendButton.setAttribute("data-review-busy", "");
     sendNote.textContent = "";
+    // The card says "Sending" for the whole round trip, so the submit-now
+    // path never shows a staged view that implies nothing happened.
+    for (const comment of selected) {
+      submittingIds.add(comment.id);
+      submitErrorById.delete(comment.id);
+    }
+    renderTray();
     try {
       await confirmRuntime();
       const answer = await call("/api/feedback", {
         method: "POST",
         body: { comments: selected },
       });
+      agentConnected = answer.agentConnected === true;
       const submittedIds = new Set(selected.map((comment) => comment.id));
       sent = sent.concat(selected);
-      if (isAgentRequest(answer.agentRequest)) {
-        agentRequests = agentRequests.concat([answer.agentRequest]);
-      }
+      const submittedRequests = (
+        Array.isArray(answer.agentRequests)
+          ? answer.agentRequests
+          : [answer.agentRequest]
+      ).filter(isAgentRequest);
+      agentRequests = agentRequests.concat(submittedRequests);
       drafts = drafts.filter((comment) => !submittedIds.has(comment.id));
-      for (const id of submittedIds) minimizedDraftIds.delete(id);
+      for (const id of submittedIds) {
+        minimizedDraftIds.delete(id);
+        submittingIds.delete(id);
+      }
       activeDraft = agentInput.value;
       renderTray();
       await persist();
-      setAgentState("With agent", "working");
+      setAgentState(
+        agentConnected ? "Waiting for agent" : "No agent connected",
+        agentConnected ? "idle" : "failed",
+      );
       sendNote.textContent =
-        "Sent " +
+        "Queued " +
         answer.comments +
         " to the agent as " +
         answer.packageId +
         ".";
-      announce("Feedback sent to the agent.");
+      sendBar.hidden = false;
+      announce("Feedback queued for the agent.");
       setActiveTab("comments");
       if (closeRailAfter) setRailOpen(false);
       startProgress();
       return true;
     } catch (error) {
-      sendNote.textContent = describeError(error);
+      // A failed send returns the comment to staged with the failure written
+      // on the card itself, never silently.
+      for (const comment of selected) {
+        submittingIds.delete(comment.id);
+        submitErrorById.set(
+          comment.id,
+          "Couldn’t send: " +
+            describeError(error) +
+            " Your comment is still staged. Restart `big-plan review`, then open the new URL it prints.",
+        );
+      }
+      sendNote.textContent =
+        describeError(error) +
+        " Restart `big-plan review`, then open the new URL it prints. Your comments are safe.";
       trigger.disabled = false;
+      announce("Sending failed. The comment stays staged.");
+      renderTray();
       return false;
     } finally {
       sendButton.removeAttribute("data-review-busy");
@@ -3845,23 +5800,36 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   // One intentional send of everything pending, with no confirmation dialog:
   // the tray already shows the count and every body about to leave.
-  const submit = () =>
+  const submit = (trigger = sendButton) =>
     submitComments({
       comments: drafts,
       closeRailAfter: false,
-      trigger: sendButton,
+      trigger,
     });
 
   sendButton.addEventListener("click", () => {
     void submit();
   });
+  sidebarSendButton.addEventListener("click", () => {
+    void submit(sidebarSendButton);
+  });
+  compactSendButton.addEventListener("click", () => {
+    compactBatchMenu.open = false;
+    void submit(compactSendButton);
+  });
+  compactReviewButton.addEventListener("click", () => {
+    compactBatchMenu.open = false;
+    setRailOpen(true);
+    setActiveTab("comments");
+  });
 
   // ----------------------------------------------------------------- progress
 
-  const exchangeSignature = ({ requests, responses }) =>
+  const exchangeSignature = ({ requests, responses, cancelledIds = [] }) =>
     JSON.stringify([
       requests.map((request) => request.requestId),
       responses.map((response) => [response.requestId, response.createdAt]),
+      cancelledIds,
     ]);
 
   const reloadForSourceRevision = () => {
@@ -3872,7 +5840,12 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
           JSON.stringify({
             scrollY: window.scrollY,
             expanded: Array.from(expandedThreadIds),
-            tab: chatPanel.hidden ? "comments" : "chat",
+            tab:
+              connectionPanel && !connectionPanel.hidden
+                ? "agent"
+                : chatPanel.hidden
+                  ? "comments"
+                  : "chat",
             railOpen: railIsOpen(),
           }),
         );
@@ -3885,22 +5858,34 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   const applyAgentSnapshot = (answer) => {
     const checked = checkedAgentSnapshot(answer);
+    const connectionChanged = checked.connected !== agentConnected;
     const changed =
       exchangeSignature(checked) !==
       exchangeSignature({
         requests: agentRequests,
         responses: agentResponses,
+        cancelledIds: agentCancelledIds,
       });
     agentRequests = checked.requests;
     agentResponses = checked.responses;
-    if (!changed) return;
-    renderTray();
-    void hydrateRevisionDiffs();
+    agentCancelledIds = checked.cancelledIds;
+    agentConnected = checked.connected;
+    agentHeartbeatAt = checked.updatedAtMs;
+    agentSessionState = checked.state;
+    agentConnectionLog = checked.connectionLog;
+    agentPlanPath = checked.plan;
+    agentCommand = checked.agentCommand;
+    agentRecoveryPrompt = checked.recoveryPrompt;
+    if (changed || connectionChanged) {
+      renderTray();
+      void hydrateRevisionDiffs();
+    }
+    if (connectionPanel && !connectionPanel.hidden) renderConnectionPanel();
     const pending = pendingAgentRequestCount();
     if (needsAnswerCount() > 0) {
       setAgentState("Needs your answer", "ready");
     } else if (pending > 0) {
-      setAgentState("With agent", "working");
+      setAgentState("Agent working", "working");
     } else if (agentResponses.length > 0) {
       setAgentState("Ready to re-review", "ready");
     }
@@ -3910,41 +5895,26 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     const answered = new Set(
       agentResponses.map((response) => response.requestId),
     );
-    return agentRequests.filter((request) => !answered.has(request.requestId))
-      .length;
+    const cancelled = new Set(agentCancelledIds);
+    return agentRequests.filter(
+      (request) =>
+        !answered.has(request.requestId) && !cancelled.has(request.requestId),
+    ).length;
   };
-
-  const syncActivityToggle = () => {
-    activityToggle.hidden = pendingAgentRequestCount() === 0;
-    activityToggle.textContent = showAgentActivity
-      ? "Hide activity"
-      : "Show activity";
-    activityToggle.setAttribute(
-      "aria-pressed",
-      showAgentActivity ? "true" : "false",
-    );
-  };
-
-  activityToggle.addEventListener("click", () => {
-    showAgentActivity = !showAgentActivity;
-    renderPlanChat();
-    renderThreads();
-    syncActivityToggle();
-  });
 
   const renderProgress = (events) => {
     if (events.length === 0) return;
     progressEvents = events;
     // The old DONE/WAITING ledger had no readable story. The latest validated
     // event appears only where the reviewer is waiting: inside a chat turn or
-    // expanded anchored thread.
-    renderPlanChat();
-    renderThreads();
+    // an expanded anchored thread - including one expanded inside the tray,
+    // so the whole tray repaints, not just the floating layer.
+    renderTray();
     const last = events[events.length - 1];
     if (needsAnswerCount() > 0) {
       setAgentState("Needs your answer", "ready");
     } else if (pendingAgentRequestCount() > 0) {
-      setAgentState("With agent", "working");
+      setAgentState("Agent working", "working");
     } else if (
       last.state === "done" &&
       (/re-?review/i.test(last.step) || /agent response ready/i.test(last.step))
@@ -3959,6 +5929,64 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
     }
   };
 
+  const AGENT_ALERT_LABELS = {
+    unavailable: "No agent connected",
+    quiet: "Agent not responding",
+    errored: "Agent error",
+    offline: "Review server offline",
+  };
+
+  const syncAgentAlert = (health) => {
+    const label = health
+      ? AGENT_ALERT_LABELS[health.key]
+      : hasRuntime && !agentConnected
+        ? AGENT_ALERT_LABELS.unavailable
+        : undefined;
+    const indicator = deriveAgentIndicator({
+      hasRuntime,
+      agentConnected,
+      healthKey: health?.key,
+    });
+    agentOk.hidden = indicator !== "ok";
+    agentAlert.hidden = indicator !== "alert";
+    if (indicator !== "alert" || label === undefined) return;
+    agentAlertLabel.textContent = label;
+    agentAlert.setAttribute(
+      "aria-label",
+      label + " — open the connection status",
+    );
+  };
+
+  // Re-renders the waiting chrome only when the derived health actually
+  // changes, and lets a failure state own the toolbar pill until it clears.
+  const syncAgentHealthPresentation = () => {
+    const health = agentHealth();
+    const signature = health ? health.key + "|" + (health.headline || "") : "";
+    syncAgentAlert(health);
+    if (health) {
+      if (health.key === "offline") {
+        setAgentState("Review server offline", "failed");
+      } else if (health.key === "errored") {
+        setAgentState("Agent needs attention", "failed");
+      } else if (health.key === "unavailable") {
+        setAgentState("No agent connected", "failed");
+      } else if (health.key === "quiet") {
+        setAgentState("Agent silent — check terminal", "idle");
+      }
+    }
+    if (signature === lastHealthSignature) return;
+    const wasFailing =
+      lastHealthSignature !== "" && !lastHealthSignature.startsWith("working");
+    lastHealthSignature = signature;
+    if ((!health || health.key === "working") && wasFailing) {
+      if (needsAnswerCount() > 0) setAgentState("Needs your answer", "ready");
+      else if (pendingAgentRequestCount() > 0) {
+        setAgentState("Agent working", "working");
+      }
+    }
+    renderTray();
+  };
+
   const startProgress = () => {
     if (progressTimer !== null || !hasRuntime) return;
     const tick = async () => {
@@ -3967,6 +5995,11 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
           call("/api/progress"),
           call("/api/agent"),
         ]);
+        pollFailures = 0;
+        if (runtimeOffline) {
+          runtimeOffline = false;
+          renderTray();
+        }
         if (
           typeof exchange.sourceRevision === "string" &&
           sourceRevision !== "" &&
@@ -3978,7 +6011,6 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         if (typeof exchange.sourceRevision === "string") {
           sourceRevision = exchange.sourceRevision;
         }
-        applyAgentSnapshot(exchange);
         // The runtime already drops foreign and out-of-order events; the
         // document checks the same two facts again rather than trusting that
         // an event reached it only because it was allowed to.
@@ -3992,15 +6024,38 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         );
         const latest =
           timeline.length === 0 ? 0 : timeline[timeline.length - 1].seq;
-        if (latest > progressSeq) {
+        const liveTimeline = timeline.filter(isAgentWorkEvent);
+        const liveLatest =
+          liveTimeline.length === 0
+            ? 0
+            : liveTimeline[liveTimeline.length - 1].seq;
+        const progressChanged = latest > progressSeq;
+        if (liveLatest > liveProgressSeq) {
+          liveProgressSeq = liveLatest;
+          lastProgressAdvanceAt = Date.now();
+        }
+        if (progressChanged) {
           progressSeq = latest;
+          progressEvents = timeline;
+        }
+        // On the first poll, establish the existing progress baseline before
+        // pending requests are observed. Historical work must not claim a new
+        // request merely because the page was just opened.
+        applyAgentSnapshot(exchange);
+        if (progressChanged) {
           renderProgress(timeline);
         }
+        syncAgentHealthPresentation();
       } catch {
-        // A refused or unreachable runtime stops the loop rather than
-        // retrying forever against a port that may no longer be ours.
-        window.clearInterval(progressTimer);
-        progressTimer = null;
+        // The loop keeps polling the loopback port so recovery is observed,
+        // but after two straight failures the UI says so instead of waiting
+        // silently on a runtime that may be gone.
+        pollFailures += 1;
+        if (pollFailures >= 2 && !runtimeOffline) {
+          runtimeOffline = true;
+          renderTray();
+        }
+        syncAgentHealthPresentation();
       }
     };
     progressTimer = window.setInterval(tick, PROGRESS_INTERVAL_MS);
@@ -4009,35 +6064,25 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
 
   // ---------------------------------------------------------------- keyboard
 
-  const moveCursor = (step) => {
-    const index = cursorBlock ? blocks.indexOf(cursorBlock) : -1;
-    const next = blocks[Math.min(Math.max(index + step, 0), blocks.length - 1)];
-    if (!next) return;
-    next.scrollIntoView({ behavior: "smooth", block: "center" });
-    setTimeout(() => showAffordance(next), 220);
-    announce(kindFor(next) + ": " + labelFor(next));
-  };
-
   document.addEventListener("keydown", (event) => {
-    if (event.altKey && event.key === "ArrowDown") {
-      event.preventDefault();
-      moveCursor(1);
-    }
-    if (event.altKey && event.key === "ArrowUp") {
-      event.preventDefault();
-      moveCursor(-1);
-    }
     if (event.altKey && (event.key === "c" || event.key === "C")) {
       event.preventDefault();
       if (pendingSelection) openCompose(pendingSelection);
-      else if (cursorBlock) openCompose(targetForBlock(cursorBlock));
       else setRailOpen(!railIsOpen());
     }
     if (event.key === "Escape" && diffLens) {
       event.preventDefault();
       clearDiffLens();
     } else if (event.key === "Escape" && !compose.hidden) {
+      event.preventDefault();
       closeCompose();
+      clearReviewSelection();
+    } else if (
+      event.key === "Escape" &&
+      (pendingSelection !== null || !window.getSelection()?.isCollapsed)
+    ) {
+      event.preventDefault();
+      clearReviewSelection();
     }
   });
 
@@ -4053,21 +6098,26 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
   window.addEventListener(
     "scroll",
     () => {
-      if (!compose.hidden && composeTarget) positionCompose(composeTarget);
       if (pendingSelection) {
         pendingSelection = null;
         attachLabel.hidden = true;
         affordance.hidden = true;
         window.getSelection()?.removeAllRanges();
         paintTargetHighlights();
-      } else if (!affordance.hidden && cursorBlock) {
-        showAffordance(cursorBlock);
       }
-      positionThreadCards();
       positionMarkers();
     },
     { passive: true },
   );
+  const anchoredChromeObserver =
+    typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(() => {
+          if (window.innerWidth >= 1280 && !railIsOpen()) {
+            positionThreadCards();
+          }
+        });
+  anchoredChromeObserver?.observe(document.body);
 
   // --------------------------------------------------------------------- boot
 
@@ -4078,6 +6128,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
         "`big-plan review`.";
       renderTray();
       if (drafts.length > 0) setRailOpen(true);
+      root.setAttribute("data-review-ready", "");
       return;
     }
     try {
@@ -4115,7 +6166,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       renderTray();
       void hydrateRevisionDiffs();
       if (drafts.length > 0) setRailOpen(true);
-      if (sent.length > 0 || agentRequests.length > 0) startProgress();
+      if (hasRuntime) startProgress();
       if (reloadState !== null) {
         setActiveTab(reloadState.tab);
         setRailOpen(reloadState.railOpen);
@@ -4135,6 +6186,7 @@ import { diffRunSimilarity } from "../../src/review/revision-diff.js";
       agentInput.value = activeDraft;
       renderTray();
     }
+    root.setAttribute("data-review-ready", "");
   };
 
   renderTray();

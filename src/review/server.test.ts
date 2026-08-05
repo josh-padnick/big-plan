@@ -14,7 +14,7 @@ import {
 } from "./agent-exchange.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
-import { writeRevisionSnapshot } from "./store.js";
+import { writeAgentHeartbeat, writeRevisionSnapshot } from "./store.js";
 
 const PLAN = `# Review runtime plan
 
@@ -37,7 +37,8 @@ beforeAll(async () => {
   runtime = await startReviewRuntime({
     planPath,
     validatePlan: ({ markdown }) => {
-      if (!markdown.includes("The runtime serves this document")) {
+      const lede = markdown.split("\n\n")[1];
+      if (lede === undefined || lede.startsWith("## ")) {
         throw new Error("Plan failed authoring lint");
       }
     },
@@ -216,6 +217,23 @@ describe("review runtime document", () => {
       await writeFile(runtime.planPath, PLAN);
     }
   });
+
+  it("should keep a manually refreshed valid revision stable while an agent response is older", async () => {
+    const revised = PLAN.replace(
+      "The runtime serves this document and nothing else.",
+      "The runtime serves this valid revised document and nothing else.",
+    );
+    await writeFile(runtime.planPath, revised);
+    const document = await fetch(runtime.url);
+    expect(document.status).toBe(200);
+    expect(await document.text()).toContain("valid revised document");
+    const answer: unknown = await (await call({ path: "/api/agent" })).json();
+    expect(answer).toMatchObject({
+      sourceRevision: deriveSourceRevision(revised),
+    });
+    await writeFile(runtime.planPath, PLAN);
+    expect((await fetch(runtime.url)).status).toBe(200);
+  });
 });
 
 describe("review runtime feedback", () => {
@@ -316,6 +334,31 @@ describe("review runtime feedback", () => {
     });
   });
 
+  it("should durably cancel an unanswered request and skip it in the queue", async () => {
+    const exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const request = exchange.requests.find((entry) => entry.kind === "reply");
+    if (request === undefined) throw new Error("Missing reply request");
+    const response = await call({
+      path: "/api/agent-requests/cancel",
+      method: "POST",
+      body: { requestId: request.requestId },
+    });
+    expect(response.status).toBe(200);
+    const updated = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    expect(updated.cancelledIds).toContain(request.requestId);
+    expect(nextPendingAgentRequest(updated)?.requestId).not.toBe(
+      request.requestId,
+    );
+  });
+
   it("should expose only validated live agent exchange state", async () => {
     const answer: unknown = await (await call({ path: "/api/agent" })).json();
     expect(answer).toMatchObject({
@@ -325,6 +368,8 @@ describe("review runtime feedback", () => {
         { kind: "reply", commentId: "55667788" },
       ],
       responses: [],
+      connected: false,
+      connectionLog: [{ connected: false }],
     });
     if (
       typeof answer !== "object" ||
@@ -342,6 +387,56 @@ describe("review runtime feedback", () => {
       sourceRevision: acceptedRevision,
     });
     await writeFile(runtime.planPath, PLAN);
+  });
+
+  it("should expose a fresh agent lease as connected", async () => {
+    await writeAgentHeartbeat({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      state: "waiting",
+    });
+    const answer: unknown = await (await call({ path: "/api/agent" })).json();
+    expect(answer).toMatchObject({
+      connected: true,
+      agent: {
+        connected: true,
+        state: "waiting",
+        updatedAtMs: expect.any(Number),
+      },
+    });
+  });
+
+  it("should proactively expire a lease and preserve every connection transition", async () => {
+    await writeAgentHeartbeat({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      state: "waiting",
+      now: 0,
+    });
+    const answer: unknown = await (await call({ path: "/api/agent" })).json();
+    expect(answer).toMatchObject({
+      connected: false,
+      plan: runtime.planPath,
+      agentCommand: expect.stringContaining(runtime.planPath),
+      recoveryPrompt: expect.stringContaining(
+        "Reconnect to my existing Big Plan review",
+      ),
+      connectionLog: [
+        { connected: false, at: expect.any(String) },
+        { connected: true, at: expect.any(String) },
+        {
+          connected: false,
+          at: expect.any(String),
+          reason: "Heartbeat timed out",
+        },
+      ],
+    });
+    const lines = (
+      await readFile(runtime.store.agentConnectionEventsPath, "utf8")
+    )
+      .trim()
+      .split("\n");
+    expect(lines).toHaveLength(3);
   });
 
   it("should serve a deterministic diff between retained revisions", async () => {
@@ -367,15 +462,25 @@ describe("review runtime feedback", () => {
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      from,
-      to,
-      locations: [
-        {
-          status: "changed",
-          oldText: "Today's reality is that feedback does not reach the agent.",
-          newText: "Today's reality is that feedback reaches the coding agent.",
-        },
-      ],
+      changeSet: {
+        version: 1,
+        fromRevision: from,
+        toRevision: to,
+        places: [
+          {
+            placeId: expect.stringMatching(/^[a-f0-9]{16}$/),
+            locations: [
+              {
+                status: "changed",
+                oldText:
+                  "Today's reality is that feedback does not reach the agent.",
+                newText:
+                  "Today's reality is that feedback reaches the coding agent.",
+              },
+            ],
+          },
+        ],
+      },
     });
   });
 

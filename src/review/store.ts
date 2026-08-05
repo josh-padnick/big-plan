@@ -15,7 +15,13 @@
 
 import { randomBytes } from "node:crypto";
 import { lstatSync } from "node:fs";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  mkdir,
+  readdir,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import type { ReviewComment } from "./comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
@@ -28,6 +34,7 @@ const FILE_MODE = 0o600;
 const PROGRESS_STATES = new Set(["waiting", "live", "done", "failed"]);
 const PROGRESS_TEXT_LIMIT = 160;
 const PROGRESS_EVENT_LIMIT = 200;
+const EXCHANGE_FILE_LIMIT = 400;
 
 // Finds the nearest `.big-plan` ancestor so every I/O operation can re-check
 // the complete store-owned path immediately before it reaches the filesystem.
@@ -75,6 +82,22 @@ export type ProgressEvent = {
   readonly step: string;
   readonly state: string;
   readonly detail?: string;
+  readonly requestId?: string;
+  readonly at?: string;
+};
+
+/** The last renewable coding-agent lease, whether or not it is still fresh. */
+export type AgentHeartbeat = {
+  readonly state: "waiting" | "working";
+  readonly updatedAtMs: number;
+};
+
+/** One immutable connection transition recorded by the review runtime. */
+export type AgentConnectionEvent = {
+  readonly sessionId: string;
+  readonly connected: boolean;
+  readonly at: string;
+  readonly reason?: string;
 };
 
 /** Where one plan's review state lives. */
@@ -94,6 +117,9 @@ export type ReviewStore = {
   readonly resolvedPath: string;
   readonly sessionPath: string;
   readonly heartbeatPath: string;
+  readonly agentHeartbeatPath: string;
+  readonly agentCancellationsPath: string;
+  readonly agentConnectionEventsPath: string;
 };
 
 // The one place a review path is constructed. Callers name a leaf, never a
@@ -160,6 +186,18 @@ export const reviewStoreFor = ({
     resolvedPath: inside({ base: reviewDirectory, leaf: "resolved.json" }),
     sessionPath: inside({ base: root, leaf: "session.json" }),
     heartbeatPath: inside({ base: root, leaf: "session-heartbeat.json" }),
+    agentHeartbeatPath: inside({
+      base: agentDirectory,
+      leaf: "presence.json",
+    }),
+    agentCancellationsPath: inside({
+      base: agentDirectory,
+      leaf: "cancellations.json",
+    }),
+    agentConnectionEventsPath: inside({
+      base: agentDirectory,
+      leaf: "connection-events.jsonl",
+    }),
   };
 };
 
@@ -461,6 +499,137 @@ export const writeAgentResponseValue = async ({
   });
 };
 
+export type AgentCancellation = {
+  readonly requestId: string;
+  readonly at: string;
+};
+
+/** Reads the durable reviewer-authored request cancellations. */
+export const readAgentCancellations = async ({
+  store,
+}: {
+  readonly store: ReviewStore;
+}): Promise<ReadonlyArray<AgentCancellation>> => {
+  const value = await readJson(store.agentCancellationsPath);
+  if (!Array.isArray(value)) return [];
+  const accepted: Array<AgentCancellation> = [];
+  for (const entry of value.slice(0, EXCHANGE_FILE_LIMIT)) {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      Array.isArray(entry) ||
+      !("requestId" in entry) ||
+      typeof entry.requestId !== "string" ||
+      !/^[a-f0-9]{16}$/.test(entry.requestId) ||
+      !("at" in entry) ||
+      typeof entry.at !== "string" ||
+      Number.isNaN(Date.parse(entry.at))
+    ) {
+      continue;
+    }
+    if (!accepted.some(({ requestId }) => requestId === entry.requestId)) {
+      accepted.push({
+        requestId: entry.requestId,
+        at: new Date(entry.at).toISOString(),
+      });
+    }
+  }
+  return accepted;
+};
+
+/** Appends one cancellation without allowing duplicate cancellation facts. */
+export const appendAgentCancellation = async ({
+  store,
+  cancellation,
+}: {
+  readonly store: ReviewStore;
+  readonly cancellation: AgentCancellation;
+}): Promise<void> => {
+  const existing = await readAgentCancellations({ store });
+  if (existing.some(({ requestId }) => requestId === cancellation.requestId)) {
+    return;
+  }
+  await writeJson({
+    path: store.agentCancellationsPath,
+    value: [...existing, cancellation],
+  });
+};
+
+const asAgentConnectionEvent = ({
+  value,
+  sessionId,
+}: {
+  readonly value: unknown;
+  readonly sessionId: string;
+}): AgentConnectionEvent | undefined => {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("sessionId" in value) ||
+    value.sessionId !== sessionId ||
+    !("connected" in value) ||
+    typeof value.connected !== "boolean" ||
+    !("at" in value) ||
+    typeof value.at !== "string" ||
+    Number.isNaN(Date.parse(value.at))
+  ) {
+    return undefined;
+  }
+  return {
+    sessionId,
+    connected: value.connected,
+    at: new Date(value.at).toISOString(),
+    ...("reason" in value &&
+    typeof value.reason === "string" &&
+    value.reason.trim() !== "" &&
+    value.reason.length <= 160
+      ? { reason: value.reason }
+      : {}),
+  };
+};
+
+/** Reads the append-only connection timeline for one review session. */
+export const readAgentConnectionEvents = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<ReadonlyArray<AgentConnectionEvent>> => {
+  const raw = await readFile(store.agentConnectionEventsPath, "utf8").catch(
+    () => "",
+  );
+  const accepted: Array<AgentConnectionEvent> = [];
+  for (const line of raw.split("\n")) {
+    if (line.trim() === "") continue;
+    let value: unknown;
+    try {
+      value = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const event = asAgentConnectionEvent({ value, sessionId });
+    if (event !== undefined) accepted.push(event);
+  }
+  return accepted;
+};
+
+/** Appends one runtime-observed connection transition without rewriting history. */
+export const appendAgentConnectionEvent = async ({
+  store,
+  event,
+}: {
+  readonly store: ReviewStore;
+  readonly event: AgentConnectionEvent;
+}): Promise<void> => {
+  await appendFile(
+    store.agentConnectionEventsPath,
+    `${JSON.stringify(event)}\n`,
+    { mode: FILE_MODE },
+  );
+};
+
 /** Gives an agent a safe ignored path for authoring one response draft. */
 export const agentResponseDraftPath = ({
   store,
@@ -525,6 +694,10 @@ const asProgressEvent = ({
     ...(typeof event.detail === "string"
       ? { detail: event.detail.slice(0, PROGRESS_TEXT_LIMIT) }
       : {}),
+    ...(typeof event.requestId === "string"
+      ? { requestId: event.requestId }
+      : {}),
+    ...(typeof event.at === "string" ? { at: event.at } : {}),
   };
 };
 
@@ -643,4 +816,73 @@ export const sessionHeartbeatIsFresh = async ({
     now - value.updatedAtMs >= 0 &&
     now - value.updatedAtMs <= maximumAgeMs
   );
+};
+
+/** Records that the coding-agent loop is available for this review session. */
+export const writeAgentHeartbeat = async ({
+  store,
+  sessionId,
+  state,
+  now = Date.now(),
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly state: "waiting" | "working";
+  readonly now?: number;
+}): Promise<void> => {
+  await writeJson({
+    path: store.agentHeartbeatPath,
+    value: { sessionId, state, updatedAtMs: now },
+  });
+};
+
+/** Reads the validated coding-agent lease without applying an age cutoff. */
+export const readAgentHeartbeat = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<AgentHeartbeat | undefined> => {
+  const value = await readJson(store.agentHeartbeatPath);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("sessionId" in value) ||
+    value.sessionId !== sessionId ||
+    !("state" in value) ||
+    (value.state !== "waiting" && value.state !== "working") ||
+    !("updatedAtMs" in value) ||
+    typeof value.updatedAtMs !== "number" ||
+    !Number.isFinite(value.updatedAtMs)
+  ) {
+    return undefined;
+  }
+  return { state: value.state, updatedAtMs: value.updatedAtMs };
+};
+
+/**
+ * Checks the agent's renewable lease. Waiting loops refresh frequently;
+ * claimed work gets a longer lease so queued follow-up requests stay Waiting.
+ */
+export const agentHeartbeatIsFresh = async ({
+  store,
+  sessionId,
+  now = Date.now(),
+  waitingMaximumAgeMs = 3_000,
+  workingMaximumAgeMs = 90_000,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly now?: number;
+  readonly waitingMaximumAgeMs?: number;
+  readonly workingMaximumAgeMs?: number;
+}): Promise<boolean> => {
+  const value = await readAgentHeartbeat({ store, sessionId });
+  if (value === undefined) return false;
+  const age = now - value.updatedAtMs;
+  const maximumAge =
+    value.state === "waiting" ? waitingMaximumAgeMs : workingMaximumAgeMs;
+  return age >= 0 && age <= maximumAge;
 };

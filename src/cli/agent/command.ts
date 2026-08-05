@@ -7,9 +7,11 @@ import { readFile } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
+import { shellQuote } from "../_shared/shell-quote.js";
 import {
   commentsFromExchange,
   deriveSourceRevision,
+  effectiveSourceRevision,
   nextPendingAgentRequest,
   readAgentExchange,
   responseTemplateFor,
@@ -29,22 +31,35 @@ import {
   readRevisionSnapshot,
   reviewStoreFor,
   sessionHeartbeatIsFresh,
+  writeAgentHeartbeat,
   writeAgentPrompt,
   writeRevisionSnapshot,
 } from "../../review/store.js";
 import { derivePlanId, renderDocument } from "../../render/render-document.js";
-import { diffRevisions } from "../../review/revision-diff.js";
+import { buildRevisionChangeSet } from "../../review/revision-change-set.js";
 
 const USAGE = [
   "Usage:",
   "  big-plan agent <input.mdx>",
   "  big-plan agent next <input.mdx> [--wait]",
+  "  big-plan agent note <input.mdx> <text>",
   "  big-plan agent respond <input.mdx> <response.json>",
 ].join("\n");
 
-const fail = (message: string): never => {
-  throw new AxiError(message, "INVALID_INPUT", [USAGE]);
+const fail = (
+  message: string,
+  suggestions: ReadonlyArray<string> = [USAGE],
+): never => {
+  throw new AxiError(message, "INVALID_INPUT", [...suggestions]);
 };
+
+// Every agent subcommand needs the review server alive in another terminal;
+// spell out the two-terminal shape whenever that precondition fails.
+const twoTerminalSuggestions = (planPath: string): ReadonlyArray<string> => [
+  `Terminal 1: run big-plan review ${shellQuote(planPath)} and LEAVE IT RUNNING for the whole session`,
+  "Terminal 2: rerun this big-plan agent command while the server stays up",
+  USAGE,
+];
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -58,39 +73,39 @@ type SessionDescriptor = {
   readonly token: string;
 };
 
-const sessionDescriptor = (value: unknown): SessionDescriptor => {
-  if (
-    !isRecord(value) ||
-    typeof value.sessionId !== "string" ||
-    typeof value.planId !== "string" ||
-    typeof value.plan !== "string" ||
-    typeof value.url !== "string" ||
-    typeof value.pid !== "number" ||
-    !Number.isInteger(value.pid) ||
-    typeof value.token !== "string" ||
-    !/^[A-Za-z0-9_-]{43}$/.test(value.token)
-  ) {
-    return fail(
-      "No live review session describes this plan. Start `big-plan review` first.",
-    );
-  }
-  return {
-    sessionId: value.sessionId,
-    planId: value.planId,
-    plan: value.plan,
-    url: value.url,
-    pid: value.pid,
-    token: value.token,
+const sessionDescriptorFor =
+  (planPath: string) =>
+  (value: unknown): SessionDescriptor => {
+    if (
+      !isRecord(value) ||
+      typeof value.sessionId !== "string" ||
+      typeof value.planId !== "string" ||
+      typeof value.plan !== "string" ||
+      typeof value.url !== "string" ||
+      typeof value.pid !== "number" ||
+      !Number.isInteger(value.pid) ||
+      typeof value.token !== "string" ||
+      !/^[A-Za-z0-9_-]{43}$/.test(value.token)
+    ) {
+      return fail(
+        "No live review session describes this plan. The review server must be started first, in its own terminal, and stay running.",
+        twoTerminalSuggestions(planPath),
+      );
+    }
+    return {
+      sessionId: value.sessionId,
+      planId: value.planId,
+      plan: value.plan,
+      url: value.url,
+      pid: value.pid,
+      token: value.token,
+    };
   };
-};
 
 const wait = (milliseconds: number): Promise<void> =>
   new Promise((settle) => {
     setTimeout(settle, milliseconds);
   });
-
-const shellQuote = (value: string): string =>
-  `'${value.replaceAll("'", "'\\''")}'`;
 
 const responseHistory = ({
   request,
@@ -190,7 +205,7 @@ const readPlanSession = async (planArgument: string) => {
   await prepareStore(store);
   const descriptor = await readSessionDescriptor({
     store,
-    validate: sessionDescriptor,
+    validate: sessionDescriptorFor(planPath),
   });
   if (
     descriptor.plan !== planPath ||
@@ -199,6 +214,7 @@ const readPlanSession = async (planArgument: string) => {
   ) {
     return fail(
       "The live review session belongs to a different plan. Restart `big-plan review` for this source.",
+      twoTerminalSuggestions(planPath),
     );
   }
   if (
@@ -208,7 +224,8 @@ const readPlanSession = async (planArgument: string) => {
     }))
   ) {
     return fail(
-      "The recorded review session is not running. Start `big-plan review` for this plan first.",
+      "The review server for this plan is not running. It must stay running in its own terminal for the whole agent session; big-plan agent commands belong in a second terminal.",
+      twoTerminalSuggestions(planPath),
     );
   }
   return {
@@ -220,9 +237,11 @@ const readPlanSession = async (planArgument: string) => {
   };
 };
 
-const agentPrompt = async (
-  planArgument: string,
-): Promise<Record<string, unknown>> => {
+// Returns plain text, not a structured record: the codex and claude launch
+// commands must print byte-for-byte pasteable, and structured serialization
+// would add display-only backslash escapes around their inner double quotes
+// that break the command when pasted into a shell.
+const agentPrompt = async (planArgument: string): Promise<string> => {
   const session = await readPlanSession(planArgument);
   const binPath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
   const nextCommand = `node ${shellQuote(binPath)} agent next ${shellQuote(
@@ -238,31 +257,46 @@ ${nextCommand}
 
 For each returned work item:
 1. Read the current plan source and the request plus its conversation history.
-2. For every anchored comment, choose exactly one outcome:
-   - changed: revise the plan source, explain the revision, and list every changed render block id in changeTargets, in presentation order.
+2. As you work, narrate for the reviewer: run \`node ${shellQuote(binPath)} agent note ${shellQuote(
+    session.planPath,
+  )} "<one short line>"\` when you start each meaningful step - reading the request, deciding an outcome, editing the plan, validating. One line per step, present tense, no repeats.
+3. When revising prose, keep related sentences in one paragraph; never leave a blank line between every sentence.
+4. For every anchored comment, choose exactly one outcome:
+   - changed: revise the plan source and explain the revision. Leave changes empty unless the response command gives you concrete revision place IDs to annotate; the immutable revision pair decides membership.
    - question: do not guess; ask the precise question the reviewer must answer.
    - outside: explain why the request is beyond revising this plan.
-3. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
-4. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates the revised MDX and the complete response before publishing it to the reviewer.
-5. Repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
+5. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
+6. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates the revised MDX and the complete response before publishing it to the reviewer.
+7. Repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
+
+Write outcome and chat messages in plain Markdown - bold, italics, inline code, fenced code, links, and lists render for the reviewer; images and HTML do not.
+If respond reports that the reviewer cancelled a request, discard your draft, revert plan edits made for it, and run agent next.
 
 Never edit rendered HTML. Never invent a Changed outcome without changing the plan source.`;
   await writeAgentPrompt({ store: session.store, prompt });
   const promptArgument = `"$(cat ${shellQuote(session.store.agentPromptPath)})"`;
-  return {
-    agent_prompt: prompt,
-    prompt_file: session.store.agentPromptPath,
-    codex: `codex ${promptArgument}`,
-    claude: `claude ${promptArgument}`,
-    review: session.url,
-    plan: session.planPath,
-    next: nextCommand,
-    help: [
-      "Run codex or claude in the plan repository to start a real coding-agent session",
-      "Alternatively paste agent_prompt into an already-open coding-agent session",
-      "Keep that session running so browser replies return to the same conversation loop",
-    ],
-  };
+  return [
+    "Big Plan live review - coding-agent launcher",
+    "",
+    `plan: ${session.planPath}`,
+    `review: ${session.url}`,
+    `prompt_file: ${session.store.agentPromptPath}`,
+    "",
+    "The review server (`big-plan review`) must stay running in its own",
+    "terminal for this whole session; if it stops, the agent loop stops",
+    "with it. Start the coding agent in a SECOND terminal.",
+    "",
+    "In that second terminal, from the plan's repository, paste ONE of",
+    "these commands exactly as printed:",
+    "",
+    `codex ${promptArgument}`,
+    "",
+    `claude ${promptArgument}`,
+    "",
+    "Already inside a coding-agent session? Paste the contents of",
+    "prompt_file there instead. Keep the agent session running so browser",
+    "replies continue the same conversation loop.",
+  ].join("\n");
 };
 
 const nextWork = async ({
@@ -278,6 +312,11 @@ const nextWork = async ({
     sessionId: session.sessionId,
     planId: session.planId,
   });
+  await writeAgentHeartbeat({
+    store: session.store,
+    sessionId: session.sessionId,
+    state: "waiting",
+  });
   let request = nextPendingAgentRequest(snapshot);
   while (request === undefined && shouldWait) {
     if (
@@ -290,6 +329,11 @@ const nextWork = async ({
         "The review server stopped while the agent was waiting for feedback",
       );
     }
+    await writeAgentHeartbeat({
+      store: session.store,
+      sessionId: session.sessionId,
+      state: "waiting",
+    });
     await wait(500);
     snapshot = await readAgentExchange({
       store: session.store,
@@ -305,6 +349,11 @@ const nextWork = async ({
       help: ["Run again with --wait to wait for the reviewer's next message"],
     };
   }
+  await writeAgentHeartbeat({
+    store: session.store,
+    sessionId: session.sessionId,
+    state: "working",
+  });
   const progress = await readProgress({
     store: session.store,
     sessionId: session.sessionId,
@@ -318,11 +367,15 @@ const nextWork = async ({
         1,
       step:
         request.kind === "chat"
-          ? "Coding agent reviewing plan question"
+          ? "Picked up: plan question"
           : request.kind === "reply"
-            ? "Coding agent reviewing thread reply"
-            : "Coding agent reviewing feedback",
+            ? "Picked up: thread reply"
+            : `Picked up: ${request.comments.length} comment${
+                request.comments.length === 1 ? "" : "s"
+              }`,
       state: "live",
+      requestId: request.requestId,
+      at: new Date().toISOString(),
       ...(request.kind === "feedback"
         ? {
             detail: `${request.comments.length} comment${
@@ -337,10 +390,11 @@ const nextWork = async ({
     requestId: request.requestId,
   });
   const binPath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
+  const workRevision = effectiveSourceRevision({ request, snapshot });
   return {
     pending: true,
     plan: session.planPath,
-    work: request,
+    work: { ...request, sourceRevision: workRevision },
     history: responseHistory({ request, snapshot }),
     response_template: responseTemplateFor(request),
     response_file: responseFile,
@@ -364,15 +418,6 @@ const respond = async ({
   readonly responseArgument: string;
 }): Promise<Record<string, unknown>> => {
   const session = await readPlanSession(planArgument);
-  const snapshot = await readAgentExchange({
-    store: session.store,
-    sessionId: session.sessionId,
-    planId: session.planId,
-  });
-  const request = nextPendingAgentRequest(snapshot);
-  if (request === undefined) {
-    return fail("There is no pending agent request to answer");
-  }
   let responseDraft: unknown;
   try {
     responseDraft = JSON.parse(
@@ -380,6 +425,32 @@ const respond = async ({
     );
   } catch (error: unknown) {
     return fail(`Cannot read the response JSON: ${String(error)}`);
+  }
+  const snapshot = await readAgentExchange({
+    store: session.store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  if (!isRecord(responseDraft) || typeof responseDraft.requestId !== "string") {
+    return fail("The response JSON must name its requestId");
+  }
+  const request = snapshot.requests.find(
+    (candidate) => candidate.requestId === responseDraft.requestId,
+  );
+  if (request === undefined) {
+    return fail("The response does not name a request in this review session");
+  }
+  if (snapshot.cancelledIds.includes(request.requestId)) {
+    return fail(
+      "The reviewer cancelled this request. Discard your draft, revert any plan edits you made for it, and run agent next.",
+    );
+  }
+  const pending = nextPendingAgentRequest(snapshot);
+  if (pending === undefined) {
+    return fail("There is no pending agent request to answer");
+  }
+  if (pending.requestId !== request.requestId) {
+    return fail("The response does not answer the next pending agent request");
   }
   let markdown: string;
   try {
@@ -398,31 +469,28 @@ const respond = async ({
     revision: currentRevision,
     source: markdown,
   });
+  const fromRevision = effectiveSourceRevision({ request, snapshot });
   const previousMarkdown = await readRevisionSnapshot({
     store: session.store,
-    revision: request.sourceRevision,
+    revision: fromRevision,
   });
   const previousRendered = renderDocument({
     markdown: previousMarkdown,
     fallbackTitle: basename(session.planPath, extname(session.planPath)),
     identity: {},
   });
-  const changedBlocks = new Set(
-    diffRevisions({
-      before: previousRendered.blocks,
-      after: rendered.blocks,
-    }).flatMap((location) =>
-      [location.newBlockId, location.oldBlockId].filter(
-        (blockId): blockId is string => blockId !== undefined,
-      ),
-    ),
-  );
+  const changeSet = buildRevisionChangeSet({
+    pair: { fromRevision, toRevision: currentRevision },
+    before: previousRendered.blocks,
+    after: rendered.blocks,
+  });
   assertPlanPassesLint({ markdown });
   const response = validateAgentResponseDraft({
     value: responseDraft,
     request,
     commentsById: commentsFromExchange(snapshot),
-    changedBlocks,
+    changedPlaceIds: new Set(changeSet.places.map((place) => place.placeId)),
+    fromRevision,
     currentRevision,
     now: new Date().toISOString(),
   });
@@ -442,6 +510,8 @@ const respond = async ({
       seq: highest + 1,
       step: "Agent response ready",
       state: "done",
+      requestId: request.requestId,
+      at: new Date().toISOString(),
       detail:
         response.kind === "chat"
           ? "Plan-wide answer"
@@ -449,6 +519,14 @@ const respond = async ({
               response.outcomes.length === 1 ? "" : "s"
             }`,
     },
+  });
+  // The agent is between turns now. A short lease prevents a completed
+  // one-shot command from looking connected unless it follows the printed
+  // `next --wait` instruction and renews its presence.
+  await writeAgentHeartbeat({
+    store: session.store,
+    sessionId: session.sessionId,
+    state: "waiting",
   });
   return {
     responded: request.requestId,
@@ -465,10 +543,58 @@ const respond = async ({
   };
 };
 
+/** Relays one bounded, request-attributed narration line to the reviewer. */
+const note = async ({
+  planArgument,
+  textArgument,
+}: {
+  readonly planArgument: string;
+  readonly textArgument: string;
+}): Promise<Record<string, unknown>> => {
+  const step = textArgument.trim().slice(0, 120);
+  if (step === "") {
+    return fail("The agent note must contain one short line");
+  }
+  const session = await readPlanSession(planArgument);
+  const snapshot = await readAgentExchange({
+    store: session.store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const request = nextPendingAgentRequest(snapshot);
+  const progress = await readProgress({
+    store: session.store,
+    sessionId: session.sessionId,
+  });
+  await appendProgress({
+    store: session.store,
+    event: {
+      sessionId: session.sessionId,
+      seq:
+        progress.reduce((highest, event) => Math.max(highest, event.seq), 0) +
+        1,
+      step,
+      state: "live",
+      ...(request === undefined ? {} : { requestId: request.requestId }),
+      at: new Date().toISOString(),
+    },
+  });
+  await writeAgentHeartbeat({
+    store: session.store,
+    sessionId: session.sessionId,
+    state: "working",
+  });
+  return {
+    noted: true,
+    step,
+    ...(request === undefined ? {} : { requestId: request.requestId }),
+  };
+};
+
 /** Dispatches the coding-agent exchange helpers. */
 export const agentCommand = async (
   args: ReadonlyArray<string>,
-): Promise<Record<string, unknown>> => {
+): Promise<Record<string, unknown> | string> => {
   if (args.length === 1) {
     return agentPrompt(args[0] ?? "");
   }
@@ -485,6 +611,12 @@ export const agentCommand = async (
     return respond({
       planArgument: args[1] ?? "",
       responseArgument: args[2] ?? "",
+    });
+  }
+  if (args[0] === "note" && args.length === 3) {
+    return note({
+      planArgument: args[1] ?? "",
+      textArgument: args[2] ?? "",
     });
   }
   return fail(USAGE);

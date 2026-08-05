@@ -7,20 +7,27 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import {
   commentsFromExchange,
   deriveSourceRevision,
+  effectiveSourceRevision,
   nextPendingAgentRequest,
   readAgentExchange,
   validateAgentResponseDraft,
   writeAgentResponse,
 } from "../src/review/agent-exchange.js";
+import { buildRevisionChangeSet } from "../src/review/revision-change-set.js";
+import { renderDocument } from "../src/render/render-document.js";
 import { agentCommand } from "../src/cli/agent/command.js";
-import { reviewStoreFor, writeRevisionSnapshot } from "../src/review/store.js";
+import {
+  reviewStoreFor,
+  writeAgentHeartbeat,
+  writeRevisionSnapshot,
+} from "../src/review/store.js";
 import { expect, test } from "./fixtures";
 
 test("should preserve and send a floating review across reload and viewport changes", async ({
   page,
   reviewRuntimeUrl,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(180_000);
   await page.addInitScript(() => {
     const observer = new MutationObserver(() => {
       const input = document.querySelector("[data-review-agent-input]");
@@ -75,7 +82,83 @@ test("should preserve and send a floating review across reload and viewport chan
   const toggle = page.locator("[data-review-toggle]");
   const affordance = page.locator("[data-review-affordance]");
   const compose = page.locator("[data-review-compose]");
-
+  const exerciseControlStates = async ({
+    control,
+    property,
+  }: {
+    readonly control: ReturnType<typeof page.locator>;
+    readonly property: "backgroundColor" | "color" | "filter" | "opacity";
+  }) => {
+    await control.hover();
+    const hover = await control.evaluate(
+      (node, styleProperty) => getComputedStyle(node)[styleProperty],
+      property,
+    );
+    await control.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    await expect(control).toBeFocused();
+    await expect
+      .poll(() => control.evaluate((node) => node.matches(":focus-visible")))
+      .toBe(true);
+    const box = await control.boundingBox();
+    if (box === null) throw new Error("The control has no pointer target");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    const active = await control.evaluate(
+      (node, styleProperty) => getComputedStyle(node)[styleProperty],
+      property,
+    );
+    await page.mouse.move(1, 1);
+    await page.mouse.up();
+    expect(active).not.toBe(hover);
+  };
+  const exerciseExpandedReplyRetention = async ({
+    owner,
+    field,
+    expandedAttribute,
+  }: {
+    readonly owner: ReturnType<typeof page.locator>;
+    readonly field: ReturnType<typeof page.locator>;
+    readonly expandedAttribute:
+      "data-review-row-expanded" | "data-review-thread-expanded";
+  }) => {
+    const box = await field.boundingBox();
+    if (box === null)
+      throw new Error("The expanded reply has no pointer target");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await expect(field).toBeFocused();
+    await expect(owner).toHaveAttribute(expandedAttribute, "");
+    await page.mouse.up();
+    await field.click();
+    await field.fill("Focused reply text stays mounted.");
+    await expect(field).toHaveValue("Focused reply text stays mounted.");
+    await expect(owner).toHaveAttribute(expandedAttribute, "");
+    await field.press("Control+A");
+    await field.press("Shift+ArrowLeft");
+    await expect(field).toBeFocused();
+    await expect(owner).toHaveAttribute(expandedAttribute, "");
+    await owner.locator("[data-review-thread-reply-box] label").click();
+    await expect(owner).toHaveAttribute(expandedAttribute, "");
+    const conversation = owner.locator("[data-review-thread-turn] p").first();
+    const conversationBox = await conversation.boundingBox();
+    if (conversationBox !== null) {
+      await page.mouse.move(
+        conversationBox.x + 4,
+        conversationBox.y + conversationBox.height / 2,
+      );
+      await page.mouse.down();
+      await page.mouse.move(
+        conversationBox.x + Math.max(8, conversationBox.width - 4),
+        conversationBox.y + conversationBox.height / 2,
+        { steps: 4 },
+      );
+      await page.mouse.up();
+      await expect(owner).toHaveAttribute(expandedAttribute, "");
+    }
+    await field.fill("");
+  };
   await test.step("the toolbar entry reads as a toggle rather than a pill", async () => {
     await expect(toggle).toBeVisible();
     await expect
@@ -135,11 +218,370 @@ test("should preserve and send a floating review across reload and viewport chan
     }
   });
 
-  await test.step("the hover Comment control dismisses when its trigger is left", async () => {
+  await test.step("block hover stays quiet and the slide selector has complete states", async () => {
     await page.locator("[data-block-kind='paragraph']").first().hover();
-    await expect(affordance).toBeVisible();
-    await toggle.hover();
     await expect(affordance).toBeHidden();
+    const selector = page.locator("[data-review-slide-selector]").first();
+    await expect(selector).toBeVisible();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await selector.hover();
+      const hover = await selector.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      );
+      await selector.focus();
+      await expect(selector).toBeFocused();
+      const box = await selector.boundingBox();
+      if (box === null) throw new Error("The slide selector has no target");
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      const active = await selector.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      );
+      await page.mouse.up();
+      expect(active).not.toBe(hover);
+    }
+    const kicker = selector
+      .locator("xpath=ancestor::*[@data-slide]")
+      .locator("[data-slide-kicker]");
+    const slide = selector.locator("xpath=ancestor::*[@data-slide]");
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await selector.click();
+      await expect(compose).toBeVisible();
+      await expect(compose).toHaveAttribute(
+        "data-review-compose-placement",
+        "before-slide",
+      );
+      await expect
+        .poll(() =>
+          compose.evaluate((node) => {
+            const slideNode = node.nextElementSibling;
+            const composeRect = node.getBoundingClientRect();
+            const slideRect = slideNode?.getBoundingClientRect();
+            return {
+              precedesSlide: slideNode?.hasAttribute("data-slide") === true,
+              aboveSlide:
+                slideRect !== undefined &&
+                composeRect.bottom <= slideRect.top + 1,
+              visible:
+                composeRect.bottom > 44 && composeRect.top < window.innerHeight,
+            };
+          }),
+        )
+        .toEqual({
+          precedesSlide: true,
+          aboveSlide: true,
+          visible: true,
+        });
+      await expect(affordance).toBeHidden();
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-review-active-selection-highlight",
+        "false",
+      );
+      await expect(slide).toHaveAttribute(
+        "data-review-slide-highlight",
+        "active",
+      );
+      await expect(kicker).not.toHaveAttribute("data-review-comment-highlight");
+      await page.keyboard.press("Escape");
+      await expect(compose).toBeHidden();
+      await expect(affordance).toBeHidden();
+      await expect(slide).not.toHaveAttribute("data-review-slide-highlight");
+      await expect(kicker).not.toHaveAttribute("data-review-comment-highlight");
+      await expect
+        .poll(() => page.evaluate(() => window.getSelection()?.isCollapsed))
+        .toBe(true);
+    }
+    await page.evaluate(() =>
+      document.documentElement.removeAttribute("data-theme"),
+    );
+  });
+
+  await test.step("inline composers stay near the gesture for first, last, and tall slide targets", async () => {
+    await page.setViewportSize({ width: 1180, height: 520 });
+    const selectors = page.locator("[data-review-slide-selector]");
+    const candidateIndexes = [0, (await selectors.count()) - 1];
+    const heights = await page.locator("[data-slide]").evaluateAll((slides) =>
+      slides.map((slide, index) => ({
+        index,
+        height: slide.getBoundingClientRect().height,
+      })),
+    );
+    const tallIndex = heights.sort(
+      (left, right) => right.height - left.height,
+    )[0]?.index;
+    if (tallIndex !== undefined) candidateIndexes.push(tallIndex);
+    for (const index of [...new Set(candidateIndexes)]) {
+      const selector = selectors.nth(index);
+      await selector.scrollIntoViewIfNeeded();
+      await selector.click();
+      await expect(compose).toHaveAttribute(
+        "data-review-compose-placement",
+        "before-slide",
+      );
+      const geometry = await compose.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          top: rect.top,
+          bottom: rect.bottom,
+          viewport: window.innerHeight,
+        };
+      });
+      expect(geometry.bottom).toBeGreaterThan(44);
+      expect(geometry.top).toBeLessThan(geometry.viewport);
+      await page.keyboard.press("Escape");
+    }
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
+  await test.step("the page toolbar owns one full-width bottom border", async () => {
+    await toggle.click();
+    const toolbar = page.locator("[data-review-toolbar]");
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await expect
+        .poll(() =>
+          toolbar.evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            const style = getComputedStyle(node);
+            return {
+              left: rect.left,
+              right: rect.right,
+              viewport: window.innerWidth,
+              width: style.borderBottomWidth,
+              style: style.borderBottomStyle,
+              transparent:
+                style.borderBottomColor === "rgba(0, 0, 0, 0)" ||
+                style.borderBottomColor === "transparent",
+            };
+          }),
+        )
+        .toEqual({
+          left: 0,
+          right: 1440,
+          viewport: 1440,
+          width: "1px",
+          style: "solid",
+          transparent: false,
+        });
+    }
+    const header = page.locator("[data-review-rail-header]");
+    await expect(header).toBeVisible();
+    await expect
+      .poll(() =>
+        header.evaluate((node) => {
+          const style = getComputedStyle(node);
+          return {
+            width: style.borderBottomWidth,
+            style: style.borderBottomStyle,
+            transparent:
+              style.borderBottomColor === "rgba(0, 0, 0, 0)" ||
+              style.borderBottomColor === "transparent",
+          };
+        }),
+      )
+      .toEqual({
+        width: "1px",
+        style: "solid",
+        transparent: false,
+      });
+    await page.evaluate(() =>
+      document.documentElement.removeAttribute("data-theme"),
+    );
+    await page.locator("[data-review-hide]").click();
+  });
+
+  await test.step("Escape cancels a manual text selection in both themes", async () => {
+    const paragraph = page.locator("[data-block-kind='paragraph']").first();
+    await paragraph.scrollIntoViewIfNeeded();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await paragraph.click({ clickCount: 3 });
+      await expect(affordance).toHaveAttribute(
+        "aria-label",
+        "Comment on the selected text",
+      );
+      await page.keyboard.press("Escape");
+      await expect(affordance).toBeHidden();
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-review-active-selection-highlight",
+        "false",
+      );
+      await expect
+        .poll(() => page.evaluate(() => window.getSelection()?.isCollapsed))
+        .toBe(true);
+    }
+    await page.evaluate(() =>
+      document.documentElement.removeAttribute("data-theme"),
+    );
+  });
+
+  await test.step("cross-slide text remains commentable instead of being silently cleared", async () => {
+    await page.evaluate(() => {
+      const slides = Array.from(document.querySelectorAll("[data-slide]"));
+      const first = slides.at(0)?.querySelector("[data-block-id]");
+      const second = slides.at(1)?.querySelector("[data-block-id]");
+      const textNode = (root: Element | null | undefined) => {
+        if (!root) return null;
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        return walker.nextNode();
+      };
+      const start = textNode(first);
+      const end = textNode(second);
+      if (!start || !end) throw new Error("Fixture needs two text slides");
+      const range = document.createRange();
+      range.setStart(start, Math.max(0, (start.textContent?.length ?? 0) - 4));
+      range.setEnd(end, Math.min(8, end.textContent?.length ?? 0));
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    await expect(affordance).toHaveAttribute(
+      "aria-label",
+      "Comment on the selected text",
+    );
+    await expect(page.locator("[data-review-selection-notice]")).toHaveCount(0);
+    await expect
+      .poll(() => page.evaluate(() => window.getSelection()?.isCollapsed))
+      .toBe(false);
+    await affordance.click();
+    await expect(compose).toBeVisible();
+    await page.locator("[data-review-compose-cancel]").click();
+  });
+
+  await test.step("nested-list selection keeps its exact range and chrome selections stay quiet", async () => {
+    const list = page.locator(
+      '[data-block-section="Delivery"][data-block-kind="list"]',
+    );
+    await list.scrollIntoViewIfNeeded();
+    const expected =
+      "Terminal states: succeeded, exhausted, cancelled.\nTerminal rows are retained for 90 days, then archived.";
+    await list.evaluate((block) => {
+      const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+      let start: Text | null = null;
+      let end: Text | null = null;
+      let node = walker.nextNode();
+      while (node) {
+        if (node.textContent?.includes("Terminal states:"))
+          start = node as Text;
+        if (node.textContent?.includes("Terminal rows are retained")) {
+          end = node as Text;
+        }
+        node = walker.nextNode();
+      }
+      if (start === null || end === null) {
+        throw new Error("Fixture needs the nested terminal-state list");
+      }
+      const range = document.createRange();
+      range.setStart(start, 0);
+      range.setEnd(end, end.data.length);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    await expect(affordance).toBeVisible();
+    await affordance.click();
+    await page
+      .locator("[data-review-compose-input]")
+      .fill("Keep this exact two-item selection.");
+    await page.locator("[data-review-compose-save]").click();
+    await expect(page.locator("[data-review-draft-stale]")).toHaveCount(0);
+    const highlighted = await page.evaluate(() =>
+      Array.from(
+        CSS.highlights.get("big-plan-review-comments") ?? [],
+        (range) => range.toString(),
+      ).find((text) => text.startsWith("Terminal states:")),
+    );
+    expect(highlighted?.replaceAll(/\n+/g, "\n")).toBe(expected);
+    expect(highlighted).not.toContain("worker claim");
+    const staged = page
+      .locator('[data-review-thread-state="staged"]')
+      .filter({ hasText: "Keep this exact two-item selection." })
+      .first();
+    await staged.locator("[data-review-thread-delete]").click();
+    await page.locator("[data-review-delete-confirm]").click();
+    await expect(staged).toHaveCount(0);
+
+    await toggle.evaluate((button) => {
+      const range = document.createRange();
+      range.selectNodeContents(button);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    await expect(affordance).toBeHidden();
+    await expect(page.locator("[data-review-selection-notice]")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  });
+
+  await test.step("Escape preserves a typed compose draft for the same target", async () => {
+    const paragraph = page.locator("[data-block-kind='paragraph']").first();
+    await paragraph.scrollIntoViewIfNeeded();
+    await paragraph.click({ clickCount: 3 });
+    await affordance.click();
+    await page
+      .locator("[data-review-compose-input]")
+      .fill("Keep this unfinished thought safe.");
+    await page.keyboard.press("Escape");
+    await expect(compose).toBeHidden();
+    await paragraph.click({ clickCount: 3 });
+    await affordance.click();
+    await expect(page.locator("[data-review-compose-input]")).toHaveValue(
+      "Keep this unfinished thought safe.",
+    );
+    await page.locator("[data-review-compose-cancel]").click();
+  });
+
+  await test.step("a floating compose keeps its document coordinate while scrolling with its target", async () => {
+    await page.setViewportSize({ width: 1440, height: 500 });
+    const paragraph = page.locator("[data-block-kind='paragraph']").first();
+    await paragraph.scrollIntoViewIfNeeded();
+    await paragraph.click({ clickCount: 3 });
+    await affordance.click();
+    const before = await compose.evaluate((node) => ({
+      styleTop: node.style.top,
+      rectTop: node.getBoundingClientRect().top,
+      scrollY: window.scrollY,
+    }));
+    await page.mouse.move(600, 450);
+    await page.mouse.wheel(0, 1200);
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(0);
+    const after = await compose.evaluate((node) => ({
+      styleTop: node.style.top,
+      rectTop: node.getBoundingClientRect().top,
+      scrollY: window.scrollY,
+    }));
+    expect(after.styleTop).toBe(before.styleTop);
+    expect(after.rectTop - before.rectTop).toBeCloseTo(
+      -(after.scrollY - before.scrollY),
+      0,
+    );
+    await expect(page.locator("[data-review-compose-context]")).toHaveCount(0);
+    await page.locator("[data-review-compose-cancel]").click();
+    await page.setViewportSize({ width: 1440, height: 900 });
   });
 
   await test.step("the selection Comment control dismisses instead of drifting on scroll", async () => {
@@ -151,6 +593,10 @@ test("should preserve and send a floating review across reload and viewport chan
       "aria-label",
       "Comment on the selected text",
     );
+    await expect(affordance).toHaveAttribute("data-review-mode", "selection");
+    await expect(affordance.locator("span")).toHaveText("Comment");
+    await expect(affordance.locator("span")).toBeVisible();
+    await expect(affordance).toBeVisible();
     const before = await affordance.boundingBox();
     const scrollBefore = await page.evaluate(() => window.scrollY);
     await page.mouse.move(720, 820);
@@ -167,6 +613,191 @@ test("should preserve and send a floating review across reload and viewport chan
     await page.setViewportSize({ width: 1440, height: 900 });
   });
 
+  await test.step("the connection indicator and Feedback share one vertical center", async () => {
+    const alert = page.locator("[data-review-agent-alert]");
+    await alert.evaluate((node) => {
+      node.hidden = false;
+    });
+    const centers = await page
+      .locator("[data-review-agent-alert], [data-review-toggle]")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const box = node.getBoundingClientRect();
+          return box.top + box.height / 2;
+        }),
+      );
+    expect(centers).toHaveLength(2);
+    expect(Math.abs(centers[0] - centers[1])).toBeLessThanOrEqual(0.5);
+    await alert.evaluate((node) => {
+      node.hidden = true;
+    });
+  });
+
+  await test.step("heartbeat transitions proactively drive both toolbar indicators and an immutable open history", async () => {
+    const ok = page.locator("[data-review-agent-ok]");
+    const alert = page.locator("[data-review-agent-alert]");
+    await writeAgentHeartbeat({
+      store,
+      sessionId: session.sessionId,
+      state: "waiting",
+    });
+    await expect(ok).toBeVisible({ timeout: 8_000 });
+    await expect(alert).toBeHidden();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      const dot = await ok
+        .locator("[data-review-agent-ok-dot]")
+        .evaluate((node) => {
+          const style = getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          return {
+            width: rect.width,
+            height: rect.height,
+            border: style.borderTopWidth,
+            halo: style.boxShadow,
+          };
+        });
+      expect(dot).toMatchObject({ width: 6, height: 6, border: "0px" });
+      expect(dot.halo).toContain("0px 0px 0px 2px");
+    }
+    await ok.click();
+    await expect(page.locator('[data-review-panel="agent"]')).toBeVisible();
+    const connectionState = page.locator("[data-review-connection-state]");
+    await expect
+      .poll(() =>
+        connectionState.evaluate((node) => {
+          const style = getComputedStyle(node);
+          return [
+            style.borderTopWidth,
+            style.borderRightWidth,
+            style.borderBottomWidth,
+            style.borderLeftWidth,
+          ];
+        }),
+      )
+      .toEqual(["1px", "1px", "1px", "1px"]);
+    const history = page.locator("[data-review-connection-history]");
+    await history.locator("summary").click();
+    await expect(history).toHaveAttribute("open", "");
+    await page.waitForTimeout(2_200);
+    await expect(history).toHaveAttribute("open", "");
+
+    await expect(alert).toBeVisible({ timeout: 8_000 });
+    await expect(ok).toBeHidden();
+    await alert.click();
+    await expect(page.locator('[data-review-panel="agent"]')).toBeVisible();
+    await expect(history).toHaveAttribute("open", "");
+    await expect(page.locator("[data-review-recovery-command]")).toContainText(
+      session.plan,
+    );
+    await expect(page.locator("[data-review-recovery-prompt]")).toContainText(
+      "Reconnect to my existing Big Plan review",
+    );
+    await expect
+      .poll(() =>
+        connectionState.evaluate((node) => {
+          const style = getComputedStyle(node);
+          return [
+            style.borderTopWidth,
+            style.borderRightWidth,
+            style.borderBottomWidth,
+            style.borderLeftWidth,
+          ];
+        }),
+      )
+      .toEqual(["1px", "1px", "1px", "1px"]);
+    await expect(history.locator("summary")).toContainText("Connection log");
+    await expect(
+      history.locator("[data-review-connection-summary]"),
+    ).toContainText("DISCONNECTED");
+    await expect(
+      history.locator("[data-review-connection-current]"),
+    ).toContainText("Current");
+    const events = history.locator("li");
+    await expect(events).toHaveCount(3);
+    await expect(events.nth(0)).toContainText("Disconnected");
+    await expect(events.nth(1)).toContainText("Connected");
+    await expect(events.nth(2)).toContainText("Disconnected");
+    await expect(events.nth(0)).toContainText("Heartbeat timed out");
+    const eventTimes = await events
+      .locator("time")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => Date.parse(node.getAttribute("datetime") || "")),
+      );
+    expect(eventTimes).toEqual([...eventTimes].sort((a, b) => b - a));
+    for (const timestamp of await history.locator("time").all()) {
+      expect(
+        Number.isNaN(
+          Date.parse((await timestamp.getAttribute("datetime")) ?? ""),
+        ),
+      ).toBe(false);
+    }
+    const prompt = page.locator("[data-review-recovery-prompt] code");
+    const selectedPrompt = await prompt.evaluate((node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      return selection?.toString() || "";
+    });
+    await page.waitForTimeout(1_800);
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(
+      selectedPrompt,
+    );
+    await page
+      .context()
+      .grantPermissions(["clipboard-read", "clipboard-write"]);
+    for (const selector of [
+      '[data-review-copy="data-review-recovery-prompt"]',
+      '[data-review-copy="data-review-recovery-command"]',
+    ]) {
+      const copy = page.locator(selector);
+      for (const theme of ["light", "dark"]) {
+        await page.evaluate(
+          (nextTheme) =>
+            document.documentElement.setAttribute("data-theme", nextTheme),
+          theme,
+        );
+        await copy.hover();
+        await copy.focus();
+        await expect(copy).toBeFocused();
+        const box = await copy.boundingBox();
+        if (box === null) throw new Error("The copy control has no target");
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.up();
+      }
+      await copy.click();
+      await expect(copy).toContainText("Copied");
+    }
+    await page.locator('[data-review-tab="comments"]').click();
+    await page.locator("[data-review-hide]").click();
+  });
+
+  await test.step("closing the sidebar preserves the reader's current position", async () => {
+    await page.setViewportSize({ width: 1440, height: 520 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await toggle.click();
+    await expect(tray).toBeVisible();
+    await page.locator("#delivery").scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(0);
+    const beforeClose = await page.evaluate(() => window.scrollY);
+    await page.locator("[data-review-hide]").click();
+    await expect(tray).toBeHidden();
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeCloseTo(beforeClose, 0);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
   await test.step("a whole-paragraph selection always offers the same floating composer", async () => {
     const paragraph = page.locator("[data-block-kind='paragraph']").first();
     await paragraph.scrollIntoViewIfNeeded();
@@ -175,11 +806,27 @@ test("should preserve and send a floating review across reload and viewport chan
       "aria-label",
       "Comment on the selected text",
     );
+    const placement = await affordance.evaluate((node) => {
+      const control = node.getBoundingClientRect();
+      const selection = window.getSelection();
+      const range =
+        selection && selection.rangeCount > 0
+          ? selection.getRangeAt(0).getBoundingClientRect()
+          : new DOMRect();
+      return {
+        overlaps:
+          control.left < range.right &&
+          control.right > range.left &&
+          control.top < range.bottom &&
+          control.bottom > range.top,
+      };
+    });
+    expect(placement.overlaps).toBe(false);
     await affordance.click();
     await expect(compose).toHaveAttribute("data-review-compose-floating", "");
-    await expect(page.locator("[data-review-compose-save]")).toHaveText(
-      "Add Comment",
-    );
+    await expect(
+      page.locator("[data-review-compose-save] [data-review-button-label]"),
+    ).toHaveText("Add Comment");
     await expect(
       page.locator("[data-review-submit-immediately-input]"),
     ).not.toBeChecked();
@@ -212,16 +859,87 @@ test("should preserve and send a floating review across reload and viewport chan
             .find((text) => text.includes("big-plan-review-comments")),
         ),
       )
-      .not.toContain("text-decoration");
+      .toContain("text-decoration:underline");
+    expect(
+      await page.evaluate(
+        () =>
+          Array.from(document.head.querySelectorAll("style"))
+            .map((style) => style.textContent ?? "")
+            .find((text) => text.includes("big-plan-review-comments"))
+            ?.split("::highlight(big-plan-review-active)")[1],
+      ),
+    ).not.toContain("text-decoration");
 
     const longBody =
-      "This deliberately long comment proves that the floating thread stays compact until the reviewer asks for the rest. " +
-      "It includes enough detail to pass the collapse threshold while remaining plain reviewer text that can be edited or removed safely.";
+      "This deliberately long first paragraph proves that the floating thread stays compact until the reviewer asks for the rest.\n\n" +
+      "unbroken-review-token-".repeat(24) +
+      " closes the second paragraph without widening its bubble.";
     await page.locator("[data-review-compose-input]").fill(longBody);
     await page.locator("[data-review-compose-save]").click();
     const card = page.locator("[data-review-thread-card]").first();
     await expect(card).toBeVisible();
-    await expect(card).toContainText("You");
+    // The staged card keeps STAGED in its toolbar and names both send scopes.
+    await expect(card.locator("[data-review-thread-toolbar]")).toContainText(
+      "Staged",
+    );
+    await expect(
+      card.locator("[data-review-thread-toolbar] [data-review-thread-edit]"),
+    ).toBeVisible();
+    await expect(
+      card.locator("[data-review-thread-toolbar] [data-review-thread-delete]"),
+    ).toBeVisible();
+    await expect(
+      card.locator(
+        "[data-review-thread-toolbar] [data-review-thread-minimize]",
+      ),
+    ).toBeVisible();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      for (const control of [
+        "[data-review-thread-minimize]",
+        "[data-review-thread-edit]",
+        "[data-review-thread-delete]",
+      ]) {
+        const button = card.locator(control);
+        await button.hover();
+        await expect(
+          button.locator("[data-review-icon-tooltip]"),
+        ).toBeVisible();
+        const hover = await button.evaluate(
+          (node) => getComputedStyle(node).backgroundColor,
+        );
+        await button.focus();
+        await page.keyboard.press("Shift+Tab");
+        await page.keyboard.press("Tab");
+        await expect(button).toBeFocused();
+        const box = await button.boundingBox();
+        if (box === null) throw new Error("The staged action has no target");
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        const active = await button.evaluate(
+          (node) => getComputedStyle(node).backgroundColor,
+        );
+        await page.mouse.move(1, 1);
+        await page.mouse.up();
+        expect(active).not.toBe(hover);
+      }
+    }
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("data-theme", "light"),
+    );
+    await expect(
+      card.locator("[data-review-thread-actions] button"),
+    ).toHaveCount(2);
+    await expect(card.locator("[data-review-thread-submit]")).toHaveText(
+      "Send this",
+    );
+    await expect(card.locator("[data-review-thread-submit-all]")).toHaveText(
+      "Send all 1",
+    );
     await expect(card.locator("time")).not.toHaveText("");
     await expect(card.locator("[data-review-thread-more]")).toHaveText(
       "… more",
@@ -236,6 +954,16 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(card.locator("[data-review-thread-body]")).toHaveText(
       longBody,
     );
+    await expect
+      .poll(() =>
+        card.evaluate((node) => ({
+          cardContained: node.scrollWidth <= node.clientWidth,
+          bodyContained: Array.from(
+            node.querySelectorAll("[data-review-thread-body]"),
+          ).every((body) => body.scrollWidth <= body.clientWidth),
+        })),
+      )
+      .toEqual({ cardContained: true, bodyContained: true });
     await expect(page.locator("html")).toHaveAttribute(
       "data-review-selection-highlight-count",
       "1",
@@ -322,8 +1050,71 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(page.locator("[data-review-drafts] li")).toHaveCount(2);
     await expect(
       page.locator('[data-review-comment-state="staged"]'),
-    ).toHaveCount(4);
+    ).toHaveCount(2);
     await expect(page.locator("[data-review-thread-card]")).toHaveCount(2);
+    const firstCard = page.locator("[data-review-thread-card]").first();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await firstCard.hover();
+      const selectionTreatment = await firstCard.evaluate((node) => {
+        const style = getComputedStyle(node);
+        const connector = getComputedStyle(node, "::before");
+        return {
+          border: style.borderTopWidth,
+          borderColor: style.borderTopColor,
+          shadow: style.boxShadow,
+          connectorContent: connector.content,
+        };
+      });
+      expect(selectionTreatment.border).toBe("1px");
+      expect(selectionTreatment.borderColor).not.toBe("rgba(0, 0, 0, 0)");
+      expect(selectionTreatment.shadow).not.toBe("none");
+      expect(selectionTreatment.connectorContent).toBe("none");
+    }
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-focus-highlight-count",
+      "1",
+    );
+    await page.mouse.move(1, 80);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-focus-highlight-count",
+      "0",
+    );
+    const secondCard = page.locator("[data-review-thread-card]").last();
+    const sourcePoint = await row
+      .locator("td")
+      .last()
+      .evaluate((cell) => {
+        const range = document.createRange();
+        range.selectNodeContents(cell);
+        const rect = Array.from(range.getClientRects()).find(
+          (candidate) => candidate.width > 0 && candidate.height > 0,
+        );
+        if (rect === undefined) {
+          throw new Error("The highlighted source has no text rectangle");
+        }
+        return {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        };
+      });
+    await page.mouse.move(sourcePoint.x, sourcePoint.y);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-focus-highlight-count",
+      "1",
+    );
+    await expect(secondCard).toHaveAttribute(
+      "data-review-comment-emphasized",
+      "",
+    );
+    await page.mouse.move(1, 80);
+    await expect(secondCard).not.toHaveAttribute(
+      "data-review-comment-emphasized",
+    );
   });
 
   await test.step("the sidebar has a top edge and complete clickable staged lifecycle", async () => {
@@ -343,9 +1134,26 @@ test("should preserve and send a floating review across reload and viewport chan
       });
     await expect
       .poll(() =>
-        tray.evaluate((node) => getComputedStyle(node).borderTopWidth),
+        page
+          .locator("[data-review-toolbar]")
+          .evaluate((node) => getComputedStyle(node).borderBottomWidth),
       )
       .toBe("1px");
+    const zOrder = await page.evaluate(() => ({
+      toolbar: Number.parseInt(
+        getComputedStyle(
+          document.querySelector("[data-review-toolbar]") as Element,
+        ).zIndex,
+        10,
+      ),
+      cards: Number.parseInt(
+        getComputedStyle(
+          document.querySelector("[data-review-thread-layer]") as Element,
+        ).zIndex,
+        10,
+      ),
+    }));
+    expect(zOrder.toolbar).toBeGreaterThan(zOrder.cards);
     const titles = page.locator(
       "[data-review-drafts] [data-review-row-target]",
     );
@@ -355,7 +1163,114 @@ test("should preserve and send a floating review across reload and viewport chan
     }
     await expect(
       page.locator('[data-review-drafts] [data-review-comment-state="staged"]'),
-    ).toHaveCount(2);
+    ).toHaveCount(0);
+    await expect(page.locator("[data-review-draft-group] > h3")).toHaveText(
+      "Staged 2",
+    );
+    const stagedCount = toggle.locator("[data-review-toggle-count]");
+    await expect(stagedCount).toHaveText("2");
+    await expect(stagedCount).toHaveAttribute(
+      "aria-label",
+      "2 staged comments waiting submission",
+    );
+    await expect(page.locator("[data-review-toggle-label]")).toHaveText(
+      "Feedback",
+    );
+    await expect(page.locator("[data-review-send]")).toHaveText(
+      "Send all to agent",
+    );
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await exerciseControlStates({
+        control: page.locator("[data-review-send]"),
+        property: "filter",
+      });
+      await exerciseControlStates({
+        control: page
+          .locator("[data-review-drafts] [data-review-row-submit]")
+          .first(),
+        property: "opacity",
+      });
+      await exerciseControlStates({
+        control: page.locator("[data-review-sidebar-send]"),
+        property: "filter",
+      });
+    }
+    await expect(
+      page.locator("[data-review-drafts] [data-review-row-submit-all]"),
+    ).toHaveCount(0);
+    await expect(page.locator("[data-review-sidebar-send]")).toHaveCount(1);
+    await page.setViewportSize({ width: 600, height: 900 });
+    const compactBatch = page.locator("[data-review-batch-menu]");
+    await expect(compactBatch).toBeVisible();
+    await expect(compactBatch.locator("summary")).toContainText(
+      "Send 2 comments",
+    );
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await exerciseControlStates({
+        control: compactBatch.locator("summary"),
+        property: "filter",
+      });
+    }
+    await compactBatch.locator("summary").click();
+    await expect(
+      compactBatch.locator("[data-review-batch-review]"),
+    ).toBeVisible();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await exerciseControlStates({
+        control: compactBatch.locator("[data-review-batch-review]"),
+        property: "backgroundColor",
+      });
+      await exerciseControlStates({
+        control: compactBatch.locator("[data-review-batch-send]"),
+        property: "backgroundColor",
+      });
+    }
+    await compactBatch.locator("[data-review-batch-review]").click();
+    await expect(tray).toBeVisible();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      const badge = await stagedCount.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        return {
+          width: rect.width,
+          height: rect.height,
+          radius: style.borderRadius,
+          border: style.borderTopWidth,
+          transparent:
+            style.borderTopColor === "rgba(0, 0, 0, 0)" ||
+            style.borderTopColor === "transparent",
+        };
+      });
+      expect(badge.width).toBeGreaterThanOrEqual(badge.height);
+      expect(badge.height).toBeGreaterThanOrEqual(18);
+      expect(badge.radius).not.toBe("0px");
+      expect(badge.border).toBe("1px");
+      expect(badge.transparent).toBe(false);
+    }
+    await page.evaluate(() =>
+      document.documentElement.removeAttribute("data-theme"),
+    );
 
     await page.setViewportSize({ width: 1440, height: 500 });
     await page.locator("#delivery").scrollIntoViewIfNeeded();
@@ -367,6 +1282,57 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
       .not.toBeCloseTo(before, 0);
+    await expect
+      .poll(() =>
+        page.locator('[data-block-label="versionId"]').evaluate((node) => {
+          const rect = node.getBoundingClientRect();
+          return rect.top + rect.height / 2;
+        }),
+      )
+      .toBeCloseTo(250, 0);
+
+    const documentBefore = await page.evaluate(() => window.scrollY);
+    const scroller = page.locator("[data-review-scroll]");
+    await scroller.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    const firstCommentId = await page
+      .locator("[data-review-drafts] [data-review-row]")
+      .first()
+      .getAttribute("data-review-comment-id");
+    if (firstCommentId === null) {
+      throw new Error("The first staged comment has no stable row id");
+    }
+    const selectedCell = page
+      .locator('[data-block-label="versionId"] td')
+      .last();
+    const cellBox = await selectedCell.boundingBox();
+    if (cellBox === null) {
+      throw new Error("The highlighted table cell has no pointer target");
+    }
+    await page.mouse.click(cellBox.x + 20, cellBox.y + cellBox.height / 2);
+    const trayTarget = page.locator(
+      `[data-review-comment-id="${firstCommentId}"][data-review-tray-target]`,
+    );
+    await expect(trayTarget).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeCloseTo(documentBefore, 0);
+    await expect
+      .poll(() =>
+        trayTarget.evaluate((node) => {
+          const row = node.getBoundingClientRect();
+          const scroll = node
+            .closest("[data-review-scroll]")
+            ?.getBoundingClientRect();
+          return (
+            scroll !== undefined &&
+            row.top >= scroll.top &&
+            row.bottom <= scroll.bottom
+          );
+        }),
+      )
+      .toBe(true);
     await page.setViewportSize({ width: 1440, height: 900 });
   });
 
@@ -400,10 +1366,13 @@ test("should preserve and send a floating review across reload and viewport chan
 
   await test.step("anchored comment presence stays obvious and interactive below 1280 in both themes", async () => {
     await page.setViewportSize({ width: 1024, height: 900 });
+    // Boot reopens the rail for restored drafts; wait for that before closing
+    // so a late open cannot race the close and leave the backdrop up.
     const feedbackToggle = page.locator("[data-review-toggle]");
-    if ((await feedbackToggle.getAttribute("aria-expanded")) === "true") {
-      await feedbackToggle.click();
-    }
+    await expect(feedbackToggle).toHaveAttribute("aria-expanded", "true");
+    await feedbackToggle.click();
+    await expect(feedbackToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("[data-review-backdrop]")).toBeHidden();
     const anchoredBlock = page.locator('[data-block-label="versionId"]');
     await anchoredBlock.scrollIntoViewIfNeeded();
     const marker = page.locator("[data-review-marker]:visible").first();
@@ -511,21 +1480,48 @@ test("should preserve and send a floating review across reload and viewport chan
       .toBeCloseTo(before, 0);
 
     const heading = page.locator("[data-block-kind='heading']").last();
-    await heading.hover();
+    await heading.click({ clickCount: 3 });
     await affordance.click();
     await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+    await expect
+      .poll(() => page.evaluate(() => window.getSelection()?.isCollapsed))
+      .toBe(true);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-active-selection-highlight",
+      "true",
+    );
     await expect(page.locator("[data-review-thread-card]:visible")).toHaveCount(
       0,
     );
     await page.locator("[data-review-compose-cancel]").click();
   });
 
-  await test.step("a right-hand Comment button enters the same validated flow", async () => {
+  await test.step("a slide comment control enters the same validated flow", async () => {
     const before = await page.locator("[data-review-drafts] li").count();
-    const heading = page.locator("[data-block-kind='heading']").last();
-    await heading.hover();
-    await affordance.click();
-    await expect(heading).toHaveAttribute("data-review-active-highlight", "");
+    const selector = page.locator("[data-review-slide-selector]").last();
+    await selector.click();
+    await expect(compose).toBeVisible();
+    await expect(affordance).toBeHidden();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-active-selection-highlight",
+      "false",
+    );
+    const selectedSlide = selector.locator("xpath=ancestor::*[@data-slide]");
+    await expect(selectedSlide).toHaveAttribute(
+      "data-review-slide-highlight",
+      "active",
+    );
+    await expect(
+      selectedSlide.locator("[data-slide-kicker]"),
+    ).not.toHaveAttribute("data-review-comment-highlight");
+    await expect(
+      selectedSlide.locator("[data-block-kind='heading']"),
+    ).not.toHaveAttribute("data-review-active-highlight", "");
+    expect(
+      await compose.evaluate((node) =>
+        node.previousElementSibling?.hasAttribute("data-slide"),
+      ),
+    ).toBe(true);
     await expect(page.locator("[data-review-compose-save]")).toBeDisabled();
     await page.locator("[data-review-compose-input]").press("Control+Enter");
     await expect(compose).toBeVisible();
@@ -539,6 +1535,51 @@ test("should preserve and send a floating review across reload and viewport chan
     );
   });
 
+  await test.step("a multi-block inline compose lands after its end block and outside the highlight", async () => {
+    const start = page.locator('[data-block-id="section/details/heading-1"]');
+    const end = page.locator('[data-block-id="section/details/paragraph-1"]');
+    await start.scrollIntoViewIfNeeded();
+    await page.evaluate(() => {
+      const first = document.querySelector(
+        '[data-block-id="section/details/heading-1"]',
+      );
+      const last = document.querySelector(
+        '[data-block-id="section/details/paragraph-1"]',
+      );
+      if (!first || !last) throw new Error("Missing selection blocks");
+      const range = document.createRange();
+      range.selectNodeContents(first);
+      range.setEnd(last, last.childNodes.length);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    await expect(affordance).toBeVisible();
+    await affordance.click();
+    await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = document.querySelector("[data-review-compose]");
+          const last = document.querySelector(
+            '[data-block-id="section/details/paragraph-1"]',
+          );
+          const ranges = CSS.highlights.get("big-plan-review-active");
+          return {
+            followsEnd: editor?.previousElementSibling === last,
+            intersects:
+              editor !== null &&
+              ranges !== undefined &&
+              [...ranges].some((range) => range.intersectsNode(editor)),
+          };
+        }),
+      )
+      .toEqual({ followsEnd: true, intersects: false });
+    await page.locator("[data-review-compose-cancel]").click();
+    await expect(end).toBeVisible();
+  });
+
   await test.step("comment presence stays obvious without drawing through text", async () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     for (const theme of ["light", "dark"]) {
@@ -547,22 +1588,15 @@ test("should preserve and send a floating review across reload and viewport chan
           document.documentElement.setAttribute("data-theme", nextTheme),
         theme,
       );
-      const highlighted = page
-        .locator("[data-review-comment-highlight]")
-        .first();
-      const treatment = await highlighted.evaluate((node) => {
-        const style = getComputedStyle(node);
-        return {
-          background: style.backgroundColor,
-          offset: style.outlineOffset,
-          style: style.outlineStyle,
-          inset: style.boxShadow.includes("inset"),
-        };
-      });
-      expect(treatment.background).not.toBe("rgba(0, 0, 0, 0)");
-      expect(treatment.style).toBe("solid");
-      expect(treatment.offset).toBe("3px");
-      expect(treatment.inset).toBe(false);
+      const highlight = await page.evaluate(() => ({
+        ranges: CSS.highlights?.get("big-plan-review-comments")?.size ?? 0,
+        painted:
+          getComputedStyle(document.documentElement)
+            .getPropertyValue("--annotation-bg")
+            .trim() !== "",
+      }));
+      expect(highlight.ranges).toBeGreaterThan(0);
+      expect(highlight.painted).toBe(true);
     }
   });
 
@@ -570,7 +1604,7 @@ test("should preserve and send a floating review across reload and viewport chan
     await toggle.click();
     await page.locator('[data-review-tab="comments"]').click();
     await expect(page.locator("[data-review-send]")).toHaveText(
-      "Send all comments to agent",
+      "Send all to agent",
     );
     await page
       .locator("[data-review-drafts] [data-review-row-target]")
@@ -591,7 +1625,7 @@ test("should preserve and send a floating review across reload and viewport chan
       .toBeCloseTo(before, 0);
     await expect(tray).toBeVisible();
     await expect(
-      page.locator('[data-review-outcome-group="waiting"] [data-review-row]'),
+      page.locator('[data-review-outcome-group="queued"] [data-review-row]'),
     ).toHaveCount(3);
 
     const answer: unknown = await response.json();
@@ -611,25 +1645,168 @@ test("should preserve and send a floating review across reload and viewport chan
     expect(brief).toContain("versionId");
     expect(brief).toContain("number");
     expect(brief).toContain("delivery note");
+    await expect(page.locator("[data-review-send-note]")).toContainText(
+      /^Queued 3 to the agent as /,
+    );
     await page.locator("[data-review-hide]").click();
   });
 
   await test.step("sent comments wait for a real agent instead of inventing outcomes", async () => {
     await expect(
-      page.locator('[data-review-outcome-state="waiting"]'),
-    ).toHaveCount(6);
+      page.locator('[data-review-outcome-group="queued"] h3'),
+    ).toContainText("Queued");
+    await expect(
+      page.locator(
+        '[data-review-outcome-group="queued"] [data-review-outcome-group-count]',
+      ),
+    ).toHaveText("3");
+    await expect(
+      page.locator(
+        '[data-review-outcome-group="queued"] [data-review-thread-resolve]',
+      ),
+    ).toHaveCount(3);
+    await expect(
+      page.locator('[data-review-outcome-state="blocked"]'),
+    ).toHaveCount(3);
+    await expect(
+      page.locator(
+        '[data-review-sent-list] [data-review-outcome-state="blocked"]',
+      ),
+    ).toHaveCount(0);
     await expect(page.locator("[data-review-thread-turn='agent']")).toHaveCount(
       0,
     );
     await expect(toggle.locator("[data-review-toggle-count]")).toBeHidden();
     await expect(page.locator("[data-review-agent-state]")).toHaveText(
-      "With agent",
+      "No agent connected",
     );
     await expect(
       page.locator(
-        '[data-review-outcome-state="waiting"] [data-review-spinner]',
+        '[data-review-outcome-state="blocked"] [data-review-spinner]',
       ),
-    ).toHaveCount(6);
+    ).toHaveCount(0);
+    await expect(
+      page.locator(
+        '[data-review-outcome-state="blocked"] svg[aria-hidden="true"]',
+      ),
+    ).toHaveCount(3);
+    const blockedCard = page
+      .locator('[data-review-thread-state="sent"]')
+      .first();
+    await blockedCard.locator("[data-review-thread-summary-toggle]").click();
+    await expect(
+      blockedCard.locator('[data-review-thread-turn="user"] time'),
+    ).toContainText(/^Queued · /);
+    await blockedCard.locator("[data-review-thread-minimize]").click();
+    await agentCommand(["next", session.plan]);
+    await expect(
+      page.locator('[data-review-outcome-group="working"] [data-review-row]'),
+    ).toHaveCount(1, { timeout: 10_000 });
+    for (let index = 0; index < 12; index += 1) {
+      await agentCommand([
+        "note",
+        session.plan,
+        `Working update ${String(index + 1).padStart(2, "0")}`,
+      ]);
+    }
+    const workingCard = page
+      .locator(
+        '[data-review-thread-state="sent"][data-review-lifecycle="working"]',
+      )
+      .first();
+    await workingCard.locator("[data-review-thread-summary-toggle]").click();
+    const cardActivityToggle = workingCard.locator(
+      "[data-review-status-activity-toggle]",
+    );
+    await expect(cardActivityToggle).toBeVisible({ timeout: 10_000 });
+    if ((await cardActivityToggle.getAttribute("aria-expanded")) === "false") {
+      await cardActivityToggle.click();
+    }
+    const cardActivity = workingCard.locator("[data-review-status-activity]");
+    await expect(cardActivity.locator("li")).toHaveCount(8, {
+      timeout: 10_000,
+    });
+    const cardScroll = await cardActivity.evaluate((node) => {
+      node.scrollTop = Math.min(24, node.scrollHeight - node.clientHeight);
+      return {
+        top: node.scrollTop,
+        scrollable: node.scrollHeight > node.clientHeight,
+      };
+    });
+    expect(cardScroll.scrollable).toBe(true);
+    expect(cardScroll.top).toBeGreaterThan(0);
+    await agentCommand(["note", session.plan, "Working update 14"]);
+    await expect(cardActivity.locator("li")).toHaveCount(8, {
+      timeout: 10_000,
+    });
+    await expect
+      .poll(() => cardActivity.evaluate((node) => node.scrollTop))
+      .toBe(cardScroll.top);
+    const cancelRequest = workingCard.locator("[data-review-cancel-request]");
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await cancelRequest.hover();
+      await expect(cancelRequest).toHaveCSS("cursor", "pointer");
+      const hover = await cancelRequest.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      );
+      expect(hover).not.toBe("rgba(0, 0, 0, 0)");
+      await cancelRequest.focus();
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Shift+Tab");
+      await expect
+        .poll(() =>
+          cancelRequest.evaluate((node) => node.matches(":focus-visible")),
+        )
+        .toBe(true);
+      const box = await cancelRequest.boundingBox();
+      if (box === null) throw new Error("Cancel request has no pointer target");
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      const active = await cancelRequest.evaluate(
+        (node) => getComputedStyle(node).opacity,
+      );
+      await page.mouse.move(1, 1);
+      await page.mouse.up();
+      expect(active).not.toBe("1");
+    }
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("data-theme", "light"),
+    );
+
+    await toggle.click();
+    const trayWorkingRow = page
+      .locator('[data-review-outcome-group="working"] [data-review-row]')
+      .first();
+    await trayWorkingRow.locator("[data-review-row-target]").click();
+    const trayActivity = trayWorkingRow.locator(
+      "[data-review-status-activity]",
+    );
+    await expect(trayActivity).toBeVisible();
+    await expect
+      .poll(() =>
+        trayActivity.evaluate((node) => ({
+          overflow: getComputedStyle(node).overflowY,
+          contained: node.scrollHeight <= node.clientHeight,
+        })),
+      )
+      .toEqual({ overflow: "visible", contained: true });
+    await writeFile(
+      store.agentHeartbeatPath,
+      JSON.stringify({
+        sessionId: session.sessionId,
+        state: "working",
+        updatedAtMs: 0,
+      }),
+    );
+    await expect(page.locator("[data-review-agent-alert]")).toBeVisible({
+      timeout: 8_000,
+    });
+    await page.locator("[data-review-hide]").click();
   });
 
   await test.step("a real agent response revises the source and re-renders outcome threads live", async () => {
@@ -640,15 +1817,17 @@ test("should preserve and send a floating review across reload and viewport chan
       "Review persistence",
     );
     await expect(page.locator("[data-review-toggle]")).toBeVisible();
-    const revised = original
-      .replace(
-        "Content hash of the snapshot",
-        "Stable content hash of the canonical snapshot",
-      )
-      .replace(
-        "Position in this plan's history",
-        "One-based position in this plan's history",
-      );
+    const revised =
+      original
+        .replace(
+          "Content hash of the snapshot",
+          "Stable content hash of the canonical snapshot",
+        )
+        .replace(
+          "Position in this plan's history",
+          "One-based position in this plan's history",
+        ) +
+      "\n\nOperators can inspect the persisted feedback package during review.\n";
     expect(revised).not.toBe(original);
     await writeFile(session.plan, revised);
     const exchange = await readAgentExchange({
@@ -656,21 +1835,24 @@ test("should preserve and send a floating review across reload and viewport chan
       sessionId: session.sessionId,
       planId: session.planId,
     });
+    const requests = exchange.requests.filter(
+      (candidate) => candidate.kind === "feedback",
+    );
     const request = nextPendingAgentRequest(exchange);
-    if (request?.kind !== "feedback") {
+    if (request?.kind !== "feedback" || requests.length < 3) {
       throw new Error("The feedback request did not reach the coding agent");
     }
     expect(request.comments.at(0)?.target).toMatchObject({
       type: "selection",
       quote: "Content hash of the snapshot",
     });
-    expect(request.comments.at(1)?.target).toMatchObject({
+    expect(requests[1]?.comments.at(0)?.target).toMatchObject({
       type: "selection",
       quote: "Position in this plan's history",
     });
-    const states = ["changed", "question", "outside"];
-    const changeTargets = request.comments
+    const changeTargets = requests
       .slice(0, 2)
+      .flatMap((candidate) => candidate.comments)
       .map((comment) =>
         "blockId" in comment.target ? comment.target.blockId : undefined,
       )
@@ -691,28 +1873,117 @@ test("should preserve and send a floating review across reload and viewport chan
       revision: deriveSourceRevision(revised),
       source: revised,
     });
+    const pair = {
+      fromRevision: deriveSourceRevision(original),
+      toRevision: deriveSourceRevision(revised),
+    };
+    const render = (markdown: string) =>
+      renderDocument({
+        markdown,
+        fallbackTitle: "Review persistence",
+        identity: {},
+      }).blocks;
+    const changeSet = buildRevisionChangeSet({
+      pair,
+      before: render(original),
+      after: render(revised),
+    });
     const response = validateAgentResponseDraft({
       value: {
         requestId: request.requestId,
-        outcomes: request.comments.map((comment, index) => ({
-          commentId: comment.id,
-          state: states[index],
-          message:
-            index === 0
-              ? "I clarified that the content hash is canonical and stable."
-              : index === 1
-                ? "Should numbering begin at zero or one?"
-                : "This delivery request belongs to implementation, not this plan revision.",
-          ...(index === 0 ? { changeTargets } : {}),
-        })),
+        outcomes: [
+          {
+            commentId: request.comments[0]?.id,
+            state: "changed",
+            message:
+              "I clarified the canonical snapshot, history position, and inspection guidance in this one owned revision.",
+            changes: changeSet.places.map((place) => ({
+              placeId: place.placeId,
+              summary: place.label,
+            })),
+          },
+        ],
       },
       request,
       commentsById: commentsFromExchange(exchange),
-      changedBlocks: new Set(changeTargets),
+      changedPlaceIds: new Set(changeSet.places.map((place) => place.placeId)),
+      fromRevision: pair.fromRevision,
       currentRevision: deriveSourceRevision(revised),
       now: new Date().toISOString(),
     });
     await writeAgentResponse({ store, response });
+    let nextExchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const questionRequest = nextPendingAgentRequest(nextExchange);
+    if (questionRequest?.kind !== "feedback") {
+      throw new Error("The second serialized comment was not queued");
+    }
+    const queuedLabels = page.locator(
+      '[data-review-outcome-group="queued"] [data-review-row-secondary]',
+    );
+    await expect(queuedLabels).toHaveCount(2, { timeout: 10_000 });
+    await expect(queuedLabels).toHaveText(["Queued", "Queued"]);
+    await writeAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: questionRequest.requestId,
+          outcomes: [
+            {
+              commentId: questionRequest.comments[0]?.id,
+              state: "question",
+              message: "Should numbering begin at zero or one?",
+            },
+          ],
+        },
+        request: questionRequest,
+        commentsById: commentsFromExchange(nextExchange),
+        changedPlaceIds: new Set(),
+        fromRevision: effectiveSourceRevision({
+          request: questionRequest,
+          snapshot: nextExchange,
+        }),
+        currentRevision: deriveSourceRevision(revised),
+        now: new Date().toISOString(),
+      }),
+    });
+    nextExchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const outsideRequest = nextPendingAgentRequest(nextExchange);
+    if (outsideRequest?.kind !== "feedback") {
+      throw new Error("The third serialized comment was not queued");
+    }
+    await writeAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: outsideRequest.requestId,
+          outcomes: [
+            {
+              commentId: outsideRequest.comments[0]?.id,
+              state: "outside",
+              message:
+                "This delivery request belongs to implementation, not this plan revision.",
+            },
+          ],
+        },
+        request: outsideRequest,
+        commentsById: commentsFromExchange(nextExchange),
+        changedPlaceIds: new Set(),
+        fromRevision: effectiveSourceRevision({
+          request: outsideRequest,
+          snapshot: nextExchange,
+        }),
+        currentRevision: deriveSourceRevision(revised),
+        now: new Date().toISOString(),
+      }),
+    });
     await expect(
       page.getByRole("cell", {
         name: "Stable content hash of the canonical snapshot",
@@ -720,49 +1991,58 @@ test("should preserve and send a floating review across reload and viewport chan
     ).toBeVisible({ timeout: 10_000 });
     await expect(
       page.locator('[data-review-outcome-state="changed"]'),
-    ).toHaveCount(2);
+    ).toHaveCount(1);
     await expect(
       page.locator('[data-review-outcome-state="question"]'),
-    ).toHaveCount(2);
+    ).toHaveCount(1);
     await expect(
       page.locator('[data-review-outcome-state="outside"]'),
-    ).toHaveCount(2);
+    ).toHaveCount(1);
   });
 
   await test.step("changed threads list every attributed place and open an honest in-place diff lens", async () => {
     const changed = page
       .locator(
-        '[data-review-thread-state="sent"]:has([data-review-outcome-state="changed"])',
+        '[data-review-thread-state="sent"][data-review-outcome="changed"]',
       )
       .first();
     if ((await changed.getAttribute("data-review-thread-expanded")) === null) {
-      await changed.locator("[data-review-thread-summary]").click();
+      await changed.locator("[data-review-thread-summary-toggle]").click();
     }
     await expect(changed.locator("[data-review-anchor-context]")).toContainText(
       "this text was revised",
     );
     await expect(
       changed.locator("[data-review-change-list] strong"),
-    ).toHaveText("Changed 1 place");
-    await expect(changed.locator("[data-review-change-row]")).toHaveCount(1);
+    ).toHaveText("3 changes across 2 slides");
+    const changeRows = changed.locator("[data-review-change-row]");
+    await expect(changeRows).toHaveCount(3);
+    const changeRow = changeRows.first();
+    const wrapMetrics = await changeRow.evaluate((row) => {
+      row.style.width = "7rem";
+      const label = row.querySelector("[data-review-change-label]");
+      if (!(label instanceof HTMLElement)) {
+        throw new Error("The change row has no label");
+      }
+      return {
+        whiteSpace: getComputedStyle(label).whiteSpace,
+        rowFits: row.scrollWidth <= row.clientWidth,
+        labelHeight: label.getBoundingClientRect().height,
+        lineHeight: Number.parseFloat(getComputedStyle(label).lineHeight),
+      };
+    });
+    expect(wrapMetrics.whiteSpace).toBe("normal");
+    expect(wrapMetrics.rowFits).toBe(true);
+    expect(wrapMetrics.labelHeight).toBeGreaterThan(wrapMetrics.lineHeight);
+    await expect(changeRows.locator("[data-review-change-label]")).toHaveCount(
+      3,
+    );
     await expect(changed.locator("[data-review-see-change]")).toHaveText(
-      "See the change",
+      "See changes (3)",
     );
-    expect(
-      await page.locator("[data-review-anchor-changed]").evaluateAll((nodes) =>
-        nodes.map((node) => ({
-          id: node.getAttribute("data-block-id"),
-          label: node.getAttribute("data-block-label"),
-          text: node.textContent,
-        })),
-      ),
-    ).toEqual(
-      expect.arrayContaining([expect.objectContaining({ label: "versionId" })]),
-    );
-
     const question = page
       .locator(
-        '[data-review-thread-state="sent"]:has([data-review-outcome-state="question"])',
+        '[data-review-thread-state="sent"][data-review-outcome="question"]',
       )
       .first();
     if ((await question.getAttribute("data-review-thread-expanded")) === null) {
@@ -770,16 +2050,16 @@ test("should preserve and send a floating review across reload and viewport chan
         .locator('[data-block-label="number"]')
         .scrollIntoViewIfNeeded();
       await question
-        .locator("[data-review-thread-summary]")
+        .locator("[data-review-thread-summary-toggle]")
         .evaluate((button) => button.click());
     }
     await expect(page.locator('[data-block-label="number"]')).toHaveAttribute(
       "data-review-anchor-changed",
       "",
     );
-    await expect(
-      question.locator("[data-review-anchor-context]"),
-    ).toContainText("this text was revised");
+    await expect(question.locator("[data-review-anchor-context]")).toHaveCount(
+      0,
+    );
 
     await page
       .locator('[data-block-label="versionId"]')
@@ -790,25 +2070,21 @@ test("should preserve and send a floating review across reload and viewport chan
     const lens = page.locator("[data-review-diff-lens]");
     const stepper = page.locator("[data-review-diff-stepper]");
     await expect(lens).toBeVisible();
-    await expect(
-      lens
-        .locator('[data-review-diff-op="del"]')
-        .filter({ hasText: "Content" }),
-    ).toHaveCount(1);
-    await expect(
-      lens.locator('[data-review-diff-op="ins"]').filter({ hasText: "Stable" }),
-    ).toHaveCount(1);
-    await expect(lens.locator("[data-review-diff-comment-tag]")).toHaveText(
-      "your comment",
+    await expect(lens.locator('[data-review-diff-op="del"]')).toHaveCount(1);
+    await expect(lens.locator('[data-review-diff-op="ins"]')).toHaveCount(1);
+    await expect(lens.locator("[data-review-diff-comment-tag]")).toHaveCount(0);
+    await expect(lens.locator("[data-review-diff-side]")).toHaveCount(2);
+    await expect(lens.locator("[data-review-diff-side-label]")).toHaveText([
+      "Was",
+      "Now",
+    ]);
+    await expect(lens.locator("[data-review-diff-side-content]")).toHaveCount(
+      2,
     );
+    expect((await lens.boundingBox())?.height ?? 0).toBeLessThan(600);
     await expect(stepper.locator("[data-review-diff-position]")).toHaveText(
-      "Change 1 of 1 · 1 · Details",
+      "Change 1 of 3 · 1 · Details",
     );
-    await expect(
-      lens
-        .locator('[data-review-diff-op="ins"]')
-        .filter({ hasText: "One-based" }),
-    ).toHaveCount(1);
     expect(
       await lens.evaluate((node) => getComputedStyle(node).marginTop),
     ).toBe("0px");
@@ -823,7 +2099,7 @@ test("should preserve and send a floating review across reload and viewport chan
     await page.reload();
     const rehydratedChanged = page
       .locator(
-        '[data-review-thread-state="sent"]:has([data-review-outcome-state="changed"])',
+        '[data-review-thread-state="sent"][data-review-outcome="changed"]',
       )
       .first();
     await expect(rehydratedChanged).toBeVisible();
@@ -831,7 +2107,9 @@ test("should preserve and send a floating review across reload and viewport chan
       (await rehydratedChanged.getAttribute("data-review-thread-expanded")) ===
       null
     ) {
-      await rehydratedChanged.locator("[data-review-thread-summary]").click();
+      await rehydratedChanged
+        .locator("[data-review-thread-summary-toggle]")
+        .click();
     }
     await rehydratedChanged.locator("[data-review-see-change]").click();
     await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
@@ -842,7 +2120,7 @@ test("should preserve and send a floating review across reload and viewport chan
   await test.step("a second revision on the same block keeps both historical diffs pinned", async () => {
     const changed = page
       .locator(
-        '[data-review-thread-state="sent"]:has([data-review-outcome-state="changed"])',
+        '[data-review-thread-state="sent"][data-review-outcome="changed"]',
       )
       .first();
     const commentId = await changed.getAttribute("data-review-comment-id");
@@ -854,7 +2132,7 @@ test("should preserve and send a floating review across reload and viewport chan
       .scrollIntoViewIfNeeded();
     if ((await changed.getAttribute("data-review-thread-expanded")) === null) {
       await changed
-        .locator("[data-review-thread-summary]")
+        .locator("[data-review-thread-summary-toggle]")
         .evaluate((button) => button.click());
     }
     const reply = changed.locator("[data-review-thread-reply]");
@@ -894,6 +2172,23 @@ test("should preserve and send a floating review across reload and viewport chan
       revision: deriveSourceRevision(revised),
       source: revised,
     });
+    const replyPair = {
+      fromRevision: deriveSourceRevision(current),
+      toRevision: deriveSourceRevision(revised),
+    };
+    const replyChangeSet = buildRevisionChangeSet({
+      pair: replyPair,
+      before: renderDocument({
+        markdown: current,
+        fallbackTitle: "Review persistence",
+        identity: {},
+      }).blocks,
+      after: renderDocument({
+        markdown: revised,
+        fallbackTitle: "Review persistence",
+        identity: {},
+      }).blocks,
+    });
     await writeAgentResponse({
       store,
       response: validateAgentResponseDraft({
@@ -904,13 +2199,19 @@ test("should preserve and send a floating review across reload and viewport chan
               commentId,
               state: "changed",
               message: "I made the stability guarantee explicit.",
-              changeTargets: [blockId],
+              changes: replyChangeSet.places.map((place) => ({
+                placeId: place.placeId,
+                summary: "Made the stability guarantee explicit",
+              })),
             },
           ],
         },
         request,
         commentsById: commentsFromExchange(exchange),
-        changedBlocks: new Set([blockId]),
+        changedPlaceIds: new Set(
+          replyChangeSet.places.map((place) => place.placeId),
+        ),
+        fromRevision: replyPair.fromRevision,
         currentRevision: deriveSourceRevision(revised),
         now: new Date().toISOString(),
       }),
@@ -924,15 +2225,15 @@ test("should preserve and send a floating review across reload and viewport chan
       `[data-review-thread-state="sent"][data-review-comment-id="${commentId}"]`,
     );
     if ((await restored.getAttribute("data-review-thread-expanded")) === null) {
-      await restored.locator("[data-review-thread-summary]").click();
+      await restored.locator("[data-review-thread-summary-toggle]").click();
     }
     await expect(restored.locator("[data-review-see-change]")).toHaveCount(2);
     await expect(
       restored.locator("[data-review-see-change]").first(),
-    ).toHaveText("See the change");
+    ).toHaveText("See changes (3)");
     await expect(
       restored.locator("[data-review-see-change]").last(),
-    ).toHaveText("See the change");
+    ).toHaveText("See changes (2)");
     await restored.locator("[data-review-see-change]").first().click();
     await expect(
       restored.locator("[data-review-see-change]").first(),
@@ -945,7 +2246,21 @@ test("should preserve and send a floating review across reload and viewport chan
     await page
       .locator("[data-review-diff-exit]")
       .evaluate((button) => button.click());
-    await restored.locator("[data-review-see-change]").last().click();
+    await expect(page.locator("[data-review-diff-lens]")).toBeHidden();
+    await expect(
+      page.locator("[data-review-diff-stepper] [data-review-diff-position]"),
+    ).toHaveText("Change 1 of 3 · 1 · Details");
+    await expect(page.locator("[data-review-diff-stepper]")).toBeVisible();
+    await expect(page.locator("[data-review-diff-exit]")).toHaveText(
+      "Show changes",
+    );
+    await page.locator("[data-review-diff-exit]").click();
+    await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
+    await page.locator("[data-review-diff-hide]").click();
+    await restored
+      .locator("[data-review-see-change]")
+      .last()
+      .evaluate((button) => button.click());
     await expect(
       page.locator('[data-review-diff-op="del"]').filter({ hasText: "Stable" }),
     ).toHaveCount(1);
@@ -955,11 +2270,11 @@ test("should preserve and send a floating review across reload and viewport chan
         .filter({ hasText: "Immutable" }),
     ).toHaveCount(1);
     await page
-      .locator("[data-review-diff-exit]")
+      .locator("[data-review-diff-hide]")
       .evaluate((button) => button.click());
   });
 
-  await test.step("responses collapse to one-line outcome chips without accumulating", async () => {
+  await test.step("responses collapse to one-line floating summaries without accumulating", async () => {
     const expanded = page.locator(
       "[data-review-thread-expanded] [data-review-thread-minimize]",
     );
@@ -969,13 +2284,13 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(page.locator("[data-review-thread-summary]")).toHaveCount(3);
     await expect(
       page.locator('[data-review-outcome-state="changed"]'),
-    ).toHaveCount(2);
+    ).toHaveCount(1);
     await expect(
       page.locator('[data-review-outcome-state="question"]'),
-    ).toHaveCount(2);
+    ).toHaveCount(1);
     await expect(
       page.locator('[data-review-outcome-state="outside"]'),
-    ).toHaveCount(2);
+    ).toHaveCount(1);
     await expect(toggle.locator("[data-review-toggle-count]")).toHaveText("1");
     const cards = page.locator('[data-review-thread-state="sent"]:visible');
     await expect(cards).toHaveCount(3);
@@ -989,12 +2304,12 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(page.locator("[data-review-thread-expanded]")).toHaveCount(0);
   });
 
-  await test.step("floating composers and expanded threads never overlap neighboring controls", async () => {
+  await test.step("composers and expanded threads never overlap neighboring controls", async () => {
     await page.setViewportSize({ width: 1440, height: 520 });
     await page
       .locator('[data-block-label="versionId"]')
       .scrollIntoViewIfNeeded();
-    const summaries = page.locator("[data-review-thread-summary]");
+    const summaries = page.locator("[data-review-thread-summary-toggle]");
     await expect(summaries).toHaveCount(3);
     await summaries.first().click();
     const stacked = await page
@@ -1035,22 +2350,46 @@ test("should preserve and send a floating review across reload and viewport chan
           neighbor.bottom > replyRect.y,
       ).toBe(false);
     }
+    await page
+      .locator("[data-review-thread-expanded] [data-review-thread-minimize]")
+      .click();
 
-    const row = page.locator('[data-block-label="versionId"]');
-    await row.hover();
-    await affordance.click();
-    await expect(compose).toHaveAttribute("data-review-compose-floating", "");
+    await page.locator("[data-review-slide-selector]").last().click();
+    await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+    await expect(compose).toHaveAttribute(
+      "data-review-compose-placement",
+      "before-slide",
+    );
     const composeRect = await compose.boundingBox();
-    const cardTops = await page
+    const selectedSlideRect = await page
+      .locator('[data-review-slide-highlight="active"]')
+      .boundingBox();
+    if (composeRect === null || selectedSlideRect === null) {
+      throw new Error("The whole-slide composer has no document placement");
+    }
+    expect(composeRect.y + composeRect.height).toBeLessThanOrEqual(
+      selectedSlideRect.y,
+    );
+    const cardRectsAfterCompose = await page
       .locator("[data-review-thread-card]:not([hidden])")
       .evaluateAll((nodes) =>
-        nodes.map((node) => node.getBoundingClientRect().top),
+        nodes.map((node) => {
+          const rect = node.getBoundingClientRect();
+          return {
+            left: rect.left,
+            right: rect.right,
+            top: rect.top,
+            bottom: rect.bottom,
+          };
+        }),
       );
-    if (composeRect === null) throw new Error("The composer has no box");
-    for (const top of cardTops) {
-      expect(top).toBeGreaterThanOrEqual(
-        composeRect.y + composeRect.height + 7.5,
-      );
+    for (const card of cardRectsAfterCompose) {
+      expect(
+        card.left < composeRect.x + composeRect.width &&
+          card.right > composeRect.x &&
+          card.top < composeRect.y + composeRect.height &&
+          card.bottom > composeRect.y,
+      ).toBe(false);
     }
     await page.locator("[data-review-compose-cancel]").click();
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -1070,7 +2409,7 @@ test("should preserve and send a floating review across reload and viewport chan
       .scrollIntoViewIfNeeded();
     const summary = page
       .locator(
-        '[data-review-thread-state="sent"]:has([data-review-outcome-state="changed"]) [data-review-thread-summary]',
+        '[data-review-thread-state="sent"][data-review-outcome="changed"] [data-review-thread-summary-toggle]',
       )
       .first();
     await expect(summary).toBeVisible();
@@ -1080,21 +2419,17 @@ test("should preserve and send a floating review across reload and viewport chan
           document.documentElement.setAttribute("data-theme", nextTheme),
         theme,
       );
-      for (const outcome of ["changed", "question", "outside"]) {
-        const row = page.locator(`[data-review-outcome="${outcome}"]`);
-        const colors = await row.evaluate((node) => {
-          const label = node.querySelector("[data-review-outcome-state]");
-          return {
-            border: getComputedStyle(node).borderLeftColor,
-            label: label === null ? "" : getComputedStyle(label).color,
-          };
-        });
-        expect(colors.label).toBe(colors.border);
-      }
+      await expect(
+        page.locator("[data-review-sent-list] [data-review-outcome-state]"),
+      ).toHaveCount(0);
       await summary.hover();
-      const hover = await summary.evaluate(
-        (node) => getComputedStyle(node).backgroundColor,
-      );
+      const hover = await summary
+        .locator("[data-review-thread-echo]")
+        .evaluate((node) => ({
+          decoration: getComputedStyle(node).textDecorationLine,
+          opacity: getComputedStyle(node).opacity,
+        }));
+      expect(hover.decoration).toContain("underline");
       await summary.focus();
       await page.keyboard.press("Shift+Tab");
       await page.keyboard.press("Tab");
@@ -1107,12 +2442,12 @@ test("should preserve and send a floating review across reload and viewport chan
         throw new Error("The outcome chip has no pointer target");
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await page.mouse.down();
-      const active = await summary.evaluate(
-        (node) => getComputedStyle(node).backgroundColor,
-      );
+      const active = await summary
+        .locator("[data-review-thread-echo]")
+        .evaluate((node) => getComputedStyle(node).opacity);
       await page.mouse.move(1, 1);
       await page.mouse.up();
-      expect(active).not.toBe(hover);
+      expect(active).not.toBe(hover.opacity);
     }
     await page.evaluate(() =>
       document.documentElement.setAttribute("data-theme", "light"),
@@ -1122,7 +2457,7 @@ test("should preserve and send a floating review across reload and viewport chan
   await test.step("a chip expands the complete thread in place and a reply stays in that chat", async () => {
     const questionCandidate = page
       .locator(
-        '[data-review-thread-state="sent"]:has([data-review-outcome-state="question"])',
+        '[data-review-thread-state="sent"][data-review-outcome="question"]',
       )
       .first();
     const questionId = await questionCandidate.getAttribute(
@@ -1135,7 +2470,7 @@ test("should preserve and send a floating review across reload and viewport chan
       `[data-review-thread-state="sent"][data-review-comment-id="${questionId}"]`,
     );
     if ((await question.getAttribute("data-review-thread-expanded")) === null) {
-      await question.locator("[data-review-thread-summary]").click();
+      await question.locator("[data-review-thread-summary-toggle]").click();
     }
     await expect(question).toHaveAttribute("data-review-thread-expanded", "");
     await expect(
@@ -1148,6 +2483,18 @@ test("should preserve and send a floating review across reload and viewport chan
       question.locator('[data-review-thread-turn="agent"]'),
     ).toContainText("Should numbering begin at zero or one?");
     const reply = question.locator("[data-review-thread-reply]");
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await exerciseExpandedReplyRetention({
+        owner: question,
+        field: reply,
+        expandedAttribute: "data-review-thread-expanded",
+      });
+    }
     await reply.press("Control+Enter");
     await expect(
       question.locator('[data-review-thread-turn="user"]'),
@@ -1160,21 +2507,20 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       question.locator('[data-review-thread-turn="agent"]'),
     ).toHaveCount(1);
-    await expect(
-      question.locator("[data-review-thread-waiting]"),
-    ).toBeVisible();
-    const activity = question.locator("[data-review-agent-activity]");
-    await expect(activity).toHaveAttribute("open", "");
-    await activity.locator("summary").click();
-    await expect(activity).not.toHaveAttribute("open", "");
-    await activity.locator("summary").click();
-    await expect(activity).toHaveAttribute("open", "");
+    const status = question.locator("[data-review-thread-status]");
+    await expect(status).toHaveAttribute(
+      "data-review-thread-status",
+      "blocked",
+      { timeout: 10_000 },
+    );
+    await expect(status).toContainText("Blocked - no agent connected");
+    await expect(status.locator("[data-review-spinner]")).toHaveCount(0);
     await expect(page.locator("[data-review-agent-state]")).toHaveText(
-      "With agent",
+      "No agent connected",
     );
     await expect(
-      question.locator('[data-review-outcome-state="waiting"]'),
-    ).toBeVisible();
+      question.locator('[data-review-outcome-state="blocked"]'),
+    ).toHaveCount(0);
     await expect(question.locator("[data-review-thread-reply]")).toHaveCount(0);
     await expect(toggle.locator("[data-review-toggle-count]")).toBeHidden();
 
@@ -1203,7 +2549,11 @@ test("should preserve and send a floating review across reload and viewport chan
         },
         request,
         commentsById: commentsFromExchange(exchange),
-        changedBlocks: new Set(),
+        changedPlaceIds: new Set(),
+        fromRevision: effectiveSourceRevision({
+          request,
+          snapshot: exchange,
+        }),
         currentRevision: deriveSourceRevision(source),
         now: new Date().toISOString(),
       }),
@@ -1224,11 +2574,31 @@ test("should preserve and send a floating review across reload and viewport chan
     await toggle.click();
     await expect(tray).toBeVisible();
     await expect(page.locator("[data-review-round-summary]")).toHaveText(
-      "Latest round · 1 changed · 1 needs your answer · 1 outside this plan · 0 with agent",
+      "3 ready",
     );
     expect(
-      await page.locator("[data-review-outcome-group] h3").allTextContents(),
-    ).toEqual(["Needs your answer", "Changed", "Outside this plan"]);
+      await page
+        .locator("[data-review-sent-list] [data-review-outcome-group] h3")
+        .allTextContents(),
+    ).toEqual(["Ready for Review 3"]);
+    await expect(
+      page.locator(
+        '[data-review-outcome-group="ready"] [data-review-sent-row][data-review-outcome="changed"] [data-review-row-review-change]',
+      ),
+    ).toHaveText("Review change");
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      await exerciseControlStates({
+        control: page.locator(
+          '[data-review-outcome-group="ready"] [data-review-sent-row][data-review-outcome="changed"] [data-review-row-review-change]',
+        ),
+        property: "backgroundColor",
+      });
+    }
     for (const title of await page
       .locator("[data-review-sent-list] [data-review-row-target]")
       .allTextContents()) {
@@ -1238,7 +2608,9 @@ test("should preserve and send a floating review across reload and viewport chan
     await page.evaluate(() => window.scrollTo(0, 0));
     const before = await page.evaluate(() => window.scrollY);
     await page
-      .locator('[data-review-outcome-group="outside"] [data-review-row-target]')
+      .locator(
+        '[data-review-outcome-group="ready"] [data-review-sent-row][data-review-outcome="outside"] [data-review-row-target]',
+      )
       .click();
     await expect(tray).toBeVisible();
     await expect(page.locator("#delivery")).toBeInViewport();
@@ -1247,17 +2619,116 @@ test("should preserve and send a floating review across reload and viewport chan
       .not.toBeCloseTo(before, 0);
     await expect(
       page.locator(
-        '[data-review-sent-row][data-review-outcome="outside"] [data-review-tray-thread]',
+        '[data-review-sent-row][data-review-outcome="outside"][data-review-row-expanded]',
       ),
     ).toBeVisible();
     await page.setViewportSize({ width: 1440, height: 900 });
   });
 
+  await test.step("a sent row transforms in place through both collapse controls in both themes", async () => {
+    await page.evaluate(() => {
+      document.documentElement.style.scrollBehavior = "auto";
+    });
+    const commentText = "Keep this delivery note in its own anchored thread.";
+    const row = page.locator(
+      '[data-review-sent-row][data-review-outcome="outside"]',
+    );
+    const target = row.locator("[data-review-row-target]");
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      if ((await row.getAttribute("data-review-row-expanded")) !== null) {
+        await target.click();
+      }
+      await expect(target).toHaveAttribute("aria-expanded", "false");
+      await expect(row.locator("[data-review-row-body]")).toHaveText(
+        commentText,
+      );
+      await expect(row.getByText(commentText, { exact: true })).toHaveCount(1);
+
+      await page.mouse.move(1, 1);
+      const resting = await target.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      );
+      await target.hover();
+      const hover = await target.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      );
+      expect(hover).toBe(resting);
+      await expect(row.locator("[data-review-row-locator]")).toHaveCSS(
+        "opacity",
+        "1",
+      );
+      const rowHover = await row.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      );
+      expect(rowHover).not.toBe("rgba(0, 0, 0, 0)");
+      await target.focus();
+      await page.keyboard.press("Shift+Tab");
+      await page.keyboard.press("Tab");
+      await expect(target).toBeFocused();
+      await expect
+        .poll(() => target.evaluate((node) => node.matches(":focus-visible")))
+        .toBe(true);
+      const box = await target.boundingBox();
+      if (box === null) throw new Error("The thread header has no target");
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      const active = await target.evaluate(
+        (node) => getComputedStyle(node).color,
+      );
+      await page.mouse.move(1, 1);
+      await page.mouse.up();
+      const restingColor = await target.evaluate(
+        (node) => getComputedStyle(node).color,
+      );
+      expect(active).not.toBe(restingColor);
+
+      await row.locator("[data-review-row-body]").click();
+      await expect(row).toHaveAttribute("data-review-row-expanded", "");
+      await expect(target).toHaveAttribute("aria-expanded", "true");
+      await expect(row.locator("[data-review-row-body]")).toHaveCount(0);
+      await expect(row.getByText(commentText, { exact: true })).toHaveCount(1);
+      await expect(row.locator("[data-review-outcome-state]")).toHaveCount(0);
+      await exerciseExpandedReplyRetention({
+        owner: row,
+        field: row.locator("[data-review-thread-reply]"),
+        expandedAttribute: "data-review-row-expanded",
+      });
+      await page.waitForTimeout(700);
+      const beforeCollapse = await page.evaluate(() => window.scrollY);
+      await target.click();
+      await expect(row).not.toHaveAttribute("data-review-row-expanded");
+      await expect
+        .poll(() => page.evaluate(() => window.scrollY))
+        .toBeCloseTo(beforeCollapse, 0);
+      await expect(row.locator("[data-review-row-body]")).toHaveText(
+        commentText,
+      );
+
+      await target.click();
+      await row.locator("[data-review-thread-minimize]").click();
+      await expect(row).not.toHaveAttribute("data-review-row-expanded");
+      await expect(row.locator("[data-review-row-body]")).toHaveText(
+        commentText,
+      );
+    }
+  });
+
   await test.step("plan-wide chat stays separate and reaches the same real agent exchange", async () => {
     await expect(tray).toBeVisible();
     await page.locator('[data-review-tab="chat"]').click();
+    await expect(
+      page.locator("[data-review-chat-empty] [data-review-status-setup]"),
+    ).toHaveCount(0);
+    await expect(page.locator("[data-review-chat-empty]")).toContainText(
+      "Connection status and setup are in the Agent tab",
+    );
     const sentCount = await page
-      .locator("[data-review-thread-summary]")
+      .locator("[data-review-thread-summary-toggle]")
       .count();
     await page
       .locator("[data-review-agent-input]")
@@ -1269,33 +2740,60 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       page.locator('[data-review-chat-message="waiting"]'),
     ).toBeVisible();
+    const chatStatus = page.locator(
+      '[data-review-chat-message="waiting"] [data-review-thread-status]',
+    );
+    await expect(chatStatus).toHaveAttribute(
+      "data-review-thread-status",
+      "blocked",
+    );
+    await expect(chatStatus).toContainText("Blocked - no agent connected");
     await expect(
-      page.locator(
-        '[data-review-chat-message="waiting"] [data-review-spinner]',
-      ),
-    ).toBeVisible();
-    const activityToggle = page.locator("[data-review-activity-toggle]");
-    await expect(activityToggle).toBeVisible();
-    await activityToggle.click();
-    await expect(
-      page.locator('[data-review-chat-message="waiting"]'),
-    ).toContainText("Agent activity hidden");
-    await activityToggle.click();
-    await expect(
-      page.locator(
-        '[data-review-chat-message="waiting"] [data-review-agent-activity]',
-      ),
-    ).toBeVisible();
+      chatStatus.locator("[data-review-status-setup]"),
+    ).not.toHaveAttribute("open", "");
+    await expect(chatStatus.locator("[data-review-spinner]")).toHaveCount(0);
     await expect(page.locator("[data-review-progress]")).toHaveCount(0);
     await expect(page.locator("[data-review-agent-state]")).toHaveText(
-      "With agent",
+      "No agent connected",
     );
     await agentCommand(["next", session.plan]);
     await expect(
       page.locator('[data-review-chat-message="waiting"]'),
-    ).toContainText("Coding agent reviewing plan question", {
+    ).toContainText("Picked up: plan question", {
       timeout: 10_000,
     });
+    await expect(chatStatus).toHaveAttribute(
+      "data-review-thread-status",
+      "working",
+    );
+    await expect(chatStatus.locator("[data-review-spinner]")).toHaveCount(1);
+    const activityToggle = chatStatus.locator(
+      "[data-review-status-activity-toggle]",
+    );
+    await expect(activityToggle).toBeVisible();
+    await activityToggle.click();
+    await expect(
+      chatStatus.locator("[data-review-status-activity]"),
+    ).toHaveCount(0);
+    await activityToggle.click();
+    await expect(
+      chatStatus.locator("[data-review-status-activity]"),
+    ).toBeVisible();
+    await expect(
+      chatStatus.locator("[data-review-status-activity] time", {
+        hasText: "Just now",
+      }),
+    ).toHaveCount(0);
+    const activityItems = chatStatus.locator(
+      "[data-review-status-activity] li",
+    );
+    if ((await activityItems.count()) > 1) {
+      expect(
+        await activityItems
+          .nth(1)
+          .evaluate((node) => getComputedStyle(node).borderTopWidth),
+      ).toBe("1px");
+    }
     const exchange = await readAgentExchange({
       store,
       sessionId: session.sessionId,
@@ -1362,7 +2860,11 @@ Ship the live review loop behind the explicit review command.
         },
         request,
         commentsById: commentsFromExchange(exchange),
-        changedBlocks: new Set(),
+        changedPlaceIds: new Set(),
+        fromRevision: effectiveSourceRevision({
+          request,
+          snapshot: exchange,
+        }),
         currentRevision: deriveSourceRevision(revisedChat),
         now: new Date().toISOString(),
       }),
@@ -1399,7 +2901,7 @@ Ship the live review loop behind the explicit review command.
       };
     });
     expect(chatDiff.responseRevision).not.toBe(chatDiff.requestRevision);
-    expect(chatDiff.diff.locations.length).toBeGreaterThan(0);
+    expect(chatDiff.diff.changeSet.places.length).toBeGreaterThan(0);
     const digest = page
       .locator(
         '[data-review-chat-message="agent"] [data-review-chat-change-digest]',
@@ -1407,13 +2909,13 @@ Ship the live review loop behind the explicit review command.
       .first();
     await expect(
       digest.locator("[data-review-chat-change-toggle]"),
-    ).toContainText(/Changed \d+ places across \d+ slides/);
+    ).toContainText(/\d+ changes across \d+ slides/);
     const chatPlaces = Number(
       (
         (await digest
           .locator("[data-review-chat-change-toggle]")
           .textContent()) || ""
-      ).match(/Changed (\d+) places/)?.[1],
+      ).match(/(\d+) changes across/)?.[1],
     );
     expect(chatPlaces).toBeGreaterThan(3);
     await expect(
@@ -1458,12 +2960,19 @@ Ship the live review loop behind the explicit review command.
       document.documentElement.setAttribute("data-theme", "light"),
     );
     await digest.locator("[data-review-chat-change-toggle]").click();
+    // Slides are the grouping: expand every collapsed slide group, then all
+    // places appear as rows beneath their slide headers.
+    const slideGroups = digest.locator("[data-review-change-group]");
+    expect(await slideGroups.count()).toBeGreaterThan(1);
+    for (let index = 0; index < (await slideGroups.count()); index += 1) {
+      const group = slideGroups.nth(index);
+      if ((await group.getAttribute("aria-expanded")) === "false") {
+        await group.click();
+      }
+    }
     await expect(digest.locator("[data-review-change-row]")).toHaveCount(
       chatPlaces,
     );
-    expect(
-      await digest.locator("[data-review-change-slide-header]").count(),
-    ).toBeGreaterThan(1);
     await digest.locator("[data-review-see-change]").click();
     await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
     await expect(
@@ -1477,6 +2986,22 @@ Ship the live review loop behind the explicit review command.
       "aria-selected",
       "true",
     );
+    if (chatPlaces > 1) {
+      await page.locator("[data-review-diff-next]").click();
+      await expect(page.locator("[data-review-diff-position]")).toContainText(
+        `Change 2 of ${chatPlaces} ·`,
+      );
+      await page.locator("[data-review-diff-exit]").click();
+      await expect(page.locator("[data-review-diff-lens]")).toBeHidden();
+      await expect(page.locator("[data-review-diff-position]")).toContainText(
+        `Change 2 of ${chatPlaces} ·`,
+      );
+      await page.locator("[data-review-diff-exit]").click();
+      await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
+      await expect(page.locator("[data-review-diff-position]")).toContainText(
+        `Change 2 of ${chatPlaces} ·`,
+      );
+    }
     await digest.locator("[data-review-see-change]").click();
     await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
     await expect(page.locator("[data-review-diff-hidden]")).toHaveCount(0);
@@ -1487,8 +3012,8 @@ Ship the live review loop behind the explicit review command.
       .first();
     await expect(rewrittenRow).toBeVisible();
     await rewrittenRow.click();
-    await expect(page.locator("[data-review-diff-was]")).toBeVisible();
-    await expect(page.locator("[data-review-diff-now]")).toBeVisible();
+    await expect(page.locator('[data-review-diff-side="was"]')).toBeVisible();
+    await expect(page.locator('[data-review-diff-side="now"]')).toBeVisible();
     await digest.locator("[data-review-see-change]").click();
 
     const addedRow = digest
@@ -1496,7 +3021,8 @@ Ship the live review loop behind the explicit review command.
       .filter({ hasText: "added" })
       .first();
     await addedRow.click();
-    await expect(page.locator("[data-review-diff-added-run]")).toBeVisible();
+    await expect(page.locator('[data-review-diff-side="was"]')).toHaveCount(0);
+    await expect(page.locator('[data-review-diff-side="now"]')).toBeVisible();
     await digest.locator("[data-review-see-change]").click();
     await expect(page.locator("[data-review-diff-hidden]")).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Security" })).toBeVisible();
@@ -1539,7 +3065,11 @@ Ship the live review loop behind the explicit review command.
         },
         request: formattingRequest,
         commentsById: commentsFromExchange(formattingExchange),
-        changedBlocks: new Set(),
+        changedPlaceIds: new Set(),
+        fromRevision: effectiveSourceRevision({
+          request: formattingRequest,
+          snapshot: formattingExchange,
+        }),
         currentRevision: deriveSourceRevision(formattingSource),
         now: new Date().toISOString(),
       }),
@@ -1587,7 +3117,11 @@ Ship the live review loop behind the explicit review command.
         },
         request: unchangedRequest,
         commentsById: commentsFromExchange(unchangedExchange),
-        changedBlocks: new Set(),
+        changedPlaceIds: new Set(),
+        fromRevision: effectiveSourceRevision({
+          request: unchangedRequest,
+          snapshot: unchangedExchange,
+        }),
         currentRevision: deriveSourceRevision(formattingSource),
         now: new Date().toISOString(),
       }),
@@ -1625,7 +3159,7 @@ Ship the live review loop behind the explicit review command.
     await page.locator('[data-review-tab="comments"]').click();
     await page
       .locator(
-        '[data-review-outcome-group="question"] [data-review-row-target]',
+        '[data-review-outcome-group="ready"] [data-review-sent-row][data-review-outcome="question"] [data-review-row-target]',
       )
       .click();
     await expect(
@@ -1654,18 +3188,18 @@ Ship the live review loop behind the explicit review command.
     expect(geometry.position).toBe("relative");
   });
 
-  await test.step("Add Comment remembers immediate-send preference and staged comments can Submit Now", async () => {
+  await test.step("Add Comment remembers immediate-send preference and staged comments can Send this", async () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     if (await tray.isVisible()) {
       await page.locator("[data-review-hide]").click();
     }
     const delivery = page.locator("[data-block-kind='paragraph']").last();
-    await delivery.hover();
-    await affordance.click();
+    await delivery.scrollIntoViewIfNeeded();
+    await page.locator("[data-review-slide-selector]:visible").last().click();
     const preference = page.locator("[data-review-submit-immediately-input]");
-    const preferenceLabel = page.locator("[data-review-submit-immediately]");
+    const preferenceTrack = page.locator("[data-review-switch-track]");
     await expect(preference).not.toBeChecked();
-    await preferenceLabel.click();
+    await preferenceTrack.click();
     await expect(preference).toBeChecked();
     const immediateResponse = page.waitForResponse(
       (response) =>
@@ -1679,14 +3213,14 @@ Ship the live review loop behind the explicit review command.
     expect((await immediateResponse).ok()).toBe(true);
     await expect(page.locator("[data-review-drafts] li")).toHaveCount(0);
 
-    await delivery.hover();
-    await affordance.click();
+    await delivery.scrollIntoViewIfNeeded();
+    await page.locator("[data-review-slide-selector]:visible").last().click();
     await expect(preference).toBeChecked();
-    await preferenceLabel.click();
+    await preferenceTrack.click();
     await expect(preference).not.toBeChecked();
     await page
       .locator("[data-review-compose-input]")
-      .fill("Stage this one so Submit Now remains an explicit shortcut.");
+      .fill("Stage this one so Send this remains an explicit shortcut.");
     await page.locator("[data-review-compose-save]").click();
     await expect(page.locator("[data-review-drafts] li")).toHaveCount(1);
     const submitNow = page.locator(
@@ -1710,7 +3244,7 @@ Ship the live review loop behind the explicit review command.
     }
     await page.locator('[data-review-tab="comments"]').click();
     const changedRow = page.locator(
-      '[data-review-outcome-group="changed"] [data-review-row-target]',
+      '[data-review-outcome-group="ready"] [data-review-sent-row][data-review-outcome="changed"] [data-review-row-target]',
     );
     await changedRow.click();
     const commentId = await changedRow
@@ -1720,14 +3254,30 @@ Ship the live review loop behind the explicit review command.
     const stableRow = page.locator(
       `[data-review-sent-row][data-review-comment-id="${commentId}"]`,
     );
-    const trayThread = stableRow.locator("[data-review-tray-thread]");
-    await expect(trayThread).toBeVisible();
+    const trayThread = stableRow;
+    await expect(trayThread).toHaveAttribute("data-review-row-expanded", "");
     await expect(
       trayThread.locator("[data-review-thread-revert]"),
     ).toBeVisible();
     await expect(
       trayThread.locator("[data-review-thread-resolve]"),
     ).toBeVisible();
+    const resolutionFooter = trayThread.locator(
+      "[data-review-thread-resolution]",
+    );
+    await expect(resolutionFooter).toBeVisible();
+    await expect(
+      resolutionFooter.locator("[data-review-thread-keep-open]"),
+    ).toHaveText("Keep open");
+    const footerResolve = resolutionFooter.locator(
+      "[data-review-thread-resolve-footer]",
+    );
+    await expect(footerResolve).toHaveText("Resolve thread");
+    const replyField = trayThread.locator("[data-review-thread-reply]");
+    await replyField.fill("One final note before resolving.");
+    await expect(footerResolve).toHaveText("Reply & resolve");
+    await replyField.fill("");
+    await expect(footerResolve).toHaveText("Resolve thread");
     for (const theme of ["light", "dark"]) {
       await page.evaluate(
         (nextTheme) =>
@@ -1738,11 +3288,26 @@ Ship the live review loop behind the explicit review command.
         "[data-review-thread-minimize]",
         "[data-review-thread-resolve]",
         "[data-review-thread-revert]",
+        "[data-review-thread-keep-open]",
+        "[data-review-thread-resolve-footer]",
       ]) {
         const button = trayThread.locator(control);
+        const styleProperty =
+          control === "[data-review-thread-resolve-footer]"
+            ? "filter"
+            : "backgroundColor";
         await button.hover();
+        if (
+          control !== "[data-review-thread-keep-open]" &&
+          control !== "[data-review-thread-resolve-footer]"
+        ) {
+          await expect(
+            button.locator("[data-review-icon-tooltip]"),
+          ).toBeVisible();
+        }
         const hover = await button.evaluate(
-          (node) => getComputedStyle(node).backgroundColor,
+          (node, property) => getComputedStyle(node)[property],
+          styleProperty,
         );
         await button.focus();
         await page.keyboard.press("Shift+Tab");
@@ -1756,7 +3321,8 @@ Ship the live review loop behind the explicit review command.
         await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
         await page.mouse.down();
         const active = await button.evaluate(
-          (node) => getComputedStyle(node).backgroundColor,
+          (node, property) => getComputedStyle(node)[property],
+          styleProperty,
         );
         await page.mouse.move(1, 1);
         await page.mouse.up();
@@ -1766,6 +3332,14 @@ Ship the live review loop behind the explicit review command.
     await page.evaluate(() =>
       document.documentElement.setAttribute("data-theme", "light"),
     );
+    const beforeKeepOpen = await page.evaluate(() => window.scrollY);
+    await resolutionFooter.locator("[data-review-thread-keep-open]").click();
+    await expect(trayThread).not.toHaveAttribute("data-review-row-expanded");
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeCloseTo(beforeKeepOpen, 0);
+    await changedRow.click();
+    await expect(trayThread).toHaveAttribute("data-review-row-expanded", "");
     const historicalChange = trayThread
       .locator("[data-review-see-change]")
       .first();
@@ -1774,10 +3348,16 @@ Ship the live review loop behind the explicit review command.
     await expect(page.locator("[data-review-diff-label]")).toContainText(
       "since revised again",
     );
-    await historicalChange.click();
-    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
     await trayThread.locator("[data-review-thread-minimize]").click();
-    await expect(trayThread).toHaveCount(0);
+    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+    await expect(trayThread).not.toHaveAttribute("data-review-row-expanded");
+    await expect(trayThread.locator("[data-review-row-body]")).toBeVisible();
+    await expect(
+      trayThread.locator("[data-review-thread-resolve]"),
+    ).toBeVisible();
+    await expect(
+      trayThread.locator("[data-review-thread-revert]"),
+    ).toBeVisible();
     await expect(tray).toBeVisible();
 
     await changedRow.click();
@@ -1834,6 +3414,26 @@ Ship the live review loop behind the explicit review command.
       revision: deriveSourceRevision(reverted),
       source: reverted,
     });
+    const revertPair = {
+      fromRevision: effectiveSourceRevision({
+        request,
+        snapshot: exchange,
+      }),
+      toRevision: deriveSourceRevision(reverted),
+    };
+    const revertChangeSet = buildRevisionChangeSet({
+      pair: revertPair,
+      before: renderDocument({
+        markdown: current,
+        fallbackTitle: "Review persistence",
+        identity: {},
+      }).blocks,
+      after: renderDocument({
+        markdown: reverted,
+        fallbackTitle: "Review persistence",
+        identity: {},
+      }).blocks,
+    });
     await writeAgentResponse({
       store,
       response: validateAgentResponseDraft({
@@ -1844,13 +3444,19 @@ Ship the live review loop behind the explicit review command.
               commentId,
               state: "changed",
               message: "I reverted this thread's plan changes.",
-              changeTargets: [blockId],
+              changes: revertChangeSet.places.map((place) => ({
+                placeId: place.placeId,
+                summary: "Reverted this thread's plan changes",
+              })),
             },
           ],
         },
         request,
         commentsById: commentsFromExchange(exchange),
-        changedBlocks: new Set([blockId]),
+        changedPlaceIds: new Set(
+          revertChangeSet.places.map((place) => place.placeId),
+        ),
+        fromRevision: revertPair.fromRevision,
         currentRevision: deriveSourceRevision(reverted),
         now: new Date().toISOString(),
       }),
@@ -1862,13 +3468,36 @@ Ship the live review loop behind the explicit review command.
       page.locator('[data-block-label="versionId"]'),
     ).not.toHaveAttribute("data-review-anchor-changed");
 
+    await expect(page.locator("[data-review-other-changes]")).toHaveCount(0);
     const savedResolve = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/drafts") &&
         response.request().method() === "PUT",
     );
-    await trayThread.locator("[data-review-thread-resolve]").click();
+    const beforeResolve = await page.evaluate(() => window.scrollY);
+    await trayThread.locator("[data-review-thread-resolve-footer]").click();
     expect((await savedResolve).ok()).toBe(true);
+    await expect(page.locator("[data-review-toast]")).toBeVisible();
+    await expect(page.locator("[data-review-toast]")).toContainText("Resolved");
+    await expect(page.locator("[data-review-toast-action]")).toHaveText("Undo");
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeCloseTo(beforeResolve, 0);
+    const savedUndo = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/drafts") &&
+        response.request().method() === "PUT",
+    );
+    await page.locator("[data-review-toast-action]").click();
+    expect((await savedUndo).ok()).toBe(true);
+    await expect(trayThread).toHaveAttribute("data-review-row-expanded", "");
+    const savedFinalResolve = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/drafts") &&
+        response.request().method() === "PUT",
+    );
+    await trayThread.locator("[data-review-thread-resolve-footer]").click();
+    expect((await savedFinalResolve).ok()).toBe(true);
     await expect(
       page.locator(
         `[data-review-outcome-group] [data-review-sent-row][data-review-comment-id="${commentId}"]`,
@@ -1879,10 +3508,69 @@ Ship the live review loop behind the explicit review command.
         `[data-review-resolved-group] [data-review-sent-row][data-review-comment-id="${commentId}"]`,
       ),
     ).toHaveCount(1);
+    await expect(page.locator("[data-review-other-changes]")).toHaveCount(0);
     await expect(tray).toBeVisible();
   });
 
   await test.step("resolved threads stay retired after reload but remain findable", async () => {
+    const restoreResolutionState = await page.evaluate(async () => {
+      const token =
+        document.documentElement.getAttribute("data-review-token") ?? "";
+      const headers = {
+        "content-type": "application/json",
+        "x-big-plan-review-token": token,
+      };
+      const state = await fetch("/api/drafts", { headers }).then((response) =>
+        response.json(),
+      );
+      await fetch("/api/drafts", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          drafts: state.drafts,
+          activeDraft: state.activeDraft,
+          resolvedCommentIds: state.sent.map(
+            (comment: { readonly id: string }) => comment.id,
+          ),
+        }),
+      });
+      return {
+        drafts: state.drafts,
+        activeDraft: state.activeDraft,
+        resolvedCommentIds: state.resolvedCommentIds,
+      };
+    });
+    await page.reload();
+    if (!(await tray.isVisible())) {
+      await toggle.click();
+    }
+    await page.locator('[data-review-tab="comments"]').click();
+    await expect(
+      page.locator("[data-review-sent] [data-review-outcome-group]"),
+    ).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.locator("[data-review-resolved-group]").evaluate((resolved) => ({
+          border: getComputedStyle(resolved).borderTopWidth,
+          className: resolved.className,
+        })),
+      )
+      .toEqual({
+        border: "0px",
+        className: "mt-0! border-t-0! pt-0!",
+      });
+    await page.evaluate(async (state) => {
+      const token =
+        document.documentElement.getAttribute("data-review-token") ?? "";
+      await fetch("/api/drafts", {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          "x-big-plan-review-token": token,
+        },
+        body: JSON.stringify(state),
+      });
+    }, restoreResolutionState);
     await page.reload();
     if (!(await tray.isVisible())) {
       await toggle.click();
@@ -1891,10 +3579,27 @@ Ship the live review loop behind the explicit review command.
     await expect(
       page.locator("[data-review-resolved-group] summary"),
     ).toHaveText("Resolved (1)");
+    await expect(page.locator("[data-review-empty]")).toBeVisible();
+    await expect
+      .poll(() =>
+        page.locator("[data-review-sent]").evaluate((sent) => {
+          const resolved = sent.querySelector("[data-review-resolved-group]");
+          return {
+            outer: getComputedStyle(sent).borderTopWidth,
+            inner:
+              resolved === null
+                ? "missing"
+                : getComputedStyle(resolved).borderTopWidth,
+          };
+        }),
+      )
+      .toEqual({
+        outer: "1px",
+        inner: "1px",
+      });
     await page.locator("[data-review-resolved-group] summary").click();
     const resolvedRow = page.locator("[data-review-resolved-group] li");
     await expect(resolvedRow).toHaveCount(1);
-    await resolvedRow.locator("[data-review-row-target]").click();
     await expect(
       resolvedRow.locator("[data-review-thread-unresolve]"),
     ).toBeVisible();
@@ -1908,13 +3613,17 @@ Ship the live review loop behind the explicit review command.
     await expect(page.locator("[data-review-resolved-group]")).toHaveCount(0);
     await expect(
       page.locator(
-        '[data-review-outcome-group="changed"] [data-review-sent-row]',
+        '[data-review-outcome-group="ready"] [data-review-sent-row][data-review-outcome="changed"]',
       ),
     ).toHaveCount(1);
     const restoredRow = page.locator(
-      '[data-review-outcome-group="changed"] [data-review-sent-row]',
+      '[data-review-outcome-group="ready"] [data-review-sent-row][data-review-outcome="changed"]',
     );
-    await restoredRow.locator("[data-review-row-target]").click();
+    if ((await restoredRow.getAttribute("data-review-row-expanded")) === null) {
+      await restoredRow.locator("[data-review-row-target]").click();
+    }
+    await restoredRow.locator("[data-review-see-change]").first().click();
+    await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
     const savedReresolve = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/drafts") &&
@@ -1922,6 +3631,7 @@ Ship the live review loop behind the explicit review command.
     );
     await restoredRow.locator("[data-review-thread-resolve]").click();
     expect((await savedReresolve).ok()).toBe(true);
+    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
     await expect(page.locator("[data-review-resolved-group]")).toHaveCount(1);
   });
 
@@ -1930,7 +3640,19 @@ Ship the live review loop behind the explicit review command.
       await page.locator("[data-review-hide]").click();
     }
     const paragraph = page.locator(
-      '[data-block-section="Delivery"][data-block-kind="paragraph"]',
+      '[data-block-id="section/delivery/paragraph-1"]',
+    );
+    await paragraph.waitFor({ state: "attached" });
+    if (!(await paragraph.isVisible())) {
+      const expandSlide = page.getByRole("button", { name: "Expand slide" });
+      await expect(expandSlide).toHaveCount(1);
+      await expandSlide.click();
+    }
+    await expect(paragraph).toBeVisible();
+    const selectionCountBefore = Number(
+      (await page
+        .locator("html")
+        .getAttribute("data-review-selection-highlight-count")) ?? "0",
     );
     await paragraph.scrollIntoViewIfNeeded();
     await paragraph.evaluate((block) => {
@@ -1960,13 +3682,11 @@ Ship the live review loop behind the explicit review command.
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute(
       "data-review-selection-highlight-count",
-      "1",
+      String(selectionCountBefore + 1),
     );
     await expect(page.locator("[data-review-draft-stale]")).toHaveCount(0);
     await expect(
-      page.locator(
-        '[data-block-section="Delivery"][data-block-kind="paragraph"]',
-      ),
+      page.locator('[data-block-id="section/delivery/paragraph-1"]'),
     ).not.toHaveAttribute("data-review-anchor-changed");
 
     const changed = moved.replace(
@@ -1977,16 +3697,72 @@ Ship the live review loop behind the explicit review command.
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute(
       "data-review-selection-highlight-count",
-      "0",
+      String(selectionCountBefore),
     );
     await expect(page.locator("[data-review-draft-stale]")).toHaveCount(2);
     await expect(page.locator("[data-review-draft-stale]").first()).toHaveText(
       "The text changed since you drafted this.",
     );
     await expect(
-      page.locator(
-        '[data-block-section="Delivery"][data-block-kind="paragraph"]',
-      ),
+      page.locator('[data-block-id="section/delivery/paragraph-1"]'),
     ).toHaveAttribute("data-review-anchor-changed", "");
   });
+});
+
+test("should preserve footnote navigation inside a selected slide", async ({
+  page,
+  footnoteReviewRuntimeUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(footnoteReviewRuntimeUrl);
+  await page.evaluate(() => {
+    document.documentElement.style.scrollBehavior = "auto";
+  });
+  const selector = page.locator("[data-review-slide-selector]").first();
+  const selectedSlide = selector.locator("xpath=ancestor::*[@data-slide]");
+  await selector.click();
+  const compose = page.locator("[data-review-compose]");
+  await expect(compose).toHaveAttribute(
+    "data-review-compose-placement",
+    "before-slide",
+  );
+  await page
+    .locator("[data-review-compose-input]")
+    .fill("Keep the footnote reachable while this slide is selected.");
+  await page.locator("[data-review-compose-save]").click();
+  await expect(selectedSlide).toHaveAttribute(
+    "data-review-slide-highlight",
+    "comment",
+  );
+  const footnoteLink = selectedSlide.locator("[data-footnote-ref]");
+  const footnote = page.locator("#user-content-fn-delivery");
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate(
+      (nextTheme) =>
+        document.documentElement.setAttribute("data-theme", nextTheme),
+      theme,
+    );
+    await footnoteLink.click();
+    await expect(footnote).toBeInViewport();
+    await expect
+      .poll(() => page.evaluate(() => location.hash))
+      .toBe("#user-content-fn-delivery");
+    await footnote.locator("[data-footnote-backref]").click();
+    await expect(footnoteLink).toBeInViewport();
+  }
+  const footnoteParagraph = footnoteLink.locator("xpath=ancestor::p");
+  await footnoteParagraph.click({ clickCount: 3 });
+  const affordance = page.locator("[data-review-affordance]");
+  await expect(affordance).toBeVisible();
+  await affordance.click();
+  await expect(compose).toBeVisible();
+  await expect
+    .poll(() =>
+      compose.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return rect.bottom > 44 && rect.top < window.innerHeight;
+      }),
+    )
+    .toBe(true);
+  await page.keyboard.press("Escape");
 });

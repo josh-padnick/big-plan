@@ -10,15 +10,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  agentHeartbeatIsFresh,
+  appendAgentCancellation,
+  appendAgentConnectionEvent,
   appendProgress,
   prepareStore,
   readActiveDraft,
+  readAgentHeartbeat,
+  readAgentCancellations,
+  readAgentConnectionEvents,
   readProgress,
   readResolvedCommentIds,
   readRevisionSnapshot,
   reviewStoreFor,
   sessionHeartbeatIsFresh,
   writeActiveDraft,
+  writeAgentHeartbeat,
   writeResolvedCommentIds,
   writeRevisionSnapshot,
   writeSessionDescriptor,
@@ -58,6 +65,9 @@ describe("review store placement", () => {
       store.resolvedPath,
       store.sessionPath,
       store.heartbeatPath,
+      store.agentHeartbeatPath,
+      store.agentCancellationsPath,
+      store.agentConnectionEventsPath,
     ]) {
       expect(path.startsWith(join(directory, ".big-plan"))).toBe(true);
     }
@@ -108,6 +118,30 @@ describe("review store placement", () => {
     await expect(readFile(outside, "utf8")).resolves.toBe(
       "outside stays unchanged\n",
     );
+  });
+});
+
+describe("review store request cancellations", () => {
+  it("should append a cancellation once and ignore malformed disk entries", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const cancellation = {
+      requestId: "1111111111111111",
+      at: "2026-08-04T12:00:00.000Z",
+    };
+    await appendAgentCancellation({ store, cancellation });
+    await appendAgentCancellation({ store, cancellation });
+    await expect(readAgentCancellations({ store })).resolves.toEqual([
+      cancellation,
+    ]);
+    await writeFile(
+      store.agentCancellationsPath,
+      JSON.stringify([cancellation, { requestId: "../../bad", at: "never" }]),
+    );
+    await expect(readAgentCancellations({ store })).resolves.toEqual([
+      cancellation,
+    ]);
   });
 });
 
@@ -229,6 +263,104 @@ describe("review store session heartbeat", () => {
   });
 });
 
+describe("review store agent heartbeat", () => {
+  it("should use a short waiting lease and a longer claimed-work lease", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "agent-session",
+      state: "waiting",
+      now: 1_000,
+    });
+    await expect(
+      readAgentHeartbeat({ store, sessionId: "agent-session" }),
+    ).resolves.toEqual({ state: "waiting", updatedAtMs: 1_000 });
+    await expect(
+      readAgentHeartbeat({ store, sessionId: "another-session" }),
+    ).resolves.toBeUndefined();
+    await expect(
+      agentHeartbeatIsFresh({
+        store,
+        sessionId: "agent-session",
+        now: 3_999,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      agentHeartbeatIsFresh({
+        store,
+        sessionId: "agent-session",
+        now: 4_001,
+      }),
+    ).resolves.toBe(false);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "agent-session",
+      state: "working",
+      now: 1_000,
+    });
+    await expect(
+      agentHeartbeatIsFresh({
+        store,
+        sessionId: "agent-session",
+        now: 91_000,
+      }),
+    ).resolves.toBe(true);
+  });
+});
+
+describe("review store connection events", () => {
+  it("should append an immutable timestamped timeline for one session", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await appendAgentConnectionEvent({
+      store,
+      event: {
+        sessionId: "agent-session",
+        connected: false,
+        at: "2026-08-04T17:00:00.000Z",
+      },
+    });
+    await appendAgentConnectionEvent({
+      store,
+      event: {
+        sessionId: "agent-session",
+        connected: true,
+        at: "2026-08-04T17:00:01.000Z",
+      },
+    });
+    await appendAgentConnectionEvent({
+      store,
+      event: {
+        sessionId: "another-session",
+        connected: true,
+        at: "2026-08-04T17:00:02.000Z",
+      },
+    });
+    await expect(
+      readAgentConnectionEvents({ store, sessionId: "agent-session" }),
+    ).resolves.toEqual([
+      {
+        sessionId: "agent-session",
+        connected: false,
+        at: "2026-08-04T17:00:00.000Z",
+      },
+      {
+        sessionId: "agent-session",
+        connected: true,
+        at: "2026-08-04T17:00:01.000Z",
+      },
+    ]);
+    expect(
+      (await readFile(store.agentConnectionEventsPath, "utf8"))
+        .trim()
+        .split("\n"),
+    ).toHaveLength(3);
+  });
+});
+
 describe("review store progress relay", () => {
   const line = (value: unknown) => `${JSON.stringify(value)}\n`;
 
@@ -309,8 +441,15 @@ describe("review store progress relay", () => {
         seq: 1,
         step: "Feedback package received",
         state: "done",
+        requestId: "request-1",
+        at: "2026-08-03T12:00:00.000Z",
       },
     });
-    expect(await readProgress({ store, sessionId: "s1" })).toHaveLength(1);
+    expect(await readProgress({ store, sessionId: "s1" })).toEqual([
+      expect.objectContaining({
+        requestId: "request-1",
+        at: "2026-08-03T12:00:00.000Z",
+      }),
+    ]);
   });
 });

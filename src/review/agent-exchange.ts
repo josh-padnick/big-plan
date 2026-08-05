@@ -6,7 +6,14 @@
 import { createHash } from "node:crypto";
 import type { CommentTarget, ReviewComment } from "./comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
+import type { RevisionPair } from "./revision-change-set.js";
 import {
+  parseMessageMarkdown,
+  validateMessageNodes,
+} from "./message-markdown.js";
+import type { MessageNode } from "./message-markdown.js";
+import {
+  readAgentCancellations,
   readAgentRequestValues,
   readAgentResponseValues,
   writeAgentRequestValue,
@@ -34,6 +41,8 @@ type AgentRequestBase = {
 export type AgentFeedbackRequest = AgentRequestBase & {
   readonly kind: "feedback";
   readonly packageId: string;
+  readonly batchIndex: number;
+  readonly batchSize: number;
   readonly comments: ReadonlyArray<ReviewComment>;
 };
 
@@ -55,7 +64,11 @@ export type AgentOutcome = {
   readonly commentId: string;
   readonly state: AgentOutcomeState;
   readonly message: string;
-  readonly changeTargets?: ReadonlyArray<string>;
+  readonly messageNodes?: ReadonlyArray<MessageNode>;
+  readonly changes?: ReadonlyArray<{
+    readonly placeId: string;
+    readonly summary: string;
+  }>;
 };
 
 type AgentResponseBase = {
@@ -64,6 +77,7 @@ type AgentResponseBase = {
   readonly sessionId: string;
   readonly planId: string;
   readonly sourceRevision: string;
+  readonly revisionPair: RevisionPair;
   readonly createdAt: string;
 };
 
@@ -75,6 +89,7 @@ export type AgentThreadResponse = AgentResponseBase & {
 export type AgentChatResponse = AgentResponseBase & {
   readonly kind: "chat";
   readonly message: string;
+  readonly messageNodes?: ReadonlyArray<MessageNode>;
 };
 
 export type AgentResponse = AgentThreadResponse | AgentChatResponse;
@@ -82,6 +97,7 @@ export type AgentResponse = AgentThreadResponse | AgentChatResponse;
 export type AgentExchangeSnapshot = {
   readonly requests: ReadonlyArray<AgentRequest>;
   readonly responses: ReadonlyArray<AgentResponse>;
+  readonly cancelledIds: ReadonlyArray<string>;
 };
 
 export class AgentExchangeRejected extends Error {
@@ -166,6 +182,7 @@ const target = (value: unknown): CommentTarget => {
   }
   if (
     (value.type !== "block" &&
+      value.type !== "slide" &&
       value.type !== "selection" &&
       value.type !== "lines") ||
     typeof value.blockId !== "string" ||
@@ -188,7 +205,18 @@ const target = (value: unknown): CommentTarget => {
       : {}),
   };
   if (value.type === "block") {
-    return { type: "block", ...identity };
+    return { type: value.type, ...identity };
+  }
+  if (value.type === "slide") {
+    const expectedScope = value.blockId.split("/").slice(0, -1).join("/");
+    if (
+      typeof value.scope !== "string" ||
+      value.scope !== expectedScope ||
+      !BLOCK_ID.test(value.scope)
+    ) {
+      throw new AgentExchangeRejected("A stored slide scope is invalid");
+    }
+    return { type: value.type, ...identity, scope: value.scope };
   }
   if (
     typeof value.start !== "number" ||
@@ -202,9 +230,23 @@ const target = (value: unknown): CommentTarget => {
   ) {
     throw new AgentExchangeRejected("A stored comment range is invalid");
   }
+  if (
+    value.type === "selection" &&
+    value.endBlockId !== undefined &&
+    (typeof value.endBlockId !== "string" || !BLOCK_ID.test(value.endBlockId))
+  ) {
+    throw new AgentExchangeRejected(
+      "A stored multi-block selection target is invalid",
+    );
+  }
   return {
     type: value.type,
     ...identity,
+    ...(value.type === "selection" &&
+    typeof value.endBlockId === "string" &&
+    BLOCK_ID.test(value.endBlockId)
+      ? { endBlockId: value.endBlockId }
+      : {}),
     start: value.start,
     end: value.end,
     quote: value.quote,
@@ -248,17 +290,25 @@ export const validateAgentRequest = (value: unknown): AgentRequest => {
   if (value.kind === "feedback") {
     if (
       !Array.isArray(value.comments) ||
-      value.comments.length === 0 ||
-      value.comments.length > MESSAGE_LIMIT
+      value.comments.length !== 1 ||
+      typeof value.batchIndex !== "number" ||
+      !Number.isInteger(value.batchIndex) ||
+      value.batchIndex < 0 ||
+      typeof value.batchSize !== "number" ||
+      !Number.isInteger(value.batchSize) ||
+      value.batchSize < 1 ||
+      value.batchIndex >= value.batchSize
     ) {
       throw new AgentExchangeRejected(
-        "A feedback request must contain comments",
+        "A feedback request must own exactly one comment in its batch",
       );
     }
     return {
       ...base,
       kind: "feedback",
       packageId: id(value.packageId, "packageId"),
+      batchIndex: value.batchIndex,
+      batchSize: value.batchSize,
       comments: value.comments.map(comment),
     };
   }
@@ -282,10 +332,12 @@ export const validateAgentRequest = (value: unknown): AgentRequest => {
 
 const responseBase = ({
   request,
+  fromRevision,
   currentRevision,
   now,
 }: {
   readonly request: AgentRequest;
+  readonly fromRevision: string;
   readonly currentRevision: string;
   readonly now: string;
 }): AgentResponseBase => ({
@@ -294,6 +346,7 @@ const responseBase = ({
   sessionId: request.sessionId,
   planId: request.planId,
   sourceRevision: currentRevision,
+  revisionPair: { fromRevision, toRevision: currentRevision },
   createdAt: now,
 });
 
@@ -317,13 +370,13 @@ const expectedCommentIds = ({
 
 const outcome = ({
   value,
-  request,
-  changedBlocks,
+  changedPlaceIds,
+  fromRevision,
   currentRevision,
 }: {
   readonly value: unknown;
-  readonly request: AgentFeedbackRequest | AgentReplyRequest;
-  readonly changedBlocks: ReadonlySet<string>;
+  readonly changedPlaceIds: ReadonlySet<string>;
+  readonly fromRevision: string;
   readonly currentRevision: string;
 }): AgentOutcome => {
   if (!isRecord(value)) {
@@ -341,42 +394,59 @@ const outcome = ({
     state,
     message: text({ value: value.message, field: "message" }),
   };
+  const withMessage = {
+    ...result,
+    messageNodes: parseMessageMarkdown(result.message),
+  };
   if (state !== "changed") {
-    return result;
+    return withMessage;
   }
-  if (currentRevision === request.sourceRevision) {
+  if (currentRevision === fromRevision) {
     throw new AgentExchangeRejected(
       'A "changed" outcome requires a revision to the plan source',
     );
   }
   if (
-    !Array.isArray(value.changeTargets) ||
-    value.changeTargets.length === 0 ||
-    value.changeTargets.length > MESSAGE_LIMIT
+    value.changes !== undefined &&
+    (!Array.isArray(value.changes) || value.changes.length > MESSAGE_LIMIT)
   ) {
     throw new AgentExchangeRejected(
-      'A "changed" outcome must list at least one changed block',
+      '"changes" must be a list of optional place summaries',
     );
   }
-  const changeTargets = value.changeTargets.map((entry) => {
-    const changeTarget = text({
-      value: entry,
-      field: "changeTargets",
-      limit: 300,
-    });
-    if (!BLOCK_ID.test(changeTarget) || !changedBlocks.has(changeTarget)) {
-      throw new AgentExchangeRejected(
-        'Every "changeTargets" entry must name a block changed by this revision',
-      );
-    }
-    return changeTarget;
-  });
-  if (new Set(changeTargets).size !== changeTargets.length) {
+  const changes = (Array.isArray(value.changes) ? value.changes : []).map(
+    (entry) => {
+      if (!isRecord(entry)) {
+        throw new AgentExchangeRejected(
+          'Every "changes" entry must contain a placeId and summary',
+        );
+      }
+      const placeId = text({
+        value: entry.placeId,
+        field: "changes.placeId",
+        limit: 16,
+      });
+      if (!ID.test(placeId) || !changedPlaceIds.has(placeId)) {
+        throw new AgentExchangeRejected(
+          'Every "changes.placeId" must name a real place in this revision pair',
+        );
+      }
+      return {
+        placeId,
+        summary: text({
+          value: entry.summary,
+          field: "changes.summary",
+          limit: 90,
+        }),
+      };
+    },
+  );
+  if (new Set(changes.map(({ placeId }) => placeId)).size !== changes.length) {
     throw new AgentExchangeRejected(
-      '"changeTargets" cannot contain duplicates',
+      '"changes" cannot contain duplicate targets',
     );
   }
-  return { ...result, changeTargets };
+  return { ...withMessage, changes };
 };
 
 /** Validates an agent-authored draft and fills trusted session metadata. */
@@ -384,14 +454,16 @@ export const validateAgentResponseDraft = ({
   value,
   request,
   commentsById,
-  changedBlocks,
+  changedPlaceIds,
+  fromRevision,
   currentRevision,
   now,
 }: {
   readonly value: unknown;
   readonly request: AgentRequest;
   readonly commentsById: ReadonlyMap<string, ReviewComment>;
-  readonly changedBlocks: ReadonlySet<string>;
+  readonly changedPlaceIds: ReadonlySet<string>;
+  readonly fromRevision: string;
   readonly currentRevision: string;
   readonly now: string;
 }): AgentResponse => {
@@ -403,12 +475,14 @@ export const validateAgentResponseDraft = ({
       "The response does not answer the pending request",
     );
   }
-  const base = responseBase({ request, currentRevision, now });
+  const base = responseBase({ request, fromRevision, currentRevision, now });
   if (request.kind === "chat") {
+    const message = text({ value: value.message, field: "message" });
     return {
       ...base,
       kind: "chat",
-      message: text({ value: value.message, field: "message" }),
+      message,
+      messageNodes: parseMessageMarkdown(message),
     };
   }
   if (!Array.isArray(value.outcomes)) {
@@ -418,8 +492,8 @@ export const validateAgentResponseDraft = ({
   const outcomes = value.outcomes.map((entry) =>
     outcome({
       value: entry,
-      request,
-      changedBlocks,
+      changedPlaceIds,
+      fromRevision,
       currentRevision,
     }),
   );
@@ -464,13 +538,31 @@ const validateStoredResponse = ({
     sessionId: request.sessionId,
     planId: request.planId,
     sourceRevision: sourceRevision(value.sourceRevision),
+    revisionPair: (() => {
+      if (!isRecord(value.revisionPair)) {
+        throw new AgentExchangeRejected("A stored revision pair is invalid");
+      }
+      return {
+        fromRevision: sourceRevision(value.revisionPair.fromRevision),
+        toRevision: sourceRevision(value.revisionPair.toRevision),
+      };
+    })(),
     createdAt: timestamp(value.createdAt),
   };
+  if (base.revisionPair.toRevision !== base.sourceRevision) {
+    throw new AgentExchangeRejected(
+      "A stored revision pair must end at the response revision",
+    );
+  }
   if (request.kind === "chat") {
+    const message = text({ value: value.message, field: "message" });
     return {
       ...base,
       kind: "chat",
-      message: text({ value: value.message, field: "message" }),
+      message,
+      ...(value.messageNodes === undefined
+        ? {}
+        : { messageNodes: validateMessageNodes(value.messageNodes) }),
     };
   }
   if (!Array.isArray(value.outcomes)) {
@@ -493,20 +585,48 @@ const validateStoredResponse = ({
       commentId: checkedCommentId,
       state: entry.state,
       message: text({ value: entry.message, field: "message" }),
+      ...(entry.messageNodes === undefined
+        ? {}
+        : { messageNodes: validateMessageNodes(entry.messageNodes) }),
     };
     if (entry.state !== "changed") {
       return result;
     }
     if (
-      !Array.isArray(entry.changeTargets) ||
-      entry.changeTargets.length === 0 ||
-      entry.changeTargets.some(
-        (target) => typeof target !== "string" || !BLOCK_ID.test(target),
-      )
+      (entry.changes !== undefined && !Array.isArray(entry.changes)) ||
+      (Array.isArray(entry.changes) &&
+        entry.changes.some(
+          (change) =>
+            !isRecord(change) ||
+            typeof change.placeId !== "string" ||
+            !ID.test(change.placeId) ||
+            typeof change.summary !== "string" ||
+            change.summary.trim() === "" ||
+            change.summary.trim().length > 90,
+        ))
     ) {
-      throw new AgentExchangeRejected("Stored change targets are invalid");
+      throw new AgentExchangeRejected("Stored changes are invalid");
     }
-    return { ...result, changeTargets: entry.changeTargets };
+    const changes = (Array.isArray(entry.changes) ? entry.changes : []).map(
+      (change) => {
+        if (!isRecord(change)) {
+          throw new AgentExchangeRejected("Stored changes are invalid");
+        }
+        return {
+          placeId: text({
+            value: change.placeId,
+            field: "changes.placeId",
+            limit: 16,
+          }),
+          summary: text({
+            value: change.summary,
+            field: "changes.summary",
+            limit: 90,
+          }),
+        };
+      },
+    );
+    return { ...result, changes };
   });
   const actual = outcomes.map((entry) => entry.commentId);
   if (
@@ -523,24 +643,36 @@ const validateStoredResponse = ({
 export const deriveSourceRevision = (source: string): string =>
   createHash("sha256").update(source).digest("hex").slice(0, 16);
 
-/** Turns one real feedback package into the first coding-agent request. */
-export const feedbackAgentRequest = ({
+/** Fans Send all into ordered, causally isolated one-comment exchanges. */
+export const feedbackAgentRequests = ({
   feedback,
   sourceRevision: revision,
+  requestIds,
 }: {
   readonly feedback: FeedbackPackage;
   readonly sourceRevision: string;
-}): AgentFeedbackRequest => ({
-  version: 1,
-  requestId: feedback.packageId,
-  sessionId: feedback.sessionId,
-  planId: feedback.planId,
-  sourceRevision: revision,
-  createdAt: feedback.createdAt,
-  kind: "feedback",
-  packageId: feedback.packageId,
-  comments: feedback.comments,
-});
+  readonly requestIds: ReadonlyArray<string>;
+}): ReadonlyArray<AgentFeedbackRequest> => {
+  if (requestIds.length !== feedback.comments.length) {
+    throw new AgentExchangeRejected(
+      "Every feedback comment needs one exchange identifier",
+    );
+  }
+  const startedAt = Date.parse(feedback.createdAt);
+  return feedback.comments.map((entry, batchIndex) => ({
+    version: 1,
+    requestId: id(requestIds[batchIndex], "requestId"),
+    sessionId: feedback.sessionId,
+    planId: feedback.planId,
+    sourceRevision: revision,
+    createdAt: new Date(startedAt + batchIndex).toISOString(),
+    kind: "feedback",
+    packageId: feedback.packageId,
+    batchIndex,
+    batchSize: feedback.comments.length,
+    comments: [entry],
+  }));
+};
 
 /** Creates a reviewer reply or plan-chat request for the same live session. */
 export const messageAgentRequest = ({
@@ -692,7 +824,10 @@ export const readAgentExchange = async ({
   responses.sort((left, right) =>
     left.createdAt.localeCompare(right.createdAt),
   );
-  return { requests, responses };
+  const cancelledIds = (await readAgentCancellations({ store }))
+    .map(({ requestId }) => requestId)
+    .filter((requestId) => requestById.has(requestId));
+  return { requests, responses, cancelledIds };
 };
 
 /** Returns the oldest request that does not yet have a validated response. */
@@ -702,7 +837,40 @@ export const nextPendingAgentRequest = (
   const answered = new Set(
     snapshot.responses.map((response) => response.requestId),
   );
-  return snapshot.requests.find((request) => !answered.has(request.requestId));
+  const cancelled = new Set(snapshot.cancelledIds);
+  return snapshot.requests.find(
+    (request) =>
+      !answered.has(request.requestId) && !cancelled.has(request.requestId),
+  );
+};
+
+/**
+ * Resolves the causal baseline for one serialized work item. Later comments in
+ * a Send-all batch begin where the preceding comment's immutable pair ended.
+ */
+export const effectiveSourceRevision = ({
+  request,
+  snapshot,
+}: {
+  readonly request: AgentRequest;
+  readonly snapshot: AgentExchangeSnapshot;
+}): string => {
+  if (request.kind !== "feedback" || request.batchIndex === 0) {
+    return request.sourceRevision;
+  }
+  const previous = snapshot.requests.find(
+    (candidate) =>
+      candidate.kind === "feedback" &&
+      candidate.packageId === request.packageId &&
+      candidate.batchIndex === request.batchIndex - 1,
+  );
+  const response =
+    previous === undefined
+      ? undefined
+      : snapshot.responses.find(
+          (candidate) => candidate.requestId === previous.requestId,
+        );
+  return response?.revisionPair.toRevision ?? request.sourceRevision;
 };
 
 /** Collects the original comments needed to validate a reply response. */
@@ -740,7 +908,7 @@ export const responseTemplateFor = (
       commentId,
       state: "changed",
       message: "Explain the concrete revision or why another outcome applies.",
-      changeTargets: ["replace-with-each-changed-block-id"],
+      changes: [],
     })),
   };
 };
