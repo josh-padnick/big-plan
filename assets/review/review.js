@@ -101,22 +101,36 @@ import {
         return document.createTextNode(node.value);
       }
       if (node.type === "inlineCode") {
-        return el("code", { text: node.value });
+        return el("code", {
+          class: "max-w-full [overflow-wrap:anywhere]",
+          text: node.value,
+        });
       }
       if (node.type === "code") {
-        return el("pre", {}, [
-          ...(node.language
-            ? [
-                el("span", {
-                  class:
-                    "[display:block] [margin-bottom:0.25rem] [color:var(--muted-c)] [font-size:0.58rem] [text-transform:uppercase]",
-                  "data-review-code-language": true,
-                  text: node.language,
-                }),
-              ]
-            : []),
-          el("code", { text: node.value }),
-        ]);
+        return el(
+          "pre",
+          {
+            class:
+              "min-w-0 max-w-full overflow-x-hidden whitespace-pre-wrap [overflow-wrap:anywhere]",
+          },
+          [
+            ...(node.language
+              ? [
+                  el("span", {
+                    class:
+                      "[display:block] [margin-bottom:0.25rem] [color:var(--muted-c)] [font-size:0.58rem] [text-transform:uppercase]",
+                    "data-review-code-language": true,
+                    text: node.language,
+                  }),
+                ]
+              : []),
+            el("code", {
+              class:
+                "min-w-0 max-w-full whitespace-pre-wrap [overflow-wrap:anywhere]",
+              text: node.value,
+            }),
+          ],
+        );
       }
       const children = (node.children || []).map(renderNode);
       if (node.type === "paragraph") return el("p", {}, children);
@@ -335,6 +349,62 @@ import {
   const submittingIds = new Set();
   const submitErrorById = new Map();
   const requestSeenAt = new Map();
+
+  // Poll-driven renders replace several nested lists. Preserve every keyed
+  // scroll container through that shared remount boundary instead of adding
+  // another surface-specific scrollTop patch each time a list grows.
+  const preservedScrollPositions = new Map();
+  const restorePreservedScroll = () => {
+    for (const node of document.querySelectorAll("[data-review-scroll-key]")) {
+      const position = preservedScrollPositions.get(
+        node.getAttribute("data-review-scroll-key"),
+      );
+      if (position) {
+        node.scrollTop = position.top;
+        node.scrollLeft = position.left;
+      }
+    }
+  };
+  const renderWithPreservedScroll = (render) => {
+    for (const node of document.querySelectorAll("[data-review-scroll-key]")) {
+      const key = node.getAttribute("data-review-scroll-key");
+      if (key !== null) {
+        preservedScrollPositions.set(key, {
+          top: node.scrollTop,
+          left: node.scrollLeft,
+        });
+      }
+    }
+    render();
+    restorePreservedScroll();
+    requestAnimationFrame(() => {
+      restorePreservedScroll();
+      // A replaced scroll owner may not expose its final scrollHeight until
+      // the next layout pass (notably the connection-history disclosure).
+      requestAnimationFrame(restorePreservedScroll);
+    });
+    window.setTimeout(restorePreservedScroll, 50);
+  };
+  document.addEventListener(
+    "scroll",
+    (event) => {
+      const node = event.target;
+      if (
+        event.isTrusted &&
+        node instanceof HTMLElement &&
+        node.hasAttribute("data-review-scroll-key")
+      ) {
+        preservedScrollPositions.set(
+          node.getAttribute("data-review-scroll-key"),
+          { top: node.scrollTop, left: node.scrollLeft },
+        );
+      }
+    },
+    true,
+  );
+  new MutationObserver(() => {
+    requestAnimationFrame(restorePreservedScroll);
+  }).observe(root, { childList: true, subtree: true });
   let emphasizedCommentId = null;
   let lastProgressAdvanceAt = 0;
   let pollFailures = 0;
@@ -837,7 +907,7 @@ import {
   const agentAlertLabel = el("span", { text: "No agent connected" });
   const agentAlert = el("button", {
     class:
-      "[display:inline-flex] [min-height:1.85rem] [align-items:center] [gap:0.4rem] [padding:0.32rem_0.4rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.2] [cursor:pointer] [color:var(--callout-danger-c)] [font-size:0.75rem] [font-weight:650] [white-space:nowrap] hover:[background:var(--callout-danger-bg)] active:[background:color-mix(in_srgb,_var(--callout-danger-bg)_80%,_var(--ink-c))]",
+      "inline-flex min-h-[1.85rem] cursor-pointer items-center gap-1.5 whitespace-nowrap rounded border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] px-2 py-1 text-xs font-semibold leading-[1.2] text-[var(--callout-danger-c)] shadow-sm hover:brightness-95 active:brightness-90",
     type: "button",
     "data-review-agent-alert": true,
     hidden: true,
@@ -938,7 +1008,7 @@ import {
     "div",
     {
       class:
-        "fixed inset-x-0 top-0 z-80 flex h-11 items-center justify-end gap-[0.35rem] border-b border-edge bg-transparent pr-4 pointer-events-none",
+        "fixed inset-x-0 top-0 z-[2147483647] flex h-11 items-center justify-end gap-[0.35rem] border-b border-edge bg-transparent pr-4 pointer-events-none",
       "data-review-toolbar": true,
     },
     [agentAlert, agentOk, toggle, sendButton, compactBatchMenu],
@@ -1203,8 +1273,9 @@ import {
         "div",
         {
           class:
-            "[flex:1_1_auto] [overflow-y:auto] [overscroll-behavior:contain] [padding:0.7rem_0.9rem_1.2rem]",
+            "[flex:1_1_auto] [overflow-y:auto] [overflow-anchor:none] [overscroll-behavior:contain] [padding:0.7rem_0.9rem_1.2rem]",
           "data-review-scroll": true,
+          "data-review-scroll-key": "comments",
         },
         [draftGroup, sendBar, emptyNote, sentGroup],
       ),
@@ -1214,9 +1285,10 @@ import {
     "section",
     {
       class:
-        "[min-height:0] data-[review-panel=comments]:[display:flex] data-[review-panel=comments]:[flex:1_1_auto] data-[review-panel=comments]:[flex-direction:column] data-[review-panel=chat]:[flex:1_1_auto] data-[review-panel=chat]:[overflow-y:auto] data-[review-panel=chat]:[overscroll-behavior:contain] data-[review-panel=agent]:[flex:1_1_auto] data-[review-panel=agent]:[padding:0.9rem] data-[review-panel=agent]:[overflow-y:auto] data-[review-panel=agent]:[overscroll-behavior:contain]",
+        "[min-height:0] [overflow-anchor:none] data-[review-panel=comments]:[display:flex] data-[review-panel=comments]:[flex:1_1_auto] data-[review-panel=comments]:[flex-direction:column] data-[review-panel=chat]:[flex:1_1_auto] data-[review-panel=chat]:[overflow-y:auto] data-[review-panel=chat]:[overscroll-behavior:contain] data-[review-panel=agent]:[flex:1_1_auto] data-[review-panel=agent]:[padding:0.9rem] data-[review-panel=agent]:[overflow-y:auto] data-[review-panel=agent]:[overscroll-behavior:contain]",
       id: "big-plan-review-chat",
       "data-review-panel": "chat",
+      "data-review-scroll-key": "chat",
       role: "tabpanel",
       hidden: true,
     },
@@ -1225,9 +1297,10 @@ import {
   const connectionPanel = hasRuntime
     ? el("section", {
         class:
-          "[min-height:0] data-[review-panel=comments]:[display:flex] data-[review-panel=comments]:[flex:1_1_auto] data-[review-panel=comments]:[flex-direction:column] data-[review-panel=chat]:[flex:1_1_auto] data-[review-panel=chat]:[overflow-y:auto] data-[review-panel=chat]:[overscroll-behavior:contain] data-[review-panel=agent]:[flex:1_1_auto] data-[review-panel=agent]:[padding:0.9rem] data-[review-panel=agent]:[overflow-y:auto] data-[review-panel=agent]:[overscroll-behavior:contain]",
+          "[min-height:0] [overflow-anchor:none] data-[review-panel=comments]:[display:flex] data-[review-panel=comments]:[flex:1_1_auto] data-[review-panel=comments]:[flex-direction:column] data-[review-panel=chat]:[flex:1_1_auto] data-[review-panel=chat]:[overflow-y:auto] data-[review-panel=chat]:[overscroll-behavior:contain] data-[review-panel=agent]:[flex:1_1_auto] data-[review-panel=agent]:[padding:0.9rem] data-[review-panel=agent]:[overflow-y:auto] data-[review-panel=agent]:[overscroll-behavior:contain]",
         id: "big-plan-review-agent",
         "data-review-panel": "agent",
+        "data-review-scroll-key": "connection",
         role: "tabpanel",
         hidden: true,
       })
@@ -1375,7 +1448,7 @@ import {
   });
   const toast = el("div", {
     class:
-      "fixed bottom-4 left-1/2 z-[70] hidden -translate-x-1/2 items-center gap-3 rounded-md border border-edge bg-[var(--ink-c)] px-3 py-2 text-xs font-semibold text-[var(--bg)] shadow-lg",
+      "fixed bottom-4 left-1/2 z-[70] hidden max-w-[calc(100vw-2rem)] min-w-0 -translate-x-1/2 items-center gap-3 rounded-md border border-edge bg-[var(--ink-c)] px-3 py-2 text-xs font-semibold text-[var(--bg)] shadow-lg",
     "data-review-toast": true,
     role: "status",
   });
@@ -1442,7 +1515,7 @@ import {
   });
   const revertDescription = el("p", {
     id: "big-plan-review-revert-description",
-    text: "The coding agent will revert all plan changes made in response to this comment.",
+    text: "This reverses the plan changes owned by this comment. The coding agent is notified, but no new request is created.",
   });
   const revertCancel = el("button", {
     type: "button",
@@ -1545,7 +1618,11 @@ import {
       void action();
     });
     toast.replaceChildren(
-      el("span", { "data-review-toast-message": true, text: message }),
+      el("span", {
+        class: "min-w-0 [overflow-wrap:anywhere]",
+        "data-review-toast-message": true,
+        text: message,
+      }),
       actionButton,
     );
     toast.classList.remove("hidden");
@@ -1962,7 +2039,9 @@ import {
       );
     }
     const history = connectionLogView({ historyWasOpen });
-    connectionPanel.replaceChildren(state, history);
+    renderWithPreservedScroll(() => {
+      connectionPanel.replaceChildren(state, history);
+    });
   };
 
   const setActiveTab = (tab) => {
@@ -2532,7 +2611,7 @@ import {
     const state = outcome.status?.stage || outcome.key;
     const badge = el("span", {
       class:
-        "[display:inline-flex] [align-items:center] [gap:0.22rem] [font-size:0.625rem] [font-weight:750] [letter-spacing:0.06em] [text-transform:uppercase]",
+        "inline-flex min-w-0 max-w-full items-center gap-[0.22rem] overflow-hidden text-ellipsis text-[0.625rem] font-[750] uppercase tracking-[0.06em]",
       "data-review-outcome-state": state,
       ...(options.iconOnly === true ? { "aria-label": outcome.label } : {}),
     });
@@ -2949,20 +3028,24 @@ import {
         );
       }
       strip.appendChild(
-        el("p", {
-          class:
-            "flex min-w-0 items-start gap-2 [margin:0.35rem_0_0] [color:var(--ink-c)] [font-size:0.75rem] [line-height:1.45] [overflow-wrap:anywhere]",
-          "data-review-status-current-activity": true,
-          "aria-live": "polite",
-        }, [
-          spinner(),
-          el("span", {
-            text: currentEvent
-              ? currentEvent.step +
-                (currentEvent.detail ? " — " + currentEvent.detail : "")
-              : "Starting work…",
-          }),
-        ]),
+        el(
+          "p",
+          {
+            class:
+              "flex min-w-0 items-start gap-2 [margin:0.35rem_0_0] [color:var(--ink-c)] [font-size:0.75rem] [line-height:1.45] [overflow-wrap:anywhere]",
+            "data-review-status-current-activity": true,
+            "aria-live": "polite",
+          },
+          [
+            spinner(),
+            el("span", {
+              text: currentEvent
+                ? currentEvent.step +
+                  (currentEvent.detail ? " — " + currentEvent.detail : "")
+                : "Starting work…",
+            }),
+          ],
+        ),
       );
     }
     if (earlierEvents.length > 0) {
@@ -2995,22 +3078,33 @@ import {
               (options.surface === "tray"
                 ? "max-h-none! overflow-visible!"
                 : "") +
-              " [display:grid] [min-width:0] [max-width:100%] [max-height:9rem] [margin:0] [padding-left:0.2rem] [color:var(--ink-c)] [list-style:none] [overflow-x:hidden] [overflow-y:auto] [overscroll-behavior:contain] [line-height:1.35]",
+              " [display:grid] [min-width:0] [max-width:100%] [max-height:9rem] [margin:0] [padding-left:0.2rem] [color:var(--ink-c)] [list-style:none] [overflow-x:hidden] [overflow-y:auto] [overflow-anchor:none] [overscroll-behavior:contain] [line-height:1.35]",
             "data-review-status-activity": true,
+            "data-review-scroll-key":
+              "activity:" +
+              (status.requestId || "session") +
+              ":" +
+              (options.surface || "unknown") +
+              ":" +
+              (options.commentId || "session"),
             ...(options.surface === "card" && options.commentId
               ? { "data-review-activity-owner": options.commentId }
               : {}),
           },
           earlierEvents.map((event) => {
-            const item = el("li", {
-              class:
-                "flex min-w-0 items-baseline justify-between gap-2 py-1 text-[var(--muted-c)]",
-            }, [
-              el("span", {
-                class: "min-w-0 [overflow-wrap:anywhere]",
-                text: event.step + (event.detail ? " — " + event.detail : ""),
-              }),
-            ]);
+            const item = el(
+              "li",
+              {
+                class:
+                  "flex min-w-0 items-baseline justify-between gap-2 py-1 text-[var(--muted-c)]",
+              },
+              [
+                el("span", {
+                  class: "min-w-0 [overflow-wrap:anywhere]",
+                  text: event.step + (event.detail ? " — " + event.detail : ""),
+                }),
+              ],
+            );
             if (
               typeof event.at === "string" &&
               !Number.isNaN(Date.parse(event.at)) &&
@@ -4443,9 +4537,6 @@ import {
   };
 
   const threadToolbar = (comment, options = {}) => {
-    const hasChangeActions = outcomeEventsFor(comment).some(
-      (event) => event.key === "changed",
-    );
     return el(
       "div",
       {
@@ -4467,7 +4558,7 @@ import {
             }),
           ],
         ),
-        ...(hasChangeActions ? [] : [threadToolbarActions(comment, options)]),
+        threadToolbarActions(comment, options),
       ],
     );
   };
@@ -4692,14 +4783,9 @@ import {
     jump.addEventListener("click", toggleThread);
     const rowHeadChildren = [jump];
     if (expanded) {
-      const hasChangeActions = outcomeEventsFor(comment).some(
-        (event) => event.key === "changed",
+      rowHeadChildren.push(
+        threadToolbarActions(comment, { resolved, minimize: collapse }),
       );
-      if (!hasChangeActions) {
-        rowHeadChildren.push(
-          threadToolbarActions(comment, { resolved, minimize: collapse }),
-        );
-      }
     }
     const rowHead = el(
       "div",
@@ -4734,17 +4820,21 @@ import {
         }),
       );
       if (rowState !== "queued") {
-        const footer = el("div", {
-          class:
-            "mt-2 flex min-w-0 items-center justify-between gap-3 text-[0.6875rem] leading-[1.35] text-[var(--muted-c)]",
-          "data-review-row-footer": rowState,
-        }, [
-          el("p", {
-            class: "m-0 min-w-0 tabular-nums",
-            "data-review-row-secondary": rowState,
-            text: secondary,
-          }),
-        ]);
+        const footer = el(
+          "div",
+          {
+            class:
+              "mt-2 flex min-w-0 items-center justify-between gap-3 text-[0.6875rem] leading-[1.35] text-[var(--muted-c)]",
+            "data-review-row-footer": rowState,
+          },
+          [
+            el("p", {
+              class: "m-0 min-w-0 tabular-nums",
+              "data-review-row-secondary": rowState,
+              text: secondary,
+            }),
+          ],
+        );
         if (rowState === "working" && pendingRequest) {
           const cancel = el("button", {
             type: "button",
@@ -4823,9 +4913,14 @@ import {
 
   const threadCard = ({ comment, state }) => {
     const isEditing = state === "staged" && comment.id === editingId;
+    const sentExpanded = state === "sent" && expandedThreadIds.has(comment.id);
     const card = el("article", {
       class:
-        "max-[80rem]:data-[review-thread-inline]:relative! max-[80rem]:data-[review-thread-inline]:[right:auto] max-[80rem]:data-[review-thread-inline]:[z-index:2]! max-[80rem]:data-[review-thread-inline]:block! max-[80rem]:data-[review-thread-inline]:[width:100%]! max-[80rem]:data-[review-thread-inline]:[margin:0.65rem_0_1rem] [position:absolute] [right:auto] [width:17rem] [padding:0.65rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_3px_14px_rgb(0_0_0_/_0.1)] [pointer-events:auto] data-[review-thread-state=sent]:[padding:0.28rem] data-[review-thread-state=sent]:[box-shadow:0_4px_16px_rgb(0_0_0_/_0.1)]",
+        "max-[80rem]:data-[review-thread-inline]:relative! max-[80rem]:data-[review-thread-inline]:[right:auto] max-[80rem]:data-[review-thread-inline]:[z-index:2]! max-[80rem]:data-[review-thread-inline]:block! max-[80rem]:data-[review-thread-inline]:[width:100%]! max-[80rem]:data-[review-thread-inline]:[margin:0.65rem_0_1rem] [position:absolute] [right:auto] [width:17rem] [max-width:calc(100vw_-_1.5rem)] [min-width:0] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_3px_14px_rgb(0_0_0_/_0.1)] [pointer-events:auto]" +
+        (state === "sent" ? " [box-shadow:0_4px_16px_rgb(0_0_0_/_0.1)]" : "") +
+        (state === "sent" && !sentExpanded
+          ? " [padding:0.28rem]"
+          : " [padding:0.65rem]"),
       "data-review-thread-card": true,
       "data-review-thread-state": state,
       "data-review-comment-id": comment.id,
@@ -4879,7 +4974,7 @@ import {
         "button",
         {
           class:
-            "[min-width:0] [padding:0] [border:0] [background:transparent] [color:inherit] [cursor:pointer] [text-align:left]",
+            "block w-full min-w-0 overflow-hidden border-0 bg-transparent p-0 text-left text-inherit cursor-pointer",
           type: "button",
           "data-review-thread-summary-toggle": true,
           "aria-expanded": expanded ? "true" : "false",
@@ -4893,7 +4988,7 @@ import {
         [
           el("span", {
             class:
-              "[min-width:0] [overflow:hidden] [font-size:0.6875rem] [text-overflow:ellipsis] [white-space:nowrap]",
+              "block min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[0.6875rem]",
             "data-review-thread-echo": true,
             text: shortEcho(comment.body),
           }),
@@ -4903,7 +4998,7 @@ import {
         "div",
         {
           class:
-            "[display:grid] [width:100%] [min-width:0] [grid-template-columns:auto_minmax(0,_1fr)] [align-items:center] [gap:0.4rem] [padding:0.18rem_5.2rem_0.18rem_0.22rem] [color:var(--ink-c)] [text-align:left]",
+            "grid w-full min-w-0 max-w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-[0.4rem] overflow-hidden py-[0.18rem] pl-[0.22rem] pr-[5.2rem] text-left text-[var(--ink-c)]",
           "data-review-thread-summary": true,
         },
         [
@@ -4951,7 +5046,7 @@ import {
         "button",
         {
           class:
-            "[min-width:0] [padding:0] [border:0] [background:transparent] [color:inherit] [cursor:pointer] [text-align:left]",
+            "block w-full min-w-0 overflow-hidden border-0 bg-transparent p-0 text-left text-inherit cursor-pointer",
           type: "button",
           "data-review-thread-summary-toggle": true,
           "aria-expanded": "false",
@@ -4960,7 +5055,7 @@ import {
         [
           el("span", {
             class:
-              "[min-width:0] [overflow:hidden] [font-size:0.6875rem] [text-overflow:ellipsis] [white-space:nowrap]",
+              "block min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[0.6875rem]",
             "data-review-thread-echo": true,
             text: shortEcho(comment.body),
           }),
@@ -4970,7 +5065,7 @@ import {
         "div",
         {
           class:
-            "[display:grid] [width:100%] [min-width:0] [grid-template-columns:auto_minmax(0,_1fr)] [align-items:center] [gap:0.4rem] [padding:0.18rem_5.2rem_0.18rem_0.22rem] [color:var(--ink-c)] [text-align:left]",
+            "grid w-full min-w-0 max-w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-[0.4rem] overflow-hidden py-[0.18rem] pl-[0.22rem] pr-[5.2rem] text-left text-[var(--ink-c)]",
           "data-review-thread-summary": true,
         },
         [
@@ -5205,14 +5300,6 @@ import {
   };
 
   const renderThreads = () => {
-    const anchoredActivityScroll = new Map(
-      Array.from(
-        threadLayer.querySelectorAll("[data-review-activity-owner]"),
-      ).map((node) => [
-        node.getAttribute("data-review-activity-owner"),
-        node.scrollTop,
-      ]),
-    );
     document
       .querySelectorAll("[data-review-thread-inline]")
       .forEach((card) => card.remove());
@@ -5231,14 +5318,6 @@ import {
       ...cards,
       ...(floatingCompose === null ? [] : [floatingCompose]),
     );
-    for (const activity of threadLayer.querySelectorAll(
-      "[data-review-activity-owner]",
-    )) {
-      const owner = activity.getAttribute("data-review-activity-owner");
-      if (owner !== null && anchoredActivityScroll.has(owner)) {
-        activity.scrollTop = anchoredActivityScroll.get(owner);
-      }
-    }
     if (window.innerWidth < 1280) {
       for (const card of cards) {
         const id = card.getAttribute("data-review-comment-id");
@@ -5297,23 +5376,29 @@ import {
           return match ? match(outcome) : outcome.key === key;
         });
         if (comments.length === 0) return null;
-        const heading = el("h3", {
-          class:
-            "flex min-w-0 items-center gap-1.5 [margin:0_0_0.6rem] text-xs font-bold uppercase tracking-[0.1em]",
-        }, [
-          ...(spin === true ? [spinner()] : []),
-          ...(glyph === undefined ? [] : [icon(glyph)]),
-          el("span", { class: "min-w-0", text: label }),
-          document.createTextNode(" "),
-          el("span", {
+        const heading = el(
+          "h3",
+          {
             class:
-              "[display:inline-flex] [min-width:1.1rem] [height:1.1rem] [align-items:center] [justify-content:center] [margin-left:auto] [padding:0_0.25rem] [border-radius:999px] [background:var(--surface-c)] [font-size:0.625rem] [font-variant-numeric:tabular-nums]",
-            "data-review-outcome-group-count": true,
-            "aria-label":
-              comments.length + " thread" + (comments.length === 1 ? "" : "s"),
-            text: String(comments.length),
-          }),
-        ]);
+              "flex min-w-0 items-center gap-1.5 [margin:0_0_0.6rem] text-xs font-bold uppercase tracking-[0.1em]",
+          },
+          [
+            ...(spin === true ? [spinner()] : []),
+            ...(glyph === undefined ? [] : [icon(glyph)]),
+            el("span", { class: "min-w-0", text: label }),
+            document.createTextNode(" "),
+            el("span", {
+              class:
+                "[display:inline-flex] [min-width:1.1rem] [height:1.1rem] [align-items:center] [justify-content:center] [margin-left:auto] [padding:0_0.25rem] [border-radius:999px] [background:var(--surface-c)] [font-size:0.625rem] [font-variant-numeric:tabular-nums]",
+              "data-review-outcome-group-count": true,
+              "aria-label":
+                comments.length +
+                " thread" +
+                (comments.length === 1 ? "" : "s"),
+              text: String(comments.length),
+            }),
+          ],
+        );
         return el("section", { "data-review-outcome-group": displayKey }, [
           heading,
           el("ol", {}, comments.map(sentRow)),
@@ -5363,77 +5448,82 @@ import {
   });
 
   const renderTray = () => {
-    draftList.replaceChildren(...drafts.map(draftRow));
-    emptyNote.hidden = drafts.length > 0;
-    const pending = drafts.length;
-    const needs = needsAnswerCount();
-    countLabel.textContent =
-      needs > 0 ? String(needs) : pending > 0 ? String(pending) : "";
-    countLabel.setAttribute(
-      "data-review-count-tone",
-      needs > 0 ? "needs" : pending > 0 ? "pending" : "idle",
-    );
-    commentsTab.setAttribute(
-      "aria-label",
-      needs > 0
-        ? `Comments, ${needs} needs your answer`
-        : pending > 0
-          ? `Comments, ${pending} staged`
-          : "Comments",
-    );
-    const toolbarCount = pending > 0 ? pending : needs;
-    const toolbarCountKind =
-      pending > 0 ? "staged" : needs > 0 ? "needs" : "idle";
-    feedbackLabel.textContent = "Feedback";
-    toggleCount.textContent = toolbarCount > 0 ? String(toolbarCount) : "";
-    toggleCount.setAttribute("data-review-toggle-count-kind", toolbarCountKind);
-    toggleCount.setAttribute(
-      "aria-label",
-      pending > 0
-        ? `${pending} staged comment${pending === 1 ? "" : "s"} waiting submission`
-        : needs > 0
-          ? `${needs} comment${needs === 1 ? "" : "s"} needs your answer`
-          : "",
-    );
-    toggle.setAttribute(
-      "data-review-has-pending",
-      toolbarCount > 0 ? "true" : "false",
-    );
-    toggle.setAttribute("data-review-needs-answer", String(needs));
-    toggle.setAttribute(
-      "aria-label",
-      (railIsOpen() ? "Close" : "Open") +
-        " feedback sidebar" +
-        (pending > 0
-          ? `, ${pending} staged waiting submission`
+    renderWithPreservedScroll(() => {
+      draftList.replaceChildren(...drafts.map(draftRow));
+      emptyNote.hidden = drafts.length > 0;
+      const pending = drafts.length;
+      const needs = needsAnswerCount();
+      countLabel.textContent =
+        needs > 0 ? String(needs) : pending > 0 ? String(pending) : "";
+      countLabel.setAttribute(
+        "data-review-count-tone",
+        needs > 0 ? "needs" : pending > 0 ? "pending" : "idle",
+      );
+      commentsTab.setAttribute(
+        "aria-label",
+        needs > 0
+          ? `Comments, ${needs} needs your answer`
+          : pending > 0
+            ? `Comments, ${pending} staged`
+            : "Comments",
+      );
+      const toolbarCount = pending > 0 ? pending : needs;
+      const toolbarCountKind =
+        pending > 0 ? "staged" : needs > 0 ? "needs" : "idle";
+      feedbackLabel.textContent = "Feedback";
+      toggleCount.textContent = toolbarCount > 0 ? String(toolbarCount) : "";
+      toggleCount.setAttribute(
+        "data-review-toggle-count-kind",
+        toolbarCountKind,
+      );
+      toggleCount.setAttribute(
+        "aria-label",
+        pending > 0
+          ? `${pending} staged comment${pending === 1 ? "" : "s"} waiting submission`
           : needs > 0
-            ? `, ${needs} needs your answer`
-            : ""),
-    );
-    toolbar.setAttribute(
-      "data-review-batch-ready",
-      pending > 0 ? "true" : "false",
-    );
-    sendButton.hidden = pending === 0;
-    sendButton.disabled = pending === 0;
-    draftGroup.hidden = pending === 0;
-    draftGroupCount.textContent = String(pending);
-    draftGroupCount.setAttribute(
-      "aria-label",
-      `${pending} staged comment${pending === 1 ? "" : "s"}`,
-    );
-    sidebarSendButton.disabled = pending === 0;
-    compactBatchMenu.hidden = pending === 0;
-    compactBatchLabel.textContent = `Send ${pending} comment${pending === 1 ? "" : "s"}`;
-    compactBatchMenu.open = false;
-    sendBar.hidden = sendNote.textContent.trim().length === 0;
-    sentGroup.hidden = sent.length === 0;
-    renderSentIndex();
-    renderPlanChat();
-    syncPlanChatValidity();
-    paintChips();
-    paintTargetHighlights();
-    renderThreads();
+            ? `${needs} comment${needs === 1 ? "" : "s"} needs your answer`
+            : "",
+      );
+      toggle.setAttribute(
+        "data-review-has-pending",
+        toolbarCount > 0 ? "true" : "false",
+      );
+      toggle.setAttribute("data-review-needs-answer", String(needs));
+      toggle.setAttribute(
+        "aria-label",
+        (railIsOpen() ? "Close" : "Open") +
+          " feedback sidebar" +
+          (pending > 0
+            ? `, ${pending} staged waiting submission`
+            : needs > 0
+              ? `, ${needs} needs your answer`
+              : ""),
+      );
+      toolbar.setAttribute(
+        "data-review-batch-ready",
+        pending > 0 ? "true" : "false",
+      );
+      sendButton.hidden = pending === 0;
+      sendButton.disabled = pending === 0;
+      draftGroup.hidden = pending === 0;
+      draftGroupCount.textContent = String(pending);
+      draftGroupCount.setAttribute(
+        "aria-label",
+        `${pending} staged comment${pending === 1 ? "" : "s"}`,
+      );
+      sidebarSendButton.disabled = pending === 0;
+      compactBatchMenu.hidden = pending === 0;
+      compactBatchLabel.textContent = `Send ${pending} comment${pending === 1 ? "" : "s"}`;
+      compactBatchMenu.open = false;
+      sendBar.hidden = sendNote.textContent.trim().length === 0;
+      sentGroup.hidden = sent.length === 0;
+      renderSentIndex();
+      renderPlanChat();
+      syncPlanChatValidity();
+      paintChips();
+      paintTargetHighlights();
+      renderThreads();
+    });
   };
 
   document.addEventListener("pointerdown", (event) => {
@@ -5542,26 +5632,28 @@ import {
     revertConfirm.disabled = true;
     try {
       await confirmRuntime();
-      const answer = await call("/api/agent-requests", {
+      const beforeRequestCount = agentRequests.length;
+      const answer = await call("/api/revert", {
         method: "POST",
-        body: {
-          kind: "reply",
-          commentId: comment.id,
-          body: "Revert all plan changes made in response to this comment.",
-        },
+        body: { commentId: comment.id },
       });
-      agentConnected = answer.agentConnected === true;
-      if (isAgentRequest(answer.request)) {
-        agentRequests = agentRequests.concat([answer.request]);
+      if (
+        answer.reverted !== true ||
+        agentRequests.length !== beforeRequestCount
+      ) {
+        throw new Error("The local revert did not complete cleanly");
       }
-      expandedThreadIds.add(comment.id);
-      setAgentState("Agent working", "working");
-      announce("Revert request sent to the coding agent.");
+      resolvedCommentIds.add(comment.id);
+      expandedThreadIds.delete(comment.id);
+      await save();
+      announce("Changes reverted. The coding agent was notified.");
       revertDialog.close();
-      renderTray();
-      startProgress();
+      reloadForSourceRevision();
     } catch (error) {
-      showInlineError(revertConfirm, "Couldn’t send: " + describeError(error));
+      showInlineError(
+        revertConfirm,
+        "Couldn’t revert: " + describeError(error),
+      );
       announce(describeError(error));
       revertConfirm.disabled = false;
     }
@@ -5690,7 +5782,7 @@ import {
       compose.setAttribute("data-review-compose-placement", "centered");
       return;
     }
-    if (target.type !== "slide" && window.innerWidth >= 1280 && !railIsOpen()) {
+    if (window.innerWidth >= 1280 && !railIsOpen()) {
       if (compose.parentElement !== threadLayer)
         threadLayer.appendChild(compose);
       compose.removeAttribute("data-review-compose-inline");
@@ -5966,24 +6058,30 @@ import {
     affordanceLabel.hidden = false;
     affordance.setAttribute("aria-label", "Comment on the selected text");
     const width = affordance.offsetWidth || 108;
-    const startBlock = blockForTarget(anchor);
-    const slide = startBlock?.closest("[data-slide]");
-    const slideRect = slide?.getBoundingClientRect();
-    const gutterLeft = slideRect
-      ? Math.min(slideRect.left, rect.left) - width - 10
-      : -1;
-    const hasGutter = gutterLeft >= 12;
+    const height = affordance.offsetHeight || 28;
+    const gap = 8;
+    const preferredLeft = rect.left - width - gap;
+    const hasRoomLeft = preferredLeft >= 12;
+    const preferredTop = rect.top - height - gap;
+    const top =
+      preferredTop >= REVIEW_CONTROL_TOP
+        ? preferredTop
+        : hasRoomLeft
+          ? REVIEW_CONTROL_TOP
+          : rect.bottom + gap;
     affordance.style.top =
       Math.max(
         REVIEW_CONTROL_TOP,
+        Math.min(top, window.innerHeight - height - FLOAT_EDGE),
+      ) + "px";
+    affordance.style.left =
+      Math.max(
+        12,
         Math.min(
-          hasGutter ? rect.top : rect.bottom + 8,
-          window.innerHeight - affordance.offsetHeight - FLOAT_EDGE,
+          hasRoomLeft ? preferredLeft : rect.left,
+          rightLimit() - width - 12,
         ),
       ) + "px";
-    affordance.style.left = hasGutter
-      ? gutterLeft + "px"
-      : Math.max(12, Math.min(rect.left, rightLimit() - width - 12)) + "px";
   };
 
   let selectionOfferTimer = null;
@@ -6586,7 +6684,7 @@ import {
   };
 
   const AGENT_ALERT_LABELS = {
-    unavailable: "No agent connected",
+    unavailable: "Agent connection lost",
     quiet: "Agent not responding",
     errored: "Agent error",
     offline: "Review server offline",
