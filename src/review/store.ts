@@ -24,6 +24,7 @@ import {
 import { dirname, join, relative, resolve } from "node:path";
 import type { ReviewComment } from "./comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
+import { replaceFileAtomically } from "./atomic-file.js";
 
 const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
@@ -210,8 +211,9 @@ const writeJson = async ({
   readonly path: string;
   readonly value: unknown;
 }): Promise<void> => {
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, {
-    mode: FILE_MODE,
+  await replaceFileAtomically({
+    path,
+    contents: `${JSON.stringify(value, null, 2)}\n`,
   });
 };
 
