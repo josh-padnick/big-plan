@@ -44,8 +44,8 @@ test("should comment on a slide and a passage, then revise before sending", asyn
       throw new Error("The slide selector is not anchored to a slide");
     }
     initialSelectorGap = geometry.gap;
-    expect(initialSelectorGap).toBeCloseTo(8, 0);
-    expect(geometry.topDelta).toBeCloseTo(12, 0);
+    expect(initialSelectorGap).toBeCloseTo(5, 0);
+    expect(geometry.topDelta).toBeCloseTo(10, 0);
     await expect(selector).toHaveAttribute(
       "aria-label",
       "Comment on all content in Status quo",
@@ -82,7 +82,7 @@ test("should comment on a slide and a passage, then revise before sending", asyn
       throw new Error("The slide selector lost its slide anchor");
     }
     expect(geometry.gap).toBeCloseTo(initialSelectorGap, 1);
-    expect(geometry.topDelta).toBeCloseTo(12, 0);
+    expect(geometry.topDelta).toBeCloseTo(10, 0);
   });
 
   await test.step("highlighting a passage offers to comment on the selection", async () => {
@@ -156,5 +156,104 @@ test("should comment on a slide and a passage, then revise before sending", asyn
       "big-plan review",
     );
     await expect(rows).toHaveCount(1);
+  });
+});
+
+test("should offer comments from nested sub-slide icons and text selections", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(deckViewerUrl);
+  const subSlide = page.locator("[data-subslide]").first();
+  const selector = subSlide.locator(":scope > [data-review-slide-selector]");
+  const compose = page.locator("[data-review-compose]");
+  const affordance = page.locator("[data-review-affordance]");
+
+  await test.step("the nested selector owns an addressable sub-slide", async () => {
+    await expect(subSlide.locator("[data-block-id]")).not.toHaveCount(0);
+    await expect(selector).toBeVisible();
+    const geometry = await selector.evaluate((node) => {
+      const slide = node.closest("[data-slide]");
+      if (slide === null) return null;
+      const slideRect = slide.getBoundingClientRect();
+      const selectorRect = node.getBoundingClientRect();
+      return {
+        gap: slideRect.left - selectorRect.right,
+        topDelta: selectorRect.top - slideRect.top,
+      };
+    });
+    expect(geometry?.gap).toBeCloseTo(5, 0);
+    expect(geometry?.topDelta).toBeCloseTo(10, 0);
+    await selector.scrollIntoViewIfNeeded();
+    const before = await subSlide.evaluate((slide) => {
+      const title = document.querySelector("h1");
+      const article = document.querySelector("article");
+      const slideRect = slide.getBoundingClientRect();
+      return {
+        articleLeft: article?.getBoundingClientRect().left ?? -1,
+        bodyPaddingRight: getComputedStyle(document.body).paddingRight,
+        scrollY: window.scrollY,
+        slideLeft: slideRect.left,
+        slideTop: slideRect.top,
+        titleLeft: title?.getBoundingClientRect().left ?? -1,
+      };
+    });
+    await selector.click();
+    await expect(compose).toBeVisible();
+    await expect(compose).toHaveAttribute(
+      "data-review-compose-placement",
+      "floating",
+    );
+    await expect(page.locator("html")).not.toHaveAttribute(
+      "data-review-floating",
+    );
+    await expect
+      .poll(() =>
+        subSlide.evaluate((slide) => {
+          const title = document.querySelector("h1");
+          const article = document.querySelector("article");
+          const slideRect = slide.getBoundingClientRect();
+          return {
+            articleLeft: article?.getBoundingClientRect().left ?? -1,
+            bodyPaddingRight: getComputedStyle(document.body).paddingRight,
+            scrollY: window.scrollY,
+            slideLeft: slideRect.left,
+            slideTop: slideRect.top,
+            titleLeft: title?.getBoundingClientRect().left ?? -1,
+          };
+        }),
+      )
+      .toEqual(before);
+    await expect(subSlide).toHaveAttribute(
+      "data-review-slide-highlight",
+      "active",
+    );
+    await page.getByRole("button", { name: "Cancel" }).click();
+  });
+
+  await test.step("selected sub-slide text exposes the comment affordance", async () => {
+    const target = subSlide.locator("[data-block-kind='list'] li").first();
+    await target.evaluate((node) => {
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+      let text = walker.nextNode();
+      while (text !== null && (text.textContent?.trim().length ?? 0) === 0) {
+        text = walker.nextNode();
+      }
+      if (text === null) throw new Error("The nested block has no text");
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, Math.min(12, text.textContent?.length ?? 0));
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await expect(affordance).toHaveAttribute(
+      "aria-label",
+      "Comment on the selected text",
+    );
+    await affordance.click();
+    await expect(compose).toBeVisible();
   });
 });

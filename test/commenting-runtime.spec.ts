@@ -1688,9 +1688,9 @@ test("should preserve and send a floating review across reload and viewport chan
     ).not.toHaveAttribute("data-review-active-highlight", "");
     await expect(compose).toHaveAttribute(
       "data-review-compose-placement",
-      "before-slide",
+      "centered",
     );
-    await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+    await expect(compose).not.toHaveAttribute("data-review-compose-inline", "");
     await expect(page.locator("[data-review-compose-save]")).toBeDisabled();
     await page.locator("[data-review-compose-input]").press("Control+Enter");
     await expect(compose).toBeVisible();
@@ -4213,7 +4213,9 @@ test("should keep composition anchored across tray and missing-source states", a
   await expect(page.locator("html")).toHaveAttribute("data-review-ready", "");
   const toggle = page.locator("[data-review-toggle]");
   const compose = page.locator("[data-review-compose]");
-  const paragraph = page.locator("[data-block-kind='paragraph']").first();
+  const paragraph = page.locator(
+    '[data-block-id="section/details/paragraph-1"]',
+  );
 
   await toggle.click();
   await paragraph.evaluate((node) => {
@@ -4235,6 +4237,25 @@ test("should keep composition anchored across tray and missing-source states", a
     )
     .toBe("relative");
 
+  await page.setViewportSize({ width: 800, height: 900 });
+  await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+  await expect
+    .poll(async () => {
+      const slide = paragraph.locator("xpath=ancestor::*[@data-slide][1]");
+      const [composeBox, slideBox] = await Promise.all([
+        compose.boundingBox(),
+        slide.boundingBox(),
+      ]);
+      if (composeBox === null || slideBox === null) return null;
+      return {
+        containedLeft: composeBox.x >= slideBox.x - 1,
+        containedRight:
+          composeBox.x + composeBox.width <= slideBox.x + slideBox.width + 1,
+      };
+    })
+    .toEqual({ containedLeft: true, containedRight: true });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.locator("[data-review-hide]").click();
   await expect(compose).toHaveAttribute(
     "data-review-compose-placement",

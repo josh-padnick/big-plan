@@ -1443,7 +1443,7 @@ import { createToastManager } from "./toast.js";
     "div",
     {
       class:
-        "data-[review-compose-inline]:relative! data-[review-compose-inline]:[right:auto] data-[review-compose-inline]:[z-index:2]! data-[review-compose-inline]:[width:100%]! data-[review-compose-inline]:[margin:0.65rem_0_1rem] data-[review-compose-inline]:[box-shadow:0_4px_18px_rgb(0_0_0_/_0.11)] data-[review-compose-centered]:fixed! data-[review-compose-centered]:[top:50%] data-[review-compose-centered]:[right:auto] data-[review-compose-centered]:[left:50%] data-[review-compose-centered]:[width:min(24rem,calc(100vw-2rem))]! data-[review-compose-centered]:[transform:translate(-50%,-50%)] [position:absolute] [right:auto] [z-index:47] [width:17rem] [padding:0.75rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_8px_28px_rgb(0_0_0_/_0.16)] [pointer-events:auto]",
+        "data-[review-compose-inline]:relative! data-[review-compose-inline]:[right:auto] data-[review-compose-inline]:[z-index:2]! data-[review-compose-inline]:[width:min(100%,var(--review-compose-inline-width,100%))]! data-[review-compose-inline]:[margin:0.65rem_0_1rem] data-[review-compose-inline]:[margin-left:var(--review-compose-inline-offset,0)] data-[review-compose-inline]:[box-shadow:0_4px_18px_rgb(0_0_0_/_0.11)] data-[review-compose-centered]:fixed! data-[review-compose-centered]:[top:50%] data-[review-compose-centered]:[right:auto] data-[review-compose-centered]:[left:50%] data-[review-compose-centered]:[width:min(24rem,calc(100vw-2rem))]! data-[review-compose-centered]:[transform:translate(-50%,-50%)] [position:absolute] [right:auto] [z-index:47] [width:17rem] [padding:0.75rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_8px_28px_rgb(0_0_0_/_0.16)] [pointer-events:auto]",
       "data-review-compose": true,
       role: "dialog",
       "aria-label": "Add a comment",
@@ -5377,9 +5377,8 @@ import { createToastManager } from "./toast.js";
     const shouldFloat =
       window.innerWidth >= 1280 &&
       !railIsOpen() &&
-      (!compose.hidden ||
-        drafts.length + sent.length > 0 ||
-        threadLayer.childElementCount > 0);
+      (drafts.length + sent.length > 0 ||
+        threadLayer.querySelector("[data-review-thread-card]") !== null);
     root.toggleAttribute("data-review-floating", shouldFloat);
   };
 
@@ -5416,10 +5415,9 @@ import { createToastManager } from "./toast.js";
 
   const positionThreadCards = () => {
     syncFloatingMode();
-    const canFloat =
-      window.innerWidth >= 1280 &&
-      !railIsOpen() &&
-      root.hasAttribute("data-review-floating");
+    const canUseThreadLayer = window.innerWidth >= 1280 && !railIsOpen();
+    const canFloatCards =
+      canUseThreadLayer && root.hasAttribute("data-review-floating");
     const cards = Array.from(
       threadLayer.querySelectorAll("[data-review-thread-card]"),
     );
@@ -5432,7 +5430,7 @@ import { createToastManager } from "./toast.js";
         .find((candidate) => candidate.id === id);
       const block = comment ? floatingBlockForComment(comment) : null;
       const rect = block?.getBoundingClientRect();
-      const visible = canFloat && block !== null && rect !== undefined;
+      const visible = canFloatCards && block !== null && rect !== undefined;
       card.hidden = !visible;
       if (!visible || !id) continue;
       card.style.left = floatLeftForBlock(block, card.offsetWidth) + "px";
@@ -5444,7 +5442,7 @@ import { createToastManager } from "./toast.js";
       nodes.set(id, card);
     }
     if (
-      canFloat &&
+      canUseThreadLayer &&
       !compose.hidden &&
       composeTarget &&
       compose.hasAttribute("data-review-compose-floating")
@@ -5970,25 +5968,50 @@ import { createToastManager } from "./toast.js";
     positionThreadCards();
   };
 
+  // Inline composition is a sibling of its anchor, whose parent may be wider
+  // than the visible slide. Carry the anchor's measured column through static
+  // utility candidates so the editor cannot overhang the selected surface.
+  const alignInlineCompose = (anchor) => {
+    const parent = compose.parentElement;
+    if (!parent) return;
+    const visualColumn = anchor.closest("[data-slide]") || anchor;
+    const parentRect = parent.getBoundingClientRect();
+    const anchorRect = visualColumn.getBoundingClientRect();
+    compose.style.setProperty(
+      "--review-compose-inline-width",
+      Math.min(parentRect.width, anchorRect.width) + "px",
+    );
+    compose.style.setProperty(
+      "--review-compose-inline-offset",
+      Math.max(0, anchorRect.left - parentRect.left) + "px",
+    );
+  };
+
+  // Responsive fallbacks overlay the viewport rather than entering document
+  // flow, so opening a composer can never move the plan it annotates.
+  const centerCompose = () => {
+    if (compose.parentElement !== surface) surface.appendChild(compose);
+    compose.removeAttribute("style");
+    compose.removeAttribute("data-review-compose-inline");
+    compose.removeAttribute("data-review-compose-floating");
+    compose.setAttribute("data-review-compose-centered", "");
+    compose.setAttribute("data-review-compose-placement", "centered");
+    Object.assign(compose.style, {
+      position: "fixed",
+      top: "50%",
+      left: "50%",
+      right: "auto",
+      transform: "translate(-50%, -50%)",
+    });
+  };
+
   const positionCompose = (target) => {
     const block = visualAnchorForTarget(target);
     if (!block) {
-      if (compose.parentElement !== surface) surface.appendChild(compose);
-      compose.removeAttribute("style");
-      compose.removeAttribute("data-review-compose-inline");
-      compose.removeAttribute("data-review-compose-floating");
-      compose.setAttribute("data-review-compose-centered", "");
-      compose.setAttribute("data-review-compose-placement", "centered");
       // This fallback must remain independently safe if generated utility
       // ordering changes: a missing source anchor can never leave an
       // absolutely positioned editor at the viewport origin.
-      Object.assign(compose.style, {
-        position: "fixed",
-        top: "50%",
-        left: "50%",
-        right: "auto",
-        transform: "translate(-50%, -50%)",
-      });
+      centerCompose();
       return;
     }
     if (window.innerWidth >= 1280 && !railIsOpen()) {
@@ -6002,14 +6025,16 @@ import { createToastManager } from "./toast.js";
       positionThreadCards();
       return;
     }
+    if (target.type === "slide") {
+      centerCompose();
+      return;
+    }
     const endBlock =
       target.type === "selection" && target.endBlockId
         ? document.querySelector(
             '[data-block-id="' + cssEscape(target.endBlockId) + '"]',
           )
         : null;
-    const slide =
-      target.type === "slide" ? block.closest("[data-slide]") : null;
     const insertionBlock = endBlock || block;
     // A table row cannot legally own a div sibling inside tbody, so its
     // scroll container is the insertion anchor.
@@ -6026,11 +6051,6 @@ import { createToastManager } from "./toast.js";
     compose.removeAttribute("data-review-compose-centered");
     compose.removeAttribute("data-review-compose-floating");
     compose.setAttribute("data-review-compose-inline", "");
-    if (slide) {
-      slide.before(compose);
-      compose.setAttribute("data-review-compose-placement", "before-slide");
-      return;
-    }
     const composeHeight = compose.offsetHeight;
     const startRect = leadingAnchor.getBoundingClientRect();
     const endRect = trailingAnchor.getBoundingClientRect();
@@ -6039,23 +6059,16 @@ import { createToastManager } from "./toast.js";
     if (roomBelow >= composeHeight + FLOAT_CONTENT_GAP) {
       trailingAnchor.after(compose);
       compose.setAttribute("data-review-compose-placement", "after-selection");
+      alignInlineCompose(trailingAnchor);
       return;
     }
     if (roomAbove >= composeHeight + FLOAT_CONTENT_GAP) {
       leadingAnchor.before(compose);
       compose.setAttribute("data-review-compose-placement", "before-selection");
+      alignInlineCompose(leadingAnchor);
       return;
     }
-    if (compose.parentElement !== surface) surface.appendChild(compose);
-    compose.setAttribute("data-review-compose-centered", "");
-    compose.setAttribute("data-review-compose-placement", "centered");
-    Object.assign(compose.style, {
-      position: "fixed",
-      top: "50%",
-      left: "50%",
-      right: "auto",
-      transform: "translate(-50%, -50%)",
-    });
+    centerCompose();
   };
 
   const normalizedComposeBody = () => composeInput.value.trim();
@@ -6329,7 +6342,7 @@ import { createToastManager } from "./toast.js";
           ?.getAttribute("data-block-section") || "this slide";
       const selector = el("button", {
         class:
-          "[position:absolute] [top:calc(0.75rem_-_1px)] [right:calc(100%_+_0.5625rem)] [z-index:44] [display:inline-flex] [width:1.4rem] [height:1.4rem] [align-items:center] [justify-content:center] [padding:0] [border:1px_solid_transparent] [border-radius:0.3rem] [background:color-mix(in_srgb,_var(--bg)_88%,_transparent)] [color:color-mix(in_srgb,_var(--muted-c)_72%,_transparent)] [cursor:pointer] hover:[border-color:var(--edge-c)] hover:[background:var(--review-control-hover)] hover:[color:var(--accent-c)] focus-visible:[border-color:var(--edge-c)] focus-visible:[background:var(--review-control-hover)] focus-visible:[color:var(--accent-c)] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px] active:[background:var(--review-control-active)]",
+          "[position:absolute] [top:calc(0.625rem_-_1px)] [right:calc(100%_+_0.375rem)] [z-index:44] [display:inline-flex] [width:1.4rem] [height:1.4rem] [align-items:center] [justify-content:center] [padding:0] [border:1px_solid_transparent] [border-radius:0.3rem] [background:color-mix(in_srgb,_var(--bg)_88%,_transparent)] [color:color-mix(in_srgb,_var(--muted-c)_72%,_transparent)] [cursor:pointer] hover:[border-color:var(--edge-c)] hover:[background:var(--review-control-hover)] hover:[color:var(--accent-c)] focus-visible:[border-color:var(--edge-c)] focus-visible:[background:var(--review-control-hover)] focus-visible:[color:var(--accent-c)] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px] active:[background:var(--review-control-active)]",
         type: "button",
         "data-review-slide-selector": true,
         "aria-label": "Comment on all content in " + title,
