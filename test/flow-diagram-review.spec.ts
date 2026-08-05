@@ -168,6 +168,34 @@ test("should group and right-align the diagram viewer controls", async ({
   ).toBeVisible();
   await expect(fit).toHaveAttribute("aria-pressed", "true");
 
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset["theme"] = value;
+    }, theme);
+    await expect
+      .poll(() =>
+        fit.evaluate((element) => {
+          const reference = document.createElement("span");
+          reference.style.color = "var(--accent-c)";
+          reference.style.backgroundColor = "var(--edge-c)";
+          document.body.append(reference);
+          const style = getComputedStyle(element);
+          const referenceStyle = getComputedStyle(reference);
+          const channels = (color: string): ReadonlyArray<string> =>
+            color.match(/\d+/gu)?.slice(0, 3) ?? [];
+          const result = {
+            isAccent: style.color === referenceStyle.color,
+            hasNeutralBackground:
+              channels(style.backgroundColor).join(",") ===
+              channels(referenceStyle.backgroundColor).join(","),
+          };
+          reference.remove();
+          return result;
+        }),
+      )
+      .toEqual({ isAccent: false, hasNeutralBackground: true });
+  }
+
   const geometry = await toolbar.evaluate((element) => {
     const controls = element.querySelector("[data-flow-zoom-controls]");
     const maximize = element.querySelector("[data-figure-maximize]");
