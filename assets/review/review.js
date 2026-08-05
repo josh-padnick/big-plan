@@ -714,7 +714,8 @@ import {
     if (value.type === "slide") return typeof value.scope === "string";
     if (
       value.type === "selection" &&
-      ![undefined, "string"].includes(typeof value.endBlockId)
+      value.endBlockId !== undefined &&
+      typeof value.endBlockId !== "string"
     ) {
       return false;
     }
