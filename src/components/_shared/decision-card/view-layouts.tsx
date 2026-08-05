@@ -50,7 +50,10 @@ const Radio = ({
 );
 
 const Recommended = () => (
-  <BadgePill label="Recommended" classNames={["badge-pill-quiet"]} />
+  <BadgePill
+    label="Recommended"
+    classNames={["border border-edge bg-surface text-ink"]}
+  />
 );
 
 const Chosen = () => (

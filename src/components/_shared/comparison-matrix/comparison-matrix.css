@@ -7,7 +7,9 @@
 
 @layer components {
   /* The prose stylesheet tints and borders markdown-table cells; a comparison
-     matrix draws its own row rules and sits on the card surface. */
+     matrix draws its own row rules and sits on the card surface. These rules
+     remain in the component layer so each decision component's later state
+     selectors can override the resting transparent surface. */
   article .comparison-matrix th,
   article .comparison-matrix td {
     border-bottom: 0;

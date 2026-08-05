@@ -5,6 +5,8 @@ import type { ElementContent } from "hast";
 import type { CompiledQuickSummary } from "./compile.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 
+// /* off-scale */ Phase A preserves the legacy hero type, 3px accent rule,
+// tracking, and token wash exactly; Phase B will select scale-backed values.
 const Label = ({ text }: { readonly text: string }) => (
   <dt className="mb-1 text-xs font-semibold tracking-[0.08em] uppercase text-accent">
     {text}
@@ -47,7 +49,7 @@ export const QuickSummary = ({
       </p>
       <dl className="m-0">
         {why === undefined ? null : (
-          <div className="quick-summary-why mb-3.5 rounded-r-lg border-l-[3px] border-accent px-4 py-3 text-[1.0625rem]">
+          <div className="quick-summary-why mb-3.5 rounded-r-lg border-l-[3px] border-accent bg-[color-mix(in_srgb,var(--accent-c)_8%,transparent)] px-4 py-3 text-[1.0625rem]">
             <Label text="Why" />
             <dd className="m-0">
               <FacetBody items={why.items} />

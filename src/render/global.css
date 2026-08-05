@@ -18,8 +18,6 @@ Light and dark follow the reader's OS in inert exports.
 @import "./markdown/prose.css";
 @import "./markdown/deck.css";
 @import "./markdown/syntax-highlighting.css";
-@import "../components/_shared/annotation-card/annotation-card.css";
-@import "../components/_shared/badge-pill/badge-pill.css";
 @import "../components/_shared/comparison-matrix/comparison-matrix.css";
 @import "../components/_shared/figure-controls/figure-controls.css";
 @import "../components/_shared/tooltip/tooltip.css";
@@ -36,7 +34,6 @@ Light and dark follow the reader's OS in inert exports.
 @import "../components/graphql-operation/styles.css";
 @import "../components/grpc-method/styles.css";
 @import "../components/http-endpoint/styles.css";
-@import "../components/quick-summary/styles.css";
 @import "../components/wireframe/font.generated.css";
 @import "../components/wireframe/styles.css";
 
