@@ -111,3 +111,35 @@ test("should comment on a block and a passage, then revise before sending", asyn
     await expect(rows).toHaveCount(1);
   });
 });
+
+test("should discard a stored comment whose target cannot be rendered", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.goto(deckViewerUrl);
+  const planId = await page.locator("html").getAttribute("data-plan-id");
+  if (planId === null) {
+    throw new Error("Rendered plan did not expose its plan id");
+  }
+  await page.addInitScript((storedPlanId) => {
+    localStorage.setItem(
+      `big-plan:review:drafts:${storedPlanId}`,
+      JSON.stringify({
+        drafts: [
+          {
+            id: "aabbccdd",
+            body: "Malformed persisted comment.",
+            target: { type: "block", kind: 1 },
+          },
+        ],
+        sent: [],
+        activeDraft: "",
+      }),
+    );
+  }, planId);
+
+  await page.reload();
+  await expect(page.locator("[data-review-toggle]")).toBeVisible();
+  await page.locator("[data-review-toggle]").click();
+  await expect(page.locator("[data-review-drafts] li")).toHaveCount(0);
+});

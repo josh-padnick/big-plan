@@ -194,13 +194,34 @@
     }
   };
 
+  const isCommentTarget = (value) => {
+    if (value === null || typeof value !== "object") return false;
+    if (value.type === "document") return true;
+    if (!["block", "selection", "lines"].includes(value.type)) return false;
+    if (
+      typeof value.blockId !== "string" ||
+      typeof value.kind !== "string" ||
+      typeof value.label !== "string" ||
+      ![undefined, "string"].includes(typeof value.section)
+    ) {
+      return false;
+    }
+    if (value.type === "block") return true;
+    return (
+      Number.isSafeInteger(value.start) &&
+      Number.isSafeInteger(value.end) &&
+      value.start >= 0 &&
+      value.end >= value.start &&
+      typeof value.quote === "string"
+    );
+  };
+
   const isComment = (value) =>
     value !== null &&
     typeof value === "object" &&
     typeof value.id === "string" &&
     typeof value.body === "string" &&
-    value.target !== null &&
-    typeof value.target === "object";
+    isCommentTarget(value.target);
 
   const readBootstrapState = () => {
     const raw = root.getAttribute("data-review-bootstrap");
