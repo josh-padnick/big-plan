@@ -3946,7 +3946,7 @@ import {
     );
     const see = el("button", {
       class:
-        "[margin-top:0.45rem] [padding:0.2rem_0.45rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--bg)] [color:var(--accent-c)] [font-size:0.6875rem] [font-weight:650] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[border-color:var(--accent-c)] active:[background:var(--review-control-active)]",
+        "[padding:0.2rem_0.45rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--bg)] [color:var(--accent-c)] [font-size:0.6875rem] [font-weight:650] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[border-color:var(--accent-c)] active:[background:var(--review-control-active)]",
       type: "button",
       "data-review-see-change": true,
       text: active
@@ -3959,6 +3959,23 @@ import {
       if (active) clearDiffLens();
       else void openDiffLens(comment, event, 0);
     });
+    const latestChangeRequestId = outcomeEventsFor(comment)
+      .filter((candidate) => candidate.key === "changed")
+      .at(-1)?.requestId;
+    const actionRow = el(
+      "div",
+      {
+        class:
+          "[display:flex] [min-width:0] [align-items:center] [justify-content:space-between] [gap:0.45rem]",
+        "data-review-change-actions": true,
+      },
+      [
+        see,
+        ...(latestChangeRequestId === event.requestId
+          ? [threadToolbarActions(comment)]
+          : []),
+      ],
+    );
     return el(
       "div",
       {
@@ -3966,7 +3983,7 @@ import {
           "[display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.45rem] [margin-top:0.6rem]",
         "data-review-change-controls": true,
       },
-      [list, see],
+      [list, actionRow],
     );
   };
 
@@ -4150,7 +4167,6 @@ import {
         commentId: comment.id,
       });
       if (strip) nodes.push(strip);
-      nodes.push(threadResolutionFooter({ comment }));
       return nodes;
     }
 
@@ -4181,8 +4197,18 @@ import {
       sendReply,
       outcome.key === "question" ? "Send answer" : "Send reply",
     );
+    const replyAndResolve = el("button", {
+      type: "button",
+      class:
+        "cursor-pointer rounded-sm border border-accent bg-accent px-2 py-1 text-xs font-semibold text-[var(--bg)] hover:brightness-110 active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+      "data-review-thread-reply-resolve": true,
+      text: "Reply & resolve",
+      hidden: true,
+    });
     const syncReply = () => {
-      sendReply.disabled = field.value.trim() === "";
+      const hasReply = field.value.trim() !== "";
+      sendReply.disabled = !hasReply;
+      replyAndResolve.hidden = !hasReply;
     };
     field.addEventListener("input", syncReply);
     field.addEventListener("keydown", (event) => {
@@ -4193,6 +4219,11 @@ import {
     });
     sendReply.addEventListener("click", () => {
       void sendThreadReply(comment, field, sendReply);
+    });
+    replyAndResolve.addEventListener("click", async () => {
+      const sentReply = await sendThreadReply(comment, field, sendReply);
+      if (!sentReply) return;
+      await resolveThread(comment);
     });
     nodes.push(
       el(
@@ -4212,11 +4243,14 @@ import {
       ),
     );
     nodes.push(
-      threadResolutionFooter({
-        comment,
-        replyField: field,
-        replyButton: sendReply,
-      }),
+      el(
+        "div",
+        {
+          class: "mt-3 flex items-center justify-end",
+          "data-review-reply-resolution": true,
+        },
+        [replyAndResolve],
+      ),
     );
     return nodes;
   };
@@ -4282,57 +4316,6 @@ import {
     announce("Comment reopened.");
     renderTray();
     await save();
-  };
-
-  const keepThreadOpen = (comment) => {
-    clearCommentLensIfOwned(comment.id);
-    expandedThreadIds.delete(comment.id);
-    renderTray();
-  };
-
-  const threadResolutionFooter = ({ comment, replyField, replyButton }) => {
-    const keepOpen = el("button", {
-      type: "button",
-      class:
-        "cursor-pointer rounded-sm px-2 py-1 text-xs font-semibold text-muted hover:bg-[var(--review-control-hover)] hover:text-ink active:bg-[var(--review-control-active)] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent",
-      "data-review-thread-keep-open": true,
-      text: "Keep open",
-    });
-    const resolve = el("button", {
-      type: "button",
-      class:
-        "cursor-pointer rounded-sm border border-accent bg-accent px-2 py-1 text-xs font-semibold text-[var(--bg)] hover:brightness-110 active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-      "data-review-thread-resolve-footer": true,
-      text: "Resolve thread",
-    });
-    const syncLabel = () => {
-      resolve.textContent =
-        replyField?.value.trim() === "" ? "Resolve thread" : "Reply & resolve";
-    };
-    replyField?.addEventListener("input", syncLabel);
-    keepOpen.addEventListener("click", () => keepThreadOpen(comment));
-    resolve.addEventListener("click", async () => {
-      const hasReply = replyField?.value.trim() !== "";
-      if (hasReply) {
-        const sentReply = await sendThreadReply(
-          comment,
-          replyField,
-          replyButton,
-        );
-        if (!sentReply) return;
-      }
-      await resolveThread(comment);
-    });
-    syncLabel();
-    return el(
-      "footer",
-      {
-        class:
-          "mt-3 flex items-center justify-end gap-2 border-t border-edge pt-3",
-        "data-review-thread-resolution": true,
-      },
-      [keepOpen, resolve],
-    );
   };
 
   const toolbarButton = ({ attribute, label, glyph, action }) => {
@@ -4413,9 +4396,14 @@ import {
       action:
         options.minimize ||
         (() => {
+          const scrollX = window.scrollX;
+          const scrollY = window.scrollY;
           clearCommentLensIfOwned(comment.id);
           expandedThreadIds.delete(comment.id);
           renderTray();
+          requestAnimationFrame(() => {
+            window.scrollTo({ left: scrollX, top: scrollY });
+          });
         }),
     });
     const quickActions = threadQuickActions(comment, options);
@@ -4424,6 +4412,9 @@ import {
   };
 
   const threadToolbar = (comment, options = {}) => {
+    const hasChangeActions = outcomeEventsFor(comment).some(
+      (event) => event.key === "changed",
+    );
     return el(
       "div",
       {
@@ -4445,7 +4436,7 @@ import {
             }),
           ],
         ),
-        threadToolbarActions(comment, options),
+        ...(hasChangeActions ? [] : [threadToolbarActions(comment, options)]),
       ],
     );
   };
@@ -4670,9 +4661,14 @@ import {
     jump.addEventListener("click", toggleThread);
     const rowHeadChildren = [jump];
     if (expanded) {
-      rowHeadChildren.push(
-        threadToolbarActions(comment, { resolved, minimize: collapse }),
+      const hasChangeActions = outcomeEventsFor(comment).some(
+        (event) => event.key === "changed",
       );
+      if (!hasChangeActions) {
+        rowHeadChildren.push(
+          threadToolbarActions(comment, { resolved, minimize: collapse }),
+        );
+      }
     } else {
       const substate = threadSubstate(outcome.status?.stage);
       if (substate !== null) {

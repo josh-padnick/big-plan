@@ -3346,22 +3346,37 @@ Ship the live review loop behind the explicit review command.
     await expect(
       trayThread.locator("[data-review-thread-resolve]"),
     ).toBeVisible();
-    const resolutionFooter = trayThread.locator(
-      "[data-review-thread-resolution]",
-    );
-    await expect(resolutionFooter).toBeVisible();
     await expect(
-      resolutionFooter.locator("[data-review-thread-keep-open]"),
-    ).toHaveText("Keep open");
-    const footerResolve = resolutionFooter.locator(
-      "[data-review-thread-resolve-footer]",
+      trayThread.locator("[data-review-thread-resolution]"),
+    ).toHaveCount(0);
+    const changeActions = trayThread.locator(
+      "[data-review-change-actions]:has([data-review-thread-minimize])",
     );
-    await expect(footerResolve).toHaveText("Resolve thread");
+    await expect(
+      changeActions.locator("[data-review-see-change]"),
+    ).toContainText("See change");
+    await expect(
+      changeActions.locator("[data-review-thread-minimize]"),
+    ).toBeVisible();
+    await expect(
+      changeActions.locator("[data-review-thread-resolve]"),
+    ).toBeVisible();
+    await expect(
+      changeActions.locator("[data-review-thread-revert]"),
+    ).toBeVisible();
+    const replyResolution = trayThread.locator(
+      "[data-review-reply-resolution]",
+    );
+    const replyAndResolve = replyResolution.locator(
+      "[data-review-thread-reply-resolve]",
+    );
+    await expect(replyAndResolve).toBeHidden();
     const replyField = trayThread.locator("[data-review-thread-reply]");
     await replyField.fill("One final note before resolving.");
-    await expect(footerResolve).toHaveText("Reply & resolve");
+    await expect(replyAndResolve).toBeVisible();
+    await expect(replyAndResolve).toHaveText("Reply & resolve");
     await replyField.fill("");
-    await expect(footerResolve).toHaveText("Resolve thread");
+    await expect(replyAndResolve).toBeHidden();
     for (const theme of ["light", "dark"]) {
       await page.evaluate(
         (nextTheme) =>
@@ -3372,23 +3387,13 @@ Ship the live review loop behind the explicit review command.
         "[data-review-thread-minimize]",
         "[data-review-thread-resolve]",
         "[data-review-thread-revert]",
-        "[data-review-thread-keep-open]",
-        "[data-review-thread-resolve-footer]",
       ]) {
-        const button = trayThread.locator(control);
-        const styleProperty =
-          control === "[data-review-thread-resolve-footer]"
-            ? "filter"
-            : "backgroundColor";
+        const button = changeActions.locator(control);
+        const styleProperty = "backgroundColor";
         await button.hover();
-        if (
-          control !== "[data-review-thread-keep-open]" &&
-          control !== "[data-review-thread-resolve-footer]"
-        ) {
-          await expect(
-            button.locator("[data-review-icon-tooltip]"),
-          ).toBeVisible();
-        }
+        await expect(
+          button.locator("[data-review-icon-tooltip]"),
+        ).toBeVisible();
         const hover = await button.evaluate(
           (node, property) => getComputedStyle(node)[property],
           styleProperty,
@@ -3416,12 +3421,12 @@ Ship the live review loop behind the explicit review command.
     await page.evaluate(() =>
       document.documentElement.setAttribute("data-theme", "light"),
     );
-    const beforeKeepOpen = await page.evaluate(() => window.scrollY);
-    await resolutionFooter.locator("[data-review-thread-keep-open]").click();
+    const beforeMinimize = await page.evaluate(() => window.scrollY);
+    await changeActions.locator("[data-review-thread-minimize]").click();
     await expect(trayThread).not.toHaveAttribute("data-review-row-expanded");
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
-      .toBeCloseTo(beforeKeepOpen, 0);
+      .toBeCloseTo(beforeMinimize, 0);
     await changedRow.click();
     await expect(trayThread).toHaveAttribute("data-review-row-expanded", "");
     const historicalChange = trayThread
@@ -3559,7 +3564,10 @@ Ship the live review loop behind the explicit review command.
         response.request().method() === "PUT",
     );
     const beforeResolve = await page.evaluate(() => window.scrollY);
-    await trayThread.locator("[data-review-thread-resolve-footer]").click();
+    await trayThread
+      .locator("[data-review-change-actions] [data-review-thread-resolve]")
+      .last()
+      .click();
     expect((await savedResolve).ok()).toBe(true);
     await expect(page.locator("[data-review-toast]")).toBeVisible();
     await expect(page.locator("[data-review-toast]")).toContainText("Resolved");
@@ -3580,7 +3588,10 @@ Ship the live review loop behind the explicit review command.
         response.url().endsWith("/api/drafts") &&
         response.request().method() === "PUT",
     );
-    await trayThread.locator("[data-review-thread-resolve-footer]").click();
+    await trayThread
+      .locator("[data-review-change-actions] [data-review-thread-resolve]")
+      .last()
+      .click();
     expect((await savedFinalResolve).ok()).toBe(true);
     await expect(
       page.locator(
