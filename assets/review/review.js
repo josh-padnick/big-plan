@@ -3023,7 +3023,6 @@ import {
             "aria-live": "polite",
           },
           [
-            spinner("activity-update"),
             el("span", {
               text: currentEvent
                 ? currentEvent.step +
