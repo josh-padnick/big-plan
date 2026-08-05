@@ -12,25 +12,60 @@ import type {
 import { GRIP_VERTICAL_ICON } from "../../icons/lucide/grip-vertical.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
+import { MutedText, SchemaCell, SchemaCode } from "./view-elements.js";
 
 // Shared by every pill in the grid and the bands below it.
 const BADGE_CLASSES =
   "table-schema-badge inline-flex shrink-0 items-center rounded-full border border-edge px-[0.4rem] py-px align-middle font-sans text-[0.625rem] font-semibold tracking-wide text-muted uppercase data-[schema-badge=pk]:border-[color-mix(in_srgb,var(--color-accent)_45%,transparent)] data-[schema-badge=pk]:text-accent";
-// Shared by the Indexes and DDL band labels.
-const SECTION_LABEL_CLASSES =
-  "table-schema-section-label m-0 text-[0.6875rem] font-medium uppercase tracking-wider text-muted";
-const CODE_CLASSES =
-  "rounded-none border-0 bg-transparent p-0 font-mono text-[0.875em] whitespace-nowrap";
+const SECTION_LABEL_CLASSES = {
+  ddl: "table-schema-section-label m-0 text-[0.6875rem] font-medium uppercase tracking-wider text-muted px-[0.75rem] mb-[0.1rem] flex items-center gap-1.5",
+  indexes:
+    "table-schema-section-label m-0 text-[0.6875rem] font-medium uppercase tracking-wider text-muted px-[0.75rem] mb-[0.1rem]",
+} as const;
+
+const SectionLabel = ({
+  variant,
+  children,
+}: {
+  readonly variant: keyof typeof SECTION_LABEL_CLASSES;
+  readonly children: ReactNode;
+}) => <p className={SECTION_LABEL_CLASSES[variant]}>{children}</p>;
 
 const GRID_HEADS: ReadonlyArray<{
   readonly label: string;
   readonly key: string;
+  readonly className: string;
 }> = [
-  { label: "Column", key: "column" },
-  { label: "Type", key: "type" },
-  { label: "Constraints", key: "constraints" },
-  { label: "Default", key: "default" },
-  { label: "Comment", key: "comment" },
+  {
+    label: "Column",
+    key: "column",
+    className:
+      "table-schema-head table-schema-head-column text-[0.625rem] uppercase tracking-wider",
+  },
+  {
+    label: "Type",
+    key: "type",
+    className:
+      "table-schema-head table-schema-head-type text-[0.625rem] uppercase tracking-wider",
+  },
+  {
+    label: "Constraints",
+    key: "constraints",
+    className:
+      "table-schema-head table-schema-head-constraints text-[0.625rem] uppercase tracking-wider",
+  },
+  {
+    label: "Default",
+    key: "default",
+    className:
+      "table-schema-head table-schema-head-default text-[0.625rem] uppercase tracking-wider",
+  },
+  {
+    label: "Comment",
+    key: "comment",
+    className:
+      "table-schema-head table-schema-head-comment text-[0.625rem] uppercase tracking-wider",
+  },
 ];
 
 const indxLabel = (position: number): string => `INDX ${position}`;
@@ -61,12 +96,7 @@ const separated = (items: ReadonlyArray<ReactNode>): ReadonlyArray<ReactNode> =>
   items.flatMap((item, index) =>
     index === 0
       ? [item]
-      : [
-          <span key={`sep-${index}`} className="text-muted">
-            {" · "}
-          </span>,
-          item,
-        ],
+      : [<MutedText key={`sep-${index}`}>{" · "}</MutedText>, item],
   );
 
 // The badge, arrow, and target wrap as one unit so a narrow cell never
@@ -74,10 +104,10 @@ const separated = (items: ReadonlyArray<ReactNode>): ReadonlyArray<ReactNode> =>
 const ForeignKeyTarget = ({ target }: { readonly target: string }) => (
   <span className="table-schema-ref-target inline-flex items-center gap-[0.35rem] whitespace-nowrap">
     <Badge kind="fk" label="FK" />
-    <span className="table-schema-ref-arrow text-muted" aria-hidden="true">
+    <MutedText variant="refArrow" aria-hidden="true">
       {"→"}
-    </span>
-    <code className={CODE_CLASSES}>{target}</code>
+    </MutedText>
+    <SchemaCode>{target}</SchemaCode>
   </span>
 );
 
@@ -93,7 +123,7 @@ const ConstraintGroup = ({
 }) => (
   <span className="table-schema-constraint inline-flex items-center gap-x-[0.45rem] whitespace-nowrap">
     {item}
-    {trailingSeparator ? <span className="text-muted">{"·"}</span> : null}
+    {trailingSeparator ? <MutedText>{"·"}</MutedText> : null}
   </span>
 );
 
@@ -113,13 +143,9 @@ const indexMarkers = (
         indxPosition={position}
       />
     ) : (
-      <span
-        key={`indx-${position}`}
-        className="text-muted"
-        data-schema-indx={String(position)}
-      >
+      <MutedText key={`indx-${position}`} data-schema-indx={String(position)}>
         {`WHERE ${indxLabel(position)}`}
-      </span>
+      </MutedText>
     ),
   );
 
@@ -140,9 +166,9 @@ const ConstraintsCell = ({
     ...(column.unique
       ? [<Badge key="unique" kind="unique" label="Unique" />]
       : []),
-    <span key="nullability" className="text-muted">
+    <MutedText key="nullability">
       {column.notNull ? "not null" : "nullable"}
-    </span>,
+    </MutedText>,
   ];
   const fkItems: ReadonlyArray<ReactNode> =
     column.ref === undefined
@@ -154,25 +180,25 @@ const ConstraintsCell = ({
           ...(column.ref.onDelete === undefined
             ? []
             : [
-                <code key="on-delete" className={`${CODE_CLASSES} text-muted`}>
+                <SchemaCode key="on-delete" tone="muted">
                   {`ON DELETE ${column.ref.onDelete.toUpperCase()}`}
-                </code>,
+                </SchemaCode>,
               ]),
           ...(column.ref.onUpdate === undefined
             ? []
             : [
-                <code key="on-update" className={`${CODE_CLASSES} text-muted`}>
+                <SchemaCode key="on-update" tone="muted">
                   {`ON UPDATE ${column.ref.onUpdate.toUpperCase()}`}
-                </code>,
+                </SchemaCode>,
               ]),
         ];
   const checkItems: ReadonlyArray<ReactNode> =
     column.check === undefined
       ? []
       : [
-          <code key="check" className={CODE_CLASSES} data-schema-check="">
+          <SchemaCode key="check" data-schema-check="">
             {`CHECK (${column.check})`}
-          </code>,
+          </SchemaCode>,
         ];
   const itemCount =
     base.length + fkItems.length + checkItems.length + markers.length;
@@ -188,7 +214,7 @@ const ConstraintsCell = ({
     );
   };
   return (
-    <td className="table-schema-cell-constraints text-[0.8125rem]">
+    <SchemaCell variant="constraints">
       <span className="table-schema-constraints flex flex-wrap items-center gap-x-[0.45rem] gap-y-[0.2rem]">
         {base.map((item, index) => group(item, index))}
         {/* display: contents keeps the ref wrapper addressable while its
@@ -201,7 +227,7 @@ const ConstraintsCell = ({
         {checkItems.map((item, index) => group(item, 200 + index))}
         {markers.map((item, index) => group(item, 300 + index))}
       </span>
-    </td>
+    </SchemaCell>
   );
 };
 
@@ -217,26 +243,19 @@ const ColumnRow = ({
   <tr className="table-schema-column-row" data-schema-column={column.name}>
     {/* Semibold matches the index names in the band: both are the
         identifier the reader scans for. */}
-    <th
-      scope="row"
-      className="table-schema-cell-name font-mono text-[0.8125rem] font-semibold"
-    >
-      {column.name}
-    </th>
-    <td className="table-schema-cell-type font-mono text-[0.8125rem]">
-      {column.type}
-    </td>
+    <SchemaCell variant="name">{column.name}</SchemaCell>
+    <SchemaCell variant="type">{column.type}</SchemaCell>
     <ConstraintsCell column={column} markers={indexMarkers(column, indexes)} />
-    <td className="table-schema-cell-default font-mono text-[0.8125rem]">
+    <SchemaCell variant="default">
       {column.defaultValue === undefined ? null : (
-        <code className={CODE_CLASSES}>{column.defaultValue}</code>
+        <SchemaCode>{column.defaultValue}</SchemaCode>
       )}
-    </td>
-    <td className="table-schema-cell-comment text-xs leading-snug text-muted">
+    </SchemaCell>
+    <SchemaCell variant="comment">
       {column.note === undefined ? null : (
         <span data-schema-note="">{column.note}</span>
       )}
-    </td>
+    </SchemaCell>
   </tr>
 );
 
@@ -255,12 +274,8 @@ export const TableSchemaGrid = ({
     <table className="table-schema-grid w-full border-collapse">
       <thead>
         <tr>
-          {GRID_HEADS.map(({ label, key }) => (
-            <th
-              key={key}
-              scope="col"
-              className={`table-schema-head table-schema-head-${key} text-[0.625rem] uppercase tracking-wider`}
-            >
+          {GRID_HEADS.map(({ label, key, className }) => (
+            <th key={key} scope="col" className={className}>
               {/* The gripper ships hidden for the live review application. */}
               {label}
               {lucideIconToReact({ icon: GRIP_VERTICAL_ICON, hidden: true })}
@@ -284,6 +299,12 @@ export const TableSchemaGrid = ({
 // One band entry per index: the INDX pill leads a content column holding the
 // strong name and its demoted definition and note, so everything under a name
 // left-aligns with the name itself whatever width the pill takes.
+const INDEX_ENTRY_CLASSES = {
+  first: "m-0 flex items-baseline gap-[0.45rem] px-[0.75rem] py-[0.5rem]",
+  divided:
+    "m-0 flex items-baseline gap-[0.45rem] px-[0.75rem] py-[0.5rem] border-t border-edge",
+} as const;
+
 const IndexEntry = ({
   index,
   offset,
@@ -292,15 +313,7 @@ const IndexEntry = ({
   readonly offset: number;
 }) => (
   <li
-    className={[
-      "m-0",
-      "flex",
-      "items-baseline",
-      "gap-[0.45rem]",
-      "px-[0.75rem]",
-      "py-[0.5rem]",
-      ...(offset === 0 ? [] : ["border-t", "border-edge"]),
-    ].join(" ")}
+    className={INDEX_ENTRY_CLASSES[offset === 0 ? "first" : "divided"]}
     data-schema-index={String(offset + 1)}
   >
     <Badge kind="idx" label={indxLabel(offset + 1)} />
@@ -311,37 +324,27 @@ const IndexEntry = ({
         </span>
         {index.unique ? <Badge kind="unique" label="Unique" /> : null}
       </span>
-      <span
+      <MutedText
+        variant="indexDefinition"
         // The band sits outside the grid's scroll container, so each
         // definition line owns its overflow instead of widening the page.
-        className="table-schema-index-definition block overflow-x-auto text-xs text-muted"
       >
         {separated([
-          <code key="columns" className={CODE_CLASSES}>
+          <SchemaCode key="columns">
             {index.columns
               .map((column) => column.replaceAll("`", ""))
               .join(", ")}
-          </code>,
+          </SchemaCode>,
           ...(index.method === undefined
             ? []
-            : [
-                <span key="method" className="text-muted">
-                  {index.method}
-                </span>,
-              ]),
+            : [<MutedText key="method">{index.method}</MutedText>]),
           ...(index.where === undefined
             ? []
-            : [
-                <code key="where" className={CODE_CLASSES}>
-                  {`WHERE ${index.where}`}
-                </code>,
-              ]),
+            : [<SchemaCode key="where">{`WHERE ${index.where}`}</SchemaCode>]),
         ])}
-      </span>
+      </MutedText>
       {index.note === undefined ? null : (
-        <span className="block text-xs leading-snug text-muted">
-          {index.note}
-        </span>
+        <MutedText variant="note">{index.note}</MutedText>
       )}
     </span>
   </li>
@@ -358,12 +361,10 @@ const DdlSection = ({ section }: { readonly section: CompiledDdlSection }) => (
   >
     {/* The badge marks the band as verbatim DDL in both the inert stack and
         the live application's tab. */}
-    <p
-      className={`${SECTION_LABEL_CLASSES} px-[0.75rem] mb-[0.1rem] flex items-center gap-1.5`}
-    >
+    <SectionLabel variant="ddl">
       {section.title}
       <Badge kind="ddl" label="DDL" />
-    </p>
+    </SectionLabel>
     <div className="table-schema-ddl-body min-w-0 px-[0.75rem] pb-[0.6rem] [&>:last-child]:mb-0">
       {hastContentToReact(section.children)}
     </div>
@@ -386,9 +387,7 @@ export const TableSchemaSections = ({
       >
         {/* A styled paragraph rather than a real heading keeps component
             chrome out of the document outline the section navigator uses. */}
-        <p className={`${SECTION_LABEL_CLASSES} px-[0.75rem] mb-[0.1rem]`}>
-          {"Indexes"}
-        </p>
+        <SectionLabel variant="indexes">{"Indexes"}</SectionLabel>
         <ul className="table-schema-index-list m-0 flex flex-col p-0 pb-[0.15rem] list-none">
           {schema.indexes.map((index, offset) => (
             <IndexEntry key={offset} index={index} offset={offset} />
