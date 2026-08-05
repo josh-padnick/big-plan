@@ -34,6 +34,7 @@ import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { MINUS_ICON } from "../../icons/lucide/minus.js";
 import { PLUS_ICON } from "../../icons/lucide/plus.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
+import { SCAN_ICON } from "../../icons/lucide/scan.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import {
@@ -226,6 +227,9 @@ const ToolbarSeparator = ({ id }: { readonly id?: string }) => (
 const CONTROL_CLASSES =
   "figure-control inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md border-0 bg-transparent px-1 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 
+const VIEWER_CONTROL_CLASSES =
+  "figure-control inline-flex h-9 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-4";
+
 const IconControl = ({
   icon,
   label,
@@ -237,7 +241,7 @@ const IconControl = ({
 }) => (
   <button
     type="button"
-    className={`${CONTROL_CLASSES} w-6 px-0`}
+    className={`${VIEWER_CONTROL_CLASSES} w-9 px-0`}
     aria-label={label}
     data-tooltip={label}
     data-flow-zoom={action}
@@ -249,32 +253,46 @@ const IconControl = ({
 // A diagram is a canvas wherever it sits, so zoom belongs to the reading
 // column as much as to the overlay. The group ships hidden and the viewer leg
 // reveals it, because without scripts there is no canvas to zoom.
-const ZoomControls = () => (
+const ViewerControls = () => (
   <span
-    className="flow-diagram-zoom inline-flex shrink-0 items-center gap-0.5"
+    className="flow-diagram-view-controls ml-auto inline-flex shrink-0 items-center gap-2"
     data-flow-zoom-controls
     hidden
   >
-    <IconControl icon={MINUS_ICON} label="Zoom out" action="out" />
     <span
-      className="flow-diagram-zoom-readout min-w-[2.75rem] text-center font-sans text-[0.6875rem] tabular-nums text-muted"
-      data-flow-zoom-readout
-      aria-live="off"
+      className="flow-diagram-zoom inline-flex shrink-0 items-center overflow-hidden rounded-md border border-edge bg-paper"
+      role="group"
+      aria-label="Diagram zoom"
     >
-      100%
+      <IconControl icon={MINUS_ICON} label="Zoom out" action="out" />
+      <button
+        type="button"
+        className={`${VIEWER_CONTROL_CLASSES} flow-diagram-zoom-readout min-w-14 border-x border-edge px-2 font-sans text-xs tabular-nums`}
+        aria-label="Reset zoom to 100%"
+        data-tooltip="Reset zoom to 100%"
+        data-flow-zoom="reset"
+        data-flow-zoom-readout
+      >
+        100%
+      </button>
+      <IconControl icon={PLUS_ICON} label="Zoom in" action="in" />
     </span>
-    <IconControl icon={PLUS_ICON} label="Zoom in" action="in" />
+    <ToolbarSeparator />
     {/* Fit says its word: beside a maximize control, a second frame-shaped
         glyph reads as a second maximize. */}
     <button
       type="button"
-      className={CONTROL_CLASSES}
+      className={`${VIEWER_CONTROL_CLASSES} gap-1.5 rounded-md border border-edge bg-paper px-2.5 font-sans text-xs font-semibold aria-pressed:border-[color-mix(in_srgb,var(--accent-c)_32%,var(--edge-c))] aria-pressed:bg-[color-mix(in_srgb,var(--accent-c)_10%,var(--bg))] aria-pressed:text-accent`}
       aria-label="Fit diagram to width"
+      aria-pressed="false"
       data-tooltip="Fit diagram to width"
       data-flow-zoom="fit"
     >
-      <span className="font-sans text-[0.6875rem] font-semibold">Fit</span>
+      {lucideIconToReact({ icon: SCAN_ICON, hidden: false })}
+      <span>Fit</span>
     </button>
+    <ToolbarSeparator />
+    <MaximizeButton subject="diagram" size="toolbar" />
   </span>
 );
 
@@ -508,22 +526,14 @@ export const FlowDiagram = ({
       })}
     >
       <div
-        className="figure-control-bar flow-diagram-controls"
+        className="figure-control-bar flow-diagram-controls flex min-w-0 items-center"
         data-flow-controls
       >
-        {/* Four units, separated: the notes count, the proposal controls, the
-            zoom group, and maximize. Each separator hides itself when the
-            group beside it is dormant, so a diagram nobody has marked up
-            never shows a rule with nothing on one side of it. */}
+        {/* Feedback and proposal controls stay at the left. Viewer controls
+            form a right-aligned cluster with distinct zoom, Fit, and maximize
+            groups. */}
         <ProposalControls />
-        <span className="flow-diagram-zoom-group inline-flex items-center gap-0.5">
-          {/* Hidden until something sits to its left: a rule with nothing on
-              one side of it separates nothing. */}
-          <ToolbarSeparator id="data-flow-zoom-sep" />
-          <ZoomControls />
-        </span>
-        <ToolbarSeparator />
-        <MaximizeButton subject="diagram" />
+        <ViewerControls />
       </div>
       {/* The canvas. Without scripts this is an ordinary scrolling strip, the
           only honest fallback; the viewer leg marks the figure

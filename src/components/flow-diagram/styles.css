@@ -183,7 +183,7 @@ classes.
      heading the moment the pointer arrives is worse than 24 pixels of quiet
      space that never moves. Nothing is drawn in the band at rest. */
   .flow-diagram > .flow-diagram-controls {
-    min-height: 1.5rem;
+    min-height: 2.25rem;
     padding: 0 0 0.15rem;
     gap: 0.25rem;
     opacity: 0;
@@ -221,7 +221,7 @@ classes.
   }
   .flow-diagram-toolbar-sep {
     width: 1px;
-    height: 0.85rem;
+    height: 1.25rem;
     flex: none;
     margin: 0 0.2rem;
     background: color-mix(in srgb, var(--ink-c) 18%, transparent);

@@ -212,6 +212,11 @@ export const DIAGRAM_SCRIPT = `
     reanchor();
   };
 
+  const setFitMode = (diagram, active) => {
+    const button = diagram.querySelector('[data-flow-zoom="fit"]');
+    if (button) button.setAttribute("aria-pressed", active ? "true" : "false");
+  };
+
   const clampPan = (diagram) => {
     const c = canvas.get(diagram);
     if (!c) return;
@@ -232,7 +237,9 @@ export const DIAGRAM_SCRIPT = `
     const c = canvas.get(diagram);
     if (!c) return;
     c.userTransformed = true;
+    setFitMode(diagram, false);
     const z1 = clamp(nextZoom, ZOOM_MIN, ZOOM_MAX);
+    diagram.toggleAttribute("data-flow-zoomed", true);
     if (z1 === c.zoom) return;
     const ratio = z1 / c.zoom;
     c.x = px - (px - c.x) * ratio;
@@ -240,7 +247,6 @@ export const DIAGRAM_SCRIPT = `
     c.zoom = z1;
     clampPan(diagram);
     applyTransform(diagram);
-    diagram.toggleAttribute("data-flow-zoomed", true);
   };
 
   const zoomCentered = (diagram, nextZoom) => {
@@ -263,6 +269,7 @@ export const DIAGRAM_SCRIPT = `
     c.x = (vw - aw * c.zoom) / 2;
     c.y = (vh - ah * c.zoom) / 2;
     c.userTransformed = false;
+    setFitMode(diagram, true);
     diagram.removeAttribute("data-flow-zoomed");
     applyTransform(diagram);
   };
@@ -324,6 +331,7 @@ export const DIAGRAM_SCRIPT = `
         return;
       }
       c.userTransformed = true;
+      setFitMode(diagram, false);
       c.x -= event.deltaX;
       c.y -= event.deltaY;
       clampPan(diagram);
@@ -345,6 +353,7 @@ export const DIAGRAM_SCRIPT = `
       if (!pan.moved) {
         pan.moved = true;
         c.userTransformed = true;
+        setFitMode(diagram, false);
         c.viewport.setAttribute("data-flow-panning", "");
         c.viewport.setPointerCapture(pan.id);
       }
@@ -383,14 +392,12 @@ export const DIAGRAM_SCRIPT = `
         event.stopPropagation();
         const action = button.getAttribute("data-flow-zoom");
         if (action === "fit") fit(diagram);
+        else if (action === "reset") zoomCentered(diagram, 1);
         else stepZoom(diagram, action === "in" ? 1 : -1);
       });
     }
     const zoomControls = diagram.querySelector("[data-flow-zoom-controls]");
     if (zoomControls) zoomControls.hidden = false;
-    const zoomSep = diagram.querySelector("[data-flow-zoom-sep]");
-    if (zoomSep) zoomSep.hidden = true;
-
     // The shared leg owns promoting the frame; this one only reacts, so the
     // two can never disagree about who is maximized.
     new MutationObserver(() => {
