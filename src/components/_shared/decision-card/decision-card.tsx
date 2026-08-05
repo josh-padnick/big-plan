@@ -34,6 +34,16 @@ const STATUS_LABELS = {
   deferred: "Deferred",
 } satisfies Record<DecisionCardStatus, string>;
 
+const STATUS_CLASSES = {
+  open: "bg-surface text-muted",
+  decided: "bg-[var(--decision-pro-bg)] text-[var(--decision-pro-c)]",
+  deferred: "bg-surface text-muted",
+} satisfies Record<DecisionCardStatus, string>;
+
+// /* off-scale */ Phase A preserves the legacy compact controls, proposal
+// geometry, state washes, and 22–24% focus halos exactly. Phase B may
+// regularize them against the product scale.
+
 const statusLabel = (model: CompiledDecisionCard): string =>
   model.status === "open" && model.interaction === "audit"
     ? "Proposed"
@@ -160,7 +170,7 @@ const AnswerControls = () => (
       hidden
     >
       <span
-        className="decision-answer-mark mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full [&_svg]:size-3"
+        className="decision-answer-mark mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--decision-pro-c)] text-paper [&_svg]:size-3"
         aria-hidden="true"
       >
         {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
@@ -256,6 +266,7 @@ export const DecisionCard = ({
             classNames={[
               "decision-status-pill",
               `decision-status-${model.status}`,
+              STATUS_CLASSES[model.status],
             ]}
           />
         )}
@@ -275,7 +286,7 @@ export const DecisionCard = ({
       <fieldset className="decision-fieldset m-0 min-w-0 border-0 p-0">
         <legend className="sr-only">{model.question}</legend>
         <div
-          className="decision-zone-compare border-t border-edge"
+          className="decision-zone-compare border-t border-edge bg-paper"
           data-decision-compare=""
         >
           <Comparison model={model} answerable={answerable} />
@@ -285,7 +296,7 @@ export const DecisionCard = ({
             shapes already carry their reasoning in line. */}
         {isMatrixLayout(model) ? (
           <div
-            className="decision-zone-rationale border-t border-edge px-5 py-3.5"
+            className="decision-zone-rationale border-t border-edge bg-surface px-5 py-3.5"
             data-decision-explain=""
           >
             <div
@@ -305,7 +316,7 @@ export const DecisionCard = ({
           </div>
         ) : null}
         {answerable ? (
-          <div className="decision-zone-propose border-t border-edge px-5 py-3">
+          <div className="decision-zone-propose border-t border-edge bg-surface px-5 py-3">
             <ProposeLink model={model} />
           </div>
         ) : null}
