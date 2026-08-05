@@ -127,8 +127,13 @@ export const VIEWER_SCRIPT = `<script>
     fallback.style.opacity = "0";
     document.body.append(fallback);
     fallback.select();
-    document.execCommand("copy");
-    fallback.remove();
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } finally {
+      fallback.remove();
+    }
+    if (!copied) throw new Error("Unable to copy code");
   };
   for (const button of buttons) {
     const figure = button.closest(".code-figure");
@@ -148,11 +153,14 @@ export const VIEWER_SCRIPT = `<script>
         await clipboardWrite(source);
         button.setAttribute("aria-label", "Copied code");
         button.setAttribute("data-tooltip", "Copied code");
-        setTimeout(() => {
-          button.setAttribute("aria-label", "Copy code");
-          button.setAttribute("data-tooltip", "Copy code");
-        }, 1200);
-      } catch (_) {}
+      } catch (_) {
+        button.setAttribute("aria-label", "Copy failed");
+        button.setAttribute("data-tooltip", "Copy failed");
+      }
+      setTimeout(() => {
+        button.setAttribute("aria-label", "Copy code");
+        button.setAttribute("data-tooltip", "Copy code");
+      }, 1200);
     });
   }
 })();
