@@ -151,4 +151,30 @@ describe("Slide component", () => {
       }),
     ).toThrowError(MarkdownDiagnosticsError);
   });
+
+  it("should reject a nested marker identically in every delivery", () => {
+    const markdown =
+      '<Callout type="note">\n\n<Slide type="status-quo" />\n\n</Callout>\n\n## Today\n\nNow.\n';
+    const messagesOf = (compile: () => unknown): ReadonlyArray<string> => {
+      try {
+        compile();
+        throw new Error("expected diagnostics");
+      } catch (error: unknown) {
+        if (!(error instanceof MarkdownDiagnosticsError)) {
+          throw error;
+        }
+        return error.diagnostics.map(({ message }) => message);
+      }
+    };
+
+    const rendered = messagesOf(() => compileMarkdown({ markdown }));
+    const compiled = messagesOf(() =>
+      compilePlanModel({ markdown, fallbackTitle: "Plan" }),
+    );
+
+    expect(rendered).toEqual([
+      "Slide must be a top-level self-closing marker immediately followed by the h2 it describes",
+    ]);
+    expect(compiled).toEqual(rendered);
+  });
 });

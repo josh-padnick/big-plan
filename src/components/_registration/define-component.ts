@@ -43,6 +43,11 @@ export type CompiledComponent = {
 export type ComponentDefinition = {
   readonly compile: (input: ComponentCompilerInput) => CompiledComponent;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
+  // Present when the component is authorable only as a direct child of the
+  // document root. The string is the author-facing diagnostic every command
+  // reports for an instance authored below the root, because the pre-HAST
+  // authoring pass - not delivery - owns the check.
+  readonly topLevelOnly?: string;
 };
 
 /** Pairs one concrete model compiler with the React view that consumes it. */
@@ -50,10 +55,12 @@ export const defineComponent = <Model>({
   compile,
   view,
   scopedChildren,
+  topLevelOnly,
 }: {
   readonly compile: ComponentModelCompiler<Model>;
   readonly view: ComponentType<{ readonly model: Model }>;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
+  readonly topLevelOnly?: string;
 }): ComponentDefinition => ({
   compile: (input) => {
     const model = compile(input);
@@ -63,6 +70,7 @@ export const defineComponent = <Model>({
     };
   },
   ...(scopedChildren === undefined ? {} : { scopedChildren }),
+  ...(topLevelOnly === undefined ? {} : { topLevelOnly }),
 });
 
 /**
@@ -76,6 +84,7 @@ export const defineOutlineComponent = <Model>({
   view,
   marker,
   scopedChildren,
+  topLevelOnly,
 }: {
   readonly compile: ComponentModelCompiler<Model>;
   readonly view: ComponentType<{
@@ -84,6 +93,7 @@ export const defineOutlineComponent = <Model>({
   }>;
   readonly marker: (model: Model) => OutlineMarker;
   readonly scopedChildren?: Readonly<Record<string, ScopedChildDefinition>>;
+  readonly topLevelOnly?: string;
 }): ComponentDefinition => ({
   compile: (input) => {
     const model = compile(input);
@@ -98,4 +108,5 @@ export const defineOutlineComponent = <Model>({
     };
   },
   ...(scopedChildren === undefined ? {} : { scopedChildren }),
+  ...(topLevelOnly === undefined ? {} : { topLevelOnly }),
 });

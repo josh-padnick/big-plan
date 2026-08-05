@@ -9,6 +9,8 @@ import { Slide } from "./view.js";
 export const SLIDE_COMPONENT_DEFINITION = defineOutlineComponent({
   compile: compileSlideComponent,
   view: Slide,
+  topLevelOnly:
+    "Slide must be a top-level self-closing marker immediately followed by the h2 it describes",
   marker: (model) =>
     model.type === undefined
       ? { kind: "boundary" }

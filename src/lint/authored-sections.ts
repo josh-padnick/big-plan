@@ -2,12 +2,13 @@
 // marker for lint rules that compare structural names or typed-slide facts.
 
 import type { Heading } from "mdast";
-import type { Node, Parent } from "unist";
+import type { Node } from "unist";
 import {
   isSlideTypeId,
   slideTypeFor,
   type SlideTypeId,
 } from "../plan-vocabulary/slide-types/index.js";
+import { isNamedFlowElement, isParent, stringAttribute } from "./mdx-nodes.js";
 
 export type AuthoredSection = {
   readonly name: string;
@@ -21,41 +22,7 @@ export type AuthoredSection = {
   readonly markerColumn?: number;
 };
 
-const isParent = (node: Node): node is Parent => "children" in node;
-
 const isHeading = (node: Node): node is Heading => node.type === "heading";
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-const isNamedFlowElement = (node: Node, name: string): node is Parent =>
-  node.type === "mdxJsxFlowElement" &&
-  isParent(node) &&
-  "name" in node &&
-  node.name === name;
-
-const stringAttribute = ({
-  node,
-  name,
-}: {
-  readonly node: Node;
-  readonly name: string;
-}): string | undefined => {
-  if (!("attributes" in node) || !Array.isArray(node.attributes)) {
-    return undefined;
-  }
-  for (const attribute of node.attributes) {
-    if (
-      isRecord(attribute) &&
-      attribute["type"] === "mdxJsxAttribute" &&
-      attribute["name"] === name
-    ) {
-      const value = attribute["value"];
-      return typeof value === "string" ? value : undefined;
-    }
-  }
-  return undefined;
-};
 
 const headingText = (node: Node): string => {
   if (node.type === "text" || node.type === "inlineCode") {

@@ -189,8 +189,14 @@ const renderFlowElement = ({
     });
   }
   // An outline-aware component defers its presentation behind a placeholder
-  // until the deck transform has computed the document outline.
-  if (compiled.outline !== undefined && delivery.deferOutline !== undefined) {
+  // until the deck transform has computed the document outline. A model being
+  // materialized inside a parent's body never reaches the document tree, so
+  // it presents against the empty outline instead of leaking a placeholder.
+  if (
+    compiled.outline !== undefined &&
+    delivery.deferOutline !== undefined &&
+    !materializeModel
+  ) {
     delivery.deferOutline.push(compiled.outline.present);
     return createOutlinePlaceholder({
       index: delivery.deferOutline.length - 1,

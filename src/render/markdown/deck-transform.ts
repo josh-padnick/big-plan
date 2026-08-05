@@ -156,9 +156,9 @@ type AssignedSlideType = {
 };
 
 // Consumes every typed Slide placeholder before framing. A valid marker is a
-// top-level sibling immediately before its h2 (blank text is ignorable);
-// anything else receives a positional structural diagnostic and emits no
-// marker HTML.
+// top-level sibling immediately before its h2 (blank text is ignorable); a
+// top-level marker in any other position receives a positional structural
+// diagnostic, and no marker ever emits HTML.
 const collectSlideTypes = ({
   tree,
   diagnostics,
@@ -194,12 +194,14 @@ const collectSlideTypes = ({
         nextIndex += 1;
       }
       const next = parent.children[nextIndex];
-      if (
-        parent.type !== "root" ||
-        next === undefined ||
-        !isElement(next) ||
-        next.tagName !== "h2"
-      ) {
+      // A marker below the document root is rejected by authoring validation,
+      // which every command shares, so it is consumed here without a second
+      // diagnostic.
+      if (parent.type !== "root") {
+        parent.children.splice(index, 1);
+        continue;
+      }
+      if (next === undefined || !isElement(next) || next.tagName !== "h2") {
         diagnostics.add({
           message:
             "Slide must be a top-level self-closing marker immediately followed by the h2 it describes",

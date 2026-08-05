@@ -139,6 +139,18 @@ describe("compilePlanModel", () => {
     ]);
   });
 
+  it("should present a nested outline component instead of leaking its placeholder", () => {
+    const plan = compilePlanModel({
+      markdown:
+        '<Callout type="note">\n\n<Part title="Context" />\n\n</Callout>\n',
+      fallbackTitle: "x",
+    });
+    const serialized = JSON.stringify(plan.components);
+
+    expect(serialized).not.toContain("data-outline-placeholder");
+    expect(serialized).toContain("data-part-title");
+  });
+
   it("should hard-fail on diagnostics exactly as rendering does", () => {
     expect(() =>
       compilePlanModel({
