@@ -64,9 +64,8 @@ const COMPONENT_INTERACTIONS = {
     affordances: [],
   },
   FileTreeDiff: {
-    selector: ".file-tree-diff",
-    affordances: ["maximize"],
-    deferred: ["unified/split view"],
+    selector: "[data-file-tree-diff]",
+    affordances: ["combined/side-by-side view", "maximize"],
   },
   FlowDiagram: {
     selector: "[data-flow-diagram]",
@@ -226,6 +225,38 @@ test("should exercise every live component affordance with browser gestures", as
     await page.mouse.move(0, 0);
     await annotation.hover();
     await expect(line).toHaveClass(/annotation-hover/u);
+  });
+
+  await test.step("FileTreeDiff: switch views by pointer and keyboard", async () => {
+    const tree = page
+      .locator(COMPONENT_INTERACTIONS.FileTreeDiff.selector)
+      .first();
+    const combined = tree.getByRole("button", { name: "Combined view" });
+    const sideBySide = tree.getByRole("button", {
+      name: "Side-by-side view",
+    });
+
+    await expect(
+      tree.getByRole("group", { name: "File tree diff view" }),
+    ).toBeVisible();
+    await expect(combined).toHaveAttribute("aria-pressed", "true");
+    await sideBySide.click();
+    await expect(tree).toHaveAttribute("data-tree-view", "before-after");
+    await expect(sideBySide).toHaveAttribute("aria-pressed", "true");
+    await expect(combined).toHaveAttribute("aria-pressed", "false");
+    await expect(
+      tree.locator('[data-tree-content="before-after"]'),
+    ).toBeVisible();
+
+    await page.reload();
+    await expect(tree).toHaveAttribute("data-tree-view", "before-after");
+    await combined.focus();
+    await page.keyboard.press("Space");
+    await expect(tree).toHaveAttribute("data-tree-view", "combined");
+    await expect(combined).toHaveAttribute("aria-pressed", "true");
+
+    await page.reload();
+    await expect(tree).toHaveAttribute("data-tree-view", "combined");
   });
 
   for (const figure of [

@@ -1,6 +1,6 @@
 ---
 title: FileTreeDiff
-description: A component for a project file hierarchy annotated with per-entry change status in one combined tree.
+description: A component for comparing project file hierarchies in combined or side-by-side views.
 ---
 
 import ThemeImage from "../../../components/ThemeImage.astro";
@@ -8,7 +8,9 @@ import combinedLight from "../../../assets/components/file-tree-diff-combined-li
 import combinedDark from "../../../assets/components/file-tree-diff-combined-dark.png";
 
 `FileTreeDiff` renders a file hierarchy where each entry can carry a change status - added, modified, removed, or renamed - so a reviewer sees the shape of a change across the tree.
-It derives the complete transition from one authored change tree and renders it as a combined view.
+It derives the complete transition from one authored change tree.
+With the viewer script active, a pressed-state segmented control switches between combined and side-by-side before/after views and remembers the choice for this exact plan revision.
+With scripts disabled, the complete combined tree remains readable and no dormant control appears.
 
 ## How it looks
 
@@ -61,7 +63,7 @@ README.md [modified] - Document the stale-while-revalidate path.
 | Attribute  | Type               | Required | Behavior                                                                                                                 |
 | ---------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `title`    | string (non-empty) | No       | Header caption; when omitted, the change summary remains.                                                               |
-| `hideDiff` | bare boolean       | No       | Makes the model's alternate after state plain rather than change-highlighted; the inert document opens in combined view. |
+| `hideDiff` | bare boolean       | No       | Makes the alternate after pane plain rather than change-highlighted; the no-script document still opens in combined view. |
 
 Any other attribute is a positional authoring error.
 
@@ -86,3 +88,8 @@ Every violation - an unknown badge, a rename without its `[renamed]` badge, or a
 
 The combined tree keeps additions, modifications, removals, and renames in one fully expanded hierarchy.
 Renames show both names, deleted entries remain struck-through tombstones, and compact colored counts in the header summarize the whole change.
+
+## Side-by-side view
+
+The side-by-side view derives before and after hierarchies from the same authored tree.
+It separates removals from additions while preserving directory context, so reviewers can compare the resulting project shape without maintaining two sources.

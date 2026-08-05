@@ -18,7 +18,7 @@ Everything on this page is shipped and works today.
 - A sticky sidebar on wide screens; a compact sticky `Sections` menu on narrow ones.
 - Section links scroll smoothly, unless you've asked your OS for reduced motion.
 - Collapse controls on Parts, slides, and sub-slides, plus document-wide expand-all and collapse-all controls in the table of contents; TOC jumps expand collapsed ancestors.
-- Collapse choices, database-schema column order and visibility, and a document-level review-comment draft persist only for the exact source path and authored revision, so same-titled plans and distinct authored revisions never share viewer state.
+- Collapse choices, CodeDiff and FileTreeDiff views, database-schema column order and visibility, and a document-level review-comment draft persist only for the exact source path and authored revision, so same-titled plans and distinct authored revisions never share viewer state.
 
 ## Code
 
@@ -36,7 +36,7 @@ Everything on this page is shipped and works today.
 - `DataTable` components for reference datasets with sorting, optional search, selectable and reorderable columns, grouping, and text-fit controls.
 - `DatabaseTableSchema` components for one table's schema: a psql-style columns grid with key badges, foreign keys, indexes, checks, and titled verbatim-DDL bands.
 - `FileTree` components for plain hierarchies with optional per-entry notes.
-- `FileTreeDiff` components with entry-level change status, summaries, and a combined change tree.
+- `FileTreeDiff` components with entry-level change status, summaries, and combined or side-by-side before/after views.
 - `HttpEndpoint` components for HTTP contracts with location-grouped parameters, request examples, and status-coded responses.
 - `GraphqlOperation` components for queries, mutations, and subscriptions with literal argument types, one-level input and payload fields, and grouped executable examples with repeatable labeled responses.
 - `GrpcMethod` components for streaming-aware proto signatures, message-typed request and response fields, gRPC status codes, grouped examples, and proto source.
@@ -46,7 +46,7 @@ Everything on this page is shipped and works today.
 ## Output
 
 - One self-contained HTML file with styling and branding embedded.
-- One embedded viewer script (TOC scroll-spy, hover popovers, CodeDiff view selection, deck collapse, database-schema columns and index jumps, comment drafts, figure maximize, flow-diagram review, and wireframe navigation and scaling); content stays fully readable with scripts disabled.
+- One embedded viewer script (TOC scroll-spy, hover popovers, CodeDiff and FileTreeDiff view selection, deck collapse, database-schema columns and index jumps, comment drafts, figure maximize, flow-diagram review, and wireframe navigation and scaling); content stays fully readable with scripts disabled.
 - No external requests, ever.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 
