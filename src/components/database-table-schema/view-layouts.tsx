@@ -186,7 +186,10 @@ const ConstraintsCell = ({
     );
   };
   return (
-    <td className="table-schema-cell-constraints text-[0.8125rem]">
+    <td
+      className="table-schema-cell-constraints text-[0.8125rem]"
+      data-schema-grid-column="constraints"
+    >
       <span className="table-schema-constraints flex flex-wrap items-center gap-x-[0.45rem] gap-y-[0.2rem]">
         {base.map((item, index) => group(item, index))}
         {/* display: contents keeps the ref wrapper addressable while its
@@ -218,19 +221,29 @@ const ColumnRow = ({
     <th
       scope="row"
       className="table-schema-cell-name font-mono text-[0.8125rem] font-semibold"
+      data-schema-grid-column="column"
     >
       {column.name}
     </th>
-    <td className="table-schema-cell-type font-mono text-[0.8125rem]">
+    <td
+      className="table-schema-cell-type font-mono text-[0.8125rem]"
+      data-schema-grid-column="type"
+    >
       {column.type}
     </td>
     <ConstraintsCell column={column} markers={indexMarkers(column, indexes)} />
-    <td className="table-schema-cell-default font-mono text-[0.8125rem]">
+    <td
+      className="table-schema-cell-default font-mono text-[0.8125rem]"
+      data-schema-grid-column="default"
+    >
       {column.defaultValue === undefined ? null : (
         <code>{column.defaultValue}</code>
       )}
     </td>
-    <td className="table-schema-cell-comment text-xs leading-snug text-muted">
+    <td
+      className="table-schema-cell-comment text-xs leading-snug text-muted"
+      data-schema-grid-column="comment"
+    >
       {column.note === undefined ? null : (
         <span data-schema-note="">{column.note}</span>
       )}
@@ -250,6 +263,11 @@ export const TableSchemaGrid = ({
     className="table-schema-scroll min-w-0 overflow-x-auto"
     data-table-scroll-container=""
   >
+    <span
+      className="sr-only"
+      aria-live="polite"
+      data-schema-reorder-status=""
+    />
     <table className="table-schema-grid w-full">
       <thead>
         <tr>
@@ -258,6 +276,7 @@ export const TableSchemaGrid = ({
               key={key}
               scope="col"
               className={`table-schema-head table-schema-head-${key} text-[0.625rem] uppercase tracking-wider`}
+              data-schema-grid-column={key}
             >
               {/* The gripper ships hidden for the live review application. */}
               {label}

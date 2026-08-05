@@ -216,18 +216,28 @@ describe("renderDatabaseTableSchema rendering", () => {
       element,
       (candidate) => candidate.tagName === "table",
     )[0];
-    const headLabels = queryAll(
+    const heads = queryAll(
       columnsGrid ?? element,
       (candidate) =>
         candidate.tagName === "th" && candidate.properties.scope === "col",
-    ).map((head) => collectText(head));
-    expect(headLabels).toEqual([
+    );
+    expect(heads.map((head) => collectText(head))).toEqual([
       "Column",
       "Type",
       "Constraints",
       "Default",
       "Comment",
     ]);
+    expect(
+      heads.map((head) => head.properties["data-schema-grid-column"]),
+    ).toEqual(["column", "type", "constraints", "default", "comment"]);
+    expect(
+      queryAll(
+        element,
+        (candidate) =>
+          candidate.properties["data-schema-reorder-status"] === "",
+      ),
+    ).toHaveLength(1);
     const rows = queryAll(
       element,
       (candidate) => candidate.properties["data-schema-column"] !== undefined,
