@@ -110,6 +110,8 @@ const wait = (milliseconds: number): Promise<void> =>
     setTimeout(settle, milliseconds);
   });
 
+const agentRequestPollIntervalMs = 100;
+
 const responseHistory = ({
   request,
   snapshot,
@@ -337,7 +339,7 @@ const nextWork = async ({
       sessionId: session.sessionId,
       state: "waiting",
     });
-    await wait(500);
+    await wait(agentRequestPollIntervalMs);
     snapshot = await readAgentExchange({
       store: session.store,
       sessionId: session.sessionId,
