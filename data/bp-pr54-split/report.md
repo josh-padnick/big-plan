@@ -1,6 +1,6 @@
 # PR 54 split report
 
-Status: five draft PRs implemented. The final stack preserves every PR 54 source change and adds one authorized, styling-owned capture-harness bridge.
+Status: five draft PRs implemented. The final stack preserves every PR 54 source change and adds two root-fix bridges in the styling slice: the authorized capture-harness fix and the subsequently required Playwright flake fix.
 
 ## Chosen stack
 
@@ -34,13 +34,13 @@ The artifacts are committed on `fm/bp-pr54-split`, and every draft description l
 
 The GitHub `lint` job runs the complete branch contract: install, lint, build, generated-source drift, unit/style-history tests, Chromium install, and Playwright tests. The separate `style-history` job replays every styling commit from `main` using exact capture evidence. Macroscope reports independently.
 
-| Slice |                             Unit tests | Browser tests | GitHub CI run |
-| ----- | -------------------------------------: | ------------: | ------------- |
-| 1     |                                    944 |            52 | `30997775574` |
-| 2     |                                    971 |            52 | `30998066366` |
-| 3     |                                  1,019 |            66 | `30998398283` |
-| 4     |                                  1,030 |            66 | `30998959025` |
-| 5     | 1,061 plus 21 style-history unit tests |            91 | `30998972319` |
+| Slice |                             Unit tests | Browser tests | GitHub CI run                     |
+| ----- | -------------------------------------: | ------------: | --------------------------------- |
+| 1     |                                    944 |            52 | `30997775574`                     |
+| 2     |                                    971 |            52 | `30998066366`                     |
+| 3     |                                  1,019 |            66 | `30998398283`                     |
+| 4     |                                  1,030 |            66 | `31000606152` |
+| 5     | 1,061 plus 21 style-history unit tests |            91 | `31000610996` |
 
 The equivalent commands also passed locally at every slice boundary:
 
@@ -90,14 +90,27 @@ PR 4 adds five new capture keys. The old verifier applied the head config to eve
 
 The bridge now uses each child commit's declared config for that commit/parent comparison while retaining the current deterministic harness. New keys therefore compare both sides of the commit that introduces them, and earlier evidence remains scoped to the contract that approved it. A new regression test proves a later capture-key addition cannot reinterpret an earlier approved manifest.
 
+### Intentional visual evidence
+
+The Tailwind and causal-diff slice is not pixel-empty: its hosted ledger records 28 changed captures and 1,035,563 changed pixels. PR 4 therefore carries exact `[visual:approved]` evidence instead of the earlier incorrect empty claim.
+
+The persistence and typed-lens slice also changes rendered structure: its hosted ledger records 14 changed captures and 5,239,975 changed pixels. PR 5 carries a commit-scoped `[visual:approved]` manifest for those exact hashes and then removes that transient split evidence in a separate cleanup commit, so no split manifest remains in the final tree.
+
+### Playwright locator flake
+
+An earlier PR 4 CI run exposed a second pre-existing nondeterminism in `test/commenting-runtime.spec.ts`: the focus poll succeeded, then a separate `button.boundingBox()` call sometimes failed with “The thread action has no target.”
+
+The locator is live, and focusing the toolbar control can trigger the review runtime to replace that toolbar node. The successful focus observation and later geometry lookup could therefore straddle the replacement gap. A `--repeat-each=10 --workers=5` stress run reproduced the exact failure. The bridge now captures and returns the non-null bounding box inside the same successful `expect.poll` iteration; there is no second lookup against a potentially replaced node. The focused journey passed three consecutive serial repeats, and the complete lint/Playwright job passed after the fix.
+
 ## Bridging changes
 
 Capture-related bridge commits:
 
 1. `9837f7590d64395b5fd5cc9e78372137b9779aed` — temporary split scaffolding in PR 1 (`test(style-history): pin deterministic raster frames [visual:empty]`). It makes earlier approved manifests reproducible while the historical slices are replayed. PR 4 removes this transient version.
-2. `d0468837768886e1fe2d4e38bdec03bbd3918f89` — the one final, authorized bridge in PR 4 (`fix(style-history): make review captures deterministic and complete [visual:empty]`). It combines the server-bootstrap correction, root deterministic-raster fix, and commit-scoped history replay with its regression test.
+2. `1529183a1fe9db44fdff7e66d191f7e4a7f7a136` — the final authorized capture bridge in PR 4 (`fix(style-history): make review captures deterministic and complete [visual:empty]`). It contains only the three style-history files for the server-bootstrap correction, deterministic-raster fix, and commit-scoped replay regression.
+3. `f44cedcdf3f15d9e199c7b2cc1aef509c56dc851` — the subsequently required test-harness bridge in PR 4 (`fix(test): make live toolbar focus assertion atomic`). It contains only the Playwright locator-atomicity fix.
 
-Approved visual manifests rotate through PRs 1–3 as split-only review evidence and are deleted by PR 4. They do not remain in the final tree. Other narrow intermediate ordering bridges—identity reconciliation, selectors, generated assets, and milestone assertions—are reconciled to PR 54's own final implementations by PR 5.
+Approved visual manifests rotate one per slice as split-only review evidence. PR 5 deletes PR 4's manifest while adding its own exact evidence, then deletes its own manifest in the final cleanup commit. They do not remain in the final tree. Other narrow intermediate ordering bridges—identity reconciliation, selectors, generated assets, and milestone assertions—are reconciled to PR 54's own final implementations by PR 5.
 
 ## Adjusted completeness proof
 
@@ -111,30 +124,36 @@ PR 54 source tree:
 
 Final split head:
 
-`78f345b1b884a82422be41c95d09fdede29c45bb`
+`993f2ab5419896c1057635d003b95baa8e185cc3`
 
 Final split tree:
 
-`63799a3d91c0603b29956e6d23bd5217e50fee53`
+`f363846f0ce713ee219a6ca536ac650ae81cdbd7`
 
-The direct source-to-final diff changes exactly three bridge-owned files:
+The direct source-to-final diff changes exactly four bridge-owned files:
 
 - `scripts/style-snapshots/capture.mjs`
 - `scripts/style-snapshots/verify-history.mjs`
 - `scripts/style-snapshots/verify-history.test.mjs`
+- `test/commenting-runtime.spec.ts`
 
-The direct diff and final bridge commit have the same stable patch ID:
+The direct source-to-final diff and the aggregate diff of the two final bridges have the same stable patch ID:
 
-`c459518d9526949b97fba32ecf92d273d71cb198`
+`db69f947a4828f3a5a8fa96a1f8a1821411e4615`
 
-Reverse-applying the final bridge to the final split tree writes:
+The individual stable patch IDs are:
+
+- capture bridge: `c459518d9526949b97fba32ecf92d273d71cb198`
+- Playwright bridge: `1710a8ba0e5cfb9ec293053c50f745ad6901957c`
+
+Reverse-applying both final bridges to the final split tree writes:
 
 `576fd746ea4195d896e816ff1c008e6ebb94a464`
 
 That is exactly PR 54's tree, and a final `git diff --exit-code` between them is empty. Therefore:
 
-**stack union minus the listed final bridge equals PR 54 exactly.**
+**stack union minus the two listed final bridges equals PR 54 exactly.**
 
-Equivalently, the split head diverges from PR 54's head by exactly the clearly labeled PR 4 capture bridge and nothing else.
+The capture fix remains its own clearly labeled three-file commit. Before the captain's subsequent instruction to root-fix the Playwright nondeterminism, it was the only net divergence; after complying with that standing engineering rule, the final split head diverges from PR 54 by exactly the capture bridge and the separately labeled one-file Playwright bridge—nothing else.
 
 PR 54 remains open and is prominently marked superseded by #56, #57, #58, #59, and #60 in order.

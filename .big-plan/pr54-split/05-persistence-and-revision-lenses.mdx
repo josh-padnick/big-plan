@@ -40,7 +40,7 @@ Harden every mutable review transition and preserve typed meaning across revisio
 ## Inherited product
 
 - Slices one through three establish the review server, live agent loop, and complete commenting workflow.
-- Slice four makes visual ownership and causal revision behavior mechanically explicit, and repairs the capture harness so its expanded sent-thread state is bootstrapped through the production ownership boundary and exact pixels are stable across CPU variants.
+- Slice four makes visual ownership and causal revision behavior mechanically explicit, repairs the capture harness so its expanded sent-thread state is bootstrapped through the production ownership boundary and exact pixels are stable across CPU variants, and makes the live-toolbar Playwright observation atomic across runtime node replacement.
 - This slice addresses the failure modes that appear only across interruptions, concurrent tabs, rebases, and typed component changes.
 
 ## Success looks like
@@ -87,10 +87,11 @@ Review the final slice in four passes:
 ## Review boundaries
 
 - This slice contains every source change from `origin/fm/bp-commenting-round3`.
-- Its final tree differs from that source head only by slice four's capture bridge. That bridge produces the two missing expanded-thread captures, eliminates the eight-pixel Skia antialias flake without relaxing exact comparison, and prevents later capture keys from reinterpreting earlier manifests. Removing that one bridge patch produces the exact PR 54 tree.
+- Its final tree differs from that source head only by slice four's two root-fix bridges. The capture bridge produces the two missing expanded-thread captures, eliminates the eight-pixel Skia antialias flake without relaxing exact comparison, and prevents later capture keys from reinterpreting earlier manifests. The separate Playwright bridge makes focus and geometry observation atomic across live toolbar-node replacement. Removing those two bridge patches produces the exact PR 54 tree.
 - It adds no compatibility shim: Big Plan remains pre-release and updates every call site to the clean contract.
 - Historical preview reports and evidence land with the slice that produced them; they document the tested UX rather than defining runtime behavior.
-- Earlier slices contain narrow test, selector, generated-asset, and visual-evidence bridges so each intermediate branch remains green; all net final-tree bridges except the authorized capture fix reconcile back to PR 54.
+- Earlier slices contain narrow test, selector, generated-asset, and visual-evidence bridges so each intermediate branch remains green; all net final-tree bridges except the two root fixes reconcile back to PR 54.
+- This slice's intentional structural presentation delta carries exact approved evidence for 14 captures and 5,239,975 changed pixels; its cleanup commit removes the split-only manifest from the final tree.
 
 ## Acceptance criteria
 
@@ -99,5 +100,5 @@ Review the final slice in four passes:
 - Concurrent stale-tab tests preserve newer state and merge only valid owned drafts.
 - Browser workflow tests cover composition, submission, cancellation, navigation, reconnect, and recovery actions.
 - The revision-contract check and browser journey cover all eighteen registered component lenses.
-- The direct diff from `origin/fm/bp-commenting-round3` changes only the three style-snapshot files owned by the authorized bridge: the capture harness, history verifier, and verifier regression test.
-- The patch-id of that direct diff exactly matches the authorized capture bridge commit, and reverse-applying it yields PR 54's tree object.
+- The direct diff from `origin/fm/bp-commenting-round3` changes only the three style-snapshot files owned by the capture bridge and `test/commenting-runtime.spec.ts` owned by the Playwright bridge.
+- The aggregate bridge diff and direct source-to-final diff share stable patch ID `db69f947a4828f3a5a8fa96a1f8a1821411e4615`; reverse-applying both yields PR 54's tree object.

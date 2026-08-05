@@ -10,11 +10,13 @@
 > 4. #59 — Tailwind/UI contracts and causal diffs
 > 5. #60 — persistence hardening and component revision lenses
 >
-> Each replacement PR targets `main`, declares its predecessor, includes independent green evidence, and links a rendered Big Plan review document. The final branch contains every change from this PR plus one authorized capture-harness bridge in #59.
+> Each replacement PR targets `main`, declares its predecessor, includes independent green evidence, and links a rendered Big Plan review document. The final branch contains every change from this PR plus two root-fix bridges in #59: the authorized three-file capture-harness commit and a separately labeled one-file Playwright locator fix required by the captain's standing flake rule.
 >
 > **This PR's current head is red on `style-history`.** Its configuration declares 34 captures, but its harness produces only 32. The missing light/dark `expanded-thread-reply` captures promote a draft only in browser-local state; after reload, the production runtime correctly reads sent comments from server bootstrap state and therefore has no thread to expand.
 >
 > Its exact-pixel capture was also flaky: identical hosted runs alternated between two hashes that differed at eight one-channel pixels on two rounded-card corners because Skia selected CPU-specific antialias paths. #59 fixes both harness defects while preserving the zero-pixel rule: it uses a valid server bootstrap, pins deterministic raster settings, writes only a repeated byte-identical settled frame, and scopes each replay pair to the capture config declared by its child commit. It does not change production runtime behavior.
+>
+> The source also contained a flaky Playwright assertion: a live toolbar locator could resolve across node replacement between a successful focus poll and a later geometry lookup. #59 keeps the non-null bounding box in the same successful poll iteration. The final stack differs from this head by exactly those two listed bridge commits; subtracting both yields this PR's tree exactly.
 
 ## Scope
 

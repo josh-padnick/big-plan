@@ -63,6 +63,8 @@ The same bridge removes a real raster flake without weakening the zero-pixel con
 
 **Stable history.** A capture-config addition applies to its own before/after pair, but cannot retroactively reinterpret an earlier approved manifest. The verifier uses the child commit's declared config for each pair while executing it with the current deterministic harness.
 
+**Atomic browser evidence.** A separate test bridge keeps the toolbar control's focus and geometry observation in one successful poll. The review runtime can replace that toolbar node while focus state settles, so resolving a live locator again afterward was nondeterministic.
+
 **Causal revisions.** Request claims become immutable, response resolution belongs to the exchange, and one claimed source revision advances per agent turn.
 
 **Diff correctness.** Removal anchors stay within their section, inexact mappings remain historical, and unchanged structural moves disappear from the change tour.
@@ -84,9 +86,10 @@ In the browser:
 2. Check narrow and wide layouts, light and dark palettes, focus rings, tooltips, and working motion.
 3. Inspect the `expanded-thread-reply` style capture in both themes and confirm it shows the promoted sent thread expanded beside its source block.
 4. Run `bun run verify:style-history -- --base origin/main` twice and confirm both exact ledgers pass without a pixel tolerance.
-5. Send two sequential requests and confirm each response advances only its claimed revision.
-6. Remove content within one section and confirm the removal anchor stays there.
-7. Confirm unchanged structural movement does not appear as a user-visible change.
+5. Run the toolbar-focus journey repeatedly and confirm the focus poll retains the geometry from the same live control instance.
+6. Send two sequential requests and confirm each response advances only its claimed revision.
+7. Remove content within one section and confirm the removal anchor stays there.
+8. Confirm unchanged structural movement does not appear as a user-visible change.
 
 <Part title="Shipping & your review" />
 
@@ -96,17 +99,24 @@ In the browser:
 - It owns one clearly labeled capture-harness bridge. PR 54's source tree declared the expanded-thread light/dark captures but could not produce them because its harness promoted the draft only in browser-local state; the production runtime correctly accepts sent comments only from server bootstrap state.
 - That bridge also fixes the pre-existing exact-pixel flake at its source. It preserves the zero-pixel rule: no blanket threshold, per-channel tolerance, or ignored region is introduced.
 - The same bridge scopes replay config by commit, so adding later capture keys cannot change earlier approved evidence.
+- A separate one-file Playwright bridge fixes the live-locator replacement race instead of retrying around it.
 - It includes rounds twenty-one through twenty-three because their replay and causality fixes close the migration's review contract.
 - It does not add atomic persistence, interrupted-write recovery, stale-tab merging, or post-rebase identity repair.
 - Component-owned typed revision lenses are isolated in the final slice.
 
 ## Acceptance criteria
 
+**Build and visual evidence.**
+
 - `bun run build`, `bun run lint`, `bun run test`, and `bun run test:e2e` pass on this branch.
 - Styling-contract and style-history checks accept every styling commit in the slice.
 - The final capture harness produces all 34 configured captures, including `components__expanded-thread-reply__desktop__light.png` and `components__expanded-thread-reply__desktop__dark.png`.
 - Identical capture matrices produce identical PNG bytes across repeated local and hosted runs.
 - A regression test proves that a later capture-key addition cannot reinterpret an earlier approved manifest.
-- Visual-empty commits remain pixel-identical; intentional earlier slice deltas carry exact approved evidence manifests.
+- Visual-empty commits remain pixel-identical; this slice's intentional Tailwind delta carries exact approved evidence for 28 captures and 1,035,563 changed pixels.
+- The live-toolbar focus journey obtains focus and its non-null geometry from the same successful poll iteration.
+
+**Revision truth.**
+
 - One agent turn owns exactly one immutable claim and causal revision.
 - Diff anchors, historical mappings, and structural-move suppression match the source revisions.
