@@ -292,10 +292,9 @@ export const diffRevisions = ({
     const textChanged =
       normalized(oldBlock.authoredText ?? oldBlock.text) !==
       normalized(newBlock.authoredText ?? newBlock.text);
-    const moved = oldBlock.section !== newBlock.section;
-    if (!textChanged && !moved) continue;
+    if (!textChanged) continue;
     locations.push({
-      status: textChanged ? "changed" : "moved",
+      status: "changed",
       oldBlockId: oldBlock.id,
       newBlockId: newBlock.id,
       kind: newBlock.kind,
