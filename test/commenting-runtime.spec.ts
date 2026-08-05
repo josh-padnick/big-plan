@@ -1613,7 +1613,8 @@ test("should preserve and send a floating review across reload and viewport chan
     const heading = page.locator("[data-block-kind='heading']").last();
     await heading.click({ clickCount: 3 });
     await affordance.click();
-    await expect(compose).toHaveAttribute(
+    await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+    await expect(compose).not.toHaveAttribute(
       "data-review-compose-placement",
       "centered",
     );
@@ -1653,8 +1654,9 @@ test("should preserve and send a floating review across reload and viewport chan
     ).not.toHaveAttribute("data-review-active-highlight", "");
     await expect(compose).toHaveAttribute(
       "data-review-compose-placement",
-      "centered",
+      "before-slide",
     );
+    await expect(compose).toHaveAttribute("data-review-compose-inline", "");
     await expect(page.locator("[data-review-compose-save]")).toBeDisabled();
     await page.locator("[data-review-compose-input]").press("Control+Enter");
     await expect(compose).toBeVisible();
@@ -1690,10 +1692,7 @@ test("should preserve and send a floating review across reload and viewport chan
     });
     await expect(affordance).toBeVisible();
     await affordance.click();
-    await expect(compose).toHaveAttribute(
-      "data-review-compose-placement",
-      "centered",
-    );
+    await expect(compose).toHaveAttribute("data-review-compose-inline", "");
     await expect
       .poll(() =>
         page.evaluate(() => {
@@ -4150,6 +4149,73 @@ Ship the live review loop behind the explicit review command.
       page.locator('[data-block-id="section/delivery/paragraph-1"]'),
     ).toHaveAttribute("data-review-anchor-changed", "");
   });
+});
+
+test("should keep composition anchored across tray and missing-source states", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(reviewRuntimeUrl);
+  await expect(page.locator("html")).toHaveAttribute("data-review-ready", "");
+  const toggle = page.locator("[data-review-toggle]");
+  const compose = page.locator("[data-review-compose]");
+  const paragraph = page.locator("[data-block-kind='paragraph']").first();
+
+  await toggle.click();
+  await paragraph.evaluate((node) => {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+  await page.locator("[data-review-affordance]").click();
+  await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+  await expect
+    .poll(() =>
+      compose.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return rect.top > 0 && rect.left > 0 && getComputedStyle(node).position;
+      }),
+    )
+    .toBe("relative");
+
+  await page.locator("[data-review-hide]").click();
+  await expect(compose).toHaveAttribute(
+    "data-review-compose-placement",
+    "floating",
+  );
+  await toggle.click();
+  await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+
+  await paragraph.evaluate((node) => {
+    node.remove();
+    window.dispatchEvent(new Event("resize"));
+  });
+  await expect(compose).toHaveAttribute(
+    "data-review-compose-placement",
+    "centered",
+  );
+  await expect
+    .poll(() =>
+      compose.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          position: getComputedStyle(node).position,
+          centeredX: Math.abs(rect.left + rect.width / 2 - innerWidth / 2) < 2,
+          centeredY: Math.abs(rect.top + rect.height / 2 - innerHeight / 2) < 2,
+          stranded: rect.left === 0 && rect.top === 0,
+        };
+      }),
+    )
+    .toEqual({
+      position: "fixed",
+      centeredX: true,
+      centeredY: true,
+      stranded: false,
+    });
 });
 
 test("should preserve footnote navigation inside a selected slide", async ({
