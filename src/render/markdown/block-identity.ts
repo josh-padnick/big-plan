@@ -105,6 +105,23 @@ const idSegment = (raw: string): string => {
   return safe.length > 0 ? safe : "block";
 };
 
+// Heading ids are already unique document anchors. Preserve that identity
+// exactly: readable lowercase ASCII stays readable, while every other UTF-16
+// code unit uses a fixed-width escape that cannot collide with literal `%`.
+const scopeSegment = (anchor: string): string => {
+  let encoded = "";
+  for (let index = 0; index < anchor.length; index += 1) {
+    const code = anchor.charCodeAt(index);
+    const isLowercaseLetter = code >= 0x61 && code <= 0x7a;
+    const isDigit = code >= 0x30 && code <= 0x39;
+    encoded +=
+      isLowercaseLetter || isDigit || code === 0x2d
+        ? anchor[index]
+        : `%${code.toString(16).padStart(4, "0")}`;
+  }
+  return encoded === "" ? "%" : encoded;
+};
+
 const componentName = (node: Element): string | undefined => {
   const name = node.properties["data-component"];
   return typeof name === "string" && name.length > 0 ? name : undefined;
@@ -367,7 +384,7 @@ const scopeNameFor = ({
       typeof candidate.properties.id === "string",
   });
   const id = heading?.properties.id;
-  return typeof id === "string" ? `section/${idSegment(id)}` : fallback;
+  return typeof id === "string" ? `section/${scopeSegment(id)}` : fallback;
 };
 
 /**

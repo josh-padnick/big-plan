@@ -129,8 +129,23 @@ describe("block identity kinds and labels", () => {
   it("should restrict an id to a path-safe character set when a heading is not", () => {
     const { blocks } = compile("## Ship it! (v2) — now?\n\nBody.\n");
     for (const block of blocks) {
-      expect(block.id).toMatch(/^[a-z0-9/-]+$/);
+      expect(block.id).toMatch(/^[a-z0-9%/-]+$/);
     }
+  });
+
+  it("should keep slide scopes distinct when heading anchors differ after 48 characters", () => {
+    const prefix = "a".repeat(60);
+    const { blocks } = compile(
+      `## ${prefix} one\n\nFirst.\n\n## ${prefix} two\n\nSecond.\n`,
+    );
+    const paragraphs = blocks.filter((block) => block.kind === "paragraph");
+    expect(new Set(paragraphs.map((block) => block.id)).size).toBe(2);
+  });
+
+  it("should keep distinct non-ASCII heading anchors in distinct scopes", () => {
+    const { blocks } = compile("## 計画\n\nFirst.\n\n## 方案\n\nSecond.\n");
+    const paragraphs = blocks.filter((block) => block.kind === "paragraph");
+    expect(new Set(paragraphs.map((block) => block.id)).size).toBe(2);
   });
 });
 
