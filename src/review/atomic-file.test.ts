@@ -1,7 +1,7 @@
 // Proves review-file replacement and immutable creation remain complete,
 // owner-only, and recoverable across filesystem failures.
 
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -33,6 +33,18 @@ describe("atomic review files", () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-atomic-"));
     const path = join(directory, "state.json");
     await replaceFileAtomically({ path, contents: "{}\n" });
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+  });
+
+  it("should tighten permissions when replacing an existing loose file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-atomic-"));
+    const path = join(directory, "state.json");
+    await writeFile(path, '{"revision":1}\n');
+    await chmod(path, 0o644);
+
+    await replaceFileAtomically({ path, contents: '{"revision":2}\n' });
+
+    await expect(readFile(path, "utf8")).resolves.toBe('{"revision":2}\n');
     expect((await stat(path)).mode & 0o777).toBe(0o600);
   });
 
