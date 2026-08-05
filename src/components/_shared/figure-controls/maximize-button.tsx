@@ -15,7 +15,7 @@ import { lucideIconToReact } from "../lucide-icon/lucide-icon.js";
 // A transparent resting state keeps the control quieter than the figure it
 // acts on; hover and focus still reveal the full affordance.
 const BUTTON_CLASSES =
-  "figure-control inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-edge hover:text-ink [&_svg]:size-3.5";
+  "figure-control inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:bg-edge focus-visible:text-ink focus-visible:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent-c)_20%,transparent)] focus-visible:outline-none [&_svg]:size-3.5";
 
 /**
  * Renders the dormant maximize control. Both glyphs ship server-side so the

@@ -30,18 +30,6 @@
     .file-tree-dir-summary {
     display: inline-flex;
   }
-  article .file-tree-sum-added {
-    color: var(--diff-add-c);
-  }
-  article .file-tree-sum-modified {
-    color: var(--callout-warning-c);
-  }
-  article .file-tree-sum-removed {
-    color: var(--diff-remove-c);
-  }
-  article .file-tree-sum-renamed {
-    color: var(--callout-note-c);
-  }
   article .file-tree-row > svg {
     color: var(--color-muted);
   }

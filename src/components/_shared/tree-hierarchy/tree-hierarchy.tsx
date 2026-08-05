@@ -58,10 +58,10 @@ const BADGE_LABELS: Readonly<Record<TreeBadge, string>> = {
 const COUNT_SIGILS: ReadonlyArray<
   readonly [keyof TreeChangeCounts, string, string]
 > = [
-  ["added", "+", "file-tree-sum-added"],
-  ["modified", "~", "file-tree-sum-modified"],
-  ["removed", "-", "file-tree-sum-removed"],
-  ["renamed", "->", "file-tree-sum-renamed"],
+  ["added", "+", "text-[var(--diff-add-c)]"],
+  ["modified", "~", "text-[var(--callout-warning-c)]"],
+  ["removed", "-", "text-[var(--diff-remove-c)]"],
+  ["renamed", "->", "text-[var(--callout-note-c)]"],
 ];
 
 /** Renders one compact colored count per non-zero change kind. */
