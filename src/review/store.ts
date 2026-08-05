@@ -766,7 +766,7 @@ export const readProgress = async ({
         ? chronological
         : left.eventId.localeCompare(right.eventId);
     })
-    .slice(0, PROGRESS_EVENT_LIMIT)
+    .slice(-PROGRESS_EVENT_LIMIT)
     .map((event, index) => ({ ...event, seq: index + 1 }));
 };
 

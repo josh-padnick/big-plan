@@ -390,6 +390,31 @@ describe("review store progress relay", () => {
     expect(events.map((event) => event.seq)).toEqual([1, 2]);
   });
 
+  it("should retain the latest 200 events when the progress history is longer", async () => {
+    const store = await progressStore();
+    await Promise.all(
+      Array.from({ length: 205 }, (_, index) =>
+        appendProgress({
+          store,
+          event: {
+            eventId: (index + 1).toString(16).padStart(16, "0"),
+            sessionId: "s1",
+            step: `Event ${index + 1}`,
+            state: "live",
+            at: new Date(
+              Date.parse("2026-08-04T17:00:00.000Z") + index * 1_000,
+            ).toISOString(),
+          },
+        }),
+      ),
+    );
+
+    const events = await readProgress({ store, sessionId: "s1" });
+    expect(events).toHaveLength(200);
+    expect(events[0]).toMatchObject({ seq: 1, step: "Event 6" });
+    expect(events.at(-1)).toMatchObject({ seq: 200, step: "Event 205" });
+  });
+
   it("should drop an event carrying a state the surface cannot show", async () => {
     const store = await progressStore();
     await writeFile(
