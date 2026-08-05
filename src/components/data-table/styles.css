@@ -71,10 +71,12 @@
     }
   }
 
-  /* Fit modes. Wrap is the default; truncate clamps against a fixed layout;
-     only scroll is meant to move sideways. Wrap still keeps `auto` on the
-     container as a backstop, because a pathological grid must overflow inside
-     its own box rather than widening the page. */
+  /* Fit modes. Wrap is the default; truncate preserves automatic,
+     content-proportional column sizing and caps only a cell whose content
+     genuinely exceeds the component's single-line allowance. Only scroll is
+     meant to move sideways. Wrap still keeps `auto` on the container as a
+     backstop, because a pathological grid must overflow inside its own box
+     rather than widening the page. */
   article [data-table-fit="wrap"] .data-table-scroll {
     overflow-x: auto;
   }
@@ -83,12 +85,13 @@
     overflow-wrap: break-word;
   }
   article [data-table-fit="truncate"] .data-table-grid {
-    table-layout: fixed;
+    table-layout: auto;
   }
   article [data-table-fit="truncate"] .data-table-grid td {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 18rem;
   }
   article [data-table-fit="scroll"] .data-table-scroll {
     overflow-x: auto;
