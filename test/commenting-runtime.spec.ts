@@ -11,7 +11,7 @@ import {
   nextPendingAgentRequest,
   readAgentExchange,
   validateAgentResponseDraft,
-  writeAgentRequest,
+  writeAgentClaim,
   writeAgentResponse,
 } from "../src/review/agent-exchange.js";
 import { buildRevisionChangeSet } from "../src/review/revision-change-set.js";
@@ -2293,7 +2293,7 @@ test("should preserve and send a floating review across reload and viewport chan
       ...queuedQuestionRequest,
       claimedFromRevision: deriveSourceRevision(revised),
     };
-    await writeAgentRequest({ store, request: questionRequest });
+    await writeAgentClaim({ store, request: questionRequest });
     nextExchange = await readAgentExchange({
       store,
       sessionId: session.sessionId,
@@ -2340,7 +2340,7 @@ test("should preserve and send a floating review across reload and viewport chan
       ...queuedOutsideRequest,
       claimedFromRevision: deriveSourceRevision(revised),
     };
-    await writeAgentRequest({ store, request: outsideRequest });
+    await writeAgentClaim({ store, request: outsideRequest });
     nextExchange = await readAgentExchange({
       store,
       sessionId: session.sessionId,
@@ -3968,6 +3968,7 @@ Ship the live review loop behind the explicit review command.
           resolvedCommentIds: state.sent.map(
             (comment: { readonly id: string }) => comment.id,
           ),
+          expectedRevision: state.revision,
         }),
       });
       return {
@@ -4000,13 +4001,20 @@ Ship the live review loop behind the explicit review command.
     await page.evaluate(async (state) => {
       const token =
         document.documentElement.getAttribute("data-review-token") ?? "";
+      const headers = {
+        "content-type": "application/json",
+        "x-big-plan-review-token": token,
+      };
+      const current = await fetch("/api/drafts", { headers }).then((response) =>
+        response.json(),
+      );
       await fetch("/api/drafts", {
         method: "PUT",
-        headers: {
-          "content-type": "application/json",
-          "x-big-plan-review-token": token,
-        },
-        body: JSON.stringify(state),
+        headers,
+        body: JSON.stringify({
+          ...state,
+          expectedRevision: current.revision,
+        }),
       });
     }, restoreResolutionState);
     await page.reload();
@@ -4217,4 +4225,80 @@ test("should preserve footnote navigation inside a selected slide", async ({
     )
     .toBe(true);
   await page.keyboard.press("Escape");
+});
+
+test("should preserve stale-tab text when a reviewer save conflicts", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  const staleTab = await page.context().newPage();
+  await staleTab.goto(reviewRuntimeUrl);
+  await expect(staleTab.locator("html")).toHaveAttribute(
+    "data-review-ready",
+    "",
+  );
+  await page.goto(reviewRuntimeUrl);
+  await expect(page.locator("html")).toHaveAttribute("data-review-ready", "");
+
+  const paragraph = staleTab.locator(
+    '[data-block-id="section/delivery/paragraph-1"]',
+  );
+  await paragraph.evaluate((block) => {
+    const range = document.createRange();
+    range.selectNodeContents(block);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+  await staleTab.locator("[data-review-affordance]").click();
+  const body = "Preserve this exact stale-tab reviewer text.";
+  await staleTab.locator("[data-review-compose-input]").fill(body);
+  const conflictedSave = staleTab.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT" &&
+      response.status() === 409,
+  );
+  await staleTab.locator("[data-review-compose-save]").click();
+  await conflictedSave;
+
+  await expect(staleTab.locator("[data-review-toast]")).toContainText(
+    "Review changed in another tab",
+  );
+  await expect(
+    staleTab.locator("[data-review-drafts] li").filter({ hasText: body }),
+  ).toHaveCount(1);
+  const beforeReload = await staleTab.evaluate(async (draftBody) => {
+    const token =
+      document.documentElement.getAttribute("data-review-token") ?? "";
+    const state = await fetch("/api/drafts", {
+      headers: { "x-big-plan-review-token": token },
+    }).then((response) => response.json());
+    return state.drafts.some(
+      (draft: { readonly body?: string }) => draft.body === draftBody,
+    );
+  }, body);
+  expect(beforeReload).toBe(false);
+
+  await staleTab.reload();
+  await expect(staleTab.locator("html")).toHaveAttribute(
+    "data-review-ready",
+    "",
+  );
+  await expect
+    .poll(() =>
+      staleTab.evaluate(async (draftBody) => {
+        const token =
+          document.documentElement.getAttribute("data-review-token") ?? "";
+        const state = await fetch("/api/drafts", {
+          headers: { "x-big-plan-review-token": token },
+        }).then((response) => response.json());
+        return state.drafts.some(
+          (draft: { readonly body?: string }) => draft.body === draftBody,
+        );
+      }, body),
+    )
+    .toBe(true);
+  await staleTab.close();
 });

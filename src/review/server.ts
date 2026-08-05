@@ -64,7 +64,9 @@ import {
   readAgentHeartbeat,
   readProgress,
   readRevisionSnapshot,
+  readSessionDescriptor,
   reviewStoreFor,
+  sessionHeartbeatIsFresh,
   writeRevisionSnapshot,
   writeSessionDescriptor,
   writeSessionHeartbeat,
@@ -129,6 +131,21 @@ export type ReviewRuntime = {
   readonly store: ReviewStore;
   readonly close: () => Promise<void>;
 };
+
+export class ReviewRuntimeAlreadyRunning extends Error {
+  constructor({
+    planPath,
+    url,
+  }: {
+    readonly planPath: string;
+    readonly url?: string;
+  }) {
+    super(
+      `A live review runtime already owns ${planPath}.${url === undefined ? "" : ` Open ${url} or stop that runtime before starting another.`}`,
+    );
+    this.name = "ReviewRuntimeAlreadyRunning";
+  }
+}
 
 const constantTimeEquals = (left: string, right: string): boolean => {
   const a = Buffer.from(left, "utf8");
@@ -229,6 +246,40 @@ export const startReviewRuntime = async ({
   const token = randomBytes(32).toString("base64url");
   const store = reviewStoreFor({ planPath: resolvedPlanPath, planId });
   await prepareStore(store);
+  const previous = await readSessionDescriptor({
+    store,
+    validate: (
+      value,
+    ): { readonly sessionId: string; readonly url?: string } | undefined => {
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        Array.isArray(value) ||
+        !("sessionId" in value) ||
+        typeof value.sessionId !== "string"
+      ) {
+        return undefined;
+      }
+      return {
+        sessionId: value.sessionId,
+        ...("url" in value && typeof value.url === "string"
+          ? { url: value.url }
+          : {}),
+      };
+    },
+  });
+  if (
+    previous !== undefined &&
+    (await sessionHeartbeatIsFresh({
+      store,
+      sessionId: previous.sessionId,
+    }))
+  ) {
+    throw new ReviewRuntimeAlreadyRunning({
+      planPath: resolvedPlanPath,
+      url: previous.url,
+    });
+  }
   const initialSource = await readFile(resolvedPlanPath, "utf8");
   const initialSourceRevision = deriveSourceRevision(initialSource);
   let servedSourceRevision = initialSourceRevision;
@@ -243,6 +294,18 @@ export const startReviewRuntime = async ({
   // re-anchor; it simply refuses to forget what it once addressed.
   const blocks = new Map<string, BlockMapEntry>();
   let lastConnectionState: boolean | undefined;
+  let reviewerMutationQueue = Promise.resolve();
+
+  const serializeReviewerMutation = <Result>(
+    operation: () => Promise<Result>,
+  ): Promise<Result> => {
+    const result = reviewerMutationQueue.then(operation);
+    reviewerMutationQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
 
   const validate = (value: unknown): ReadonlyArray<ReviewComment> =>
     validateComments({ value, blocks, now: new Date().toISOString() });
@@ -381,17 +444,27 @@ export const startReviewRuntime = async ({
       const resolvedCommentIds = validateResolvedCommentIds(
         payload.resolvedCommentIds,
       );
-      const current = await durableReview();
-      const expectedRevision =
-        typeof payload.expectedRevision === "number"
-          ? payload.expectedRevision
-          : current.reviewer.revision;
-      const saved = await saveReviewerState({
-        store,
-        expectedRevision,
-        validators: reviewerValidators,
-        next: { drafts, activeDraft, resolvedCommentIds },
-      });
+      const expectedRevision = payload.expectedRevision;
+      if (
+        typeof expectedRevision !== "number" ||
+        !Number.isInteger(expectedRevision) ||
+        expectedRevision < 0
+      ) {
+        refuse({
+          response,
+          status: 400,
+          reason: "Draft saves require the reviewer revision they read",
+        });
+        return;
+      }
+      const saved = await serializeReviewerMutation(() =>
+        saveReviewerState({
+          store,
+          expectedRevision,
+          validators: reviewerValidators,
+          next: { drafts, activeDraft, resolvedCommentIds },
+        }),
+      );
       if (!saved.ok) {
         sendJson({
           response,
@@ -437,31 +510,41 @@ export const startReviewRuntime = async ({
         sourceRevision: revision,
         requestIds: comments.map(() => randomId(8)),
       });
-      const current = await durableReview();
-      const expectedRevision =
-        typeof payload.expectedRevision === "number"
-          ? payload.expectedRevision
-          : current.reviewer.revision;
-      const committed = await commitFeedback({
-        store,
-        expectedRevision,
-        feedback,
-        brief: renderBrief(feedback, Array.from(blocks.keys())),
-        source,
-        sourceRevision: revision,
-        requests: agentRequests,
-        submittedCommentIds: comments.map((comment) => comment.id),
-        event: {
-          eventId: randomId(8),
-          sessionId,
-          step: "Feedback package received",
-          state: "done",
-          requestId: agentRequests[0]?.requestId,
-          at: new Date().toISOString(),
-          detail: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
-        },
-        validators: reviewerValidators,
-      });
+      const expectedRevision = payload.expectedRevision;
+      if (
+        typeof expectedRevision !== "number" ||
+        !Number.isInteger(expectedRevision) ||
+        expectedRevision < 0
+      ) {
+        refuse({
+          response,
+          status: 400,
+          reason: "Feedback submission requires the reviewer revision it read",
+        });
+        return;
+      }
+      const committed = await serializeReviewerMutation(() =>
+        commitFeedback({
+          store,
+          expectedRevision,
+          feedback,
+          brief: renderBrief(feedback, Array.from(blocks.keys())),
+          source,
+          sourceRevision: revision,
+          requests: agentRequests,
+          submittedCommentIds: comments.map((comment) => comment.id),
+          event: {
+            eventId: randomId(8),
+            sessionId,
+            step: "Feedback package received",
+            state: "done",
+            requestId: agentRequests[0]?.requestId,
+            at: new Date().toISOString(),
+            detail: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
+          },
+          validators: reviewerValidators,
+        }),
+      );
       if (!committed.ok) {
         sendJson({
           response,

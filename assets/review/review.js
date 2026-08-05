@@ -331,6 +331,7 @@ import { createToastManager } from "./toast.js";
   let agentCommand = "";
   let agentRecoveryPrompt = "";
   let sourceRevision = "";
+  let reviewerRevision = 0;
   let progressSeq = 0;
   let liveProgressSeq = 0;
   let progressTimer = null;
@@ -454,6 +455,7 @@ import { createToastManager } from "./toast.js";
       connectionLog: [],
     },
     sourceRevision: "",
+    reviewerRevision: 0,
   });
 
   const isStoredState = (value) =>
@@ -531,6 +533,13 @@ import { createToastManager } from "./toast.js";
         /^[a-f0-9]{16,64}$/.test(value.sourceRevision)
           ? value.sourceRevision
           : "",
+      reviewerRevision:
+        Number.isInteger(value.revision) && value.revision >= 0
+          ? value.revision
+          : Number.isInteger(value.reviewerRevision) &&
+              value.reviewerRevision >= 0
+            ? value.reviewerRevision
+            : 0,
     };
   };
 
@@ -745,6 +754,7 @@ import { createToastManager } from "./toast.js";
           composeDrafts,
           threadReplies,
           planChatMessages,
+          reviewerRevision,
         }),
       );
     } catch {
@@ -798,6 +808,7 @@ import { createToastManager } from "./toast.js";
   agentHeartbeatAt = diskState.agent.updatedAtMs;
   agentSessionState = diskState.agent.state;
   sourceRevision = diskState.sourceRevision;
+  reviewerRevision = diskState.reviewerRevision;
   try {
     submitRightAway = localStorage.getItem(submitPreferenceKey) === "true";
   } catch {
@@ -809,6 +820,16 @@ import { createToastManager } from "./toast.js";
   // Every call is a same-origin path on the runtime that served this page.
   // The token rides a header; `same-origin` mode makes a redirect to another
   // origin a network error rather than a quiet exfiltration.
+  class ReviewerSaveConflict extends Error {
+    constructor(reviewer) {
+      super(
+        "This review changed in another tab. Your unsaved text is preserved; review the conflict, then save again.",
+      );
+      this.name = "ReviewerSaveConflict";
+      this.reviewer = reviewer;
+    }
+  }
+
   const call = async (path, options) => {
     const response = await fetch(path, {
       method: (options && options.method) || "GET",
@@ -824,12 +845,16 @@ import { createToastManager } from "./toast.js";
         ? { body: JSON.stringify(options.body) }
         : {}),
     });
+    const answer = await response.json();
+    if (response.status === 409 && answer?.conflict === true) {
+      throw new ReviewerSaveConflict(answer.reviewer);
+    }
     if (!response.ok) {
       throw new Error(
         "Review runtime refused the request (" + response.status + ")",
       );
     }
-    return response.json();
+    return answer;
   };
 
   // The runtime proves it is the process that minted this document's session
@@ -851,14 +876,66 @@ import { createToastManager } from "./toast.js";
       return;
     }
     await confirmRuntime();
-    await call("/api/drafts", {
-      method: "PUT",
-      body: {
-        drafts,
-        activeDraft,
-        resolvedCommentIds: Array.from(resolvedCommentIds),
-      },
-    });
+    try {
+      const answer = await call("/api/drafts", {
+        method: "PUT",
+        body: {
+          drafts,
+          activeDraft,
+          resolvedCommentIds: Array.from(resolvedCommentIds),
+          expectedRevision: reviewerRevision,
+        },
+      });
+      reviewerRevision = answer.revision;
+      writeLocalState();
+    } catch (error) {
+      if (!(error instanceof ReviewerSaveConflict)) throw error;
+      const current = error.reviewer;
+      const serverDrafts = Array.isArray(current?.drafts)
+        ? current.drafts.filter(isComment)
+        : [];
+      const localById = new Map(drafts.map((draft) => [draft.id, draft]));
+      const conflictingIds = new Set();
+      drafts = serverDrafts.map((serverDraft) => {
+        const localDraft = localById.get(serverDraft.id);
+        localById.delete(serverDraft.id);
+        if (
+          localDraft &&
+          (localDraft.body !== serverDraft.body ||
+            JSON.stringify(localDraft.target) !==
+              JSON.stringify(serverDraft.target))
+        ) {
+          conflictingIds.add(localDraft.id);
+          return localDraft;
+        }
+        return localDraft || serverDraft;
+      });
+      drafts.push(...localById.values());
+      if (
+        current &&
+        Number.isInteger(current.revision) &&
+        current.revision >= 0
+      ) {
+        reviewerRevision = current.revision;
+      }
+      for (const id of conflictingIds) {
+        submitErrorById.set(
+          id,
+          "This comment also changed in another tab. Your version is still unsaved; review it, then save again.",
+        );
+      }
+      writeLocalState();
+      renderTray();
+      notifications.add({
+        title: "Review changed in another tab",
+        description:
+          conflictingIds.size > 0
+            ? "Your conflicting comment text is preserved. Review it, then save again."
+            : "The newer review state was merged with your unsaved work. Save again when ready.",
+        tone: "danger",
+      });
+      throw error;
+    }
   };
 
   // ------------------------------------------------------------------ layout
@@ -6442,8 +6519,12 @@ import { createToastManager } from "./toast.js";
       await confirmRuntime();
       const answer = await call("/api/feedback", {
         method: "POST",
-        body: { comments: selected },
+        body: {
+          comments: selected,
+          expectedRevision: reviewerRevision,
+        },
       });
+      reviewerRevision = answer.revision;
       agentConnected = answer.agentConnected === true;
       const submittedIds = new Set(selected.map((comment) => comment.id));
       sent = sent.concat(selected);
@@ -6460,7 +6541,7 @@ import { createToastManager } from "./toast.js";
       }
       activeDraft = agentInput.value;
       renderTray();
-      await persist();
+      writeLocalState();
       setAgentState(
         agentConnected ? "Waiting for agent" : "No agent connected",
         agentConnected ? "idle" : "failed",
@@ -7033,6 +7114,7 @@ import { createToastManager } from "./toast.js";
       // handed over once and then cleared, so drafts do not linger in an
       // origin every local file shares.
       const answer = await call("/api/drafts");
+      reviewerRevision = answer.revision;
       const known = new Set((answer.drafts || []).map((draft) => draft.id));
       const carried = readLocalState();
       drafts = (answer.drafts || []).concat(
@@ -7050,14 +7132,16 @@ import { createToastManager } from "./toast.js";
           ? carried.activeDraft
           : answer.activeDraft || activeDraft;
       agentInput.value = activeDraft;
-      await call("/api/drafts", {
+      const adopted = await call("/api/drafts", {
         method: "PUT",
         body: {
           drafts,
           activeDraft,
           resolvedCommentIds: Array.from(resolvedCommentIds),
+          expectedRevision: reviewerRevision,
         },
       });
+      reviewerRevision = adopted.revision;
       writeLocalState();
       renderTray();
       void hydrateRevisionDiffs();
