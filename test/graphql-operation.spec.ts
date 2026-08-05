@@ -36,8 +36,9 @@ test("should review a GraphQL operation contract", async ({
     expect(pillColor).not.toEqual(bodyColor);
   });
 
-  await test.step("code examples ship without dead controls", async () => {
-    await expect(operation.locator("[data-copy-code]")).toHaveCount(0);
+  await test.step("code examples expose live copy controls", async () => {
+    await expect(operation.locator("[data-copy-code]")).toHaveCount(3);
+    await expect(operation.locator("[data-copy-code]").first()).toBeVisible();
     await expect(operation.locator("pre code")).toHaveCount(3);
   });
 
@@ -57,6 +58,9 @@ test("should review a GraphQL operation contract", async ({
     await expect(staticOperation.locator("pre code").first()).toContainText(
       "mutation commentCreate",
     );
+    await expect(
+      staticOperation.locator("[data-copy-code]").first(),
+    ).toBeHidden();
     await context.close();
   });
 });

@@ -94,7 +94,7 @@ describe("compileMarkdown code highlighting", () => {
     );
   });
 
-  it("should give each block a dormant maximize control and no other chrome", () => {
+  it("should give each block dormant stacked copy and maximize controls", () => {
     const bodyHtml = compileAndSerialize(
       "```sql\nSELECT 1;\n```\n\n```\nplain block\n```\n",
     );
@@ -107,8 +107,8 @@ describe("compileMarkdown code highlighting", () => {
     expect(bodyHtml.match(/data-figure-maximizable="code"/g)).toHaveLength(2);
     // It ships hidden: a document read without scripts shows no control that
     // cannot act.
+    expect(bodyHtml.match(/hidden data-copy-code=""/g)).toHaveLength(2);
     expect(bodyHtml.match(/hidden data-figure-maximize=""/g)).toHaveLength(2);
-    expect(bodyHtml).not.toContain("data-copy-code");
   });
 });
 

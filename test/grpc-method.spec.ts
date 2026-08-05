@@ -45,8 +45,9 @@ test("should review a gRPC method contract", async ({
     );
   });
 
-  await test.step("the proto fence ships without dead controls", async () => {
-    await expect(method.locator("[data-copy-code]")).toHaveCount(0);
+  await test.step("the proto fence exposes a live copy control", async () => {
+    await expect(method.locator("[data-copy-code]")).toHaveCount(1);
+    await expect(method.locator("[data-copy-code]")).toBeVisible();
     await expect(method.locator("pre code").first()).toContainText(
       "rpc WatchComments",
     );
@@ -65,6 +66,7 @@ test("should review a gRPC method contract", async ({
     await expect(staticMethod.locator("pre code").first()).toContainText(
       "rpc WatchComments",
     );
+    await expect(staticMethod.locator("[data-copy-code]")).toBeHidden();
     await context.close();
   });
 });

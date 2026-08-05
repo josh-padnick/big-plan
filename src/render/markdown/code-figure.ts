@@ -10,6 +10,7 @@
 // The attribute vocabulary is owned by components/_model/figure-controls.
 
 import type { Element, Root, RootContent } from "hast";
+import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
 import {
@@ -28,7 +29,24 @@ const isElement = (node: RootContent): node is Element =>
 // Matches the React edge's resting-quiet button so the two affordances are
 // the same affordance.
 const BUTTON_CLASSES =
-  "figure-control inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border border-edge bg-paper p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:bg-edge focus-visible:text-ink focus-visible:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent-c)_20%,transparent)] focus-visible:outline-none [&_svg]:size-3.5";
+  "figure-control inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border border-edge bg-paper p-0 text-muted transition-colors hover:bg-edge hover:text-ink active:bg-edge-strong active:text-ink focus-visible:bg-edge focus-visible:text-ink focus-visible:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent-c)_20%,transparent)] focus-visible:outline-none [&_svg]:size-3.5";
+
+const copyButton = (): Element => {
+  const label = "Copy code";
+  return {
+    type: "element",
+    tagName: "button",
+    properties: {
+      type: "button",
+      className: BUTTON_CLASSES.split(" "),
+      "aria-label": label,
+      "data-tooltip": label,
+      hidden: true,
+      "data-copy-code": "",
+    },
+    children: [lucideIconToHast({ icon: COPY_ICON })],
+  };
+};
 
 const maximizeButton = (): Element => {
   const label = maximizeLabel("code");
@@ -75,7 +93,8 @@ const codeFigure = (pre: Element): Element => ({
           "right-[0.4rem]",
           "z-[1]",
           "flex",
-          "items-center",
+          "flex-col",
+          "items-end",
           "justify-end",
           "gap-1",
           "p-0",
@@ -86,7 +105,7 @@ const codeFigure = (pre: Element): Element => ({
           "group-focus-within/code-figure:opacity-100",
         ],
       },
-      children: [maximizeButton()],
+      children: [copyButton(), maximizeButton()],
     },
     { ...pre, properties: { ...pre.properties, [BODY_ATTRIBUTE]: "" } },
   ],
