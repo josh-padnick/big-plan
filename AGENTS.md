@@ -1,3 +1,8 @@
+<!--
+Entry point for Big Plan contributors: product orientation, architecture,
+source ownership, repository-wide vocabulary, and durable workflow boundaries.
+-->
+
 # Big Plan agent guide
 
 This is the entry point for agents working in Big Plan.
@@ -152,57 +157,18 @@ Hold every sentence to these principles:
 
 Guidance is demand-driven: add a document, rule, or map entry only after an agent observably failed or had to ask something the repository should already answer.
 
-## Engineering rules
+## Engineering practices
 
-The rules in this guide are authoritative for Big Plan.
-They were adapted from the TypeScript and Playwright guidance in `fabricahq/app/_rules`; that repository is provenance, not a dependency required to contribute here.
-
-Facts enforced mechanically live with their checks.
-`eslint.config.mjs` owns the separate-type-import, `any`, non-null-assertion, architectural-layering, source-completeness, and Playwright-fixture enforcement.
-
-Apply these review conventions by judgment:
-
-- Use named exports, type aliases rather than interfaces, literal unions rather than enums, and `unknown` rather than `any`; do not use type assertions.
-- Use a single object argument for multi-parameter functions and prefer immutable data (`readonly`, `const`).
-- Colocate code and tests by feature, use kebab-case file names, and keep component-specific behavior inside its component slice.
-- Start every authored source file with a file-level comment saying what it owns or why it exists.
-  Give every non-trivial function a concise description; comments explain why, not what.
-- Use Lucide for icons and keep framework-neutral glyph data in `src/icons/lucide/`; components never define icon paths locally.
-- Keep logic in pure modules and unit-test it there.
-  Reserve Playwright for critical user journeys.
-- Write focused, user-oriented tests with `should ... when ...` descriptions and coverage of degenerate and boundary cases.
-- Structure long browser journeys as named `test.step` phases so the test reads as a story and a failure names its phase.
-
-### Styling owned markup
-
-This section governs how agents implement styles in Big Plan.
-The default is Tailwind utility classes colocated with the markup an agent edits.
-Before using CSS, apply these three tests to every declaration:
-
-1. **Owned.** Does the view own the element that would carry the class?
-   Generated Markdown and syntax-highlighter tokens fail this test because their elements are emitted downstream.
-2. **Discoverable.** Does the complete Tailwind candidate appear statically in source?
-   Semantic runtime variants such as `data-[collapsed]:hidden` pass; dynamically constructed candidates such as `` `opacity-${value}` `` fail.
-   For a finite choice, use a lookup whose values contain complete candidate strings.
-3. **Local and legible.** Does the class explain this element and its condition without making a reviewer execute DOM traversal or a selector program?
-   Short variants such as `before:block`, `has-[img]:p-4`, `print:hidden`, `motion-reduce:transition-none`, and `@sm:grid` can pass.
-   Framework support alone does not make a long arbitrary variant maintainable.
-
-A rule that passes all three tests should normally be implemented with Tailwind utility classes.
-Runtime state is not a reason by itself to use CSS: prefer semantic `aria-*` and `data-*` attributes while keeping every complete candidate static.
-
-CSS is the fallback.
-Use it only as an escape hatch for externally owned or generated markup, document-wide behavior, token or keyframe definitions, a selector relationship that is clearer as a selector, a shared visual primitive with no authored element of its own, or a case where utilities make the local markup materially less legible.
-Component CSS therefore requires a concrete ownership, selector, primitive-definition, document-wide, or readability reason—not merely that the rule uses state, a pseudo-element, `:has()`, print, motion, or a container query.
-State the reason in the stylesheet's file-level `CSS escape hatch:` comment.
-Ordinary escape-hatch rules belong to `components` and yield to utilities; only a state invariant that must beat resting utilities belongs to `bp-state`, with an adjacent `Override invariant:` comment naming what it must override.
-The stylesheet-contract check owns the exact enforced syntax and allowed layer exceptions.
+Read and follow [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for the
+authoritative coding, comments, error-handling, logging, testing,
+browser-runtime, styling, and tooling practices. Mechanically enforced facts
+remain owned by their checks.
 
 ## Gold-standard plan-quality testing
 
 This section owns the durable procedure for improving Big Plan's plan quality as a product.
 It is not unit testing, Playwright journey testing, or ordinary contribution verification.
-Those remain under [Engineering rules](#engineering-rules), `test/`, and [CONTRIBUTING.md](CONTRIBUTING.md).
+Those remain under [Engineering practices](#engineering-practices), `test/`, and [CONTRIBUTING.md](CONTRIBUTING.md).
 Current product capabilities and authoring guidance remain in `docs/`; point there rather than restating them.
 The evaluation bar for plan quality is the two [plan-quality standards](#plan-quality-standards): pleasant to read, and understandable.
 
