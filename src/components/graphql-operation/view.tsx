@@ -21,6 +21,21 @@ import {
   SectionLabel,
 } from "../_shared/labeled-section/labeled-section.js";
 
+// /* off-scale */ Phase A preserves the legacy 14% token washes exactly;
+// Phase B will replace them with palette-backed theme shades.
+const KIND_CLASSES: Readonly<Record<CompiledGraphqlOperation["kind"], string>> =
+  {
+    query:
+      "text-[var(--callout-note-c)] [background:color-mix(in_srgb,var(--callout-note-c)_14%,transparent)]",
+    mutation:
+      "text-[var(--callout-warning-c)] [background:color-mix(in_srgb,var(--callout-warning-c)_14%,transparent)]",
+    subscription:
+      "text-[var(--annotation-c)] [background:color-mix(in_srgb,var(--annotation-c)_14%,transparent)]",
+  };
+
+const DEPRECATED_CLASSES =
+  "text-muted [background:color-mix(in_srgb,var(--color-muted)_14%,transparent)]";
+
 const MonoType = ({ value }: { readonly value: string }) => (
   <span className="font-mono text-xs text-muted">{value}</span>
 );
@@ -103,10 +118,7 @@ export const GraphqlOperation = ({
       <div className="flex flex-wrap items-center gap-2.5">
         <BadgePill
           label={model.kind}
-          classNames={[
-            "graphql-operation-kind-pill",
-            `graphql-operation-kind-${model.kind}`,
-          ]}
+          classNames={["graphql-operation-kind-pill", KIND_CLASSES[model.kind]]}
         />
         <span
           className={[
@@ -119,10 +131,7 @@ export const GraphqlOperation = ({
           {model.name}
         </span>
         {model.deprecated ? (
-          <BadgePill
-            label="Deprecated"
-            classNames={["graphql-operation-deprecated"]}
-          />
+          <BadgePill label="Deprecated" classNames={[DEPRECATED_CLASSES]} />
         ) : null}
         {model.deprecationReason === undefined ? null : (
           <span className="text-sm text-muted">{model.deprecationReason}</span>

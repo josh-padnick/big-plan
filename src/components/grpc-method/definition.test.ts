@@ -169,24 +169,26 @@ describe("renderGrpcMethod", () => {
     [
       "serverStreaming",
       "rpc WatchComments(WatchCommentsRequest) returns (stream Comment)",
+      "text-[var(--callout-note-c)]",
     ],
     [
       "clientStreaming",
       "rpc WatchComments(stream WatchCommentsRequest) returns (Comment)",
+      "text-[var(--callout-warning-c)]",
     ],
     [
       "bidiStreaming",
       "rpc WatchComments(stream WatchCommentsRequest) returns (stream Comment)",
+      "text-[var(--annotation-c)]",
     ],
-  ])("should place the stream keyword for %s", (kind, expected) => {
+  ])("should place the stream keyword for %s", (kind, expected, toneClass) => {
     const { element, diagnostics } = render({
       attributes: { ...BASE_ATTRIBUTES, kind },
     });
     expect(diagnostics).toEqual([]);
     expect(signatureText(element)).toBe(expected);
-    expect(JSON.stringify(element)).toContain(
-      `grpc-method-kind-${kind.toLowerCase()}`,
-    );
+    expect(element.properties["data-grpc-kind"]).toBe(kind);
+    expect(JSON.stringify(element)).toContain(toneClass);
   });
 
   it("should group fields into request and response sections", () => {
@@ -364,7 +366,7 @@ describe("renderGrpcMethod", () => {
     expect(rendered).not.toContain('"tagName":"section"');
   });
 
-  it("should render errors and proto with their palette hooks", () => {
+  it("should render errors and proto with their palette utilities", () => {
     const { element, diagnostics } = render({
       children: [paragraph("Streams new comments.")],
       scopedChildren: [
@@ -380,7 +382,7 @@ describe("renderGrpcMethod", () => {
     const rendered = JSON.stringify(element);
     expect(diagnostics).toEqual([]);
     expect(rendered).toContain('"data-grpc-error":"NOT_FOUND"');
-    expect(rendered).toContain("grpc-method-error-code");
+    expect(rendered).toContain("text-[var(--callout-warning-c)]");
     expect(rendered).toContain('"value":"Proto"');
   });
 
@@ -392,6 +394,8 @@ describe("renderGrpcMethod", () => {
     expect(diagnostics).toEqual([]);
     expect(element.properties["data-grpc-deprecated"]).toBe("");
     expect(rendered).toContain('"line-through"');
-    expect(rendered).toContain("grpc-method-deprecated");
+    expect(rendered).toContain(
+      "[background:color-mix(in_srgb,var(--color-muted)_14%,transparent)]",
+    );
   });
 });
