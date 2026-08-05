@@ -146,6 +146,15 @@ describe("validateComments shape and bounds", () => {
     ).toThrow(CommentRejected);
   });
 
+  it("should refuse duplicate ids within one comment batch", () => {
+    expect(() =>
+      validate([
+        { id: "aabbccdd", body: "First.", target: { type: "document" } },
+        { id: "aabbccdd", body: "Second.", target: { type: "document" } },
+      ]),
+    ).toThrow(/unique/);
+  });
+
   it("should refuse an empty body", () => {
     expect(() =>
       validate([{ id: "aabbccdd", body: "   ", target: { type: "document" } }]),
