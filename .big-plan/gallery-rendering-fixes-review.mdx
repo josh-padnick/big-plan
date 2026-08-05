@@ -1,0 +1,226 @@
+# Reliable gallery component rendering
+
+Review the prose boundary and four gallery fixes before PR 64 merges.
+
+<QuickSummary>
+
+<Why>
+
+- Registered components must control their own layout, and review controls must report their true state.
+
+</Why>
+
+<What>
+
+- Verify the component boundary, the neutral Fit state, the proportional Truncate mode, and the exact code-copy control.
+
+</What>
+
+<How>
+
+- Inspect each live control in light and dark themes.
+- Compare the measured table widths in Wrap and Truncate modes.
+- Run the focused tests and the style-history replay.
+
+</How>
+
+</QuickSummary>
+
+<TableOfContents>
+<Entry section="Status quo" gist="Prose rules changed component chrome and some controls gave the wrong result" />
+<Entry section="Success looks like" gist="Each component owns its layout and each control reports its true state" />
+<Entry section="Prose has an explicit boundary" gist="Only Markdown-origin elements get prose styles" />
+<Entry section="Fit has a neutral state" gist="The persistent state is clear and has no green accent" />
+<Entry section="Truncate keeps proportional widths" gist="Narrow columns stay narrow and long content truncates only when necessary" />
+<Entry section="Copy uses exact text and correct feedback" gist="Copy excludes figure chrome and reports a failed fallback" />
+<Entry section="Schema styles have local owners" gist="Small presentation components own repeated Tailwind class strings" />
+<Entry section="Try the changes" gist="Build, render, serve, and run the focused checks" />
+<Entry section="Review checklist" gist="Check the visible result and the interaction result" />
+</TableOfContents>
+
+<Part title="Context" />
+
+## Status quo
+
+- Prose CSS selected semantic tags under `article`.
+- Registered component chrome used some of the same tags.
+- Decision rows inherited a 728 px reading measure and a list-item margin.
+- DataTable Truncate mode forced equal columns.
+- The FlowDiagram Fit state used a green accent.
+- Plain code figures had no Copy control.
+- The legacy copy fallback reported success when the browser returned `false`.
+
+## Success looks like
+
+- Only authored Markdown gets prose-flow styles.
+- All 18 registered components control their own chrome.
+- Authored prose inside a component keeps its reading styles.
+- Fit uses a clear neutral gray in both themes.
+- Wrap and Truncate use the same content-proportional widths until content is too wide.
+- Copy uses only the code text and reports a true failure.
+- The schema figure defines each repeated presentation class once.
+
+<Part title="Rendered changes" />
+
+## Prose has an explicit boundary
+
+The renderer marks Markdown-origin HAST with `data-authored-prose`.
+It adds the marker before the React component delivery edge.
+Prose CSS now requires this marker.
+Component chrome does not get the marker.
+
+<FlowDiagram>
+
+<Stage title="Author">
+<Node id="markdown" label="Authored Markdown" tone="source" />
+</Stage>
+
+<Stage title="Compile">
+<Node id="marker" label="Add data-authored-prose" code="rehypeMarkAuthoredProse" />
+</Stage>
+
+<Stage title="Render">
+<Node id="prose" label="Authored prose keeps reading styles" tone="destination" />
+<Node id="chrome" label="Component chrome owns its styles" tone="destination" />
+</Stage>
+
+<Edge from="markdown" to="marker" label="compile" />
+<Edge from="marker" to="prose" label="marked nodes" />
+<Edge from="marker" to="chrome" label="React edge" />
+
+One provenance marker separates authored prose from component chrome.
+
+</FlowDiagram>
+
+The audit covered all registered components:
+
+<DataTable title="Registered component prose audit" filter>
+
+```table
+| Component | Component result | Authored prose that stays |
+| --- | --- | --- |
+| Callout | Owns its measured outer width | Body paragraphs, headings, lists, and code |
+| CodeDiff | Owns figure chrome | Annotation Markdown |
+| CodeSnippet | Owns figure chrome | Annotation Markdown |
+| DataTable | Owns tables, cells, and inline code | None |
+| DatabaseTableSchema | Owns tables, lists, cells, and code | None |
+| Decision | Owns chooser rows and list rhythm | Context and option detail |
+| DecisionAnalysis | Owns matrix rows and tables | Criteria, rationale, recommendation, and reversibility detail |
+| FileTree | Owns all tree lists | None |
+| FileTreeDiff | Owns all diff-tree lists | None |
+| FlowDiagram | Owns labels, descriptions, lists, and code | None |
+| GraphqlOperation | Owns operation chrome | Description, field detail, and example fences |
+| GrpcMethod | Owns method chrome | Description, field detail, and proto fences |
+| HttpEndpoint | Owns endpoint chrome | Description, parameter detail, and example fences |
+| Part | Adds no prose chrome | All document content inside the wrapper |
+| QuickSummary | Owns its measured outer width | None |
+| QuickDecision | Owns brief rows and list rhythm | Option detail |
+| TableOfContents | Owns headings, links, and summaries | None |
+| Wireframe | Owns the complete sketch vocabulary | None |
+```
+
+</DataTable>
+
+Callout and QuickSummary deliberately keep a 728 px outer reading measure.
+Authored Markdown inside a component also keeps prose styles.
+All other component-owned widths and margins come from that component.
+
+## Fit has a neutral state
+
+The pressed Fit control now uses the `edge` background, the `edge-strong` border, and the `ink` label.
+The state is gray in light and dark themes.
+It does not use the accent color.
+
+Use the Fit control in the diagram above.
+Check that the pressed state is clear and neutral.
+The group, separators, target size, and control order do not change.
+
+## Truncate keeps proportional widths
+
+Truncate now keeps automatic table layout.
+It applies an 18 rem limit only to a cell that is too wide.
+It does not make every column equal.
+
+| Mode | Figure width | Column widths | Evidence cell |
+| --- | ---: | --- | --- |
+| Wrap | 585.0625 px | 147.234375 / 90.6875 / 136.1875 / 208.953125 px | client 209 px / scroll 209 px |
+| Truncate | 585.0625 px | 147.234375 / 90.6875 / 136.1875 / 208.953125 px | client 209 px / scroll 209 px |
+| Truncate with long content | 664.109375 px | 147.234375 / 90.6875 / 136.1875 / 288 px | client 288 px / scroll 882 px |
+
+The old Truncate figure was 786.8125 px.
+It used four 196.203125 px columns.
+It clipped the 209 px Evidence content in a 196 px cell.
+
+## Copy uses exact text and correct feedback
+
+Plain code figures now show Copy above Maximize.
+Both controls have a 24 by 24 px target.
+Copy reads only the direct `pre > code` text.
+It removes only the structural final newline.
+It does not copy a title or control label.
+
+Use Copy on this example:
+
+```http
+POST /api/plans/demo/review-events HTTP/1.1
+Content-Type: application/json
+
+{"kind":"comment","body":"Keep this exact text."}
+```
+
+The label changes to `Copied code` after success.
+If the Clipboard API is not available, the viewer uses `execCommand`.
+If `execCommand` returns `false`, the label changes to `Copy failed`.
+The viewer always removes its temporary text field.
+
+## Schema styles have local owners
+
+`SchemaCode` owns code styles and its complete neutral or muted variant.
+`SchemaCell` owns each cell role.
+`MutedText` owns repeated secondary-text shapes in the layout and header files.
+`SectionLabel` and complete static lookups own the remaining layout variants.
+
+Each Tailwind candidate is a complete source string.
+The implementation does not build class names at run time.
+The extraction changes no rendered pixels.
+
+<Part title="Try and review" />
+
+## Try the changes
+
+Run these commands from the repository root:
+
+```sh
+bun run build
+node bin/big-plan.mjs guidance
+node bin/big-plan.mjs validate .big-plan/gallery-rendering-fixes-review.mdx
+node bin/big-plan.mjs render .big-plan/gallery-rendering-fixes-review.mdx .big-plan/gallery-rendering-fixes-review.html
+node bin/big-plan.mjs render examples/all-components.mdx .big-plan/all-components-pr64.html
+python3 -m http.server 8000 --directory .big-plan
+```
+
+Open `http://localhost:8000/gallery-rendering-fixes-review.html`.
+Open `http://localhost:8000/all-components-pr64.html` for the complete gallery.
+
+Run the focused fallback test:
+
+```sh
+bunx playwright test test/component-interactions.spec.ts --grep "failed legacy copy"
+```
+
+Run the exact replay gate:
+
+```sh
+bun run verify:style-history -- --base fm/bp-tailwind-a-fb --artifacts test-results/style-history/review-followups
+```
+
+## Review checklist
+
+- Check Decision, QuickDecision, and DecisionAnalysis at the full component width.
+- Check that Decision rows have no prose list margin below them.
+- Check that authored Markdown still has the normal reading measure.
+- Toggle the theme and press Fit. Check for a clear neutral state.
+- Select Wrap and Truncate in the Rollout gates table. Check that the columns keep the same proportions.
+- Copy the HTTP example. Check that the result starts with `POST` and ends with `}`.
+- Run the fallback test. Check that a false result shows `Copy failed`.
+- Check the schema figure in both themes. Confirm that the extraction changes no pixels.
