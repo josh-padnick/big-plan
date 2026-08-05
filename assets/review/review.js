@@ -44,6 +44,7 @@ import {
   compactDurationLabel,
   relativeSignalLabel,
 } from "../../src/review/time-label.js";
+import { createToastManager } from "./toast.js";
 
 (() => {
   "use strict";
@@ -1415,12 +1416,6 @@ import {
     "data-review-live": true,
     "aria-live": "polite",
   });
-  const toast = el("div", {
-    class:
-      "fixed bottom-4 left-1/2 z-[70] hidden max-w-[calc(100vw-2rem)] min-w-0 -translate-x-1/2 items-center gap-3 rounded-md border border-edge bg-[var(--ink-c)] px-3 py-2 text-xs font-semibold text-[var(--bg)] shadow-lg",
-    "data-review-toast": true,
-    role: "status",
-  });
   const backdrop = el("button", {
     class:
       "[position:fixed] [inset:2.75rem_0_0] [z-index:43] [border:0] [background:rgb(0_0_0_/_0.28)] [cursor:pointer]",
@@ -1541,7 +1536,6 @@ import {
       markerLayer,
       deleteDialog,
       revertDialog,
-      toast,
       live,
     ],
   );
@@ -1573,30 +1567,7 @@ import {
     live.textContent = message;
   };
 
-  const showToast = ({ message, actionLabel, action }) => {
-    const actionButton = el("button", {
-      type: "button",
-      class:
-        "cursor-pointer rounded-sm underline underline-offset-2 hover:opacity-80 active:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--bg)]",
-      "data-review-toast-action": true,
-      text: actionLabel,
-    });
-    actionButton.addEventListener("click", () => {
-      toast.classList.add("hidden");
-      toast.classList.remove("flex");
-      void action();
-    });
-    toast.replaceChildren(
-      el("span", {
-        class: "min-w-0 [overflow-wrap:anywhere]",
-        "data-review-toast-message": true,
-        text: message,
-      }),
-      actionButton,
-    );
-    toast.classList.remove("hidden");
-    toast.classList.add("flex");
-  };
+  const notifications = createToastManager({ document });
 
   // -------------------------------------------------------------- tray render
 
@@ -4377,15 +4348,17 @@ import {
       await persist();
       sendNote.textContent = "";
       if (ids.length === 1 && options.toast !== false) {
-        showToast({
-          message: "Resolved",
-          actionLabel: "Undo",
-          action: async () => {
+        notifications.add({
+          title: "Comment resolved",
+          action: {
+            label: "Undo",
+            run: async () => {
             resolvedCommentIds.delete(ids[0]);
             expandedThreadIds.add(ids[0]);
             announce("Comment reopened.");
             renderTray();
             await save();
+            },
           },
         });
       }
@@ -4398,6 +4371,11 @@ import {
       previousExpandedComments.forEach((id) => expandedCommentIds.add(id));
       const message = "Couldn’t resolve: " + describeError(error);
       sendNote.textContent = message;
+      notifications.add({
+        title: "Couldn’t resolve comment",
+        description: describeError(error),
+        tone: "danger",
+      });
       announce(message);
       renderTray();
     }
