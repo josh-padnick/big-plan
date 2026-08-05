@@ -5,10 +5,7 @@ import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  createFileExclusively,
-  replaceFileAtomically,
-} from "./atomic-file.js";
+import { createFileExclusively, replaceFileAtomically } from "./atomic-file.js";
 
 describe("atomic review files", () => {
   it("should preserve the previous value when rename fails", async () => {

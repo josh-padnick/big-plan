@@ -2,13 +2,7 @@
 // for the local review repository.
 
 import { randomBytes } from "node:crypto";
-import {
-  chmod,
-  open,
-  rename,
-  unlink,
-  type FileHandle,
-} from "node:fs/promises";
+import { chmod, open, rename, unlink, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 const FILE_MODE = 0o600;
