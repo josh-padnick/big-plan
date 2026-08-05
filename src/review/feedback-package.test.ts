@@ -56,6 +56,24 @@ describe("agent brief framing", () => {
 });
 
 describe("agent brief containment", () => {
+  it("should name a whole slide once rather than repeating its heading", () => {
+    const brief = briefFor([
+      {
+        ...NOTE,
+        target: {
+          type: "slide",
+          blockId: "section/background/heading-1",
+          scope: "section/background",
+          kind: "heading",
+          label: "Background",
+          section: "Background",
+        },
+      },
+    ]);
+    expect(brief).toContain("Background · whole slide");
+    expect(brief).not.toContain("Background / Background");
+  });
+
   it("should keep a body that looks like a heading inside its own quote", () => {
     const brief = briefFor([
       {

@@ -30,6 +30,41 @@ test("should navigate the rendered sample plan through the TOC without errors", 
         name: "Payments Retry Architecture Plan",
       }),
     ).toBeVisible();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(
+        (nextTheme) =>
+          document.documentElement.setAttribute("data-theme", nextTheme),
+        theme,
+      );
+      const logo = banner.locator(
+        theme === "light" ? "[data-logo-light]" : "[data-logo-dark]",
+      );
+      await expect(logo).toBeVisible();
+      const paintedPixels = await logo.evaluate((image) => {
+        if (!(image instanceof HTMLImageElement)) return 0;
+        const canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        const context = canvas.getContext("2d");
+        if (context === null) return 0;
+        context.drawImage(image, 0, 0);
+        const pixels = context.getImageData(
+          0,
+          0,
+          canvas.width,
+          canvas.height,
+        ).data;
+        let painted = 0;
+        for (let index = 3; index < pixels.length; index += 4) {
+          if (pixels[index] > 0) painted += 1;
+        }
+        return painted;
+      });
+      expect(paintedPixels).toBeGreaterThan(1_000);
+    }
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("data-theme", "light"),
+    );
   });
 
   await test.step("the TOC lists every h2 section in document order", async () => {

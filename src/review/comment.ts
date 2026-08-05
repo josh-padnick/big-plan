@@ -19,8 +19,17 @@ export type CommentTarget =
       readonly section?: string;
     }
   | {
+      readonly type: "slide";
+      readonly blockId: string;
+      readonly scope: string;
+      readonly kind: string;
+      readonly label: string;
+      readonly section?: string;
+    }
+  | {
       readonly type: "selection";
       readonly blockId: string;
+      readonly endBlockId?: string;
       readonly kind: string;
       readonly label: string;
       readonly section?: string;
@@ -199,7 +208,24 @@ const validateTarget = ({
     ...(block.section === undefined ? {} : { section: block.section }),
   };
   if (type === "block") {
-    return { type: "block", ...identity };
+    return { type, ...identity };
+  }
+  if (type === "slide") {
+    const expectedScope = block.id.split("/").slice(0, -1).join("/");
+    const scope = asText({
+      value: target.scope,
+      field: "scope",
+      limit: 300,
+    });
+    if (
+      !/^[a-z0-9][a-z0-9/_.-]{0,299}$/.test(scope) ||
+      scope !== expectedScope
+    ) {
+      throw new CommentRejected(
+        "A whole-slide target must name its renderer-owned scope",
+      );
+    }
+    return { type, ...identity, scope };
   }
   if (type === "selection" || type === "lines") {
     const start = asLineNumber({ value: target.start, field: "start" });
@@ -207,9 +233,14 @@ const validateTarget = ({
     if (end < start) {
       throw new CommentRejected("A range must end at or after it starts");
     }
+    const endBlock =
+      type === "selection" && target.endBlockId !== undefined
+        ? resolveBlock({ value: target.endBlockId, blocks })
+        : undefined;
     return {
       type,
       ...identity,
+      ...(endBlock === undefined ? {} : { endBlockId: endBlock.id }),
       start,
       end,
       quote: asText({

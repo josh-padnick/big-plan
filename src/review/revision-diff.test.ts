@@ -12,16 +12,20 @@ const block = ({
   id,
   text,
   kind = "paragraph",
+  parentBlockId,
 }: {
   readonly id: string;
   readonly text: string;
   readonly kind?: string;
+  readonly parentBlockId?: string;
 }) => ({
   id,
   kind,
   label: text,
   section: "Approach",
   text,
+  markedText: text,
+  ...(parentBlockId === undefined ? {} : { parentBlockId }),
 });
 
 describe("revision word diff", () => {
@@ -67,6 +71,32 @@ describe("revision word diff", () => {
 });
 
 describe("revision block alignment", () => {
+  it("should preserve a changed row's table parent for container attribution", () => {
+    const parentBlockId = "section/approach/table-1";
+    const [location] = diffRevisions({
+      before: [
+        block({
+          id: "section/approach/table-row-1",
+          kind: "table-row",
+          text: "timeout\n504",
+          parentBlockId,
+        }),
+      ],
+      after: [
+        block({
+          id: "section/approach/table-row-1",
+          kind: "table-row",
+          text: "timeout\n503",
+          parentBlockId,
+        }),
+      ],
+    });
+    expect(location).toMatchObject({
+      kind: "table-row",
+      parentBlockId,
+    });
+  });
+
   it("should treat an inserted sibling as added without shifting later identities", () => {
     const before = [
       block({ id: "section/approach/paragraph-1", text: "First." }),

@@ -1,5 +1,5 @@
 // Browser test of the reviewer's commenting journey over a complete rendered
-// document: the quiet reading default, a comment on a block, a comment on a
+// document: the quiet reading default, a whole-slide selection, a comment on a
 // highlighted passage, the Feedback sidebar's staged lifecycle, and the guarantee
 // that a comment body stays literal text wherever it is shown. The runtime's
 // transport and package behavior is covered by its own unit tests; this spec
@@ -8,7 +8,7 @@
 
 import { expect, test } from "./fixtures";
 
-test("should comment on a block and a passage, then revise before sending", async ({
+test("should comment on a slide and a passage, then revise before sending", async ({
   page,
   deckViewerUrl,
 }) => {
@@ -16,6 +16,7 @@ test("should comment on a block and a passage, then revise before sending", asyn
   const tray = page.locator("[data-review-rail]");
   const affordance = page.locator("[data-review-affordance]");
   const rows = page.locator("[data-review-drafts] li");
+  let initialSelectorGap = 0;
 
   await test.step("reading stays quiet until the reviewer asks for more", async () => {
     await expect(tray).toBeHidden();
@@ -24,14 +25,56 @@ test("should comment on a block and a passage, then revise before sending", asyn
     await expect(page.locator("[data-review-annotated]")).toHaveCount(0);
   });
 
-  await test.step("hovering a block reveals its comment control", async () => {
+  await test.step("hovering a block stays quiet while a slide selector teaches selection", async () => {
     await page.locator("[data-block-kind='list']").first().hover();
-    await expect(affordance).toBeVisible();
-    await expect(affordance).toHaveAttribute("aria-label", /^Comment on list:/);
+    await expect(affordance).toBeHidden();
+    const selector = page.locator("[data-review-slide-selector]").first();
+    await expect(selector).toBeVisible();
+    const geometry = await selector.evaluate((node) => {
+      const slide = node.closest("[data-slide]");
+      if (slide === null) return null;
+      const slideRect = slide.getBoundingClientRect();
+      const selectorRect = node.getBoundingClientRect();
+      const kickerRect = slide
+        .querySelector("[data-slide-kicker]")
+        ?.getBoundingClientRect();
+      const toggleRect = slide
+        .querySelector(
+          ":scope > [data-collapse-header] > [data-collapse-toggle]",
+        )
+        ?.getBoundingClientRect();
+      return {
+        gap: slideRect.left - selectorRect.right,
+        gapToKicker:
+          kickerRect === undefined ? -1 : kickerRect.left - selectorRect.right,
+        overlapsToggle:
+          toggleRect !== undefined &&
+          selectorRect.left < toggleRect.right &&
+          selectorRect.right > toggleRect.left &&
+          selectorRect.top < toggleRect.bottom &&
+          selectorRect.bottom > toggleRect.top,
+        topDelta: selectorRect.top - slideRect.top,
+      };
+    });
+    if (geometry === null) {
+      throw new Error("The slide selector is not anchored to a slide");
+    }
+    initialSelectorGap = geometry.gap;
+    expect(geometry.gapToKicker).toBeGreaterThanOrEqual(0);
+    expect(geometry.gapToKicker).toBeLessThanOrEqual(8);
+    expect(geometry.overlapsToggle).toBe(false);
+    expect(geometry.topDelta).toBeGreaterThanOrEqual(5);
+    expect(geometry.topDelta).toBeLessThanOrEqual(8);
+    await expect(selector).toHaveAttribute(
+      "aria-label",
+      "Comment on all content in Status quo",
+    );
+    await selector.click();
+    await expect(page.locator("[data-review-compose]")).toBeVisible();
+    await expect(affordance).toBeHidden();
   });
 
   await test.step("saving the first comment floats its card and chips the block", async () => {
-    await affordance.click();
     await page
       .locator("[data-review-compose-input]")
       .fill("Say what breaks, not only what works.");
@@ -40,7 +83,47 @@ test("should comment on a block and a passage, then revise before sending", asyn
     await expect(page.locator("[data-review-thread-card]")).toBeVisible();
     await expect(rows).toHaveCount(1);
     await expect(page.locator("[data-review-annotated]")).toHaveCount(1);
-    await expect(page.locator("[data-review-toggle-count]")).toBeHidden();
+    await expect(page.locator("[data-review-toggle-count]")).toHaveText("1");
+    const geometry = await page
+      .locator("[data-review-slide-selector]")
+      .first()
+      .evaluate((node) => {
+        const slide = node.closest("[data-slide]");
+        if (slide === null) return null;
+        const slideRect = slide.getBoundingClientRect();
+        const selectorRect = node.getBoundingClientRect();
+        const kickerRect = slide
+          .querySelector("[data-slide-kicker]")
+          ?.getBoundingClientRect();
+        const toggleRect = slide
+          .querySelector(
+            ":scope > [data-collapse-header] > [data-collapse-toggle]",
+          )
+          ?.getBoundingClientRect();
+        return {
+          gap: slideRect.left - selectorRect.right,
+          gapToKicker:
+            kickerRect === undefined
+              ? -1
+              : kickerRect.left - selectorRect.right,
+          overlapsToggle:
+            toggleRect !== undefined &&
+            selectorRect.left < toggleRect.right &&
+            selectorRect.right > toggleRect.left &&
+            selectorRect.top < toggleRect.bottom &&
+            selectorRect.bottom > toggleRect.top,
+          topDelta: selectorRect.top - slideRect.top,
+        };
+      });
+    if (geometry === null) {
+      throw new Error("The slide selector lost its slide anchor");
+    }
+    expect(geometry.gap).toBeCloseTo(initialSelectorGap, 1);
+    expect(geometry.gapToKicker).toBeGreaterThanOrEqual(0);
+    expect(geometry.gapToKicker).toBeLessThanOrEqual(8);
+    expect(geometry.overlapsToggle).toBe(false);
+    expect(geometry.topDelta).toBeGreaterThanOrEqual(5);
+    expect(geometry.topDelta).toBeLessThanOrEqual(8);
   });
 
   await test.step("highlighting a passage offers to comment on the selection", async () => {
@@ -100,10 +183,10 @@ test("should comment on a block and a passage, then revise before sending", asyn
     await expect(page.locator("[data-review-annotated]")).toHaveCount(1);
   });
 
-  await test.step("the tray hides on demand without making drafts a persistent signal", async () => {
+  await test.step("the tray hides on demand while preserving the staged count", async () => {
     await page.locator("[data-review-hide]").click();
     await expect(tray).toBeHidden();
-    await expect(page.locator("[data-review-toggle-count]")).toBeHidden();
+    await expect(page.locator("[data-review-toggle-count]")).toHaveText("1");
     await page.locator("[data-review-toggle]").click();
     await expect(tray).toBeVisible();
   });

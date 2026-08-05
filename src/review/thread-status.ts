@@ -1,0 +1,200 @@
+// Owns the single lifecycle status shown for a review thread. Keeping this
+// decision pure prevents badges, waiting copy, and severity from drifting
+// between anchored comments, the tray, and plan-wide chat.
+
+export type ThreadStatusStage =
+  | "staged"
+  | "sending"
+  | "waiting"
+  | "blocked"
+  | "working"
+  | "stalled"
+  | "errored"
+  | "offline"
+  | "outcome"
+  | "resolved";
+
+export type ThreadStatus = {
+  readonly stage: ThreadStatusStage;
+  readonly tone: "neutral" | "working" | "warning" | "danger";
+  readonly badge: string;
+  readonly headline?: string;
+  readonly hint?: string;
+  readonly showsSpinner: boolean;
+  readonly showsSetup: boolean;
+  readonly waitingBusy?: boolean;
+};
+
+/** Chooses the one toolbar connection indicator allowed to be visible. */
+export const deriveAgentIndicator = ({
+  hasRuntime,
+  agentConnected,
+  healthKey,
+}: {
+  readonly hasRuntime: boolean;
+  readonly agentConnected: boolean;
+  readonly healthKey?: string;
+}): "ok" | "alert" | "hidden" => {
+  if (!hasRuntime) return "hidden";
+  if (healthKey !== undefined && healthKey !== "working") return "alert";
+  return agentConnected ? "ok" : "alert";
+};
+
+type ThreadStatusInput = {
+  readonly phase: "staged" | "sending" | "pending" | "outcome" | "resolved";
+  readonly surface: "thread" | "chat";
+  readonly runtimeOffline?: boolean;
+  readonly agentConnected?: boolean;
+  readonly pickedUp?: boolean;
+  readonly sessionBusy?: boolean;
+  readonly quietForMs?: number;
+  readonly failedStep?: string;
+  readonly failedDetail?: string;
+};
+
+const stalledHint =
+  "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This thread updates by itself once the agent resumes.";
+
+const blockedHint =
+  "Your comment is saved and sends itself as soon as an agent reconnects. Nothing is lost.";
+
+/** Measures session-wide quiet from the newest trustworthy liveness signal. */
+export const sessionQuietMs = ({
+  now,
+  lastProgressAdvanceAt,
+  heartbeatAt,
+  seenAt,
+}: {
+  readonly now: number;
+  readonly lastProgressAdvanceAt: number;
+  readonly heartbeatAt: number;
+  readonly seenAt: number;
+}): number =>
+  Math.max(0, now - Math.max(lastProgressAdvanceAt, heartbeatAt, seenAt));
+
+/** Resolves one thread to exactly one user-facing lifecycle state. */
+export const deriveThreadStatus = ({
+  phase,
+  surface,
+  runtimeOffline = false,
+  agentConnected = false,
+  pickedUp = false,
+  sessionBusy = false,
+  quietForMs = 0,
+  failedStep,
+  failedDetail,
+}: ThreadStatusInput): ThreadStatus => {
+  if (phase === "staged") {
+    return {
+      stage: "staged",
+      tone: "neutral",
+      badge: "Staged",
+      showsSpinner: false,
+      showsSetup: false,
+    };
+  }
+  if (phase === "sending") {
+    return {
+      stage: "sending",
+      tone: "working",
+      badge: "Sending",
+      showsSpinner: true,
+      showsSetup: false,
+    };
+  }
+  if (phase === "outcome" || phase === "resolved") {
+    return {
+      stage: phase,
+      tone: "neutral",
+      badge: "",
+      showsSpinner: false,
+      showsSetup: false,
+    };
+  }
+  if (runtimeOffline) {
+    return {
+      stage: "offline",
+      tone: "danger",
+      badge: "Working",
+      headline: "The review server is unreachable",
+      hint: "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
+      showsSpinner: false,
+      showsSetup: false,
+    };
+  }
+  if (failedStep !== undefined) {
+    const detail =
+      failedDetail === undefined || failedDetail === ""
+        ? failedStep
+        : `${failedStep} - ${failedDetail}`;
+    return {
+      stage: "errored",
+      tone: "danger",
+      badge: "Working",
+      headline: "The agent reported a problem",
+      hint: `${detail}. Reply again or restart \`big-plan agent\`.`,
+      showsSpinner: false,
+      showsSetup: false,
+    };
+  }
+  if (!pickedUp) {
+    if (agentConnected) {
+      if (sessionBusy) {
+        return {
+          stage: "waiting",
+          tone: "neutral",
+          badge: "Waiting",
+          headline: "Waiting - the agent is working on another request",
+          showsSpinner: false,
+          showsSetup: false,
+          waitingBusy: true,
+        };
+      }
+      return {
+        stage: "waiting",
+        tone: "neutral",
+        badge: "Waiting",
+        headline: "Waiting for an agent",
+        showsSpinner: false,
+        showsSetup: false,
+      };
+    }
+    return {
+      stage: "blocked",
+      tone: "warning",
+      badge: "Blocked",
+      headline: "Blocked - no agent connected",
+      hint: blockedHint,
+      showsSpinner: false,
+      showsSetup: true,
+    };
+  }
+  if (quietForMs > 90_000) {
+    return {
+      stage: "stalled",
+      tone: "warning",
+      badge: "Working",
+      headline:
+        "No progress for " + Math.max(1, Math.round(quietForMs / 60_000)) + "m",
+      hint: stalledHint,
+      ...(agentConnected
+        ? {
+            hint: "The agent session is still connected. " + stalledHint,
+          }
+        : {}),
+      showsSpinner: false,
+      showsSetup: false,
+    };
+  }
+  return {
+    stage: "working",
+    tone: "working",
+    badge: "Working",
+    headline:
+      surface === "chat"
+        ? "Agent is working on your feedback"
+        : "Agent is working on this",
+    showsSpinner: true,
+    showsSetup: false,
+  };
+};

@@ -18,6 +18,45 @@
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 
+/** Authored structure retained at the revision boundary for faithful lenses. */
+export type ReviewContentNode =
+  | { readonly type: "text"; readonly value: string }
+  | {
+      readonly type:
+        | "paragraph"
+        | "strong"
+        | "emphasis"
+        | "inline-code"
+        | "code"
+        | "quote"
+        | "list-item"
+        | "group";
+      readonly children: ReadonlyArray<ReviewContentNode>;
+    }
+  | {
+      readonly type: "link";
+      readonly href: string;
+      readonly children: ReadonlyArray<ReviewContentNode>;
+    }
+  | {
+      readonly type: "list";
+      readonly ordered: boolean;
+      readonly children: ReadonlyArray<ReviewContentNode>;
+    }
+  | {
+      readonly type: "table";
+      readonly children: ReadonlyArray<ReviewContentNode>;
+    }
+  | {
+      readonly type: "table-row";
+      readonly children: ReadonlyArray<ReviewContentNode>;
+    }
+  | {
+      readonly type: "table-cell";
+      readonly header: boolean;
+      readonly children: ReadonlyArray<ReviewContentNode>;
+    };
+
 /** The document-order block descriptors one compile produced. */
 export type BlockDescriptor = {
   readonly id: string;
@@ -27,6 +66,15 @@ export type BlockDescriptor = {
   // Plain authored presentation text is retained for revision alignment and
   // diffing. It never enters an id or path and is not exposed as markup.
   readonly text: string;
+  // Diff presentation retains inline-code boundaries without changing the
+  // plain-text offsets used by comment anchors.
+  readonly markedText: string;
+  // Generated numbering and reader chrome are excluded from this authored
+  // text. Revision alignment uses it instead of treating rendered pixels as
+  // source identity.
+  readonly authoredText: string;
+  readonly content: ReviewContentNode;
+  readonly parentBlockId?: string;
 };
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
@@ -63,6 +111,109 @@ const textOf = (node: Element): string => {
       const hidden = Array.isArray(className) && className.includes("sr-only");
       if (!hidden) {
         text += textOf(child);
+      }
+    }
+  }
+  return text;
+};
+
+const INLINE_CODE_SENTINEL = "\u0011";
+
+const contentChildrenOf = (node: Element): ReadonlyArray<ReviewContentNode> =>
+  node.children.flatMap((child): ReadonlyArray<ReviewContentNode> => {
+    if (child.type === "text") {
+      return child.value === "" ? [] : [{ type: "text", value: child.value }];
+    }
+    if (!isElement(child)) return [];
+    const className = child.properties.className;
+    if (
+      (Array.isArray(className) && className.includes("sr-only")) ||
+      child.properties["aria-hidden"] === "true"
+    ) {
+      return [];
+    }
+    const children = contentChildrenOf(child);
+    if (child.tagName === "strong" || child.tagName === "b") {
+      return [{ type: "strong", children }];
+    }
+    if (child.tagName === "em" || child.tagName === "i") {
+      return [{ type: "emphasis", children }];
+    }
+    if (child.tagName === "code") {
+      return [{ type: "inline-code", children }];
+    }
+    if (child.tagName === "a") {
+      const href = child.properties.href;
+      return [
+        {
+          type: "link",
+          href: typeof href === "string" ? href : "",
+          children,
+        },
+      ];
+    }
+    if (child.tagName === "p") return [{ type: "paragraph", children }];
+    if (child.tagName === "blockquote") return [{ type: "quote", children }];
+    if (child.tagName === "pre") return [{ type: "code", children }];
+    if (child.tagName === "ul" || child.tagName === "ol") {
+      return [
+        {
+          type: "list",
+          ordered: child.tagName === "ol",
+          children,
+        },
+      ];
+    }
+    if (child.tagName === "li") return [{ type: "list-item", children }];
+    if (child.tagName === "table") return [{ type: "table", children }];
+    if (child.tagName === "tr") return [{ type: "table-row", children }];
+    if (child.tagName === "td" || child.tagName === "th") {
+      return [
+        {
+          type: "table-cell",
+          header: child.tagName === "th",
+          children,
+        },
+      ];
+    }
+    return children;
+  });
+
+const contentOf = (node: Element): ReviewContentNode => {
+  const children = contentChildrenOf(node);
+  if (node.tagName === "tr") {
+    return {
+      type: "table",
+      children: [{ type: "table-row", children }],
+    };
+  }
+  if (node.tagName === "table") return { type: "table", children };
+  if (node.tagName === "ul" || node.tagName === "ol") {
+    return { type: "list", ordered: node.tagName === "ol", children };
+  }
+  if (node.tagName === "pre") return { type: "code", children };
+  if (node.tagName === "blockquote") return { type: "quote", children };
+  if (node.tagName === "p" || HEADING_TAGS.has(node.tagName)) {
+    return { type: "paragraph", children };
+  }
+  return { type: "group", children };
+};
+
+// Keeps only the formatting boundary the revision lens must reconstruct.
+const markedTextOf = (node: Element): string => {
+  let text = "";
+  for (const child of node.children) {
+    if (child.type === "text") {
+      text += child.value;
+    } else if (isElement(child)) {
+      const className = child.properties.className;
+      const hidden = Array.isArray(className) && className.includes("sr-only");
+      if (!hidden) {
+        const childText = markedTextOf(child);
+        text +=
+          child.tagName === "code"
+            ? `${INLINE_CODE_SENTINEL}${childText}${INLINE_CODE_SENTINEL}`
+            : childText;
       }
     }
   }
@@ -265,12 +416,14 @@ const stampTableRows = ({
   section,
   blocks,
   counter,
+  parentBlockId,
 }: {
   readonly table: Element;
   readonly scope: string;
   readonly section: string;
   readonly blocks: Array<BlockDescriptor>;
   readonly counter: ScopeCounter;
+  readonly parentBlockId: string;
 }): void => {
   forEachDescendant({
     node: table,
@@ -297,6 +450,10 @@ const stampTableRows = ({
         label: label.length > 0 ? label : "Table row",
         section,
         text: textOf(candidate),
+        markedText: markedTextOf(candidate),
+        authoredText: textOf(candidate),
+        content: contentOf(candidate),
+        parentBlockId,
       });
     },
   });
@@ -344,11 +501,30 @@ const stampScope = ({
     child.properties["data-block-kind"] = kind;
     child.properties["data-block-label"] = label;
     child.properties["data-block-section"] = section;
-    blocks.push({ id, kind, label, section, text: textOf(child) });
+    blocks.push({
+      id,
+      kind,
+      label,
+      section,
+      text: textOf(child),
+      markedText: markedTextOf(child),
+      authoredText:
+        kind === "heading"
+          ? textOf(child).replace(KICKER_PREFIX, "")
+          : textOf(child),
+      content: contentOf(child),
+    });
     if (kind === "code" || kind.startsWith("code-")) {
       stampCodeLines(child);
     } else if (kind === "table") {
-      stampTableRows({ table: child, scope, section, blocks, counter });
+      stampTableRows({
+        table: child,
+        scope,
+        section,
+        blocks,
+        counter,
+        parentBlockId: id,
+      });
     }
   }
 };

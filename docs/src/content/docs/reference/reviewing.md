@@ -116,10 +116,11 @@ that plan and session:
 npx big-plan agent plans/checkout-retry.mdx
 ```
 
-Run the returned `codex` or `claude` command in the plan's repository and
-leave that session running while you review. The command reads the generated
-owner-only `prompt_file`; `agent_prompt` is also returned when you want to
-paste the contract into an already-open coding-agent session.
+Run the returned `codex` or `claude` command in the plan's repository, in a
+second terminal, and leave that session running while you review; the review
+runtime must keep running in its own terminal the whole time. The command
+reads the generated owner-only `prompt_file`; paste that file's contents when
+you want the contract in an already-open coding-agent session.
 The prompt tells that session to run `big-plan agent next <plan> --wait`, revise
 the authoritative MDX when appropriate, and publish each answer with
 `big-plan agent respond`.

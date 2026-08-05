@@ -211,6 +211,18 @@ is styled by its owning module, not here.
     width: max-content;
     font-size: 0.9375rem;
   }
+  [data-table-scroll-container] {
+    box-shadow: inset -1rem 0 0.8rem -1.1rem var(--muted-c);
+    scrollbar-color: var(--muted-c) transparent;
+    scrollbar-width: thin;
+  }
+  [data-table-scroll-container]::-webkit-scrollbar {
+    height: 0.42rem;
+  }
+  [data-table-scroll-container]::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: var(--muted-c);
+  }
   article th,
   article td {
     border-bottom: 1px solid var(--color-edge);

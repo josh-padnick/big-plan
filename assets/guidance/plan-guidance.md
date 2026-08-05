@@ -106,6 +106,7 @@ These principles apply to both the authored MDX structure and the product chrome
 Write as tersely as the content allows.
 Prefer one precise sentence over three cautious ones, and cut anything that restates another section, narrates your process, or exists to look thorough.
 Keep paragraphs short; a reviewer should never lose the argument inside a wall of text.
+When revising prose, keep related sentences in one paragraph; never leave a blank line between every sentence.
 
 ## 10. Use components where they beat prose
 

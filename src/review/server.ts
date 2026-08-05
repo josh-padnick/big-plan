@@ -43,16 +43,21 @@ import {
 import { buildFeedbackPackage, renderBrief } from "./feedback-package.js";
 import {
   deriveSourceRevision,
-  feedbackAgentRequest,
+  feedbackAgentRequests,
   messageAgentRequest,
   readAgentExchange,
   writeAgentRequest,
 } from "./agent-exchange.js";
 import {
+  agentHeartbeatIsFresh,
+  appendAgentCancellation,
+  appendAgentConnectionEvent,
   appendProgress,
   prepareStore,
   randomId,
   readActiveDraft,
+  readAgentConnectionEvents,
+  readAgentHeartbeat,
   readComments,
   readProgress,
   readResolvedCommentIds,
@@ -67,11 +72,15 @@ import {
   writeSessionHeartbeat,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
-import { diffRevisions } from "./revision-diff.js";
+import { buildRevisionChangeSet } from "./revision-change-set.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const HEARTBEAT_INTERVAL_MS = 750;
+
+/** Quotes one trusted local path as one POSIX-shell argument. */
+const shellArgument = (value: string): string =>
+  `'${value.replaceAll("'", `'"'"'`)}'`;
 
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
@@ -103,6 +112,7 @@ const API_ROUTES: ReadonlyArray<Route> = [
   { method: "POST", path: "/api/feedback" },
   { method: "GET", path: "/api/agent" },
   { method: "POST", path: "/api/agent-requests" },
+  { method: "POST", path: "/api/agent-requests/cancel" },
   { method: "GET", path: "/api/progress" },
   { method: "GET", path: "/api/revision-diff" },
 ];
@@ -203,6 +213,15 @@ export const startReviewRuntime = async ({
   readonly planPath: string;
 }): Promise<ReviewRuntime> => {
   const resolvedPlanPath = resolve(planPath);
+  const agentCommand = `node ${shellArgument(
+    resolve(process.argv[1] ?? "bin/big-plan.mjs"),
+  )} agent ${shellArgument(resolvedPlanPath)}`;
+  const recoveryPrompt = [
+    `Reconnect to my existing Big Plan review for ${resolvedPlanPath}.`,
+    `Run ${agentCommand}.`,
+    "Read the prompt_file path it prints and follow that prompt in this agent session.",
+    "Keep the connection loop running so the review remains live.",
+  ].join(" ");
   const planId = derivePlanId({ planPath: resolvedPlanPath });
   const sessionId = randomId(8);
   const token = randomBytes(32).toString("base64url");
@@ -210,6 +229,7 @@ export const startReviewRuntime = async ({
   await prepareStore(store);
   const initialSource = await readFile(resolvedPlanPath, "utf8");
   const initialSourceRevision = deriveSourceRevision(initialSource);
+  let servedSourceRevision = initialSourceRevision;
   await writeRevisionSnapshot({
     store,
     revision: initialSourceRevision,
@@ -221,9 +241,19 @@ export const startReviewRuntime = async ({
   // re-anchor; it simply refuses to forget what it once addressed.
   const blocks = new Map<string, BlockMapEntry>();
   let progressSeq = 0;
+  let lastConnectionState: boolean | undefined;
 
   const validate = (value: unknown): ReadonlyArray<ReviewComment> =>
     validateComments({ value, blocks, now: new Date().toISOString() });
+  const agentConnected = (): Promise<boolean> =>
+    agentHeartbeatIsFresh({ store, sessionId });
+  const agentSession = async (): Promise<Readonly<Record<string, unknown>>> => {
+    const heartbeat = await readAgentHeartbeat({ store, sessionId });
+    return {
+      connected: await agentConnected(),
+      ...(heartbeat === undefined ? {} : heartbeat),
+    };
+  };
 
   const readBootstrap = async (markdown: string): Promise<string> =>
     JSON.stringify({
@@ -237,12 +267,16 @@ export const startReviewRuntime = async ({
         store,
         validate: validateResolvedCommentIds,
       }),
-      agent: await readAgentExchange({ store, sessionId, planId }),
+      agent: {
+        ...(await readAgentExchange({ store, sessionId, planId })),
+        ...(await agentSession()),
+      },
       sourceRevision: deriveSourceRevision(markdown),
     });
 
   const renderPlan = async (): Promise<string> => {
     const markdown = await readFile(resolvedPlanPath, "utf8");
+    const revision = deriveSourceRevision(markdown);
     const firstPass = renderDocument({
       markdown,
       fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
@@ -251,7 +285,7 @@ export const startReviewRuntime = async ({
     for (const block of firstPass.blocks) {
       blocks.set(block.id, block);
     }
-    return renderDocument({
+    const rendered = renderDocument({
       markdown,
       fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
       identity: {
@@ -261,6 +295,11 @@ export const startReviewRuntime = async ({
         reviewBootstrap: await readBootstrap(markdown),
       },
     }).html;
+    // A successful document render is itself a safe revision rendezvous.
+    // Remember it so a manual refresh cannot be told to reload away from the
+    // exact valid source it just received while an agent response is older.
+    servedSourceRevision = revision;
+    return rendered;
   };
 
   const handleDocument = async (response: ServerResponse): Promise<void> => {
@@ -373,19 +412,21 @@ export const startReviewRuntime = async ({
       const written = await writeFeedbackPackage({
         store,
         feedback,
-        brief: renderBrief(feedback),
+        brief: renderBrief(feedback, Array.from(blocks.keys())),
       });
       const source = await readFile(resolvedPlanPath, "utf8");
       const revision = deriveSourceRevision(source);
       await writeRevisionSnapshot({ store, revision, source });
-      const agentRequest = feedbackAgentRequest({
+      const agentRequests = feedbackAgentRequests({
         feedback,
         sourceRevision: revision,
+        requestIds: comments.map(() => randomId(8)),
       });
-      await writeAgentRequest({
-        store,
-        request: agentRequest,
-      });
+      await Promise.all(
+        agentRequests.map((agentRequest) =>
+          writeAgentRequest({ store, request: agentRequest }),
+        ),
+      );
       const alreadySent = await readComments({
         path: store.sentPath,
         validate,
@@ -406,6 +447,8 @@ export const startReviewRuntime = async ({
           seq: progressSeq,
           step: "Feedback package received",
           state: "done",
+          requestId: agentRequests[0]?.requestId,
+          at: new Date().toISOString(),
           detail: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
         },
       });
@@ -417,7 +460,9 @@ export const startReviewRuntime = async ({
           comments: comments.length,
           package: written.jsonPath,
           brief: written.briefPath,
-          agentRequest,
+          agentRequest: agentRequests[0],
+          agentRequests,
+          agentConnected: await agentConnected(),
         },
       });
       return;
@@ -425,18 +470,102 @@ export const startReviewRuntime = async ({
     if (route.path === "/api/agent") {
       const exchange = await readAgentExchange({ store, sessionId, planId });
       const latestResponse = exchange.responses.at(-1);
+      const session = await agentSession();
+      const connected = session.connected === true;
+      if (connected !== lastConnectionState) {
+        const reason =
+          lastConnectionState === true && !connected
+            ? "Heartbeat timed out"
+            : undefined;
+        lastConnectionState = connected;
+        await appendAgentConnectionEvent({
+          store,
+          event: {
+            sessionId,
+            connected,
+            at: new Date().toISOString(),
+            ...(reason === undefined ? {} : { reason }),
+          },
+        });
+      }
+      const connectionLog = await readAgentConnectionEvents({
+        store,
+        sessionId,
+      });
       sendJson({
         response,
         status: 200,
         value: {
-          // The browser reloads only revisions the response command has
-          // rendered, linted, and accepted. Watching the raw file here would
-          // navigate the reviewer onto a transient parse error while an agent
-          // is midway through editing the authoritative MDX.
+          // A response revision is reloadable only while it is still the
+          // source on disk. Otherwise keep the browser on the latest revision
+          // this server successfully rendered; this also makes a manual
+          // refresh a stable rendezvous during an in-progress agent edit.
           sourceRevision:
-            latestResponse?.sourceRevision ?? initialSourceRevision,
+            latestResponse?.sourceRevision ===
+            deriveSourceRevision(await readFile(resolvedPlanPath, "utf8"))
+              ? latestResponse.sourceRevision
+              : servedSourceRevision,
           ...exchange,
+          connected,
+          agent: session,
+          connectionLog,
+          plan: resolvedPlanPath,
+          agentCommand,
+          recoveryPrompt,
         },
+      });
+      return;
+    }
+    if (route.path === "/api/agent-requests/cancel") {
+      const body = await readBody(request);
+      const payload =
+        typeof body === "object" && body !== null
+          ? (body as Readonly<Record<string, unknown>>)
+          : {};
+      const requestId = payload.requestId;
+      const exchange = await readAgentExchange({ store, sessionId, planId });
+      const known =
+        typeof requestId === "string" &&
+        exchange.requests.some((entry) => entry.requestId === requestId);
+      if (!known) {
+        refuse({
+          response,
+          status: 400,
+          reason: "The request is unknown",
+        });
+        return;
+      }
+      if (exchange.responses.some((entry) => entry.requestId === requestId)) {
+        refuse({
+          response,
+          status: 409,
+          reason: "The request was already answered - too late to cancel",
+        });
+        return;
+      }
+      await appendAgentCancellation({
+        store,
+        cancellation: {
+          requestId,
+          at: new Date().toISOString(),
+        },
+      });
+      progressSeq += 1;
+      await appendProgress({
+        store,
+        event: {
+          sessionId,
+          seq: progressSeq,
+          step: "Request cancelled by reviewer",
+          state: "done",
+          requestId,
+          at: new Date().toISOString(),
+        },
+      });
+      sendJson({
+        response,
+        status: 200,
+        value: { requestId, cancelled: true },
       });
       return;
     }
@@ -493,6 +622,8 @@ export const startReviewRuntime = async ({
               ? "Reply sent to agent"
               : "Plan question sent to agent",
           state: "waiting",
+          requestId: agentRequest.requestId,
+          at: new Date().toISOString(),
         },
       });
       sendJson({
@@ -502,6 +633,7 @@ export const startReviewRuntime = async ({
           requestId: agentRequest.requestId,
           kind: agentRequest.kind,
           request: agentRequest,
+          agentConnected: await agentConnected(),
         },
       });
       return;
@@ -539,9 +671,8 @@ export const startReviewRuntime = async ({
         response,
         status: 200,
         value: {
-          from,
-          to,
-          locations: diffRevisions({
+          changeSet: buildRevisionChangeSet({
+            pair: { fromRevision: from, toRevision: to },
             before: before.blocks,
             after: after.blocks,
           }),

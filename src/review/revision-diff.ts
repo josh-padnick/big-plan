@@ -2,12 +2,26 @@
 // live review runtime. It is intentionally DOM- and filesystem-free so the
 // attribution contract and browser route share one deterministic answer.
 
-type RevisionBlock = {
+export type RevisionContentNode =
+  | { readonly type: "text"; readonly value: string }
+  | {
+      readonly type: Exclude<string, "text">;
+      readonly children: ReadonlyArray<RevisionContentNode>;
+      readonly href?: string;
+      readonly ordered?: boolean;
+      readonly header?: boolean;
+    };
+
+export type RevisionBlock = {
   readonly id: string;
   readonly kind: string;
   readonly label: string;
   readonly section: string;
   readonly text: string;
+  readonly markedText: string;
+  readonly authoredText?: string;
+  readonly content?: RevisionContentNode;
+  readonly parentBlockId?: string;
 };
 
 export type DiffRun = {
@@ -16,7 +30,7 @@ export type DiffRun = {
 };
 
 export type RevisionDiffLocation = {
-  readonly status: "changed" | "added" | "removed";
+  readonly status: "changed" | "added" | "removed" | "moved";
   readonly oldBlockId?: string;
   readonly newBlockId?: string;
   readonly kind: string;
@@ -24,10 +38,15 @@ export type RevisionDiffLocation = {
   readonly section: string;
   readonly oldText: string;
   readonly newText: string;
+  readonly oldContent?: RevisionContentNode;
+  readonly newContent?: RevisionContentNode;
   readonly runs: ReadonlyArray<DiffRun>;
   readonly beforeBlockId?: string;
   readonly afterBlockId?: string;
+  readonly parentBlockId?: string;
 };
+
+export const INLINE_CODE_SENTINEL = "\u0011";
 
 /** Measures how much text survives a diff, independent of insert/delete size. */
 export const diffRunSimilarity = (runs: ReadonlyArray<DiffRun>): number => {
@@ -54,11 +73,6 @@ export const diffRunSimilarity = (runs: ReadonlyArray<DiffRun>): number => {
 
 const normalized = (value: string): string =>
   value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
-
-const scopeOf = (block: RevisionBlock): string => {
-  const slash = block.id.lastIndexOf("/");
-  return slash < 0 ? block.section : block.id.slice(0, slash);
-};
 
 const lcsPairs = ({
   left,
@@ -164,14 +178,73 @@ export const diffWords = ({
   return runs;
 };
 
-const compatible = (before: RevisionBlock, after: RevisionBlock): boolean =>
-  before.kind === after.kind ||
-  (before.kind !== "table-row" && after.kind !== "table-row");
+const meaningfulTokens = (value: string): ReadonlySet<string> =>
+  new Set(
+    normalized(value)
+      .split(/[^\p{L}\p{N}_]+/u)
+      .filter((token) => token.length > 1),
+  );
+
+const textSimilarity = (left: string, right: string): number => {
+  const leftTokens = meaningfulTokens(left);
+  const rightTokens = meaningfulTokens(right);
+  if (leftTokens.size === 0 && rightTokens.size === 0) return 1;
+  let overlap = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) overlap += 1;
+  }
+  return (2 * overlap) / Math.max(1, leftTokens.size + rightTokens.size);
+};
+
+const pairScore = ({
+  oldBlock,
+  newBlock,
+  oldIndex,
+  newIndex,
+}: {
+  readonly oldBlock: RevisionBlock;
+  readonly newBlock: RevisionBlock;
+  readonly oldIndex: number;
+  readonly newIndex: number;
+}): number => {
+  if (oldBlock.kind !== newBlock.kind) return -1;
+  const oldAuthored = oldBlock.authoredText ?? oldBlock.text;
+  const newAuthored = newBlock.authoredText ?? newBlock.text;
+  const sameIdentity = oldBlock.id === newBlock.id ? 0.55 : 0;
+  const sameText =
+    normalized(oldAuthored) === normalized(newAuthored) ? 0.7 : 0;
+  const sameLabel =
+    normalized(oldBlock.label) === normalized(newBlock.label) ? 0.2 : 0;
+  const sameSection =
+    normalized(oldBlock.section) === normalized(newBlock.section) ? 0.12 : 0;
+  const proximity = 0.08 / (1 + Math.abs(oldIndex - newIndex));
+  return (
+    sameIdentity +
+    sameText +
+    sameLabel +
+    sameSection +
+    proximity +
+    textSimilarity(oldAuthored, newAuthored) * 0.45
+  );
+};
+
+const neighboringAnchor = ({
+  after,
+  newIndex,
+  direction,
+}: {
+  readonly after: ReadonlyArray<RevisionBlock>;
+  readonly newIndex: number;
+  readonly direction: -1 | 1;
+}): string | undefined => {
+  const neighbor = after.at(newIndex + direction);
+  return neighbor?.id;
+};
 
 /**
- * Aligns exact blocks by normalized text within structural scopes, then pairs
- * compatible unmatched positions as rewrites. Insertions therefore cannot
- * make later structural ids masquerade as changed content.
+ * Aligns authored blocks by stable identity, exact authored content, and then
+ * deterministic semantic similarity. Unmatched blocks remain explicit:
+ * insertion never consumes the identity of the content beside it.
  */
 export const diffRevisions = ({
   before,
@@ -180,112 +253,151 @@ export const diffRevisions = ({
   readonly before: ReadonlyArray<RevisionBlock>;
   readonly after: ReadonlyArray<RevisionBlock>;
 }): ReadonlyArray<RevisionDiffLocation> => {
-  const scopes: Array<string> = [];
-  for (const block of [...before, ...after]) {
-    const scope = scopeOf(block);
-    if (!scopes.includes(scope)) scopes.push(scope);
-  }
-  const locations: Array<RevisionDiffLocation> = [];
-  for (const scope of scopes) {
-    const oldIndexes = before
-      .map((block, index) => ({ block, index }))
-      .filter(({ block }) => scopeOf(block) === scope)
-      .map(({ index }) => index);
-    const newIndexes = after
-      .map((block, index) => ({ block, index }))
-      .filter(({ block }) => scopeOf(block) === scope)
-      .map(({ index }) => index);
-    const anchors = lcsPairs({
-      left: oldIndexes,
-      right: newIndexes,
-      equals: (oldIndex, newIndex) => {
-        const oldBlock = before.at(oldIndex);
-        const newBlock = after.at(newIndex);
-        return (
-          oldBlock !== undefined &&
-          newBlock !== undefined &&
-          oldBlock.kind === newBlock.kind &&
-          normalized(oldBlock.text) === normalized(newBlock.text)
-        );
-      },
-    });
-    let oldStart = 0;
-    let newStart = 0;
-    const scopedPairs = [
-      ...anchors.map(
-        ([oldIndex, newIndex]) =>
-          [oldIndexes.indexOf(oldIndex), newIndexes.indexOf(newIndex)] as const,
-      ),
-      [oldIndexes.length, newIndexes.length] as const,
-    ];
-    for (const [oldEnd, newEnd] of scopedPairs) {
-      const oldGap = oldIndexes.slice(oldStart, oldEnd);
-      const newGap = newIndexes.slice(newStart, newEnd);
-      const maximumPairs = Math.min(oldGap.length, newGap.length);
-      let paired = 0;
-      for (let index = 0; index < maximumPairs; index += 1) {
-        const oldIndex = oldGap.at(index);
-        const newIndex = newGap.at(index);
-        const oldBlock =
-          oldIndex === undefined ? undefined : before.at(oldIndex);
-        const newBlock =
-          newIndex === undefined ? undefined : after.at(newIndex);
-        if (oldBlock === undefined || newBlock === undefined) break;
-        if (!compatible(oldBlock, newBlock)) break;
-        locations.push({
-          status: "changed",
-          oldBlockId: oldBlock.id,
-          newBlockId: newBlock.id,
-          kind: newBlock.kind,
-          label: newBlock.label,
-          section: newBlock.section,
-          oldText: oldBlock.text,
-          newText: newBlock.text,
-          runs: diffWords({ before: oldBlock.text, after: newBlock.text }),
-        });
-        paired += 1;
-      }
-      for (const oldIndex of oldGap.slice(paired)) {
-        const oldBlock = before.at(oldIndex);
-        if (oldBlock === undefined) continue;
-        const beforeIndex = newGap.at(paired) ?? newIndexes.at(newEnd);
-        const afterIndex = newGap.at(paired - 1) ?? newIndexes.at(newStart - 1);
-        const afterBlock =
-          afterIndex === undefined ? undefined : after.at(afterIndex);
-        const beforeBlock =
-          beforeIndex === undefined ? undefined : after.at(beforeIndex);
-        locations.push({
-          status: "removed",
-          oldBlockId: oldBlock.id,
-          kind: oldBlock.kind,
-          label: oldBlock.label,
-          section: oldBlock.section,
-          oldText: oldBlock.text,
-          newText: "",
-          runs: [{ op: "del", text: oldBlock.text }],
-          ...(afterBlock === undefined ? {} : { afterBlockId: afterBlock.id }),
-          ...(beforeBlock === undefined
-            ? {}
-            : { beforeBlockId: beforeBlock.id }),
-        });
-      }
-      for (const newIndex of newGap.slice(paired)) {
-        const newBlock = after.at(newIndex);
-        if (newBlock === undefined) continue;
-        locations.push({
-          status: "added",
-          newBlockId: newBlock.id,
-          kind: newBlock.kind,
-          label: newBlock.label,
-          section: newBlock.section,
-          oldText: "",
-          newText: newBlock.text,
-          runs: [{ op: "ins", text: newBlock.text }],
-        });
-      }
-      oldStart = oldEnd + 1;
-      newStart = newEnd + 1;
+  const pairs: Array<readonly [number, number]> = [];
+  const usedOld = new Set<number>();
+  const usedNew = new Set<number>();
+  const candidates = before.flatMap((oldBlock, oldIndex) =>
+    after.map((newBlock, newIndex) => ({
+      oldIndex,
+      newIndex,
+      score: pairScore({ oldBlock, newBlock, oldIndex, newIndex }),
+    })),
+  );
+  candidates.sort(
+    (left, right) =>
+      right.score - left.score ||
+      left.oldIndex - right.oldIndex ||
+      left.newIndex - right.newIndex,
+  );
+  for (const candidate of candidates) {
+    if (
+      candidate.score < 0.52 ||
+      usedOld.has(candidate.oldIndex) ||
+      usedNew.has(candidate.newIndex)
+    ) {
+      continue;
     }
+    usedOld.add(candidate.oldIndex);
+    usedNew.add(candidate.newIndex);
+    pairs.push([candidate.oldIndex, candidate.newIndex]);
   }
-  return locations;
+
+  const locations: Array<RevisionDiffLocation> = [];
+  for (const [oldIndex, newIndex] of pairs.sort(
+    (left, right) => left[1] - right[1],
+  )) {
+    const oldBlock = before.at(oldIndex);
+    const newBlock = after.at(newIndex);
+    if (oldBlock === undefined || newBlock === undefined) continue;
+    const textChanged =
+      normalized(oldBlock.authoredText ?? oldBlock.text) !==
+      normalized(newBlock.authoredText ?? newBlock.text);
+    const moved = oldBlock.section !== newBlock.section;
+    if (!textChanged && !moved) continue;
+    locations.push({
+      status: textChanged ? "changed" : "moved",
+      oldBlockId: oldBlock.id,
+      newBlockId: newBlock.id,
+      kind: newBlock.kind,
+      label: newBlock.label,
+      section: newBlock.section,
+      oldText: oldBlock.markedText,
+      newText: newBlock.markedText,
+      ...(oldBlock.content === undefined
+        ? {}
+        : { oldContent: oldBlock.content }),
+      ...(newBlock.content === undefined
+        ? {}
+        : { newContent: newBlock.content }),
+      ...(newBlock.parentBlockId === undefined &&
+      oldBlock.parentBlockId === undefined
+        ? {}
+        : { parentBlockId: newBlock.parentBlockId ?? oldBlock.parentBlockId }),
+      runs: diffWords({
+        before: oldBlock.markedText,
+        after: newBlock.markedText,
+      }),
+    });
+  }
+  for (const [oldIndex, oldBlock] of before.entries()) {
+    if (usedOld.has(oldIndex)) continue;
+    const previousPair = [...pairs]
+      .filter(([candidateOld]) => candidateOld < oldIndex)
+      .sort((left, right) => right[0] - left[0])[0];
+    const nextPair = [...pairs]
+      .filter(([candidateOld]) => candidateOld > oldIndex)
+      .sort((left, right) => left[0] - right[0])[0];
+    const afterBlockId =
+      previousPair === undefined ? undefined : after.at(previousPair[1])?.id;
+    const beforeBlockId =
+      nextPair === undefined
+        ? after.at((previousPair?.[1] ?? -1) + 1)?.id
+        : after.at(nextPair[1])?.id;
+    locations.push({
+      status: "removed",
+      oldBlockId: oldBlock.id,
+      kind: oldBlock.kind,
+      label: oldBlock.label,
+      section: oldBlock.section,
+      oldText: oldBlock.markedText,
+      newText: "",
+      ...(oldBlock.content === undefined
+        ? {}
+        : { oldContent: oldBlock.content }),
+      ...(oldBlock.parentBlockId === undefined
+        ? {}
+        : { parentBlockId: oldBlock.parentBlockId }),
+      runs: [{ op: "del", text: oldBlock.markedText }],
+      ...(afterBlockId === undefined ? {} : { afterBlockId }),
+      ...(beforeBlockId === undefined ? {} : { beforeBlockId }),
+    });
+  }
+  for (const [newIndex, newBlock] of after.entries()) {
+    if (usedNew.has(newIndex)) continue;
+    locations.push({
+      status: "added",
+      newBlockId: newBlock.id,
+      kind: newBlock.kind,
+      label: newBlock.label,
+      section: newBlock.section,
+      oldText: "",
+      newText: newBlock.markedText,
+      ...(newBlock.content === undefined
+        ? {}
+        : { newContent: newBlock.content }),
+      ...(newBlock.parentBlockId === undefined
+        ? {}
+        : { parentBlockId: newBlock.parentBlockId }),
+      runs: [{ op: "ins", text: newBlock.markedText }],
+      ...(neighboringAnchor({ after, newIndex, direction: -1 }) === undefined
+        ? {}
+        : {
+            afterBlockId: neighboringAnchor({
+              after,
+              newIndex,
+              direction: -1,
+            }),
+          }),
+      ...(neighboringAnchor({ after, newIndex, direction: 1 }) === undefined
+        ? {}
+        : {
+            beforeBlockId: neighboringAnchor({
+              after,
+              newIndex,
+              direction: 1,
+            }),
+          }),
+    });
+  }
+  return locations.sort((left, right) => {
+    const leftId = left.newBlockId ?? left.beforeBlockId ?? left.afterBlockId;
+    const rightId =
+      right.newBlockId ?? right.beforeBlockId ?? right.afterBlockId;
+    const leftIndex = after.findIndex((block) => block.id === leftId);
+    const rightIndex = after.findIndex((block) => block.id === rightId);
+    return (
+      (leftIndex < 0 ? Number.MAX_SAFE_INTEGER : leftIndex) -
+      (rightIndex < 0 ? Number.MAX_SAFE_INTEGER : rightIndex)
+    );
+  });
 };

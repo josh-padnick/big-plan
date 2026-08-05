@@ -242,6 +242,25 @@ The table has adjacent targets that must remain distinguishable.
 ## Delivery
 
 Sending writes one real feedback package beside this plan.
+
+- Terminal states: succeeded, exhausted, cancelled.
+  - Terminal rows are retained for 90 days, then archived.
+- The worker claim is deliberately outside the selected terminal-state text.
+`;
+
+const FOOTNOTE_REVIEW_RUNTIME_MDX = `# Footnote navigation
+
+Keep document links usable while comments highlight their source.
+
+## Details
+
+This selected slide keeps its supporting note reachable.[^delivery]
+
+## Delivery
+
+The footnote remains outside the selected slide.
+
+[^delivery]: Feedback remains attached to this plan.
 `;
 
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
@@ -252,6 +271,20 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       );
       const inputPath = join(outputDir, "plan.mdx");
       await writeFile(inputPath, REVIEW_RUNTIME_MDX, "utf8");
+      const runtime = await startReviewRuntime({ planPath: inputPath });
+      await use(runtime.url);
+      await runtime.close();
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  footnoteReviewRuntimeUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-footnote-review-runtime-"),
+      );
+      const inputPath = join(outputDir, "plan.mdx");
+      await writeFile(inputPath, FOOTNOTE_REVIEW_RUNTIME_MDX, "utf8");
       const runtime = await startReviewRuntime({ planPath: inputPath });
       await use(runtime.url);
       await runtime.close();

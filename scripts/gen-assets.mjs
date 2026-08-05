@@ -27,8 +27,8 @@ const readDataUri = (fileName) => {
 };
 
 const assets = [
-  ["LOGO_LIGHT_SRC", "logo-light.svg"],
-  ["LOGO_DARK_SRC", "logo-dark.svg"],
+  ["LOGO_LIGHT_SRC", "logo-light.png"],
+  ["LOGO_DARK_SRC", "logo-dark.png"],
   ["FAVICON_LIGHT_SRC", "favicon-light.ico"],
   ["FAVICON_DARK_SRC", "favicon-dark.ico"],
 ];

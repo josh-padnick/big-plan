@@ -256,8 +256,7 @@ test("should preserve diagram drafts when undoing review text", async ({
   });
 
   await test.step("use native undo in the page review composer", async () => {
-    await page.locator("[data-block-id]").first().hover();
-    await page.locator("[data-review-affordance]").click();
+    await page.locator("[data-review-slide-selector]").first().click();
     const input = page.locator("[data-review-compose-input]");
     await input.fill("Page review text");
     await page.keyboard.type("!");
