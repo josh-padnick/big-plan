@@ -4681,6 +4681,7 @@ import { createToastManager } from "./toast.js";
     };
     const toggleThread = () => {
       if (expanded) {
+        focusTarget(comment, { keepRailOpen: true });
         collapse();
         return;
       }
