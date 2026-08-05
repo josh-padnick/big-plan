@@ -5,15 +5,15 @@
 // order, a group header precedes the first row of every part, and a row
 // beyond the outline keeps its placeholder link (the
 // table-of-contents-matches-sections lint rule owns reporting mismatches).
-// Hover feedback is pure CSS - the row wash from the colocated stylesheet,
-// the title accent from a group variant here - so the overview needs no
-// script.
+// Hover feedback is pure utilities, so the overview needs no script.
 
 import { Fragment } from "react";
 import type { DocumentOutlinePart } from "../_model/document-outline/document-outline.js";
 import type { DocumentOutline } from "../_model/document-outline/document-outline.js";
 import type { CompiledTableOfContents } from "./compile.js";
 
+// /* off-scale */ Phase A preserves the legacy title size, row gap, tracking,
+// and adaptive ink wash exactly; Phase B will choose scale-backed successors.
 const GroupHeader = ({ part }: { readonly part: DocumentOutlinePart }) => (
   <p
     data-table-of-contents-group=""
@@ -41,7 +41,7 @@ export const TableOfContents = ({
     >
       {/* Semantic h2 for chrome only: nested inside the overview nav so it
           is not a deck slide, and sized to match slide-title h2 scale. */}
-      <h2 className="table-of-contents-title mb-3 border-0 p-0 text-[1.6rem] leading-tight font-semibold text-ink">
+      <h2 className="table-of-contents-title m-0 mb-3 border-0 p-0 text-[1.6rem] leading-tight font-semibold text-ink">
         The plan in one look
       </h2>
       {model.entries.map((entry, index) => {
@@ -59,7 +59,7 @@ export const TableOfContents = ({
             <a
               data-table-of-contents-row
               href={section?.id === undefined ? "#" : `#${section.id}`}
-              className="table-of-contents-row group -mx-2 grid w-fit max-w-full grid-cols-[2rem_minmax(0,max-content)] items-baseline gap-x-[0.9rem] rounded-md px-2 py-1.5 no-underline"
+              className="table-of-contents-row group -mx-2 grid w-fit max-w-full grid-cols-[2rem_minmax(0,max-content)] items-baseline gap-x-[0.9rem] rounded-md px-2 py-1.5 no-underline hover:bg-[color-mix(in_srgb,var(--ink-c)_4%,transparent)]"
             >
               <span
                 data-table-of-contents-num

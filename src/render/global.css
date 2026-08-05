@@ -37,7 +37,6 @@ Light and dark follow the reader's OS in inert exports.
 @import "../components/grpc-method/styles.css";
 @import "../components/http-endpoint/styles.css";
 @import "../components/quick-summary/styles.css";
-@import "../components/table-of-contents/styles.css";
 @import "../components/wireframe/font.generated.css";
 @import "../components/wireframe/styles.css";
 
