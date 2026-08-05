@@ -22,19 +22,19 @@ const attributesFor = ({
 
 const DECISION_FIXTURE = `## Calls
 
-<Decision question="Which store?" status="open">
+<Decision question="Which store?">
 
 Context for the call.
 
 <Option title="SQLite" recommended summary="Zero setup for local review.">
 
-<Consideration title="Setup" verdict="None" tone="good" />
+<Consideration label="Setup" verdict="None" tone="good" />
 
 </Option>
 
 <Option title="Postgres" summary="A server the reviewer must run.">
 
-<Consideration title="Setup" verdict="A server" tone="bad" />
+<Consideration label="Setup" verdict="A server" tone="bad" />
 
 </Option>
 

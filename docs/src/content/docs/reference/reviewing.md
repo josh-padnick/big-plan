@@ -77,8 +77,11 @@ The selected block temporarily becomes an old/new diff in the document, and a
 floating stepper moves through the places with the current slide in its
 position label. The launching control flips to **Hide changes** while the lens
 is open; that control, **Show current text**, or `Escape` exits without changing
-the authoritative plan. Older diffs say **since revised again** when their
-new side is no longer the plan's current revision.
+the authoritative plan. Typed components retain their native visual structure
+on both sides of the lens, so a changed diagram, table, code figure, or other
+component remains readable rather than collapsing into concatenated text.
+Older diffs say **since revised again** when their new side is no longer the
+plan's current revision.
 
 When a plan-wide Chat response advances the source revision, its agent turn
 gets the same computed change vocabulary without relying on agent-authored

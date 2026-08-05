@@ -96,6 +96,66 @@ export const revisionDiffCases: ReadonlyArray<RevisionDiffCase> = [
     ),
     expected: "changed",
   },
+  {
+    name: "flow diagram semantic change",
+    before: plan(`## Retry state machine
+
+The worker treats \`blocking\` as the durable state while a retry waits for its next eligibility time.
+
+<FlowDiagram>
+<Stage title="Await next attempt">
+<Node id="waiting" label="blocking" tone="source">
+
+Eligible when \`next_attempt_at\` arrives
+
+</Node>
+</Stage>
+<Stage title="Claim and capture">
+<Node id="claim" label="Claim and capture" />
+</Stage>
+<Stage title="Outcome">
+<Node id="success" label="succeeds" tone="destination" />
+<Node id="reschedule" label="reschedules" tone="destination" />
+<Node id="cap" label="reaches cap" tone="destination" />
+</Stage>
+<Edge from="waiting" to="claim" label="claims" />
+<Edge from="claim" to="success" />
+<Edge from="claim" to="reschedule" />
+<Edge from="claim" to="cap" />
+
+The state machine keeps waiting and terminal outcomes explicit.
+
+</FlowDiagram>`),
+    after: plan(`## Retry state machine
+
+The worker treats \`activiating\` as the durable state while a retry waits for its next eligibility time.
+
+<FlowDiagram>
+<Stage title="Await next attempt">
+<Node id="waiting" label="activiating" tone="source">
+
+Eligible when \`next_attempt_at\` arrives
+
+</Node>
+</Stage>
+<Stage title="Claim and capture">
+<Node id="claim" label="Claim and capture" />
+</Stage>
+<Stage title="Outcome">
+<Node id="success" label="succeeds" tone="destination" />
+<Node id="reschedule" label="reschedules" tone="destination" />
+<Node id="cap" label="reaches cap" tone="destination" />
+</Stage>
+<Edge from="waiting" to="claim" label="claims" />
+<Edge from="claim" to="success" />
+<Edge from="claim" to="reschedule" />
+<Edge from="claim" to="cap" />
+
+The state machine keeps waiting and terminal outcomes explicit.
+
+</FlowDiagram>`),
+    expected: "changed",
+  },
 ];
 
 export const associationCases = [

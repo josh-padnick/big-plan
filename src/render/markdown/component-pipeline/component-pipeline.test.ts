@@ -17,6 +17,7 @@ import type { ComponentCompilerInput } from "../../../components/_authoring/cont
 import { createDiagnosticCollector } from "../../../components/_authoring/diagnostics.js";
 import type { ComponentDiagnostic } from "../../../components/_authoring/diagnostics.js";
 import { defineComponent } from "../../../components/_registration/define-component.js";
+import { defineRevisionAdapter } from "../../../components/_registration/revision-adapter.js";
 import type { ComponentRegistry } from "../../../components/_registration/registry.js";
 import { hastContentToReact } from "../../../components/_shared/hast-content/hast-content.js";
 import { rehypeRenderComponents } from "./deliver.js";
@@ -59,6 +60,7 @@ const NestedFixture = ({ model }: { readonly model: NestedFixtureModel }) =>
 const NESTED_COMPONENT_DEFINITION = defineComponent({
   compile: compileNestedFixture,
   view: NestedFixture,
+  revision: defineRevisionAdapter({ view: NestedFixture }),
   scopedChildren: {
     Branch: {
       kind: "scoped-child",
@@ -174,8 +176,16 @@ describe("scoped child dispatch", () => {
     const Inner = () => createElement("span", null, "React inner");
     const Outer = () => createElement("section", null, "React outer");
     const registry = {
-      Inner: defineComponent({ compile: compileInner, view: Inner }),
-      Outer: defineComponent({ compile: compileOuter, view: Outer }),
+      Inner: defineComponent({
+        compile: compileInner,
+        view: Inner,
+        revision: defineRevisionAdapter({ view: Inner }),
+      }),
+      Outer: defineComponent({
+        compile: compileOuter,
+        view: Outer,
+        revision: defineRevisionAdapter({ view: Outer }),
+      }),
     } satisfies ComponentRegistry;
 
     const { root, diagnostics } = compileWithRegistry({
@@ -195,7 +205,11 @@ describe("scoped child dispatch", () => {
     const compile = vi.fn(() => ({ value: "compiled" }));
     const View = () => createElement("section", null, "React view");
     const registry = {
-      Fixture: defineComponent({ compile, view: View }),
+      Fixture: defineComponent({
+        compile,
+        view: View,
+        revision: defineRevisionAdapter({ view: View }),
+      }),
     } satisfies ComponentRegistry;
     const models: Array<CollectedComponentModel> = [];
     const adapt = vi.fn(() => {
@@ -227,7 +241,11 @@ describe("scoped child dispatch", () => {
     const compile = vi.fn(() => ({ value: "compiled" }));
     const View = () => createElement("section", null, "React view");
     const registry = {
-      Fixture: defineComponent({ compile, view: View }),
+      Fixture: defineComponent({
+        compile,
+        view: View,
+        revision: defineRevisionAdapter({ view: View }),
+      }),
     } satisfies ComponentRegistry;
     const collectModels: Array<CollectedComponentModel> = [];
     const adapt = vi.fn((): Element => ({

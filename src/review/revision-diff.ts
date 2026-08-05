@@ -12,6 +12,19 @@ export type RevisionContentNode =
       readonly header?: boolean;
     };
 
+export type RevisionSnapshot =
+  | {
+      readonly type: "markdown";
+      readonly semanticHash: string;
+      readonly content: RevisionContentNode;
+    }
+  | {
+      readonly type: "component";
+      readonly component: string;
+      readonly semanticHash: string;
+      readonly html: string;
+    };
+
 export type RevisionBlock = {
   readonly id: string;
   readonly kind: string;
@@ -20,7 +33,7 @@ export type RevisionBlock = {
   readonly text: string;
   readonly markedText: string;
   readonly authoredText?: string;
-  readonly content?: RevisionContentNode;
+  readonly snapshot: RevisionSnapshot;
   readonly parentBlockId?: string;
 };
 
@@ -38,8 +51,8 @@ export type RevisionDiffLocation = {
   readonly section: string;
   readonly oldText: string;
   readonly newText: string;
-  readonly oldContent?: RevisionContentNode;
-  readonly newContent?: RevisionContentNode;
+  readonly oldSnapshot?: RevisionSnapshot;
+  readonly newSnapshot?: RevisionSnapshot;
   readonly runs: ReadonlyArray<DiffRun>;
   readonly beforeBlockId?: string;
   readonly afterBlockId?: string;
@@ -208,6 +221,14 @@ const pairScore = ({
   readonly newIndex: number;
 }): number => {
   if (oldBlock.kind !== newBlock.kind) return -1;
+  if (
+    oldBlock.snapshot.type !== newBlock.snapshot.type ||
+    (oldBlock.snapshot.type === "component" &&
+      newBlock.snapshot.type === "component" &&
+      oldBlock.snapshot.component !== newBlock.snapshot.component)
+  ) {
+    return -1;
+  }
   const oldAuthored = oldBlock.authoredText ?? oldBlock.text;
   const newAuthored = newBlock.authoredText ?? newBlock.text;
   const sameIdentity = oldBlock.id === newBlock.id ? 0.55 : 0;
@@ -289,10 +310,13 @@ export const diffRevisions = ({
     const oldBlock = before.at(oldIndex);
     const newBlock = after.at(newIndex);
     if (oldBlock === undefined || newBlock === undefined) continue;
-    const textChanged =
-      normalized(oldBlock.authoredText ?? oldBlock.text) !==
-      normalized(newBlock.authoredText ?? newBlock.text);
-    if (!textChanged) continue;
+    const changed =
+      oldBlock.snapshot.type === "component" &&
+      newBlock.snapshot.type === "component"
+        ? oldBlock.snapshot.semanticHash !== newBlock.snapshot.semanticHash
+        : normalized(oldBlock.authoredText ?? oldBlock.text) !==
+          normalized(newBlock.authoredText ?? newBlock.text);
+    if (!changed) continue;
     locations.push({
       status: "changed",
       oldBlockId: oldBlock.id,
@@ -302,12 +326,8 @@ export const diffRevisions = ({
       section: newBlock.section,
       oldText: oldBlock.markedText,
       newText: newBlock.markedText,
-      ...(oldBlock.content === undefined
-        ? {}
-        : { oldContent: oldBlock.content }),
-      ...(newBlock.content === undefined
-        ? {}
-        : { newContent: newBlock.content }),
+      oldSnapshot: oldBlock.snapshot,
+      newSnapshot: newBlock.snapshot,
       ...(newBlock.parentBlockId === undefined &&
       oldBlock.parentBlockId === undefined
         ? {}
@@ -346,9 +366,7 @@ export const diffRevisions = ({
       section: oldBlock.section,
       oldText: oldBlock.markedText,
       newText: "",
-      ...(oldBlock.content === undefined
-        ? {}
-        : { oldContent: oldBlock.content }),
+      oldSnapshot: oldBlock.snapshot,
       ...(oldBlock.parentBlockId === undefined
         ? {}
         : { parentBlockId: oldBlock.parentBlockId }),
@@ -367,9 +385,7 @@ export const diffRevisions = ({
       section: newBlock.section,
       oldText: "",
       newText: newBlock.markedText,
-      ...(newBlock.content === undefined
-        ? {}
-        : { newContent: newBlock.content }),
+      newSnapshot: newBlock.snapshot,
       ...(newBlock.parentBlockId === undefined
         ? {}
         : { parentBlockId: newBlock.parentBlockId }),

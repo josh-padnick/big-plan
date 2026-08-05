@@ -4,11 +4,13 @@
 import { compileDatabaseTableSchema } from "./compile.js";
 import { DatabaseTableSchema } from "./view.js";
 import { defineComponent } from "../_registration/define-component.js";
+import { defineRevisionAdapter } from "../_registration/revision-adapter.js";
 
 /** Declares DatabaseTableSchema's complete component integration contract. */
 export const DATABASE_TABLE_SCHEMA_COMPONENT_DEFINITION = defineComponent({
   compile: compileDatabaseTableSchema,
   view: DatabaseTableSchema,
+  revision: defineRevisionAdapter({ view: DatabaseTableSchema }),
   scopedChildren: {
     Ddl: {
       kind: "scoped-child",

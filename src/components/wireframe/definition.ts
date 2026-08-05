@@ -7,6 +7,7 @@ import { WIREFRAME_ELEMENT_NAMES } from "./catalog.js";
 import { Wireframe } from "./view.js";
 import type { ScopedChildDefinition } from "../_authoring/contract.js";
 import { defineComponent } from "../_registration/define-component.js";
+import { defineRevisionAdapter } from "../_registration/revision-adapter.js";
 
 // The wireframe vocabulary nests without a fixed depth, so the scoped-name
 // graph deliberately points back at itself: the Markdown layer only needs to
@@ -27,5 +28,6 @@ const buildScopedChildren = (): Readonly<
 export const WIREFRAME_COMPONENT_DEFINITION = defineComponent({
   compile: compileWireframe,
   view: Wireframe,
+  revision: defineRevisionAdapter({ view: Wireframe }),
   scopedChildren: buildScopedChildren(),
 });

@@ -8,6 +8,7 @@ import {
 } from "./compile.js";
 import { QuickSummary } from "./view.js";
 import { defineComponent } from "../_registration/define-component.js";
+import { defineRevisionAdapter } from "../_registration/revision-adapter.js";
 
 // Facet bodies hold nothing but a short bullet list.
 const facet = (name: string): ScopedChildDefinition => ({
@@ -26,6 +27,7 @@ const facet = (name: string): ScopedChildDefinition => ({
 export const QUICK_SUMMARY_COMPONENT_DEFINITION = defineComponent({
   compile: compileQuickSummaryComponent,
   view: QuickSummary,
+  revision: defineRevisionAdapter({ view: QuickSummary }),
   scopedChildren: Object.fromEntries(
     QUICK_SUMMARY_FACETS.map((name) => [name, facet(name)]),
   ),

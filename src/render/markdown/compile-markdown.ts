@@ -21,6 +21,12 @@ import type { CollectedComponentModel } from "./component-pipeline/deliver.js";
 export type { CollectedComponentModel } from "./component-pipeline/deliver.js";
 import { completeOutlinePlaceholders } from "./component-pipeline/outline-placeholder.js";
 import type { DeferredOutlinePresentations } from "./component-pipeline/outline-placeholder.js";
+import {
+  materializeComponentRevisionSnapshots,
+  type MaterializedComponentRevision,
+  type PendingComponentRevision,
+} from "./component-pipeline/component-revision-snapshot.js";
+import { reactToHast } from "./component-pipeline/react-hast-adapter.js";
 import { rehypeBlockIdentity } from "./block-identity.js";
 import type { BlockDescriptor } from "./block-identity.js";
 export type { BlockDescriptor } from "./block-identity.js";
@@ -292,6 +298,8 @@ const compileMarkdownTree = ({
   const deferredOutline: DeferredOutlinePresentations = [];
   const outline: MutableDocumentOutline = { parts: [], sections: [] };
   const blocks: Array<BlockDescriptor> = [];
+  const pendingRevisions = new Map<string, PendingComponentRevision>();
+  const componentSnapshots = new Map<string, MaterializedComponentRevision>();
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -316,6 +324,7 @@ const compileMarkdownTree = ({
       ...(models === undefined ? {} : { models }),
       ...(collectModels === undefined ? {} : { collectModels }),
       deferOutline: deferredOutline,
+      revisions: pendingRevisions,
     })
     // Detection stays opt-in through the fence language: undeclared and
     // unknown languages remain readable without guessed tokenization.
@@ -330,10 +339,18 @@ const compileMarkdownTree = ({
         outline,
         diagnostics,
       });
+      const materialized = materializeComponentRevisionSnapshots({
+        pending: pendingRevisions,
+        outline,
+        adapt: reactToHast,
+      });
+      for (const [instanceId, snapshot] of materialized) {
+        componentSnapshots.set(instanceId, snapshot);
+      }
     })
     // Identity runs last, over the finished deck, so every block it addresses
     // is the one the reader will actually point at.
-    .use(rehypeBlockIdentity, { blocks });
+    .use(rehypeBlockIdentity, { blocks, componentSnapshots });
   // Only parsing reflects author mistakes; a transform that throws is a
   // renderer defect and must surface as an internal error, not as a
   // diagnostic blaming the document.

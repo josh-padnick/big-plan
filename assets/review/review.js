@@ -9,8 +9,9 @@
 //
 //  1. Reviewer text, quoted plan text, and agent progress text are DATA.
 //     Everything user- or agent-supplied reaches the page through textContent
-//     or a value property. This file never assigns innerHTML and never builds
-//     markup from a string.
+//     or a value property. The sole string-to-markup seam accepts only the
+//     server compiler's inert component revision snapshots, validates their
+//     root and every descendant, and never accepts reviewer or agent strings.
 //  2. The session token travels in a header, never in a URL, so it stays out
 //     of history, referrers, and any log that records paths.
 //  3. Nothing leaves the machine. Every request is a same-origin path against
@@ -3746,30 +3747,65 @@ import { createToastManager } from "./toast.js";
     }
   };
 
+  const checkedRevisionSnapshot = (snapshot) => {
+    if (!snapshot || typeof snapshot !== "object") return null;
+    if (
+      snapshot.type === "markdown" &&
+      typeof snapshot.semanticHash === "string" &&
+      snapshot.content &&
+      typeof snapshot.content === "object"
+    ) {
+      return snapshot;
+    }
+    if (
+      snapshot.type === "component" &&
+      typeof snapshot.component === "string" &&
+      snapshot.component !== "" &&
+      typeof snapshot.semanticHash === "string" &&
+      typeof snapshot.html === "string"
+    ) {
+      return snapshot;
+    }
+    return null;
+  };
+
   const checkedDiffLocations = (value) =>
-    (Array.isArray(value) ? value : []).filter(
-      (location) =>
-        location &&
-        typeof location === "object" &&
-        (location.status === "changed" ||
-          location.status === "added" ||
-          location.status === "removed" ||
-          location.status === "moved") &&
-        typeof location.kind === "string" &&
-        typeof location.label === "string" &&
-        typeof location.section === "string" &&
-        typeof location.oldText === "string" &&
-        typeof location.newText === "string" &&
-        (location.parentBlockId === undefined ||
-          typeof location.parentBlockId === "string") &&
-        Array.isArray(location.runs) &&
-        location.runs.every(
+    (Array.isArray(value) ? value : []).flatMap((location) => {
+      if (
+        !location ||
+        typeof location !== "object" ||
+        (location.status !== "changed" &&
+          location.status !== "added" &&
+          location.status !== "removed" &&
+          location.status !== "moved") ||
+        typeof location.kind !== "string" ||
+        typeof location.label !== "string" ||
+        typeof location.section !== "string" ||
+        typeof location.oldText !== "string" ||
+        typeof location.newText !== "string" ||
+        (location.parentBlockId !== undefined &&
+          typeof location.parentBlockId !== "string") ||
+        !Array.isArray(location.runs) ||
+        !location.runs.every(
           (run) =>
             run &&
             (run.op === "same" || run.op === "del" || run.op === "ins") &&
             typeof run.text === "string",
-        ),
-    );
+        )
+      ) {
+        return [];
+      }
+      const oldSnapshot = checkedRevisionSnapshot(location.oldSnapshot);
+      const newSnapshot = checkedRevisionSnapshot(location.newSnapshot);
+      if (!oldSnapshot && !newSnapshot) return [];
+      return [
+        {
+          ...location,
+          ...(oldSnapshot ? { oldSnapshot } : {}),
+          ...(newSnapshot ? { newSnapshot } : {}),
+        },
+      ];
+    });
 
   const checkedRevisionChangeSet = (value) => {
     if (
@@ -3944,22 +3980,71 @@ import { createToastManager } from "./toast.js";
     return rendered;
   };
 
+  const trustedInertComponentFragment = (snapshot) => {
+    const template = document.createElement("template");
+    template.innerHTML = snapshot.html;
+    const root = template.content.firstElementChild;
+    if (
+      !root ||
+      template.content.childElementCount !== 1 ||
+      root.getAttribute("data-review-component-snapshot") !==
+        snapshot.component ||
+      !root.hasAttribute("data-review-snapshot-inert")
+    ) {
+      return null;
+    }
+    if (
+      root.matches(
+        "script,iframe,object,embed,form,input,textarea,select,button,[contenteditable],[id],[tabindex],a[href]",
+      ) ||
+      root.querySelector(
+        "script,iframe,object,embed,form,input,textarea,select,button,[contenteditable],[id],[tabindex],a[href]",
+      )
+    ) {
+      return null;
+    }
+    const forbiddenBehaviorAttributes = new Set([
+      "data-component",
+      "data-component-instance",
+      "data-controls",
+      "data-maximize",
+      "data-proposal",
+      "data-zoom",
+    ]);
+    for (const element of [root, ...root.querySelectorAll("*")]) {
+      for (const attribute of element.getAttributeNames()) {
+        if (
+          attribute.toLocaleLowerCase().startsWith("on") ||
+          forbiddenBehaviorAttributes.has(attribute)
+        ) {
+          return null;
+        }
+      }
+    }
+    return root;
+  };
+
   const diffSide = ({ label, locations, side }) => {
     const snapshots = locations.flatMap((location) => {
-      const content =
-        side === "was" ? location.oldContent : location.newContent;
-      const fallback = side === "was" ? location.oldText : location.newText;
-      if (!content && !fallback) return [];
+      const revisionSnapshot =
+        side === "was" ? location.oldSnapshot : location.newSnapshot;
+      if (!revisionSnapshot) return [];
       const snapshot = el("div", {
         class:
           "data-[review-diff-op=del]:[background:var(--diff-remove-bg)] data-[review-diff-op=del]:[color:var(--diff-remove-c)] data-[review-diff-op=ins]:[background:var(--diff-add-bg)] data-[review-diff-op=ins]:[color:var(--diff-add-c)]",
         "data-review-diff-snapshot": true,
         "data-review-diff-kind": location.kind,
         "data-review-diff-op": side === "was" ? "del" : "ins",
+        ...(revisionSnapshot.type === "component"
+          ? { "data-review-diff-component": revisionSnapshot.component }
+          : {}),
       });
-      const rendered = renderRevisionContent(content);
-      if (rendered) snapshot.appendChild(rendered);
-      else snapshot.appendChild(document.createTextNode(fallback));
+      const rendered =
+        revisionSnapshot.type === "component"
+          ? trustedInertComponentFragment(revisionSnapshot)
+          : renderRevisionContent(revisionSnapshot.content);
+      if (!rendered) return [];
+      snapshot.appendChild(rendered);
       return [snapshot];
     });
     if (snapshots.length === 0) return null;

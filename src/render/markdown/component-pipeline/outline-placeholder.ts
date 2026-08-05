@@ -11,6 +11,7 @@ import type { DiagnosticCollector } from "../../../components/_authoring/diagnos
 import type { DocumentOutline } from "../../../components/_model/document-outline/document-outline.js";
 import type { OutlineMarker } from "../../../components/_registration/define-component.js";
 import { COMPONENT_NAME_ATTRIBUTE } from "./component-name.js";
+import { COMPONENT_INSTANCE_ATTRIBUTE } from "./component-revision-snapshot.js";
 import { reactToHast } from "./react-hast-adapter.js";
 import type { ReactHastAdapter } from "./react-hast-adapter.js";
 
@@ -31,12 +32,14 @@ export const createOutlinePlaceholder = ({
   index,
   marker,
   component,
+  componentInstance,
 }: {
   readonly index: number;
   readonly marker: OutlineMarker;
   // The authored name, held across deferral so the presented root carries the
   // same component identity a directly delivered root does.
   readonly component?: string;
+  readonly componentInstance?: string;
 }): Element => ({
   type: "element",
   tagName: "div",
@@ -45,6 +48,9 @@ export const createOutlinePlaceholder = ({
     ...(component === undefined
       ? {}
       : { [COMPONENT_NAME_ATTRIBUTE]: component }),
+    ...(componentInstance === undefined
+      ? {}
+      : { [COMPONENT_INSTANCE_ATTRIBUTE]: componentInstance }),
     ...(marker.kind === "part"
       ? {
           [OUTLINE_PART_TITLE_ATTRIBUTE]: marker.title,
@@ -91,6 +97,11 @@ const presentPlaceholder = ({
   const component = placeholder.properties[COMPONENT_NAME_ATTRIBUTE];
   if (typeof component === "string") {
     rendered.properties[COMPONENT_NAME_ATTRIBUTE] = component;
+  }
+  const componentInstance =
+    placeholder.properties[COMPONENT_INSTANCE_ATTRIBUTE];
+  if (typeof componentInstance === "string") {
+    rendered.properties[COMPONENT_INSTANCE_ATTRIBUTE] = componentInstance;
   }
   return rendered;
 };
