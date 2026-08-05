@@ -2,14 +2,14 @@
 // a scroll-spy that marks the section being read with aria-current on its TOC
 // links (falling back to the overview links above the first section), hover
 // popovers that float [data-info-popover] disclosures beside their triggers,
-// annotation-to-code cross-highlighting, collapse toggles for deck parts,
-// slides, and sub-slides, table-schema column state and index jumps, a document
-// comment draft, DataTable sorting, filtering, text fit, column layout and
-// grouping, and one maximize behavior shared by every figure family, a
-// decision matrix's column highlight, rationale swap, and confirm step,
-// wireframe screen navigation driven entirely by renderer-emitted data
-// attributes plus true-width scaling, and the diagram leg in
-// ./diagram-script.ts. Plan content never contributes script, and every
+// annotation-to-code cross-highlighting, CodeDiff view selection, collapse
+// toggles for deck parts, slides, and sub-slides, table-schema column state and
+// index jumps, a document comment draft, DataTable sorting, filtering, text
+// fit, column layout and grouping, and one maximize behavior shared by every
+// figure family, a decision matrix's column highlight, rationale swap, and
+// confirm step, wireframe screen navigation driven entirely by
+// renderer-emitted data attributes plus true-width scaling, and the diagram
+// leg in ./diagram-script.ts. Plan content never contributes script, and every
 // affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
@@ -253,6 +253,55 @@ export const VIEWER_SCRIPT = `<script>
         }),
       );
     }
+  }
+})();
+(() => {
+  const diffs = Array.from(document.querySelectorAll("[data-code-diff]"));
+  if (diffs.length === 0) return;
+  const planId = document.documentElement.getAttribute("data-plan-id");
+  const storageKey =
+    planId === null || planId === ""
+      ? null
+      : "big-plan:code-diff-view:" + planId;
+  const isView = (view) => view === "unified" || view === "split";
+  let initialView = "unified";
+  if (storageKey !== null) {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (isView(stored)) initialView = stored;
+    } catch (_) {}
+  }
+  const applyView = (diff, view) => {
+    diff.setAttribute("data-diff-view", view);
+    for (const button of diff.querySelectorAll("[data-diff-set-view]")) {
+      button.setAttribute(
+        "aria-pressed",
+        button.getAttribute("data-diff-set-view") === view ? "true" : "false",
+      );
+    }
+  };
+  const persist = (view) => {
+    if (storageKey === null) return;
+    try {
+      if (view === "unified") localStorage.removeItem(storageKey);
+      else localStorage.setItem(storageKey, view);
+    } catch (_) {}
+  };
+  for (const diff of diffs) {
+    const group = diff.querySelector("[data-diff-toggle-group]");
+    if (group === null) continue;
+    applyView(diff, initialView);
+    for (const button of group.querySelectorAll("[data-diff-set-view]")) {
+      button.addEventListener("click", () => {
+        const view = button.getAttribute("data-diff-set-view");
+        if (!isView(view)) return;
+        applyView(diff, view);
+        persist(view);
+      });
+    }
+    // The segmented control becomes visible only after its state is restored
+    // and every native button has a handler.
+    group.hidden = false;
   }
 })();
 (() => {

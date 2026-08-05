@@ -19,8 +19,11 @@ const COMPONENT_INTERACTIONS = {
   },
   CodeDiff: {
     selector: "[data-code-diff]",
-    affordances: ["maximize", "line-to-annotation hover emphasis"],
-    deferred: ["unified/split view"],
+    affordances: [
+      "maximize",
+      "unified/split view",
+      "line-to-annotation hover emphasis",
+    ],
   },
   CodeSnippet: {
     selector: "[data-code-snippet]",
@@ -169,6 +172,30 @@ test("should exercise every live component affordance with browser gestures", as
     const rationale = analysis.locator("[data-decision-definition]").first();
     await rationale.locator("summary").hover();
     await expect(rationale).toHaveAttribute("open", "");
+  });
+
+  await test.step("CodeDiff: switch views by pointer and keyboard", async () => {
+    const diff = page.locator(COMPONENT_INTERACTIONS.CodeDiff.selector).first();
+    const unified = diff.getByRole("button", { name: "Unified view" });
+    const split = diff.getByRole("button", { name: "Side-by-side view" });
+
+    await expect(diff.getByRole("group", { name: "Diff view" })).toBeVisible();
+    await expect(unified).toHaveAttribute("aria-pressed", "true");
+    await split.click();
+    await expect(diff).toHaveAttribute("data-diff-view", "split");
+    await expect(split).toHaveAttribute("aria-pressed", "true");
+    await expect(unified).toHaveAttribute("aria-pressed", "false");
+    await expect(diff.locator('[data-diff-content="split"]')).toBeVisible();
+
+    await page.reload();
+    await expect(diff).toHaveAttribute("data-diff-view", "split");
+    await unified.focus();
+    await page.keyboard.press("Space");
+    await expect(diff).toHaveAttribute("data-diff-view", "unified");
+    await expect(unified).toHaveAttribute("aria-pressed", "true");
+
+    await page.reload();
+    await expect(diff).toHaveAttribute("data-diff-view", "unified");
   });
 
   await test.step("CodeDiff: cross-highlight an annotation and its lines", async () => {
