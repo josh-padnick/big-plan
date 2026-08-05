@@ -34,13 +34,15 @@ The artifacts are committed on `fm/bp-pr54-split`, and every draft description l
 
 The GitHub `lint` job runs the complete branch contract: install, lint, build, generated-source drift, unit/style-history tests, Chromium install, and Playwright tests. The separate `style-history` job replays every styling commit from `main` using exact capture evidence. Macroscope reports independently.
 
-| Slice |                             Unit tests | Browser tests | GitHub CI run                     |
-| ----- | -------------------------------------: | ------------: | --------------------------------- |
-| 1     |                                    944 |            52 | `30997775574`                     |
-| 2     |                                    971 |            52 | `30998066366`                     |
-| 3     |                                  1,019 |            66 | `30998398283`                     |
+| Slice |                             Unit tests | Browser tests | GitHub CI run |
+| ----- | -------------------------------------: | ------------: | ------------- |
+| 1     |                                    944 |            52 | `30997775574` |
+| 2     |                                    971 |            52 | `30998066366` |
+| 3     |                                  1,019 |            66 | `30998398283` |
 | 4     |                                  1,030 |            66 | `31000606152` |
 | 5     | 1,061 plus 21 style-history unit tests |            91 | `31000610996` |
+
+Every PR has passing `lint` and `style-history` checks with zero failed checks. Macroscope passed on PR 1 and reported skipped, not failed, on PRs 2–5.
 
 The equivalent commands also passed locally at every slice boundary:
 
