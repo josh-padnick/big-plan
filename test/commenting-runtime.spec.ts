@@ -3823,7 +3823,13 @@ Ship the live review loop behind the explicit review command.
         await expect
           .poll(() => button.evaluate((node) => node.matches(":focus-visible")))
           .toBe(true);
-        const box = await button.boundingBox();
+        let box: Awaited<ReturnType<typeof button.boundingBox>> = null;
+        await expect
+          .poll(async () => {
+            box = await button.boundingBox();
+            return box !== null;
+          })
+          .toBe(true);
         if (box === null) throw new Error("The thread action has no target");
         await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
         await page.mouse.down();
