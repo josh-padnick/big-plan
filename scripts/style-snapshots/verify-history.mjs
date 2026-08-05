@@ -774,6 +774,7 @@ export const verifyHistory = async ({
   };
 
   const results = [];
+  const visualErrors = [];
   try {
     await rm(disposableArtifactRoot, { recursive: true, force: true });
     await captureCommit(head);
@@ -808,7 +809,7 @@ export const verifyHistory = async ({
               `${change.capture} (${change.changedPixels} changed pixels)`,
           )
           .join(", ");
-        throw new Error(
+        visualErrors.push(
           `${entry.subject}: expected zero changed pixels; observed ${detail}.`,
         );
       }
@@ -838,6 +839,9 @@ export const verifyHistory = async ({
           0,
         ),
       });
+    }
+    if (visualErrors.length > 0) {
+      throw new Error(visualErrors.join("\n"));
     }
   } finally {
     for (const worktree of (await readdir(temporaryRoot)).filter((name) =>
