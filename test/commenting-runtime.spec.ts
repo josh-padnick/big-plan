@@ -55,6 +55,7 @@ test("should preserve and send a floating review across reload and viewport chan
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(reviewRuntimeUrl);
+  await expect(page.locator("html")).toHaveAttribute("data-review-ready", "");
   const session = await page.evaluate(async () => {
     const root = document.documentElement;
     const response = await fetch("/api/session", {
@@ -1896,22 +1897,28 @@ test("should preserve and send a floating review across reload and viewport chan
       await expect(workingSpinner).toBeVisible();
       await expect(workingSpinner).toHaveCSS("animation-name", "spin");
       await expect(workingSpinner).toHaveCSS("animation-duration", "0.7s");
-      const spinnerMotion = await workingSpinner.evaluate(async (node) => {
+      const beforeTransform = await workingSpinner.evaluate(
+        (node) => window.getComputedStyle(node).transform,
+      );
+      await expect
+        .poll(
+          () =>
+            workingSpinner.evaluate(
+              (node) => window.getComputedStyle(node).transform,
+            ),
+          { intervals: [100, 150, 200], timeout: 2_000 },
+        )
+        .not.toBe(beforeTransform);
+      const spinnerColors = await workingSpinner.evaluate((node) => {
         const styles = window.getComputedStyle(node);
-        const animation = node.getAnimations()[0];
-        const before = Number(animation?.currentTime ?? 0);
-        await new Promise((resolve) => window.setTimeout(resolve, 100));
         return {
-          before,
-          after: Number(animation?.currentTime ?? 0),
           borderTopColor: styles.borderTopColor,
           borderRightColor: styles.borderRightColor,
         };
       });
-      expect(spinnerMotion.after).toBeGreaterThan(spinnerMotion.before);
-      expect(spinnerMotion.borderRightColor).toBe("rgba(0, 0, 0, 0)");
-      expect(spinnerMotion.borderTopColor).not.toBe(
-        spinnerMotion.borderRightColor,
+      expect(spinnerColors.borderRightColor).toBe("rgba(0, 0, 0, 0)");
+      expect(spinnerColors.borderTopColor).not.toBe(
+        spinnerColors.borderRightColor,
       );
     };
     for (const colorScheme of ["light", "dark"] as const) {
