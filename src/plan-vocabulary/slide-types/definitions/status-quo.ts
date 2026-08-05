@@ -3,7 +3,7 @@
 
 import type { SlideTypeDefinition } from "../types.js";
 
-export const STATUS_QUO_SLIDE_TYPE: SlideTypeDefinition = {
+export const STATUS_QUO_SLIDE_TYPE = {
   id: "status-quo",
   name: "Status quo",
   match: {
@@ -30,4 +30,4 @@ export const STATUS_QUO_SLIDE_TYPE: SlideTypeDefinition = {
         "Show current ownership or placement when the tree itself explains the constraint.",
     },
   ],
-};
+} satisfies SlideTypeDefinition;

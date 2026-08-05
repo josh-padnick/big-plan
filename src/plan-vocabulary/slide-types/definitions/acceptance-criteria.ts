@@ -3,7 +3,7 @@
 
 import type { SlideTypeDefinition } from "../types.js";
 
-export const ACCEPTANCE_CRITERIA_SLIDE_TYPE: SlideTypeDefinition = {
+export const ACCEPTANCE_CRITERIA_SLIDE_TYPE = {
   id: "acceptance-criteria",
   name: "Acceptance criteria",
   match: {
@@ -35,4 +35,4 @@ export const ACCEPTANCE_CRITERIA_SLIDE_TYPE: SlideTypeDefinition = {
         "Use when request and response behavior form a checkable API acceptance boundary.",
     },
   ],
-};
+} satisfies SlideTypeDefinition;

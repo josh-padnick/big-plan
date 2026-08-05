@@ -17,9 +17,9 @@ export type {
   SlideTypePlacement,
 } from "./types.js";
 
-export const SLIDE_TYPE_BY_ID: Readonly<
-  Record<SlideTypeId, SlideTypeDefinition>
-> = {
+export const SLIDE_TYPE_BY_ID: {
+  readonly [Id in SlideTypeId]: SlideTypeDefinition & { readonly id: Id };
+} = {
   "status-quo": STATUS_QUO_SLIDE_TYPE,
   "desired-experience": DESIRED_EXPERIENCE_SLIDE_TYPE,
   "desired-outcome": DESIRED_OUTCOME_SLIDE_TYPE,
@@ -27,13 +27,8 @@ export const SLIDE_TYPE_BY_ID: Readonly<
   "acceptance-criteria": ACCEPTANCE_CRITERIA_SLIDE_TYPE,
 };
 
-export const SLIDE_TYPES: ReadonlyArray<SlideTypeDefinition> = [
-  STATUS_QUO_SLIDE_TYPE,
-  DESIRED_EXPERIENCE_SLIDE_TYPE,
-  DESIRED_OUTCOME_SLIDE_TYPE,
-  USER_JOURNEY_SLIDE_TYPE,
-  ACCEPTANCE_CRITERIA_SLIDE_TYPE,
-];
+export const SLIDE_TYPES: ReadonlyArray<SlideTypeDefinition> =
+  Object.values(SLIDE_TYPE_BY_ID);
 
 export const SLIDE_TYPE_IDS: ReadonlyArray<SlideTypeId> = SLIDE_TYPES.map(
   ({ id }) => id,

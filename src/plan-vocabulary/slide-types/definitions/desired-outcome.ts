@@ -4,7 +4,7 @@
 
 import type { SlideTypeDefinition } from "../types.js";
 
-export const DESIRED_OUTCOME_SLIDE_TYPE: SlideTypeDefinition = {
+export const DESIRED_OUTCOME_SLIDE_TYPE = {
   id: "desired-outcome",
   name: "Desired outcome",
   match: {
@@ -31,4 +31,4 @@ export const DESIRED_OUTCOME_SLIDE_TYPE: SlideTypeDefinition = {
         "Make one architectural invariant or non-negotiable outcome impossible to miss.",
     },
   ],
-};
+} satisfies SlideTypeDefinition;

@@ -3,7 +3,7 @@
 
 import type { SlideTypeDefinition } from "../types.js";
 
-export const DESIRED_EXPERIENCE_SLIDE_TYPE: SlideTypeDefinition = {
+export const DESIRED_EXPERIENCE_SLIDE_TYPE = {
   id: "desired-experience",
   name: "Desired experience",
   match: {
@@ -30,4 +30,4 @@ export const DESIRED_EXPERIENCE_SLIDE_TYPE: SlideTypeDefinition = {
         "Surface one non-negotiable experience constraint that the rest of the proposal must preserve.",
     },
   ],
-};
+} satisfies SlideTypeDefinition;

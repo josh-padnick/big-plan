@@ -1,6 +1,6 @@
 // Implements the objective typed-slide structure rule: singleton types may
-// not repeat, the outcome pair is mutually exclusive, and Acceptance
-// criteria is the last typed slide. It deliberately judges no slide content.
+// not repeat, the outcome pair is mutually exclusive, and a last-typed type
+// ends the typed slides. It deliberately judges no slide content.
 
 import {
   SLIDE_TYPES,
@@ -77,17 +77,18 @@ const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
     });
   }
 
-  const acceptanceIndex = typed.findIndex(
-    ({ type }) => type === "acceptance-criteria",
-  );
-  if (acceptanceIndex !== -1 && acceptanceIndex < typed.length - 1) {
-    const acceptance = typed[acceptanceIndex];
-    if (acceptance !== undefined) {
-      findings.push({
-        ...positionOf(acceptance),
-        message: `${slideTypeFor("acceptance-criteria").name} must be the last typed slide in the plan`,
-      });
+  for (const definition of SLIDE_TYPES) {
+    if (definition.placement !== "last-typed") {
+      continue;
     }
+    typed.forEach((section, index) => {
+      if (section.type === definition.id && index < typed.length - 1) {
+        findings.push({
+          ...positionOf(section),
+          message: `${definition.name} must be the last typed slide in the plan`,
+        });
+      }
+    });
   }
 
   const journeys = typed.filter(({ type }) => type === "user-journey");

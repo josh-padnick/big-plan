@@ -3,7 +3,7 @@
 
 import type { SlideTypeDefinition } from "../types.js";
 
-export const USER_JOURNEY_SLIDE_TYPE: SlideTypeDefinition = {
+export const USER_JOURNEY_SLIDE_TYPE = {
   id: "user-journey",
   name: "User journeys",
   match: {
@@ -33,4 +33,4 @@ export const USER_JOURNEY_SLIDE_TYPE: SlideTypeDefinition = {
         "Surface the decision, exception, or recovery moment a reviewer should inspect most closely.",
     },
   ],
-};
+} satisfies SlideTypeDefinition;
