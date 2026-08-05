@@ -159,10 +159,8 @@ Guidance is demand-driven: add a document, rule, or map entry only after an agen
 
 ## Engineering practices
 
-Read and follow [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for the
-authoritative coding, comments, error-handling, logging, testing,
-browser-runtime, styling, and tooling practices. Mechanically enforced facts
-remain owned by their checks.
+Read and follow [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for the authoritative coding, comments, error-handling, logging, testing, browser-runtime, styling, and tooling practices.
+Mechanically enforced facts remain owned by their checks.
 
 ## Gold-standard plan-quality testing
 

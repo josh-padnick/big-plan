@@ -1,7 +1,6 @@
 <!--
-Owns Big Plan's detailed coding, testing, diagnostics, logging, browser-runtime,
-and styling practices. Repository orientation and source placement stay in
-AGENTS.md; mechanically enforced details stay with their checks.
+Owns Big Plan's detailed coding, testing, diagnostics, logging, browser-runtime, and styling practices.
+Repository orientation and source placement stay in AGENTS.md; mechanically enforced details stay with their checks.
 -->
 
 # Engineering Practices
