@@ -56,7 +56,7 @@ import {
   // which is the only way the session attributes can be here at all.
   const hasRuntime = sessionId !== "" && sessionToken !== "";
 
-  const blocks = Array.from(document.querySelectorAll("[data-block-id]"));
+  let blocks = Array.from(document.querySelectorAll("[data-block-id]"));
   if (blocks.length === 0) return;
 
   const TOKEN_HEADER = "x-big-plan-review-token";
@@ -262,27 +262,31 @@ import {
   // wrappers is incorrect because a parent with subslides may be flattened
   // away by the deck transform while its h2 remains in the document.
   const slideNumberBySection = new Map();
-  let majorSlide = 0;
-  for (const heading of document.querySelectorAll(
-    "main h2[data-block-section]",
-  )) {
-    if (heading.closest("section.footnotes")) continue;
-    const section = heading.getAttribute("data-block-section");
-    if (!section || section === "Overview") continue;
-    majorSlide += 1;
-    slideNumberBySection.set(section, String(majorSlide));
-  }
-  for (const slide of document.querySelectorAll("[data-slide]")) {
-    if (!slide.hasAttribute("data-subslide")) continue;
-    const section = slide
-      .querySelector("[data-block-section]")
-      ?.getAttribute("data-block-section");
-    const kicker = slide
-      .querySelector("[data-slide-kicker]")
-      ?.textContent?.trim();
-    const number = kicker?.match(/^(\d+(?:\.\d+)*)\s*\//)?.[1];
-    if (section && number) slideNumberBySection.set(section, number);
-  }
+  const refreshSlideNumbers = () => {
+    slideNumberBySection.clear();
+    let majorSlide = 0;
+    for (const heading of document.querySelectorAll(
+      "main h2[data-block-section]",
+    )) {
+      if (heading.closest("section.footnotes")) continue;
+      const section = heading.getAttribute("data-block-section");
+      if (!section || section === "Overview") continue;
+      majorSlide += 1;
+      slideNumberBySection.set(section, String(majorSlide));
+    }
+    for (const slide of document.querySelectorAll("[data-slide]")) {
+      if (!slide.hasAttribute("data-subslide")) continue;
+      const section = slide
+        .querySelector("[data-block-section]")
+        ?.getAttribute("data-block-section");
+      const kicker = slide
+        .querySelector("[data-slide-kicker]")
+        ?.textContent?.trim();
+      const number = kicker?.match(/^(\d+(?:\.\d+)*)\s*\//)?.[1];
+      if (section && number) slideNumberBySection.set(section, number);
+    }
+  };
+  refreshSlideNumbers();
 
   // Comment chrome names the numbered slide, not the renderer's full
   // structural path. The source highlight carries the exact passage.
@@ -343,6 +347,7 @@ import {
   const expandedThreadIds = new Set();
   const minimizedDraftIds = new Set();
   const resolvedCommentIds = new Set();
+  const threadReplyDrafts = new Map();
   // Honest in-flight and failure states: a comment mid-submit renders as
   // sending, a failed submit renders its error on the card, and the agent's
   // availability is derived rather than assumed.
@@ -429,39 +434,6 @@ import {
 
   const storageKey = planId === "" ? null : "big-plan:review:drafts:" + planId;
   const submitPreferenceKey = "big-plan:review:submit-right-away";
-  const reloadKey =
-    planId === "" ? null : "big-plan:review:live-reload:" + planId;
-
-  const readReloadState = () => {
-    if (reloadKey === null) return null;
-    try {
-      const raw = sessionStorage.getItem(reloadKey);
-      sessionStorage.removeItem(reloadKey);
-      if (raw === null) return null;
-      const value = JSON.parse(raw);
-      if (
-        value === null ||
-        typeof value !== "object" ||
-        typeof value.scrollY !== "number" ||
-        !Array.isArray(value.expanded)
-      ) {
-        return null;
-      }
-      return {
-        scrollY: Math.max(0, value.scrollY),
-        expanded: value.expanded.filter(isExchangeId),
-        tab:
-          value.tab === "chat" || value.tab === "agent"
-            ? value.tab
-            : "comments",
-        railOpen: value.railOpen === true,
-      };
-    } catch {
-      return null;
-    }
-  };
-
-  const reloadState = readReloadState();
 
   const emptyStoredState = () => ({
     drafts: [],
@@ -825,9 +797,6 @@ import {
   agentHeartbeatAt = diskState.agent.updatedAtMs;
   agentSessionState = diskState.agent.state;
   sourceRevision = diskState.sourceRevision;
-  for (const id of reloadState?.expanded || []) {
-    expandedThreadIds.add(id);
-  }
   try {
     submitRightAway = localStorage.getItem(submitPreferenceKey) === "true";
   } catch {
@@ -3448,6 +3417,7 @@ import {
         agentRequests = agentRequests.concat([answer.request]);
       }
       field.value = "";
+      threadReplyDrafts.delete(comment.id);
       clearInlineError(button);
       expandedThreadIds.add(comment.id);
       setAgentState("Agent working", "working");
@@ -4302,6 +4272,7 @@ import {
       "data-review-thread-reply": true,
       rows: "3",
       maxlength: String(BODY_LIMIT),
+      value: threadReplyDrafts.get(comment.id) || "",
       placeholder:
         outcome.key === "question"
           ? "Answer the agent…"
@@ -4336,7 +4307,11 @@ import {
       sendReply.disabled = !hasReply;
       replyAndResolve.hidden = !hasReply;
     };
-    field.addEventListener("input", syncReply);
+    field.addEventListener("input", () => {
+      if (field.value === "") threadReplyDrafts.delete(comment.id);
+      else threadReplyDrafts.set(comment.id, field.value);
+      syncReply();
+    });
     field.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
@@ -4351,6 +4326,7 @@ import {
       if (!sentReply) return;
       await resolveThread(comment);
     });
+    syncReply();
     nodes.push(
       el(
         "div",
@@ -5649,7 +5625,9 @@ import {
       await save();
       announce("Changes reverted. The coding agent was notified.");
       revertDialog.close();
-      reloadForSourceRevision();
+      const refreshedRevision = await refreshSourceDocument();
+      sourceRevision =
+        refreshedRevision || answer.sourceRevision || sourceRevision;
     } catch (error) {
       showInlineError(
         revertConfirm,
@@ -6103,60 +6081,68 @@ import {
     paintTargetHighlights();
   };
 
-  for (const slide of document.querySelectorAll("[data-slide]")) {
-    const title =
-      slide
-        .querySelector("[data-block-section]")
-        ?.getAttribute("data-block-section") || "this slide";
-    const selector = el("button", {
-      class:
-        "[position:absolute] [top:calc(0.75rem_-_1px)] [right:calc(100%_+_0.5625rem)] [z-index:44] [display:inline-flex] [width:1.4rem] [height:1.4rem] [align-items:center] [justify-content:center] [padding:0] [border:1px_solid_transparent] [border-radius:0.3rem] [background:color-mix(in_srgb,_var(--bg)_88%,_transparent)] [color:color-mix(in_srgb,_var(--muted-c)_72%,_transparent)] [cursor:pointer] hover:[border-color:var(--edge-c)] hover:[background:var(--review-control-hover)] hover:[color:var(--accent-c)] focus-visible:[border-color:var(--edge-c)] focus-visible:[background:var(--review-control-hover)] focus-visible:[color:var(--accent-c)] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px] active:[background:var(--review-control-active)]",
-      type: "button",
-      "data-review-slide-selector": true,
-      "aria-label": "Comment on all content in " + title,
-    });
-    selector.append(
-      icon(MESSAGE_SQUARE_TEXT_ICON),
-      el("span", {
+  const installSlideSelectors = () => {
+    for (const slide of document.querySelectorAll("[data-slide]")) {
+      if (slide.querySelector(":scope > [data-review-slide-selector]")) {
+        continue;
+      }
+      const title =
+        slide
+          .querySelector("[data-block-section]")
+          ?.getAttribute("data-block-section") || "this slide";
+      const selector = el("button", {
         class:
-          "[position:absolute] [top:calc(100%_+_0.35rem)] [right:0] [z-index:60] [width:max-content] [max-width:11rem] [padding:0.22rem_0.42rem] [border-radius:0.25rem] [background:var(--ink-c)] [color:var(--bg)] [font-size:0.66rem] [font-weight:600] [line-height:1.35] [pointer-events:none] [opacity:0] [transform:translateY(-0.1rem)] [transition:opacity_70ms_ease,_transform_70ms_ease]",
-        "data-review-icon-tooltip": true,
-        "aria-hidden": "true",
-        text: "Comment on slide",
-      }),
-    );
-    selector.addEventListener("mouseup", (event) => {
-      event.stopPropagation();
-    });
-    selector.addEventListener("click", () => {
-      const slideBlocks = Array.from(slide.querySelectorAll("[data-block-id]"));
-      const first = slideBlocks[0];
-      const kicker = slide.querySelector("[data-slide-kicker]");
-      if (!first || !kicker) return;
-      if (!compose.hidden) closeCompose();
-      window.getSelection()?.removeAllRanges();
-      const target = {
-        type: "slide",
-        blockId: first.getAttribute("data-block-id"),
-        scope: first
-          .getAttribute("data-block-id")
-          .split("/")
-          .slice(0, -1)
-          .join("/"),
-        kind: kindFor(first),
-        label: labelFor(first),
-        section: first.getAttribute("data-block-section") || "",
-      };
-      pendingSelection = target;
-      attachLabel.hidden = false;
-      attachInput.checked = false;
-      paintTargetHighlights();
-      openCompose(target);
-      announce("Commenting on all content in " + title + ".");
-    });
-    slide.setAttribute("data-review-slide-selectable", "");
-    slide.appendChild(selector);
-  }
+          "[position:absolute] [top:calc(0.75rem_-_1px)] [right:calc(100%_+_0.5625rem)] [z-index:44] [display:inline-flex] [width:1.4rem] [height:1.4rem] [align-items:center] [justify-content:center] [padding:0] [border:1px_solid_transparent] [border-radius:0.3rem] [background:color-mix(in_srgb,_var(--bg)_88%,_transparent)] [color:color-mix(in_srgb,_var(--muted-c)_72%,_transparent)] [cursor:pointer] hover:[border-color:var(--edge-c)] hover:[background:var(--review-control-hover)] hover:[color:var(--accent-c)] focus-visible:[border-color:var(--edge-c)] focus-visible:[background:var(--review-control-hover)] focus-visible:[color:var(--accent-c)] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px] active:[background:var(--review-control-active)]",
+        type: "button",
+        "data-review-slide-selector": true,
+        "aria-label": "Comment on all content in " + title,
+      });
+      selector.append(
+        icon(MESSAGE_SQUARE_TEXT_ICON),
+        el("span", {
+          class:
+            "[position:absolute] [top:calc(100%_+_0.35rem)] [right:0] [z-index:60] [width:max-content] [max-width:11rem] [padding:0.22rem_0.42rem] [border-radius:0.25rem] [background:var(--ink-c)] [color:var(--bg)] [font-size:0.66rem] [font-weight:600] [line-height:1.35] [pointer-events:none] [opacity:0] [transform:translateY(-0.1rem)] [transition:opacity_70ms_ease,_transform_70ms_ease]",
+          "data-review-icon-tooltip": true,
+          "aria-hidden": "true",
+          text: "Comment on slide",
+        }),
+      );
+      selector.addEventListener("mouseup", (event) => {
+        event.stopPropagation();
+      });
+      selector.addEventListener("click", () => {
+        const slideBlocks = Array.from(
+          slide.querySelectorAll("[data-block-id]"),
+        );
+        const first = slideBlocks[0];
+        const kicker = slide.querySelector("[data-slide-kicker]");
+        if (!first || !kicker) return;
+        if (!compose.hidden) closeCompose();
+        window.getSelection()?.removeAllRanges();
+        const target = {
+          type: "slide",
+          blockId: first.getAttribute("data-block-id"),
+          scope: first
+            .getAttribute("data-block-id")
+            .split("/")
+            .slice(0, -1)
+            .join("/"),
+          kind: kindFor(first),
+          label: labelFor(first),
+          section: first.getAttribute("data-block-section") || "",
+        };
+        pendingSelection = target;
+        attachLabel.hidden = false;
+        attachInput.checked = false;
+        paintTargetHighlights();
+        openCompose(target);
+        announce("Commenting on all content in " + title + ".");
+      });
+      slide.setAttribute("data-review-slide-selectable", "");
+      slide.appendChild(selector);
+    }
+  };
+  installSlideSelectors();
 
   document.addEventListener("mouseup", () => setTimeout(offerSelection, 0));
   document.addEventListener("keyup", (event) => {
@@ -6587,29 +6573,217 @@ import {
       cancelledIds,
     ]);
 
-  const reloadForSourceRevision = () => {
-    if (reloadKey !== null) {
-      try {
-        sessionStorage.setItem(
-          reloadKey,
-          JSON.stringify({
-            scrollY: window.scrollY,
-            expanded: Array.from(expandedThreadIds),
-            tab:
-              connectionPanel && !connectionPanel.hidden
-                ? "agent"
-                : chatPanel.hidden
-                  ? "comments"
-                  : "chat",
-            railOpen: railIsOpen(),
-          }),
-        );
-      } catch {
-        // Losing a restore hint never blocks the source refresh.
-      }
+  let sourceRefreshPromise = null;
+  let restoringSourceViewport = false;
+
+  const sourceRevisionFromDocument = (nextDocument) => {
+    try {
+      const bootstrap = JSON.parse(
+        nextDocument.documentElement.getAttribute("data-review-bootstrap") ||
+          "{}",
+      );
+      return typeof bootstrap.sourceRevision === "string" &&
+        /^[a-f0-9]{16,64}$/.test(bootstrap.sourceRevision)
+        ? bootstrap.sourceRevision
+        : "";
+    } catch {
+      return "";
     }
-    window.location.reload();
   };
+
+  const desktopTocIn = (owner) =>
+    Array.from(owner.querySelectorAll('nav[aria-label="Contents"]')).find(
+      (candidate) => !candidate.hasAttribute("data-mobile-toc"),
+    ) || null;
+
+  const replaceOptionalNode = ({ current, next, insert }) => {
+    if (current && next) {
+      current.replaceWith(document.importNode(next, true));
+    } else if (current) {
+      current.remove();
+    } else if (next) {
+      insert(document.importNode(next, true));
+    }
+  };
+
+  const captureViewportAnchor = () => {
+    const visible = blocks
+      .map((block) => ({ block, rect: block.getBoundingClientRect() }))
+      .filter(
+        ({ rect }) =>
+          rect.bottom > REVIEW_CONTROL_TOP && rect.top < window.innerHeight,
+      )
+      .sort(
+        (left, right) =>
+          Math.abs(left.rect.top - REVIEW_CONTROL_TOP) -
+          Math.abs(right.rect.top - REVIEW_CONTROL_TOP),
+      )[0];
+    return visible
+      ? {
+          id: visible.block.getAttribute("data-block-id"),
+          top: visible.rect.top,
+        }
+      : null;
+  };
+
+  // The server intentionally owns MDX compilation, so a revision refresh
+  // fetches its newly rendered document. Only the authored article and TOCs
+  // cross this boundary: the live review shell and its browser state remain
+  // mounted.
+  async function refreshSourceDocument() {
+    if (sourceRefreshPromise !== null) return sourceRefreshPromise;
+    sourceRefreshPromise = (async () => {
+      const response = await fetch(window.location.pathname, {
+        method: "GET",
+        mode: "same-origin",
+        credentials: "omit",
+        cache: "no-store",
+        redirect: "error",
+        headers: { [TOKEN_HEADER]: sessionToken },
+      });
+      if (!response.ok) {
+        throw new Error(
+          "Review runtime could not render the revised plan (" +
+            response.status +
+            ")",
+        );
+      }
+      const nextDocument = new DOMParser().parseFromString(
+        await response.text(),
+        "text/html",
+      );
+      if (
+        nextDocument.documentElement.getAttribute("data-plan-id") !== planId ||
+        nextDocument.documentElement.getAttribute("data-review-session") !==
+          sessionId
+      ) {
+        throw new Error("The revised document belongs to another session");
+      }
+      const currentMain = document.querySelector("main");
+      const currentArticle = currentMain?.querySelector(":scope > article");
+      const nextMain = nextDocument.querySelector("main");
+      const nextArticle = nextMain?.querySelector(":scope > article");
+      if (!currentMain || !currentArticle || !nextMain || !nextArticle) {
+        throw new Error("The revised document has no review article");
+      }
+
+      const scrollY = window.scrollY;
+      const viewportAnchor = captureViewportAnchor();
+      const mobileTocOpen =
+        document.querySelector("[data-mobile-toc] details")?.open === true;
+      const focusedReply =
+        document.activeElement instanceof HTMLTextAreaElement &&
+        document.activeElement.hasAttribute("data-review-thread-reply")
+          ? {
+              commentId:
+                document.activeElement
+                  .closest("[data-review-comment-id]")
+                  ?.getAttribute("data-review-comment-id") || "",
+              start: document.activeElement.selectionStart,
+              end: document.activeElement.selectionEnd,
+            }
+          : null;
+      const previousOverflowAnchor = root.style.overflowAnchor;
+      root.style.overflowAnchor = "none";
+      root.setAttribute("data-review-source-refresh", "pending");
+      if (currentArticle.contains(compose)) surface.appendChild(compose);
+
+      currentArticle.replaceChildren(
+        ...Array.from(nextArticle.childNodes, (child) =>
+          document.importNode(child, true),
+        ),
+      );
+      currentMain.className = nextMain.className;
+      currentMain.id = nextMain.id;
+      const currentLayout = currentMain.parentElement;
+      const nextLayout = nextMain.parentElement;
+      if (currentLayout && nextLayout) {
+        currentLayout.className = nextLayout.className;
+      }
+      replaceOptionalNode({
+        current: document.querySelector("[data-mobile-toc]"),
+        next: nextDocument.querySelector("[data-mobile-toc]"),
+        insert: (node) => currentLayout?.before(node),
+      });
+      replaceOptionalNode({
+        current: desktopTocIn(document),
+        next: desktopTocIn(nextDocument),
+        insert: (node) => currentMain.before(node),
+      });
+      const mobileDetails = document.querySelector("[data-mobile-toc] details");
+      if (mobileDetails) mobileDetails.open = mobileTocOpen;
+      document.title = nextDocument.title;
+
+      blocks = Array.from(document.querySelectorAll("[data-block-id]"));
+      refreshSlideNumbers();
+      installSlideSelectors();
+      window.__bigPlanRefreshViewer?.();
+      renderTray();
+      if (!compose.hidden && composeTarget) positionCompose(composeTarget);
+      paintTargetHighlights();
+      positionMarkers();
+
+      restoringSourceViewport = true;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const replacementReply =
+            focusedReply === null
+              ? null
+              : Array.from(
+                  document.querySelectorAll(
+                    '[data-review-comment-id="' +
+                      cssEscape(focusedReply.commentId) +
+                      '"] [data-review-thread-reply]',
+                  ),
+                ).find((candidate) => candidate.getClientRects().length > 0);
+          if (replacementReply instanceof HTMLTextAreaElement) {
+            replacementReply.focus({ preventScroll: true });
+            replacementReply.setSelectionRange(
+              focusedReply.start,
+              focusedReply.end,
+            );
+          }
+          const replacement =
+            viewportAnchor?.id === null || viewportAnchor?.id === undefined
+              ? null
+              : document.querySelector(
+                  '[data-block-id="' + cssEscape(viewportAnchor.id) + '"]',
+                );
+          if (replacement && viewportAnchor) {
+            window.scrollBy(
+              0,
+              replacement.getBoundingClientRect().top - viewportAnchor.top,
+            );
+          } else {
+            window.scrollTo({ top: scrollY });
+          }
+          const anchorDelta =
+            replacement && viewportAnchor
+              ? Math.abs(
+                  replacement.getBoundingClientRect().top - viewportAnchor.top,
+                )
+              : 0;
+          root.setAttribute(
+            "data-review-source-anchor-delta",
+            String(anchorDelta),
+          );
+          root.setAttribute("data-review-source-refresh", "complete");
+          renderThreads();
+          positionMarkers();
+          window.setTimeout(() => {
+            root.style.overflowAnchor = previousOverflowAnchor;
+            restoringSourceViewport = false;
+          }, 0);
+        });
+      });
+      return sourceRevisionFromDocument(nextDocument);
+    })();
+    try {
+      return await sourceRefreshPromise;
+    } finally {
+      sourceRefreshPromise = null;
+    }
+  }
 
   const applyAgentSnapshot = (answer) => {
     const checked = checkedAgentSnapshot(answer);
@@ -6760,10 +6934,16 @@ import {
           sourceRevision !== "" &&
           exchange.sourceRevision !== sourceRevision
         ) {
-          reloadForSourceRevision();
-          return;
+          const refreshedRevision = await refreshSourceDocument();
+          sourceRevision =
+            refreshedRevision === ""
+              ? exchange.sourceRevision
+              : refreshedRevision;
         }
-        if (typeof exchange.sourceRevision === "string") {
+        if (
+          typeof exchange.sourceRevision === "string" &&
+          sourceRevision === ""
+        ) {
           sourceRevision = exchange.sourceRevision;
         }
         // The runtime already drops foreign and out-of-order events; the
@@ -6853,7 +7033,7 @@ import {
   window.addEventListener(
     "scroll",
     () => {
-      if (pendingSelection) {
+      if (!restoringSourceViewport && pendingSelection) {
         pendingSelection = null;
         attachLabel.hidden = true;
         affordance.hidden = true;
@@ -6922,14 +7102,6 @@ import {
       void hydrateRevisionDiffs();
       if (drafts.length > 0) setRailOpen(true);
       if (hasRuntime) startProgress();
-      if (reloadState !== null) {
-        setActiveTab(reloadState.tab);
-        setRailOpen(reloadState.railOpen);
-        requestAnimationFrame(() => {
-          window.scrollTo(0, reloadState.scrollY);
-          renderThreads();
-        });
-      }
     } catch (error) {
       sendNote.textContent = describeError(error);
       const carried = readLocalState();

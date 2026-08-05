@@ -2136,6 +2136,50 @@ test("should preserve and send a floating review across reload and viewport chan
       "Review persistence",
     );
     await expect(page.locator("[data-review-toggle]")).toBeVisible();
+    await page.locator("[data-review-toggle]").click();
+    await page.locator('[data-review-tab="chat"]').click();
+    const preservedComposerText =
+      "Keep this plan-wide draft while the source refreshes.";
+    await page.locator("[data-review-agent-input]").fill(preservedComposerText);
+    await page.locator('[data-review-tab="comments"]').click();
+    const preservedThread = page
+      .locator('[data-review-outcome-group="working"] [data-review-row]')
+      .first();
+    const preservedThreadId = await preservedThread.getAttribute(
+      "data-review-comment-id",
+    );
+    if (preservedThreadId === null) {
+      throw new Error("The source refresh needs an open thread to preserve");
+    }
+    await preservedThread.locator("[data-review-row-target]").click();
+    await expect(preservedThread).toHaveAttribute(
+      "data-review-row-expanded",
+      "",
+    );
+    const refreshState = await page.evaluate(() => {
+      const anchor = document.querySelector('[data-block-label="number"]');
+      if (!(anchor instanceof HTMLElement)) {
+        throw new Error("The source refresh has no viewport anchor");
+      }
+      anchor.scrollIntoView({ block: "center" });
+      const readingAnchor = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-block-id]"),
+      )
+        .map((block) => ({ block, rect: block.getBoundingClientRect() }))
+        .filter(({ rect }) => rect.bottom > 52 && rect.top < innerHeight)
+        .sort(
+          (left, right) =>
+            Math.abs(left.rect.top - 52) - Math.abs(right.rect.top - 52),
+        )[0];
+      if (readingAnchor === undefined) {
+        throw new Error("The source refresh has no visible reading anchor");
+      }
+      const sentinel = crypto.randomUUID();
+      (
+        window as Window & { __bigPlanSourceRefreshSentinel?: string }
+      ).__bigPlanSourceRefreshSentinel = sentinel;
+      return { sentinel };
+    });
     const revised =
       original
         .replace(
@@ -2307,6 +2351,50 @@ test("should preserve and send a floating review across reload and viewport chan
         name: "Stable content hash of the canonical snapshot",
       }),
     ).toBeVisible({ timeout: 10_000 });
+    const preservedRefreshState = await page.evaluate(
+      ({ threadId }) => {
+        const thread = document.querySelector(
+          `[data-review-comment-id="${CSS.escape(threadId)}"][data-review-row]`,
+        );
+        return {
+          sentinel: (
+            window as Window & { __bigPlanSourceRefreshSentinel?: string }
+          ).__bigPlanSourceRefreshSentinel,
+          anchorDelta: Number(
+            document.documentElement.getAttribute(
+              "data-review-source-anchor-delta",
+            ),
+          ),
+          refreshState: document.documentElement.getAttribute(
+            "data-review-source-refresh",
+          ),
+          railOpen:
+            document
+              .querySelector("[data-review-rail]")
+              ?.hasAttribute("hidden") === false,
+          commentsSelected:
+            document
+              .querySelector('[data-review-tab="comments"]')
+              ?.getAttribute("aria-selected") === "true",
+          threadExpanded: thread?.hasAttribute("data-review-row-expanded"),
+        };
+      },
+      {
+        threadId: preservedThreadId,
+      },
+    );
+    expect(preservedRefreshState.sentinel).toBe(refreshState.sentinel);
+    expect(preservedRefreshState.refreshState).toBe("complete");
+    expect(preservedRefreshState.anchorDelta).toBeLessThanOrEqual(2);
+    expect(preservedRefreshState.railOpen).toBe(true);
+    expect(preservedRefreshState.commentsSelected).toBe(true);
+    expect(preservedRefreshState.threadExpanded).toBe(true);
+    await page.locator('[data-review-tab="chat"]').click();
+    await expect(page.locator("[data-review-agent-input]")).toHaveValue(
+      preservedComposerText,
+    );
+    await page.locator('[data-review-tab="comments"]').click();
+    await page.locator("[data-review-hide]").click();
     await expect(
       page.locator('[data-review-outcome-state="changed"]'),
     ).toHaveCount(1);

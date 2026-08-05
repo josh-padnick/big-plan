@@ -87,9 +87,23 @@ export const VIEWER_SCRIPT = `<script>
       if (!isReadableHeading(heading)) continue;
       if (heading.getBoundingClientRect().top <= readingLine) current = heading;
     }
-    for (const [heading, sectionLinks] of targets) {
-      for (const link of sectionLinks) {
-        if (heading === current) link.setAttribute("aria-current", "true");
+    const headings = Array.from(targets.keys());
+    const apply = () => {
+      const readingLine = window.innerHeight * 0.25;
+      let current = null;
+      for (const heading of headings) {
+        if (heading.getBoundingClientRect().top <= readingLine) {
+          current = heading;
+        }
+      }
+      for (const [heading, sectionLinks] of targets) {
+        for (const link of sectionLinks) {
+          if (heading === current) link.setAttribute("aria-current", "true");
+          else link.removeAttribute("aria-current");
+        }
+      }
+      for (const link of overviewLinks) {
+        if (current === null) link.setAttribute("aria-current", "true");
         else link.removeAttribute("aria-current");
       }
     }
