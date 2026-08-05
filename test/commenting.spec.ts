@@ -112,7 +112,7 @@ test("should comment on a block and a passage, then revise before sending", asyn
   });
 });
 
-test("should discard a stored comment whose target cannot be rendered", async ({
+test("should preserve valid stored targets while discarding malformed ones", async ({
   page,
   deckViewerUrl,
 }) => {
@@ -121,25 +121,52 @@ test("should discard a stored comment whose target cannot be rendered", async ({
   if (planId === null) {
     throw new Error("Rendered plan did not expose its plan id");
   }
-  await page.addInitScript((storedPlanId) => {
-    localStorage.setItem(
-      `big-plan:review:drafts:${storedPlanId}`,
-      JSON.stringify({
-        drafts: [
-          {
-            id: "aabbccdd",
-            body: "Malformed persisted comment.",
-            target: { type: "block", kind: 1 },
-          },
-        ],
-        sent: [],
-        activeDraft: "",
-      }),
-    );
-  }, planId);
+  const storedTarget = await page
+    .locator("[data-block-id]")
+    .first()
+    .evaluate((block) => ({
+      type: "block",
+      blockId: block.getAttribute("data-block-id"),
+      kind: block.getAttribute("data-block-kind"),
+      label: block.getAttribute("data-block-label"),
+    }));
+  if (
+    storedTarget.blockId === null ||
+    storedTarget.kind === null ||
+    storedTarget.label === null
+  ) {
+    throw new Error("Rendered block did not expose its comment identity");
+  }
+  await page.addInitScript(
+    ({ storedPlanId, validTarget }) => {
+      localStorage.setItem(
+        `big-plan:review:drafts:${storedPlanId}`,
+        JSON.stringify({
+          drafts: [
+            {
+              id: "aabbccdd",
+              body: "Valid persisted comment.",
+              target: validTarget,
+            },
+            {
+              id: "eeff0011",
+              body: "Malformed persisted comment.",
+              target: { type: "block", kind: 1 },
+            },
+          ],
+          sent: [],
+          activeDraft: "",
+        }),
+      );
+    },
+    { storedPlanId: planId, validTarget: storedTarget },
+  );
 
   await page.reload();
   await expect(page.locator("[data-review-toggle]")).toBeVisible();
   await page.locator("[data-review-toggle]").click();
-  await expect(page.locator("[data-review-drafts] li")).toHaveCount(0);
+  await expect(page.locator("[data-review-drafts] li")).toHaveCount(1);
+  await expect(page.locator("[data-review-row-body]")).toHaveText(
+    "Valid persisted comment.",
+  );
 });

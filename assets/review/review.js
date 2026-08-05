@@ -202,7 +202,7 @@
       typeof value.blockId !== "string" ||
       typeof value.kind !== "string" ||
       typeof value.label !== "string" ||
-      ![undefined, "string"].includes(typeof value.section)
+      (value.section !== undefined && typeof value.section !== "string")
     ) {
       return false;
     }
