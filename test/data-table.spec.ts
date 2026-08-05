@@ -3,6 +3,77 @@
 
 import { expect, test } from "./fixtures";
 
+test("should preserve content-proportional columns when truncating text", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.goto(allComponentsViewerUrl);
+  const figure = page.locator("[data-data-table]").filter({
+    hasText: "Rollout gates",
+  });
+  const grid = figure.locator(".data-table-grid");
+  const evidence = grid.locator("tbody tr").first().locator("td").nth(3);
+  const readGeometry = () =>
+    figure.evaluate((element) => {
+      const table = element.querySelector<HTMLTableElement>(".data-table-grid");
+      const evidenceCell = table?.querySelector<HTMLTableCellElement>(
+        "tbody tr td:nth-child(4)",
+      );
+      if (table === null || evidenceCell === null) {
+        throw new Error("expected the rollout table and its Evidence cell");
+      }
+      return {
+        figure: element.getBoundingClientRect().width,
+        table: table.getBoundingClientRect().width,
+        columns: [...table.querySelectorAll("thead th")].map(
+          (cell) => cell.getBoundingClientRect().width,
+        ),
+        evidenceClient: evidenceCell.clientWidth,
+        evidenceScroll: evidenceCell.scrollWidth,
+      };
+    });
+
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset["theme"] = value;
+    }, theme);
+    await figure.evaluate((element) => {
+      element.setAttribute("data-table-fit", "wrap");
+    });
+    const wrap = await readGeometry();
+
+    await figure.evaluate((element) => {
+      element.setAttribute("data-table-fit", "truncate");
+    });
+    const truncate = await readGeometry();
+
+    expect(truncate.figure).toBeCloseTo(wrap.figure, 4);
+    expect(truncate.table).toBeCloseTo(wrap.table, 4);
+    expect(truncate.columns).toEqual(
+      wrap.columns.map((width) => expect.closeTo(width, 4)),
+    );
+    expect(new Set(truncate.columns.map(Math.round)).size).toBeGreaterThan(1);
+    expect(truncate.evidenceScroll).toBeLessThanOrEqual(
+      truncate.evidenceClient,
+    );
+
+    const originalEvidence = await evidence.textContent();
+    await evidence.evaluate((cell) => {
+      cell.textContent =
+        "A genuinely overlong evidence entry that must truncate instead of widening the entire table beyond its component surface and reading column";
+    });
+    const overflowing = await readGeometry();
+    expect(overflowing.evidenceClient).toBeLessThanOrEqual(288);
+    expect(overflowing.evidenceScroll).toBeGreaterThan(
+      overflowing.evidenceClient,
+    );
+
+    await evidence.evaluate((cell, text) => {
+      cell.textContent = text;
+    }, originalEvidence);
+  }
+});
+
 test("should keep every table-chrome focus state subtle in every palette", async ({
   page,
   dataTableViewerUrl,
