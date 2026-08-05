@@ -39,8 +39,8 @@ The GitHub `lint` job runs the complete branch contract: install, lint, build, g
 | 1     |                                    944 |            52 | `30997775574` |
 | 2     |                                    971 |            52 | `30998066366` |
 | 3     |                                  1,019 |            66 | `30998398283` |
-| 4     |                                  1,030 |            66 | `30998412953` |
-| 5     | 1,061 plus 20 style-history unit tests |            91 | `30998457222` |
+| 4     |                                  1,030 |            66 | `30998959025` |
+| 5     | 1,061 plus 21 style-history unit tests |            91 | `30998972319` |
 
 The equivalent commands also passed locally at every slice boundary:
 
@@ -84,12 +84,18 @@ Proof:
 - Two separately triggered hosted evidence ledgers were byte-identical.
 - Both hosted ledgers have SHA-256 `2d7cc96758085f8691189d87a77d8459bf526ab3f9f2d758b5d1331149e40bbf`.
 
+### Stable config history
+
+PR 4 adds five new capture keys. The old verifier applied the head config to every historical pair, which would retroactively add captures to PRs 1–3 and invalidate already-approved manifests even when their pixels remained correct.
+
+The bridge now uses each child commit's declared config for that commit/parent comparison while retaining the current deterministic harness. New keys therefore compare both sides of the commit that introduces them, and earlier evidence remains scoped to the contract that approved it. A new regression test proves a later capture-key addition cannot reinterpret an earlier approved manifest.
+
 ## Bridging changes
 
 Capture-related bridge commits:
 
 1. `9837f7590d64395b5fd5cc9e78372137b9779aed` — temporary split scaffolding in PR 1 (`test(style-history): pin deterministic raster frames [visual:empty]`). It makes earlier approved manifests reproducible while the historical slices are replayed. PR 4 removes this transient version.
-2. `29f94b1d853b714110620a3c5aa3f534c1a00d77` — the one final, authorized bridge in PR 4 (`fix(style-history): make review captures deterministic and complete [visual:empty]`). It combines the server-bootstrap capture correction with the root deterministic-raster fix.
+2. `d0468837768886e1fe2d4e38bdec03bbd3918f89` — the one final, authorized bridge in PR 4 (`fix(style-history): make review captures deterministic and complete [visual:empty]`). It combines the server-bootstrap correction, root deterministic-raster fix, and commit-scoped history replay with its regression test.
 
 Approved visual manifests rotate through PRs 1–3 as split-only review evidence and are deleted by PR 4. They do not remain in the final tree. Other narrow intermediate ordering bridges—identity reconciliation, selectors, generated assets, and milestone assertions—are reconciled to PR 54's own final implementations by PR 5.
 
@@ -105,19 +111,21 @@ PR 54 source tree:
 
 Final split head:
 
-`07ae2bab4287b76f2969e3615284db6dca0a0ea1`
+`78f345b1b884a82422be41c95d09fdede29c45bb`
 
 Final split tree:
 
-`544465059abaea85bdd40dd896ad7007bace0386`
+`63799a3d91c0603b29956e6d23bd5217e50fee53`
 
-The direct source-to-final diff changes exactly one file:
+The direct source-to-final diff changes exactly three bridge-owned files:
 
-`scripts/style-snapshots/capture.mjs` — 93 insertions, 8 deletions.
+- `scripts/style-snapshots/capture.mjs`
+- `scripts/style-snapshots/verify-history.mjs`
+- `scripts/style-snapshots/verify-history.test.mjs`
 
 The direct diff and final bridge commit have the same stable patch ID:
 
-`09589eb5d5a3fcbb7f82c9ef46126c35756af162`
+`c459518d9526949b97fba32ecf92d273d71cb198`
 
 Reverse-applying the final bridge to the final split tree writes:
 

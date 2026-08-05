@@ -11,6 +11,7 @@ This slice makes the review UI and revision story mechanically truthful:
 - a CSS ownership contract and complete Tailwind utility conversion;
 - generated embedded assets and style-history guards;
 - a capture-harness bridge that bootstraps promoted sent threads through the server-owned review state and makes exact raster capture deterministic;
+- commit-scoped capture configuration so later capture additions cannot reinterpret earlier approved evidence;
 - responsive review chrome, navigator, composers, and anchored cards;
 - one immutable causal revision per agent turn;
 - correct removal anchors, structural-move filtering, and honest historical mappings;
@@ -40,3 +41,5 @@ This slice removes the temporary stylesheet exemption introduced in PR 1 and ref
 It also contains the authorized, clearly labeled `fix(style-history): make review captures deterministic and complete [visual:empty]` bridge. PR 54's source harness moved a draft to browser-local `sent` state and reloaded, while the production runtime correctly accepts sent comments only from server bootstrap state. The bridge installs that validated bootstrap before reload, so the light and dark `expanded-thread-reply` captures are both produced.
 
 The bridge also fixes the pre-existing screenshot flake at its source. The alternating hashes differed at eight ±1 RGB pixels on two rounded-card corners; geometry, text, and motion were unchanged, isolating CPU-specific Skia antialias rounding. The harness disables Skia runtime CPU optimizations, pins sRGB/device scale, disables motion, and accepts a capture only after two consecutive settled frames are byte-identical. The exact zero-pixel contract remains unchanged—there is no tolerance or ignored region. Three complete local matrices and two independent hosted ledgers were byte-identical. No production runtime behavior changes.
+
+PR 4 also adds five capture keys. The bridge makes each historical pair use its child commit's declared capture config, so those later keys do not retroactively change PRs 1–3's approved manifests; a focused regression test locks that boundary.

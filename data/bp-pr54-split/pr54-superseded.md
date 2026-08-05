@@ -14,7 +14,7 @@
 >
 > **This PR's current head is red on `style-history`.** Its configuration declares 34 captures, but its harness produces only 32. The missing light/dark `expanded-thread-reply` captures promote a draft only in browser-local state; after reload, the production runtime correctly reads sent comments from server bootstrap state and therefore has no thread to expand.
 >
-> Its exact-pixel capture was also flaky: identical hosted runs alternated between two hashes that differed at eight one-channel pixels on two rounded-card corners because Skia selected CPU-specific antialias paths. #59 fixes both harness defects while preserving the zero-pixel rule: it uses a valid server bootstrap, pins deterministic raster settings, and writes only a repeated byte-identical settled frame. It does not change production runtime behavior.
+> Its exact-pixel capture was also flaky: identical hosted runs alternated between two hashes that differed at eight one-channel pixels on two rounded-card corners because Skia selected CPU-specific antialias paths. #59 fixes both harness defects while preserving the zero-pixel rule: it uses a valid server bootstrap, pins deterministic raster settings, writes only a repeated byte-identical settled frame, and scopes each replay pair to the capture config declared by its child commit. It does not change production runtime behavior.
 
 ## Scope
 

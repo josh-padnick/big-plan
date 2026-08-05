@@ -87,7 +87,7 @@ Review the final slice in four passes:
 ## Review boundaries
 
 - This slice contains every source change from `origin/fm/bp-commenting-round3`.
-- Its final tree differs from that source head only by slice four's capture-harness bridge. That bridge produces the two missing expanded-thread captures and eliminates the eight-pixel Skia antialias flake without relaxing exact comparison. Removing that one bridge patch produces the exact PR 54 tree.
+- Its final tree differs from that source head only by slice four's capture bridge. That bridge produces the two missing expanded-thread captures, eliminates the eight-pixel Skia antialias flake without relaxing exact comparison, and prevents later capture keys from reinterpreting earlier manifests. Removing that one bridge patch produces the exact PR 54 tree.
 - It adds no compatibility shim: Big Plan remains pre-release and updates every call site to the clean contract.
 - Historical preview reports and evidence land with the slice that produced them; they document the tested UX rather than defining runtime behavior.
 - Earlier slices contain narrow test, selector, generated-asset, and visual-evidence bridges so each intermediate branch remains green; all net final-tree bridges except the authorized capture fix reconcile back to PR 54.
@@ -99,5 +99,5 @@ Review the final slice in four passes:
 - Concurrent stale-tab tests preserve newer state and merge only valid owned drafts.
 - Browser workflow tests cover composition, submission, cancellation, navigation, reconnect, and recovery actions.
 - The revision-contract check and browser journey cover all eighteen registered component lenses.
-- The direct diff from `origin/fm/bp-commenting-round3` changes only `scripts/style-snapshots/capture.mjs`.
+- The direct diff from `origin/fm/bp-commenting-round3` changes only the three style-snapshot files owned by the authorized bridge: the capture harness, history verifier, and verifier regression test.
 - The patch-id of that direct diff exactly matches the authorized capture bridge commit, and reverse-applying it yields PR 54's tree object.

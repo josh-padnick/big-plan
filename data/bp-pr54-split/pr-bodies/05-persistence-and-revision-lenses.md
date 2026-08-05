@@ -34,9 +34,13 @@ The plan provides restart, concurrency, rebase, cancellation, and all-component 
 
 ## Completeness
 
-The direct diff from `origin/fm/bp-commenting-round3` changes exactly one file: `scripts/style-snapshots/capture.mjs`.
+The direct diff from `origin/fm/bp-commenting-round3` changes exactly the three style-snapshot files owned by the authorized bridge:
 
-That diff's stable patch-id exactly matches the clearly labeled capture bridge in #59. Reverse-applying the bridge to this branch yields #54's tree `576fd746ea4195d896e816ff1c008e6ebb94a464`. Therefore the stack union minus the listed bridge equals #54 exactly.
+- `scripts/style-snapshots/capture.mjs`
+- `scripts/style-snapshots/verify-history.mjs`
+- `scripts/style-snapshots/verify-history.test.mjs`
+
+That combined diff's stable patch-id exactly matches the clearly labeled capture bridge in #59. Reverse-applying the bridge to this branch yields #54's tree `576fd746ea4195d896e816ff1c008e6ebb94a464`. Therefore the stack union minus the listed bridge equals #54 exactly.
 
 ## Split bridges
 
