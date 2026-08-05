@@ -436,34 +436,41 @@ describe("HttpEndpoint scoped Markdown policy", () => {
 });
 
 describe("renderHttpEndpoint presentation", () => {
-  it.each(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])(
-    "should select the %s method pill class",
-    (method) => {
-      const { element, diagnostics } = render({
-        attributes: { method, path: "/health" },
-      });
-      expect(diagnostics).toEqual([]);
-      expect(JSON.stringify(element)).toContain(
-        `"http-endpoint-method-${method.toLowerCase()}"`,
-      );
-    },
-  );
-
   it.each([
-    ["100", "informational"],
-    ["201", "success"],
-    ["304", "redirect"],
-    ["404", "client-error"],
-    ["503", "server-error"],
-  ])("should select the %s response status class", (status, statusClass) => {
+    ["GET", "text-[var(--callout-note-c)]"],
+    ["POST", "text-[var(--diff-add-c)]"],
+    ["PUT", "text-[var(--callout-warning-c)]"],
+    ["PATCH", "text-[var(--annotation-c)]"],
+    ["DELETE", "text-[var(--diff-remove-c)]"],
+    ["HEAD", "text-muted"],
+    ["OPTIONS", "text-muted"],
+  ])("should select the %s method pill palette", (method, toneClass) => {
     const { element, diagnostics } = render({
-      scopedChildren: [response({ status })],
+      attributes: { method, path: "/health" },
     });
     expect(diagnostics).toEqual([]);
-    expect(JSON.stringify(element)).toContain(
-      `"http-endpoint-status-${statusClass}"`,
-    );
+    expect(element.properties["data-http-method"]).toBe(method);
+    expect(JSON.stringify(element)).toContain(`"${toneClass}"`);
   });
+
+  it.each([
+    ["100", "informational", "text-muted"],
+    ["201", "success", "text-[var(--diff-add-c)]"],
+    ["304", "redirect", "text-muted"],
+    ["404", "client-error", "text-[var(--callout-warning-c)]"],
+    ["503", "server-error", "text-[var(--diff-remove-c)]"],
+  ])(
+    "should select the %s response status palette",
+    (status, statusClass, toneClass) => {
+      const { element, diagnostics } = render({
+        scopedChildren: [response({ status })],
+      });
+      expect(diagnostics).toEqual([]);
+      const rendered = JSON.stringify(element);
+      expect(rendered).toContain(`"data-http-status-class":"${statusClass}"`);
+      expect(rendered).toContain(`"${toneClass}"`);
+    },
+  );
 
   it("should tint each path placeholder without splitting literal path text", () => {
     const { element, diagnostics } = render({
@@ -474,7 +481,11 @@ describe("renderHttpEndpoint presentation", () => {
     });
     const rendered = JSON.stringify(element);
     expect(diagnostics).toEqual([]);
-    expect(rendered.match(/http-endpoint-placeholder/gu)).toHaveLength(2);
+    expect(
+      rendered.match(
+        /bg-\[color-mix\(in_srgb,var\(--color-accent\)_12%,transparent\)\]/gu,
+      ),
+    ).toHaveLength(2);
     expect(rendered).toContain('"value":"{planId}"');
     expect(rendered).toContain('"value":"/comments/"');
     expect(rendered).toContain('"value":"{commentId}"');

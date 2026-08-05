@@ -25,6 +25,22 @@ const KIND_LABELS: Readonly<Record<GrpcStreamingKind, string>> = {
   bidiStreaming: "Bidirectional streaming",
 };
 
+// /* off-scale */ Phase A preserves the legacy 14% token washes exactly;
+// Phase B will replace them with palette-backed theme shades.
+const KIND_CLASSES: Readonly<Record<GrpcStreamingKind, string>> = {
+  unary:
+    "text-muted [background:color-mix(in_srgb,var(--color-muted)_14%,transparent)]",
+  serverStreaming:
+    "text-[var(--callout-note-c)] [background:color-mix(in_srgb,var(--callout-note-c)_14%,transparent)]",
+  clientStreaming:
+    "text-[var(--callout-warning-c)] [background:color-mix(in_srgb,var(--callout-warning-c)_14%,transparent)]",
+  bidiStreaming:
+    "text-[var(--annotation-c)] [background:color-mix(in_srgb,var(--annotation-c)_14%,transparent)]",
+};
+
+const DEPRECATED_CLASSES =
+  "text-muted [background:color-mix(in_srgb,var(--color-muted)_14%,transparent)]";
+
 const Keyword = ({ value }: { readonly value: string }) => (
   <span className="text-muted">{value}</span>
 );
@@ -32,7 +48,9 @@ const Keyword = ({ value }: { readonly value: string }) => (
 // The stream keyword is the load-bearing signal Google's reference drops;
 // here it is both present and tinted so streaming reads at a glance.
 const StreamKeyword = () => (
-  <span className="grpc-method-stream font-semibold">{"stream "}</span>
+  <span className="grpc-method-stream font-semibold text-accent">
+    {"stream "}
+  </span>
 );
 
 // Renders the literal proto signature with the stream keywords placed by the
@@ -115,7 +133,7 @@ const ErrorEntry = ({ error }: { readonly error: CompiledGrpcError }) => (
     data-grpc-error={error.code}
   >
     <div className="mb-2 flex flex-wrap items-center gap-2">
-      <span className="grpc-method-error-code inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[0.6875rem] leading-4 font-bold">
+      <span className="grpc-method-error-code inline-flex items-center rounded-full bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,transparent)] px-2 py-0.5 font-mono text-[0.6875rem] leading-4 font-bold text-[var(--callout-warning-c)]">
         {error.code}
       </span>
     </div>
@@ -157,16 +175,10 @@ export const GrpcMethod = ({
         <Signature model={model} />
         <BadgePill
           label={KIND_LABELS[model.kind]}
-          classNames={[
-            "grpc-method-kind-pill",
-            `grpc-method-kind-${model.kind.toLowerCase()}`,
-          ]}
+          classNames={["grpc-method-kind-pill", KIND_CLASSES[model.kind]]}
         />
         {model.deprecated ? (
-          <BadgePill
-            label="Deprecated"
-            classNames={["grpc-method-deprecated"]}
-          />
+          <BadgePill label="Deprecated" classNames={[DEPRECATED_CLASSES]} />
         ) : null}
       </div>
     </header>

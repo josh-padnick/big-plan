@@ -307,17 +307,17 @@ describe("renderGraphqlOperation", () => {
     expect(rendered).not.toContain('"tagName":"section"');
   });
 
-  it.each(["query", "mutation", "subscription"])(
-    "should select the %s kind pill class",
-    (kind) => {
-      const { element } = render({
-        attributes: { kind, name: "plan" },
-      });
-      expect(JSON.stringify(element)).toContain(
-        `graphql-operation-kind-${kind}`,
-      );
-    },
-  );
+  it.each([
+    ["query", "text-[var(--callout-note-c)]"],
+    ["mutation", "text-[var(--callout-warning-c)]"],
+    ["subscription", "text-[var(--annotation-c)]"],
+  ])("should select the %s kind pill palette", (kind, toneClass) => {
+    const { element } = render({
+      attributes: { kind, name: "plan" },
+    });
+    expect(element.properties["data-graphql-kind"]).toBe(kind);
+    expect(JSON.stringify(element)).toContain(toneClass);
+  });
 
   it("should render the full card anatomy in contract order", () => {
     const { element, diagnostics } = render({
@@ -385,7 +385,9 @@ describe("renderGraphqlOperation", () => {
     expect(diagnostics).toEqual([]);
     expect(element.properties["data-graphql-deprecated"]).toBe("");
     expect(rendered).toContain('"line-through"');
-    expect(rendered).toContain("graphql-operation-deprecated");
+    expect(rendered).toContain(
+      "[background:color-mix(in_srgb,var(--color-muted)_14%,transparent)]",
+    );
     expect(rendered).toContain('"value":"Use planById."');
   });
 
