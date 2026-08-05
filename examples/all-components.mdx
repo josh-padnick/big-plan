@@ -1,0 +1,366 @@
+# Plan Review Operations Rollout
+
+Move plan-review activity into a durable local service while preserving the
+authoritative plan source on disk.
+
+<QuickSummary>
+
+<Why>
+
+- Review comments and decisions must survive browser reloads without moving
+  plan authority away from the source file.
+
+</Why>
+
+<What>
+
+- Add a local review service, a durable event table, and one operator-facing
+  review queue.
+
+</What>
+
+<How>
+
+- Land persistence first, expose narrow service contracts, then enable the
+  review workspace behind a rollout flag.
+
+</How>
+
+</QuickSummary>
+
+<TableOfContents>
+<Entry section="Review decisions" gist="Settle ownership, storage, and rollout boundaries" />
+<Entry section="System shape" gist="Show the service flow and planned file changes" />
+<Entry section="Service contracts" gist="Review code, data, table, HTTP, GraphQL, and gRPC contracts" />
+<Entry section="Operator workspace" gist="Preview the queue used to resolve review threads" />
+</TableOfContents>
+
+<Part title="Context and choices" />
+
+## Review decisions
+
+*The remaining choices set the persistence and rollout boundaries.*
+
+<Callout type="note" title="Captain review">
+
+Approve the persistence boundary and staged rollout before implementation
+begins. The browser remains a review surface; the MDX plan on disk remains
+authoritative.
+
+</Callout>
+
+<Decision question="Where should review-event persistence live?">
+
+The first release runs locally, but the storage boundary should admit shared
+review later.
+
+<Option title="Review service repository" recommended summary="Keep persistence behind the service contract.">
+
+<Consideration label="Source authority" verdict="Preserved" tone="good">
+
+The service stores feedback and decisions, never a competing copy of the plan.
+
+</Consideration>
+
+<Consideration label="Migration path" verdict="Contained" tone="good">
+
+A later shared service can retain the same repository interface.
+
+</Consideration>
+
+</Option>
+
+<Option title="Browser local storage" summary="Persist review state in each browser profile.">
+
+<Consideration label="Source authority" verdict="Ambiguous" tone="bad">
+
+Independent browser profiles can disagree about review state.
+
+</Consideration>
+
+<Consideration label="Migration path" verdict="Manual" tone="mixed">
+
+Existing browser records would need an export and reconciliation path.
+
+</Consideration>
+
+</Option>
+
+</Decision>
+
+<QuickDecision question="Ship the workspace behind a local feature flag?">
+
+<Option title="Yes" recommended summary="Lets maintainers exercise the full review loop before it becomes the default." />
+
+<Option title="No" summary="Reduces rollout code but exposes every local user at once." />
+
+</QuickDecision>
+
+<DecisionAnalysis question="Which event store should back the first release?" state="proposed" interaction="audit">
+
+The store must preserve thread order, anchor updates, and crash-safe writes.
+
+<Criterion title="Atomic review updates">
+
+A thread event and its latest anchor must commit together.
+
+</Criterion>
+
+<Criterion title="Local setup">
+
+Contributors should not need a separately managed database service.
+
+</Criterion>
+
+<Option title="SQLite" recommended summary="Use one embedded database owned by the review service.">
+
+<Score criterion="Atomic review updates" verdict="Strong" tone="good">
+
+Transactions cover the event and anchor rows in one file.
+
+</Score>
+
+<Score criterion="Local setup" verdict="No setup" tone="good">
+
+The service opens the database directly.
+
+</Score>
+
+</Option>
+
+<Option title="PostgreSQL" summary="Run the same server store planned for shared review.">
+
+<Score criterion="Atomic review updates" verdict="Strong" tone="good">
+
+Relational transactions provide the required boundary.
+
+</Score>
+
+<Score criterion="Local setup" verdict="Extra service" tone="mixed">
+
+Every contributor must start and maintain a database server.
+
+</Score>
+
+</Option>
+
+<Reversibility rating="somewhat-hard">
+
+The repository seam contains the code change, but persisted local data still
+needs a migration.
+
+</Reversibility>
+
+</DecisionAnalysis>
+
+<Part title="Architecture" />
+
+## System shape
+
+*How one authoritative plan reaches the service, browser, and authoring agent.*
+
+<FlowDiagram>
+
+<Stage title="Author">
+<Node id="plan-source" label="Plan source" code="plans/review-rollout.mdx" tone="source" />
+</Stage>
+
+<Stage title="Review">
+<Node id="review-service" label="Local review service" code="src/review/service.ts" />
+</Stage>
+
+<Stage title="Consume">
+<Node id="browser" label="Review document" tone="destination" />
+<Node id="agent" label="Authoring agent" tone="destination" />
+</Stage>
+
+<Edge from="plan-source" to="review-service" label="opens" />
+<Edge from="review-service" to="browser" label="serves" />
+<Edge from="review-service" to="agent" label="notifies" />
+
+One source file, one feedback stream, and two coordinated readers.
+
+</FlowDiagram>
+
+<FileTree title="Review module layout">
+
+```tree
+src/
+  review/
+    service.ts - Coordinates plan reads and review events.
+    repository.ts - Owns durable event transactions.
+    anchors.ts - Reconciles selections after source edits.
+  render/
+    shell/
+      viewer-script.ts - Sends review actions to the local service.
+```
+
+</FileTree>
+
+<FileTreeDiff title="Planned changes">
+
+```tree
+src/
+  review/ [added] - New review-service vertical slice.
+    service.ts [added] - Coordinates review workflows.
+    repository.ts [added] - Persists ordered events.
+  render/
+    shell/
+      viewer-script.ts [modified] - Connect review controls.
+test/
+  review-service.spec.ts [added] - Exercises the durable browser journey.
+docs/
+  review-workflow.md [added] - Explains the local review loop.
+```
+
+</FileTreeDiff>
+
+<Part title="Implementation contracts" />
+
+## Service contracts
+
+*The code, storage, and transport contracts that make review events durable.*
+
+<CodeSnippet file="src/review/service.ts" startLine="18" showLineNumbers>
+
+```ts
+export const appendReviewEvent = async (
+  command: AppendReviewEvent,
+): Promise<ReviewThread> =>
+  repository.transaction((tx) => tx.append(command));
+```
+
+<Annotation lines="21">
+
+The service owns the transaction boundary so every transport receives the same
+ordering and anchor guarantees.
+
+</Annotation>
+
+</CodeSnippet>
+
+<CodeDiff file="src/render/shell/viewer-script.ts" showLineNumbers showLineCounts>
+
+```diff
+diff --git a/src/render/shell/viewer-script.ts b/src/render/shell/viewer-script.ts
+index 8af2711..47d20f9 100644
+--- a/src/render/shell/viewer-script.ts
++++ b/src/render/shell/viewer-script.ts
+@@ -412,2 +412,6 @@ const saveDraft = async () => {
+-  sessionStorage.setItem(draftKey, body);
++  await reviewClient.append({
++    planId,
++    body,
++    selection: currentSelection(),
++  });
+ };
+```
+
+<Annotation lines="414-417" side="new">
+
+Persist the comment and its current selection together; acknowledging either
+one alone would create an event the authoring agent cannot safely apply.
+
+</Annotation>
+
+</CodeDiff>
+
+<DatabaseTableSchema name="review.review_events">
+
+```dbml
+id          bigint      [pk, increment]
+plan_id     text        [not null]
+thread_id   text        [not null]
+kind        text        [not null, note: 'comment | reply | resolve | accept']
+body        text
+anchor_json text
+created_at  timestamptz [not null, default: `now()`]
+
+indexes {
+  (plan_id, thread_id, id) [name: 'review_events_thread_idx']
+}
+
+Note: 'Append-only review events in durable thread order.'
+```
+
+</DatabaseTableSchema>
+
+<DataTable title="Rollout gates" filter>
+
+<Column name="Error budget" type="number" align="right" />
+
+```table
+| Gate | Owner | Error budget | Evidence |
+| --- | --- | ---: | --- |
+| Event durability | Service | 0 | Crash-recovery integration test |
+| Anchor reconciliation | Renderer | 1 | Edited-source replay fixture |
+| Workspace rollout | Product | 2 | Maintainer dogfood sessions |
+```
+
+</DataTable>
+
+<HttpEndpoint method="POST" path="/api/plans/{planId}/review-events" summary="Append one review event" auth="Local review session" />
+
+<GraphqlOperation kind="mutation" name="reviewEventAppend" access="Requires plan write access" />
+
+<GrpcMethod service="bigplan.v1.ReviewService" name="WatchReviewEvents" request="WatchReviewEventsRequest" response="ReviewEvent" kind="serverStreaming" />
+
+<Part title="Human validation" />
+
+## Operator workspace
+
+The operator opens unresolved threads, sees the selected plan excerpt, and
+records a resolution without leaving the review queue.
+
+<Wireframe id="review-queue" title="Local review queue">
+
+<Screen id="queue" name="Review queue" device="desktop" url="/plans/cache-rollout/review">
+
+<AppShell>
+
+<Sidebar brand="Big Plan" mode="Local review">
+
+<Nav label="Review">
+<NavItem label="Open threads" active />
+<NavItem label="Resolved" />
+</Nav>
+
+</Sidebar>
+
+<AppContent>
+
+<PageHeader title="Plan review">
+<Badge label="3 open" tone="warning" />
+<Button label="Accept plan" emphasis="primary" />
+</PageHeader>
+
+<Row gap="md">
+
+<Panel title="Threads" surface="filled">
+<List>
+<ListItem label="Keep the retry budget explicit" meta="Code change" selected />
+<ListItem label="Clarify the migration owner" meta="Decision" />
+<ListItem label="Add the rollback query" meta="Rollout" />
+</List>
+</Panel>
+
+<Rail>
+<Panel title="Selected thread" surface="outlined">
+<Text text="Keep the retry budget explicit." />
+<Text text="viewer-script.ts · lines 414–417" role="helper" />
+<Button label="Resolve thread" />
+</Panel>
+</Rail>
+
+</Row>
+
+</AppContent>
+
+</AppShell>
+
+</Screen>
+
+</Wireframe>
+
+The plan is ready to execute when every gate has an owner, every unresolved
+thread has a disposition, and the reviewer explicitly accepts the plan.
