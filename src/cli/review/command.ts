@@ -38,7 +38,10 @@ export const reviewCommand = async (
 
   let runtime;
   try {
-    runtime = await startReviewRuntime({ planPath: inputPath });
+    runtime = await startReviewRuntime({
+      planPath: inputPath,
+      validatePlan: assertPlanPassesLint,
+    });
   } catch (error: unknown) {
     throw new AxiError(
       `Cannot start the review runtime: ${String(error)}`,

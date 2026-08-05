@@ -252,7 +252,10 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       );
       const inputPath = join(outputDir, "plan.mdx");
       await writeFile(inputPath, REVIEW_RUNTIME_MDX, "utf8");
-      const runtime = await startReviewRuntime({ planPath: inputPath });
+      const runtime = await startReviewRuntime({
+        planPath: inputPath,
+        validatePlan: () => undefined,
+      });
       await use(runtime.url);
       await runtime.close();
       await rm(outputDir, { recursive: true, force: true });

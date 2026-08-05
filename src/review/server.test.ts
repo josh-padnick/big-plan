@@ -28,7 +28,14 @@ beforeAll(async () => {
   const directory = await mkdtemp(join(tmpdir(), "big-plan-server-"));
   const planPath = join(directory, "plan.mdx");
   await writeFile(planPath, PLAN);
-  runtime = await startReviewRuntime({ planPath });
+  runtime = await startReviewRuntime({
+    planPath,
+    validatePlan: ({ markdown }) => {
+      if (!markdown.includes("The runtime serves this document")) {
+        throw new Error("Plan failed authoring lint");
+      }
+    },
+  });
   running.push(runtime);
   const descriptor: unknown = JSON.parse(
     await readFile(runtime.store.sessionPath, "utf8"),
@@ -187,6 +194,22 @@ describe("review runtime document", () => {
       planId: runtime.planId,
     });
   });
+
+  it("should refuse a renderable live revision that fails authoring lint", async () => {
+    await writeFile(
+      runtime.planPath,
+      "# Review runtime plan\n\n## Status quo\n\nStill renderable.\n",
+    );
+    try {
+      const response = await fetch(runtime.url);
+      expect(response.status).toBe(500);
+      await expect(response.text()).resolves.toContain(
+        "Plan failed authoring lint",
+      );
+    } finally {
+      await writeFile(runtime.planPath, PLAN);
+    }
+  });
 });
 
 describe("review runtime feedback", () => {
@@ -272,6 +295,7 @@ describe("review runtime shutdown", () => {
     await expect(
       startReviewRuntime({
         planPath,
+        validatePlan: () => undefined,
         operations: {
           createServer: (listener) => {
             openedServer = createServer(listener);

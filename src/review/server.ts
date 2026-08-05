@@ -192,9 +192,11 @@ const refuse = ({
 export const startReviewRuntime = async ({
   planPath,
   operations = DEFAULT_OPERATIONS,
+  validatePlan,
 }: {
   readonly planPath: string;
   readonly operations?: ReviewRuntimeOperations;
+  readonly validatePlan: (input: { readonly markdown: string }) => void;
 }): Promise<ReviewRuntime> => {
   const resolvedPlanPath = resolve(planPath);
   const planId = derivePlanId({ planPath: resolvedPlanPath });
@@ -224,6 +226,7 @@ export const startReviewRuntime = async ({
 
   const renderPlan = async (): Promise<string> => {
     const markdown = await readFile(resolvedPlanPath, "utf8");
+    validatePlan({ markdown });
     const firstPass = renderDocument({
       markdown,
       fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
