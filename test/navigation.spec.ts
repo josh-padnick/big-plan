@@ -30,6 +30,20 @@ test("should navigate the rendered sample plan through the TOC without errors", 
         name: "Payments Retry Architecture Plan",
       }),
     ).toBeVisible();
+    const barTitle = banner.locator("[data-plan-title]");
+    await expect(barTitle).toHaveCSS("font-style", "italic");
+    expect(
+      await barTitle.evaluate((element) => {
+        const range = document.createRange();
+        range.selectNode(element);
+        const selection = getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        const copiedText = selection?.toString() ?? "";
+        selection?.removeAllRanges();
+        return copiedText;
+      }),
+    ).toBe("Payments Retry Architecture Plan");
   });
 
   await test.step("the TOC lists every h2 section in document order", async () => {
