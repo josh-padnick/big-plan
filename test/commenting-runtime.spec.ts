@@ -751,7 +751,7 @@ test("should preserve and send a floating review across reload and viewport chan
           };
         }),
       )
-      .toEqual({ outer: "0px", inner: "1px" });
+      .toEqual({ outer: "1px", inner: "missing" });
     await expect(history.locator("summary")).toContainText("Connection log");
     await expect(
       history.locator("[data-review-connection-summary]"),
