@@ -61,7 +61,13 @@ describe("guidanceCommand", () => {
     expect(output).toContain("### Status quo (`status-quo`)");
     expect(output).toContain("### Desired experience (`desired-experience`)");
     expect(output).toContain("### Desired outcome (`desired-outcome`)");
-    expect(output).toContain("### User journey (`user-journey`)");
+    expect(output).toContain("### User journeys (`user-journey`)");
+    expect(output).toContain(
+      "distinct `name` for its kicker and sidebar plus an ultra-concise `toc` form",
+    );
+    expect(output).toContain(
+      "`Wireframe` **(required)** — Required on every journey slide",
+    );
     expect(output).toContain("### Acceptance criteria (`acceptance-criteria`)");
     expect(output).toContain("Components that pair well");
   });

@@ -1,11 +1,11 @@
-// Defines the User journey slide type and its guidance for one complete human
-// loop, with repeated singular slides forming the plan's journey group.
+// Defines the User journeys catalog type and its guidance for a named
+// container whose repeated entries each carry one complete human loop.
 
 import type { SlideTypeDefinition } from "./types.js";
 
 export const USER_JOURNEY_SLIDE_TYPE: SlideTypeDefinition = {
   id: "user-journey",
-  name: "User journey",
+  name: "User journeys",
   match: {
     when: "The slide follows one person through one complete goal, including the response, recovery, or decision that closes the loop.",
     notWhen:
@@ -14,15 +14,18 @@ export const USER_JOURNEY_SLIDE_TYPE: SlideTypeDefinition = {
   cardinality: "many",
   placement: "anywhere",
   guidance: [
-    "Keep one complete human loop per slide; repeat the singular type for several journeys rather than inventing a plural container type.",
-    "Lead with real or proposed UI whenever the interface is the experience, then annotate what the person does and what changes for them.",
+    "Name the container “User journeys”; use either a Part or an untyped introductory slide according to the plan's argument, because the catalog does not mandate one container presentation.",
+    "Give every journey marker a distinct `name` for its kicker and sidebar plus an ultra-concise `toc` form for the overview; let the h2 carry the full plain-language claim.",
+    "Put a Wireframe with actual Screen mockups on every journey slide so the reviewer sees the interface states and moves through the same shortest path as the user; prose may explain the journey but never replace the mockups.",
+    "Keep one complete human loop per typed slide and repeat the type for several journeys inside the container.",
     "Include unhappy-path recovery when it is part of completing the goal, and keep system mechanics subordinate to the person's actions.",
   ],
   components: [
     {
-      name: "FlowDiagram",
+      name: "Wireframe",
+      required: true,
       guidance:
-        "Use only for a genuinely relational human path, with stages named as actions and edges named as choices or responses.",
+        "Required on every journey slide. Draw the shortest CLEAR-compliant sequence of Screen mockups that proves the human loop, including visible state changes and recovery when it matters.",
     },
     {
       name: "Callout",

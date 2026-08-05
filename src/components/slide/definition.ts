@@ -12,5 +12,10 @@ export const SLIDE_COMPONENT_DEFINITION = defineOutlineComponent({
   marker: (model) =>
     model.type === undefined
       ? { kind: "boundary" }
-      : { kind: "slide", type: model.type },
+      : {
+          kind: "slide",
+          type: model.type,
+          ...(model.name === undefined ? {} : { name: model.name }),
+          ...(model.toc === undefined ? {} : { toc: model.toc }),
+        },
 });

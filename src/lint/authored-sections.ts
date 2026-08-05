@@ -11,7 +11,9 @@ import {
 
 export type AuthoredSection = {
   readonly name: string;
+  readonly toc?: string;
   readonly title: string;
+  readonly components: ReadonlyArray<string>;
   readonly line: number;
   readonly column: number;
   readonly type?: SlideTypeId;
@@ -65,6 +67,26 @@ const headingText = (node: Node): string => {
   return node.children.map(headingText).join("");
 };
 
+const componentNamesWithin = (
+  nodes: ReadonlyArray<Node>,
+): ReadonlyArray<string> => {
+  const names: Array<string> = [];
+  const visit = (node: Node): void => {
+    if (
+      node.type === "mdxJsxFlowElement" &&
+      "name" in node &&
+      typeof node.name === "string"
+    ) {
+      names.push(node.name);
+    }
+    if (isParent(node)) {
+      node.children.forEach(visit);
+    }
+  };
+  nodes.forEach(visit);
+  return names;
+};
+
 /** Returns h2 sections in source order with valid top-level type markers. */
 export const collectAuthoredSections = (
   tree: Node,
@@ -85,6 +107,18 @@ export const collectAuthoredSections = (
         child.depth === 2 &&
         child.position !== undefined
       ) {
+        const nextSectionOffset = parent.children
+          .slice(index + 1)
+          .findIndex(
+            (candidate) => isHeading(candidate) && candidate.depth === 2,
+          );
+        const sectionEnd =
+          nextSectionOffset === -1
+            ? parent.children.length
+            : index + 1 + nextSectionOffset;
+        const components = componentNamesWithin(
+          parent.children.slice(index + 1, sectionEnd),
+        );
         const title = headingText(child).trim();
         const previous = parent.children[index - 1];
         const authoredType =
@@ -94,9 +128,19 @@ export const collectAuthoredSections = (
             ? stringAttribute({ node: previous, name: "type" })
             : undefined;
         if (authoredType !== undefined && isSlideTypeId(authoredType)) {
+          const journeyName =
+            authoredType === "user-journey" && previous !== undefined
+              ? stringAttribute({ node: previous, name: "name" })
+              : undefined;
+          const journeyToc =
+            authoredType === "user-journey" && previous !== undefined
+              ? stringAttribute({ node: previous, name: "toc" })
+              : undefined;
           sections.push({
-            name: slideTypeFor(authoredType).name,
+            name: journeyName ?? slideTypeFor(authoredType).name,
+            ...(journeyToc === undefined ? {} : { toc: journeyToc }),
             title,
+            components,
             type: authoredType,
             line: child.position.start.line,
             column: child.position.start.column,
@@ -111,6 +155,7 @@ export const collectAuthoredSections = (
           sections.push({
             name: title,
             title,
+            components,
             line: child.position.start.line,
             column: child.position.start.column,
           });

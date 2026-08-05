@@ -416,7 +416,7 @@ describe("lintPlan slide-type-structure", () => {
     expect(
       lintPlan({
         markdown:
-          '<Slide type="acceptance-criteria" />\n\n## The change has checkable proof\n\nA.\n\n<Slide type="user-journey" />\n\n## A reviewer accepts the plan\n\nB.\n',
+          '<Slide type="acceptance-criteria" />\n\n## The change has checkable proof\n\nA.\n\n<Slide type="user-journey" name="Accepting the plan" toc="Accept" />\n\n## A reviewer accepts the plan\n\nB.\n\n<Wireframe id="accept"><Screen id="review" name="Review" device="desktop" /></Wireframe>\n',
       }),
     ).toEqual([
       {
@@ -428,13 +428,54 @@ describe("lintPlan slide-type-structure", () => {
     ]);
   });
 
-  it("should allow repeated User journey types and canonical Success looks like", () => {
+  it("should allow repeated User journeys with distinct names and canonical Success looks like", () => {
     expect(
       lintPlan({
         markdown:
-          '## Success looks like\n\nA.\n\n<Slide type="user-journey" />\n\n## A reviewer opens the plan\n\nB.\n\n<Slide type="user-journey" />\n\n## A reviewer accepts the plan\n\nC.\n',
+          '## Success looks like\n\nA.\n\n<Slide type="user-journey" name="Opening the plan" toc="Open" />\n\n## A reviewer opens the plan\n\nB.\n\n<Wireframe id="open"><Screen id="plan" name="Plan" device="desktop" /></Wireframe>\n\n<Slide type="user-journey" name="Accepting the plan" toc="Accept" />\n\n## A reviewer accepts the plan\n\nC.\n\n<Wireframe id="accept"><Screen id="review" name="Review" device="desktop" /></Wireframe>\n',
       }),
     ).toEqual([]);
+  });
+
+  it("should require actual UI mockups on every User journeys slide", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '<Slide type="user-journey" name="Reviewing the plan" toc="Review" />\n\n## A reviewer opens the plan\n\nProse alone.\n',
+      }),
+    ).toEqual([
+      {
+        ruleId: "slide-type-structure",
+        line: 1,
+        column: 1,
+        message:
+          'User journeys slide "Reviewing the plan" must contain a Wireframe with actual UI mockups',
+      },
+    ]);
+  });
+
+  it("should reject repeated journey names and TOC forms", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '<Slide type="user-journey" name="Reviewing the plan" toc="Review" />\n\n## An agent reviews the plan\n\nA.\n\n<Wireframe id="agent"><Screen id="review" name="Review" device="desktop" /></Wireframe>\n\n<Slide type="user-journey" name="Reviewing the plan" toc="Review" />\n\n## A captain reviews the plan\n\nB.\n\n<Wireframe id="captain"><Screen id="review" name="Review" device="desktop" /></Wireframe>\n',
+      }),
+    ).toEqual([
+      {
+        ruleId: "slide-type-structure",
+        line: 9,
+        column: 1,
+        message:
+          'Give every journey in User journeys a distinct name; "Reviewing the plan" is repeated',
+      },
+      {
+        ruleId: "slide-type-structure",
+        line: 9,
+        column: 1,
+        message:
+          'Give every journey in User journeys a distinct table-of-contents form; "Review" is repeated',
+      },
+    ]);
   });
 
   it("should leave plain-language title judgment to guidance", () => {
@@ -484,6 +525,15 @@ describe("lintPlan table-of-contents-matches-sections", () => {
       lintPlan({
         markdown:
           '# T\n\nLede.\n\n<TableOfContents>\n<Entry section="Status quo" gist="Today" />\n</TableOfContents>\n\n<Slide type="status-quo" />\n\n## Inline retries delay checkout\n\nA.\n',
+      }),
+    ).toEqual([]);
+  });
+
+  it("should compare a user journey against its ultra-concise TOC form", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '# T\n\nLede.\n\n<TableOfContents>\n<Entry section="Draft status" gist="One journey" />\n</TableOfContents>\n\n<Slide type="user-journey" name="Drafting a status slide" toc="Draft status" />\n\n## An agent turns evidence into a status slide\n\nA.\n\n<Wireframe id="draft"><Screen id="evidence" name="Evidence" device="desktop" /></Wireframe>\n',
       }),
     ).toEqual([]);
   });

@@ -22,7 +22,12 @@ import type { SlideTypeId } from "../../plan-vocabulary/slide-types/index.js";
 export type OutlineMarker =
   | { readonly kind: "part"; readonly title: string; readonly id?: string }
   | { readonly kind: "boundary" }
-  | { readonly kind: "slide"; readonly type: SlideTypeId };
+  | {
+      readonly kind: "slide";
+      readonly type: SlideTypeId;
+      readonly name?: string;
+      readonly toc?: string;
+    };
 
 export type CompiledComponent = {
   readonly model: unknown;

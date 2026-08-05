@@ -4,7 +4,7 @@ description: The self-closing type marker that connects a recurring slide role t
 ---
 
 `Slide` applies one type from Big Plan's closed, guidance-bearing catalog to the h2 immediately after it.
-The type supplies the reusable structural name shown in the kicker, [TableOfContents](/components/table-of-contents/), and sidebar navigation.
+Most types supply the reusable structural name shown in the kicker, [TableOfContents](/components/table-of-contents/), and sidebar navigation; user journeys supply their deeper naming forms on the marker.
 The h2 remains the large, plan-specific title.
 
 The marker itself emits no HTML.
@@ -31,7 +31,7 @@ For each intended slide, use a type only when its matching rule fits; otherwise 
 | `status-quo`          | Status quo          | What is true today, including what already works                            |
 | `desired-experience`  | Desired experience  | The concrete lived experience introduced by a new feature                   |
 | `desired-outcome`     | Desired outcome     | The concrete payoff of a bug fix, re-architecture, or tech-debt change      |
-| `user-journey`        | User journey        | One complete human loop; repeat the singular type for several journeys      |
+| `user-journey`        | User journeys       | A named container of individually named, complete human loops               |
 | `acceptance-criteria` | Acceptance criteria | Independently checkable verification, placed after every other typed slide  |
 
 `desired-experience` and `desired-outcome` are mutually exclusive.
@@ -40,15 +40,53 @@ They are light recommendations when their sharper framing fits; the canonical un
 ## Names and titles
 
 A typed slide's name and title are distinct concepts.
-The catalog name is stable across plans; the h2 title states this plan's message.
+For most types the catalog name is stable across plans; the h2 title states this plan's message.
 Normally make the title distinct and write it in plain language with concrete nouns and active verbs, omitting evaluative adjectives, superlatives, slogans, and abstract noun stacks.
 Big Plan does not lint that judgment because broad language checks would create false positives, and an identical name and title remains structurally valid when a distinct title would be strained.
+
+### User journeys
+
+User journeys add one deeper name/title layer.
+Name the container “User journeys,” but choose the container presentation that fits the plan: either a Part or an untyped introductory slide.
+Big Plan deliberately supports both.
+
+```mdx
+<Part title="User journeys" />
+
+<Slide type="user-journey" name="Drafting a status slide" toc="Draft status" />
+
+## An agent turns evidence into a status slide
+
+<Wireframe id="draft-status" initialScreen="evidence">
+  <Screen id="evidence" name="Gather evidence" device="desktop">
+    ...
+  </Screen>
+  <Screen id="preview" name="Review status slide" device="desktop">
+    ...
+  </Screen>
+</Wireframe>
+```
+
+For each journey:
+
+- `name` is a distinct, concrete journey name shown in the kicker and sidebar.
+- `toc` is an ultra-concise form shown in the TableOfContents.
+- The h2 is the full plain-language claim.
+- A required `Wireframe` carries the actual `Screen` mockups for the shortest path that proves the journey.
+
+Repeat the singular `user-journey` marker for several individual journeys.
+The catalog's plural “User journeys” name belongs to the container, not every journey kicker.
+Distinct journey names and TOC forms keep repeated entries navigable.
+The Wireframe makes the journey visible and walkable; prose can annotate the screens but cannot replace them.
+Apply the Wireframe component's CLEAR quality bar to every mockup.
 
 ## The contract
 
 - `type` is required and accepts only the five registered ids above.
 - `Slide` is self-closing and rejects body content.
 - The marker must be top-level and immediately followed by the h2 it describes.
+- `user-journey` additionally requires non-empty `name` and `toc` attributes; other types reject them.
+- Every `user-journey` section must contain a `Wireframe` with actual UI mockups.
 - Singleton types may appear at most once; `user-journey` may repeat.
 - A plan may use `desired-experience` or `desired-outcome`, never both.
 - `acceptance-criteria` must be the last typed slide.

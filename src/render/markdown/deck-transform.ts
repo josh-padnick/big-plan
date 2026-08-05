@@ -26,6 +26,8 @@ import {
 import {
   OUTLINE_PART_TITLE_ATTRIBUTE,
   OUTLINE_PLACEHOLDER_ATTRIBUTE,
+  OUTLINE_SLIDE_NAME_ATTRIBUTE,
+  OUTLINE_SLIDE_TOC_ATTRIBUTE,
   OUTLINE_SLIDE_TYPE_ATTRIBUTE,
 } from "./component-pipeline/outline-placeholder.js";
 import { appendCollapseBody, createCollapsible } from "./deck-collapse.js";
@@ -147,6 +149,12 @@ export type MutableDocumentOutline = {
   readonly sections: Array<DocumentOutlineSection>;
 };
 
+type AssignedSlideType = {
+  readonly definition: SlideTypeDefinition;
+  readonly name?: string;
+  readonly toc?: string;
+};
+
 // Consumes every typed Slide placeholder before framing. A valid marker is a
 // top-level sibling immediately before its h2 (blank text is ignorable);
 // anything else receives a positional structural diagnostic and emits no
@@ -157,8 +165,8 @@ const collectSlideTypes = ({
 }: {
   readonly tree: Root;
   readonly diagnostics: DiagnosticCollector;
-}): Map<Element, SlideTypeDefinition> => {
-  const assigned = new Map<Element, SlideTypeDefinition>();
+}): Map<Element, AssignedSlideType> => {
+  const assigned = new Map<Element, AssignedSlideType>();
 
   const consume = (parent: Root | Element): void => {
     let index = 0;
@@ -201,7 +209,13 @@ const collectSlideTypes = ({
         typeof authoredType === "string" &&
         isSlideTypeId(authoredType)
       ) {
-        assigned.set(next, slideTypeFor(authoredType));
+        const authoredName = child.properties[OUTLINE_SLIDE_NAME_ATTRIBUTE];
+        const authoredToc = child.properties[OUTLINE_SLIDE_TOC_ATTRIBUTE];
+        assigned.set(next, {
+          definition: slideTypeFor(authoredType),
+          ...(typeof authoredName === "string" ? { name: authoredName } : {}),
+          ...(typeof authoredToc === "string" ? { toc: authoredToc } : {}),
+        });
       }
       parent.children.splice(index, 1);
     }
@@ -281,7 +295,7 @@ const buildSubSlides = ({
   readonly body: ReadonlyArray<ElementContent>;
   readonly label: string;
   readonly kicker: Element;
-  readonly slideType?: SlideTypeDefinition;
+  readonly slideType?: AssignedSlideType;
 }): Element => {
   const firstH3 = body.findIndex(
     (node) => isElement(node) && node.tagName === "h3",
@@ -356,7 +370,9 @@ const buildSubSlides = ({
     properties: {
       "data-slide": "",
       "data-subpart": "",
-      ...(slideType === undefined ? {} : { "data-slide-type": slideType.id }),
+      ...(slideType === undefined
+        ? {}
+        : { "data-slide-type": slideType.definition.id }),
     },
     className: SLIDE_GROUP_CLASSES,
     chrome: [kicker, heading],
@@ -372,7 +388,7 @@ const buildSubSlides = ({
 const wrapSlides = (
   tree: Root,
   parts: Map<Element, DocumentOutlinePart>,
-  slideTypes: Map<Element, SlideTypeDefinition>,
+  slideTypes: Map<Element, AssignedSlideType>,
 ): ReadonlyArray<DocumentOutlineSection> => {
   const sections: Array<DocumentOutlineSection> = [];
   const rewritten: Array<RootContent> = [];
@@ -468,7 +484,7 @@ const wrapSlides = (
         : `${currentPart.number}.${indexInPart}`;
     const title = textOf(child);
     const slideType = slideTypes.get(child);
-    const name = slideType?.name ?? title;
+    const name = slideType?.name ?? slideType?.definition.name ?? title;
     const kicker: Element = {
       type: "element",
       tagName: "p",
@@ -484,7 +500,8 @@ const wrapSlides = (
       name,
       title,
       id: typeof id === "string" ? id : label,
-      ...(slideType === undefined ? {} : { type: slideType.id }),
+      ...(slideType?.toc === undefined ? {} : { toc: slideType.toc }),
+      ...(slideType === undefined ? {} : { type: slideType.definition.id }),
       ...(currentPart === undefined ? {} : { part: currentPart }),
     });
     const sectionBody = body.slice(1);
@@ -516,7 +533,7 @@ const wrapSlides = (
           "data-slide": "",
           ...(slideType === undefined
             ? {}
-            : { "data-slide-type": slideType.id }),
+            : { "data-slide-type": slideType.definition.id }),
         },
         className: SLIDE_CLASSES,
         chrome: [kicker, child],

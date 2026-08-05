@@ -41,7 +41,7 @@ describe("lintPlan table-of-contents-matches-sections", () => {
         line: 5,
         column: 1,
         message:
-          'TableOfContents entry 2 says "Design" but section 2 is titled "The design"; list every section title exactly, in document order',
+          'TableOfContents entry 2 says "Design" but section 2 is named "The design"; list every section name exactly, in document order',
       },
     ]);
   });

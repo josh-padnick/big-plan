@@ -34,6 +34,7 @@ export type SectionPart = {
 export type Section = {
   readonly id: string;
   readonly name: string;
+  readonly toc?: string;
   readonly title: string;
   readonly type?: SlideTypeId;
   readonly part?: SectionPart;
@@ -364,6 +365,7 @@ const compileMarkdownTree = ({
             id: section.id,
             name: outlined.name,
             title: outlined.title,
+            ...(outlined.toc === undefined ? {} : { toc: outlined.toc }),
             ...(outlined.type === undefined ? {} : { type: outlined.type }),
             ...(section.part === undefined ? {} : { part: section.part }),
           };

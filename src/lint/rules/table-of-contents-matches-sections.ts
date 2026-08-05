@@ -57,7 +57,9 @@ const checkTableOfContentsMatchesSections = ({
   readonly tree: Node;
 }): ReadonlyArray<PlanLintFinding> => {
   const overviews: Array<TableOfContentsNode> = [];
-  const sectionNames = collectAuthoredSections(tree).map(({ name }) => name);
+  const sectionNames = collectAuthoredSections(tree).map(
+    ({ name, toc }) => toc ?? name,
+  );
 
   const visit = (node: Node): void => {
     if (

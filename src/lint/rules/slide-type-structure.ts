@@ -43,6 +43,24 @@ const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
     }
   }
 
+  for (const section of typed) {
+    if (section.type === undefined) {
+      continue;
+    }
+    const definition = slideTypeFor(section.type);
+    for (const component of definition.components) {
+      if (
+        component.required === true &&
+        !section.components.includes(component.name)
+      ) {
+        findings.push({
+          ...positionOf(section),
+          message: `${definition.name} slide "${section.name}" must contain a ${component.name} with actual UI mockups`,
+        });
+      }
+    }
+  }
+
   const desiredExperience = typed.find(
     ({ type }) => type === "desired-experience",
   );
@@ -69,6 +87,27 @@ const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
         ...positionOf(acceptance),
         message: `${slideTypeFor("acceptance-criteria").name} must be the last typed slide in the plan`,
       });
+    }
+  }
+
+  const journeys = typed.filter(({ type }) => type === "user-journey");
+  for (const field of ["name", "toc"] as const) {
+    const seen = new Set<string>();
+    for (const journey of journeys) {
+      const value = journey[field];
+      if (value === undefined) {
+        continue;
+      }
+      if (seen.has(value)) {
+        findings.push({
+          ...positionOf(journey),
+          message:
+            field === "name"
+              ? `Give every journey in User journeys a distinct name; "${value}" is repeated`
+              : `Give every journey in User journeys a distinct table-of-contents form; "${value}" is repeated`,
+        });
+      }
+      seen.add(value);
     }
   }
 

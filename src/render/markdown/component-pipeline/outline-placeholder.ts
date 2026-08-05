@@ -20,6 +20,8 @@ import type { ReactHastAdapter } from "./react-hast-adapter.js";
 export const OUTLINE_PLACEHOLDER_ATTRIBUTE = "data-outline-placeholder";
 export const OUTLINE_PART_TITLE_ATTRIBUTE = "data-outline-part-title";
 export const OUTLINE_SLIDE_TYPE_ATTRIBUTE = "data-outline-slide-type";
+export const OUTLINE_SLIDE_NAME_ATTRIBUTE = "data-outline-slide-name";
+export const OUTLINE_SLIDE_TOC_ATTRIBUTE = "data-outline-slide-toc";
 
 /** Deferred outline presentations in placeholder-index order. */
 export type DeferredOutlinePresentations = Array<
@@ -47,7 +49,15 @@ export const createOutlinePlaceholder = ({
         }
       : {}),
     ...(marker.kind === "slide"
-      ? { [OUTLINE_SLIDE_TYPE_ATTRIBUTE]: marker.type }
+      ? {
+          [OUTLINE_SLIDE_TYPE_ATTRIBUTE]: marker.type,
+          ...(marker.name === undefined
+            ? {}
+            : { [OUTLINE_SLIDE_NAME_ATTRIBUTE]: marker.name }),
+          ...(marker.toc === undefined
+            ? {}
+            : { [OUTLINE_SLIDE_TOC_ATTRIBUTE]: marker.toc }),
+        }
       : {}),
   },
   children: [],

@@ -46,6 +46,52 @@ describe("Slide component", () => {
     expect(html).not.toContain("data-slide-marker");
   });
 
+  it("should give a user journey distinct navigation, overview, and title forms", () => {
+    const markdown =
+      '<Slide type="user-journey" name="Drafting a status slide" toc="Draft status" />\n\n## An agent turns evidence into a status slide\n\nJourney.\n';
+    const plan = compilePlanModel({ markdown, fallbackTitle: "Plan" });
+    const html = serializeHtml({
+      root: compileMarkdown({ markdown }).root,
+    });
+
+    expect(plan.components).toMatchObject([
+      {
+        component: "Slide",
+        model: {
+          type: "user-journey",
+          name: "Drafting a status slide",
+          toc: "Draft status",
+        },
+      },
+    ]);
+    expect(plan.sections).toEqual([
+      {
+        id: "an-agent-turns-evidence-into-a-status-slide",
+        name: "Drafting a status slide",
+        toc: "Draft status",
+        title: "An agent turns evidence into a status slide",
+        type: "user-journey",
+      },
+    ]);
+    expect(html).toContain(">1 / Drafting a status slide</p>");
+    expect(html).toContain('data-slide-type="user-journey"');
+  });
+
+  it("should require journey name and TOC forms only for user journeys", () => {
+    expect(() =>
+      compileMarkdown({
+        markdown:
+          '<Slide type="user-journey" />\n\n## An agent reviews the plan\n',
+      }),
+    ).toThrowError(MarkdownDiagnosticsError);
+    expect(() =>
+      compileMarkdown({
+        markdown:
+          '<Slide type="status-quo" name="Today" toc="Now" />\n\n## Retries block checkout\n',
+      }),
+    ).toThrowError(MarkdownDiagnosticsError);
+  });
+
   it("should reject unknown types with the complete closed catalog", () => {
     expect(() =>
       compileMarkdown({

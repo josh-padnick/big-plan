@@ -33,6 +33,8 @@ A rendered plan reads as a deck: every section is one slide carrying one thought
 If a section needs a second screen, it holds a second thought; split it into h3 sub-slides, each of which renders as its own numbered frame.
 Before drafting, run `big-plan guidance Slide` once for the complete slide-type catalog.
 For each intended slide, ask whether its purpose matches a defined type; when one fits, use its `Slide` marker and type-specific guidance, and when none fits, author an untyped slide under these general principles rather than forcing a match.
+For user journeys, name the container “User journeys” as either a Part or an untyped introductory slide; give every journey its own marker `name`, ultra-concise `toc` form, and full h2 claim.
+Every journey slide must contain a `Wireframe` with actual `Screen` mockups that show the interface states in the human loop; prose may explain the screens but never replace them.
 Typed coverage is not a quality target.
 Group the slides with `Part` markers into about three acts - Context, The proposal, and Shipping & your review - adapting the names when this plan demands it.
 Part 1 canonically holds "Status quo" and then "Success looks like": what is true today, and the outcome-level success a sponsor would repeat.
@@ -47,7 +49,8 @@ Fold "why X rather than Y" justifications into the surrounding story or a decisi
 
 Every slide and sub-slide names its message before it shows anything; the reader has to know what they are looking at before they look at it.
 An h2 is the slide's title.
-On a typed slide the catalog supplies the reusable structural name shown in the kicker, overview, and navigation, while the h2 states this plan's specific message; on an untyped slide the h2 remains both name and title.
+On most typed slides the catalog supplies the reusable structural name shown in the kicker, overview, and navigation, while the h2 states this plan's specific message; user journeys instead use their marker `name` in the kicker and navigation and their marker `toc` in the overview.
+On an untyped slide the h2 remains both name and title.
 Normally keep a typed title distinct from its name and write it in plain language: concrete nouns and active verbs, without evaluative adjectives, superlatives, slogans, or abstract noun stacks.
 That discipline stays judgment guidance because broad title lint would falsely flag legitimate domain language; an identical name and title remains structurally valid when a distinct title would be strained.
 An h3 renders only as a small kicker, so a sub-slide that leads with a figure needs an h4 title of its own.

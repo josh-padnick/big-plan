@@ -17,6 +17,7 @@ export type DocumentOutlineSection = {
   // The slide number in reading form: "3" alone, "1.2" inside a part.
   readonly number: string;
   readonly name: string;
+  readonly toc?: string;
   readonly title: string;
   readonly id: string;
   readonly type?: SlideTypeId;

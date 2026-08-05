@@ -15,10 +15,14 @@ import {
 
 export type CompiledSlide = {
   readonly type?: SlideTypeId;
+  readonly name?: string;
+  readonly toc?: string;
 };
 
 const SLIDE_SCHEMA = {
   type: { kind: "enum", values: SLIDE_TYPE_IDS, required: true },
+  name: { kind: "string", nonEmpty: true },
+  toc: { kind: "string", nonEmpty: true },
 } satisfies ComponentAttributeSchema;
 
 /** Compiles one self-closing Slide marker into its registered type. */
@@ -42,9 +46,40 @@ export const compileSlideComponent = ({
       position,
     });
   }
+  if (validated.type === "user-journey") {
+    if (attributes["name"] === undefined) {
+      diagnostics.add({
+        message:
+          'User journey Slide requires a distinct journey name; add name="..."',
+        position,
+      });
+    }
+    if (attributes["toc"] === undefined) {
+      diagnostics.add({
+        message:
+          'User journey Slide requires an ultra-concise table-of-contents form; add toc="..."',
+        position,
+      });
+    }
+  } else if (
+    validated.type !== undefined &&
+    (attributes["name"] !== undefined || attributes["toc"] !== undefined)
+  ) {
+    diagnostics.add({
+      message:
+        'Slide attributes "name" and "toc" belong only on user-journey markers; other types derive their name from the catalog',
+      position,
+    });
+  }
   return {
     ...(validated.type !== undefined && isSlideTypeId(validated.type)
       ? { type: validated.type }
+      : {}),
+    ...(validated.type === "user-journey" && validated.name !== undefined
+      ? { name: validated.name }
+      : {}),
+    ...(validated.type === "user-journey" && validated.toc !== undefined
+      ? { toc: validated.toc }
       : {}),
   };
 };
