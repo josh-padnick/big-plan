@@ -299,7 +299,106 @@ Note: 'Append-only review events in durable thread order.'
 
 </DataTable>
 
-<HttpEndpoint method="POST" path="/api/plans/{planId}/review-events" summary="Append one review event" auth="Local review session" />
+<HttpEndpoint method="POST" path="/api/plans/{planId}/review-events" summary="Append one review event" auth="Local review session">
+
+Persists one ordered event and its current source anchor in the same
+transaction. Clients use `clientEventId` to retry safely after a lost response.
+
+<Param name="planId" in="path" type="string" required>
+
+Stable identifier for the authoritative plan source.
+
+</Param>
+
+<Param name="threadId" in="body" type="string" required>
+
+Thread receiving the event.
+
+</Param>
+
+<Param name="clientEventId" in="body" type="string" required>
+
+Client-generated idempotency key for this append attempt.
+
+</Param>
+
+<Param name="kind" in="body" type="comment | reply | resolve | accept" required>
+
+Review action represented by the event.
+
+</Param>
+
+<Param name="body" in="body" type="string">
+
+Comment or reply text. Omitted for resolve and accept events.
+
+</Param>
+
+<Param name="anchor" in="body" type="SourceAnchor">
+
+Source location the event refers to, captured against the current plan
+revision.
+
+</Param>
+
+<Request contentType="application/json">
+
+```json
+{
+  "threadId": "thr_01K1Q8WZ3B4N6M7P9R2T5V8X0Y",
+  "clientEventId": "evt_client_01K1Q91C8Y2F6G4H7J3M5N0PQS",
+  "kind": "comment",
+  "body": "Keep the retry budget explicit in the service contract.",
+  "anchor": {
+    "path": "src/render/shell/viewer-script.ts",
+    "startLine": 414,
+    "endLine": 417,
+    "planRevision": "sha256:7a1d56c4"
+  }
+}
+```
+
+</Request>
+
+<Response status="201" label="Review event appended">
+
+```json
+{
+  "eventId": "evt_01K1Q91DD5Z8A2B4C6E7F9G0HJ",
+  "threadId": "thr_01K1Q8WZ3B4N6M7P9R2T5V8X0Y",
+  "sequence": 7,
+  "status": "open",
+  "createdAt": "2026-08-05T19:42:11.392Z"
+}
+```
+
+</Response>
+
+<Response status="409" label="Thread changed before append">
+
+```json
+{
+  "error": "thread_sequence_conflict",
+  "expectedSequence": 6,
+  "currentSequence": 7
+}
+```
+
+</Response>
+
+<Response status="422" label="Source anchor is invalid">
+
+```json
+{
+  "error": "invalid_source_anchor",
+  "field": "anchor.startLine",
+  "message": "startLine must exist in plan revision sha256:7a1d56c4"
+}
+```
+
+</Response>
+
+</HttpEndpoint>
 
 <GraphqlOperation kind="mutation" name="reviewEventAppend" access="Requires plan write access" />
 
