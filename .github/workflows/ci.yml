@@ -65,7 +65,7 @@ jobs:
           GIT_CONFIG_COUNT: 1
           GIT_CONFIG_KEY_0: safe.directory
           GIT_CONFIG_VALUE_0: ${{ github.workspace }}
-          STYLE_HISTORY_BASE: ${{ github.ref == 'refs/heads/main' && github.event.before || 'origin/main' }}
+          STYLE_HISTORY_BASE: origin/fm/bp-tailwind-a-fb
         run: bun run verify:style-history -- --base "$STYLE_HISTORY_BASE"
       - name: Upload styling history evidence
         if: always()
