@@ -177,6 +177,31 @@ Guidance is demand-driven: add a document, rule, or map entry only after an agen
 Read and follow [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for the authoritative coding, comments, error-handling, logging, testing, browser-runtime, styling, and tooling practices.
 Mechanically enforced facts remain owned by their checks.
 
+### Styling owned markup
+
+This section governs how agents implement styles in Big Plan.
+The default is Tailwind utility classes colocated with the markup an agent edits.
+Before using CSS, apply these three tests to every declaration:
+
+1. **Owned.** Does the view own the element that would carry the class?
+   Generated Markdown and syntax-highlighter tokens fail this test because their elements are emitted downstream.
+2. **Discoverable.** Does the complete Tailwind candidate appear statically in source?
+   Semantic runtime variants such as `data-[collapsed]:hidden` pass; dynamically constructed candidates such as `` `opacity-${value}` `` fail.
+   For a finite choice, use a lookup whose values contain complete candidate strings.
+3. **Local and legible.** Does the class explain this element and its condition without making a reviewer execute DOM traversal or a selector program?
+   Short variants such as `before:block`, `has-[img]:p-4`, `print:hidden`, `motion-reduce:transition-none`, and `@sm:grid` can pass.
+   Framework support alone does not make a long arbitrary variant maintainable.
+
+A rule that passes all three tests should normally be implemented with Tailwind utility classes.
+Runtime state is not a reason by itself to use CSS: prefer semantic `aria-*` and `data-*` attributes while keeping every complete candidate static.
+
+CSS is the fallback.
+Use it only as an escape hatch for externally owned or generated markup, document-wide behavior, token or keyframe definitions, a selector relationship that is clearer as a selector, a shared visual primitive with no authored element of its own, or a case where utilities make the local markup materially less legible.
+Component CSS therefore requires a concrete ownership, selector, primitive-definition, document-wide, or readability reason—not merely that the rule uses state, a pseudo-element, `:has()`, print, motion, or a container query.
+State the reason in the stylesheet's file-level `CSS escape hatch:` comment.
+Ordinary escape-hatch rules belong to `components` and yield to utilities; only a state invariant that must beat resting utilities belongs to `bp-state`, with an adjacent `Override invariant:` comment naming what it must override.
+The stylesheet-contract check owns the exact enforced syntax and allowed layer exceptions.
+
 ## Gold-standard plan-quality testing
 
 This section owns the durable procedure for improving Big Plan's plan quality as a product.

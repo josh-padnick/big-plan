@@ -24,7 +24,7 @@
 //    script running on this runtime's own origin.
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { basename, extname, resolve } from "node:path";
@@ -73,6 +73,10 @@ import {
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
 import { buildRevisionChangeSet } from "./revision-change-set.js";
+import {
+  RevisionRevertConflict,
+  revertRevisionPair,
+} from "./revision-revert.js";
 
 type ReviewRuntimeOperations = {
   readonly createServer: typeof createServer;
@@ -123,6 +127,7 @@ const API_ROUTES: ReadonlyArray<Route> = [
   { method: "GET", path: "/api/agent" },
   { method: "POST", path: "/api/agent-requests" },
   { method: "POST", path: "/api/agent-requests/cancel" },
+  { method: "POST", path: "/api/revert" },
   { method: "GET", path: "/api/progress" },
   { method: "GET", path: "/api/revision-diff" },
 ];
@@ -581,6 +586,102 @@ export const startReviewRuntime = async ({
         response,
         status: 200,
         value: { requestId, cancelled: true },
+      });
+      return;
+    }
+    if (route.path === "/api/revert") {
+      const body = await readBody(request);
+      const payload =
+        typeof body === "object" && body !== null
+          ? (body as Readonly<Record<string, unknown>>)
+          : {};
+      const commentId = payload.commentId;
+      const exchange = await readAgentExchange({ store, sessionId, planId });
+      const responsesForComment =
+        typeof commentId === "string"
+          ? exchange.responses.filter(
+              (entry) =>
+                entry.kind !== "chat" &&
+                entry.outcomes.some(
+                  (outcome) =>
+                    outcome.commentId === commentId &&
+                    outcome.state === "changed",
+                ),
+            )
+          : [];
+      const latestResponse = responsesForComment.at(-1);
+      if (latestResponse === undefined || typeof commentId !== "string") {
+        refuse({
+          response,
+          status: 400,
+          reason: "This comment has no owned revision pair to revert",
+        });
+        return;
+      }
+      const current = await readFile(resolvedPlanPath, "utf8");
+      let reverted = current;
+      try {
+        for (const ownedResponse of [...responsesForComment].reverse()) {
+          const { fromRevision, toRevision } = ownedResponse.revisionPair;
+          const [before, after] = await Promise.all([
+            readRevisionSnapshot({ store, revision: fromRevision }),
+            readRevisionSnapshot({ store, revision: toRevision }),
+          ]);
+          reverted = revertRevisionPair({
+            before,
+            after,
+            current: reverted,
+          });
+        }
+        if (reverted === current) {
+          const oldest = responsesForComment.at(0);
+          if (oldest !== undefined) {
+            const [before, after] = await Promise.all([
+              readRevisionSnapshot({
+                store,
+                revision: oldest.revisionPair.fromRevision,
+              }),
+              readRevisionSnapshot({
+                store,
+                revision: latestResponse.revisionPair.toRevision,
+              }),
+            ]);
+            reverted = revertRevisionPair({ before, after, current });
+          }
+        }
+      } catch (error: unknown) {
+        if (error instanceof RevisionRevertConflict) {
+          refuse({ response, status: 409, reason: error.message });
+          return;
+        }
+        throw error;
+      }
+      await writeFile(resolvedPlanPath, reverted, "utf8");
+      const revision = deriveSourceRevision(reverted);
+      await writeRevisionSnapshot({ store, revision, source: reverted });
+      progressSeq += 1;
+      await appendProgress({
+        store,
+        event: {
+          sessionId,
+          seq: progressSeq,
+          step: "Reviewer reverted a comment change",
+          state: "done",
+          requestId: latestResponse.requestId,
+          at: new Date().toISOString(),
+          detail: commentId,
+        },
+      });
+      sendJson({
+        response,
+        status: 200,
+        value: {
+          reverted: true,
+          commentId,
+          requestId: latestResponse.requestId,
+          sourceRevision: revision,
+          agentNotified: true,
+        },
       });
       return;
     }
