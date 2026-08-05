@@ -3,13 +3,14 @@
 // links (falling back to the overview links above the first section), hover
 // popovers that float [data-info-popover] disclosures beside their triggers,
 // annotation-to-code cross-highlighting, collapse toggles for deck parts,
-// slides, and sub-slides, table-schema column state, a document comment draft,
-// DataTable sorting, filtering, text fit, column layout and grouping, and one
-// maximize behavior shared by every figure family, a decision matrix's column
-// highlight, rationale swap, and confirm step, wireframe screen navigation
-// driven entirely by renderer-emitted data attributes plus true-width scaling,
-// and the diagram leg in ./diagram-script.ts. Plan content never contributes
-// script, and every affordance keeps a no-JS fallback.
+// slides, and sub-slides, table-schema column state and index jumps, a document
+// comment draft, DataTable sorting, filtering, text fit, column layout and
+// grouping, and one maximize behavior shared by every figure family, a
+// decision matrix's column highlight, rationale swap, and confirm step,
+// wireframe screen navigation driven entirely by renderer-emitted data
+// attributes plus true-width scaling, and the diagram leg in
+// ./diagram-script.ts. Plan content never contributes script, and every
+// affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
@@ -270,6 +271,8 @@ export const VIEWER_SCRIPT = `<script>
       : "big-plan:table:" + planId + ":" + tableName;
   };
   let activeColumnDrag = null;
+  let nextIndexTargetId = 1;
+  const indexFlashTimers = new WeakMap();
   for (const figure of figures) {
     const grid = figure.querySelector(".table-schema-grid");
     const headRow = grid?.querySelector("thead tr");
@@ -515,6 +518,62 @@ export const VIEWER_SCRIPT = `<script>
           boundary - (fromIndex < boundary ? 1 : 0);
         moveColumn(drag.column, insertion);
         announceMove(drag.column);
+      });
+    }
+
+    // Index references stay inert text without scripts. Once enhanced, each
+    // becomes a native button whose controlled entry receives focus, scrolls
+    // into view, and takes the existing accent flash.
+    for (const marker of figure.querySelectorAll("[data-schema-indx]")) {
+      const position = marker.getAttribute("data-schema-indx");
+      if (position === null || position === "") continue;
+      const entry = figure.querySelector(
+        '[data-schema-index="' + position + '"]',
+      );
+      if (entry === null) continue;
+      if (entry.id === "") {
+        let targetId;
+        do {
+          targetId = "big-plan-schema-index-" + String(nextIndexTargetId);
+          nextIndexTargetId += 1;
+        } while (document.getElementById(targetId) !== null);
+        entry.id = targetId;
+      }
+      entry.tabIndex = -1;
+      const jump = document.createElement("button");
+      jump.type = "button";
+      jump.className =
+        marker.className +
+        " table-schema-index-jump focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+      jump.textContent = marker.textContent;
+      jump.setAttribute("data-schema-indx", position);
+      jump.setAttribute("aria-controls", entry.id);
+      jump.setAttribute("aria-label", "Jump to index " + position);
+      jump.title = "Jump to index " + position;
+      marker.replaceWith(jump);
+      jump.addEventListener("click", () => {
+        const reducedMotion = matchMedia(
+          "(prefers-reduced-motion: reduce)",
+        ).matches;
+        entry.scrollIntoView({
+          behavior: reducedMotion ? "auto" : "smooth",
+          block: "center",
+        });
+        entry.focus({ preventScroll: true });
+        const previousTimer = indexFlashTimers.get(entry);
+        if (previousTimer !== undefined) clearTimeout(previousTimer);
+        entry.classList.remove("table-schema-index-flash");
+        // Re-reading layout lets a repeated activation restart the transition;
+        // reduced-motion readers get the same tint with no transition.
+        void entry.offsetWidth;
+        entry.classList.add("table-schema-index-flash");
+        indexFlashTimers.set(
+          entry,
+          setTimeout(() => {
+            entry.classList.remove("table-schema-index-flash");
+            indexFlashTimers.delete(entry);
+          }, 1600),
+        );
       });
     }
 
