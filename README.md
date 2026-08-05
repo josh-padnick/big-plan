@@ -25,6 +25,7 @@ npx big-plan guidance
 npx big-plan validate <file.mdx>
 npx big-plan render <file.mdx> [output.html]
 npx big-plan compile <file.mdx> [output.json]
+npx big-plan review <file.mdx>
 ```
 
 `guidance` prints the principles for writing a plan a human loves to review; reading it recently is required before `validate` and `render` will run.
@@ -51,7 +52,8 @@ The full authoring contract lives in the documentation:
 - [Linting rules](docs/src/content/docs/reference/lint-rules.md) - every authoring rule and its conservative matching boundaries.
 - [Components](docs/src/content/docs/components/index.md) - the complete built-in component reference.
 - [Features](docs/src/content/docs/intro/features.md) - the reader-facing viewer capabilities.
-- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `validate`, `render`, and `compile` in detail.
+- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `validate`, `render`, `compile`, and `review` in detail.
+- [Reviewing a plan](docs/src/content/docs/reference/reviewing.md) - commenting, the Feedback tray, the feedback package, and the runtime's trust boundaries.
 
 To preview components locally, run `node bin/big-plan.mjs guidance` once, then render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`.
 To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.

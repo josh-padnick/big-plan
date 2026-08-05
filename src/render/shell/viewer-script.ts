@@ -33,84 +33,87 @@ const COMPARE_DATA_TABLE_VALUES_SOURCE = compareDataTableValues.toString();
 
 export const VIEWER_SCRIPT = `<script>
 (() => {
-  const links = Array.from(document.querySelectorAll("[data-section-link]"));
-  const overviewLinks = Array.from(
-    document.querySelectorAll("[data-overview-link]"),
-  );
-  const targets = new Map();
-  for (const link of links) {
-    const id = decodeURIComponent((link.getAttribute("href") || "").slice(1));
-    const heading = document.getElementById(id);
-    if (heading === null) continue;
-    targets.set(heading, (targets.get(heading) || []).concat(link));
-  }
-  const headings = Array.from(targets.keys());
-  if (headings.length === 0) {
-    window.__bigPlanRefreshScrollSpy = () => {};
-    return;
-  }
-  const isReadableHeading = (heading) => {
-    if (!(heading instanceof Element)) return false;
-    if (typeof heading.checkVisibility === "function") {
-      try {
+  let controller = null;
+  const refresh = () => {
+    controller?.abort();
+    controller = new AbortController();
+    const signal = controller.signal;
+    const links = Array.from(
+      document.querySelectorAll("[data-section-link]"),
+    );
+    const overviewLinks = Array.from(
+      document.querySelectorAll("[data-overview-link]"),
+    );
+    const targets = new Map();
+    for (const link of links) {
+      const id = decodeURIComponent((link.getAttribute("href") || "").slice(1));
+      const heading = document.getElementById(id);
+      if (heading === null) continue;
+      targets.set(heading, (targets.get(heading) || []).concat(link));
+    }
+    const headings = Array.from(targets.keys());
+    const isReadableHeading = (heading) => {
+      if (!(heading instanceof Element)) return false;
+      if (typeof heading.checkVisibility === "function") {
+        try {
+          if (
+            !heading.checkVisibility({
+              checkOpacity: false,
+              checkVisibilityCSS: true,
+            })
+          )
+            return false;
+        } catch (_) {}
+      }
+      const rect = heading.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return false;
+      let node = heading;
+      while (node instanceof Element) {
+        const parent = node.parentElement;
         if (
-          !heading.checkVisibility({
-            checkOpacity: false,
-            checkVisibilityCSS: true,
-          })
+          parent !== null &&
+          node.hasAttribute("data-collapse-body") &&
+          parent.hasAttribute("data-collapsed")
         )
           return false;
-      } catch (_) {}
-    }
-    const rect = heading.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) return false;
-    // A heading is hidden exactly when it sits in the body of a collapsed
-    // frame. Header chrome is never inside a body, so it always stays
-    // readable - no per-kind special cases needed.
-    let node = heading;
-    while (node instanceof Element) {
-      const parent = node.parentElement;
-      if (
-        parent !== null &&
-        node.hasAttribute("data-collapse-body") &&
-        parent.hasAttribute("data-collapsed")
-      )
-        return false;
-      node = parent;
-    }
-    return true;
-  };
-  const apply = () => {
-    const readingLine = window.innerHeight * 0.25;
-    let current = null;
-    for (const heading of headings) {
-      if (!isReadableHeading(heading)) continue;
-      if (heading.getBoundingClientRect().top <= readingLine) current = heading;
-    }
-    for (const [heading, sectionLinks] of targets) {
-      for (const link of sectionLinks) {
-        if (heading === current) link.setAttribute("aria-current", "true");
+        node = parent;
+      }
+      return true;
+    };
+    const apply = () => {
+      const readingLine = window.innerHeight * 0.25;
+      let current = null;
+      for (const heading of headings) {
+        if (!isReadableHeading(heading)) continue;
+        if (heading.getBoundingClientRect().top <= readingLine) current = heading;
+      }
+      for (const [heading, sectionLinks] of targets) {
+        for (const link of sectionLinks) {
+          if (heading === current) link.setAttribute("aria-current", "true");
+          else link.removeAttribute("aria-current");
+        }
+      }
+      for (const link of overviewLinks) {
+        if (current === null) link.setAttribute("aria-current", "true");
         else link.removeAttribute("aria-current");
       }
-    }
-    for (const link of overviewLinks) {
-      if (current === null) link.setAttribute("aria-current", "true");
-      else link.removeAttribute("aria-current");
-    }
+    };
+    window.__bigPlanRefreshScrollSpy = apply;
+    let scheduled = false;
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => {
+        scheduled = false;
+        apply();
+      });
+    };
+    addEventListener("scroll", schedule, { passive: true, signal });
+    addEventListener("resize", schedule, { passive: true, signal });
+    apply();
   };
-  window.__bigPlanRefreshScrollSpy = apply;
-  let scheduled = false;
-  const schedule = () => {
-    if (scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(() => {
-      scheduled = false;
-      apply();
-    });
-  };
-  addEventListener("scroll", schedule, { passive: true });
-  addEventListener("resize", schedule, { passive: true });
-  apply();
+  window.__bigPlanRefreshViewer = refresh;
+  refresh();
 })();
 (() => {
   const infos = document.querySelectorAll("details[data-info-popover]");

@@ -61,7 +61,7 @@ describe("renderCommand", () => {
     });
     const html = await readFile(outputPath, "utf8");
     expect(html).toContain("<title>Adapter plan</title>");
-    expect(html).toMatch(/<html lang="en" data-plan-id="[a-f0-9]{32}">/);
+    expect(html).toMatch(/<html lang="en" data-plan-id="[a-f0-9]{16}">/);
   });
 
   it("should refuse to render a plan that fails authoring lint and write nothing", async () => {

@@ -21,6 +21,7 @@ export default tseslint.config(
       "examples/",
       "test-results/",
       "playwright-report/",
+      ".agent-runs/",
     ],
   },
   js.configs.recommended,
@@ -163,17 +164,26 @@ export default tseslint.config(
         ignores: ["src/render/page.ts", "src/render/escape-html.ts"],
         imports: [
           "**/compile-plan-model.js",
+          "**/plan-id.js",
           "**/render-document.js",
           "**/serialize-html.js",
         ],
         mayImport: ["markdown", "shell", "page"],
+      },
+      // The local review runtime: loopback transport, session identity, the
+      // reviewer's on-disk state, and the feedback package. It renders through
+      // the composer's public entry points and owns no command I/O.
+      review: {
+        files: ["src/review/**/*.ts"],
+        imports: ["**/review/**"],
+        mayImport: ["composer"],
       },
       cli: {
         files: ["src/cli/**/*.ts"],
         imports: ["**/cli/**"],
         // The composer files are the renderer's public entry points; granting
         // only them keeps the CLI out of the renderer's internals.
-        mayImport: ["composer", "planLint"],
+        mayImport: ["composer", "planLint", "review"],
       },
     };
 
@@ -184,6 +194,7 @@ export default tseslint.config(
       ["components"],
       ["markdown", "shell"],
       ["composer"],
+      ["review"],
       ["cli"],
     ];
 
@@ -312,6 +323,13 @@ export default tseslint.config(
     // Node-runtime JavaScript: the bin shim and build-time generators.
     files: ["bin/**/*.mjs", "scripts/**/*.mjs"],
     languageOptions: { globals: globals.node },
+  },
+  {
+    // Browser-runtime JavaScript: the authored viewer sources a generator
+    // bundles into the document. They never run in Node, so they get browser
+    // globals rather than the project default.
+    files: ["assets/**/*.js"],
+    languageOptions: { globals: globals.browser },
   },
   {
     // Playwright specs must go through the extended test in fixtures.ts so

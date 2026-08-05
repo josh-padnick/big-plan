@@ -43,6 +43,19 @@ Everything on this page is shipped and works today.
 - `QuickDecision` components for standalone brief questions with recommendations and a reading-session answer flow, without a comparison expander.
 - `Wireframe` components for true-width product screens with device-honest fixed or growing frames, walkable prototypes, opt-in common layout patterns, and an open vocabulary for custom layouts.
 
+## Reviewing
+
+- Comment on any block: a heading, paragraph, list, table, code figure, or component.
+- Comment on any span of text you highlight, or on a line range inside a code figure.
+- A Feedback tray that collects drafts, opens with your first comment, and hides whenever you want the column back.
+- Edit and delete anything before it reaches the agent.
+- One action sends every pending comment as a single feedback package, plus a Markdown brief the agent can read directly.
+- An always-present agent panel: one compose field for whole-plan notes, and progress after you send.
+- Keyboard navigation over blocks, and drafts that survive closing the tab.
+- Everything runs locally through `npx big-plan review`; nothing leaves the machine.
+
+See [Reviewing a plan](/reference/reviewing/) for the whole loop and its trust boundaries.
+
 ## Output
 
 - One self-contained HTML file with styling and branding embedded.
