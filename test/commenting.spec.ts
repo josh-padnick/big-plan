@@ -211,6 +211,38 @@ test("should offer comments from nested sub-slide icons and text selections", as
   const compose = page.locator("[data-review-compose]");
   const affordance = page.locator("[data-review-affordance]");
 
+  await test.step("the nested selector keeps complete interaction states in both themes", async () => {
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme });
+      await selector.hover();
+      await expect
+        .poll(() => selector.evaluate((node) => node.matches(":hover")))
+        .toBe(true);
+
+      await selector.focus();
+      const focusState = await selector.evaluate((node) => {
+        const style = getComputedStyle(node);
+        return {
+          focused: node.matches(":focus-visible"),
+          outlineStyle: style.outlineStyle,
+          outlineWidth: style.outlineWidth,
+        };
+      });
+      expect(focusState.focused).toBe(true);
+      expect(focusState.outlineStyle).not.toBe("none");
+      expect(focusState.outlineWidth).not.toBe("0px");
+
+      const box = await selector.boundingBox();
+      if (box === null) throw new Error("The nested selector has no hit box");
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await expect
+        .poll(() => selector.evaluate((node) => node.matches(":active")))
+        .toBe(true);
+      await page.mouse.up();
+    }
+  });
+
   await test.step("the nested selector owns an addressable sub-slide", async () => {
     await expect(subSlide.locator("[data-block-id]")).not.toHaveCount(0);
     await expect(selector).toBeVisible();
