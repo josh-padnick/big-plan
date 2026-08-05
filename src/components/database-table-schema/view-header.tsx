@@ -13,6 +13,10 @@ import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { CopyFeedback } from "../_shared/copy-feedback/copy-feedback.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
+// /* off-scale */ Phase A preserves the legacy inset header radius, compact
+// caption/menu geometry, and menu shadow exactly. Phase B may regularize them
+// against the product scale.
+
 // A transparent resting state keeps the overflow control quieter than the
 // schema it acts on; hover and focus still reveal the full affordance.
 // Shared by the column and action controls. The hover background is a utility
@@ -22,7 +26,7 @@ const BUTTON_CLASSES =
   "table-schema-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 // Shared by the actions and columns menus.
 const MENU_LIST_CLASSES =
-  "table-schema-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge p-1";
+  "table-schema-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge bg-[var(--diff-header-bg)] p-1 shadow-[0_6px_18px_rgb(12_10_8_/_0.18)]";
 const MENU_ITEM_CLASSES =
   "table-schema-menu-item flex w-full cursor-pointer items-center gap-[0.45rem] whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-[0.3rem] text-left text-xs text-ink hover:bg-edge [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted";
 
@@ -162,7 +166,7 @@ const ColumnsMenu = () => (
           authored order, so the layout has one home. The separator keeps
           the reset action visually apart from the checkboxes. */}
       <div
-        className="table-schema-menu-separator -mx-1 my-1 h-px"
+        className="table-schema-menu-separator -mx-1 my-1 h-px bg-edge"
         role="separator"
         aria-orientation="horizontal"
       />
@@ -186,7 +190,7 @@ export const TableSchemaHeader = ({
   readonly schemaName?: string;
   readonly note?: string;
 }) => (
-  <figcaption className="table-schema-header min-w-0 border-b border-edge px-[0.55rem] py-[0.3rem]">
+  <figcaption className="table-schema-header min-w-0 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-[0.55rem] py-[0.3rem]">
     <span className="table-schema-header-row flex min-w-0 items-center justify-between gap-3">
       <TableIdentity
         tableName={tableName}

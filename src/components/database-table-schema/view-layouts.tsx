@@ -15,7 +15,7 @@ import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 
 // Shared by every pill in the grid and the bands below it.
 const BADGE_CLASSES =
-  "table-schema-badge inline-flex shrink-0 items-center rounded-full border px-[0.4rem] py-px align-middle font-sans text-[0.625rem] font-semibold uppercase tracking-wide";
+  "table-schema-badge inline-flex shrink-0 items-center rounded-full border border-edge px-[0.4rem] py-px align-middle font-sans text-[0.625rem] font-semibold tracking-wide text-muted uppercase data-[schema-badge=pk]:border-[color-mix(in_srgb,var(--color-accent)_45%,transparent)] data-[schema-badge=pk]:text-accent";
 // Shared by the Indexes and DDL band labels.
 const SECTION_LABEL_CLASSES =
   "table-schema-section-label m-0 text-[0.6875rem] font-medium uppercase tracking-wider text-muted";
@@ -346,7 +346,7 @@ const IndexEntry = ({
 // through untouched for downstream highlighting.
 const DdlSection = ({ section }: { readonly section: CompiledDdlSection }) => (
   <section
-    className="table-schema-section border-t border-edge pt-[0.55rem]"
+    className="table-schema-section border-t border-edge bg-surface pt-[0.55rem]"
     data-schema-section="ddl"
     data-schema-ddl-title={section.title}
   >
@@ -375,7 +375,7 @@ export const TableSchemaSections = ({
   <>
     {schema.indexes.length === 0 ? null : (
       <section
-        className="table-schema-section border-t border-edge pt-[0.55rem]"
+        className="table-schema-section border-t border-edge bg-surface pt-[0.55rem]"
         data-schema-section="indexes"
       >
         {/* A styled paragraph rather than a real heading keeps component
