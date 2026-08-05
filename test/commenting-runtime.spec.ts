@@ -4292,6 +4292,60 @@ test("should keep composition anchored across tray and missing-source states", a
     });
 });
 
+test("should present reconnect guidance as quiet copyable code wells", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  await expect(page.locator("html")).toHaveAttribute("data-review-ready", "");
+  await page.locator("[data-review-toggle]").click();
+  await page.locator('[data-review-tab="agent"]').click();
+  const wells = page.locator("[data-review-copy-block] pre");
+  await expect(wells).toHaveCount(2);
+
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate(
+      (nextTheme) =>
+        document.documentElement.setAttribute("data-theme", nextTheme),
+      theme,
+    );
+    for (const codeWell of await wells.all()) {
+      const treatment = await codeWell.evaluate((node) => {
+        const style = getComputedStyle(node);
+        return {
+          background: style.backgroundColor,
+          borderColor: style.borderTopColor,
+          borderWidth: style.borderTopWidth,
+          color: style.color,
+          overflowWrap: style.overflowWrap,
+          whiteSpace: style.whiteSpace,
+        };
+      });
+      expect(treatment.background).not.toBe("rgba(0, 0, 0, 0)");
+      expect(treatment.borderWidth).toBe("1px");
+      expect(treatment.borderColor).not.toBe(treatment.color);
+      expect(treatment.overflowWrap).toBe("anywhere");
+      expect(treatment.whiteSpace).toBe("pre-wrap");
+    }
+    const copy = page.locator("[data-review-copy]").first();
+    await copy.hover();
+    const hover = await copy.evaluate(
+      (node) => getComputedStyle(node).backgroundColor,
+    );
+    await copy.focus();
+    await expect(copy).toBeFocused();
+    const box = await copy.boundingBox();
+    if (box === null) throw new Error("The copy control has no pointer target");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    const active = await copy.evaluate(
+      (node) => getComputedStyle(node).backgroundColor,
+    );
+    await page.mouse.up();
+    expect(active).not.toBe(hover);
+  }
+});
+
 test("should present one live agent activity and navigate to its conversation", async ({
   page,
   reviewRuntimeUrl,

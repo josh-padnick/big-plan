@@ -1728,7 +1728,7 @@ import { createToastManager } from "./toast.js";
   const copyBlock = ({ attribute, text }) => {
     const button = el("button", {
       class:
-        "[position:absolute] [top:0.38rem] [right:0.38rem] [display:inline-flex] [align-items:center] [gap:0.25rem] [padding:0.2rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.625rem] [line-height:1] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--ink-c)] active:[background:var(--review-control-active)]",
+        "[position:absolute] [top:0.38rem] [right:0.38rem] [display:inline-flex] [align-items:center] [gap:0.25rem] [padding:0.2rem_0.35rem] [border:1px_solid_color-mix(in_srgb,var(--edge-c)_52%,transparent)] [border-radius:0.3rem] [background:color-mix(in_srgb,var(--surface-c)_72%,transparent)] [color:var(--muted-c)] [font-size:0.625rem] [line-height:1] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--ink-c)] active:[background:var(--review-control-active)]",
       type: "button",
       "data-review-copy": attribute,
       "aria-label": "Copy to clipboard",
@@ -1758,7 +1758,18 @@ import { createToastManager } from "./toast.js";
         class: "[position:relative] [min-width:0]",
         "data-review-copy-block": attribute,
       },
-      [el("pre", { [attribute]: true }, [el("code", { text })]), button],
+      [
+        el(
+          "pre",
+          {
+            class:
+              "[margin:0] [min-width:0] [overflow-x:auto] [padding:0.72rem_3.25rem_0.72rem_0.78rem] [border:1px_solid_color-mix(in_srgb,var(--edge-c)_46%,transparent)] [border-radius:0.375rem] [background:color-mix(in_srgb,var(--surface-c)_58%,transparent)] [color:var(--ink-c)] [font-family:var(--font-mono)] [font-size:0.75rem] [line-height:1.45] [white-space:pre-wrap] [overflow-wrap:anywhere]",
+            [attribute]: true,
+          },
+          [el("code", { text })],
+        ),
+        button,
+      ],
     );
   };
 
