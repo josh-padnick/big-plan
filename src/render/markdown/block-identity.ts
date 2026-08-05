@@ -574,31 +574,40 @@ export const rehypeBlockIdentity =
       blocks: collected,
     });
     let slideIndex = 0;
-    for (const child of tree.children) {
-      if (!isElement(child)) {
-        continue;
+    // Sub-slides are nested inside their major slide after deck transforms.
+    // Walk every scope boundary while stampScope itself skips nested scopes,
+    // so each addressable surface is stamped exactly once.
+    const visitScopes = (
+      children: ReadonlyArray<RootContent | ElementContent>,
+    ): void => {
+      for (const child of children) {
+        if (!isElement(child)) {
+          continue;
+        }
+        const isSubpart = child.properties["data-subpart"] !== undefined;
+        const isSlide = child.properties["data-slide"] !== undefined;
+        if (isSubpart || isSlide) {
+          slideIndex += 1;
+          const isSubSlide = child.properties["data-subslide"] !== undefined;
+          const headingTag = isSubSlide ? "h3" : "h2";
+          const scope = scopeNameFor({
+            node: child,
+            headingTag,
+            fallback: `slide/${slideIndex}`,
+          });
+          const sectionHeading = findDescendant({
+            node: child,
+            match: (candidate) => candidate.tagName === headingTag,
+          });
+          const section =
+            sectionHeading === undefined
+              ? `Section ${slideIndex}`
+              : summarize(textOf(sectionHeading)).replace(KICKER_PREFIX, "");
+          stampScope({ container: child, scope, section, blocks: collected });
+        }
+        visitScopes(child.children);
       }
-      const isSubpart = child.properties["data-subpart"] !== undefined;
-      const isSlide = child.properties["data-slide"] !== undefined;
-      if (!isSubpart && !isSlide) {
-        continue;
-      }
-      slideIndex += 1;
-      const isSubSlide = child.properties["data-subslide"] !== undefined;
-      const scope = scopeNameFor({
-        node: child,
-        headingTag: isSubSlide ? "h3" : "h2",
-        fallback: `slide/${slideIndex}`,
-      });
-      const sectionHeading = findDescendant({
-        node: child,
-        match: (candidate) => candidate.tagName === (isSubSlide ? "h3" : "h2"),
-      });
-      const section =
-        sectionHeading === undefined
-          ? `Section ${slideIndex}`
-          : summarize(textOf(sectionHeading)).replace(KICKER_PREFIX, "");
-      stampScope({ container: child, scope, section, blocks: collected });
-    }
+    };
+    visitScopes(tree.children);
     blocks?.push(...collected);
   };
