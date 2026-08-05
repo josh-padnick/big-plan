@@ -343,10 +343,24 @@ const nextWork = async ({
     });
     request = nextPendingAgentRequest(snapshot);
   }
+  const progress = await readProgress({
+    store: session.store,
+    sessionId: session.sessionId,
+  });
+  const contextEvents = progress
+    .filter((event) => event.step === "Reviewer reverted a comment change")
+    .slice(-20)
+    .map((event) => ({
+      event: "comment_change_reverted",
+      requestId: event.requestId,
+      commentId: event.detail,
+      at: event.at,
+    }));
   if (request === undefined) {
     return {
       pending: false,
       plan: session.planPath,
+      context_events: contextEvents,
       help: ["Run again with --wait to wait for the reviewer's next message"],
     };
   }
@@ -354,10 +368,6 @@ const nextWork = async ({
     store: session.store,
     sessionId: session.sessionId,
     state: "working",
-  });
-  const progress = await readProgress({
-    store: session.store,
-    sessionId: session.sessionId,
   });
   await appendProgress({
     store: session.store,
@@ -397,6 +407,7 @@ const nextWork = async ({
     plan: session.planPath,
     work: { ...request, sourceRevision: workRevision },
     history: responseHistory({ request, snapshot }),
+    context_events: contextEvents,
     response_template: responseTemplateFor(request),
     response_file: responseFile,
     respond_command: `node ${shellQuote(binPath)} agent respond ${shellQuote(
