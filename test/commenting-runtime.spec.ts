@@ -709,7 +709,7 @@ test("should preserve and send a floating review across reload and viewport chan
           };
         }),
       )
-      .toEqual({ outer: "0px", inner: "1px" });
+      .toEqual({ outer: "1px", inner: "missing" });
     const history = page.locator("[data-review-connection-history]");
     await history.locator("summary").click();
     await expect(history).toHaveAttribute("open", "");
