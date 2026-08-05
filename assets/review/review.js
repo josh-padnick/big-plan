@@ -4070,23 +4070,6 @@ import {
       if (active) clearDiffLens();
       else void openDiffLens(comment, event, 0);
     });
-    const latestChangeRequestId = outcomeEventsFor(comment)
-      .filter((candidate) => candidate.key === "changed")
-      .at(-1)?.requestId;
-    const actionRow = el(
-      "div",
-      {
-        class:
-          "[display:flex] [min-width:0] [align-items:center] [justify-content:space-between] [gap:0.45rem]",
-        "data-review-change-actions": true,
-      },
-      [
-        see,
-        ...(latestChangeRequestId === event.requestId
-          ? [threadToolbarActions(comment)]
-          : []),
-      ],
-    );
     return el(
       "div",
       {
@@ -4094,7 +4077,7 @@ import {
           "[display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.45rem] [margin-top:0.6rem]",
         "data-review-change-controls": true,
       },
-      [list, actionRow],
+      [list, see],
     );
   };
 
@@ -4280,6 +4263,25 @@ import {
       if (strip) nodes.push(strip);
       return nodes;
     }
+
+    nodes.push(
+      el(
+        "section",
+        {
+          class:
+            "mt-3 grid min-w-0 gap-1.5 border-t border-[var(--edge-c)] pt-2",
+          "data-review-thread-next-steps": true,
+        },
+        [
+          el("strong", {
+            class:
+              "text-[0.625rem] font-bold uppercase tracking-[0.06em] text-[var(--muted-c)]",
+            text: "Next steps",
+          }),
+          threadToolbarActions(comment),
+        ],
+      ),
+    );
 
     const field = el("textarea", {
       class:
