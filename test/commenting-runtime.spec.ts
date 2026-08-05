@@ -1692,7 +1692,10 @@ test("should preserve and send a floating review across reload and viewport chan
     expect(brief).toContain("number");
     expect(brief).toContain("delivery note");
     await expect(page.locator("[data-review-send-note]")).toContainText(
-      /^Queued 3 to the agent as /,
+      "3 comments sent to the agent",
+    );
+    await expect(page.locator("[data-review-send-note]")).not.toContainText(
+      /[a-f0-9]{12,}/,
     );
     await page.locator("[data-review-hide]").click();
   });
@@ -1710,7 +1713,7 @@ test("should preserve and send a floating review across reload and viewport chan
       page.locator(
         '[data-review-outcome-group="queued"] [data-review-thread-resolve]',
       ),
-    ).toHaveCount(3);
+    ).toHaveCount(0);
     await expect(
       page.locator('[data-review-outcome-state="blocked"]'),
     ).toHaveCount(3);
@@ -1760,6 +1763,19 @@ test("should preserve and send a floating review across reload and viewport chan
       });
     expect(workingCardBox.paddingLeft).toBeGreaterThanOrEqual(8);
     expect(workingCardBox.borderWidth).toBeGreaterThan(0);
+    await expect(
+      page.locator('[data-review-outcome-group="working"] h3'),
+    ).toContainText("Now Working");
+    await expect(
+      page.locator(
+        '[data-review-outcome-group="working"] [data-review-row-secondary]',
+      ),
+    ).toHaveText("Agent is working · Just now");
+    await expect(
+      page.locator(
+        '[data-review-outcome-group="working"] [data-review-row-cancel-request]',
+      ),
+    ).toHaveText("Cancel");
     for (let index = 0; index < 12; index += 1) {
       await agentCommand([
         "note",
@@ -1790,11 +1806,14 @@ test("should preserve and send a floating review across reload and viewport chan
       "[data-review-status-activity-toggle]",
     );
     await expect(cardActivityToggle).toBeVisible({ timeout: 10_000 });
-    if ((await cardActivityToggle.getAttribute("aria-expanded")) === "false") {
-      await cardActivityToggle.click();
-    }
+    await expect(cardActivityToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(cardActivityToggle).toHaveText("Show 7 earlier updates");
+    await expect(
+      workingCard.locator("[data-review-status-current-activity]"),
+    ).toContainText("Working update 12");
+    await cardActivityToggle.click();
     const cardActivity = workingCard.locator("[data-review-status-activity]");
-    await expect(cardActivity.locator("li")).toHaveCount(8, {
+    await expect(cardActivity.locator("li")).toHaveCount(7, {
       timeout: 10_000,
     });
     await expect
@@ -1812,9 +1831,12 @@ test("should preserve and send a floating review across reload and viewport chan
     expect(cardScroll.scrollable).toBe(true);
     expect(cardScroll.top).toBeGreaterThan(0);
     await agentCommand(["note", session.plan, "Working update 14"]);
-    await expect(cardActivity.locator("li")).toHaveCount(8, {
+    await expect(cardActivity.locator("li")).toHaveCount(7, {
       timeout: 10_000,
     });
+    await expect(
+      workingCard.locator("[data-review-status-current-activity]"),
+    ).toContainText("Working update 14");
     await expect
       .poll(() => cardActivity.evaluate((node) => node.scrollTop))
       .toBe(cardScroll.top);
@@ -2000,8 +2022,7 @@ test("should preserve and send a floating review across reload and viewport chan
     const queuedLabels = page.locator(
       '[data-review-outcome-group="queued"] [data-review-row-secondary]',
     );
-    await expect(queuedLabels).toHaveCount(2, { timeout: 10_000 });
-    await expect(queuedLabels).toHaveText(["Queued", "Queued"]);
+    await expect(queuedLabels).toHaveCount(0, { timeout: 10_000 });
     await writeAgentResponse({
       store,
       response: validateAgentResponseDraft({
@@ -2649,9 +2670,7 @@ test("should preserve and send a floating review across reload and viewport chan
   await test.step("the lifecycle index groups outcomes and click-scrolls to the expanded anchor", async () => {
     await toggle.click();
     await expect(tray).toBeVisible();
-    await expect(page.locator("[data-review-round-summary]")).toHaveText(
-      "3 ready",
-    );
+    await expect(page.locator("[data-review-round-summary]")).toBeEmpty();
     expect(
       await page
         .locator("[data-review-sent-list] [data-review-outcome-group] h3")
@@ -2842,24 +2861,23 @@ test("should preserve and send a floating review across reload and viewport chan
       "data-review-thread-status",
       "working",
     );
-    await expect(chatStatus.locator("[data-review-spinner]")).toHaveCount(1);
+    await expect(chatStatus.locator("[data-review-spinner]")).toHaveCount(2);
     const activityToggle = chatStatus.locator(
       "[data-review-status-activity-toggle]",
     );
     await expect(activityToggle).toBeVisible();
-    await activityToggle.click();
-    await expect(
-      chatStatus.locator("[data-review-status-activity]"),
-    ).toHaveCount(0);
+    await expect(activityToggle).toHaveAttribute("aria-expanded", "false");
     await activityToggle.click();
     await expect(
       chatStatus.locator("[data-review-status-activity]"),
     ).toBeVisible();
+    await activityToggle.click();
     await expect(
-      chatStatus.locator("[data-review-status-activity] time", {
-        hasText: "Just now",
-      }),
+      chatStatus.locator("[data-review-status-activity]"),
     ).toHaveCount(0);
+    await expect(
+      chatStatus.locator("[data-review-status-current-activity]"),
+    ).toBeVisible();
     const activityItems = chatStatus.locator(
       "[data-review-status-activity] li",
     );

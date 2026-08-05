@@ -33,7 +33,6 @@ import { TRASH_2_ICON } from "../../src/icons/lucide/trash-2.js";
 import { TRIANGLE_ALERT_ICON } from "../../src/icons/lucide/triangle-alert.js";
 import { UNDO_2_ICON } from "../../src/icons/lucide/undo-2.js";
 import { X_ICON } from "../../src/icons/lucide/x.js";
-import { threadSubstate } from "../../src/review/thread-group.js";
 import {
   deriveAgentIndicator,
   deriveThreadStatus,
@@ -321,7 +320,7 @@ import {
   let deleteCandidateId = null;
   let revertCandidateId = null;
   let submitRightAway = false;
-  let showAgentActivity = true;
+  let showEarlierAgentActivity = false;
   const revisionDiffs = new Map();
   const chatDigestExpansion = new Map();
   const changeGroupExpansion = new Map();
@@ -2905,6 +2904,8 @@ import {
     if (!status.headline) return null;
     const events =
       status.stage === "working" ? currentActivityEvents(status.requestId) : [];
+    const currentEvent = events.at(-1);
+    const earlierEvents = events.slice(0, -1).reverse();
     const row = el("div", {
       class: "[display:flex] [align-items:center] [gap:0.38rem]",
       "data-review-status-row": true,
@@ -2914,30 +2915,7 @@ import {
       const glyph = statusIcon(status);
       if (glyph) row.appendChild(glyph);
     }
-    if (events.length > 0) {
-      const activityButton = el("button", {
-        class:
-          "[display:inline-flex] [min-width:0] [flex:1_1_auto] [align-items:center] [justify-content:space-between] [gap:0.45rem] [padding:0.12rem_0.2rem] [border-radius:0.25rem] [color:currentcolor] [cursor:pointer] hover:[background:color-mix(in_srgb,_currentcolor_12%,_transparent)] focus-visible:[background:color-mix(in_srgb,_currentcolor_12%,_transparent)]",
-        type: "button",
-        "data-review-status-activity-toggle": true,
-        "aria-expanded": showAgentActivity ? "true" : "false",
-        "aria-label": showAgentActivity
-          ? "Hide agent activity"
-          : "Show agent activity",
-        title: showAgentActivity ? "Hide activity" : "Show activity",
-      });
-      activityButton.append(
-        el("strong", { text: status.headline }),
-        icon(CHEVRON_RIGHT_ICON),
-      );
-      activityButton.addEventListener("click", () => {
-        showAgentActivity = !showAgentActivity;
-        renderTray();
-      });
-      row.appendChild(activityButton);
-    } else {
-      row.appendChild(el("strong", { text: status.headline }));
-    }
+    row.appendChild(el("strong", { text: status.headline }));
     const strip = el("div", {
       class:
         "[display:grid] [gap:0.3rem] [margin:0.35rem_0] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-left-width:3px] [border-radius:0.4rem] [background:color-mix(in_srgb,_var(--surface-c)_60%,_var(--bg))] [color:var(--muted-c)] [font-size:0.6875rem] [line-height:1.4] data-[tone=working]:[border-color:var(--callout-note-c)] data-[tone=working]:[background:var(--callout-note-bg)] data-[tone=working]:[color:var(--callout-note-c)] data-[tone=warning]:[border-color:var(--callout-warning-c)] data-[tone=warning]:[background:var(--callout-warning-bg)] data-[tone=warning]:[color:var(--callout-warning-c)] data-[tone=danger]:[border-color:var(--callout-danger-c)] data-[tone=danger]:[background:var(--callout-danger-bg)] data-[tone=danger]:[color:var(--callout-danger-c)]",
@@ -2960,7 +2938,55 @@ import {
     if (status.showsSetup) {
       strip.appendChild(setupInstructions());
     }
-    if (events.length > 0 && showAgentActivity) {
+    if (status.stage === "working") {
+      if (options.surface !== "chat") {
+        strip.appendChild(
+          el("p", {
+            class: "[margin:0.15rem_0_0] [color:var(--muted-c)]",
+            "data-review-status-scope": true,
+            text: "Updating 1 comment",
+          }),
+        );
+      }
+      strip.appendChild(
+        el("p", {
+          class:
+            "flex min-w-0 items-start gap-2 [margin:0.35rem_0_0] [color:var(--ink-c)] [font-size:0.75rem] [line-height:1.45] [overflow-wrap:anywhere]",
+          "data-review-status-current-activity": true,
+          "aria-live": "polite",
+        }, [
+          spinner(),
+          el("span", {
+            text: currentEvent
+              ? currentEvent.step +
+                (currentEvent.detail ? " — " + currentEvent.detail : "")
+              : "Starting work…",
+          }),
+        ]),
+      );
+    }
+    if (earlierEvents.length > 0) {
+      const activityButton = el("button", {
+        class:
+          "inline-flex w-fit cursor-pointer items-center gap-1 rounded-sm px-1 py-0.5 text-[0.6875rem] text-[var(--muted-c)] hover:text-[var(--ink-c)] active:opacity-65",
+        type: "button",
+        "data-review-status-activity-toggle": true,
+        "aria-expanded": showEarlierAgentActivity ? "true" : "false",
+        text: showEarlierAgentActivity
+          ? "Hide earlier updates"
+          : "Show " +
+            earlierEvents.length +
+            " earlier update" +
+            (earlierEvents.length === 1 ? "" : "s"),
+      });
+      activityButton.prepend(icon(CHEVRON_RIGHT_ICON));
+      activityButton.addEventListener("click", () => {
+        showEarlierAgentActivity = !showEarlierAgentActivity;
+        renderTray();
+      });
+      strip.appendChild(activityButton);
+    }
+    if (earlierEvents.length > 0 && showEarlierAgentActivity) {
       strip.appendChild(
         el(
           "ol",
@@ -2975,9 +3001,13 @@ import {
               ? { "data-review-activity-owner": options.commentId }
               : {}),
           },
-          events.map((event) => {
-            const item = el("li", {}, [
+          earlierEvents.map((event) => {
+            const item = el("li", {
+              class:
+                "flex min-w-0 items-baseline justify-between gap-2 py-1 text-[var(--muted-c)]",
+            }, [
               el("span", {
+                class: "min-w-0 [overflow-wrap:anywhere]",
                 text: event.step + (event.detail ? " — " + event.detail : ""),
               }),
             ]);
@@ -4670,22 +4700,6 @@ import {
           threadToolbarActions(comment, { resolved, minimize: collapse }),
         );
       }
-    } else {
-      const substate = threadSubstate(outcome.status?.stage);
-      if (substate !== null) {
-        const slot = el("span", {
-          class:
-            "[display:inline-flex] [width:1.2rem] [height:1.2rem] [flex:0_0_auto] [align-items:center] [justify-content:center] [color:var(--muted-c)] data-[review-row-substate=stalled]:[color:var(--callout-warning-c)]",
-          "data-review-row-substate": substate,
-          "aria-label":
-            substate === "working" ? "Agent working" : "Agent progress stalled",
-        });
-        slot.appendChild(
-          substate === "working" ? spinner() : icon(TRIANGLE_ALERT_ICON),
-        );
-        rowHeadChildren.push(slot);
-      }
-      rowHeadChildren.push(threadQuickActions(comment, { resolved }));
     }
     const rowHead = el(
       "div",
@@ -4707,13 +4721,9 @@ import {
           ? `${outcome.label} · ${relativeCommentTime(
               latestOutcome?.createdAt || comment.createdAt,
             )}`
-          : rowState === "working"
-            ? lifecycle === "stalled"
-              ? "Agent quiet · check its terminal"
-              : `Working · ${relativeCommentTime(
-                  pendingRequest?.createdAt || comment.createdAt,
-                )}`
-            : "Queued";
+          : lifecycle === "stalled"
+            ? "Agent is quiet · check its terminal"
+            : "Agent is working · Just now";
       children.push(
         el("p", {
           class:
@@ -4722,13 +4732,37 @@ import {
           "data-review-row-body": true,
           text: shortEcho(comment.body),
         }),
-        el("p", {
-          class:
-            "[margin:0.25rem_0_0] [color:var(--muted-c)] [font-size:0.6875rem] [font-variant-numeric:tabular-nums] [line-height:1.35]",
-          "data-review-row-secondary": rowState,
-          text: secondary,
-        }),
       );
+      if (rowState !== "queued") {
+        const footer = el("div", {
+          class:
+            "mt-2 flex min-w-0 items-center justify-between gap-3 text-[0.6875rem] leading-[1.35] text-[var(--muted-c)]",
+          "data-review-row-footer": rowState,
+        }, [
+          el("p", {
+            class: "m-0 min-w-0 tabular-nums",
+            "data-review-row-secondary": rowState,
+            text: secondary,
+          }),
+        ]);
+        if (rowState === "working" && pendingRequest) {
+          const cancel = el("button", {
+            type: "button",
+            class:
+              "flex-none cursor-pointer rounded-sm px-1 py-0.5 font-semibold text-[var(--callout-note-c)] hover:underline active:opacity-65",
+            "data-review-row-cancel-request": true,
+            text: "Cancel",
+          });
+          cancel.addEventListener("click", () => {
+            void cancelAgentRequest({
+              requestId: pendingRequest.requestId,
+              trigger: cancel,
+            });
+          });
+          footer.appendChild(cancel);
+        }
+        children.push(footer);
+      }
       const changedEvent = outcomeEventsFor(comment)
         .filter((event) => event.key === "changed")
         .at(-1);
@@ -4750,10 +4784,10 @@ import {
       }
     }
     const rowClasses =
-      "group/row [margin-bottom:0.55rem] [padding:0.55rem_0.6rem] [border:1px_solid_var(--edge-c)] [border-radius:0.5rem] [background:var(--surface-c)] [cursor:pointer] [transition:border-color_100ms_ease,_background-color_100ms_ease] [background:transparent] [display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.18rem] [padding:0.45rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-left-width:2px] [border-radius:0.4rem] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.6875rem] hover:[border-color:color-mix(in_srgb,_var(--muted-c)_45%,_var(--edge-c))] hover:[background:color-mix(in_srgb,_var(--surface-c)_94%,_var(--ink-c))] data-[review-outcome=changed]:[border-left-color:var(--diff-add-c)] data-[review-outcome=question]:[border-left-color:var(--callout-warning-c)] data-[review-outcome=outside]:[border-left-color:var(--muted-c)] data-[review-outcome=waiting]:[border-left-color:var(--muted-c)] data-[review-outcome=cancelled]:[border-left-color:var(--muted-c)]" +
-      (resolved ? " [background:var(--surface-c)]" : "") +
+      "group/row mb-3 grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)] gap-[0.18rem] rounded-lg border border-[var(--edge-c)] bg-[var(--bg)] p-3 text-[0.6875rem] text-[var(--muted-c)] transition-[border-color,background-color] duration-100 hover:border-[color-mix(in_srgb,var(--muted-c)_55%,var(--edge-c))] focus-within:border-[var(--muted-c)] data-[review-row-state=working]:border-l-[3px] data-[review-row-state=working]:border-[var(--callout-note-c)] data-[review-row-state=working]:bg-[var(--callout-note-bg)] data-[review-row-state=queued]:border-l data-[review-row-state=ready]:border-l-2 data-[review-outcome=changed]:border-l-[var(--diff-add-c)] data-[review-outcome=question]:border-l-[var(--callout-warning-c)]" +
+      (resolved ? " bg-[var(--surface-c)]" : "") +
       (outcome.status
-        ? " data-[review-lifecycle=blocked]:[border-left-color:var(--callout-warning-c)]"
+        ? " data-[review-lifecycle=blocked]:border-l-[var(--callout-warning-c)]"
         : "");
     const row = el(
       "li",
@@ -5227,29 +5261,7 @@ import {
 
   const renderSentIndex = () => {
     const counts = outcomeCounts();
-    const workingCount = sent.filter((comment) => {
-      if (resolvedCommentIds.has(comment.id)) return false;
-      const stage = outcomeFor(comment).status?.stage;
-      return stage === "working" || stage === "stalled";
-    }).length;
-    const waitingCount = Math.max(0, counts.waiting - workingCount);
-    const readyCount =
-      counts.question + counts.changed + counts.outside + counts.cancelled;
-    const summaryItems = [
-      { count: readyCount, label: "ready" },
-      { count: workingCount, label: "working" },
-      { count: waitingCount, label: "queued" },
-    ].filter((item) => item.count > 0);
-    responseSummary.replaceChildren(
-      ...summaryItems.map((item) =>
-        el("span", {
-          class:
-            "[padding:0.1rem_0.38rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--surface-c)] [font-variant-numeric:tabular-nums] [white-space:nowrap]",
-          "data-review-round-chip": item.label,
-          text: `${item.count} ${item.label}`,
-        }),
-      ),
-    );
+    responseSummary.replaceChildren();
     resolveAllButton.hidden =
       counts.changed + counts.question + counts.outside === 0;
     const groups = [
@@ -5261,7 +5273,7 @@ import {
       },
       {
         key: "working",
-        label: "Working",
+        label: "Now Working",
         spin: true,
         match: (outcome) =>
           outcome.status?.stage === "working" ||
@@ -5285,10 +5297,13 @@ import {
           return match ? match(outcome) : outcome.key === key;
         });
         if (comments.length === 0) return null;
-        const heading = el("h3", {}, [
+        const heading = el("h3", {
+          class:
+            "flex min-w-0 items-center gap-1.5 [margin:0_0_0.6rem] text-xs font-bold uppercase tracking-[0.1em]",
+        }, [
           ...(spin === true ? [spinner()] : []),
           ...(glyph === undefined ? [] : [icon(glyph)]),
-          el("span", { text: label }),
+          el("span", { class: "min-w-0", text: label }),
           document.createTextNode(" "),
           el("span", {
             class:
@@ -6405,11 +6420,10 @@ import {
         agentConnected ? "idle" : "failed",
       );
       sendNote.textContent =
-        "Queued " +
         answer.comments +
-        " to the agent as " +
-        answer.packageId +
-        ".";
+        " comment" +
+        (answer.comments === 1 ? "" : "s") +
+        " sent to the agent";
       sendBar.hidden = false;
       announce("Feedback queued for the agent.");
       setActiveTab("comments");
