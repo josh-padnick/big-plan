@@ -42,6 +42,10 @@ import {
 import { deriveCurrentAgentActivity } from "../../src/review/agent-activity.js";
 import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
 import {
+  createInitialReviewState,
+  createReviewStateStore,
+} from "../../src/review/browser-state.js";
+import {
   commentTimeLabel,
   compactDurationLabel,
   relativeSignalLabel,
@@ -311,32 +315,34 @@ import { createToastManager } from "./toast.js";
 
   // ------------------------------------------------------------------- state
 
-  // Drafts are the reviewer's, unsent. Sent comments are kept for the session
-  // so "I know the agent has it" survives a scroll away from the tray.
-  let drafts = [];
-  let sent = [];
+  // Durable workflow collections move only through named state actions. This
+  // adapter keeps the existing rendering code reading familiar local names;
+  // DOM, selection, geometry, timers, and expansion state remain local below.
+  const reviewStateStore = createReviewStateStore(createInitialReviewState());
+  let drafts;
+  let sent;
   let editingId = null;
   let composeTarget = null;
   let pendingSelection = null;
-  let activeDraft = "";
-  let composeDrafts = {};
-  let threadReplies = {};
-  let planChatMessages = [];
-  let agentRequests = [];
-  let agentResponses = [];
-  let agentCancelledIds = [];
-  let agentConnected = false;
-  let agentHeartbeatAt = 0;
-  let agentConnectionLog = [];
-  let agentPlanPath = "";
-  let agentCommand = "";
-  let agentRecoveryPrompt = "";
-  let sourceRevision = "";
-  let reviewerRevision = 0;
+  let activeDraft;
+  let composeDrafts;
+  let threadReplies;
+  let planChatMessages;
+  let agentRequests;
+  let agentResponses;
+  let agentCancelledIds;
+  let agentConnected;
+  let agentHeartbeatAt;
+  let agentConnectionLog;
+  let agentPlanPath;
+  let agentCommand;
+  let agentRecoveryPrompt;
+  let sourceRevision;
+  let reviewerRevision;
   let progressSeq = 0;
   let liveProgressSeq = 0;
   let progressTimer = null;
-  let progressEvents = [];
+  let progressEvents;
   let runtimeConfirmed = false;
   let deleteCandidateId = null;
   let revertCandidateId = null;
@@ -349,70 +355,150 @@ import { createToastManager } from "./toast.js";
   const expandedCommentIds = new Set();
   const expandedThreadIds = new Set();
   const minimizedDraftIds = new Set();
-  const resolvedCommentIds = new Set();
+  let resolvedCommentIds;
   const threadReplyDrafts = new Map();
   // Honest in-flight and failure states: a comment mid-submit renders as
   // sending, a failed submit renders its error on the card, and the agent's
   // availability is derived rather than assumed.
-  const submittingIds = new Set();
-  const submitErrorById = new Map();
+  let submittingIds;
+  let submitErrorById;
   const requestSeenAt = new Map();
+
+  // Rebinds read aliases after each immutable transition. No workflow caller
+  // mutates these collections directly.
+  const syncReviewState = () => {
+    const state = reviewStateStore.getState();
+    drafts = state.drafts;
+    sent = state.sent;
+    activeDraft = state.activeDraft;
+    composeDrafts = state.composeDrafts;
+    threadReplies = state.threadReplies;
+    planChatMessages = state.planChatMessages;
+    agentRequests = state.agent.requests;
+    agentResponses = state.agent.responses;
+    agentCancelledIds = state.agent.cancelledIds;
+    agentConnected = state.agent.connected;
+    agentHeartbeatAt = state.agent.heartbeatAt;
+    agentConnectionLog = state.agent.connectionLog;
+    agentPlanPath = state.agent.planPath;
+    agentCommand = state.agent.command;
+    agentRecoveryPrompt = state.agent.recoveryPrompt;
+    sourceRevision = state.sourceRevision;
+    reviewerRevision = state.reviewerRevision;
+    progressEvents = state.progressEvents;
+    resolvedCommentIds = new Set(state.resolvedCommentIds);
+    submittingIds = new Set(state.submittingIds);
+    submitErrorById = new Map(Object.entries(state.submitErrors));
+  };
+  const dispatchReview = (action) => {
+    reviewStateStore.dispatch(action);
+    syncReviewState();
+  };
+  const currentAgentState = (overrides = {}) => ({
+    requests: agentRequests,
+    responses: agentResponses,
+    cancelledIds: agentCancelledIds,
+    connected: agentConnected,
+    heartbeatAt: agentHeartbeatAt,
+    connectionLog: agentConnectionLog,
+    planPath: agentPlanPath,
+    command: agentCommand,
+    recoveryPrompt: agentRecoveryPrompt,
+    ...overrides,
+  });
+  syncReviewState();
 
   // Poll-driven renders replace several nested lists. Preserve every keyed
   // scroll container through that shared remount boundary instead of adding
   // another surface-specific scrollTop patch each time a list grows.
   const preservedScrollPositions = new Map();
-  const restorePreservedScroll = () => {
+  const scrollPositionVersions = new Map();
+  const pendingScrollRestorations = new Map();
+  let scrollRestorationSequence = 0;
+  const captureScrollPositions = () => {
+    const positions = new Map();
     for (const node of document.querySelectorAll("[data-review-scroll-key]")) {
-      const position = preservedScrollPositions.get(
-        node.getAttribute("data-review-scroll-key"),
-      );
-      if (position) {
-        node.scrollTop = position.top;
-        node.scrollLeft = position.left;
-      }
+      const key = node.getAttribute("data-review-scroll-key");
+      if (key === null) continue;
+      const visible = node.getClientRects().length > 0;
+      const position = visible
+        ? { top: node.scrollTop, left: node.scrollLeft }
+        : preservedScrollPositions.get(key);
+      if (!position) continue;
+      if (visible) preservedScrollPositions.set(key, position);
+      positions.set(key, {
+        ...position,
+        version: scrollPositionVersions.get(key) || 0,
+      });
+    }
+    return positions;
+  };
+  const restoreCapturedScroll = (positions, sequence) => {
+    for (const node of document.querySelectorAll("[data-review-scroll-key]")) {
+      const key = node.getAttribute("data-review-scroll-key");
+      const position = positions.get(key);
+      if (!position) continue;
+      if (pendingScrollRestorations.get(key)?.sequence !== sequence) continue;
+      if ((scrollPositionVersions.get(key) || 0) !== position.version) continue;
+      node.scrollTop = position.top;
+      node.scrollLeft = position.left;
     }
   };
   const renderWithPreservedScroll = (render) => {
-    for (const node of document.querySelectorAll("[data-review-scroll-key]")) {
-      const key = node.getAttribute("data-review-scroll-key");
-      if (key !== null) {
-        preservedScrollPositions.set(key, {
-          top: node.scrollTop,
-          left: node.scrollLeft,
-        });
-      }
+    const positions = captureScrollPositions();
+    const sequence = ++scrollRestorationSequence;
+    for (const [key, position] of positions) {
+      pendingScrollRestorations.set(key, { sequence, position });
     }
     render();
-    restorePreservedScroll();
+    restoreCapturedScroll(positions, sequence);
     requestAnimationFrame(() => {
-      restorePreservedScroll();
+      restoreCapturedScroll(positions, sequence);
       // A replaced scroll owner may not expose its final scrollHeight until
       // the next layout pass (notably the connection-history disclosure).
-      requestAnimationFrame(restorePreservedScroll);
+      requestAnimationFrame(() => {
+        restoreCapturedScroll(positions, sequence);
+        for (const key of positions.keys()) {
+          if (pendingScrollRestorations.get(key)?.sequence === sequence) {
+            pendingScrollRestorations.delete(key);
+          }
+        }
+      });
     });
-    window.setTimeout(restorePreservedScroll, 50);
   };
   document.addEventListener(
     "scroll",
     (event) => {
       const node = event.target;
       if (
-        event.isTrusted &&
-        node instanceof HTMLElement &&
-        node.hasAttribute("data-review-scroll-key")
+        !(node instanceof HTMLElement) ||
+        !node.hasAttribute("data-review-scroll-key")
       ) {
-        preservedScrollPositions.set(
-          node.getAttribute("data-review-scroll-key"),
-          { top: node.scrollTop, left: node.scrollLeft },
-        );
+        return;
       }
+      const key = node.getAttribute("data-review-scroll-key");
+      const pending = pendingScrollRestorations.get(key);
+      if (pending) {
+        const atExpectedPosition =
+          node.scrollTop === pending.position.top &&
+          node.scrollLeft === pending.position.left;
+        const atTransientReset =
+          (pending.position.top > 0 && node.scrollTop === 0) ||
+          (pending.position.left > 0 && node.scrollLeft === 0);
+        if (atExpectedPosition || atTransientReset) return;
+        pendingScrollRestorations.delete(key);
+      }
+      preservedScrollPositions.set(key, {
+        top: node.scrollTop,
+        left: node.scrollLeft,
+      });
+      scrollPositionVersions.set(
+        key,
+        (scrollPositionVersions.get(key) || 0) + 1,
+      );
     },
     true,
   );
-  new MutationObserver(() => {
-    requestAnimationFrame(restorePreservedScroll);
-  }).observe(root, { childList: true, subtree: true });
   let emphasizedCommentId = null;
   let lastProgressAdvanceAt = 0;
   let pollFailures = 0;
@@ -787,28 +873,34 @@ import { createToastManager } from "./toast.js";
   // write; the server remains the durable owner across runtime restarts.
   const diskState = hasRuntime ? readBootstrapState() : emptyStoredState();
   const browserState = readLocalState();
-  const initialIds = new Set(diskState.drafts.map((draft) => draft.id));
-  drafts = diskState.drafts.concat(
-    browserState.drafts.filter((draft) => !initialIds.has(draft.id)),
-  );
-  sent = diskState.sent;
-  activeDraft =
-    browserState.activeDraft !== ""
-      ? browserState.activeDraft
-      : diskState.activeDraft;
-  composeDrafts = browserState.composeDrafts;
-  threadReplies = browserState.threadReplies;
-  planChatMessages = browserState.planChatMessages;
-  for (const id of diskState.resolvedCommentIds) {
-    resolvedCommentIds.add(id);
-  }
-  agentRequests = diskState.agent.requests;
-  agentResponses = diskState.agent.responses;
-  agentCancelledIds = diskState.agent.cancelledIds;
-  agentConnected = diskState.agent.connected;
-  agentHeartbeatAt = diskState.agent.updatedAtMs;
-  sourceRevision = diskState.sourceRevision;
-  reviewerRevision = diskState.reviewerRevision;
+  dispatchReview({
+    type: "offlineDraftsLoaded",
+    drafts: browserState.drafts,
+    activeDraft: browserState.activeDraft,
+    composeDrafts: browserState.composeDrafts,
+    threadReplies: browserState.threadReplies,
+    planChatMessages: browserState.planChatMessages,
+  });
+  dispatchReview({
+    type: "runtimeAdoptedDrafts",
+    drafts: diskState.drafts,
+    sent: diskState.sent,
+    activeDraft: diskState.activeDraft,
+    resolvedCommentIds: diskState.resolvedCommentIds,
+    sourceRevision: diskState.sourceRevision,
+    reviewerRevision: diskState.reviewerRevision,
+    agent: {
+      requests: diskState.agent.requests,
+      responses: diskState.agent.responses,
+      cancelledIds: diskState.agent.cancelledIds,
+      connected: diskState.agent.connected,
+      heartbeatAt: diskState.agent.updatedAtMs,
+      connectionLog: diskState.agent.connectionLog,
+      planPath: diskState.agent.plan || "",
+      command: diskState.agent.agentCommand || "",
+      recoveryPrompt: diskState.agent.recoveryPrompt || "",
+    },
+  });
   try {
     submitRightAway = localStorage.getItem(submitPreferenceKey) === "true";
   } catch {
@@ -886,7 +978,10 @@ import { createToastManager } from "./toast.js";
           expectedRevision: reviewerRevision,
         },
       });
-      reviewerRevision = answer.revision;
+      dispatchReview({
+        type: "reviewerRevisionChanged",
+        revision: answer.revision,
+      });
       writeLocalState();
     } catch (error) {
       if (!(error instanceof ReviewerSaveConflict)) throw error;
@@ -896,7 +991,7 @@ import { createToastManager } from "./toast.js";
         : [];
       const localById = new Map(drafts.map((draft) => [draft.id, draft]));
       const conflictingIds = new Set();
-      drafts = serverDrafts.map((serverDraft) => {
+      const mergedDrafts = serverDrafts.map((serverDraft) => {
         const localDraft = localById.get(serverDraft.id);
         localById.delete(serverDraft.id);
         if (
@@ -910,20 +1005,22 @@ import { createToastManager } from "./toast.js";
         }
         return localDraft || serverDraft;
       });
-      drafts.push(...localById.values());
-      if (
-        current &&
-        Number.isInteger(current.revision) &&
-        current.revision >= 0
-      ) {
-        reviewerRevision = current.revision;
-      }
+      mergedDrafts.push(...localById.values());
+      const conflictRevision =
+        current && Number.isInteger(current.revision) && current.revision >= 0
+          ? current.revision
+          : reviewerRevision;
+      const errors = {};
       for (const id of conflictingIds) {
-        submitErrorById.set(
-          id,
-          "This comment also changed in another tab. Your version is still unsaved; review it, then save again.",
-        );
+        errors[id] =
+          "This comment also changed in another tab. Your version is still unsaved; review it, then save again.";
       }
+      dispatchReview({
+        type: "durableSaveConflicted",
+        drafts: mergedDrafts,
+        reviewerRevision: conflictRevision,
+        errors,
+      });
       writeLocalState();
       renderTray();
       notifications.add({
@@ -3134,7 +3231,12 @@ import { createToastManager } from "./toast.js";
         body: { requestId },
       });
       if (!agentCancelledIds.includes(requestId)) {
-        agentCancelledIds = agentCancelledIds.concat([requestId]);
+        dispatchReview({
+          type: "agentExchangeUpdated",
+          agent: currentAgentState({
+            cancelledIds: agentCancelledIds.concat([requestId]),
+          }),
+        });
       }
       clearInlineError(trigger);
       announce("Agent request cancelled.");
@@ -3205,6 +3307,7 @@ import { createToastManager } from "./toast.js";
             "aria-live": "polite",
           },
           [
+            spinner("thread-current-activity"),
             el("span", {
               text: currentEvent
                 ? currentEvent.step +
@@ -3406,7 +3509,10 @@ import { createToastManager } from "./toast.js";
   const commitDraftEdit = async (comment, field) => {
     const body = field.value.trim();
     if (body === "") return;
-    comment.body = body;
+    dispatchReview({
+      type: "draftEdited",
+      draft: { ...comment, body },
+    });
     editingId = null;
     announce("Comment updated.");
     renderTray();
@@ -3609,10 +3715,15 @@ import { createToastManager } from "./toast.js";
         method: "POST",
         body: { kind: "reply", commentId: comment.id, body },
       });
-      agentConnected = answer.agentConnected === true;
-      if (isAgentRequest(answer.request)) {
-        agentRequests = agentRequests.concat([answer.request]);
-      }
+      dispatchReview({
+        type: "agentExchangeUpdated",
+        agent: currentAgentState({
+          connected: answer.agentConnected === true,
+          requests: isAgentRequest(answer.request)
+            ? agentRequests.concat([answer.request])
+            : agentRequests,
+        }),
+      });
       field.value = "";
       threadReplyDrafts.delete(comment.id);
       clearInlineError(button);
@@ -4566,7 +4677,7 @@ import { createToastManager } from "./toast.js";
     const previousExpandedThreads = new Set(expandedThreadIds);
     const previousExpandedComments = new Set(expandedCommentIds);
     for (const id of ids) {
-      resolvedCommentIds.add(id);
+      dispatchReview({ type: "threadResolved", id });
       expandedThreadIds.delete(id);
       expandedCommentIds.delete(id);
     }
@@ -4585,7 +4696,7 @@ import { createToastManager } from "./toast.js";
           action: {
             label: "Undo",
             run: async () => {
-              resolvedCommentIds.delete(ids[0]);
+              dispatchReview({ type: "threadReopened", id: ids[0] });
               expandedThreadIds.add(ids[0]);
               announce("Comment reopened.");
               renderTray();
@@ -4595,8 +4706,10 @@ import { createToastManager } from "./toast.js";
         });
       }
     } catch (error) {
-      resolvedCommentIds.clear();
-      previousResolved.forEach((id) => resolvedCommentIds.add(id));
+      dispatchReview({
+        type: "resolutionsReplaced",
+        ids: Array.from(previousResolved),
+      });
       expandedThreadIds.clear();
       previousExpandedThreads.forEach((id) => expandedThreadIds.add(id));
       expandedCommentIds.clear();
@@ -4616,7 +4729,7 @@ import { createToastManager } from "./toast.js";
   const resolveThread = async (comment) => resolveThreadIds([comment.id]);
 
   const unresolveThread = async (comment) => {
-    resolvedCommentIds.delete(comment.id);
+    dispatchReview({ type: "threadReopened", id: comment.id });
     expandedThreadIds.add(comment.id);
     announce("Comment reopened.");
     renderTray();
@@ -5464,6 +5577,17 @@ import { createToastManager } from "./toast.js";
         if (compose.parentElement !== threadLayer) {
           threadLayer.appendChild(compose);
         }
+        // A transient composer does not reserve page width. Narrow only as
+        // much as the real right gutter requires so it remains wholly beside
+        // the slide without moving or covering the plan.
+        if (!root.hasAttribute("data-review-floating")) {
+          const available =
+            window.innerWidth - rect.right - FLOAT_CONTENT_GAP - FLOAT_EDGE;
+          compose.style.width =
+            Math.min(17 * 16, Math.max(12 * 16, available)) + "px";
+        } else {
+          compose.style.removeProperty("width");
+        }
         compose.style.left =
           floatLeftFor(composeTarget, compose.offsetWidth) + "px";
         entries.push({
@@ -5812,7 +5936,7 @@ import { createToastManager } from "./toast.js";
   deleteCancel.addEventListener("click", () => deleteDialog.close());
   deleteConfirm.addEventListener("click", async () => {
     if (deleteCandidateId === null) return;
-    drafts = drafts.filter((comment) => comment.id !== deleteCandidateId);
+    dispatchReview({ type: "draftRemoved", id: deleteCandidateId });
     expandedCommentIds.delete(deleteCandidateId);
     deleteCandidateId = null;
     deleteDialog.close();
@@ -5846,14 +5970,16 @@ import { createToastManager } from "./toast.js";
       ) {
         throw new Error("The local revert did not complete cleanly");
       }
-      resolvedCommentIds.add(comment.id);
+      dispatchReview({ type: "threadResolved", id: comment.id });
       expandedThreadIds.delete(comment.id);
       await save();
       announce("Changes reverted. The coding agent was notified.");
       revertDialog.close();
       const refreshedRevision = await refreshSourceDocument();
-      sourceRevision =
-        refreshedRevision || answer.sourceRevision || sourceRevision;
+      dispatchReview({
+        type: "sourceRevisionChanged",
+        revision: refreshedRevision || answer.sourceRevision || sourceRevision,
+      });
     } catch (error) {
       showInlineError(
         revertConfirm,
@@ -5931,7 +6057,7 @@ import { createToastManager } from "./toast.js";
       createdAt: new Date().toISOString(),
       target: target,
     };
-    drafts = drafts.concat([comment]);
+    dispatchReview({ type: "draftCreated", draft: comment });
     return comment;
   };
 
@@ -5962,8 +6088,14 @@ import { createToastManager } from "./toast.js";
   const closeCompose = () => {
     if (composeTarget) {
       const key = composeDraftKey(composeTarget);
-      if (composeInput.value.trim() === "") delete composeDrafts[key];
-      else composeDrafts[key] = composeInput.value.slice(0, BODY_LIMIT);
+      dispatchReview({
+        type: "composeDraftChanged",
+        key,
+        body:
+          composeInput.value.trim() === ""
+            ? ""
+            : composeInput.value.slice(0, BODY_LIMIT),
+      });
       writeLocalState();
     }
     compose.hidden = true;
@@ -6095,11 +6227,20 @@ import { createToastManager } from "./toast.js";
     // here, so the shortcut cannot bypass the button's disabled state.
     if (body === "" || composeTarget === null) return;
     const comment = addDraft(composeTarget, body);
-    delete composeDrafts[composeDraftKey(composeTarget)];
+    dispatchReview({
+      type: "composeDraftChanged",
+      key: composeDraftKey(composeTarget),
+      body: "",
+    });
     composeInput.value = "";
     // With submit-right-away on, the very first paint of this comment must
     // already say "Sending", never a staged card with its own Submit button.
-    if (submitRightAway && hasRuntime) submittingIds.add(comment.id);
+    if (submitRightAway && hasRuntime) {
+      dispatchReview({
+        type: "feedbackSubmissionStarted",
+        ids: [comment.id],
+      });
+    }
     announce(
       submitRightAway
         ? "Submitting comment on " + describeTarget(composeTarget) + "."
@@ -6140,8 +6281,14 @@ import { createToastManager } from "./toast.js";
     syncComposeValidity();
     if (!composeTarget) return;
     const key = composeDraftKey(composeTarget);
-    if (composeInput.value === "") delete composeDrafts[key];
-    else composeDrafts[key] = composeInput.value.slice(0, BODY_LIMIT);
+    dispatchReview({
+      type: "composeDraftChanged",
+      key,
+      body:
+        composeInput.value === ""
+          ? ""
+          : composeInput.value.slice(0, BODY_LIMIT),
+    });
     writeLocalState();
   });
   composeInput.addEventListener("keydown", (event) => {
@@ -6635,7 +6782,7 @@ import { createToastManager } from "./toast.js";
       announce("Draft saved on " + describeTarget(pendingSelection) + ".");
       attachInput.checked = false;
       agentInput.value = "";
-      activeDraft = "";
+      dispatchReview({ type: "activeDraftChanged", body: "" });
       syncPlanChatValidity();
       renderTray();
       await save();
@@ -6653,12 +6800,17 @@ import { createToastManager } from "./toast.js";
         method: "POST",
         body: { kind: "chat", body },
       });
-      agentConnected = answer.agentConnected === true;
-      if (isAgentRequest(answer.request)) {
-        agentRequests = agentRequests.concat([answer.request]);
-      }
+      dispatchReview({
+        type: "agentExchangeUpdated",
+        agent: currentAgentState({
+          connected: answer.agentConnected === true,
+          requests: isAgentRequest(answer.request)
+            ? agentRequests.concat([answer.request])
+            : agentRequests,
+        }),
+      });
       agentInput.value = "";
-      activeDraft = "";
+      dispatchReview({ type: "activeDraftChanged", body: "" });
       attachInput.checked = false;
       clearInlineError(agentSave);
       syncPlanChatValidity();
@@ -6683,7 +6835,10 @@ import { createToastManager } from "./toast.js";
   agentSave.addEventListener("click", sendPlanChat);
   let activeDraftTimer = null;
   agentInput.addEventListener("input", () => {
-    activeDraft = agentInput.value;
+    dispatchReview({
+      type: "activeDraftChanged",
+      body: agentInput.value,
+    });
     syncPlanChatValidity();
     writeLocalState();
     if (activeDraftTimer !== null) window.clearTimeout(activeDraftTimer);
@@ -6733,10 +6888,10 @@ import { createToastManager } from "./toast.js";
     sendNote.textContent = "";
     // The card says "Sending" for the whole round trip, so the submit-now
     // path never shows a staged view that implies nothing happened.
-    for (const comment of selected) {
-      submittingIds.add(comment.id);
-      submitErrorById.delete(comment.id);
-    }
+    dispatchReview({
+      type: "feedbackSubmissionStarted",
+      ids: selected.map((comment) => comment.id),
+    });
     renderTray();
     try {
       await confirmRuntime();
@@ -6747,22 +6902,27 @@ import { createToastManager } from "./toast.js";
           expectedRevision: reviewerRevision,
         },
       });
-      reviewerRevision = answer.revision;
-      agentConnected = answer.agentConnected === true;
       const submittedIds = new Set(selected.map((comment) => comment.id));
-      sent = sent.concat(selected);
       const submittedRequests = (
         Array.isArray(answer.agentRequests)
           ? answer.agentRequests
           : [answer.agentRequest]
       ).filter(isAgentRequest);
-      agentRequests = agentRequests.concat(submittedRequests);
-      drafts = drafts.filter((comment) => !submittedIds.has(comment.id));
+      dispatchReview({
+        type: "feedbackSubmissionAccepted",
+        submittedIds: Array.from(submittedIds),
+        sent: selected,
+        requests: submittedRequests,
+        reviewerRevision: answer.revision,
+        agentConnected: answer.agentConnected === true,
+      });
       for (const id of submittedIds) {
         minimizedDraftIds.delete(id);
-        submittingIds.delete(id);
       }
-      activeDraft = agentInput.value;
+      dispatchReview({
+        type: "activeDraftChanged",
+        body: agentInput.value,
+      });
       renderTray();
       writeLocalState();
       setAgentState(
@@ -6783,15 +6943,14 @@ import { createToastManager } from "./toast.js";
     } catch (error) {
       // A failed send returns the comment to staged with the failure written
       // on the card itself, never silently.
-      for (const comment of selected) {
-        submittingIds.delete(comment.id);
-        submitErrorById.set(
-          comment.id,
+      dispatchReview({
+        type: "feedbackSubmissionFailed",
+        ids: selected.map((comment) => comment.id),
+        message:
           "Couldn’t send: " +
-            describeError(error) +
-            " Your comment is still staged. Restart `big-plan review`, then open the new URL it prints.",
-        );
-      }
+          describeError(error) +
+          " Your comment is still staged. Restart `big-plan review`, then open the new URL it prints.",
+      });
       sendNote.textContent =
         describeError(error) +
         " Restart `big-plan review`, then open the new URL it prints. Your comments are safe.";
@@ -7062,15 +7221,20 @@ import { createToastManager } from "./toast.js";
         responses: agentResponses,
         cancelledIds: agentCancelledIds,
       });
-    agentRequests = checked.requests;
-    agentResponses = checked.responses;
-    agentCancelledIds = checked.cancelledIds;
-    agentConnected = checked.connected;
-    agentHeartbeatAt = checked.updatedAtMs;
-    agentConnectionLog = checked.connectionLog;
-    agentPlanPath = checked.plan;
-    agentCommand = checked.agentCommand;
-    agentRecoveryPrompt = checked.recoveryPrompt;
+    dispatchReview({
+      type: "agentExchangeUpdated",
+      agent: {
+        requests: checked.requests,
+        responses: checked.responses,
+        cancelledIds: checked.cancelledIds,
+        connected: checked.connected,
+        heartbeatAt: checked.updatedAtMs,
+        connectionLog: checked.connectionLog,
+        planPath: checked.plan,
+        command: checked.agentCommand,
+        recoveryPrompt: checked.recoveryPrompt,
+      },
+    });
     if (changed || connectionChanged) {
       renderTray();
       void hydrateRevisionDiffs();
@@ -7099,7 +7263,7 @@ import { createToastManager } from "./toast.js";
 
   const renderProgress = (events) => {
     if (events.length === 0) return;
-    progressEvents = events;
+    dispatchReview({ type: "progressEventsObserved", events });
     // The old DONE/WAITING ledger had no readable story. The latest validated
     // event appears only where the reviewer is waiting: inside a chat turn or
     // an expanded anchored thread - including one expanded inside the tray,
@@ -7201,16 +7365,22 @@ import { createToastManager } from "./toast.js";
           exchange.sourceRevision !== sourceRevision
         ) {
           const refreshedRevision = await refreshSourceDocument();
-          sourceRevision =
-            refreshedRevision === ""
-              ? exchange.sourceRevision
-              : refreshedRevision;
+          dispatchReview({
+            type: "sourceRevisionChanged",
+            revision:
+              refreshedRevision === ""
+                ? exchange.sourceRevision
+                : refreshedRevision,
+          });
         }
         if (
           typeof exchange.sourceRevision === "string" &&
           sourceRevision === ""
         ) {
-          sourceRevision = exchange.sourceRevision;
+          dispatchReview({
+            type: "sourceRevisionChanged",
+            revision: exchange.sourceRevision,
+          });
         }
         // The runtime already drops foreign and out-of-order events; the
         // document checks the same two facts again rather than trusting that
@@ -7237,7 +7407,10 @@ import { createToastManager } from "./toast.js";
         }
         if (progressChanged) {
           progressSeq = latest;
-          progressEvents = timeline;
+          dispatchReview({
+            type: "progressEventsObserved",
+            events: timeline,
+          });
         }
         // On the first poll, establish the existing progress baseline before
         // pending requests are observed. Historical work must not claim a new
@@ -7338,23 +7511,31 @@ import { createToastManager } from "./toast.js";
       // handed over once and then cleared, so drafts do not linger in an
       // origin every local file shares.
       const answer = await call("/api/drafts");
-      reviewerRevision = answer.revision;
       const known = new Set((answer.drafts || []).map((draft) => draft.id));
       const carried = readLocalState();
-      drafts = (answer.drafts || []).concat(
+      const adoptedDrafts = (answer.drafts || []).concat(
         carried.drafts.filter((draft) => !known.has(draft.id)),
       );
-      sent = answer.sent || [];
-      resolvedCommentIds.clear();
-      for (const id of answer.resolvedCommentIds || []) {
-        if (isExchangeId(id)) resolvedCommentIds.add(id);
-      }
-      threadReplies = carried.threadReplies;
-      planChatMessages = carried.planChatMessages;
-      activeDraft =
+      const adoptedResolved = (answer.resolvedCommentIds || []).filter(
+        isExchangeId,
+      );
+      const adoptedActiveDraft =
         carried.activeDraft !== ""
           ? carried.activeDraft
           : answer.activeDraft || activeDraft;
+      dispatchReview({
+        type: "durableSnapshotReplaced",
+        drafts: adoptedDrafts,
+        sent: answer.sent || [],
+        activeDraft: adoptedActiveDraft,
+        resolvedCommentIds: adoptedResolved,
+        reviewerRevision: answer.revision,
+      });
+      dispatchReview({
+        type: "conversationStateReplaced",
+        threadReplies: carried.threadReplies,
+        planChatMessages: carried.planChatMessages,
+      });
       agentInput.value = activeDraft;
       const adopted = await call("/api/drafts", {
         method: "PUT",
@@ -7365,7 +7546,10 @@ import { createToastManager } from "./toast.js";
           expectedRevision: reviewerRevision,
         },
       });
-      reviewerRevision = adopted.revision;
+      dispatchReview({
+        type: "reviewerRevisionChanged",
+        revision: adopted.revision,
+      });
       writeLocalState();
       renderTray();
       void hydrateRevisionDiffs();
@@ -7374,11 +7558,19 @@ import { createToastManager } from "./toast.js";
     } catch (error) {
       sendNote.textContent = describeError(error);
       const carried = readLocalState();
-      drafts = carried.drafts;
-      sent = carried.sent;
-      threadReplies = carried.threadReplies;
-      planChatMessages = carried.planChatMessages;
-      activeDraft = carried.activeDraft;
+      dispatchReview({
+        type: "durableSnapshotReplaced",
+        drafts: carried.drafts,
+        sent: carried.sent,
+        activeDraft: carried.activeDraft,
+        resolvedCommentIds: carried.resolvedCommentIds,
+        reviewerRevision: carried.reviewerRevision,
+      });
+      dispatchReview({
+        type: "conversationStateReplaced",
+        threadReplies: carried.threadReplies,
+        planChatMessages: carried.planChatMessages,
+      });
       agentInput.value = activeDraft;
       renderTray();
     }

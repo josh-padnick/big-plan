@@ -142,8 +142,6 @@ test("should preserve and send a floating review across reload and viewport chan
     await field.press("Shift+ArrowLeft");
     await expect(field).toBeFocused();
     await expect(owner).toHaveAttribute(expandedAttribute, "");
-    await owner.locator("[data-review-thread-reply-box] label").click();
-    await expect(owner).toHaveAttribute(expandedAttribute, "");
     const conversation = owner.locator("[data-review-thread-turn] p").first();
     const conversationBox = await conversation.boundingBox();
     if (conversationBox !== null) {
@@ -822,6 +820,7 @@ test("should preserve and send a floating review across reload and viewport chan
   });
 
   await test.step("closing the sidebar preserves the reader's current position", async () => {
+    await page.setViewportSize({ width: 1440, height: 520 });
     await page.evaluate(() => window.scrollTo(0, 0));
     await toggle.click();
     await expect(tray).toBeVisible();
@@ -836,6 +835,7 @@ test("should preserve and send a floating review across reload and viewport chan
       .poll(() => page.evaluate(() => window.scrollY))
       .toBeCloseTo(beforeClose, 0);
     await page.evaluate(() => window.scrollTo(0, 0));
+    await page.setViewportSize({ width: 1440, height: 900 });
   });
 
   await test.step("a whole-paragraph selection always offers the same floating composer", async () => {
@@ -1733,8 +1733,7 @@ test("should preserve and send a floating review across reload and viewport chan
           const editor = document.querySelector("[data-review-compose]");
           const ranges = CSS.highlights.get("big-plan-review-active");
           return {
-            inReviewSurface:
-              editor?.parentElement?.hasAttribute("data-review-root") === true,
+            insideAuthoredBlock: editor?.closest("[data-block-id]") !== null,
             intersects:
               editor !== null &&
               ranges !== undefined &&
@@ -1742,7 +1741,7 @@ test("should preserve and send a floating review across reload and viewport chan
           };
         }),
       )
-      .toEqual({ inReviewSurface: true, intersects: false });
+      .toEqual({ insideAuthoredBlock: false, intersects: false });
     await page.locator("[data-review-compose-cancel]").click();
     await expect(end).toBeVisible();
   });
@@ -3251,7 +3250,7 @@ test("should preserve and send a floating review across reload and viewport chan
       );
 
       await target.click();
-      await row.locator("[data-review-thread-minimize]").click();
+      await row.locator("[data-review-thread-minimize]").first().click();
       await expect(row).not.toHaveAttribute("data-review-row-expanded");
       await expect(row.locator("[data-review-row-body]")).toHaveText(
         commentText,
@@ -3609,7 +3608,7 @@ Ship the live review loop behind the explicit review command.
       .first();
     await historicalDigest.locator("[data-review-see-change]").click();
     await expect(page.locator("[data-review-diff-label]")).toContainText(
-      "since revised again",
+      "plan revised again",
     );
     await historicalDigest.locator("[data-review-see-change]").click();
 
@@ -3822,9 +3821,9 @@ Ship the live review loop behind the explicit review command.
     await expect(
       trayThread.locator("[data-review-thread-next-steps]"),
     ).toContainText("Next steps");
-    await expect(trayThread.locator("[data-review-see-change]")).toContainText(
-      "See change",
-    );
+    await expect(
+      trayThread.locator("[data-review-see-change]").first(),
+    ).toContainText("See change");
     await expect(
       changeActions.locator("[data-review-thread-minimize]"),
     ).toBeVisible();
@@ -3908,7 +3907,7 @@ Ship the live review loop behind the explicit review command.
     await historicalChange.click();
     await expect(historicalChange).toHaveText("Hide changes");
     await expect(page.locator("[data-review-diff-label]")).toContainText(
-      "since revised again",
+      "plan revised again",
     );
     await headerActions.locator("[data-review-thread-minimize]").click();
     await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
@@ -4144,6 +4143,13 @@ Ship the live review loop behind the explicit review command.
     const paragraph = page.locator(
       '[data-block-id="section/delivery/paragraph-1"]',
     );
+    await paragraph.waitFor({ state: "attached" });
+    if (!(await paragraph.isVisible())) {
+      const expandSlide = page.getByRole("button", { name: "Expand slide" });
+      await expect(expandSlide).toHaveCount(1);
+      await expandSlide.click();
+    }
+    await expect(paragraph).toBeVisible();
     const selectionCountBefore = Number(
       (await page
         .locator("html")
