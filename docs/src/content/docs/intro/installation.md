@@ -14,7 +14,8 @@ Install Big Plan for me using `npm i -g big-plan`, then read
 https://big-plan.ai/setup.md and set yourself up to use it.
 ```
 
-The agent installs the CLI, reads [setup.md](/setup.md), adopts the plan-review workflow, and adds the rule to your project's agent instructions so every future session keeps it.
+The agent installs the CLI, reads [setup.md](/setup.md), can install the thin skill shell via `big-plan skill write`, adopts the plan-review workflow, and adds the rule to your project's agent instructions so every future session keeps it.
+Authoring principles stay in `big-plan guidance`, so package upgrades refresh them without hand-editing skill files.
 
 ## Or install it yourself
 
@@ -23,6 +24,7 @@ Big Plan needs Node.js 22 or newer; the published package runs under plain Node.
 Run it with no install at all:
 
 ```sh
+npx big-plan guidance
 npx big-plan render plan.mdx
 ```
 
@@ -30,11 +32,13 @@ Or install it globally:
 
 ```sh
 npm install -g big-plan
+big-plan guidance
 big-plan render plan.mdx
 ```
 
 Either way, `render` writes `plan.html` next to the input.
 Pass a second argument to choose the output path: `big-plan render plan.mdx reviews/plan.html`.
+Reading `guidance` first is required; it unlocks `render` for the working directory.
 
 ## Render your first plan
 
@@ -42,6 +46,7 @@ Download the example plan, or use any plan your agent has written:
 
 ```sh
 curl -o plan.mdx https://big-plan.ai/demo/example-plan.md
+npx big-plan guidance
 npx big-plan render plan.mdx
 ```
 

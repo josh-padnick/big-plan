@@ -191,7 +191,7 @@ describe("renderFileTree", () => {
     expect(diagnostics).toEqual([]);
     // The two files and no one else stand in for a chevron; both foldable
     // directories keep the real toggle, and both affordances start hidden so
-    // the script-free document is unchanged.
+    // the no-script fallback is unchanged.
     expect(rendered.match(/"data-tree-toggle-spacer":""/gu)).toHaveLength(2);
     expect(rendered.match(/"data-tree-toggle":""/gu)).toHaveLength(2);
     expect(

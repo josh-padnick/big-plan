@@ -18,16 +18,19 @@ Everything runs locally, and the MDX file on your disk is the source of truth.
 
 ## Usage
 
-Read the plan-writing guidance, validate a plan without writing anything, render it as self-contained themed HTML, or compile its validated contents as machine-readable JSON:
+Read the plan-writing guidance, print or install the agent skill shell, validate a plan without writing anything, render it as self-contained themed HTML, or compile its validated contents as machine-readable JSON:
 
 ```sh
 npx big-plan guidance
+npx big-plan skill
+npx big-plan skill write <path/to/SKILL.md>
 npx big-plan validate <file.mdx>
 npx big-plan render <file.mdx> [output.html]
 npx big-plan compile <file.mdx> [output.json]
 ```
 
 `guidance` prints the principles for writing a plan a human loves to review; reading it recently is required before `validate` and `render` will run.
+`skill` prints the thin agent skill shell shipped with the package; `skill write <path>` installs that shell only when you ask (no silent overwrites).
 Validation checks that the plan can be compiled and rendered, then applies linting rules to the authored plan without writing an output file.
 Rendering applies the same linting rules, so a plan that fails lint never reaches a reviewer.
 Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.model.json`.
@@ -45,13 +48,35 @@ Enable the worker before stale reads.
 </Callout>
 ```
 
+### Agent skill and how updates propagate
+
+Big Plan ships a **thin skill shell** under `assets/skill/SKILL.md`, embedded into the published package and printed by `big-plan skill`.
+
+| Layer                              | Owns                                                                                     | Changes when                       |
+| ---------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------- |
+| Skill shell (`big-plan skill`)     | When to use Big Plan, how to invoke the CLI, and the mandatory "run guidance first" rule | Rarely - workflow framing only     |
+| CLI guidance (`big-plan guidance`) | Plan-writing principles and per-component usage                                          | Often - product quality iterations |
+| Package upgrade                    | Binary + embedded skill + guidance                                                       | Every release                      |
+
+**Update story for end users:**
+
+1. Upgrade Big Plan (`npm i -g big-plan@latest`, bump the dependency, or run `npx big-plan@latest ...`).
+2. New guidance arrives automatically on the next `big-plan guidance` - no skill-file edits.
+3. Re-run `big-plan skill write <path>` only if the thin shell text itself changed (rare).
+4. Prefer `npx big-plan@latest` for always-current one-off runs over silent global mutation.
+   The CLI also exposes axi-sdk's built-in `update` for global installs when you want that path explicitly.
+
+Agents should not re-copy long guidance into chat memory as policy; the installed CLI is authoritative each session.
+See [Use the skill](docs/src/content/docs/for-agents/use-the-skill.md) for the agent-facing install path.
+
 The full authoring contract lives in the documentation:
 
+- [Use the skill](docs/src/content/docs/for-agents/use-the-skill.md) - install the skill shell and keep it fresh via package upgrades.
 - [Authoring plans](docs/src/content/docs/for-agents/authoring-plans.md) - what a plan document is, how the guidance gate works, and where each kind of rule lives.
 - [Linting rules](docs/src/content/docs/reference/lint-rules.md) - every authoring rule and its conservative matching boundaries.
 - [Components](docs/src/content/docs/components/index.md) - the complete built-in component reference.
 - [Features](docs/src/content/docs/intro/features.md) - the reader-facing viewer capabilities.
-- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `validate`, `render`, and `compile` in detail.
+- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `skill`, `validate`, `render`, and `compile` in detail.
 
 To preview components locally, run `node bin/big-plan.mjs guidance` once, then render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`.
 To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.
@@ -66,7 +91,7 @@ bun run build           # regenerate embedded modules, then compile TypeScript t
 bun run test            # Vitest and Node unit tests (regenerates embedded modules first)
 bun run lint            # ESLint, stylesheet-contract, and Prettier checks
 bun run format          # format authored files with Prettier
-bun run gen             # regenerate CSS, font, branding-asset, and guidance modules
+bun run gen             # regenerate CSS, font, branding-asset, guidance, and skill modules
 bun run test:e2e        # browser tests of the rendered viewer (build first)
 node bin/big-plan.mjs render examples/sample.mdx
 ```
