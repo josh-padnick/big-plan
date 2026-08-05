@@ -40,6 +40,7 @@ const renderThroughCli = async ({
 
 type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
+  readonly allComponentsViewerUrl: string;
   readonly componentsViewerUrl: string;
   readonly apiEndpointsViewerUrl: string;
   readonly dataTableViewerUrl: string;
@@ -235,6 +236,25 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const outputPath = join(outputDir, "annotation-code.html");
       await writeFile(inputPath, ANNOTATION_CODE_MDX, "utf8");
       await renderThroughCli({ inputPath, outputPath, outputDir });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  // The complete gallery is the registry-level interaction gate: unlike the
+  // focused fixtures below, it gives one rendered document an instance of
+  // every authorable component.
+  allComponentsViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-all-components-"),
+      );
+      const outputPath = join(outputDir, "all-components.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "all-components.mdx"),
+        outputPath,
+        outputDir,
+      });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },
