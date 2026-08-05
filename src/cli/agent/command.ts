@@ -10,12 +10,15 @@ import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { shellQuote } from "../_shared/shell-quote.js";
 import {
   commentsFromExchange,
+  claimAgentRequest,
   deriveSourceRevision,
   effectiveSourceRevision,
   nextPendingAgentRequest,
   readAgentExchange,
+  resolveAgentResponseRequest,
   responseTemplateFor,
   validateAgentResponseDraft,
+  writeAgentRequest,
   writeAgentResponse,
 } from "../../review/agent-exchange.js";
 import type {
@@ -342,21 +345,41 @@ const nextWork = async ({
     });
     request = nextPendingAgentRequest(snapshot);
   }
+  const progress = await readProgress({
+    store: session.store,
+    sessionId: session.sessionId,
+  });
+  const contextEvents = progress
+    .filter((event) => event.step === "Reviewer reverted a comment change")
+    .slice(-20)
+    .map((event) => ({
+      event: "comment_change_reverted",
+      requestId: event.requestId,
+      commentId: event.detail,
+      at: event.at,
+    }));
   if (request === undefined) {
     return {
       pending: false,
       plan: session.planPath,
+      context_events: contextEvents,
       help: ["Run again with --wait to wait for the reviewer's next message"],
     };
   }
+  const claimedSource = await readFile(session.planPath, "utf8");
+  const pickupRevision = deriveSourceRevision(claimedSource);
+  if (request.claimedFromRevision === undefined) {
+    request = claimAgentRequest({
+      request,
+      currentRevision: pickupRevision,
+    });
+    await writeAgentRequest({ store: session.store, request });
+  }
+  const claimedFromRevision = effectiveSourceRevision({ request, snapshot });
   await writeAgentHeartbeat({
     store: session.store,
     sessionId: session.sessionId,
     state: "working",
-  });
-  const progress = await readProgress({
-    store: session.store,
-    sessionId: session.sessionId,
   });
   await appendProgress({
     store: session.store,
@@ -390,12 +413,13 @@ const nextWork = async ({
     requestId: request.requestId,
   });
   const binPath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
-  const workRevision = effectiveSourceRevision({ request, snapshot });
+  const workRevision = claimedFromRevision;
   return {
     pending: true,
     plan: session.planPath,
     work: { ...request, sourceRevision: workRevision },
     history: responseHistory({ request, snapshot }),
+    context_events: contextEvents,
     response_template: responseTemplateFor(request),
     response_file: responseFile,
     respond_command: `node ${shellQuote(binPath)} agent respond ${shellQuote(
@@ -434,24 +458,12 @@ const respond = async ({
   if (!isRecord(responseDraft) || typeof responseDraft.requestId !== "string") {
     return fail("The response JSON must name its requestId");
   }
-  const request = snapshot.requests.find(
-    (candidate) => candidate.requestId === responseDraft.requestId,
-  );
-  if (request === undefined) {
-    return fail("The response does not name a request in this review session");
-  }
-  if (snapshot.cancelledIds.includes(request.requestId)) {
-    return fail(
-      "The reviewer cancelled this request. Discard your draft, revert any plan edits you made for it, and run agent next.",
-    );
-  }
-  const pending = nextPendingAgentRequest(snapshot);
-  if (pending === undefined) {
-    return fail("There is no pending agent request to answer");
-  }
-  if (pending.requestId !== request.requestId) {
-    return fail("The response does not answer the next pending agent request");
-  }
+  const resolution = resolveAgentResponseRequest({
+    snapshot,
+    requestId: responseDraft.requestId,
+  });
+  if (!resolution.ok) return fail(resolution.message);
+  const { request } = resolution;
   let markdown: string;
   try {
     markdown = await readFile(session.planPath, "utf8");

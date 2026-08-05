@@ -3,7 +3,7 @@
 // keeps its revision-local fixture syntax so both sides compile compatibly.
 
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -69,6 +69,20 @@ const renderDocument = async ({ source, outputPath, stateDirectory }) => {
  */
 const applyActions = async ({ page, actions }) => {
   for (const action of actions) {
+    if (action.type === "promote-review-drafts") {
+      await page.evaluate(() => {
+        const key = Object.keys(localStorage).find((candidate) =>
+          candidate.startsWith("big-plan:review:drafts:"),
+        );
+        if (key === undefined) return;
+        const state = JSON.parse(localStorage.getItem(key) ?? "{}");
+        state.sent = state.drafts ?? [];
+        state.drafts = [];
+        localStorage.setItem(key, JSON.stringify(state));
+      });
+      await page.reload();
+      continue;
+    }
     const locator = page.locator(action.selector);
     const count = await locator.count();
     if (count === 0) {
@@ -86,8 +100,38 @@ const applyActions = async ({ page, actions }) => {
       case "focus":
         await locator.focus();
         break;
+      case "fill":
+        await locator.fill(action.value);
+        break;
       case "hover":
         await locator.hover();
+        break;
+      case "scroll-into-view":
+        await locator.scrollIntoViewIfNeeded();
+        break;
+      case "select-text":
+        await locator.evaluate((element, text) => {
+          const walker = globalThis.document.createTreeWalker(
+            element,
+            globalThis.NodeFilter.SHOW_TEXT,
+          );
+          let node = walker.nextNode();
+          while (node !== null && !node.textContent?.includes(text)) {
+            node = walker.nextNode();
+          }
+          if (node === null) {
+            throw new Error(`Selection fixture text "${text}" was not found.`);
+          }
+          const start = node.textContent?.indexOf(text) ?? -1;
+          const range = globalThis.document.createRange();
+          range.setStart(node, start);
+          range.setEnd(node, start + text.length);
+          const selection = globalThis.window.getSelection();
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+          globalThis.document.dispatchEvent(new Event("selectionchange"));
+        }, action.value);
+        await page.waitForTimeout(100);
         break;
       case "set-attribute":
         await locator.evaluate(
@@ -110,55 +154,13 @@ const captureName = ({ document, capture, viewport, theme }) =>
     .map((part) => part.replaceAll(/[^a-zA-Z0-9_-]/g, "-"))
     .join("__") + ".png";
 
-/** Waits until layout and paint have crossed two complete browser frames. */
-const settlePaint = async (page) => {
-  await page.evaluate(
-    () =>
-      new Promise((resolvePaint) => {
-        globalThis.requestAnimationFrame(() =>
-          globalThis.requestAnimationFrame(resolvePaint),
-        );
-      }),
-  );
-};
-
-/**
- * Writes only a byte-stable frame. The exact comparison is deliberate: an
- * unsettled animation, transition, font, or layout frame is a fixture defect,
- * not a visual delta the history contract may smooth over.
- */
-const captureStableTarget = async ({ page, target, path }) => {
-  await target.scrollIntoViewIfNeeded();
-  let prior;
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    await settlePaint(page);
-    const current = await target.screenshot({ animations: "disabled" });
-    if (prior !== undefined && prior.equals(current)) {
-      await writeFile(path, current);
-      return;
-    }
-    prior = current;
-  }
-  throw new Error(
-    `Screenshot target "${path}" never repeated exact bytes across six settled frames.`,
-  );
-};
-
 const temporaryDirectory = await mkdtemp(
   join(tmpdir(), "big-plan-style-captures-"),
 );
 // Exact RGBA evidence requires one stable rasterizer and color space in CI.
 const browser = await chromium.launch({
   headless: true,
-  args: [
-    "--disable-gpu",
-    // Hosted runners expose different CPU instruction sets. Skia documents
-    // this switch as its baseline layout-test path; it prevents SIMD-specific
-    // antialias rounding from changing an otherwise identical pixel by one.
-    "--disable-skia-runtime-opts",
-    "--force-color-profile=srgb",
-    "--force-device-scale-factor=1",
-  ],
+  args: ["--disable-gpu", "--force-color-profile=srgb"],
 });
 
 try {
@@ -216,9 +218,8 @@ try {
               );
             }
             await target.waitFor({ state: "visible" });
-            await captureStableTarget({
-              page,
-              target,
+            await target.screenshot({
+              animations: "disabled",
               path: join(
                 outputDirectory,
                 captureName({

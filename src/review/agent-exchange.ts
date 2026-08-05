@@ -35,6 +35,7 @@ type AgentRequestBase = {
   readonly sessionId: string;
   readonly planId: string;
   readonly sourceRevision: string;
+  readonly claimedFromRevision?: string;
   readonly createdAt: string;
 };
 
@@ -277,6 +278,11 @@ const requestBase = (
     sessionId: id(value.sessionId, "sessionId"),
     planId: id(value.planId, "planId"),
     sourceRevision: sourceRevision(value.sourceRevision),
+    ...(value.claimedFromRevision === undefined
+      ? {}
+      : {
+          claimedFromRevision: sourceRevision(value.claimedFromRevision),
+        }),
     createdAt: timestamp(value.createdAt),
   };
 };
@@ -552,6 +558,13 @@ const validateStoredResponse = ({
   if (base.revisionPair.toRevision !== base.sourceRevision) {
     throw new AgentExchangeRejected(
       "A stored revision pair must end at the response revision",
+    );
+  }
+  const expectedFromRevision =
+    request.claimedFromRevision ?? request.sourceRevision;
+  if (base.revisionPair.fromRevision !== expectedFromRevision) {
+    throw new AgentExchangeRejected(
+      "A stored revision pair must begin at the request claim revision",
     );
   }
   if (request.kind === "chat") {
@@ -845,6 +858,79 @@ export const nextPendingAgentRequest = (
 };
 
 /**
+ * Claims a serialized request against the source visible at pickup. Claim
+ * ownership is immutable: repeating `agent next` cannot move the baseline
+ * after an agent has begun editing.
+ */
+export const claimAgentRequest = ({
+  request,
+  currentRevision,
+}: {
+  readonly request: AgentRequest;
+  readonly currentRevision: string;
+}): AgentRequest =>
+  request.claimedFromRevision === undefined
+    ? {
+        ...request,
+        claimedFromRevision: sourceRevision(currentRevision),
+      }
+    : request;
+
+export type AgentResponseRequestResolution =
+  | {
+      readonly ok: true;
+      readonly request: AgentRequest;
+    }
+  | {
+      readonly ok: false;
+      readonly message: string;
+    };
+
+/**
+ * Resolves the exact request named by a response draft while preserving the
+ * serialized queue contract. Cancellation belongs to that identity, never to
+ * an unrelated raw queue head.
+ */
+export const resolveAgentResponseRequest = ({
+  snapshot,
+  requestId,
+}: {
+  readonly snapshot: AgentExchangeSnapshot;
+  readonly requestId: string;
+}): AgentResponseRequestResolution => {
+  const request = snapshot.requests.find(
+    (candidate) => candidate.requestId === requestId,
+  );
+  if (request === undefined) {
+    return {
+      ok: false,
+      message: "The response does not name a request in this review session",
+    };
+  }
+  if (snapshot.cancelledIds.includes(request.requestId)) {
+    return {
+      ok: false,
+      message:
+        "The reviewer cancelled this request. Discard your draft, revert any plan edits you made for it, and run agent next.",
+    };
+  }
+  const pending = nextPendingAgentRequest(snapshot);
+  if (pending === undefined) {
+    return {
+      ok: false,
+      message: "There is no pending agent request to answer",
+    };
+  }
+  if (pending.requestId !== request.requestId) {
+    return {
+      ok: false,
+      message: "The response does not answer the next pending agent request",
+    };
+  }
+  return { ok: true, request };
+};
+
+/**
  * Resolves the causal baseline for one serialized work item. Later comments in
  * a Send-all batch begin where the preceding comment's immutable pair ended.
  */
@@ -855,22 +941,19 @@ export const effectiveSourceRevision = ({
   readonly request: AgentRequest;
   readonly snapshot: AgentExchangeSnapshot;
 }): string => {
-  if (request.kind !== "feedback" || request.batchIndex === 0) {
-    return request.sourceRevision;
+  if (request.claimedFromRevision !== undefined) {
+    return request.claimedFromRevision;
   }
-  const previous = snapshot.requests.find(
-    (candidate) =>
-      candidate.kind === "feedback" &&
-      candidate.packageId === request.packageId &&
-      candidate.batchIndex === request.batchIndex - 1,
+  const earlierRequestIds = new Set(
+    snapshot.requests
+      .slice(0, snapshot.requests.indexOf(request))
+      .map((candidate) => candidate.requestId),
   );
-  const response =
-    previous === undefined
-      ? undefined
-      : snapshot.responses.find(
-          (candidate) => candidate.requestId === previous.requestId,
-        );
-  return response?.revisionPair.toRevision ?? request.sourceRevision;
+  return (
+    snapshot.responses
+      .filter((response) => earlierRequestIds.has(response.requestId))
+      .at(-1)?.revisionPair.toRevision ?? request.sourceRevision
+  );
 };
 
 /** Collects the original comments needed to validate a reply response. */

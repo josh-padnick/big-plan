@@ -9,12 +9,15 @@ import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./comment.js";
 import {
   AgentExchangeRejected,
+  claimAgentRequest,
   commentsFromExchange,
   deriveSourceRevision,
+  effectiveSourceRevision,
   feedbackAgentRequests,
   messageAgentRequest,
   nextPendingAgentRequest,
   readAgentExchange,
+  resolveAgentResponseRequest,
   validateAgentResponseDraft,
   writeAgentRequest,
   writeAgentResponse,
@@ -70,7 +73,150 @@ const snapshot = (): AgentExchangeSnapshot => ({
   cancelledIds: [],
 });
 
+describe("agent response request resolution", () => {
+  const secondRequest = messageAgentRequest({
+    kind: "chat",
+    requestId: "7777777777777777",
+    sessionId,
+    planId,
+    sourceRevision: deriveSourceRevision(before),
+    createdAt: "2026-08-02T12:01:00.000Z",
+    body: "Answer the later question.",
+  });
+
+  it("should resolve only the next live request named by the response", () => {
+    expect(
+      resolveAgentResponseRequest({
+        snapshot: {
+          requests: [request, secondRequest],
+          responses: [],
+          cancelledIds: [request.requestId],
+        },
+        requestId: secondRequest.requestId,
+      }),
+    ).toEqual({ ok: true, request: secondRequest });
+  });
+
+  it("should reject cancellation only for the response request identity", () => {
+    expect(
+      resolveAgentResponseRequest({
+        snapshot: {
+          requests: [request, secondRequest],
+          responses: [],
+          cancelledIds: [request.requestId],
+        },
+        requestId: request.requestId,
+      }),
+    ).toEqual({
+      ok: false,
+      message:
+        "The reviewer cancelled this request. Discard your draft, revert any plan edits you made for it, and run agent next.",
+    });
+  });
+
+  it("should preserve serialized response order", () => {
+    expect(
+      resolveAgentResponseRequest({
+        snapshot: {
+          requests: [request, secondRequest],
+          responses: [],
+          cancelledIds: [],
+        },
+        requestId: secondRequest.requestId,
+      }),
+    ).toEqual({
+      ok: false,
+      message: "The response does not answer the next pending agent request",
+    });
+  });
+});
+
 describe("agent exchange response contract", () => {
+  it("should keep a request claim immutable across repeated pickups", () => {
+    const firstClaim = claimAgentRequest({
+      request,
+      currentRevision: deriveSourceRevision(before),
+    });
+    const repeatedClaim = claimAgentRequest({
+      request: firstClaim,
+      currentRevision: deriveSourceRevision(after),
+    });
+    expect(repeatedClaim.claimedFromRevision).toBe(
+      deriveSourceRevision(before),
+    );
+  });
+
+  it("should use each globally serialized request claim as its causal baseline", () => {
+    const claimedRevision = deriveSourceRevision(after);
+    const laterChat = {
+      ...messageAgentRequest({
+        kind: "chat",
+        requestId: "7777777777777777",
+        sessionId,
+        planId,
+        sourceRevision: deriveSourceRevision(before),
+        createdAt: "2026-08-02T12:01:00.000Z",
+        body: "Summarize only this revision.",
+      }),
+      claimedFromRevision: claimedRevision,
+    };
+    expect(
+      effectiveSourceRevision({
+        request: laterChat,
+        snapshot: {
+          requests: [request, laterChat],
+          responses: [],
+          cancelledIds: [request.requestId],
+        },
+      }),
+    ).toBe(claimedRevision);
+  });
+
+  it("should carry causal ownership across package and request kinds", () => {
+    const terminalRevision = deriveSourceRevision(after);
+    const laterReply = messageAgentRequest({
+      kind: "reply",
+      requestId: "7777777777777777",
+      sessionId,
+      planId,
+      sourceRevision: deriveSourceRevision(before),
+      createdAt: "2026-08-02T12:01:00.000Z",
+      body: "Follow up behind the queued package.",
+      commentId,
+    });
+    expect(
+      effectiveSourceRevision({
+        request: laterReply,
+        snapshot: {
+          requests: [request, laterReply],
+          responses: [
+            {
+              version: 1,
+              requestId: request.requestId,
+              sessionId,
+              planId,
+              sourceRevision: terminalRevision,
+              revisionPair: {
+                fromRevision: deriveSourceRevision(before),
+                toRevision: terminalRevision,
+              },
+              createdAt: "2026-08-02T12:00:30.000Z",
+              kind: "feedback",
+              outcomes: [
+                {
+                  commentId,
+                  state: "changed",
+                  message: "Changed.",
+                },
+              ],
+            },
+          ],
+          cancelledIds: [],
+        },
+      }),
+    ).toBe(terminalRevision);
+  });
+
   it("should serialize one ordered exchange per Send-all comment", () => {
     const secondComment = {
       ...comment,

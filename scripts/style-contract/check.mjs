@@ -11,10 +11,6 @@ const OVERRIDE_MARKER = "Override invariant:";
 const CASCADE_ORDER = "theme, base, components, utilities, bp-state";
 const CASCADE_ENTRYPOINT = "src/render/global.css";
 const ALLOWED_BLOCK_LAYERS = new Set(["components", "bp-state"]);
-// The commenting stack introduces its stylesheet before the later Tailwind
-// migration makes it satisfy this repository-wide contract. Split PRs remove
-// this temporary exemption in the styling slice.
-const LEGACY_STYLESHEETS = new Set(["src/render/shell/review.css"]);
 const CONCRETE_REASONS = [
   /externally owned markup/i,
   /generated markup/i,
@@ -195,9 +191,6 @@ export const checkStylesheetContract = async ({ sourceRoot }) => {
       dirnameOfSource(sourceRoot),
       stylesheet,
     ).replaceAll("\\", "/");
-    if (LEGACY_STYLESHEETS.has(relativePath)) {
-      continue;
-    }
     const root = postcss.parse(await readFile(stylesheet, "utf8"), {
       from: stylesheet,
     });

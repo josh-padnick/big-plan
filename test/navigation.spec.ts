@@ -61,6 +61,13 @@ test("should navigate the rendered sample plan through the TOC without errors", 
         return painted;
       });
       expect(paintedPixels).toBeGreaterThan(1_000);
+      await expect
+        .poll(() =>
+          page
+            .locator("[data-review-toolbar]")
+            .evaluate((node) => getComputedStyle(node).backgroundColor),
+        )
+        .toBe("rgba(0, 0, 0, 0)");
     }
     await page.evaluate(() =>
       document.documentElement.setAttribute("data-theme", "light"),

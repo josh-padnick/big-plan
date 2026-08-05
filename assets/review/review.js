@@ -33,7 +33,6 @@ import { TRASH_2_ICON } from "../../src/icons/lucide/trash-2.js";
 import { TRIANGLE_ALERT_ICON } from "../../src/icons/lucide/triangle-alert.js";
 import { UNDO_2_ICON } from "../../src/icons/lucide/undo-2.js";
 import { X_ICON } from "../../src/icons/lucide/x.js";
-import { threadSubstate } from "../../src/review/thread-group.js";
 import {
   deriveAgentIndicator,
   deriveThreadStatus,
@@ -45,6 +44,7 @@ import {
   compactDurationLabel,
   relativeSignalLabel,
 } from "../../src/review/time-label.js";
+import { createToastManager } from "./toast.js";
 
 (() => {
   "use strict";
@@ -57,7 +57,7 @@ import {
   // which is the only way the session attributes can be here at all.
   const hasRuntime = sessionId !== "" && sessionToken !== "";
 
-  const blocks = Array.from(document.querySelectorAll("[data-block-id]"));
+  let blocks = Array.from(document.querySelectorAll("[data-block-id]"));
   if (blocks.length === 0) return;
 
   const TOKEN_HEADER = "x-big-plan-review-token";
@@ -102,20 +102,36 @@ import {
         return document.createTextNode(node.value);
       }
       if (node.type === "inlineCode") {
-        return el("code", { text: node.value });
+        return el("code", {
+          class: "max-w-full [overflow-wrap:anywhere]",
+          text: node.value,
+        });
       }
       if (node.type === "code") {
-        return el("pre", {}, [
-          ...(node.language
-            ? [
-                el("span", {
-                  "data-review-code-language": true,
-                  text: node.language,
-                }),
-              ]
-            : []),
-          el("code", { text: node.value }),
-        ]);
+        return el(
+          "pre",
+          {
+            class:
+              "min-w-0 max-w-full overflow-x-hidden whitespace-pre-wrap [overflow-wrap:anywhere]",
+          },
+          [
+            ...(node.language
+              ? [
+                  el("span", {
+                    class:
+                      "[display:block] [margin-bottom:0.25rem] [color:var(--muted-c)] [font-size:0.58rem] [text-transform:uppercase]",
+                    "data-review-code-language": true,
+                    text: node.language,
+                  }),
+                ]
+              : []),
+            el("code", {
+              class:
+                "min-w-0 max-w-full whitespace-pre-wrap [overflow-wrap:anywhere]",
+              text: node.value,
+            }),
+          ],
+        );
       }
       const children = (node.children || []).map(renderNode);
       if (node.type === "paragraph") return el("p", {}, children);
@@ -144,7 +160,9 @@ import {
       ? el(
           "div",
           {
-            class: COMMENT_WRAP_CLASSES,
+            class:
+              COMMENT_WRAP_CLASSES +
+              " data-[review-message-body=structured]:[min-width:0] data-[review-message-body=structured]:[color:var(--ink-c)] data-[review-message-body=structured]:[font-size:0.75rem] data-[review-message-body=structured]:[line-height:1.45] data-[review-message-body=structured]:[overflow-wrap:anywhere]",
             "data-review-message-body": "structured",
           },
           checked.map(renderNode),
@@ -178,12 +196,22 @@ import {
   const MOD_KEY_LABEL = IS_MAC ? "⌘" : "Ctrl";
 
   const attachShortcutTooltip = (button, label) => {
+    button.classList.add("group/kbd");
     button.appendChild(
-      el("span", { "data-review-kbd-tooltip": true, "aria-hidden": "true" }, [
-        el("kbd", { text: MOD_KEY_LABEL }),
-        el("kbd", { text: "Enter" }),
-        el("span", { text: label }),
-      ]),
+      el(
+        "span",
+        {
+          class:
+            "invisible pointer-events-none absolute right-0 bottom-[calc(100%+0.45rem)] z-60 flex items-center gap-[0.3rem] whitespace-nowrap rounded-[0.4rem] border border-edge bg-paper px-[0.45rem] py-[0.32rem] text-[0.6875rem] font-medium text-muted opacity-0 shadow-[0_6px_20px_rgb(0_0_0_/_0.14)] transition-[opacity,visibility] delay-0 duration-100 group-hover/kbd:visible group-hover/kbd:opacity-100 group-hover/kbd:delay-350 group-focus-visible/kbd:visible group-focus-visible/kbd:opacity-100 group-focus-visible/kbd:delay-350 group-disabled/kbd:hidden [&_kbd]:inline-flex [&_kbd]:h-[1.15rem] [&_kbd]:min-w-[1.15rem] [&_kbd]:items-center [&_kbd]:justify-center [&_kbd]:rounded-sm [&_kbd]:border [&_kbd]:border-edge [&_kbd]:bg-surface [&_kbd]:px-1 [&_kbd]:font-sans [&_kbd]:text-[0.625rem] [&_kbd]:font-semibold [&_kbd]:text-ink",
+          "data-review-kbd-tooltip": true,
+          "aria-hidden": "true",
+        },
+        [
+          el("kbd", { text: MOD_KEY_LABEL }),
+          el("kbd", { text: "Enter" }),
+          el("span", { text: label }),
+        ],
+      ),
     );
     button.setAttribute(
       "aria-keyshortcuts",
@@ -235,27 +263,31 @@ import {
   // wrappers is incorrect because a parent with subslides may be flattened
   // away by the deck transform while its h2 remains in the document.
   const slideNumberBySection = new Map();
-  let majorSlide = 0;
-  for (const heading of document.querySelectorAll(
-    "main h2[data-block-section]",
-  )) {
-    if (heading.closest("section.footnotes")) continue;
-    const section = heading.getAttribute("data-block-section");
-    if (!section || section === "Overview") continue;
-    majorSlide += 1;
-    slideNumberBySection.set(section, String(majorSlide));
-  }
-  for (const slide of document.querySelectorAll("[data-slide]")) {
-    if (!slide.hasAttribute("data-subslide")) continue;
-    const section = slide
-      .querySelector("[data-block-section]")
-      ?.getAttribute("data-block-section");
-    const kicker = slide
-      .querySelector("[data-slide-kicker]")
-      ?.textContent?.trim();
-    const number = kicker?.match(/^(\d+(?:\.\d+)*)\s*\//)?.[1];
-    if (section && number) slideNumberBySection.set(section, number);
-  }
+  const refreshSlideNumbers = () => {
+    slideNumberBySection.clear();
+    let majorSlide = 0;
+    for (const heading of document.querySelectorAll(
+      "main h2[data-block-section]",
+    )) {
+      if (heading.closest("section.footnotes")) continue;
+      const section = heading.getAttribute("data-block-section");
+      if (!section || section === "Overview") continue;
+      majorSlide += 1;
+      slideNumberBySection.set(section, String(majorSlide));
+    }
+    for (const slide of document.querySelectorAll("[data-slide]")) {
+      if (!slide.hasAttribute("data-subslide")) continue;
+      const section = slide
+        .querySelector("[data-block-section]")
+        ?.getAttribute("data-block-section");
+      const kicker = slide
+        .querySelector("[data-slide-kicker]")
+        ?.textContent?.trim();
+      const number = kicker?.match(/^(\d+(?:\.\d+)*)\s*\//)?.[1];
+      if (section && number) slideNumberBySection.set(section, number);
+    }
+  };
+  refreshSlideNumbers();
 
   // Comment chrome names the numbered slide, not the renderer's full
   // structural path. The source highlight carries the exact passage.
@@ -307,7 +339,7 @@ import {
   let deleteCandidateId = null;
   let revertCandidateId = null;
   let submitRightAway = false;
-  let showAgentActivity = true;
+  let showEarlierAgentActivity = false;
   const revisionDiffs = new Map();
   const chatDigestExpansion = new Map();
   const changeGroupExpansion = new Map();
@@ -316,12 +348,69 @@ import {
   const expandedThreadIds = new Set();
   const minimizedDraftIds = new Set();
   const resolvedCommentIds = new Set();
+  const threadReplyDrafts = new Map();
   // Honest in-flight and failure states: a comment mid-submit renders as
   // sending, a failed submit renders its error on the card, and the agent's
   // availability is derived rather than assumed.
   const submittingIds = new Set();
   const submitErrorById = new Map();
   const requestSeenAt = new Map();
+
+  // Poll-driven renders replace several nested lists. Preserve every keyed
+  // scroll container through that shared remount boundary instead of adding
+  // another surface-specific scrollTop patch each time a list grows.
+  const preservedScrollPositions = new Map();
+  const restorePreservedScroll = () => {
+    for (const node of document.querySelectorAll("[data-review-scroll-key]")) {
+      const position = preservedScrollPositions.get(
+        node.getAttribute("data-review-scroll-key"),
+      );
+      if (position) {
+        node.scrollTop = position.top;
+        node.scrollLeft = position.left;
+      }
+    }
+  };
+  const renderWithPreservedScroll = (render) => {
+    for (const node of document.querySelectorAll("[data-review-scroll-key]")) {
+      const key = node.getAttribute("data-review-scroll-key");
+      if (key !== null) {
+        preservedScrollPositions.set(key, {
+          top: node.scrollTop,
+          left: node.scrollLeft,
+        });
+      }
+    }
+    render();
+    restorePreservedScroll();
+    requestAnimationFrame(() => {
+      restorePreservedScroll();
+      // A replaced scroll owner may not expose its final scrollHeight until
+      // the next layout pass (notably the connection-history disclosure).
+      requestAnimationFrame(restorePreservedScroll);
+    });
+    window.setTimeout(restorePreservedScroll, 50);
+  };
+  document.addEventListener(
+    "scroll",
+    (event) => {
+      const node = event.target;
+      if (
+        event.isTrusted &&
+        node instanceof HTMLElement &&
+        node.hasAttribute("data-review-scroll-key")
+      ) {
+        preservedScrollPositions.set(
+          node.getAttribute("data-review-scroll-key"),
+          { top: node.scrollTop, left: node.scrollLeft },
+        );
+      }
+    },
+    true,
+  );
+  new MutationObserver(() => {
+    requestAnimationFrame(restorePreservedScroll);
+  }).observe(root, { childList: true, subtree: true });
   let emphasizedCommentId = null;
   let lastProgressAdvanceAt = 0;
   let pollFailures = 0;
@@ -346,39 +435,6 @@ import {
 
   const storageKey = planId === "" ? null : "big-plan:review:drafts:" + planId;
   const submitPreferenceKey = "big-plan:review:submit-right-away";
-  const reloadKey =
-    planId === "" ? null : "big-plan:review:live-reload:" + planId;
-
-  const readReloadState = () => {
-    if (reloadKey === null) return null;
-    try {
-      const raw = sessionStorage.getItem(reloadKey);
-      sessionStorage.removeItem(reloadKey);
-      if (raw === null) return null;
-      const value = JSON.parse(raw);
-      if (
-        value === null ||
-        typeof value !== "object" ||
-        typeof value.scrollY !== "number" ||
-        !Array.isArray(value.expanded)
-      ) {
-        return null;
-      }
-      return {
-        scrollY: Math.max(0, value.scrollY),
-        expanded: value.expanded.filter(isExchangeId),
-        tab:
-          value.tab === "chat" || value.tab === "agent"
-            ? value.tab
-            : "comments",
-        railOpen: value.railOpen === true,
-      };
-    } catch {
-      return null;
-    }
-  };
-
-  const reloadState = readReloadState();
 
   const emptyStoredState = () => ({
     drafts: [],
@@ -742,9 +798,6 @@ import {
   agentHeartbeatAt = diskState.agent.updatedAtMs;
   agentSessionState = diskState.agent.state;
   sourceRevision = diskState.sourceRevision;
-  for (const id of reloadState?.expanded || []) {
-    expandedThreadIds.add(id);
-  }
   try {
     submitRightAway = localStorage.getItem(submitPreferenceKey) === "true";
   } catch {
@@ -811,6 +864,8 @@ import {
   // ------------------------------------------------------------------ layout
 
   const rail = el("aside", {
+    class:
+      "[position:fixed] [top:2.75rem] [right:0] [bottom:0] [z-index:44] [display:flex] [width:min(22rem,_100vw)] max-[80rem]:[width:min(24rem,calc(100vw-2rem))] max-[40rem]:[width:100vw]! [flex-direction:column] [border-left:1px_solid_var(--edge-c)] [background:var(--bg)] [box-shadow:-8px_0_24px_rgb(0_0_0_/_0.06)] [font-size:0.875rem] [overflow-anchor:none]",
     "data-review-rail": true,
     "aria-label": "Feedback",
     hidden: true,
@@ -821,6 +876,8 @@ import {
   // model.
   const agentAlertLabel = el("span", { text: "No agent connected" });
   const agentAlert = el("button", {
+    class:
+      "inline-flex min-h-[1.85rem] cursor-pointer items-center gap-1.5 whitespace-nowrap rounded border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] px-2 py-1 text-xs font-semibold leading-[1.2] text-[var(--callout-danger-c)] shadow-sm hover:brightness-95 active:brightness-90",
     type: "button",
     "data-review-agent-alert": true,
     hidden: true,
@@ -831,6 +888,8 @@ import {
     setActiveTab("agent");
   });
   const agentOk = el("button", {
+    class:
+      "[display:inline-flex] [min-height:1.85rem] [align-items:center] [gap:0.4rem] [padding:0.32rem_0.4rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.2] [cursor:pointer] [position:relative] [width:1.85rem] [justify-content:center] hover:[background:var(--review-control-hover)] active:[background:var(--review-control-active)]",
     type: "button",
     "data-review-agent-ok": true,
     "aria-label": "Agent session active",
@@ -838,10 +897,14 @@ import {
   });
   agentOk.append(
     el("span", {
+      class:
+        "[width:6px] [height:6px] [border-radius:999px] [background:var(--diff-add-c)] [box-shadow:0_0_0_2px_color-mix(in_srgb,_var(--diff-add-c)_34%,_transparent)]",
       "data-review-agent-ok-dot": true,
       "aria-hidden": "true",
     }),
     el("span", {
+      class:
+        "[position:absolute] [top:calc(100%_+_0.35rem)] [right:0] [z-index:60] [width:max-content] [max-width:11rem] [padding:0.22rem_0.42rem] [border-radius:0.25rem] [background:var(--ink-c)] [color:var(--bg)] [font-size:0.66rem] [font-weight:600] [line-height:1.35] [pointer-events:none] [opacity:0] [transform:translateY(-0.1rem)] [transition:opacity_70ms_ease,_transform_70ms_ease]",
       "data-review-icon-tooltip": true,
       "aria-hidden": "true",
       text: "Agent session active",
@@ -853,6 +916,8 @@ import {
   });
 
   const toggle = el("button", {
+    class:
+      "[display:inline-flex] [min-height:1.85rem] [align-items:center] [gap:0.4rem] [padding:0.32rem_0.4rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.2] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--ink-c)] active:[background:var(--review-control-active)] aria-expanded:[border-radius:0.375rem] aria-expanded:[background:color-mix(in_srgb,_var(--diff-add-c)_9%,_var(--bg))] aria-expanded:[box-shadow:inset_0_0_0_1px_color-mix(in_srgb,_var(--diff-add-c)_26%,_transparent)] aria-expanded:[color:var(--diff-add-c)] data-[review-has-pending=true]:[color:var(--accent-c)]",
     type: "button",
     "data-review-toggle": true,
     "aria-expanded": "false",
@@ -860,12 +925,16 @@ import {
     title: "Open feedback sidebar (Alt+C)",
   });
   const toggleCount = el("span", {
+    class:
+      "[display:inline-flex] [min-width:1.15rem] [height:1.15rem] [align-items:center] [justify-content:center] [padding:0_0.28rem] [border:1px_solid_currentColor] [border-radius:999px] [font-variant-numeric:tabular-nums] [font-size:0.625rem] [font-weight:700] [text-align:center] empty:[display:none] data-[review-toggle-count-kind=needs]:[border-color:var(--callout-warning-c)] data-[review-toggle-count-kind=needs]:[background:var(--callout-warning-bg)] data-[review-toggle-count-kind=needs]:[color:var(--callout-warning-c)]",
     "data-review-toggle-count": true,
     text: "0",
   });
   const feedbackLabel = el("span", { "data-review-toggle-label": true });
   toggle.append(icon(MESSAGE_SQUARE_TEXT_ICON), feedbackLabel, toggleCount);
   const sendButton = el("button", {
+    class:
+      "[display:inline-flex] [width:auto] [min-height:1.85rem] [align-items:center] [padding:0.32rem_0.65rem] [border:1px_solid_var(--accent-c)] [border-radius:0.4rem] [background:var(--accent-c)] [color:var(--bg)] [font-size:0.8125rem] [font-weight:600] [white-space:nowrap] [cursor:pointer]",
     type: "button",
     "data-review-send": true,
     hidden: true,
@@ -875,6 +944,7 @@ import {
     "data-review-batch-label": true,
   });
   const compactBatchMenu = el("details", {
+    class: "[position:relative] [display:none]",
     "data-review-batch-menu": true,
     hidden: true,
   });
@@ -894,32 +964,48 @@ import {
   });
   compactBatchMenu.append(
     compactBatchSummary,
-    el("div", { "data-review-batch-actions": true }, [
-      compactReviewButton,
-      compactSendButton,
-    ]),
+    el(
+      "div",
+      {
+        class:
+          "[position:absolute] [top:calc(100%_+_0.3rem)] [right:0] [display:grid] [width:11rem] [padding:0.3rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [box-shadow:0_8px_24px_rgb(0_0_0_/_0.14)]",
+        "data-review-batch-actions": true,
+      },
+      [compactReviewButton, compactSendButton],
+    ),
   );
-  const toolbar = el("div", { "data-review-toolbar": true }, [
-    agentAlert,
-    agentOk,
-    toggle,
-    sendButton,
-    compactBatchMenu,
-  ]);
+  const toolbar = el(
+    "div",
+    {
+      class:
+        "fixed inset-x-0 top-0 z-[2147483647] flex h-11 items-center justify-end gap-[0.35rem] border-b border-edge bg-transparent pr-4 pointer-events-none",
+      "data-review-toolbar": true,
+    },
+    [agentAlert, agentOk, toggle, sendButton, compactBatchMenu],
+  );
 
   const countLabel = el("span", {
+    class:
+      "[display:inline-flex] [min-width:1.15rem] [height:1.15rem] [align-items:center] [justify-content:center] [padding:0_0.28rem] [border-radius:999px] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.625rem] [font-weight:750] [font-variant-numeric:tabular-nums] empty:[display:none]",
     "data-review-count": true,
     text: "Nothing pending",
   });
   const hideButton = el("button", {
+    class:
+      "[display:inline-flex] [padding:0.2rem] [border-radius:0.3rem] [color:var(--muted-c)] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--ink-c)] active:[background:var(--review-control-active)]",
     type: "button",
     "data-review-hide": true,
     "aria-label": "Hide feedback",
   });
   hideButton.appendChild(icon(X_ICON));
 
-  const draftList = el("ol", { "data-review-drafts": true });
+  const draftList = el("ol", {
+    class: "[margin:0] [padding:0] [list-style:none]",
+    "data-review-drafts": true,
+  });
   const draftGroupCount = el("span", {
+    class:
+      "[display:inline-flex] [min-width:1.1rem] [height:1.1rem] [align-items:center] [justify-content:center] [margin-left:auto] [padding:0_0.25rem] [border-radius:999px] [background:var(--surface-c)] [font-size:0.625rem] [font-variant-numeric:tabular-nums]",
     "data-review-outcome-group-count": true,
   });
   const sidebarSendButton = el("button", {
@@ -947,37 +1033,74 @@ import {
     ],
   );
   const emptyNote = el("p", {
+    class:
+      "[margin:0.4rem_0_0] [color:var(--muted-c)] [font-size:0.8125rem] [line-height:1.5]",
     "data-review-empty": true,
     text: "Select text to comment, or use a slide selector to select it all.",
   });
-  const responseSummary = el("p", { "data-review-round-summary": true });
+  const responseSummary = el("p", {
+    class:
+      "[min-width:0] [flex:1_1_auto] [margin:0] [color:var(--muted-c)] [font-size:0.6875rem] [line-height:1.45] [display:flex] [flex-wrap:wrap] [gap:0.3rem]",
+    "data-review-round-summary": true,
+  });
   const resolveAllButton = el("button", {
+    class:
+      "[flex:0_0_auto] [padding:0] [border:0] [background:transparent] [color:var(--muted-c)] [font-size:0.72rem] [cursor:pointer] hover:[color:var(--ink-c)] hover:[text-decoration:underline] focus-visible:[color:var(--ink-c)] focus-visible:[text-decoration:underline] active:[color:var(--accent-c)]",
     type: "button",
     "data-review-resolve-all": true,
     text: "Resolve all",
     hidden: true,
   });
-  const roundHead = el("div", { "data-review-round-head": true }, [
-    responseSummary,
-    resolveAllButton,
-  ]);
-  const sentList = el("div", { "data-review-sent-list": true });
-  const sentGroup = el("section", { "data-review-sent": true, hidden: true }, [
-    roundHead,
-    sentList,
-  ]);
+  const roundHead = el(
+    "div",
+    {
+      class:
+        "[display:flex] [min-width:0] [align-items:baseline] [gap:0.6rem] [margin-bottom:0.7rem]",
+      "data-review-round-head": true,
+    },
+    [responseSummary, resolveAllButton],
+  );
+  const sentList = el("div", {
+    class: "[margin:0] [padding:0] [list-style:none]",
+    "data-review-sent-list": true,
+  });
+  const sentGroup = el(
+    "section",
+    {
+      class:
+        "[margin-top:0.9rem] [padding-top:0.7rem] [border-top:1px_solid_var(--edge-c)]",
+      "data-review-sent": true,
+      hidden: true,
+    },
+    [roundHead, sentList],
+  );
 
-  const sendNote = el("p", { "data-review-send-note": true });
-  const sendBar = el("div", { "data-review-send-bar": true, hidden: true }, [
-    sendNote,
-  ]);
+  const sendNote = el("p", {
+    class:
+      "[margin:0.45rem_0_0] [color:var(--muted-c)] [font-size:0.75rem] [line-height:1.45] [overflow-wrap:anywhere] empty:[display:none]",
+    "data-review-send-note": true,
+  });
+  const sendBar = el(
+    "div",
+    {
+      class:
+        "[margin-top:0.7rem] [padding-top:0.7rem] [border-top:1px_solid_var(--edge-c)]",
+      "data-review-send-bar": true,
+      hidden: true,
+    },
+    [sendNote],
+  );
 
   const agentState = el("span", {
+    class:
+      "[margin-left:auto] [padding:0.1rem_0.45rem] [border-radius:999px] [font-size:0.6875rem] [font-weight:600] [white-space:nowrap] data-[tone=idle]:[background:var(--callout-warning-bg)] data-[tone=idle]:[color:var(--callout-warning-c)] data-[tone=working]:[background:var(--callout-note-bg)] data-[tone=working]:[color:var(--callout-note-c)] data-[tone=ready]:[background:var(--diff-add-bg)] data-[tone=ready]:[color:var(--diff-add-c)] data-[tone=failed]:[background:var(--callout-danger-bg)] data-[tone=failed]:[color:var(--callout-danger-c)]",
     "data-review-agent-state": true,
     "data-tone": "idle",
     text: "Waiting for you",
   });
   const agentInput = el("textarea", {
+    class:
+      "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px]",
     "data-review-agent-input": true,
     id: "big-plan-review-agent-note",
     rows: "3",
@@ -992,7 +1115,12 @@ import {
   });
   const attachLabel = el(
     "label",
-    { "data-review-attach": true, hidden: true },
+    {
+      class:
+        "[display:flex] [align-items:center] [gap:0.4rem] [margin-top:0.4rem] [color:var(--muted-c)] [font-size:0.75rem]",
+      "data-review-attach": true,
+      hidden: true,
+    },
     [
       attachInput,
       el("span", {
@@ -1002,39 +1130,62 @@ import {
     ],
   );
   const agentSave = el("button", {
+    class:
+      "[margin-top:0.45rem] [padding:0.3rem_0.65rem] [border:1px_solid_var(--edge-c)] [border-radius:0.35rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.75rem] [cursor:pointer] [position:relative] hover:[background:var(--review-control-hover)] hover:[border-color:var(--accent-c)] hover:[color:var(--accent-c)] active:[background:var(--review-control-active)]",
     type: "button",
     "data-review-agent-save": true,
     text: "Send",
   });
   attachShortcutTooltip(agentSave, "Send message");
   const planChatList = el("ol", {
+    class:
+      "[display:grid] [gap:0.5rem] [margin:0_0_0.7rem] [padding:0] [list-style:none]",
     "data-review-plan-chat": true,
     "aria-label": "Plan-wide conversation",
   });
 
-  const agentPanel = el("section", { "data-review-agent": true }, [
-    el("div", { "data-review-agent-head": true }, [
-      el("h3", { text: "Plan-wide chat" }),
-      agentState,
-    ]),
-    el("p", {
-      "data-review-chat-note": true,
-      text: hasRuntime
-        ? "Live coding-agent conversation through this plan’s local review session."
-        : "Start `big-plan review` and its coding-agent session to chat.",
-    }),
-    planChatList,
-    el("label", {
-      for: "big-plan-review-agent-note",
-      "data-review-field-label": true,
-      text: "Message",
-    }),
-    agentInput,
-    attachLabel,
-    agentSave,
-  ]);
+  const agentPanel = el(
+    "section",
+    {
+      class:
+        "[padding:0.7rem_0.9rem_0.9rem] [border-top:1px_solid_var(--edge-c)] [background:var(--surface-c)]",
+      "data-review-agent": true,
+    },
+    [
+      el(
+        "div",
+        {
+          class:
+            "[display:flex] [align-items:center] [gap:0.5rem] [margin-bottom:0.5rem]",
+          "data-review-agent-head": true,
+        },
+        [el("h3", { text: "Plan-wide chat" }), agentState],
+      ),
+      el("p", {
+        class:
+          "[margin:-0.15rem_0_0.65rem] [color:var(--muted-c)] [font-size:0.6875rem] [line-height:1.45]",
+        "data-review-chat-note": true,
+        text: hasRuntime
+          ? "Live coding-agent conversation through this plan’s local review session."
+          : "Start `big-plan review` and its coding-agent session to chat.",
+      }),
+      planChatList,
+      el("label", {
+        class:
+          "[display:block] [margin-bottom:0.25rem] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:600]",
+        for: "big-plan-review-agent-note",
+        "data-review-field-label": true,
+        text: "Message",
+      }),
+      agentInput,
+      attachLabel,
+      agentSave,
+    ],
+  );
 
   const commentsTab = el("button", {
+    class:
+      "[display:inline-flex] [align-items:center] [gap:0.35rem] [padding:0.42rem_0.52rem] [border-top-width:0] [border-right-width:0] [border-bottom-width:2px] [border-left-width:0] [border-bottom-style:solid] [border-bottom-color:transparent] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:650] [cursor:pointer] hover:[background:var(--review-control-hover)] active:[background:var(--review-control-active)] aria-selected:[border-bottom-color:var(--accent-c)] aria-selected:[color:var(--ink-c)]",
     type: "button",
     role: "tab",
     "data-review-tab": "comments",
@@ -1047,6 +1198,8 @@ import {
     countLabel,
   );
   const chatTab = el("button", {
+    class:
+      "[display:inline-flex] [align-items:center] [gap:0.35rem] [padding:0.42rem_0.52rem] [border-top-width:0] [border-right-width:0] [border-bottom-width:2px] [border-left-width:0] [border-bottom-style:solid] [border-bottom-color:transparent] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:650] [cursor:pointer] hover:[background:var(--review-control-hover)] active:[background:var(--review-control-active)] aria-selected:[border-bottom-color:var(--accent-c)] aria-selected:[color:var(--ink-c)]",
     type: "button",
     role: "tab",
     "data-review-tab": "chat",
@@ -1056,6 +1209,8 @@ import {
   chatTab.append(icon(MESSAGES_SQUARE_ICON), el("span", { text: "Chat" }));
   const connectionTab = hasRuntime
     ? el("button", {
+        class:
+          "[display:inline-flex] [align-items:center] [gap:0.35rem] [padding:0.42rem_0.52rem] [border-top-width:0] [border-right-width:0] [border-bottom-width:2px] [border-left-width:0] [border-bottom-style:solid] [border-bottom-color:transparent] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:650] [cursor:pointer] hover:[background:var(--review-control-hover)] active:[background:var(--review-control-active)] aria-selected:[border-bottom-color:var(--accent-c)] aria-selected:[color:var(--ink-c)]",
         type: "button",
         role: "tab",
         "data-review-tab": "agent",
@@ -1064,33 +1219,46 @@ import {
       })
     : null;
   connectionTab?.append(icon(ACTIVITY_ICON), el("span", { text: "Agent" }));
-  const tabList = el("div", { "data-review-tabs": true, role: "tablist" }, [
-    commentsTab,
-    chatTab,
-    connectionTab,
-    hideButton,
-  ]);
+  const tabList = el(
+    "div",
+    {
+      class:
+        "[display:flex] [flex:0_0_auto] [align-items:stretch] [gap:0.2rem] [padding:0.35rem_0.4rem_0]",
+      "data-review-tabs": true,
+      role: "tablist",
+    },
+    [commentsTab, chatTab, connectionTab, hideButton],
+  );
   const commentsPanel = el(
     "section",
     {
+      class:
+        "[min-height:0] data-[review-panel=comments]:[display:flex] data-[review-panel=comments]:[flex:1_1_auto] data-[review-panel=comments]:[flex-direction:column] data-[review-panel=chat]:[flex:1_1_auto] data-[review-panel=chat]:[overflow-y:auto] data-[review-panel=chat]:[overscroll-behavior:contain] data-[review-panel=agent]:[flex:1_1_auto] data-[review-panel=agent]:[padding:0.9rem] data-[review-panel=agent]:[overflow-y:auto] data-[review-panel=agent]:[overscroll-behavior:contain]",
       id: "big-plan-review-comments",
       "data-review-panel": "comments",
       role: "tabpanel",
     },
     [
-      el("div", { "data-review-scroll": true }, [
-        draftGroup,
-        sendBar,
-        emptyNote,
-        sentGroup,
-      ]),
+      el(
+        "div",
+        {
+          class:
+            "[flex:1_1_auto] [overflow-y:auto] [overflow-anchor:none] [overscroll-behavior:contain] [padding:0.7rem_0.9rem_1.2rem]",
+          "data-review-scroll": true,
+          "data-review-scroll-key": "comments",
+        },
+        [draftGroup, sendBar, emptyNote, sentGroup],
+      ),
     ],
   );
   const chatPanel = el(
     "section",
     {
+      class:
+        "[min-height:0] [overflow-anchor:none] data-[review-panel=comments]:[display:flex] data-[review-panel=comments]:[flex:1_1_auto] data-[review-panel=comments]:[flex-direction:column] data-[review-panel=chat]:[flex:1_1_auto] data-[review-panel=chat]:[overflow-y:auto] data-[review-panel=chat]:[overscroll-behavior:contain] data-[review-panel=agent]:[flex:1_1_auto] data-[review-panel=agent]:[padding:0.9rem] data-[review-panel=agent]:[overflow-y:auto] data-[review-panel=agent]:[overscroll-behavior:contain]",
       id: "big-plan-review-chat",
       "data-review-panel": "chat",
+      "data-review-scroll-key": "chat",
       role: "tabpanel",
       hidden: true,
     },
@@ -1098,19 +1266,29 @@ import {
   );
   const connectionPanel = hasRuntime
     ? el("section", {
+        class:
+          "[min-height:0] [overflow-anchor:none] data-[review-panel=comments]:[display:flex] data-[review-panel=comments]:[flex:1_1_auto] data-[review-panel=comments]:[flex-direction:column] data-[review-panel=chat]:[flex:1_1_auto] data-[review-panel=chat]:[overflow-y:auto] data-[review-panel=chat]:[overscroll-behavior:contain] data-[review-panel=agent]:[flex:1_1_auto] data-[review-panel=agent]:[padding:0.9rem] data-[review-panel=agent]:[overflow-y:auto] data-[review-panel=agent]:[overscroll-behavior:contain]",
         id: "big-plan-review-agent",
         "data-review-panel": "agent",
+        "data-review-scroll-key": "connection",
         role: "tabpanel",
         hidden: true,
       })
     : null;
-  const railHeader = el("header", { "data-review-rail-header": true }, [
-    tabList,
-  ]);
+  const railHeader = el(
+    "header",
+    {
+      class: "[flex:0_0_auto] [border-bottom:1px_solid_var(--edge-c)]",
+      "data-review-rail-header": true,
+    },
+    [tabList],
+  );
   rail.append(railHeader, commentsPanel, chatPanel);
   if (connectionPanel) rail.appendChild(connectionPanel);
 
   const affordance = el("button", {
+    class:
+      "[position:fixed] [z-index:46] [display:inline-flex] [align-items:center] [gap:0.3rem] [padding:0.2rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.75rem] [cursor:pointer] [box-shadow:0_2px_8px_rgb(0_0_0_/_0.08)] hover:[background:var(--review-control-hover)] hover:[border-color:var(--accent-c)] hover:[color:var(--accent-c)] focus-visible:[background:var(--review-control-hover)] focus-visible:[border-color:var(--accent-c)] focus-visible:[color:var(--accent-c)] active:[background:var(--review-control-active)]",
     type: "button",
     "data-review-affordance": true,
     hidden: true,
@@ -1118,6 +1296,8 @@ import {
   const affordanceLabel = el("span", { text: "Comment" });
   affordance.append(icon(MESSAGE_SQUARE_TEXT_ICON), affordanceLabel);
   const composeInput = el("textarea", {
+    class:
+      "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px]",
     "data-review-compose-input": true,
     id: "big-plan-review-compose",
     rows: "4",
@@ -1136,6 +1316,8 @@ import {
   const composeSave = el(
     "button",
     {
+      class:
+        "[border-color:var(--accent-c)]! [background:var(--accent-c)]! [color:var(--bg)]! [font-weight:600] [position:relative]",
       type: "button",
       "data-review-compose-save": true,
       disabled: true,
@@ -1155,6 +1337,7 @@ import {
   };
   syncComposeSaveLabel();
   const submitImmediatelyInput = el("input", {
+    class: "peer [position:absolute] [width:1px] [height:1px] [opacity:0]",
     type: "checkbox",
     role: "switch",
     "data-review-submit-immediately-input": true,
@@ -1164,19 +1347,26 @@ import {
   const submitImmediately = el(
     "label",
     {
+      class:
+        "[display:flex] [align-items:center] [gap:0.45rem] [width:fit-content] [margin-top:0.55rem] [color:var(--muted-c)] [font-size:0.75rem] [cursor:pointer]",
       "data-review-submit-immediately": true,
       for: "big-plan-review-submit-immediately",
     },
     [
       submitImmediatelyInput,
-      el("span", { "data-review-switch-track": true }),
+      el("span", {
+        class:
+          "[position:relative] [width:1.8rem] [height:1rem] [flex:0_0_auto] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--surface-c)] peer-checked:[border-color:var(--diff-add-c)] peer-checked:[background:var(--diff-add-c)] peer-checked:after:[background:var(--bg)] peer-checked:after:[transform:translateX(0.8rem)] peer-focus-visible:[outline:1px_solid_var(--accent-c)] peer-focus-visible:[outline-offset:2px]",
+        "data-review-switch-track": true,
+      }),
       el("span", { text: "Submit right away" }),
     ],
   );
   const compose = el(
     "div",
     {
-      class: "data-[review-compose-centered]:fixed!",
+      class:
+        "data-[review-compose-inline]:relative! data-[review-compose-inline]:[right:auto] data-[review-compose-inline]:[z-index:2]! data-[review-compose-inline]:[width:100%]! data-[review-compose-inline]:[margin:0.65rem_0_1rem] data-[review-compose-inline]:[box-shadow:0_4px_18px_rgb(0_0_0_/_0.11)] data-[review-compose-centered]:fixed! data-[review-compose-centered]:[top:50%] data-[review-compose-centered]:[right:auto] data-[review-compose-centered]:[left:50%] data-[review-compose-centered]:[width:min(24rem,calc(100vw-2rem))]! data-[review-compose-centered]:[transform:translate(-50%,-50%)] [position:absolute] [right:auto] [z-index:47] [width:17rem] [padding:0.75rem] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_8px_28px_rgb(0_0_0_/_0.16)] [pointer-events:auto]",
       "data-review-compose": true,
       role: "dialog",
       "aria-label": "Add a comment",
@@ -1184,24 +1374,35 @@ import {
     },
     [
       el("label", {
+        class:
+          "[display:block] [margin-bottom:0.25rem] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:600]",
         for: "big-plan-review-compose",
         "data-review-field-label": true,
         text: "Add a comment",
       }),
       composeInput,
       el("p", {
+        class:
+          "[margin:0.35rem_0_0] [color:var(--muted-c)] [font-size:0.6875rem]",
         "data-review-compose-hint": true,
         text: "Escape cancels · Cmd/Ctrl+Enter adds",
       }),
       submitImmediately,
-      el("div", { "data-review-compose-actions": true }, [
-        composeCancel,
-        composeSave,
-      ]),
+      el(
+        "div",
+        {
+          class:
+            "[display:flex] [justify-content:flex-end] [gap:0.4rem] [margin-top:0.5rem]",
+          "data-review-compose-actions": true,
+        },
+        [composeCancel, composeSave],
+      ),
     ],
   );
 
   const threadLayer = el("div", {
+    class:
+      "[position:absolute] [top:0] [right:0] [left:0] [height:0] [z-index:44] [pointer-events:none]",
     "data-review-thread-layer": true,
     "aria-label": "Comments beside the plan",
   });
@@ -1209,14 +1410,15 @@ import {
     "data-review-marker-layer": true,
     "aria-label": "Comment anchors",
   });
-  const live = el("p", { "data-review-live": true, "aria-live": "polite" });
-  const toast = el("div", {
+  const live = el("p", {
     class:
-      "fixed bottom-4 left-1/2 z-[70] hidden -translate-x-1/2 items-center gap-3 rounded-md border border-edge bg-[var(--ink-c)] px-3 py-2 text-xs font-semibold text-[var(--bg)] shadow-lg",
-    "data-review-toast": true,
-    role: "status",
+      "[position:absolute] [width:1px] [height:1px] [margin:-1px] [padding:0] [overflow:hidden] [clip-path:inset(50%)] [white-space:nowrap]",
+    "data-review-live": true,
+    "aria-live": "polite",
   });
   const backdrop = el("button", {
+    class:
+      "[position:fixed] [inset:2.75rem_0_0] [z-index:43] [border:0] [background:rgb(0_0_0_/_0.28)] [cursor:pointer]",
     type: "button",
     "data-review-backdrop": true,
     "aria-label": "Close feedback and return to the plan",
@@ -1236,6 +1438,8 @@ import {
     text: "Cancel",
   });
   const deleteConfirm = el("button", {
+    class:
+      "[border-color:var(--diff-remove-c)]! [background:var(--diff-remove-c)]! [color:var(--bg)]!",
     type: "button",
     "data-review-delete-confirm": true,
     text: "Delete",
@@ -1243,19 +1447,30 @@ import {
   const deleteDialog = el(
     "dialog",
     {
+      class:
+        "[position:fixed] [width:min(26rem,_calc(100vw_-_2rem))] [margin:auto] [padding:0] [border:1px_solid_var(--edge-c)] [border-radius:0.65rem] [background:var(--bg)] [color:var(--ink-c)] [box-shadow:0_18px_48px_rgb(0_0_0_/_0.24)]",
       "data-review-delete-dialog": true,
       "aria-labelledby": "big-plan-review-delete-title",
       "aria-describedby": "big-plan-review-delete-description",
     },
     [
-      el("div", { "data-review-delete-content": true }, [
-        deleteTitle,
-        deleteDescription,
-        el("div", { "data-review-delete-actions": true }, [
-          deleteCancel,
-          deleteConfirm,
-        ]),
-      ]),
+      el(
+        "div",
+        { class: "[padding:1.1rem]", "data-review-delete-content": true },
+        [
+          deleteTitle,
+          deleteDescription,
+          el(
+            "div",
+            {
+              class:
+                "[display:flex] [justify-content:flex-end] [gap:0.5rem] [margin-top:1rem]",
+              "data-review-delete-actions": true,
+            },
+            [deleteCancel, deleteConfirm],
+          ),
+        ],
+      ),
     ],
   );
   const revertTitle = el("h2", {
@@ -1264,7 +1479,7 @@ import {
   });
   const revertDescription = el("p", {
     id: "big-plan-review-revert-description",
-    text: "The coding agent will revert all plan changes made in response to this comment.",
+    text: "This reverses the plan changes owned by this comment. The coding agent is notified, but no new request is created.",
   });
   const revertCancel = el("button", {
     type: "button",
@@ -1272,6 +1487,8 @@ import {
     text: "Cancel",
   });
   const revertConfirm = el("button", {
+    class:
+      "[border-color:var(--diff-remove-c)]! [color:var(--diff-remove-c)]! [font-weight:650]",
     type: "button",
     "data-review-revert-confirm": true,
     text: "Revert changes",
@@ -1279,35 +1496,49 @@ import {
   const revertDialog = el(
     "dialog",
     {
+      class:
+        "[position:fixed] [width:min(26rem,_calc(100vw_-_2rem))] [margin:auto] [padding:0] [border:1px_solid_var(--edge-c)] [border-radius:0.65rem] [background:var(--bg)] [color:var(--ink-c)] [box-shadow:0_18px_48px_rgb(0_0_0_/_0.24)]",
       "data-review-revert-dialog": true,
       "aria-labelledby": "big-plan-review-revert-title",
       "aria-describedby": "big-plan-review-revert-description",
     },
     [
-      el("div", { "data-review-delete-content": true }, [
-        revertTitle,
-        revertDescription,
-        el("div", { "data-review-delete-actions": true }, [
-          revertCancel,
-          revertConfirm,
-        ]),
-      ]),
+      el(
+        "div",
+        { class: "[padding:1.1rem]", "data-review-delete-content": true },
+        [
+          revertTitle,
+          revertDescription,
+          el(
+            "div",
+            {
+              class:
+                "[display:flex] [justify-content:flex-end] [gap:0.5rem] [margin-top:1rem]",
+              "data-review-delete-actions": true,
+            },
+            [revertCancel, revertConfirm],
+          ),
+        ],
+      ),
     ],
   );
 
-  const surface = el("div", { "data-review-root": true }, [
-    backdrop,
-    toolbar,
-    rail,
-    affordance,
-    threadLayer,
-    compose,
-    markerLayer,
-    deleteDialog,
-    revertDialog,
-    toast,
-    live,
-  ]);
+  const surface = el(
+    "div",
+    { class: "[position:static] [z-index:40]", "data-review-root": true },
+    [
+      backdrop,
+      toolbar,
+      rail,
+      affordance,
+      threadLayer,
+      compose,
+      markerLayer,
+      deleteDialog,
+      revertDialog,
+      live,
+    ],
+  );
   document.body.appendChild(surface);
   // Tailwind's delivery optimizer does not yet parse the standardized
   // ::highlight() pseudo-element, so these named-highlight rules live with the browser
@@ -1336,26 +1567,7 @@ import {
     live.textContent = message;
   };
 
-  const showToast = ({ message, actionLabel, action }) => {
-    const actionButton = el("button", {
-      type: "button",
-      class:
-        "cursor-pointer rounded-sm underline underline-offset-2 hover:opacity-80 active:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--bg)]",
-      "data-review-toast-action": true,
-      text: actionLabel,
-    });
-    actionButton.addEventListener("click", () => {
-      toast.classList.add("hidden");
-      toast.classList.remove("flex");
-      void action();
-    });
-    toast.replaceChildren(
-      el("span", { "data-review-toast-message": true, text: message }),
-      actionButton,
-    );
-    toast.classList.remove("hidden");
-    toast.classList.add("flex");
-  };
+  const notifications = createToastManager({ document });
 
   // -------------------------------------------------------------- tray render
 
@@ -1438,6 +1650,8 @@ import {
 
   const copyBlock = ({ attribute, text }) => {
     const button = el("button", {
+      class:
+        "[position:absolute] [top:0.38rem] [right:0.38rem] [display:inline-flex] [align-items:center] [gap:0.25rem] [padding:0.2rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.625rem] [line-height:1] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--ink-c)] active:[background:var(--review-control-active)]",
       type: "button",
       "data-review-copy": attribute,
       "aria-label": "Copy to clipboard",
@@ -1461,10 +1675,14 @@ import {
         button.setAttribute("aria-label", message);
       }
     });
-    return el("div", { "data-review-copy-block": attribute }, [
-      el("pre", { [attribute]: true }, [el("code", { text })]),
-      button,
-    ]);
+    return el(
+      "div",
+      {
+        class: "[position:relative] [min-width:0]",
+        "data-review-copy-block": attribute,
+      },
+      [el("pre", { [attribute]: true }, [el("code", { text })]), button],
+    );
   };
 
   const connectionLogView = ({ historyWasOpen }) => {
@@ -1489,6 +1707,8 @@ import {
     });
     const title = el("span", { text: "Connection log" });
     const count = el("span", {
+      class:
+        "[padding:0.08rem_0.32rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [color:var(--muted-c)] [font-size:0.5625rem] [font-weight:700] [letter-spacing:0.04em] [line-height:1.2] [text-transform:uppercase]",
       "data-review-connection-count": true,
       text: String(events.length),
       "aria-label": events.length + " event" + (events.length === 1 ? "" : "s"),
@@ -1496,6 +1716,8 @@ import {
     const details = el(
       "details",
       {
+        class:
+          "[margin-top:0.9rem] [color:var(--muted-c)] [font-size:0.75rem] [font-variant-numeric:tabular-nums]",
         "data-review-connection-history": true,
         ...(historyWasOpen ? { open: true } : {}),
       },
@@ -1510,42 +1732,50 @@ import {
 
     const latestAt = latest?.atMs || Date.now();
     const lastSignalAt = agentHeartbeatAt > 0 ? agentHeartbeatAt : latestAt;
-    const summary = el("dl", { "data-review-connection-summary": true }, [
-      el("div", {}, [
-        el("dt", { text: "State" }),
-        el("dd", {
-          "data-state": agentConnected ? "connected" : "disconnected",
-          text: agentConnected ? "CONNECTED" : "DISCONNECTED",
-        }),
-      ]),
-      el("div", {}, [
-        el("dt", { text: "Since" }),
-        el("dd", {}, [
-          el("time", {
-            datetime: latest?.at,
-            text: new Intl.DateTimeFormat(undefined, {
-              hour: "numeric",
-              minute: "2-digit",
-              second: "2-digit",
-            }).format(new Date(latestAt)),
+    const summary = el(
+      "dl",
+      {
+        class:
+          "[display:grid] [grid-template-columns:repeat(2,_minmax(0,_1fr))] [gap:0.55rem_0.8rem] [margin:0.65rem_0_0.8rem] [padding:0.65rem_0] [border-block:1px_solid_var(--edge-c)]",
+        "data-review-connection-summary": true,
+      },
+      [
+        el("div", {}, [
+          el("dt", { text: "State" }),
+          el("dd", {
+            "data-state": agentConnected ? "connected" : "disconnected",
+            text: agentConnected ? "CONNECTED" : "DISCONNECTED",
           }),
         ]),
-      ]),
-      el("div", {}, [
-        el("dt", { text: "Last signal" }),
-        el("dd", {
-          "data-review-agent-heartbeat": true,
-          "data-review-relative-at": lastSignalAt,
-          text: relativeSignal(lastSignalAt),
-        }),
-      ]),
-      el("div", {}, [
-        el("dt", { text: "Events" }),
-        el("dd", {
-          text: disconnects + " disconnects · " + reconnects + " reconnects",
-        }),
-      ]),
-    ]);
+        el("div", {}, [
+          el("dt", { text: "Since" }),
+          el("dd", {}, [
+            el("time", {
+              datetime: latest?.at,
+              text: new Intl.DateTimeFormat(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit",
+              }).format(new Date(latestAt)),
+            }),
+          ]),
+        ]),
+        el("div", {}, [
+          el("dt", { text: "Last signal" }),
+          el("dd", {
+            "data-review-agent-heartbeat": true,
+            "data-review-relative-at": lastSignalAt,
+            text: relativeSignal(lastSignalAt),
+          }),
+        ]),
+        el("div", {}, [
+          el("dt", { text: "Events" }),
+          el("dd", {
+            text: disconnects + " disconnects · " + reconnects + " reconnects",
+          }),
+        ]),
+      ],
+    );
     details.appendChild(summary);
 
     const groups = new Map();
@@ -1578,6 +1808,8 @@ import {
         el(
           "li",
           {
+            class:
+              "[position:relative] [display:grid] [grid-template-columns:0.65rem_4.6rem_minmax(0,_1fr)_auto] [gap:0.22rem_0.4rem] [align-items:baseline] [min-width:0] [padding:0.28rem_0]",
             "data-review-connection-event": entry.connected
               ? "connected"
               : "disconnected",
@@ -1587,6 +1819,8 @@ import {
           },
           [
             el("span", {
+              class:
+                "[position:relative] [width:6px] [height:6px] [align-self:center] [border:1px_solid_var(--muted-c)] [border-radius:999px] [background:var(--bg)]",
               "data-review-connection-marker": true,
               "aria-hidden": "true",
             }),
@@ -1602,9 +1836,18 @@ import {
               text: entry.connected ? "Connected" : "Disconnected",
             }),
             ...(reverseIndex === 0
-              ? [el("span", { "data-review-current": true, text: "Current" })]
+              ? [
+                  el("span", {
+                    class:
+                      "[padding:0.08rem_0.32rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [color:var(--muted-c)] [font-size:0.5625rem] [font-weight:700] [letter-spacing:0.04em] [line-height:1.2] [text-transform:uppercase]",
+                    "data-review-current": true,
+                    text: "Current",
+                  }),
+                ]
               : []),
             el("span", {
+              class:
+                "[grid-column:3_/_-1] [color:var(--muted-c)] [font-size:0.625rem]",
               "data-review-connection-duration": true,
               "data-review-duration-start": entry.atMs,
               ...(durationEnd === undefined
@@ -1617,6 +1860,8 @@ import {
             ...(entry.reason
               ? [
                   el("span", {
+                    class:
+                      "[grid-column:3_/_-1] [color:var(--muted-c)] [font-size:0.625rem] [color:var(--callout-warning-c)]",
                     "data-review-connection-reason": true,
                     text: entry.reason,
                   }),
@@ -1657,26 +1902,48 @@ import {
       connectionPanel.querySelector("[data-review-connection-history]")
         ?.open === true;
     const state = el("section", {
+      class:
+        "[display:grid] [gap:0.55rem] [font-size:0.75rem] [line-height:1.5]" +
+        (agentConnected
+          ? " [padding:0.8rem] [border:1px_solid_var(--diff-add-c)] [border-radius:0.45rem] [background:var(--diff-add-bg)] [color:var(--diff-add-c)]"
+          : runtimeOffline
+            ? " [padding:0.8rem] [border:1px_solid_var(--callout-danger-c)] [border-radius:0.45rem] [background:var(--callout-danger-bg)] [color:var(--callout-danger-c)]"
+            : ""),
       "data-review-connection-state": agentConnected
         ? "connected"
         : runtimeOffline
           ? "offline"
           : "disconnected",
-      "data-tone": agentConnected ? "connected" : "danger",
+      "data-tone": agentConnected
+        ? "connected"
+        : runtimeOffline
+          ? "offline"
+          : "disconnected",
     });
     if (agentConnected) {
       state.append(
-        el("div", { "data-review-connection-title": true }, [
-          el("span", {
-            "data-review-connection-dot": true,
-            "aria-hidden": "true",
-          }),
-          el("strong", { text: "Agent session active" }),
-          el("span", {
-            "data-review-connection-phase": true,
-            text: agentSessionState === "working" ? "Working" : "Waiting",
-          }),
-        ]),
+        el(
+          "div",
+          {
+            class: "[display:flex] [align-items:center] [gap:0.45rem]",
+            "data-review-connection-title": true,
+          },
+          [
+            el("span", {
+              class:
+                "[width:6px] [height:6px] [border-radius:999px] [background:currentColor] [box-shadow:0_0_0_2px_color-mix(in_srgb,_var(--diff-add-c)_34%,_transparent)]",
+              "data-review-connection-dot": true,
+              "aria-hidden": "true",
+            }),
+            el("strong", { text: "Agent session active" }),
+            el("span", {
+              class:
+                "[margin-left:auto] [font-size:0.6875rem] [font-weight:700] [text-transform:uppercase]",
+              "data-review-connection-phase": true,
+              text: agentSessionState === "working" ? "Working" : "Waiting",
+            }),
+          ],
+        ),
         el("p", {}, [
           document.createTextNode("Last signal "),
           el("span", {
@@ -1696,10 +1963,22 @@ import {
       );
     } else {
       state.append(
-        el("strong", { text: "No agent is connected to this review session." }),
-        el("p", {
-          text: "Your comments still save and queue here; nothing is sent until an agent reconnects.",
-        }),
+        el(
+          "div",
+          {
+            class:
+              "grid gap-[0.55rem] rounded-[0.45rem] border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-[var(--callout-danger-c)]",
+            "data-review-connection-alert": true,
+          },
+          [
+            el("strong", {
+              text: "No agent is connected to this review session.",
+            }),
+            el("p", {
+              text: "Your comments still save and queue here; nothing is sent until an agent reconnects.",
+            }),
+          ],
+        ),
         el("p", {
           text: "To reconnect this running review, paste this exact prompt into your coding agent:",
         }),
@@ -1721,7 +2000,9 @@ import {
       );
     }
     const history = connectionLogView({ historyWasOpen });
-    connectionPanel.replaceChildren(state, history);
+    renderWithPreservedScroll(() => {
+      connectionPanel.replaceChildren(state, history);
+    });
   };
 
   const setActiveTab = (tab) => {
@@ -1780,12 +2061,17 @@ import {
     const existing = markerByBlock.get(block);
     if (existing) return existing;
     const marker = el("button", {
+      class:
+        "[position:fixed] [z-index:42] [display:inline-flex] [min-width:1.65rem] [height:1.65rem] [align-items:center] [justify-content:center] [gap:0.28rem] [padding:0_0.48rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--bg)] [color:var(--accent-c)] [cursor:pointer] [box-shadow:0_2px_8px_rgb(0_0_0_/_0.08)] hover:[background:var(--review-control-hover)] hover:[border-color:var(--accent-c)] active:[background:var(--review-control-active)]",
       type: "button",
       "data-review-marker": true,
     });
     marker.append(
       icon(MESSAGE_SQUARE_TEXT_ICON),
-      el("span", { "data-review-marker-label": true }),
+      el("span", {
+        class: "[font-size:0.625rem] [font-weight:700] [white-space:nowrap]",
+        "data-review-marker-label": true,
+      }),
     );
     marker.addEventListener("click", () => {
       const blockId = block.getAttribute("data-block-id");
@@ -2274,19 +2560,24 @@ import {
     cancelled: "Cancelled",
   };
 
-  const spinner = () =>
+  const spinner = (variant = "outcome-badge") =>
     el("span", {
+      class:
+        "inline-block size-[0.72rem] shrink-0 animate-spin rounded-full border-[1.5px] border-current border-r-transparent [animation-duration:700ms] motion-reduce:[animation-duration:1.8s]",
       "data-review-spinner": true,
+      "data-review-spinner-variant": variant,
       "aria-hidden": "true",
     });
 
   const outcomeBadge = (outcome, options = {}) => {
     const state = outcome.status?.stage || outcome.key;
     const badge = el("span", {
+      class:
+        "inline-flex min-w-0 max-w-full items-center gap-[0.22rem] overflow-hidden text-ellipsis text-[0.625rem] font-[750] uppercase tracking-[0.06em]",
       "data-review-outcome-state": state,
       ...(options.iconOnly === true ? { "aria-label": outcome.label } : {}),
     });
-    if (options.spin === true) badge.appendChild(spinner());
+    if (options.spin === true) badge.appendChild(spinner("outcome-badge"));
     if (options.waitingBusy === true) {
       badge.setAttribute("data-waiting-busy", "");
     }
@@ -2614,9 +2905,7 @@ import {
   const setupInstructions = () =>
     el(
       "details",
-      {
-        "data-review-status-setup": true,
-      },
+      { class: "[margin-top:0.35rem]", "data-review-status-setup": true },
       [
         el("summary", { text: "Show setup instructions" }),
         appendInlineCode(
@@ -2656,35 +2945,21 @@ import {
     if (!status.headline) return null;
     const events =
       status.stage === "working" ? currentActivityEvents(status.requestId) : [];
-    const row = el("div", { "data-review-status-row": true });
-    if (status.showsSpinner) row.appendChild(spinner());
+    const currentEvent = events.at(-1);
+    const earlierEvents = events.slice(0, -1).reverse();
+    const row = el("div", {
+      class: "[display:flex] [align-items:center] [gap:0.38rem]",
+      "data-review-status-row": true,
+    });
+    if (status.showsSpinner) row.appendChild(spinner("thread-header"));
     else {
       const glyph = statusIcon(status);
       if (glyph) row.appendChild(glyph);
     }
-    if (events.length > 0) {
-      const activityButton = el("button", {
-        type: "button",
-        "data-review-status-activity-toggle": true,
-        "aria-expanded": showAgentActivity ? "true" : "false",
-        "aria-label": showAgentActivity
-          ? "Hide agent activity"
-          : "Show agent activity",
-        title: showAgentActivity ? "Hide activity" : "Show activity",
-      });
-      activityButton.append(
-        el("strong", { text: status.headline }),
-        icon(CHEVRON_RIGHT_ICON),
-      );
-      activityButton.addEventListener("click", () => {
-        showAgentActivity = !showAgentActivity;
-        renderTray();
-      });
-      row.appendChild(activityButton);
-    } else {
-      row.appendChild(el("strong", { text: status.headline }));
-    }
+    row.appendChild(el("strong", { text: status.headline }));
     const strip = el("div", {
+      class:
+        "[display:grid] [gap:0.3rem] [margin:0.35rem_0] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-left-width:3px] [border-radius:0.4rem] [background:color-mix(in_srgb,_var(--surface-c)_60%,_var(--bg))] [color:var(--muted-c)] [font-size:0.6875rem] [line-height:1.4] data-[tone=working]:[border-color:var(--callout-note-c)] data-[tone=working]:[background:var(--callout-note-bg)] data-[tone=working]:[color:var(--callout-note-c)] data-[tone=warning]:[border-color:var(--callout-warning-c)] data-[tone=warning]:[background:var(--callout-warning-bg)] data-[tone=warning]:[color:var(--callout-warning-c)] data-[tone=danger]:[border-color:var(--callout-danger-c)] data-[tone=danger]:[background:var(--callout-danger-bg)] data-[tone=danger]:[color:var(--callout-danger-c)]",
       "data-review-thread-status": status.stage,
       "data-tone": status.tone,
       ...(status.waitingBusy ? { "data-waiting-busy": true } : {}),
@@ -2693,7 +2968,10 @@ import {
     if (status.hint) {
       strip.appendChild(
         appendInlineCode(
-          el("p", { "data-review-status-hint": true }),
+          el("p", {
+            class: "[margin:0] [color:var(--ink-c)] [overflow-wrap:anywhere]",
+            "data-review-status-hint": true,
+          }),
           status.hint,
         ),
       );
@@ -2701,24 +2979,93 @@ import {
     if (status.showsSetup) {
       strip.appendChild(setupInstructions());
     }
-    if (events.length > 0 && showAgentActivity) {
+    if (status.stage === "working") {
+      if (options.surface !== "chat") {
+        strip.appendChild(
+          el("p", {
+            class: "[margin:0.15rem_0_0] [color:var(--muted-c)]",
+            "data-review-status-scope": true,
+            text: "Updating 1 comment",
+          }),
+        );
+      }
+      strip.appendChild(
+        el(
+          "p",
+          {
+            class:
+              "flex min-w-0 items-start gap-2 [margin:0.35rem_0_0] [color:var(--ink-c)] [font-size:0.75rem] [line-height:1.45] [overflow-wrap:anywhere]",
+            "data-review-status-current-activity": true,
+            "aria-live": "polite",
+          },
+          [
+            el("span", {
+              text: currentEvent
+                ? currentEvent.step +
+                  (currentEvent.detail ? " — " + currentEvent.detail : "")
+                : "Starting work…",
+            }),
+          ],
+        ),
+      );
+    }
+    if (earlierEvents.length > 0) {
+      const activityButton = el("button", {
+        class:
+          "inline-flex w-fit cursor-pointer items-center gap-1 rounded-sm px-1 py-0.5 text-[0.6875rem] text-[var(--muted-c)] hover:text-[var(--ink-c)] active:opacity-65",
+        type: "button",
+        "data-review-status-activity-toggle": true,
+        "aria-expanded": showEarlierAgentActivity ? "true" : "false",
+        text: showEarlierAgentActivity
+          ? "Hide earlier updates"
+          : "Show " +
+            earlierEvents.length +
+            " earlier update" +
+            (earlierEvents.length === 1 ? "" : "s"),
+      });
+      activityButton.prepend(icon(CHEVRON_RIGHT_ICON));
+      activityButton.addEventListener("click", () => {
+        showEarlierAgentActivity = !showEarlierAgentActivity;
+        renderTray();
+      });
+      strip.appendChild(activityButton);
+    }
+    if (earlierEvents.length > 0 && showEarlierAgentActivity) {
       strip.appendChild(
         el(
           "ol",
           {
             class:
-              options.surface === "tray" ? "max-h-none! overflow-visible!" : "",
+              (options.surface === "tray"
+                ? "max-h-none! overflow-visible!"
+                : "") +
+              " [display:grid] [min-width:0] [max-width:100%] [max-height:9rem] [margin:0] [padding-left:0.2rem] [color:var(--ink-c)] [list-style:none] [overflow-x:hidden] [overflow-y:auto] [overflow-anchor:none] [overscroll-behavior:contain] [line-height:1.35]",
             "data-review-status-activity": true,
+            "data-review-scroll-key":
+              "activity:" +
+              (status.requestId || "session") +
+              ":" +
+              (options.surface || "unknown") +
+              ":" +
+              (options.commentId || "session"),
             ...(options.surface === "card" && options.commentId
               ? { "data-review-activity-owner": options.commentId }
               : {}),
           },
-          events.map((event) => {
-            const item = el("li", {}, [
-              el("span", {
-                text: event.step + (event.detail ? " — " + event.detail : ""),
-              }),
-            ]);
+          earlierEvents.map((event) => {
+            const item = el(
+              "li",
+              {
+                class:
+                  "flex min-w-0 items-baseline justify-between gap-2 py-1 text-[var(--muted-c)]",
+              },
+              [
+                el("span", {
+                  class: "min-w-0 [overflow-wrap:anywhere]",
+                  text: event.step + (event.detail ? " — " + event.detail : ""),
+                }),
+              ],
+            );
             if (
               typeof event.at === "string" &&
               !Number.isNaN(Date.parse(event.at)) &&
@@ -2743,7 +3090,7 @@ import {
       const cancel = el("button", {
         type: "button",
         class:
-          "-mx-1 cursor-pointer rounded-sm px-1 transition-colors hover:bg-[color-mix(in_srgb,currentColor_10%,transparent)] active:opacity-65 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-current",
+          "-mx-1 cursor-pointer rounded-sm px-1 transition-colors hover:bg-[color-mix(in_srgb,currentColor_10%,transparent)] active:opacity-65 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-current [justify-self:end] [color:currentColor] [font-size:0.65rem] [text-decoration:underline] [text-underline-offset:0.16em]",
         "data-review-cancel-request": true,
         text: "Cancel request",
       });
@@ -2791,6 +3138,8 @@ import {
       return null;
     }
     return el("p", {
+      class:
+        "[margin:0.45rem_0_0] [padding-left:0.55rem] [border-left:2px_solid_var(--annotation-c)] [color:var(--muted-c)] [font-size:0.72rem] [line-height:1.4]",
       "data-review-anchor-context": true,
       text:
         "You commented on: “" +
@@ -2802,6 +3151,8 @@ import {
   const stagedAnchorNotice = (comment) => {
     if (anchorStateFor(comment).kind !== "changed") return null;
     return el("p", {
+      class:
+        "[margin:0.45rem_0_0] [padding-left:0.55rem] [border-left:2px_solid_var(--annotation-c)] [color:var(--muted-c)] [font-size:0.72rem] [line-height:1.4]",
       "data-review-draft-stale": true,
       text: "The text changed since you drafted this.",
     });
@@ -2821,10 +3172,11 @@ import {
         trigger: sendThis,
       });
     });
-    if (surface === "row") return [sendThis];
+    if (surface === "row" || drafts.length < 2) return [sendThis];
     const sendAll = el("button", {
       type: "button",
-      class: "active:opacity-60",
+      class:
+        "active:opacity-60 [border-color:transparent]! [background:transparent]! [color:var(--annotation-c)]! [font-weight:650] hover:[text-decoration:underline] hover:[text-underline-offset:0.15em] active:[opacity:0.65]",
       "data-review-thread-submit-all": true,
       text: `Send all ${drafts.length}`,
     });
@@ -2858,10 +3210,14 @@ import {
   const draftRow = (comment) => {
     const isEditing = comment.id === editingId;
     const rowAttributes = {
+      class:
+        "[margin-bottom:0.55rem] [padding:0.55rem_0.6rem] [border:1px_solid_var(--edge-c)] [border-radius:0.5rem] [background:var(--surface-c)]",
       "data-review-row": true,
       "data-review-comment-id": comment.id,
     };
     const jump = el("button", {
+      class:
+        "[display:flex] [min-width:0] [flex:1_1_auto] [align-items:center] [overflow:hidden] [color:var(--ink-c)] [font-size:0.6875rem] [font-weight:600] [letter-spacing:0.06em] [text-align:left] [text-overflow:ellipsis] [text-transform:uppercase] [white-space:nowrap]",
       type: "button",
       "data-review-row-target": true,
       text: slideTitleFor(comment.target),
@@ -2869,41 +3225,80 @@ import {
     });
     jump.addEventListener("click", () => focusTarget(comment));
     if (submittingIds.has(comment.id)) {
-      return el("li", { ...rowAttributes, "data-review-row-sending": true }, [
-        el("div", { "data-review-row-head": true }, [
-          jump,
-          outcomeBadge({ key: "waiting", label: "Sending" }, { spin: true }),
-        ]),
-        el("p", {
-          class: COMMENT_WRAP_CLASSES,
-          "data-review-row-body": true,
-          text: comment.body,
-        }),
-      ]);
+      return el(
+        "li",
+        {
+          class: "[opacity:0.85]",
+          ...rowAttributes,
+          "data-review-row-sending": true,
+        },
+        [
+          el(
+            "div",
+            {
+              class:
+                "[display:flex] [min-width:0] [align-items:center] [gap:0.5rem] [margin-bottom:0.3rem]",
+              "data-review-row-head": true,
+            },
+            [
+              jump,
+              outcomeBadge(
+                { key: "waiting", label: "Sending" },
+                { spin: true },
+              ),
+            ],
+          ),
+          el("p", {
+            class:
+              COMMENT_WRAP_CLASSES +
+              " [margin:0] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [overflow-wrap:anywhere] [white-space:pre-wrap]",
+            "data-review-row-body": true,
+            text: comment.body,
+          }),
+        ],
+      );
     }
 
     if (!isEditing) {
-      const iconActions = el("div", { "data-review-row-icons": true }, [
-        toolbarButton({
-          attribute: "data-review-row-edit",
-          label: "Edit comment",
-          glyph: PENCIL_ICON,
-          action: () => {
-            editingId = comment.id;
-            renderTray();
-          },
-        }),
-        toolbarButton({
-          attribute: "data-review-row-delete",
-          label: "Remove comment",
-          glyph: TRASH_2_ICON,
-          action: () => openDeleteDialog(comment),
-        }),
-      ]);
+      const iconActions = el(
+        "div",
+        {
+          class:
+            "[display:flex] [flex:0_0_auto] [align-items:center] [gap:0.18rem]",
+          "data-review-row-icons": true,
+        },
+        [
+          toolbarButton({
+            attribute: "data-review-row-edit",
+            label: "Edit comment",
+            glyph: PENCIL_ICON,
+            action: () => {
+              editingId = comment.id;
+              renderTray();
+            },
+          }),
+          toolbarButton({
+            attribute: "data-review-row-delete",
+            label: "Remove comment",
+            glyph: TRASH_2_ICON,
+            action: () => openDeleteDialog(comment),
+          }),
+        ],
+      );
       return el("li", rowAttributes, [
-        el("div", { "data-review-row-head": true }, [jump, iconActions]),
+        el(
+          "div",
+          {
+            class:
+              "[display:flex] [min-width:0] [align-items:center] [gap:0.5rem] [margin-bottom:0.3rem]",
+            "data-review-row-head": true,
+          },
+          [jump, iconActions],
+        ),
         el("p", {
-          class: COMMENT_WRAP_CLASSES,
+          class:
+            COMMENT_WRAP_CLASSES +
+            " [margin:0] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [overflow-wrap:anywhere] [white-space:pre-wrap]",
           "data-review-row-body": true,
           text: comment.body,
         }),
@@ -2911,13 +3306,19 @@ import {
         submitErrorNote(comment),
         el(
           "div",
-          { "data-review-row-actions": true },
+          {
+            class:
+              "[display:flex] [flex-wrap:wrap] [justify-content:flex-end] [gap:0.4rem] [margin-top:0.4rem]",
+            "data-review-row-actions": true,
+          },
           stagedSubmitActions({ comment, surface: "row" }),
         ),
       ]);
     }
 
     const field = el("textarea", {
+      class:
+        "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px]",
       "data-review-row-input": true,
       rows: "3",
       value: comment.body,
@@ -2934,6 +3335,8 @@ import {
       renderTray();
     });
     const confirm = el("button", {
+      class:
+        "[color:var(--bg)]! [background:var(--accent-c)]! [border-color:var(--accent-c)]! [position:relative]",
       type: "button",
       "data-review-row-save": true,
       text: "Save",
@@ -2949,9 +3352,25 @@ import {
       if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) commit();
     });
     const row = el("li", { ...rowAttributes, "data-review-editing": true }, [
-      el("div", { "data-review-row-head": true }, [jump]),
+      el(
+        "div",
+        {
+          class:
+            "[display:flex] [min-width:0] [align-items:center] [gap:0.5rem] [margin-bottom:0.3rem]",
+          "data-review-row-head": true,
+        },
+        [jump],
+      ),
       field,
-      el("div", { "data-review-row-actions": true }, [cancel, confirm]),
+      el(
+        "div",
+        {
+          class:
+            "[display:flex] [flex-wrap:wrap] [justify-content:flex-end] [gap:0.4rem] [margin-top:0.4rem]",
+          "data-review-row-actions": true,
+        },
+        [cancel, confirm],
+      ),
     ]);
     if (railIsOpen()) setTimeout(() => field.focus(), 0);
     return row;
@@ -2989,6 +3408,7 @@ import {
         agentRequests = agentRequests.concat([answer.request]);
       }
       field.value = "";
+      threadReplyDrafts.delete(comment.id);
       clearInlineError(button);
       expandedThreadIds.add(comment.id);
       setAgentState("Agent working", "working");
@@ -3100,6 +3520,8 @@ import {
     }));
 
   const diffStepper = el("div", {
+    class:
+      "[position:fixed] [z-index:22] [bottom:1rem] [left:50%] [display:flex] [align-items:center] [gap:0.2rem] [padding:0.28rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [background:var(--surface-c)] [box-shadow:0_0.7rem_1.8rem_rgb(0_0_0_/_18%)] [transform:translateX(-50%)]",
     "data-review-diff-stepper": true,
     hidden: true,
   });
@@ -3109,7 +3531,11 @@ import {
     "aria-label": "Previous change",
   });
   diffPrevious.appendChild(icon(CHEVRON_LEFT_ICON));
-  const diffPosition = el("span", { "data-review-diff-position": true });
+  const diffPosition = el("span", {
+    class:
+      "[max-width:min(42vw,_28rem)] [overflow:hidden] [padding:0_0.45rem] [color:var(--muted-c)] [font-size:0.68rem] [font-weight:700] [text-overflow:ellipsis] [white-space:nowrap]",
+    "data-review-diff-position": true,
+  });
   const diffNext = el("button", {
     type: "button",
     "data-review-diff-next": true,
@@ -3208,6 +3634,8 @@ import {
       const fallback = side === "was" ? location.oldText : location.newText;
       if (!content && !fallback) return [];
       const snapshot = el("div", {
+        class:
+          "data-[review-diff-op=del]:[background:var(--diff-remove-bg)] data-[review-diff-op=del]:[color:var(--diff-remove-c)] data-[review-diff-op=ins]:[background:var(--diff-add-bg)] data-[review-diff-op=ins]:[color:var(--diff-add-c)]",
         "data-review-diff-snapshot": true,
         "data-review-diff-kind": location.kind,
         "data-review-diff-op": side === "was" ? "del" : "ins",
@@ -3218,19 +3646,30 @@ import {
       return [snapshot];
     });
     if (snapshots.length === 0) return null;
-    return el("section", { "data-review-diff-side": side }, [
-      el("strong", {
-        "data-review-diff-side-label": true,
-        text: label,
-      }),
-      el(
-        "div",
-        {
-          "data-review-diff-side-content": true,
-        },
-        snapshots,
-      ),
-    ]);
+    return el(
+      "section",
+      {
+        class:
+          "[display:grid] [grid-template-columns:3rem_minmax(0,_1fr)] [gap:0.55rem] [padding:0.45rem_0.55rem] [overflow:hidden] data-[review-diff-side=was]:[background:var(--diff-remove-bg)] data-[review-diff-side=was]:[color:var(--diff-remove-c)] data-[review-diff-side=now]:[background:var(--diff-add-bg)] data-[review-diff-side=now]:[color:var(--diff-add-c)]",
+        "data-review-diff-side": side,
+      },
+      [
+        el("strong", {
+          class: "[font-size:0.68rem] [text-transform:uppercase]",
+          "data-review-diff-side-label": true,
+          text: label,
+        }),
+        el(
+          "div",
+          {
+            class:
+              "[min-width:55%] [overflow:auto] [overscroll-behavior:contain]",
+            "data-review-diff-side-content": true,
+          },
+          snapshots,
+        ),
+      ],
+    );
   };
 
   const renderDiffLocation = ({ comment, event, index }) => {
@@ -3239,31 +3678,64 @@ import {
     if (!place) return;
     clearDiffLens();
     const anchorBlock = anchorBlockForPlace(place);
+    const hasExactLiveAnchor = place.locations.some((location) => {
+      if (!location.newBlockId) return false;
+      return document.querySelector(
+        '[data-block-id="' + cssEscape(location.newBlockId) + '"]',
+      );
+    });
+    const historicalOnly =
+      event.toRevision !== sourceRevision && !hasExactLiveAnchor;
     const containerTag = anchorBlock?.tagName === "TR" ? "tr" : "div";
     const statuses = new Set(
       place.locations.map((location) => location.status),
     );
     const container = el(containerTag, {
+      class:
+        "[position:relative] [box-sizing:border-box] [width:100%] [margin:0_0_0.35rem] [padding:0.85rem_1rem_0.8rem] [border:1px_dashed_var(--annotation-c)] [border-radius:0.45rem] [background:var(--diff-content-bg)] [color:var(--text-c)] data-[review-diff-status=added]:[border-color:var(--diff-add-c)] data-[review-diff-status=added]:[background:var(--diff-add-bg)] data-[review-diff-status=removed]:[border-color:var(--diff-remove-c)] data-[review-diff-status=removed]:[background:var(--diff-remove-bg)]",
       "data-review-diff-lens": true,
       "data-review-diff-status":
         statuses.size === 1 ? place.locations[0]?.status : "changed",
       "data-review-diff-kind":
         place.locations.length === 1 ? place.locations[0]?.kind : "place",
+      ...(historicalOnly ? { "data-review-diff-historical": true } : {}),
     });
     container.setAttribute("data-place-id", place.placeId);
     const content =
       containerTag === "tr" ? el("td", { colspan: "99" }) : container;
     content.appendChild(
       el("span", {
+        class:
+          "[position:absolute] [top:-0.55rem] [left:0.75rem] [padding:0.12rem_0.38rem] [border:1px_solid_var(--annotation-c)] [border-radius:999px] [background:var(--bg)] [color:var(--annotation-c)] [font-size:0.58rem] [font-weight:750] [letter-spacing:0.04em] [text-transform:uppercase]",
         "data-review-diff-label": true,
         text:
-          "Diff vs. previous version" +
-          (event.toRevision !== sourceRevision ? " · since revised again" : ""),
+          (historicalOnly ? "Historical change" : "Diff vs. previous version") +
+          (event.toRevision !== sourceRevision ? " · plan revised again" : ""),
       }),
     );
-    const body = el("div", { "data-review-diff-body": true });
+    const body = el("div", {
+      class:
+        "[display:grid] [gap:0.55rem] [margin:0] [color:inherit] [line-height:inherit]",
+      "data-review-diff-body": true,
+    });
     if (containerTag === "tr") container.appendChild(content);
-    if (anchorBlock) {
+    if (historicalOnly) {
+      const ownerSelector = comment
+        ? '[data-review-comment-id="' +
+          cssEscape(comment.id) +
+          '"] [data-review-change-controls]'
+        : "[data-review-chat-change-digest]";
+      const owner = [...document.querySelectorAll(ownerSelector)].find(
+        (candidate) => candidate.offsetParent !== null,
+      );
+      if (owner) owner.appendChild(container);
+      else
+        notifications.add({
+          title: "This change belongs to an earlier plan revision",
+          description:
+            "Open its comment thread to review the saved historical diff.",
+        });
+    } else if (anchorBlock) {
       if (
         place.locations[0]?.status === "removed" &&
         place.locations[0]?.beforeBlockId
@@ -3296,16 +3768,18 @@ import {
     if (was) body.appendChild(was);
     if (now) body.appendChild(now);
     content.appendChild(body);
-    const hiddenBlocks = place.locations.flatMap((location) => {
-      if (!location.newBlockId) return [];
-      const block = document.querySelector(
-        '[data-block-id="' + cssEscape(location.newBlockId) + '"]',
-      );
-      if (!(block instanceof HTMLElement)) return [];
-      block.setAttribute("hidden", "");
-      block.setAttribute("data-review-diff-hidden", "");
-      return [block];
-    });
+    const hiddenBlocks = historicalOnly
+      ? []
+      : place.locations.flatMap((location) => {
+          if (!location.newBlockId) return [];
+          const block = document.querySelector(
+            '[data-block-id="' + cssEscape(location.newBlockId) + '"]',
+          );
+          if (!(block instanceof HTMLElement)) return [];
+          block.setAttribute("hidden", "");
+          block.setAttribute("data-review-diff-hidden", "");
+          return [block];
+        });
     diffLens = {
       comment,
       event,
@@ -3484,7 +3958,11 @@ import {
     });
     const activeSlide =
       active && diffLens ? places[diffLens.index]?.slideTitle : null;
-    const nav = el("div", { "data-review-change-nav": true });
+    const nav = el("div", {
+      class:
+        "[display:grid] [grid-template-columns:minmax(0,_1fr)] [min-width:0] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [overflow:hidden]",
+      "data-review-change-nav": true,
+    });
     for (const group of groups) {
       const key = event.requestId + ":" + group.title;
       const stored = changeGroupExpansion.get(key);
@@ -3497,6 +3975,8 @@ import {
       const header = el(
         "button",
         {
+          class:
+            "[display:flex] [width:100%] [align-items:center] [gap:0.3rem] [padding:0.34rem_0.5rem] [border:0] [background:var(--surface-c)] [color:var(--muted-c)] [font-size:0.66rem] [font-weight:700] [text-align:left] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--ink-c)] active:[background:var(--review-control-active)]",
           type: "button",
           "data-review-change-group": true,
           "aria-expanded": expanded ? "true" : "false",
@@ -3504,10 +3984,14 @@ import {
         [
           icon(CHEVRON_RIGHT_ICON),
           el("span", {
+            class:
+              "[min-width:0] [flex:1_1_auto] [overflow:hidden] [text-overflow:ellipsis] [white-space:nowrap]",
             "data-review-change-group-title": true,
             text: group.title,
           }),
           el("span", {
+            class:
+              "[flex:0_0_auto] [min-width:1.05rem] [padding:0_0.25rem] [border-radius:999px] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.6rem] [font-variant-numeric:tabular-nums] [text-align:center]",
             "data-review-change-group-count": true,
             text: String(group.entries.length),
           }),
@@ -3522,17 +4006,29 @@ import {
       for (const { index, placeId, label, note } of group.entries) {
         const current = active && diffLens && diffLens.index === index;
         const row = el("button", {
+          class:
+            "[display:flex] [width:100%] [min-width:0] [align-items:start] [gap:0.4rem] [padding:0.34rem_0.5rem_0.34rem_1.35rem] [border:0] [background:transparent] [color:var(--text-c)] [text-align:left] [cursor:pointer] hover:[background:var(--review-control-hover)] active:[background:var(--review-control-active)] aria-current:[background:color-mix(in_srgb,_var(--annotation-bg)_45%,_transparent)] aria-current:[box-shadow:inset_3px_0_0_var(--annotation-c)]",
           type: "button",
           "data-review-change-row": true,
           "data-place-id": placeId,
           ...(current ? { "aria-current": "true" } : {}),
         });
         row.appendChild(
-          el("span", { "data-review-change-label": true, text: label }),
+          el("span", {
+            class:
+              "[min-width:0] [flex:1_1_auto] [font-size:0.72rem] [font-weight:550] [overflow-wrap:anywhere] [white-space:normal]",
+            "data-review-change-label": true,
+            text: label,
+          }),
         );
         if (note && note !== "reworded") {
           row.appendChild(
-            el("span", { "data-review-change-kind": true, text: note }),
+            el("span", {
+              class:
+                "[flex:0_0_auto] [margin-top:0.1rem] [color:var(--muted-c)] [font-size:0.6rem] [font-style:italic]",
+              "data-review-change-kind": true,
+              text: note,
+            }),
           );
         }
         row.addEventListener("click", () => {
@@ -3550,11 +4046,21 @@ import {
     const active =
       diffLens?.comment?.id === comment.id &&
       diffLens?.event.requestId === event.requestId;
-    const list = el("div", { "data-review-change-list": true }, [
-      el("strong", { text: changeSummaryText({ places: rows, event }) }),
-      changeNavigator({ comment, event, places: rows, active }),
-    ]);
+    const list = el(
+      "div",
+      {
+        class:
+          "[display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.3rem] [min-width:0]",
+        "data-review-change-list": true,
+      },
+      [
+        el("strong", { text: changeSummaryText({ places: rows, event }) }),
+        changeNavigator({ comment, event, places: rows, active }),
+      ],
+    );
     const see = el("button", {
+      class:
+        "[padding:0.2rem_0.45rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--bg)] [color:var(--accent-c)] [font-size:0.6875rem] [font-weight:650] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[border-color:var(--accent-c)] active:[background:var(--review-control-active)]",
       type: "button",
       "data-review-see-change": true,
       text: active
@@ -3567,24 +4073,41 @@ import {
       if (active) clearDiffLens();
       else void openDiffLens(comment, event, 0);
     });
-    return el("div", { "data-review-change-controls": true }, [list, see]);
+    return el(
+      "div",
+      {
+        class:
+          "[display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.45rem] [margin-top:0.6rem]",
+        "data-review-change-controls": true,
+      },
+      [list, see],
+    );
   };
 
   const agentTurn = (outcome, createdAt, comment, event) => {
     const node = el(
       "div",
       {
-        class: "min-w-0 max-w-full",
+        class:
+          "min-w-0 max-w-full [width:calc(100%_-_1rem)] [margin-top:0.45rem] [padding:0.48rem_0.52rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] data-[review-thread-turn=user]:[margin-left:1rem] data-[review-thread-turn=user]:[border-right:2px_solid_var(--annotation-c)] data-[review-thread-turn=user]:[background:color-mix(in_srgb,_var(--annotation-bg)_30%,_var(--bg))] data-[review-thread-turn=agent]:[margin-right:1rem] data-[review-thread-turn=agent]:[border-left:2px_solid_var(--callout-note-c)] data-[review-thread-turn=agent]:[background:color-mix(in_srgb,_var(--callout-note-bg)_46%,_var(--bg))]",
         "data-review-thread-turn": "agent",
       },
       [
-        el("div", { "data-review-turn-meta": true }, [
-          el("strong", { text: "Agent" }),
-          el("time", {
-            datetime: createdAt,
-            text: relativeCommentTime(createdAt),
-          }),
-        ]),
+        el(
+          "div",
+          {
+            class:
+              "[display:flex] [align-items:center] [gap:0.35rem] [color:var(--muted-c)] [font-size:0.625rem]",
+            "data-review-turn-meta": true,
+          },
+          [
+            el("strong", { text: "Agent" }),
+            el("time", {
+              datetime: createdAt,
+              text: relativeCommentTime(createdAt),
+            }),
+          ],
+        ),
         messageBody(outcome.messageNodes, outcome.message),
       ],
     );
@@ -3605,6 +4128,8 @@ import {
 
   const cancelledRequestLine = () =>
     el("p", {
+      class:
+        "[margin:0.2rem_0] [color:var(--muted-c)] [font-size:0.6875rem] [font-style:italic]",
       "data-review-request-cancelled": true,
       text: "You cancelled this request.",
     });
@@ -3621,22 +4146,31 @@ import {
       el(
         "div",
         {
-          class: "min-w-0 max-w-full",
+          class:
+            "min-w-0 max-w-full [width:calc(100%_-_1rem)] [margin-top:0.45rem] [padding:0.48rem_0.52rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] data-[review-thread-turn=user]:[margin-left:1rem] data-[review-thread-turn=user]:[border-right:2px_solid_var(--annotation-c)] data-[review-thread-turn=user]:[background:color-mix(in_srgb,_var(--annotation-bg)_30%,_var(--bg))] data-[review-thread-turn=agent]:[margin-right:1rem] data-[review-thread-turn=agent]:[border-left:2px_solid_var(--callout-note-c)] data-[review-thread-turn=agent]:[background:color-mix(in_srgb,_var(--callout-note-bg)_46%,_var(--bg))]",
           "data-review-thread-turn": "user",
         },
         [
-          el("div", { "data-review-turn-meta": true }, [
-            el("strong", { text: "You" }),
-            el("time", {
-              datetime: initialRequest?.createdAt || comment.createdAt,
-              text:
-                requestDeliveryLabel(initialRequest) +
-                " · " +
-                relativeCommentTime(
-                  initialRequest?.createdAt || comment.createdAt,
-                ),
-            }),
-          ]),
+          el(
+            "div",
+            {
+              class:
+                "[display:flex] [align-items:center] [gap:0.35rem] [color:var(--muted-c)] [font-size:0.625rem]",
+              "data-review-turn-meta": true,
+            },
+            [
+              el("strong", { text: "You" }),
+              el("time", {
+                datetime: initialRequest?.createdAt || comment.createdAt,
+                text:
+                  requestDeliveryLabel(initialRequest) +
+                  " · " +
+                  relativeCommentTime(
+                    initialRequest?.createdAt || comment.createdAt,
+                  ),
+              }),
+            ],
+          ),
           el("p", { class: COMMENT_WRAP_CLASSES, text: comment.body }),
           anchorContextLine(comment),
         ],
@@ -3679,20 +4213,29 @@ import {
         el(
           "div",
           {
-            class: "min-w-0 max-w-full",
+            class:
+              "min-w-0 max-w-full [width:calc(100%_-_1rem)] [margin-top:0.45rem] [padding:0.48rem_0.52rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] data-[review-thread-turn=user]:[margin-left:1rem] data-[review-thread-turn=user]:[border-right:2px_solid_var(--annotation-c)] data-[review-thread-turn=user]:[background:color-mix(in_srgb,_var(--annotation-bg)_30%,_var(--bg))] data-[review-thread-turn=agent]:[margin-right:1rem] data-[review-thread-turn=agent]:[border-left:2px_solid_var(--callout-note-c)] data-[review-thread-turn=agent]:[background:color-mix(in_srgb,_var(--callout-note-bg)_46%,_var(--bg))]",
             "data-review-thread-turn": "user",
           },
           [
-            el("div", { "data-review-turn-meta": true }, [
-              el("strong", { text: "You" }),
-              el("time", {
-                datetime: request.createdAt,
-                text:
-                  requestDeliveryLabel(request) +
-                  " · " +
-                  relativeCommentTime(request.createdAt),
-              }),
-            ]),
+            el(
+              "div",
+              {
+                class:
+                  "[display:flex] [align-items:center] [gap:0.35rem] [color:var(--muted-c)] [font-size:0.625rem]",
+                "data-review-turn-meta": true,
+              },
+              [
+                el("strong", { text: "You" }),
+                el("time", {
+                  datetime: request.createdAt,
+                  text:
+                    requestDeliveryLabel(request) +
+                    " · " +
+                    relativeCommentTime(request.createdAt),
+                }),
+              ],
+            ),
             el("p", { class: COMMENT_WRAP_CLASSES, text: request.body }),
           ],
         ),
@@ -3721,14 +4264,35 @@ import {
         commentId: comment.id,
       });
       if (strip) nodes.push(strip);
-      nodes.push(threadResolutionFooter({ comment }));
       return nodes;
     }
 
+    nodes.push(
+      el(
+        "section",
+        {
+          class:
+            "mt-3 grid min-w-0 gap-1.5 border-t border-[var(--edge-c)] pt-2",
+          "data-review-thread-next-steps": true,
+        },
+        [
+          el("strong", {
+            class:
+              "text-[0.625rem] font-bold uppercase tracking-[0.06em] text-[var(--muted-c)]",
+            text: "Next steps",
+          }),
+          threadToolbarActions(comment),
+        ],
+      ),
+    );
+
     const field = el("textarea", {
+      class:
+        "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical] [min-height:3.25rem] [resize:vertical] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px]",
       "data-review-thread-reply": true,
       rows: "3",
       maxlength: String(BODY_LIMIT),
+      value: threadReplyDrafts.get(comment.id) || "",
       placeholder:
         outcome.key === "question"
           ? "Answer the agent…"
@@ -3739,6 +4303,8 @@ import {
           : "Reply on this comment",
     });
     const sendReply = el("button", {
+      class:
+        "[justify-self:end] [padding:0.35rem_0.55rem] [border:1px_solid_var(--accent-c)] [border-radius:0.35rem] [background:var(--accent-c)] [color:var(--bg)] [font-size:0.6875rem] [font-weight:650] [cursor:pointer] [position:relative]",
       type: "button",
       "data-review-thread-reply-send": true,
       disabled: true,
@@ -3749,9 +4315,14 @@ import {
       outcome.key === "question" ? "Send answer" : "Send reply",
     );
     const syncReply = () => {
-      sendReply.disabled = field.value.trim() === "";
+      const hasReply = field.value.trim() !== "";
+      sendReply.disabled = !hasReply;
     };
-    field.addEventListener("input", syncReply);
+    field.addEventListener("input", () => {
+      if (field.value === "") threadReplyDrafts.delete(comment.id);
+      else threadReplyDrafts.set(comment.id, field.value);
+      syncReply();
+    });
     field.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
@@ -3761,21 +4332,23 @@ import {
     sendReply.addEventListener("click", () => {
       void sendThreadReply(comment, field, sendReply);
     });
+    syncReply();
     nodes.push(
-      el("div", { "data-review-thread-reply-box": true }, [
-        el("label", {
-          text: outcome.key === "question" ? "Your answer" : "Reply",
-        }),
-        field,
-        sendReply,
-      ]),
-    );
-    nodes.push(
-      threadResolutionFooter({
-        comment,
-        replyField: field,
-        replyButton: sendReply,
-      }),
+      el(
+        "div",
+        {
+          class:
+            "[display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.4rem] [margin-top:0.55rem]",
+          "data-review-thread-reply-box": true,
+        },
+        [
+          el("label", {
+            text: outcome.key === "question" ? "Your answer" : "Reply",
+          }),
+          field,
+          sendReply,
+        ],
+      ),
     );
     return nodes;
   };
@@ -3807,15 +4380,17 @@ import {
       await persist();
       sendNote.textContent = "";
       if (ids.length === 1 && options.toast !== false) {
-        showToast({
-          message: "Resolved",
-          actionLabel: "Undo",
-          action: async () => {
-            resolvedCommentIds.delete(ids[0]);
-            expandedThreadIds.add(ids[0]);
-            announce("Comment reopened.");
-            renderTray();
-            await save();
+        notifications.add({
+          title: "Comment resolved",
+          action: {
+            label: "Undo",
+            run: async () => {
+              resolvedCommentIds.delete(ids[0]);
+              expandedThreadIds.add(ids[0]);
+              announce("Comment reopened.");
+              renderTray();
+              await save();
+            },
           },
         });
       }
@@ -3828,6 +4403,11 @@ import {
       previousExpandedComments.forEach((id) => expandedCommentIds.add(id));
       const message = "Couldn’t resolve: " + describeError(error);
       sendNote.textContent = message;
+      notifications.add({
+        title: "Couldn’t resolve comment",
+        description: describeError(error),
+        tone: "danger",
+      });
       announce(message);
       renderTray();
     }
@@ -3843,59 +4423,10 @@ import {
     await save();
   };
 
-  const keepThreadOpen = (comment) => {
-    clearCommentLensIfOwned(comment.id);
-    expandedThreadIds.delete(comment.id);
-    renderTray();
-  };
-
-  const threadResolutionFooter = ({ comment, replyField, replyButton }) => {
-    const keepOpen = el("button", {
-      type: "button",
-      class:
-        "cursor-pointer rounded-sm px-2 py-1 text-xs font-semibold text-muted hover:bg-[var(--review-control-hover)] hover:text-ink active:bg-[var(--review-control-active)] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent",
-      "data-review-thread-keep-open": true,
-      text: "Keep open",
-    });
-    const resolve = el("button", {
-      type: "button",
-      class:
-        "cursor-pointer rounded-sm border border-accent bg-accent px-2 py-1 text-xs font-semibold text-[var(--bg)] hover:brightness-110 active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-      "data-review-thread-resolve-footer": true,
-      text: "Resolve thread",
-    });
-    const syncLabel = () => {
-      resolve.textContent =
-        replyField?.value.trim() === "" ? "Resolve thread" : "Reply & resolve";
-    };
-    replyField?.addEventListener("input", syncLabel);
-    keepOpen.addEventListener("click", () => keepThreadOpen(comment));
-    resolve.addEventListener("click", async () => {
-      const hasReply = replyField?.value.trim() !== "";
-      if (hasReply) {
-        const sentReply = await sendThreadReply(
-          comment,
-          replyField,
-          replyButton,
-        );
-        if (!sentReply) return;
-      }
-      await resolveThread(comment);
-    });
-    syncLabel();
-    return el(
-      "footer",
-      {
-        class:
-          "mt-3 flex items-center justify-end gap-2 border-t border-edge pt-3",
-        "data-review-thread-resolution": true,
-      },
-      [keepOpen, resolve],
-    );
-  };
-
   const toolbarButton = ({ attribute, label, glyph, action }) => {
     const button = el("button", {
+      class:
+        "group/review-icon relative inline-flex size-[1.65rem] flex-none items-center justify-center overflow-visible p-0 leading-none",
       type: "button",
       [attribute]: true,
       "aria-label": label,
@@ -3903,6 +4434,8 @@ import {
     button.append(
       icon(glyph),
       el("span", {
+        class:
+          "group-hover/review-icon:[opacity:1] group-hover/review-icon:[transform:translateY(0)] group-focus-visible/review-icon:[opacity:1] group-focus-visible/review-icon:[transform:translateY(0)] [position:absolute] [top:calc(100%_+_0.35rem)] [right:0] [z-index:60] [width:max-content] [max-width:11rem] [padding:0.22rem_0.42rem] [border-radius:0.25rem] [background:var(--ink-c)] [color:var(--bg)] [font-size:0.66rem] [font-weight:600] [line-height:1.35] [pointer-events:none] [opacity:0] [transform:translateY(-0.1rem)] [transition:opacity_70ms_ease,_transform_70ms_ease]",
         "data-review-icon-tooltip": true,
         "aria-hidden": "true",
         text: label,
@@ -3949,7 +4482,15 @@ import {
       );
     }
     if (revertAction) actions.push(revertAction);
-    return el("div", { "data-review-thread-toolbar-actions": true }, actions);
+    return el(
+      "div",
+      {
+        class:
+          "[display:flex] [flex:0_0_auto] [align-items:center] [gap:0.18rem]",
+        "data-review-thread-toolbar-actions": true,
+      },
+      actions,
+    );
   };
 
   const threadToolbarActions = (comment, options = {}) => {
@@ -3960,9 +4501,14 @@ import {
       action:
         options.minimize ||
         (() => {
+          const scrollX = window.scrollX;
+          const scrollY = window.scrollY;
           clearCommentLensIfOwned(comment.id);
           expandedThreadIds.delete(comment.id);
           renderTray();
+          requestAnimationFrame(() => {
+            window.scrollTo({ left: scrollX, top: scrollY });
+          });
         }),
     });
     const quickActions = threadQuickActions(comment, options);
@@ -3971,14 +4517,30 @@ import {
   };
 
   const threadToolbar = (comment, options = {}) => {
-    return el("div", { "data-review-thread-toolbar": true }, [
-      el("div", { "data-review-thread-toolbar-title": true }, [
-        el("span", {
-          text: slideTitleFor(comment.target),
-        }),
-      ]),
-      threadToolbarActions(comment, options),
-    ]);
+    return el(
+      "div",
+      {
+        class:
+          "[display:flex] [min-width:0] [align-items:center] [gap:0.45rem] [margin:-0.65rem_-0.65rem_0.6rem] [padding:0.42rem_0.45rem] [border-bottom:1px_solid_var(--edge-c)] [border-radius:0.55rem_0.55rem_0_0] [background:var(--surface-c)]",
+        "data-review-thread-toolbar": true,
+      },
+      [
+        el(
+          "div",
+          {
+            class:
+              "[display:flex] [min-width:0] [flex:1_1_auto] [align-items:center] [gap:0.35rem]",
+            "data-review-thread-toolbar-title": true,
+          },
+          [
+            el("span", {
+              text: slideTitleFor(comment.target),
+            }),
+          ],
+        ),
+        threadToolbarActions(comment, options),
+      ],
+    );
   };
 
   // Staged cards share the sent-thread toolbar pattern: state and actions in
@@ -3989,49 +4551,83 @@ import {
       options.withActions === false
         ? []
         : [
-            el("div", { "data-review-thread-toolbar-actions": true }, [
-              toolbarButton({
-                attribute: "data-review-thread-minimize",
-                label: "Minimize comment",
-                glyph: MINIMIZE_2_ICON,
-                action: () => {
-                  minimizedDraftIds.add(comment.id);
-                  renderTray();
-                },
-              }),
-              toolbarButton({
-                attribute: "data-review-thread-edit",
-                label: "Edit comment",
-                glyph: PENCIL_ICON,
-                action: () => {
-                  editingId = comment.id;
-                  renderTray();
-                },
-              }),
-              toolbarButton({
-                attribute: "data-review-thread-delete",
-                label: "Remove comment",
-                glyph: TRASH_2_ICON,
-                action: () => openDeleteDialog(comment),
-              }),
-            ]),
+            el(
+              "div",
+              {
+                class:
+                  "[display:flex] [flex:0_0_auto] [align-items:center] [gap:0.18rem]",
+                "data-review-thread-toolbar-actions": true,
+              },
+              [
+                toolbarButton({
+                  attribute: "data-review-thread-minimize",
+                  label: "Minimize comment",
+                  glyph: MINIMIZE_2_ICON,
+                  action: () => {
+                    minimizedDraftIds.add(comment.id);
+                    renderTray();
+                  },
+                }),
+                toolbarButton({
+                  attribute: "data-review-thread-edit",
+                  label: "Edit comment",
+                  glyph: PENCIL_ICON,
+                  action: () => {
+                    editingId = comment.id;
+                    renderTray();
+                  },
+                }),
+                toolbarButton({
+                  attribute: "data-review-thread-delete",
+                  label: "Remove comment",
+                  glyph: TRASH_2_ICON,
+                  action: () => openDeleteDialog(comment),
+                }),
+              ],
+            ),
           ];
-    return el("div", { "data-review-thread-toolbar": true }, [
-      el("div", { "data-review-thread-toolbar-title": true }, [
-        el("span", { "data-review-comment-state": "staged", text: "Staged" }),
-        el("time", {
-          datetime: comment.createdAt,
-          text: relativeCommentTime(comment.createdAt),
-        }),
-      ]),
-      ...actions,
-    ]);
+    return el(
+      "div",
+      {
+        class:
+          "[display:flex] [min-width:0] [align-items:center] [gap:0.45rem] [margin:-0.65rem_-0.65rem_0.6rem] [padding:0.42rem_0.45rem] [border-bottom:1px_solid_var(--edge-c)] [border-radius:0.55rem_0.55rem_0_0] [background:var(--surface-c)]",
+        "data-review-thread-toolbar": true,
+      },
+      [
+        el(
+          "div",
+          {
+            class:
+              "[display:flex] [min-width:0] [flex:1_1_auto] [align-items:center] [gap:0.35rem]",
+            "data-review-thread-toolbar-title": true,
+          },
+          [
+            el("span", {
+              class:
+                "[flex:0_0_auto] [padding:0.05rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [color:var(--muted-c)] [font-size:0.5625rem] [font-weight:700] [letter-spacing:0.06em] [text-transform:uppercase] data-[review-comment-state=staged]:[border-color:color-mix(in_srgb,_var(--annotation-c)_50%,_var(--edge-c))] data-[review-comment-state=staged]:[color:var(--annotation-c)]",
+              "data-review-comment-state": "staged",
+              text: "Staged",
+            }),
+            el("time", {
+              datetime: comment.createdAt,
+              text: relativeCommentTime(comment.createdAt),
+            }),
+          ],
+        ),
+        ...actions,
+      ],
+    );
   };
 
   const submitErrorNote = (comment) => {
     const message = submitErrorById.get(comment.id);
     if (!message) return null;
-    return el("p", { "data-review-action-error": true, text: message });
+    return el("p", {
+      class:
+        "[grid-column:1_/_-1] [margin:0.35rem_0_0] [padding:0.3rem_0.45rem] [border-left:2px_solid_var(--callout-danger-c)] [background:var(--callout-danger-bg)] [color:var(--callout-danger-c)] [font-size:0.6875rem] [line-height:1.4] [overflow-wrap:anywhere]",
+      "data-review-action-error": true,
+      text: message,
+    });
   };
 
   const bindCommentAssociation = (node, comment) => {
@@ -4117,6 +4713,7 @@ import {
     };
     const toggleThread = () => {
       if (expanded) {
+        focusTarget(comment, { keepRailOpen: true });
         collapse();
         return;
       }
@@ -4130,6 +4727,8 @@ import {
     const jump = el(
       "button",
       {
+        class:
+          "[display:flex] [min-width:0] [flex:1_1_auto] [align-items:center] [overflow:hidden] [color:var(--ink-c)] [font-size:0.6875rem] [font-weight:600] [letter-spacing:0.06em] [text-align:left] [text-overflow:ellipsis] [text-transform:uppercase] [white-space:nowrap] [cursor:pointer] hover:[color:var(--ink-c)] focus-visible:[outline:none] active:[color:var(--annotation-c)]",
         type: "button",
         "data-review-row-target": true,
         "aria-expanded": expanded ? "true" : "false",
@@ -4147,12 +4746,19 @@ import {
       },
       [
         el("span", {
+          class: "[min-width:0] [overflow:hidden] [text-overflow:ellipsis]",
           "data-review-row-title": true,
           text: slideTitleFor(comment.target),
         }),
-        el("span", { "data-review-row-locator": true }, [
-          icon(CHEVRON_RIGHT_ICON),
-        ]),
+        el(
+          "span",
+          {
+            class:
+              "[display:inline-flex] [width:1rem] [height:1rem] [flex:0_0_auto] [align-items:center] [justify-content:center] [color:var(--muted-c)] [opacity:0] [transition:opacity_100ms_ease] group-hover/row:[opacity:1] group-focus-within/row:[opacity:1]",
+            "data-review-row-locator": true,
+          },
+          [icon(CHEVRON_RIGHT_ICON)],
+        ),
       ],
     );
     jump.addEventListener("click", toggleThread);
@@ -4161,24 +4767,14 @@ import {
       rowHeadChildren.push(
         threadToolbarActions(comment, { resolved, minimize: collapse }),
       );
-    } else {
-      const substate = threadSubstate(outcome.status?.stage);
-      if (substate !== null) {
-        const slot = el("span", {
-          "data-review-row-substate": substate,
-          "aria-label":
-            substate === "working" ? "Agent working" : "Agent progress stalled",
-        });
-        slot.appendChild(
-          substate === "working" ? spinner() : icon(TRIANGLE_ALERT_ICON),
-        );
-        rowHeadChildren.push(slot);
-      }
-      rowHeadChildren.push(threadQuickActions(comment, { resolved }));
     }
     const rowHead = el(
       "div",
-      { "data-review-row-head": true },
+      {
+        class:
+          "[display:flex] [min-width:0] [align-items:center] [gap:0.5rem] [margin-bottom:0.3rem]",
+        "data-review-row-head": true,
+      },
       rowHeadChildren,
     );
     const children = [rowHead];
@@ -4192,29 +4788,59 @@ import {
           ? `${outcome.label} · ${relativeCommentTime(
               latestOutcome?.createdAt || comment.createdAt,
             )}`
-          : rowState === "working"
-            ? lifecycle === "stalled"
-              ? "Agent quiet · check its terminal"
-              : `Working · ${relativeCommentTime(
-                  pendingRequest?.createdAt || comment.createdAt,
-                )}`
-            : "Queued";
+          : lifecycle === "stalled"
+            ? "Agent is quiet · check its terminal"
+            : "Agent is working · Just now";
       children.push(
         el("p", {
-          class: COMMENT_WRAP_CLASSES,
+          class:
+            COMMENT_WRAP_CLASSES +
+            " [margin:0] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [overflow-wrap:anywhere] [white-space:pre-wrap]",
           "data-review-row-body": true,
           text: shortEcho(comment.body),
         }),
-        el("p", {
-          "data-review-row-secondary": rowState,
-          text: secondary,
-        }),
       );
+      if (rowState !== "queued") {
+        const footer = el(
+          "div",
+          {
+            class:
+              "mt-2 flex min-w-0 items-center justify-between gap-3 text-[0.6875rem] leading-[1.35] text-[var(--muted-c)]",
+            "data-review-row-footer": rowState,
+          },
+          [
+            el("p", {
+              class: "m-0 min-w-0 tabular-nums",
+              "data-review-row-secondary": rowState,
+              text: secondary,
+            }),
+          ],
+        );
+        if (rowState === "working" && pendingRequest) {
+          const cancel = el("button", {
+            type: "button",
+            class:
+              "flex-none cursor-pointer rounded-sm px-1 py-0.5 font-semibold text-[var(--callout-note-c)] hover:underline active:opacity-65",
+            "data-review-row-cancel-request": true,
+            text: "Cancel",
+          });
+          cancel.addEventListener("click", () => {
+            void cancelAgentRequest({
+              requestId: pendingRequest.requestId,
+              trigger: cancel,
+            });
+          });
+          footer.appendChild(cancel);
+        }
+        children.push(footer);
+      }
       const changedEvent = outcomeEventsFor(comment)
         .filter((event) => event.key === "changed")
         .at(-1);
       if (rowState === "ready" && changedEvent !== undefined) {
         const reviewChange = el("button", {
+          class:
+            "[margin-top:0.45rem] [padding:0.28rem_0.5rem] [border:1px_solid_var(--annotation-c)] [border-radius:0.35rem] [background:color-mix(in_srgb,_var(--annotation-c)_9%,_var(--bg))] [color:var(--annotation-c)] [cursor:pointer] [font-size:0.6875rem] [font-weight:700] hover:[background:color-mix(in_srgb,_var(--annotation-c)_14%,_var(--bg))] active:[background:color-mix(in_srgb,_var(--annotation-c)_20%,_var(--bg))]",
           type: "button",
           "data-review-row-review-change": true,
           text: "Review change",
@@ -4228,18 +4854,31 @@ import {
         children.push(reviewChange);
       }
     }
+    const rowClasses =
+      "group/row mb-3 grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)] gap-[0.18rem] rounded-lg border border-[var(--edge-c)] bg-[var(--bg)] p-3 text-[0.6875rem] text-[var(--muted-c)] transition-[border-color,background-color] duration-100 hover:border-[color-mix(in_srgb,var(--muted-c)_55%,var(--edge-c))] focus-within:border-[var(--muted-c)] data-[review-row-state=working]:border-l-[3px] data-[review-row-state=working]:border-[var(--callout-note-c)] data-[review-row-state=working]:bg-[var(--callout-note-bg)] data-[review-row-state=queued]:border-l data-[review-row-state=ready]:border-l-2 data-[review-outcome=changed]:border-l-[var(--diff-add-c)] data-[review-outcome=question]:border-l-[var(--callout-warning-c)]" +
+      (resolved ? " bg-[var(--surface-c)]" : "") +
+      (outcome.status
+        ? " data-[review-lifecycle=blocked]:border-l-[var(--callout-warning-c)]"
+        : "");
     const row = el(
       "li",
       {
+        class: rowClasses,
         "data-review-row": true,
         "data-review-sent-row": true,
         "data-review-row-state": rowState,
-        ...(resolved ? { "data-review-resolved-row": true } : {}),
+        ...(resolved
+          ? {
+              "data-review-resolved-row": true,
+            }
+          : {}),
         ...(expanded ? { "data-review-row-expanded": true } : {}),
         "data-review-comment-id": comment.id,
         "data-review-outcome": outcome.key,
         ...(outcome.status
-          ? { "data-review-lifecycle": outcome.status.stage }
+          ? {
+              "data-review-lifecycle": outcome.status.stage,
+            }
           : {}),
       },
       children,
@@ -4255,7 +4894,14 @@ import {
 
   const threadCard = ({ comment, state }) => {
     const isEditing = state === "staged" && comment.id === editingId;
+    const sentExpanded = state === "sent" && expandedThreadIds.has(comment.id);
     const card = el("article", {
+      class:
+        "max-[80rem]:data-[review-thread-inline]:relative! max-[80rem]:data-[review-thread-inline]:[right:auto] max-[80rem]:data-[review-thread-inline]:[z-index:2]! max-[80rem]:data-[review-thread-inline]:block! max-[80rem]:data-[review-thread-inline]:[width:100%]! max-[80rem]:data-[review-thread-inline]:[margin:0.65rem_0_1rem] [position:absolute] [right:auto] [width:17rem] [max-width:calc(100vw_-_1.5rem)] [min-width:0] [border:1px_solid_var(--edge-c)] [border-radius:0.6rem] [background:var(--bg)] [box-shadow:0_3px_14px_rgb(0_0_0_/_0.1)] [pointer-events:auto]" +
+        (state === "sent" ? " [box-shadow:0_4px_16px_rgb(0_0_0_/_0.1)]" : "") +
+        (state === "sent" && !sentExpanded
+          ? " [padding:0.28rem]"
+          : " [padding:0.65rem]"),
       "data-review-thread-card": true,
       "data-review-thread-state": state,
       "data-review-comment-id": comment.id,
@@ -4264,13 +4910,34 @@ import {
     if (state === "staged" && submittingIds.has(comment.id)) {
       card.setAttribute("data-review-thread-sending", "");
       card.append(
-        el("div", { "data-review-thread-toolbar": true }, [
-          el("div", { "data-review-thread-toolbar-title": true }, [
-            outcomeBadge({ key: "waiting", label: "Sending" }, { spin: true }),
-          ]),
-        ]),
+        el(
+          "div",
+          {
+            class:
+              "[display:flex] [min-width:0] [align-items:center] [gap:0.45rem] [margin:-0.65rem_-0.65rem_0.6rem] [padding:0.42rem_0.45rem] [border-bottom:1px_solid_var(--edge-c)] [border-radius:0.55rem_0.55rem_0_0] [background:var(--surface-c)]",
+            "data-review-thread-toolbar": true,
+          },
+          [
+            el(
+              "div",
+              {
+                class:
+                  "[display:flex] [min-width:0] [flex:1_1_auto] [align-items:center] [gap:0.35rem]",
+                "data-review-thread-toolbar-title": true,
+              },
+              [
+                outcomeBadge(
+                  { key: "waiting", label: "Sending" },
+                  { spin: true },
+                ),
+              ],
+            ),
+          ],
+        ),
         el("p", {
-          class: COMMENT_WRAP_CLASSES,
+          class:
+            COMMENT_WRAP_CLASSES +
+            " [margin:0] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [overflow-wrap:anywhere] [white-space:pre-wrap]",
           "data-review-thread-body": true,
           text: comment.body,
         }),
@@ -4287,6 +4954,8 @@ import {
       const summaryToggle = el(
         "button",
         {
+          class:
+            "block w-full min-w-0 overflow-hidden border-0 bg-transparent p-0 text-left text-inherit cursor-pointer",
           type: "button",
           "data-review-thread-summary-toggle": true,
           "aria-expanded": expanded ? "true" : "false",
@@ -4299,19 +4968,29 @@ import {
         },
         [
           el("span", {
+            class:
+              "block min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[0.6875rem]",
             "data-review-thread-echo": true,
             text: shortEcho(comment.body),
           }),
         ],
       );
-      const summary = el("div", { "data-review-thread-summary": true }, [
-        outcomeBadge(outcome, {
-          spin: outcome.status?.stage === "working",
-          iconOnly: outcome.key === "waiting",
-          waitingBusy: outcome.status?.waitingBusy,
-        }),
-        summaryToggle,
-      ]);
+      const summary = el(
+        "div",
+        {
+          class:
+            "grid w-full min-w-0 max-w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-[0.4rem] overflow-hidden py-[0.18rem] pl-[0.22rem] pr-[5.2rem] text-left text-[var(--ink-c)]",
+          "data-review-thread-summary": true,
+        },
+        [
+          outcomeBadge(outcome, {
+            spin: outcome.status?.stage === "working",
+            iconOnly: outcome.key === "waiting",
+            waitingBusy: outcome.status?.waitingBusy,
+          }),
+          summaryToggle,
+        ],
+      );
       summaryToggle.addEventListener("click", () => {
         if (expanded) {
           clearCommentLensIfOwned(comment.id);
@@ -4347,6 +5026,8 @@ import {
       const summaryToggle = el(
         "button",
         {
+          class:
+            "block w-full min-w-0 overflow-hidden border-0 bg-transparent p-0 text-left text-inherit cursor-pointer",
           type: "button",
           "data-review-thread-summary-toggle": true,
           "aria-expanded": "false",
@@ -4354,18 +5035,30 @@ import {
         },
         [
           el("span", {
+            class:
+              "block min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[0.6875rem]",
             "data-review-thread-echo": true,
             text: shortEcho(comment.body),
           }),
         ],
       );
-      const summary = el("div", { "data-review-thread-summary": true }, [
-        el("span", {
-          "data-review-comment-state": "staged",
-          text: "Staged",
-        }),
-        summaryToggle,
-      ]);
+      const summary = el(
+        "div",
+        {
+          class:
+            "grid w-full min-w-0 max-w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-[0.4rem] overflow-hidden py-[0.18rem] pl-[0.22rem] pr-[5.2rem] text-left text-[var(--ink-c)]",
+          "data-review-thread-summary": true,
+        },
+        [
+          el("span", {
+            class:
+              "[flex:0_0_auto] [padding:0.05rem_0.35rem] [border:1px_solid_var(--edge-c)] [border-radius:999px] [color:var(--muted-c)] [font-size:0.5625rem] [font-weight:700] [letter-spacing:0.06em] [text-transform:uppercase] data-[review-comment-state=staged]:[border-color:color-mix(in_srgb,_var(--annotation-c)_50%,_var(--edge-c))] data-[review-comment-state=staged]:[color:var(--annotation-c)]",
+            "data-review-comment-state": "staged",
+            text: "Staged",
+          }),
+          summaryToggle,
+        ],
+      );
       summaryToggle.addEventListener("click", () => {
         minimizedDraftIds.delete(comment.id);
         renderTray();
@@ -4378,6 +5071,8 @@ import {
 
     if (isEditing) {
       const field = el("textarea", {
+        class:
+          "[display:block] [width:100%] [padding:0.4rem_0.5rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [resize:vertical] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px]",
         "data-review-thread-input": true,
         rows: "4",
         value: comment.body,
@@ -4394,6 +5089,8 @@ import {
         renderTray();
       });
       const confirm = el("button", {
+        class:
+          "[border-color:var(--accent-c)]! [background:var(--accent-c)]! [color:var(--bg)]! [position:relative]",
         type: "button",
         "data-review-thread-save": true,
         text: "Save",
@@ -4412,7 +5109,15 @@ import {
       });
       card.append(
         field,
-        el("div", { "data-review-thread-actions": true }, [cancel, confirm]),
+        el(
+          "div",
+          {
+            class:
+              "[display:flex] [flex-wrap:wrap] [justify-content:flex-end] [gap:0.35rem] [margin-top:0.55rem]",
+            "data-review-thread-actions": true,
+          },
+          [cancel, confirm],
+        ),
       );
       setTimeout(() => field.focus(), 0);
       return card;
@@ -4421,7 +5126,9 @@ import {
     const isLong = comment.body.length > LONG_COMMENT_LIMIT;
     const expanded = expandedCommentIds.has(comment.id);
     const body = el("p", {
-      class: COMMENT_WRAP_CLASSES,
+      class:
+        COMMENT_WRAP_CLASSES +
+        " [margin:0] [color:var(--ink-c)] [font-size:0.8125rem] [line-height:1.5] [overflow-wrap:anywhere] [white-space:pre-wrap]",
       "data-review-thread-body": true,
     });
     if (isLong && !expanded) {
@@ -4431,6 +5138,8 @@ import {
         ),
       );
       const more = el("button", {
+        class:
+          "[display:inline] [padding:0] [border:0] [background:transparent] [color:var(--muted-c)] [font-size:0.75rem] [font-weight:600] [cursor:pointer] hover:[color:var(--accent-c)] hover:[text-decoration:underline] active:[color:var(--ink-c)]",
         type: "button",
         "data-review-thread-more": true,
         text: "… more",
@@ -4452,7 +5161,11 @@ import {
       card.appendChild(
         el(
           "div",
-          { "data-review-thread-actions": true },
+          {
+            class:
+              "[display:flex] [flex-wrap:wrap] [justify-content:flex-end] [gap:0.35rem] [margin-top:0.55rem]",
+            "data-review-thread-actions": true,
+          },
           stagedSubmitActions({ comment, surface: "thread" }),
         ),
       );
@@ -4568,14 +5281,6 @@ import {
   };
 
   const renderThreads = () => {
-    const anchoredActivityScroll = new Map(
-      Array.from(
-        threadLayer.querySelectorAll("[data-review-activity-owner]"),
-      ).map((node) => [
-        node.getAttribute("data-review-activity-owner"),
-        node.scrollTop,
-      ]),
-    );
     document
       .querySelectorAll("[data-review-thread-inline]")
       .forEach((card) => card.remove());
@@ -4594,14 +5299,6 @@ import {
       ...cards,
       ...(floatingCompose === null ? [] : [floatingCompose]),
     );
-    for (const activity of threadLayer.querySelectorAll(
-      "[data-review-activity-owner]",
-    )) {
-      const owner = activity.getAttribute("data-review-activity-owner");
-      if (owner !== null && anchoredActivityScroll.has(owner)) {
-        activity.scrollTop = anchoredActivityScroll.get(owner);
-      }
-    }
     if (window.innerWidth < 1280) {
       for (const card of cards) {
         const id = card.getAttribute("data-review-comment-id");
@@ -4624,27 +5321,7 @@ import {
 
   const renderSentIndex = () => {
     const counts = outcomeCounts();
-    const workingCount = sent.filter((comment) => {
-      if (resolvedCommentIds.has(comment.id)) return false;
-      const stage = outcomeFor(comment).status?.stage;
-      return stage === "working" || stage === "stalled";
-    }).length;
-    const waitingCount = Math.max(0, counts.waiting - workingCount);
-    const readyCount =
-      counts.question + counts.changed + counts.outside + counts.cancelled;
-    const summaryItems = [
-      { count: readyCount, label: "ready" },
-      { count: workingCount, label: "working" },
-      { count: waitingCount, label: "queued" },
-    ].filter((item) => item.count > 0);
-    responseSummary.replaceChildren(
-      ...summaryItems.map((item) =>
-        el("span", {
-          "data-review-round-chip": item.label,
-          text: `${item.count} ${item.label}`,
-        }),
-      ),
-    );
+    responseSummary.replaceChildren();
     resolveAllButton.hidden =
       counts.changed + counts.question + counts.outside === 0;
     const groups = [
@@ -4656,7 +5333,7 @@ import {
       },
       {
         key: "working",
-        label: "Working",
+        label: "Now Working",
         spin: true,
         match: (outcome) =>
           outcome.status?.stage === "working" ||
@@ -4680,18 +5357,29 @@ import {
           return match ? match(outcome) : outcome.key === key;
         });
         if (comments.length === 0) return null;
-        const heading = el("h3", {}, [
-          ...(spin === true ? [spinner()] : []),
-          ...(glyph === undefined ? [] : [icon(glyph)]),
-          el("span", { text: label }),
-          document.createTextNode(" "),
-          el("span", {
-            "data-review-outcome-group-count": true,
-            "aria-label":
-              comments.length + " thread" + (comments.length === 1 ? "" : "s"),
-            text: String(comments.length),
-          }),
-        ]);
+        const heading = el(
+          "h3",
+          {
+            class:
+              "flex min-w-0 items-center gap-1.5 [margin:0_0_0.6rem] text-xs font-bold uppercase tracking-[0.1em]",
+          },
+          [
+            ...(spin === true ? [spinner("group-heading")] : []),
+            ...(glyph === undefined ? [] : [icon(glyph)]),
+            el("span", { class: "min-w-0", text: label }),
+            document.createTextNode(" "),
+            el("span", {
+              class:
+                "[display:inline-flex] [min-width:1.1rem] [height:1.1rem] [align-items:center] [justify-content:center] [margin-left:auto] [padding:0_0.25rem] [border-radius:999px] [background:var(--surface-c)] [font-size:0.625rem] [font-variant-numeric:tabular-nums]",
+              "data-review-outcome-group-count": true,
+              "aria-label":
+                comments.length +
+                " thread" +
+                (comments.length === 1 ? "" : "s"),
+              text: String(comments.length),
+            }),
+          ],
+        );
         return el("section", { "data-review-outcome-group": displayKey }, [
           heading,
           el("ol", {}, comments.map(sentRow)),
@@ -4707,7 +5395,9 @@ import {
         el(
           "details",
           {
-            class: followsActiveGroup ? "" : "mt-0! border-t-0! pt-0!",
+            class:
+              (followsActiveGroup ? "" : "mt-0! border-t-0! pt-0!") +
+              " [margin-top:0.7rem] [padding-top:0.7rem] [border-top:1px_solid_var(--edge-c)]",
             "data-review-resolved-group": true,
             open: resolved.some((comment) => expandedThreadIds.has(comment.id)),
           },
@@ -4739,77 +5429,82 @@ import {
   });
 
   const renderTray = () => {
-    draftList.replaceChildren(...drafts.map(draftRow));
-    emptyNote.hidden = drafts.length > 0;
-    const pending = drafts.length;
-    const needs = needsAnswerCount();
-    countLabel.textContent =
-      needs > 0 ? String(needs) : pending > 0 ? String(pending) : "";
-    countLabel.setAttribute(
-      "data-review-count-tone",
-      needs > 0 ? "needs" : pending > 0 ? "pending" : "idle",
-    );
-    commentsTab.setAttribute(
-      "aria-label",
-      needs > 0
-        ? `Comments, ${needs} needs your answer`
-        : pending > 0
-          ? `Comments, ${pending} staged`
-          : "Comments",
-    );
-    const toolbarCount = pending > 0 ? pending : needs;
-    const toolbarCountKind =
-      pending > 0 ? "staged" : needs > 0 ? "needs" : "idle";
-    feedbackLabel.textContent = "Feedback";
-    toggleCount.textContent = toolbarCount > 0 ? String(toolbarCount) : "";
-    toggleCount.setAttribute("data-review-toggle-count-kind", toolbarCountKind);
-    toggleCount.setAttribute(
-      "aria-label",
-      pending > 0
-        ? `${pending} staged comment${pending === 1 ? "" : "s"} waiting submission`
-        : needs > 0
-          ? `${needs} comment${needs === 1 ? "" : "s"} needs your answer`
-          : "",
-    );
-    toggle.setAttribute(
-      "data-review-has-pending",
-      toolbarCount > 0 ? "true" : "false",
-    );
-    toggle.setAttribute("data-review-needs-answer", String(needs));
-    toggle.setAttribute(
-      "aria-label",
-      (railIsOpen() ? "Close" : "Open") +
-        " feedback sidebar" +
-        (pending > 0
-          ? `, ${pending} staged waiting submission`
+    renderWithPreservedScroll(() => {
+      draftList.replaceChildren(...drafts.map(draftRow));
+      emptyNote.hidden = drafts.length > 0;
+      const pending = drafts.length;
+      const needs = needsAnswerCount();
+      countLabel.textContent =
+        needs > 0 ? String(needs) : pending > 0 ? String(pending) : "";
+      countLabel.setAttribute(
+        "data-review-count-tone",
+        needs > 0 ? "needs" : pending > 0 ? "pending" : "idle",
+      );
+      commentsTab.setAttribute(
+        "aria-label",
+        needs > 0
+          ? `Comments, ${needs} needs your answer`
+          : pending > 0
+            ? `Comments, ${pending} staged`
+            : "Comments",
+      );
+      const toolbarCount = pending > 0 ? pending : needs;
+      const toolbarCountKind =
+        pending > 0 ? "staged" : needs > 0 ? "needs" : "idle";
+      feedbackLabel.textContent = "Feedback";
+      toggleCount.textContent = toolbarCount > 0 ? String(toolbarCount) : "";
+      toggleCount.setAttribute(
+        "data-review-toggle-count-kind",
+        toolbarCountKind,
+      );
+      toggleCount.setAttribute(
+        "aria-label",
+        pending > 0
+          ? `${pending} staged comment${pending === 1 ? "" : "s"} waiting submission`
           : needs > 0
-            ? `, ${needs} needs your answer`
-            : ""),
-    );
-    toolbar.setAttribute(
-      "data-review-batch-ready",
-      pending > 0 ? "true" : "false",
-    );
-    sendButton.hidden = pending === 0;
-    sendButton.disabled = pending === 0;
-    draftGroup.hidden = pending === 0;
-    draftGroupCount.textContent = String(pending);
-    draftGroupCount.setAttribute(
-      "aria-label",
-      `${pending} staged comment${pending === 1 ? "" : "s"}`,
-    );
-    sidebarSendButton.disabled = pending === 0;
-    compactBatchMenu.hidden = pending === 0;
-    compactBatchLabel.textContent = `Send ${pending} comment${pending === 1 ? "" : "s"}`;
-    compactBatchMenu.open = false;
-    sendBar.hidden = sendNote.textContent.trim().length === 0;
-    sentGroup.hidden = sent.length === 0;
-    renderSentIndex();
-    renderPlanChat();
-    syncPlanChatValidity();
-    paintChips();
-    paintTargetHighlights();
-    renderThreads();
+            ? `${needs} comment${needs === 1 ? "" : "s"} needs your answer`
+            : "",
+      );
+      toggle.setAttribute(
+        "data-review-has-pending",
+        toolbarCount > 0 ? "true" : "false",
+      );
+      toggle.setAttribute("data-review-needs-answer", String(needs));
+      toggle.setAttribute(
+        "aria-label",
+        (railIsOpen() ? "Close" : "Open") +
+          " feedback sidebar" +
+          (pending > 0
+            ? `, ${pending} staged waiting submission`
+            : needs > 0
+              ? `, ${needs} needs your answer`
+              : ""),
+      );
+      toolbar.setAttribute(
+        "data-review-batch-ready",
+        pending > 0 ? "true" : "false",
+      );
+      sendButton.hidden = pending === 0;
+      sendButton.disabled = pending === 0;
+      draftGroup.hidden = pending === 0;
+      draftGroupCount.textContent = String(pending);
+      draftGroupCount.setAttribute(
+        "aria-label",
+        `${pending} staged comment${pending === 1 ? "" : "s"}`,
+      );
+      sidebarSendButton.disabled = pending === 0;
+      compactBatchMenu.hidden = pending === 0;
+      compactBatchLabel.textContent = `Send ${pending} comment${pending === 1 ? "" : "s"}`;
+      compactBatchMenu.open = false;
+      sendBar.hidden = sendNote.textContent.trim().length === 0;
+      sentGroup.hidden = sent.length === 0;
+      renderSentIndex();
+      renderPlanChat();
+      syncPlanChatValidity();
+      paintChips();
+      paintTargetHighlights();
+      renderThreads();
+    });
   };
 
   document.addEventListener("pointerdown", (event) => {
@@ -4918,26 +5613,30 @@ import {
     revertConfirm.disabled = true;
     try {
       await confirmRuntime();
-      const answer = await call("/api/agent-requests", {
+      const beforeRequestCount = agentRequests.length;
+      const answer = await call("/api/revert", {
         method: "POST",
-        body: {
-          kind: "reply",
-          commentId: comment.id,
-          body: "Revert all plan changes made in response to this comment.",
-        },
+        body: { commentId: comment.id },
       });
-      agentConnected = answer.agentConnected === true;
-      if (isAgentRequest(answer.request)) {
-        agentRequests = agentRequests.concat([answer.request]);
+      if (
+        answer.reverted !== true ||
+        agentRequests.length !== beforeRequestCount
+      ) {
+        throw new Error("The local revert did not complete cleanly");
       }
-      expandedThreadIds.add(comment.id);
-      setAgentState("Agent working", "working");
-      announce("Revert request sent to the coding agent.");
+      resolvedCommentIds.add(comment.id);
+      expandedThreadIds.delete(comment.id);
+      await save();
+      announce("Changes reverted. The coding agent was notified.");
       revertDialog.close();
-      renderTray();
-      startProgress();
+      const refreshedRevision = await refreshSourceDocument();
+      sourceRevision =
+        refreshedRevision || answer.sourceRevision || sourceRevision;
     } catch (error) {
-      showInlineError(revertConfirm, "Couldn’t send: " + describeError(error));
+      showInlineError(
+        revertConfirm,
+        "Couldn’t revert: " + describeError(error),
+      );
       announce(describeError(error));
       revertConfirm.disabled = false;
     }
@@ -4974,7 +5673,11 @@ import {
     }
     let note = parent.querySelector("[data-review-action-error]");
     if (!note) {
-      note = el("p", { "data-review-action-error": true });
+      note = el("p", {
+        class:
+          "[grid-column:1_/_-1] [margin:0.35rem_0_0] [padding:0.3rem_0.45rem] [border-left:2px_solid_var(--callout-danger-c)] [background:var(--callout-danger-bg)] [color:var(--callout-danger-c)] [font-size:0.6875rem] [line-height:1.4] [overflow-wrap:anywhere]",
+        "data-review-action-error": true,
+      });
       parent.appendChild(note);
     }
     note.textContent = message;
@@ -5062,64 +5765,21 @@ import {
       compose.setAttribute("data-review-compose-placement", "centered");
       return;
     }
-    if (target.type !== "slide" && window.innerWidth >= 1280 && !railIsOpen()) {
-      if (compose.parentElement !== threadLayer)
-        threadLayer.appendChild(compose);
+    if (window.innerWidth < 1280) {
+      if (compose.parentElement !== surface) surface.appendChild(compose);
+      compose.removeAttribute("style");
       compose.removeAttribute("data-review-compose-inline");
-      compose.removeAttribute("data-review-compose-centered");
-      compose.setAttribute("data-review-compose-floating", "");
-      compose.setAttribute("data-review-compose-placement", "floating");
-      positionThreadCards();
+      compose.removeAttribute("data-review-compose-floating");
+      compose.setAttribute("data-review-compose-centered", "");
+      compose.setAttribute("data-review-compose-placement", "centered");
       return;
     }
-    const endBlock =
-      target.type === "selection" && target.endBlockId
-        ? document.querySelector(
-            '[data-block-id="' + cssEscape(target.endBlockId) + '"]',
-          )
-        : null;
-    const slide =
-      target.type === "slide" ? block.closest("[data-slide]") : null;
-    const insertionBlock = endBlock || block;
-    // A table row cannot legally own a div sibling inside tbody, so its
-    // scroll container is the insertion anchor.
-    const trailingAnchor =
-      insertionBlock.tagName === "TR"
-        ? insertionBlock.closest("[data-table-scroll-container]") ||
-          insertionBlock
-        : insertionBlock;
-    const leadingAnchor =
-      block.tagName === "TR"
-        ? block.closest("[data-table-scroll-container]") || block
-        : block;
-    compose.removeAttribute("style");
-    compose.removeAttribute("data-review-compose-centered");
-    compose.removeAttribute("data-review-compose-floating");
-    compose.setAttribute("data-review-compose-inline", "");
-    if (slide) {
-      slide.before(compose);
-      compose.setAttribute("data-review-compose-placement", "before-slide");
-      return;
-    }
-    const composeHeight = compose.offsetHeight;
-    const startRect = leadingAnchor.getBoundingClientRect();
-    const endRect = trailingAnchor.getBoundingClientRect();
-    const roomBelow = window.innerHeight - endRect.bottom;
-    const roomAbove = startRect.top - REVIEW_CONTROL_TOP;
-    if (roomBelow >= composeHeight + FLOAT_CONTENT_GAP) {
-      trailingAnchor.after(compose);
-      compose.setAttribute("data-review-compose-placement", "after-selection");
-      return;
-    }
-    if (roomAbove >= composeHeight + FLOAT_CONTENT_GAP) {
-      leadingAnchor.before(compose);
-      compose.setAttribute("data-review-compose-placement", "before-selection");
-      return;
-    }
-    if (compose.parentElement !== surface) surface.appendChild(compose);
     compose.removeAttribute("data-review-compose-inline");
-    compose.setAttribute("data-review-compose-centered", "");
-    compose.setAttribute("data-review-compose-placement", "centered");
+    compose.removeAttribute("data-review-compose-centered");
+    if (compose.parentElement !== threadLayer) threadLayer.appendChild(compose);
+    compose.setAttribute("data-review-compose-floating", "");
+    compose.setAttribute("data-review-compose-placement", "floating");
+    positionThreadCards();
   };
 
   const normalizedComposeBody = () => composeInput.value.trim();
@@ -5338,24 +5998,30 @@ import {
     affordanceLabel.hidden = false;
     affordance.setAttribute("aria-label", "Comment on the selected text");
     const width = affordance.offsetWidth || 108;
-    const startBlock = blockForTarget(anchor);
-    const slide = startBlock?.closest("[data-slide]");
-    const slideRect = slide?.getBoundingClientRect();
-    const gutterLeft = slideRect
-      ? Math.min(slideRect.left, rect.left) - width - 10
-      : -1;
-    const hasGutter = gutterLeft >= 12;
+    const height = affordance.offsetHeight || 28;
+    const gap = 8;
+    const preferredLeft = rect.left - width - gap;
+    const hasRoomLeft = preferredLeft >= 12;
+    const preferredTop = rect.top - height - gap;
+    const top =
+      preferredTop >= REVIEW_CONTROL_TOP
+        ? preferredTop
+        : hasRoomLeft
+          ? REVIEW_CONTROL_TOP
+          : rect.bottom + gap;
     affordance.style.top =
       Math.max(
         REVIEW_CONTROL_TOP,
+        Math.min(top, window.innerHeight - height - FLOAT_EDGE),
+      ) + "px";
+    affordance.style.left =
+      Math.max(
+        12,
         Math.min(
-          hasGutter ? rect.top : rect.bottom + 8,
-          window.innerHeight - affordance.offsetHeight - FLOAT_EDGE,
+          hasRoomLeft ? preferredLeft : rect.left,
+          rightLimit() - width - 12,
         ),
       ) + "px";
-    affordance.style.left = hasGutter
-      ? gutterLeft + "px"
-      : Math.max(12, Math.min(rect.left, rightLimit() - width - 12)) + "px";
   };
 
   let selectionOfferTimer = null;
@@ -5376,56 +6042,68 @@ import {
     paintTargetHighlights();
   };
 
-  for (const slide of document.querySelectorAll("[data-slide]")) {
-    const title =
-      slide
-        .querySelector("[data-block-section]")
-        ?.getAttribute("data-block-section") || "this slide";
-    const selector = el("button", {
-      type: "button",
-      "data-review-slide-selector": true,
-      "aria-label": "Comment on all content in " + title,
-    });
-    selector.append(
-      icon(MESSAGE_SQUARE_TEXT_ICON),
-      el("span", {
-        "data-review-icon-tooltip": true,
-        "aria-hidden": "true",
-        text: "Comment on slide",
-      }),
-    );
-    selector.addEventListener("mouseup", (event) => {
-      event.stopPropagation();
-    });
-    selector.addEventListener("click", () => {
-      const slideBlocks = Array.from(slide.querySelectorAll("[data-block-id]"));
-      const first = slideBlocks[0];
-      const kicker = slide.querySelector("[data-slide-kicker]");
-      if (!first || !kicker) return;
-      if (!compose.hidden) closeCompose();
-      window.getSelection()?.removeAllRanges();
-      const target = {
-        type: "slide",
-        blockId: first.getAttribute("data-block-id"),
-        scope: first
-          .getAttribute("data-block-id")
-          .split("/")
-          .slice(0, -1)
-          .join("/"),
-        kind: kindFor(first),
-        label: labelFor(first),
-        section: first.getAttribute("data-block-section") || "",
-      };
-      pendingSelection = target;
-      attachLabel.hidden = false;
-      attachInput.checked = false;
-      paintTargetHighlights();
-      openCompose(target);
-      announce("Commenting on all content in " + title + ".");
-    });
-    slide.setAttribute("data-review-slide-selectable", "");
-    slide.appendChild(selector);
-  }
+  const installSlideSelectors = () => {
+    for (const slide of document.querySelectorAll("[data-slide]")) {
+      if (slide.querySelector(":scope > [data-review-slide-selector]")) {
+        continue;
+      }
+      const title =
+        slide
+          .querySelector("[data-block-section]")
+          ?.getAttribute("data-block-section") || "this slide";
+      const selector = el("button", {
+        class:
+          "[position:absolute] [top:0.35rem] [left:calc(var(--deck-pad-x,_1rem)_-_1.25rem)] [z-index:44] [display:inline-flex] [width:1.15rem] [height:1.15rem] [align-items:center] [justify-content:center] [padding:0] [border:1px_solid_transparent] [border-radius:0.3rem] [background:color-mix(in_srgb,_var(--bg)_88%,_transparent)] [color:color-mix(in_srgb,_var(--muted-c)_72%,_transparent)] [cursor:pointer] hover:[border-color:var(--edge-c)] hover:[background:var(--review-control-hover)] hover:[color:var(--accent-c)] focus-visible:[border-color:var(--edge-c)] focus-visible:[background:var(--review-control-hover)] focus-visible:[color:var(--accent-c)] focus-visible:[outline:1px_solid_var(--accent-c)] focus-visible:[outline-offset:2px] active:[background:var(--review-control-active)]",
+        type: "button",
+        "data-review-slide-selector": true,
+        "aria-label": "Comment on all content in " + title,
+      });
+      selector.append(
+        icon(MESSAGE_SQUARE_TEXT_ICON),
+        el("span", {
+          class:
+            "[position:absolute] [top:calc(100%_+_0.35rem)] [right:0] [z-index:60] [width:max-content] [max-width:11rem] [padding:0.22rem_0.42rem] [border-radius:0.25rem] [background:var(--ink-c)] [color:var(--bg)] [font-size:0.66rem] [font-weight:600] [line-height:1.35] [pointer-events:none] [opacity:0] [transform:translateY(-0.1rem)] [transition:opacity_70ms_ease,_transform_70ms_ease]",
+          "data-review-icon-tooltip": true,
+          "aria-hidden": "true",
+          text: "Comment on slide",
+        }),
+      );
+      selector.addEventListener("mouseup", (event) => {
+        event.stopPropagation();
+      });
+      selector.addEventListener("click", () => {
+        const slideBlocks = Array.from(
+          slide.querySelectorAll("[data-block-id]"),
+        );
+        const first = slideBlocks[0];
+        const kicker = slide.querySelector("[data-slide-kicker]");
+        if (!first || !kicker) return;
+        if (!compose.hidden) closeCompose();
+        window.getSelection()?.removeAllRanges();
+        const target = {
+          type: "slide",
+          blockId: first.getAttribute("data-block-id"),
+          scope: first
+            .getAttribute("data-block-id")
+            .split("/")
+            .slice(0, -1)
+            .join("/"),
+          kind: kindFor(first),
+          label: labelFor(first),
+          section: first.getAttribute("data-block-section") || "",
+        };
+        pendingSelection = target;
+        attachLabel.hidden = false;
+        attachInput.checked = false;
+        paintTargetHighlights();
+        openCompose(target);
+        announce("Commenting on all content in " + title + ".");
+      });
+      slide.setAttribute("data-review-slide-selectable", "");
+      slide.appendChild(selector);
+    }
+  };
+  installSlideSelectors();
 
   document.addEventListener("mouseup", () => setTimeout(offerSelection, 0));
   document.addEventListener("keyup", (event) => {
@@ -5457,6 +6135,8 @@ import {
     const disclosure = el(
       "button",
       {
+        class:
+          "[display:flex] [width:100%] [align-items:center] [gap:0.3rem] [padding:0.18rem_0.25rem] [border:0] [border-radius:0.25rem] [background:transparent] [color:var(--muted-c)] [font-size:0.68rem] [font-weight:750] [text-align:left] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[color:var(--accent-c)] active:[background:var(--review-control-active)]",
         type: "button",
         "data-review-chat-change-toggle": true,
         "aria-expanded": expanded ? "true" : "false",
@@ -5474,12 +6154,16 @@ import {
     const list = el(
       "div",
       {
+        class:
+          "[display:grid] [grid-template-columns:minmax(0,_1fr)] [gap:0.25rem] [min-width:0]",
         "data-review-chat-change-list": true,
         ...(expanded ? {} : { hidden: true }),
       },
       [changeNavigator({ comment: null, event, places, active })],
     );
     const see = el("button", {
+      class:
+        "[margin-top:0.45rem] [padding:0.2rem_0.45rem] [border:1px_solid_var(--edge-c)] [border-radius:0.3rem] [background:var(--bg)] [color:var(--accent-c)] [font-size:0.6875rem] [font-weight:650] [cursor:pointer] hover:[background:var(--review-control-hover)] hover:[border-color:var(--accent-c)] active:[background:var(--review-control-active)]",
       type: "button",
       "data-review-see-change": true,
       text: active
@@ -5492,11 +6176,15 @@ import {
       if (active) clearDiffLens();
       else void openDiffLens(null, event, 0);
     });
-    return el("div", { "data-review-chat-change-digest": true }, [
-      disclosure,
-      list,
-      see,
-    ]);
+    return el(
+      "div",
+      {
+        class:
+          "[display:grid] [gap:0.4rem] [margin-top:0.55rem] [padding-top:0.5rem] [border-top:1px_solid_var(--edge-c)]",
+        "data-review-chat-change-digest": true,
+      },
+      [disclosure, list, see],
+    );
   };
 
   const livePlanChatMessages = () => {
@@ -5549,47 +6237,83 @@ import {
   const renderPlanChat = () => {
     const messages = hasRuntime ? livePlanChatMessages() : planChatMessages;
     if (messages.length === 0) {
-      const empty = el("li", { "data-review-chat-empty": true }, [
-        el("p", {
-          text: hasRuntime
-            ? "Ask about the plan as a whole. Connection status and setup are in the Agent tab."
-            : "Ask about the plan as a whole. Anchored comment threads stay beside their source.",
-        }),
-      ]);
+      const empty = el(
+        "li",
+        {
+          class:
+            "[color:var(--muted-c)] [font-size:0.75rem] [line-height:1.45]",
+          "data-review-chat-empty": true,
+        },
+        [
+          el("p", {
+            text: hasRuntime
+              ? "Ask about the plan as a whole. Connection status and setup are in the Agent tab."
+              : "Ask about the plan as a whole. Anchored comment threads stay beside their source.",
+          }),
+        ],
+      );
       planChatList.replaceChildren(empty);
       return;
     }
     const rendered = messages.map((message) => {
       if (message.role === "cancelled") {
-        return el("li", { "data-review-chat-message": "cancelled" }, [
-          cancelledRequestLine(),
-        ]);
+        return el(
+          "li",
+          {
+            class:
+              "[width:calc(100%_-_1.5rem)] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [min-width:0] data-[review-chat-message=user]:[margin-left:1.5rem] data-[review-chat-message=user]:[border-right:2px_solid_var(--annotation-c)] data-[review-chat-message=user]:[background:color-mix(in_srgb,_var(--annotation-bg)_30%,_var(--bg))] data-[review-chat-message=agent]:[margin-right:1.5rem] data-[review-chat-message=agent]:[border-left:2px_solid_var(--callout-note-c)] data-[review-chat-message=agent]:[background:color-mix(in_srgb,_var(--callout-note-bg)_46%,_var(--bg))] data-[review-chat-message=waiting]:[border-style:dashed] data-[review-chat-message=waiting]:[color:var(--muted-c)]",
+            "data-review-chat-message": "cancelled",
+          },
+          [cancelledRequestLine()],
+        );
       }
       if (message.role === "waiting") {
         const status = pendingStatusFor(message.request, "chat");
-        return el("li", { "data-review-chat-message": "waiting" }, [
-          threadStatusStrip(status, { surface: "tray" }),
-        ]);
+        return el(
+          "li",
+          {
+            class:
+              "[width:calc(100%_-_1.5rem)] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [min-width:0] data-[review-chat-message=user]:[margin-left:1.5rem] data-[review-chat-message=user]:[border-right:2px_solid_var(--annotation-c)] data-[review-chat-message=user]:[background:color-mix(in_srgb,_var(--annotation-bg)_30%,_var(--bg))] data-[review-chat-message=agent]:[margin-right:1.5rem] data-[review-chat-message=agent]:[border-left:2px_solid_var(--callout-note-c)] data-[review-chat-message=agent]:[background:color-mix(in_srgb,_var(--callout-note-bg)_46%,_var(--bg))] data-[review-chat-message=waiting]:[border-style:dashed] data-[review-chat-message=waiting]:[color:var(--muted-c)]",
+            "data-review-chat-message": "waiting",
+          },
+          [threadStatusStrip(status, { surface: "tray" })],
+        );
       }
       const body =
         message.role === "agent"
           ? messageBody(message.messageNodes, message.body)
           : el("p", { class: COMMENT_WRAP_CLASSES, text: message.body });
-      const turn = el("li", { "data-review-chat-message": message.role }, [
-        el("div", { "data-review-turn-meta": true }, [
-          el("strong", {
-            text: message.role === "user" ? "You" : "Agent",
-          }),
-          el("time", {
-            datetime: message.createdAt,
-            text:
-              (message.role === "user"
-                ? requestDeliveryLabel(message.request) + " · "
-                : "") + relativeCommentTime(message.createdAt),
-          }),
-        ]),
-        body,
-      ]);
+      const turn = el(
+        "li",
+        {
+          class:
+            "[width:calc(100%_-_1.5rem)] [padding:0.5rem_0.55rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [background:var(--bg)] [min-width:0] data-[review-chat-message=user]:[margin-left:1.5rem] data-[review-chat-message=user]:[border-right:2px_solid_var(--annotation-c)] data-[review-chat-message=user]:[background:color-mix(in_srgb,_var(--annotation-bg)_30%,_var(--bg))] data-[review-chat-message=agent]:[margin-right:1.5rem] data-[review-chat-message=agent]:[border-left:2px_solid_var(--callout-note-c)] data-[review-chat-message=agent]:[background:color-mix(in_srgb,_var(--callout-note-bg)_46%,_var(--bg))] data-[review-chat-message=waiting]:[border-style:dashed] data-[review-chat-message=waiting]:[color:var(--muted-c)]",
+          "data-review-chat-message": message.role,
+        },
+        [
+          el(
+            "div",
+            {
+              class:
+                "[display:flex] [align-items:center] [gap:0.35rem] [color:var(--muted-c)] [font-size:0.625rem]",
+              "data-review-turn-meta": true,
+            },
+            [
+              el("strong", {
+                text: message.role === "user" ? "You" : "Agent",
+              }),
+              el("time", {
+                datetime: message.createdAt,
+                text:
+                  (message.role === "user"
+                    ? requestDeliveryLabel(message.request) + " · "
+                    : "") + relativeCommentTime(message.createdAt),
+              }),
+            ],
+          ),
+          body,
+        ],
+      );
       if (message.role === "agent" && message.event) {
         const controls = chatChangeControls(message.event);
         if (controls) turn.appendChild(controls);
@@ -5742,11 +6466,10 @@ import {
         agentConnected ? "idle" : "failed",
       );
       sendNote.textContent =
-        "Queued " +
         answer.comments +
-        " to the agent as " +
-        answer.packageId +
-        ".";
+        " comment" +
+        (answer.comments === 1 ? "" : "s") +
+        " sent to the agent";
       sendBar.hidden = false;
       announce("Feedback queued for the agent.");
       setActiveTab("comments");
@@ -5811,29 +6534,217 @@ import {
       cancelledIds,
     ]);
 
-  const reloadForSourceRevision = () => {
-    if (reloadKey !== null) {
-      try {
-        sessionStorage.setItem(
-          reloadKey,
-          JSON.stringify({
-            scrollY: window.scrollY,
-            expanded: Array.from(expandedThreadIds),
-            tab:
-              connectionPanel && !connectionPanel.hidden
-                ? "agent"
-                : chatPanel.hidden
-                  ? "comments"
-                  : "chat",
-            railOpen: railIsOpen(),
-          }),
-        );
-      } catch {
-        // Losing a restore hint never blocks the source refresh.
-      }
+  let sourceRefreshPromise = null;
+  let restoringSourceViewport = false;
+
+  const sourceRevisionFromDocument = (nextDocument) => {
+    try {
+      const bootstrap = JSON.parse(
+        nextDocument.documentElement.getAttribute("data-review-bootstrap") ||
+          "{}",
+      );
+      return typeof bootstrap.sourceRevision === "string" &&
+        /^[a-f0-9]{16,64}$/.test(bootstrap.sourceRevision)
+        ? bootstrap.sourceRevision
+        : "";
+    } catch {
+      return "";
     }
-    window.location.reload();
   };
+
+  const desktopTocIn = (owner) =>
+    Array.from(owner.querySelectorAll('nav[aria-label="Contents"]')).find(
+      (candidate) => !candidate.hasAttribute("data-mobile-toc"),
+    ) || null;
+
+  const replaceOptionalNode = ({ current, next, insert }) => {
+    if (current && next) {
+      current.replaceWith(document.importNode(next, true));
+    } else if (current) {
+      current.remove();
+    } else if (next) {
+      insert(document.importNode(next, true));
+    }
+  };
+
+  const captureViewportAnchor = () => {
+    const visible = blocks
+      .map((block) => ({ block, rect: block.getBoundingClientRect() }))
+      .filter(
+        ({ rect }) =>
+          rect.bottom > REVIEW_CONTROL_TOP && rect.top < window.innerHeight,
+      )
+      .sort(
+        (left, right) =>
+          Math.abs(left.rect.top - REVIEW_CONTROL_TOP) -
+          Math.abs(right.rect.top - REVIEW_CONTROL_TOP),
+      )[0];
+    return visible
+      ? {
+          id: visible.block.getAttribute("data-block-id"),
+          top: visible.rect.top,
+        }
+      : null;
+  };
+
+  // The server intentionally owns MDX compilation, so a revision refresh
+  // fetches its newly rendered document. Only the authored article and TOCs
+  // cross this boundary: the live review shell and its browser state remain
+  // mounted.
+  async function refreshSourceDocument() {
+    if (sourceRefreshPromise !== null) return sourceRefreshPromise;
+    sourceRefreshPromise = (async () => {
+      const response = await fetch(window.location.pathname, {
+        method: "GET",
+        mode: "same-origin",
+        credentials: "omit",
+        cache: "no-store",
+        redirect: "error",
+        headers: { [TOKEN_HEADER]: sessionToken },
+      });
+      if (!response.ok) {
+        throw new Error(
+          "Review runtime could not render the revised plan (" +
+            response.status +
+            ")",
+        );
+      }
+      const nextDocument = new DOMParser().parseFromString(
+        await response.text(),
+        "text/html",
+      );
+      if (
+        nextDocument.documentElement.getAttribute("data-plan-id") !== planId ||
+        nextDocument.documentElement.getAttribute("data-review-session") !==
+          sessionId
+      ) {
+        throw new Error("The revised document belongs to another session");
+      }
+      const currentMain = document.querySelector("main");
+      const currentArticle = currentMain?.querySelector(":scope > article");
+      const nextMain = nextDocument.querySelector("main");
+      const nextArticle = nextMain?.querySelector(":scope > article");
+      if (!currentMain || !currentArticle || !nextMain || !nextArticle) {
+        throw new Error("The revised document has no review article");
+      }
+
+      const scrollY = window.scrollY;
+      const viewportAnchor = captureViewportAnchor();
+      const mobileTocOpen =
+        document.querySelector("[data-mobile-toc] details")?.open === true;
+      const focusedReply =
+        document.activeElement instanceof HTMLTextAreaElement &&
+        document.activeElement.hasAttribute("data-review-thread-reply")
+          ? {
+              commentId:
+                document.activeElement
+                  .closest("[data-review-comment-id]")
+                  ?.getAttribute("data-review-comment-id") || "",
+              start: document.activeElement.selectionStart,
+              end: document.activeElement.selectionEnd,
+            }
+          : null;
+      const previousOverflowAnchor = root.style.overflowAnchor;
+      root.style.overflowAnchor = "none";
+      root.setAttribute("data-review-source-refresh", "pending");
+      if (currentArticle.contains(compose)) surface.appendChild(compose);
+
+      currentArticle.replaceChildren(
+        ...Array.from(nextArticle.childNodes, (child) =>
+          document.importNode(child, true),
+        ),
+      );
+      currentMain.className = nextMain.className;
+      currentMain.id = nextMain.id;
+      const currentLayout = currentMain.parentElement;
+      const nextLayout = nextMain.parentElement;
+      if (currentLayout && nextLayout) {
+        currentLayout.className = nextLayout.className;
+      }
+      replaceOptionalNode({
+        current: document.querySelector("[data-mobile-toc]"),
+        next: nextDocument.querySelector("[data-mobile-toc]"),
+        insert: (node) => currentLayout?.before(node),
+      });
+      replaceOptionalNode({
+        current: desktopTocIn(document),
+        next: desktopTocIn(nextDocument),
+        insert: (node) => currentMain.before(node),
+      });
+      const mobileDetails = document.querySelector("[data-mobile-toc] details");
+      if (mobileDetails) mobileDetails.open = mobileTocOpen;
+      document.title = nextDocument.title;
+
+      blocks = Array.from(document.querySelectorAll("[data-block-id]"));
+      refreshSlideNumbers();
+      installSlideSelectors();
+      window.__bigPlanRefreshViewer?.();
+      renderTray();
+      if (!compose.hidden && composeTarget) positionCompose(composeTarget);
+      paintTargetHighlights();
+      positionMarkers();
+
+      restoringSourceViewport = true;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const replacementReply =
+            focusedReply === null
+              ? null
+              : Array.from(
+                  document.querySelectorAll(
+                    '[data-review-comment-id="' +
+                      cssEscape(focusedReply.commentId) +
+                      '"] [data-review-thread-reply]',
+                  ),
+                ).find((candidate) => candidate.getClientRects().length > 0);
+          if (replacementReply instanceof HTMLTextAreaElement) {
+            replacementReply.focus({ preventScroll: true });
+            replacementReply.setSelectionRange(
+              focusedReply.start,
+              focusedReply.end,
+            );
+          }
+          const replacement =
+            viewportAnchor?.id === null || viewportAnchor?.id === undefined
+              ? null
+              : document.querySelector(
+                  '[data-block-id="' + cssEscape(viewportAnchor.id) + '"]',
+                );
+          if (replacement && viewportAnchor) {
+            window.scrollBy(
+              0,
+              replacement.getBoundingClientRect().top - viewportAnchor.top,
+            );
+          } else {
+            window.scrollTo({ top: scrollY });
+          }
+          const anchorDelta =
+            replacement && viewportAnchor
+              ? Math.abs(
+                  replacement.getBoundingClientRect().top - viewportAnchor.top,
+                )
+              : 0;
+          root.setAttribute(
+            "data-review-source-anchor-delta",
+            String(anchorDelta),
+          );
+          root.setAttribute("data-review-source-refresh", "complete");
+          renderThreads();
+          positionMarkers();
+          window.setTimeout(() => {
+            root.style.overflowAnchor = previousOverflowAnchor;
+            restoringSourceViewport = false;
+          }, 0);
+        });
+      });
+      return sourceRevisionFromDocument(nextDocument);
+    })();
+    try {
+      return await sourceRefreshPromise;
+    } finally {
+      sourceRefreshPromise = null;
+    }
+  }
 
   const applyAgentSnapshot = (answer) => {
     const checked = checkedAgentSnapshot(answer);
@@ -5909,7 +6820,7 @@ import {
   };
 
   const AGENT_ALERT_LABELS = {
-    unavailable: "No agent connected",
+    unavailable: "Agent connection lost",
     quiet: "Agent not responding",
     errored: "Agent error",
     offline: "Review server offline",
@@ -5984,10 +6895,16 @@ import {
           sourceRevision !== "" &&
           exchange.sourceRevision !== sourceRevision
         ) {
-          reloadForSourceRevision();
-          return;
+          const refreshedRevision = await refreshSourceDocument();
+          sourceRevision =
+            refreshedRevision === ""
+              ? exchange.sourceRevision
+              : refreshedRevision;
         }
-        if (typeof exchange.sourceRevision === "string") {
+        if (
+          typeof exchange.sourceRevision === "string" &&
+          sourceRevision === ""
+        ) {
           sourceRevision = exchange.sourceRevision;
         }
         // The runtime already drops foreign and out-of-order events; the
@@ -6077,7 +6994,7 @@ import {
   window.addEventListener(
     "scroll",
     () => {
-      if (pendingSelection) {
+      if (!restoringSourceViewport && pendingSelection) {
         pendingSelection = null;
         attachLabel.hidden = true;
         affordance.hidden = true;
@@ -6146,14 +7063,6 @@ import {
       void hydrateRevisionDiffs();
       if (drafts.length > 0) setRailOpen(true);
       if (hasRuntime) startProgress();
-      if (reloadState !== null) {
-        setActiveTab(reloadState.tab);
-        setRailOpen(reloadState.railOpen);
-        requestAnimationFrame(() => {
-          window.scrollTo(0, reloadState.scrollY);
-          renderThreads();
-        });
-      }
     } catch (error) {
       sendNote.textContent = describeError(error);
       const carried = readLocalState();
