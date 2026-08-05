@@ -1880,23 +1880,62 @@ test("should preserve and send a floating review across reload and viewport chan
     }
     const workingCard = page
       .locator(
-        '[data-review-thread-state="sent"][data-review-lifecycle="working"]',
+        '[data-review-thread-card][data-review-thread-state="sent"][data-review-lifecycle="working"]',
       )
       .first();
-    const workingSpinner = workingCard.locator("[data-review-spinner]").first();
-    await expect(workingSpinner).toHaveCSS("animation-name", "spin");
-    await expect(workingSpinner).toHaveCSS("animation-duration", "0.7s");
-    const spinnerTimes = await workingSpinner.evaluate(async (node) => {
-      const animation = node.getAnimations()[0];
-      const before = Number(animation?.currentTime ?? 0);
-      await new Promise((resolve) => window.setTimeout(resolve, 100));
-      return {
-        before,
-        after: Number(animation?.currentTime ?? 0),
-      };
-    });
-    expect(spinnerTimes.after).toBeGreaterThan(spinnerTimes.before);
-    await workingCard.locator("[data-review-thread-summary-toggle]").click();
+    const expectVisibleSpinnerMotion = async (
+      workingSpinner: ReturnType<typeof page.locator>,
+    ) => {
+      await expect(workingSpinner).toBeVisible();
+      await expect(workingSpinner).toHaveCSS("animation-name", "spin");
+      await expect(workingSpinner).toHaveCSS("animation-duration", "0.7s");
+      const spinnerMotion = await workingSpinner.evaluate(async (node) => {
+        const styles = window.getComputedStyle(node);
+        const animation = node.getAnimations()[0];
+        const before = Number(animation?.currentTime ?? 0);
+        await new Promise((resolve) => window.setTimeout(resolve, 100));
+        return {
+          before,
+          after: Number(animation?.currentTime ?? 0),
+          borderTopColor: styles.borderTopColor,
+          borderRightColor: styles.borderRightColor,
+        };
+      });
+      expect(spinnerMotion.after).toBeGreaterThan(spinnerMotion.before);
+      expect(spinnerMotion.borderRightColor).toBe("rgba(0, 0, 0, 0)");
+      expect(spinnerMotion.borderTopColor).not.toBe(
+        spinnerMotion.borderRightColor,
+      );
+    };
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme });
+      await expectVisibleSpinnerMotion(
+        workingCard.locator('[data-review-spinner-variant="outcome-badge"]'),
+      );
+      await workingCard
+        .locator("[data-review-thread-summary-toggle]")
+        .click({ position: { x: 4, y: 4 } });
+      await expect(
+        workingCard.locator("[data-review-thread-status='working']"),
+      ).toBeVisible();
+      await expectVisibleSpinnerMotion(
+        workingCard.locator('[data-review-spinner-variant="thread-header"]'),
+      );
+      await expectVisibleSpinnerMotion(
+        workingCard.locator('[data-review-spinner-variant="activity-update"]'),
+      );
+      await toggle.click();
+      await expectVisibleSpinnerMotion(
+        page.locator(
+          '[data-review-outcome-group="working"] [data-review-spinner-variant="group-heading"]',
+        ),
+      );
+      await toggle.click();
+    }
+    await page.emulateMedia({ colorScheme: "light" });
+    await workingCard
+      .locator("[data-review-thread-summary-toggle]")
+      .click({ position: { x: 4, y: 4 } });
     const cardActivityToggle = workingCard.locator(
       "[data-review-status-activity-toggle]",
     );

@@ -2599,11 +2599,12 @@ import {
     cancelled: "Cancelled",
   };
 
-  const spinner = () =>
+  const spinner = (variant = "outcome-badge") =>
     el("span", {
       class:
-        "animate-spin motion-reduce:[animation-duration:1.8s] [animation-duration:700ms] [display:inline-block] [width:0.72rem] [height:0.72rem] [flex:0_0_auto] [border:1.5px_solid_currentcolor] [border-right-color:transparent] [border-radius:999px]",
+        "inline-block size-[0.72rem] shrink-0 animate-spin rounded-full border-[1.5px] border-current border-r-transparent [animation-duration:700ms] motion-reduce:[animation-duration:1.8s]",
       "data-review-spinner": true,
+      "data-review-spinner-variant": variant,
       "aria-hidden": "true",
     });
 
@@ -2615,7 +2616,7 @@ import {
       "data-review-outcome-state": state,
       ...(options.iconOnly === true ? { "aria-label": outcome.label } : {}),
     });
-    if (options.spin === true) badge.appendChild(spinner());
+    if (options.spin === true) badge.appendChild(spinner("outcome-badge"));
     if (options.waitingBusy === true) {
       badge.setAttribute("data-waiting-busy", "");
     }
@@ -2989,7 +2990,7 @@ import {
       class: "[display:flex] [align-items:center] [gap:0.38rem]",
       "data-review-status-row": true,
     });
-    if (status.showsSpinner) row.appendChild(spinner());
+    if (status.showsSpinner) row.appendChild(spinner("thread-header"));
     else {
       const glyph = statusIcon(status);
       if (glyph) row.appendChild(glyph);
@@ -3037,7 +3038,7 @@ import {
             "aria-live": "polite",
           },
           [
-            spinner(),
+            spinner("activity-update"),
             el("span", {
               text: currentEvent
                 ? currentEvent.step +
@@ -5383,7 +5384,7 @@ import {
               "flex min-w-0 items-center gap-1.5 [margin:0_0_0.6rem] text-xs font-bold uppercase tracking-[0.1em]",
           },
           [
-            ...(spin === true ? [spinner()] : []),
+            ...(spin === true ? [spinner("group-heading")] : []),
             ...(glyph === undefined ? [] : [icon(glyph)]),
             el("span", { class: "min-w-0", text: label }),
             document.createTextNode(" "),
