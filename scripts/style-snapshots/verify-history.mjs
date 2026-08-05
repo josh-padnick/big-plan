@@ -92,6 +92,35 @@ const parseConfig = (source) => {
   ) {
     throw new Error("Style screenshot config requires manifestDirectory.");
   }
+  if (config.animatedSurfaceExemptions !== undefined) {
+    if (
+      !Array.isArray(config.animatedSurfaceExemptions) ||
+      config.animatedSurfaceExemptions.length === 0
+    ) {
+      throw new Error(
+        "Style screenshot animatedSurfaceExemptions must be a non-empty array when present.",
+      );
+    }
+    const names = new Set();
+    for (const exemption of config.animatedSurfaceExemptions) {
+      for (const field of ["name", "selector", "reason"]) {
+        if (
+          typeof exemption[field] !== "string" ||
+          exemption[field].trim() === ""
+        ) {
+          throw new Error(
+            `Style screenshot animated-surface exemption requires a non-empty ${field}.`,
+          );
+        }
+      }
+      if (names.has(exemption.name)) {
+        throw new Error(
+          `Style screenshot animated-surface exemption name "${exemption.name}" is duplicated.`,
+        );
+      }
+      names.add(exemption.name);
+    }
+  }
   return config;
 };
 
