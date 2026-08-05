@@ -14,8 +14,9 @@
 //    re-checked on read exactly as if they had arrived over the wire.
 
 import { randomBytes } from "node:crypto";
+import { lstatSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import type { ReviewComment } from "./comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 
@@ -27,6 +28,45 @@ const FILE_MODE = 0o600;
 const PROGRESS_STATES = new Set(["waiting", "live", "done", "failed"]);
 const PROGRESS_TEXT_LIMIT = 160;
 const PROGRESS_EVENT_LIMIT = 200;
+
+// Finds the nearest `.big-plan` ancestor so every I/O operation can re-check
+// the complete store-owned path immediately before it reaches the filesystem.
+const reviewRootForPath = (path: string): string => {
+  let current = resolve(path);
+  while (basename(current) !== ".big-plan") {
+    const parent = dirname(current);
+    if (parent === current) {
+      throw new Error(`Review path has no .big-plan root: ${path}`);
+    }
+    current = parent;
+  }
+  return current;
+};
+
+// Existing filesystem entries are untrusted. Refuse every symbolic link from
+// the store root through the target rather than allowing writeFile to follow it.
+const assertPathHasNoSymbolicLinks = (path: string): void => {
+  const candidate = resolve(path);
+  const root = reviewRootForPath(candidate);
+  const step = relative(root, candidate);
+  let current = root;
+  for (const segment of step === "" ? [] : step.split(sep)) {
+    const status = lstatSync(current, { throwIfNoEntry: false });
+    if (status === undefined) {
+      return;
+    }
+    if (status.isSymbolicLink()) {
+      throw new Error(
+        `Refusing a review path through symbolic link ${current}`,
+      );
+    }
+    current = join(current, segment);
+  }
+  const status = lstatSync(current, { throwIfNoEntry: false });
+  if (status?.isSymbolicLink() === true) {
+    throw new Error(`Refusing a review path through symbolic link ${current}`);
+  }
+};
 
 /** One relayed agent progress event, after checking. */
 export type ProgressEvent = {
@@ -64,6 +104,7 @@ const inside = ({
   if (step.startsWith("..") || resolve(base, step) !== candidate) {
     throw new Error(`Refusing a review path outside ${base}`);
   }
+  assertPathHasNoSymbolicLinks(candidate);
   return candidate;
 };
 
@@ -97,11 +138,15 @@ const IGNORE_ALL =
 
 /** Creates the review directories owner-only and keeps them out of git. */
 export const prepareStore = async (store: ReviewStore): Promise<void> => {
+  assertPathHasNoSymbolicLinks(store.reviewDirectory);
   await mkdir(store.reviewDirectory, { recursive: true, mode: DIRECTORY_MODE });
+  assertPathHasNoSymbolicLinks(store.reviewDirectory);
+  assertPathHasNoSymbolicLinks(store.feedbackDirectory);
   await mkdir(store.feedbackDirectory, {
     recursive: true,
     mode: DIRECTORY_MODE,
   });
+  assertPathHasNoSymbolicLinks(store.feedbackDirectory);
   const ignorePath = inside({ base: store.root, leaf: ".gitignore" });
   try {
     await readFile(ignorePath, "utf8");
@@ -112,6 +157,7 @@ export const prepareStore = async (store: ReviewStore): Promise<void> => {
 
 const readJson = async (path: string): Promise<unknown> => {
   try {
+    assertPathHasNoSymbolicLinks(path);
     return JSON.parse(await readFile(path, "utf8"));
   } catch {
     // A missing, truncated, or hand-edited file means no state, never a crash.
@@ -126,6 +172,7 @@ const writeJson = async ({
   readonly path: string;
   readonly value: unknown;
 }): Promise<void> => {
+  assertPathHasNoSymbolicLinks(path);
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, {
     mode: FILE_MODE,
   });
@@ -214,6 +261,7 @@ export const writeFeedbackPackage = async ({
     leaf: `${name}.md`,
   });
   await writeJson({ path: jsonPath, value: feedback });
+  assertPathHasNoSymbolicLinks(briefPath);
   await writeFile(briefPath, brief, { mode: FILE_MODE });
   return { jsonPath, briefPath };
 };
@@ -270,6 +318,7 @@ export const readProgress = async ({
 }): Promise<ReadonlyArray<ProgressEvent>> => {
   let raw: string;
   try {
+    assertPathHasNoSymbolicLinks(store.progressPath);
     raw = await readFile(store.progressPath, "utf8");
   } catch {
     return [];
@@ -307,6 +356,7 @@ export const appendProgress = async ({
   readonly store: ReviewStore;
   readonly event: ProgressEvent;
 }): Promise<void> => {
+  assertPathHasNoSymbolicLinks(store.progressPath);
   const existing = await readFile(store.progressPath, "utf8").catch(() => "");
   await writeFile(store.progressPath, `${existing}${JSON.stringify(event)}\n`, {
     mode: FILE_MODE,

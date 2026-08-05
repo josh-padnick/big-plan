@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,6 +16,7 @@ import {
   readProgress,
   reviewStoreFor,
   writeActiveDraft,
+  writeSessionDescriptor,
 } from "./store.js";
 
 const created: Array<string> = [];
@@ -54,6 +62,39 @@ describe("review store placement", () => {
     expect(() =>
       reviewStoreFor({ planPath, planId: "../../../../etc" }),
     ).toThrow(/outside/);
+  });
+
+  it("should refuse an existing directory symlink that escapes the review root", async () => {
+    const { directory, planPath } = await temporaryPlan();
+    const outside = await mkdtemp(join(tmpdir(), "big-plan-outside-"));
+    await mkdir(join(directory, ".big-plan"), { recursive: true });
+    await symlink(outside, join(directory, ".big-plan", "feedback"));
+
+    expect(() =>
+      reviewStoreFor({ planPath, planId: "0123456789abcdef" }),
+    ).toThrow(/symbolic link/);
+  });
+
+  it("should refuse a generated leaf replaced by a symlink before writing", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const outside = join(
+      await mkdtemp(join(tmpdir(), "big-plan-outside-")),
+      "descriptor.json",
+    );
+    await writeFile(outside, "outside stays unchanged\n");
+    await symlink(outside, store.sessionPath);
+
+    await expect(
+      writeSessionDescriptor({
+        store,
+        descriptor: { token: "must-not-escape" },
+      }),
+    ).rejects.toThrow(/symbolic link/);
+    await expect(readFile(outside, "utf8")).resolves.toBe(
+      "outside stays unchanged\n",
+    );
   });
 });
 
