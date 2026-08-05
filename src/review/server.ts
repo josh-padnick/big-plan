@@ -38,8 +38,16 @@ import {
   CommentRejected,
   validateActiveDraft,
   validateComments,
+  validateResolvedCommentIds,
 } from "./comment.js";
 import { buildFeedbackPackage, renderBrief } from "./feedback-package.js";
+import {
+  deriveSourceRevision,
+  feedbackAgentRequest,
+  messageAgentRequest,
+  readAgentExchange,
+  writeAgentRequest,
+} from "./agent-exchange.js";
 import {
   appendProgress,
   prepareStore,
@@ -47,13 +55,19 @@ import {
   readActiveDraft,
   readComments,
   readProgress,
+  readResolvedCommentIds,
+  readRevisionSnapshot,
   reviewStoreFor,
   writeActiveDraft,
   writeComments,
   writeFeedbackPackage,
+  writeResolvedCommentIds,
+  writeRevisionSnapshot,
   writeSessionDescriptor,
+  writeSessionHeartbeat,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
+import { diffRevisions } from "./revision-diff.js";
 
 type ReviewRuntimeOperations = {
   readonly createServer: typeof createServer;
@@ -67,6 +81,7 @@ const DEFAULT_OPERATIONS: ReviewRuntimeOperations = {
 
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
+const HEARTBEAT_INTERVAL_MS = 750;
 
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
@@ -96,7 +111,10 @@ const API_ROUTES: ReadonlyArray<Route> = [
   { method: "GET", path: "/api/drafts" },
   { method: "PUT", path: "/api/drafts" },
   { method: "POST", path: "/api/feedback" },
+  { method: "GET", path: "/api/agent" },
+  { method: "POST", path: "/api/agent-requests" },
   { method: "GET", path: "/api/progress" },
+  { method: "GET", path: "/api/revision-diff" },
 ];
 
 /** A running review runtime. */
@@ -204,6 +222,13 @@ export const startReviewRuntime = async ({
   const token = randomBytes(32).toString("base64url");
   const store = reviewStoreFor({ planPath: resolvedPlanPath, planId });
   await prepareStore(store);
+  const initialSource = await readFile(resolvedPlanPath, "utf8");
+  const initialSourceRevision = deriveSourceRevision(initialSource);
+  await writeRevisionSnapshot({
+    store,
+    revision: initialSourceRevision,
+    source: initialSource,
+  });
 
   // Every block this session has served, so a draft written against an earlier
   // render still resolves after the agent revises the plan. Phase 1 does not
@@ -214,7 +239,7 @@ export const startReviewRuntime = async ({
   const validate = (value: unknown): ReadonlyArray<ReviewComment> =>
     validateComments({ value, blocks, now: new Date().toISOString() });
 
-  const readBootstrap = async (): Promise<string> =>
+  const readBootstrap = async (markdown: string): Promise<string> =>
     JSON.stringify({
       drafts: await readComments({ path: store.draftsPath, validate }),
       sent: await readComments({ path: store.sentPath, validate }),
@@ -222,6 +247,12 @@ export const startReviewRuntime = async ({
         path: store.activeDraftPath,
         validate: validateActiveDraft,
       }),
+      resolvedCommentIds: await readResolvedCommentIds({
+        store,
+        validate: validateResolvedCommentIds,
+      }),
+      agent: await readAgentExchange({ store, sessionId, planId }),
+      sourceRevision: deriveSourceRevision(markdown),
     });
 
   const renderPlan = async (): Promise<string> => {
@@ -242,7 +273,7 @@ export const startReviewRuntime = async ({
         planId,
         reviewSessionId: sessionId,
         reviewToken: token,
-        reviewBootstrap: await readBootstrap(),
+        reviewBootstrap: await readBootstrap(markdown),
       },
     }).html;
   };
@@ -278,10 +309,12 @@ export const startReviewRuntime = async ({
     route,
     request,
     response,
+    query,
   }: {
     readonly route: Route;
     readonly request: IncomingMessage;
     readonly response: ServerResponse;
+    readonly query: URLSearchParams;
   }): Promise<void> => {
     if (route.path === "/api/session") {
       sendJson({
@@ -305,6 +338,10 @@ export const startReviewRuntime = async ({
             path: store.activeDraftPath,
             validate: validateActiveDraft,
           }),
+          resolvedCommentIds: await readResolvedCommentIds({
+            store,
+            validate: validateResolvedCommentIds,
+          }),
         },
       });
       return;
@@ -317,11 +354,15 @@ export const startReviewRuntime = async ({
           : {};
       const drafts = validate(payload.drafts);
       const activeDraft = validateActiveDraft(payload.activeDraft);
+      const resolvedCommentIds = validateResolvedCommentIds(
+        payload.resolvedCommentIds,
+      );
       await writeComments({ path: store.draftsPath, comments: drafts });
       await writeActiveDraft({
         path: store.activeDraftPath,
         value: activeDraft,
       });
+      await writeResolvedCommentIds({ store, ids: resolvedCommentIds });
       sendJson({ response, status: 200, value: { drafts: drafts.length } });
       return;
     }
@@ -348,6 +389,17 @@ export const startReviewRuntime = async ({
         store,
         feedback,
         brief: renderBrief(feedback),
+      });
+      const source = await readFile(resolvedPlanPath, "utf8");
+      const revision = deriveSourceRevision(source);
+      await writeRevisionSnapshot({ store, revision, source });
+      const agentRequest = feedbackAgentRequest({
+        feedback,
+        sourceRevision: revision,
+      });
+      await writeAgentRequest({
+        store,
+        request: agentRequest,
       });
       const alreadySent = await readComments({
         path: store.sentPath,
@@ -380,6 +432,134 @@ export const startReviewRuntime = async ({
           comments: comments.length,
           package: written.jsonPath,
           brief: written.briefPath,
+          agentRequest,
+        },
+      });
+      return;
+    }
+    if (route.path === "/api/agent") {
+      const exchange = await readAgentExchange({ store, sessionId, planId });
+      const latestResponse = exchange.responses.at(-1);
+      sendJson({
+        response,
+        status: 200,
+        value: {
+          // The browser reloads only revisions the response command has
+          // rendered, linted, and accepted. Watching the raw file here would
+          // navigate the reviewer onto a transient parse error while an agent
+          // is midway through editing the authoritative MDX.
+          sourceRevision:
+            latestResponse?.sourceRevision ?? initialSourceRevision,
+          ...exchange,
+        },
+      });
+      return;
+    }
+    if (route.path === "/api/agent-requests") {
+      const body = await readBody(request);
+      const payload =
+        typeof body === "object" && body !== null
+          ? (body as Readonly<Record<string, unknown>>)
+          : {};
+      const kind = payload.kind;
+      if (kind !== "reply" && kind !== "chat") {
+        refuse({
+          response,
+          status: 400,
+          reason: 'An agent request kind must be "reply" or "chat"',
+        });
+        return;
+      }
+      const source = await readFile(resolvedPlanPath, "utf8");
+      const revision = deriveSourceRevision(source);
+      await writeRevisionSnapshot({ store, revision, source });
+      const agentRequest = messageAgentRequest({
+        kind,
+        requestId: randomId(8),
+        sessionId,
+        planId,
+        sourceRevision: revision,
+        createdAt: new Date().toISOString(),
+        body: typeof payload.body === "string" ? payload.body : "",
+        ...(kind === "reply" && typeof payload.commentId === "string"
+          ? { commentId: payload.commentId }
+          : {}),
+      });
+      if (agentRequest.kind === "reply") {
+        const sent = await readComments({ path: store.sentPath, validate });
+        if (!sent.some((comment) => comment.id === agentRequest.commentId)) {
+          refuse({
+            response,
+            status: 400,
+            reason: "The reply points at a comment this session did not send",
+          });
+          return;
+        }
+      }
+      await writeAgentRequest({ store, request: agentRequest });
+      progressSeq += 1;
+      await appendProgress({
+        store,
+        event: {
+          sessionId,
+          seq: progressSeq,
+          step:
+            agentRequest.kind === "reply"
+              ? "Reply sent to agent"
+              : "Plan question sent to agent",
+          state: "waiting",
+        },
+      });
+      sendJson({
+        response,
+        status: 200,
+        value: {
+          requestId: agentRequest.requestId,
+          kind: agentRequest.kind,
+          request: agentRequest,
+        },
+      });
+      return;
+    }
+    if (route.path === "/api/revision-diff") {
+      const from = query.get("from") ?? "";
+      const to = query.get("to") ?? "";
+      if (!/^[a-f0-9]{16,64}$/.test(from) || !/^[a-f0-9]{16,64}$/.test(to)) {
+        refuse({
+          response,
+          status: 400,
+          reason: "Revision diff requires hexadecimal from and to revisions",
+        });
+        return;
+      }
+      const [beforeSource, afterSource] = await Promise.all([
+        readRevisionSnapshot({ store, revision: from }),
+        readRevisionSnapshot({ store, revision: to }),
+      ]);
+      const fallbackTitle = basename(
+        resolvedPlanPath,
+        extname(resolvedPlanPath),
+      );
+      const before = renderDocument({
+        markdown: beforeSource,
+        fallbackTitle,
+        identity: {},
+      });
+      const after = renderDocument({
+        markdown: afterSource,
+        fallbackTitle,
+        identity: {},
+      });
+      sendJson({
+        response,
+        status: 200,
+        value: {
+          from,
+          to,
+          locations: diffRevisions({
+            before: before.blocks,
+            after: after.blocks,
+          }),
         },
       });
       return;
@@ -469,7 +649,12 @@ export const startReviewRuntime = async ({
         return;
       }
 
-      await handleApi({ route: matched, request, response });
+      await handleApi({
+        route: matched,
+        request,
+        response,
+        query: target.searchParams,
+      });
     } catch (error: unknown) {
       if (error instanceof CommentRejected) {
         refuse({ response, status: 400, reason: error.message });
@@ -512,6 +697,18 @@ export const startReviewRuntime = async ({
     });
     throw error;
   }
+  let heartbeatWrite = Promise.resolve();
+  const queueHeartbeat = (running: boolean): Promise<void> => {
+    heartbeatWrite = heartbeatWrite
+      .catch(() => undefined)
+      .then(() => writeSessionHeartbeat({ store, sessionId, running }));
+    return heartbeatWrite;
+  };
+  await queueHeartbeat(true);
+  const heartbeatTimer = setInterval(() => {
+    void queueHeartbeat(true);
+  }, HEARTBEAT_INTERVAL_MS);
+  heartbeatTimer.unref();
 
   return {
     url,
@@ -520,9 +717,12 @@ export const startReviewRuntime = async ({
     planId,
     planPath: resolvedPlanPath,
     store,
-    close: () =>
-      new Promise<void>((settle) => {
+    close: async () => {
+      clearInterval(heartbeatTimer);
+      await queueHeartbeat(false).catch(() => undefined);
+      await new Promise<void>((settle) => {
         server.close(() => settle());
-      }),
+      });
+    },
   };
 };

@@ -1,6 +1,6 @@
 // Browser test of the reviewer's commenting journey over a complete rendered
 // document: the quiet reading default, a comment on a block, a comment on a
-// highlighted passage, the Feedback tray's draft lifecycle, and the guarantee
+// highlighted passage, the Feedback sidebar's staged lifecycle, and the guarantee
 // that a comment body stays literal text wherever it is shown. The runtime's
 // transport and package behavior is covered by its own unit tests; this spec
 // covers the half that only exists in a browser. Render-health failures are
@@ -30,16 +30,17 @@ test("should comment on a block and a passage, then revise before sending", asyn
     await expect(affordance).toHaveAttribute("aria-label", /^Comment on list:/);
   });
 
-  await test.step("saving the first comment opens the tray and chips the block", async () => {
+  await test.step("saving the first comment floats its card and chips the block", async () => {
     await affordance.click();
     await page
       .locator("[data-review-compose-input]")
       .fill("Say what breaks, not only what works.");
     await page.locator("[data-review-compose-save]").click();
-    await expect(tray).toBeVisible();
+    await expect(tray).toBeHidden();
+    await expect(page.locator("[data-review-thread-card]")).toBeVisible();
     await expect(rows).toHaveCount(1);
     await expect(page.locator("[data-review-annotated]")).toHaveCount(1);
-    await expect(page.locator("[data-review-count]")).toHaveText("1 pending");
+    await expect(page.locator("[data-review-toggle-count]")).toBeHidden();
   });
 
   await test.step("highlighting a passage offers to comment on the selection", async () => {
@@ -60,10 +61,11 @@ test("should comment on a block and a passage, then revise before sending", asyn
       "Comment on the selected text",
     );
     await affordance.click();
-    await expect(page.locator("[data-review-compose-target]")).toContainText(
-      "selected text",
+    await expect(page.locator("[data-review-compose-target]")).toHaveCount(0);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-review-active-selection-highlight",
+      "true",
     );
-    await expect(page.locator("[data-review-compose-quote]")).toBeVisible();
   });
 
   await test.step("a comment body stays literal text wherever it is shown", async () => {
@@ -79,6 +81,7 @@ test("should comment on a block and a passage, then revise before sending", asyn
   });
 
   await test.step("a pending comment can be rewritten in place", async () => {
+    await page.locator("[data-review-toggle]").click();
     await page.locator("[data-review-row-edit]").first().click();
     await page
       .locator("[data-review-row-input]")
@@ -91,14 +94,16 @@ test("should comment on a block and a passage, then revise before sending", asyn
 
   await test.step("deleting the last comment on a block clears its chip", async () => {
     await page.locator("[data-review-row-delete]").first().click();
+    await expect(page.locator("[data-review-delete-dialog]")).toBeVisible();
+    await page.locator("[data-review-delete-confirm]").click();
     await expect(rows).toHaveCount(1);
     await expect(page.locator("[data-review-annotated]")).toHaveCount(1);
   });
 
-  await test.step("the tray hides on demand and keeps the pending count", async () => {
+  await test.step("the tray hides on demand without making drafts a persistent signal", async () => {
     await page.locator("[data-review-hide]").click();
     await expect(tray).toBeHidden();
-    await expect(page.locator("[data-review-toggle-count]")).toHaveText("1");
+    await expect(page.locator("[data-review-toggle-count]")).toBeHidden();
     await page.locator("[data-review-toggle]").click();
     await expect(tray).toBeVisible();
   });

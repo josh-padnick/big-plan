@@ -15,7 +15,7 @@
 
 import { randomBytes } from "node:crypto";
 import { lstatSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import type { ReviewComment } from "./comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
@@ -82,11 +82,18 @@ export type ReviewStore = {
   readonly root: string;
   readonly reviewDirectory: string;
   readonly feedbackDirectory: string;
+  readonly agentRequestDirectory: string;
+  readonly agentResponseDirectory: string;
+  readonly agentDraftDirectory: string;
+  readonly agentPromptPath: string;
+  readonly revisionDirectory: string;
   readonly draftsPath: string;
   readonly activeDraftPath: string;
   readonly sentPath: string;
   readonly progressPath: string;
+  readonly resolvedPath: string;
   readonly sessionPath: string;
+  readonly heartbeatPath: string;
 };
 
 // The one place a review path is constructed. Callers name a leaf, never a
@@ -118,10 +125,31 @@ export const reviewStoreFor = ({
 }): ReviewStore => {
   const root = join(dirname(resolve(planPath)), ".big-plan");
   const reviewDirectory = inside({ base: root, leaf: join("review", planId) });
+  const agentDirectory = inside({ base: reviewDirectory, leaf: "agent" });
   return {
     root,
     reviewDirectory,
     feedbackDirectory: inside({ base: root, leaf: "feedback" }),
+    agentRequestDirectory: inside({
+      base: agentDirectory,
+      leaf: "requests",
+    }),
+    agentResponseDirectory: inside({
+      base: agentDirectory,
+      leaf: "responses",
+    }),
+    agentDraftDirectory: inside({
+      base: agentDirectory,
+      leaf: "drafts",
+    }),
+    agentPromptPath: inside({
+      base: agentDirectory,
+      leaf: "agent-prompt.md",
+    }),
+    revisionDirectory: inside({
+      base: reviewDirectory,
+      leaf: "revisions",
+    }),
     draftsPath: inside({ base: reviewDirectory, leaf: "drafts.json" }),
     activeDraftPath: inside({
       base: reviewDirectory,
@@ -129,7 +157,9 @@ export const reviewStoreFor = ({
     }),
     sentPath: inside({ base: reviewDirectory, leaf: "sent.json" }),
     progressPath: inside({ base: reviewDirectory, leaf: "progress.jsonl" }),
+    resolvedPath: inside({ base: reviewDirectory, leaf: "resolved.json" }),
     sessionPath: inside({ base: root, leaf: "session.json" }),
+    heartbeatPath: inside({ base: root, leaf: "session-heartbeat.json" }),
   };
 };
 
@@ -138,15 +168,18 @@ const IGNORE_ALL =
 
 /** Creates the review directories owner-only and keeps them out of git. */
 export const prepareStore = async (store: ReviewStore): Promise<void> => {
-  assertPathHasNoSymbolicLinks(store.reviewDirectory);
-  await mkdir(store.reviewDirectory, { recursive: true, mode: DIRECTORY_MODE });
-  assertPathHasNoSymbolicLinks(store.reviewDirectory);
-  assertPathHasNoSymbolicLinks(store.feedbackDirectory);
-  await mkdir(store.feedbackDirectory, {
-    recursive: true,
-    mode: DIRECTORY_MODE,
-  });
-  assertPathHasNoSymbolicLinks(store.feedbackDirectory);
+  for (const directory of [
+    store.reviewDirectory,
+    store.feedbackDirectory,
+    store.agentRequestDirectory,
+    store.agentResponseDirectory,
+    store.agentDraftDirectory,
+    store.revisionDirectory,
+  ]) {
+    assertPathHasNoSymbolicLinks(directory);
+    await mkdir(directory, { recursive: true, mode: DIRECTORY_MODE });
+    assertPathHasNoSymbolicLinks(directory);
+  }
   const ignorePath = inside({ base: store.root, leaf: ".gitignore" });
   try {
     await readFile(ignorePath, "utf8");
@@ -237,6 +270,86 @@ export const writeActiveDraft = async ({
   await writeJson({ path, value });
 };
 
+const revisionPath = ({
+  store,
+  revision,
+}: {
+  readonly store: ReviewStore;
+  readonly revision: string;
+}): string => {
+  if (!/^[a-f0-9]{16,64}$/.test(revision)) {
+    throw new Error("A source revision must be a hexadecimal digest");
+  }
+  return inside({
+    base: store.revisionDirectory,
+    leaf: `${revision}.mdx`,
+  });
+};
+
+/** Retains the authoritative source the first time a revision is observed. */
+export const writeRevisionSnapshot = async ({
+  store,
+  revision,
+  source,
+}: {
+  readonly store: ReviewStore;
+  readonly revision: string;
+  readonly source: string;
+}): Promise<void> => {
+  const path = revisionPath({ store, revision });
+  try {
+    await readFile(path, "utf8");
+  } catch {
+    await writeFile(path, source, { mode: FILE_MODE, flag: "wx" }).catch(
+      async (error: unknown) => {
+        // Two request paths may observe the same digest concurrently. A file
+        // that now exists is the same immutable revision, not a conflict.
+        try {
+          await readFile(path, "utf8");
+        } catch {
+          throw error;
+        }
+      },
+    );
+  }
+};
+
+/** Reads one immutable source snapshot after validating its digest filename. */
+export const readRevisionSnapshot = async ({
+  store,
+  revision,
+}: {
+  readonly store: ReviewStore;
+  readonly revision: string;
+}): Promise<string> => readFile(revisionPath({ store, revision }), "utf8");
+
+/** Reads the durable set of locally resolved thread ids. */
+export const readResolvedCommentIds = async ({
+  store,
+  validate,
+}: {
+  readonly store: ReviewStore;
+  readonly validate: (value: unknown) => ReadonlyArray<string>;
+}): Promise<ReadonlyArray<string>> => {
+  const value = await readJson(store.resolvedPath);
+  try {
+    return validate(value);
+  } catch {
+    return [];
+  }
+};
+
+/** Replaces the durable resolved-thread set. */
+export const writeResolvedCommentIds = async ({
+  store,
+  ids,
+}: {
+  readonly store: ReviewStore;
+  readonly ids: ReadonlyArray<string>;
+}): Promise<void> => {
+  await writeJson({ path: store.resolvedPath, value: ids });
+};
+
 /**
  * Writes one feedback package and its brief under names the runtime generates,
  * so no reviewer or plan text ever reaches a filename.
@@ -265,6 +378,117 @@ export const writeFeedbackPackage = async ({
   await writeFile(briefPath, brief, { mode: FILE_MODE });
   return { jsonPath, briefPath };
 };
+
+const exchangePath = ({
+  directory,
+  requestId,
+}: {
+  readonly directory: string;
+  readonly requestId: string;
+}): string => {
+  if (!/^[a-f0-9]{16}$/.test(requestId)) {
+    throw new Error(
+      "An agent exchange request id must be 16 hexadecimal characters",
+    );
+  }
+  return inside({ base: directory, leaf: `${requestId}.json` });
+};
+
+const readJsonDirectory = async (
+  directory: string,
+): Promise<ReadonlyArray<unknown>> => {
+  const names = await readdir(directory).catch(() => []);
+  const values: Array<unknown> = [];
+  for (const name of names.sort()) {
+    if (!/^[a-f0-9]{16}\.json$/.test(name)) {
+      continue;
+    }
+    const value = await readJson(inside({ base: directory, leaf: name }));
+    if (value !== undefined) {
+      values.push(value);
+    }
+  }
+  return values;
+};
+
+/** Reads every untrusted request value for validation by the exchange module. */
+export const readAgentRequestValues = async (
+  store: ReviewStore,
+): Promise<ReadonlyArray<unknown>> =>
+  readJsonDirectory(store.agentRequestDirectory);
+
+/** Reads every untrusted response value for validation by the exchange module. */
+export const readAgentResponseValues = async (
+  store: ReviewStore,
+): Promise<ReadonlyArray<unknown>> =>
+  readJsonDirectory(store.agentResponseDirectory);
+
+/** Writes one runtime-authored request under its validated opaque id. */
+export const writeAgentRequestValue = async ({
+  store,
+  requestId,
+  value,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+  readonly value: unknown;
+}): Promise<void> => {
+  await writeJson({
+    path: exchangePath({
+      directory: store.agentRequestDirectory,
+      requestId,
+    }),
+    value,
+  });
+};
+
+/** Writes one validated agent response under the request it answers. */
+export const writeAgentResponseValue = async ({
+  store,
+  requestId,
+  value,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+  readonly value: unknown;
+}): Promise<void> => {
+  await writeJson({
+    path: exchangePath({
+      directory: store.agentResponseDirectory,
+      requestId,
+    }),
+    value,
+  });
+};
+
+/** Gives an agent a safe ignored path for authoring one response draft. */
+export const agentResponseDraftPath = ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): string => exchangePath({ directory: store.agentDraftDirectory, requestId });
+
+/** Writes the ready-to-paste session contract at a stable ignored path. */
+export const writeAgentPrompt = async ({
+  store,
+  prompt,
+}: {
+  readonly store: ReviewStore;
+  readonly prompt: string;
+}): Promise<void> => {
+  await writeFile(store.agentPromptPath, `${prompt}\n`, { mode: FILE_MODE });
+};
+
+/** Reads the owner-only descriptor through the caller's validator. */
+export const readSessionDescriptor = async <Descriptor>({
+  store,
+  validate,
+}: {
+  readonly store: ReviewStore;
+  readonly validate: (value: unknown) => Descriptor;
+}): Promise<Descriptor> => validate(await readJson(store.sessionPath));
 
 /** A random identifier for one package or session. */
 export const randomId = (bytes = 8): string =>
@@ -372,4 +596,51 @@ export const writeSessionDescriptor = async ({
   readonly descriptor: Readonly<Record<string, unknown>>;
 }): Promise<void> => {
   await writeJson({ path: store.sessionPath, value: descriptor });
+};
+
+/** Updates the filesystem-only liveness signal coding-agent sandboxes read. */
+export const writeSessionHeartbeat = async ({
+  store,
+  sessionId,
+  running,
+  now = Date.now(),
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly running: boolean;
+  readonly now?: number;
+}): Promise<void> => {
+  await writeJson({
+    path: store.heartbeatPath,
+    value: { sessionId, running, updatedAtMs: now },
+  });
+};
+
+/** Checks whether the matching review runtime has refreshed its heartbeat. */
+export const sessionHeartbeatIsFresh = async ({
+  store,
+  sessionId,
+  now = Date.now(),
+  maximumAgeMs = 3_000,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly now?: number;
+  readonly maximumAgeMs?: number;
+}): Promise<boolean> => {
+  const value = await readJson(store.heartbeatPath);
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    "sessionId" in value &&
+    value.sessionId === sessionId &&
+    "running" in value &&
+    value.running === true &&
+    "updatedAtMs" in value &&
+    typeof value.updatedAtMs === "number" &&
+    Number.isFinite(value.updatedAtMs) &&
+    now - value.updatedAtMs >= 0 &&
+    now - value.updatedAtMs <= maximumAgeMs
+  );
 };

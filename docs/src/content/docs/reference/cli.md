@@ -3,7 +3,7 @@ title: CLI reference
 description: Reference the complete Big Plan command surface, defaults, results, and errors.
 ---
 
-Big Plan exposes five commands through the `big-plan` executable: `guidance` for the plan-writing principles, `validate` for a no-write authoring check, `render` for the human-facing HTML document, `compile` for the machine-facing plan model, and `review` for the local runtime that serves a plan for commenting.
+Big Plan exposes six commands through the `big-plan` executable: `guidance` for the plan-writing principles, `validate` for a no-write authoring check, `render` for the human-facing HTML document, `compile` for the machine-facing plan model, `review` for the local runtime that serves a plan for commenting, and `agent` for connecting that runtime to a real coding-agent session.
 The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors, and result serialization.
 
 ## Commands
@@ -14,6 +14,9 @@ big-plan validate <input.mdx>
 big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
 big-plan review <input.mdx>
+big-plan agent <input.mdx>
+big-plan agent next <input.mdx> [--wait]
+big-plan agent respond <input.mdx> <response.json>
 ```
 
 `guidance` optionally takes one component name.
@@ -29,6 +32,7 @@ npx big-plan validate <input.mdx>
 npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
 npx big-plan review <input.mdx>
+npx big-plan agent <input.mdx>
 ```
 
 ## Guidance and the acknowledgment gate
@@ -133,6 +137,39 @@ It writes no output.
 Unlike the other commands, `review` does not exit after returning its result.
 It holds the port until the reviewer stops it with `Ctrl+C`, because the runtime is what makes submit and progress possible.
 
+`agent <input.mdx>` reads the owner-only descriptor for that running review and
+returns:
+
+- `agent_prompt`: the complete prompt to paste into a fresh Codex or Claude
+  coding session in the plan's repository.
+- `prompt_file`: the owner-only ignored file containing that prompt.
+- `codex` and `claude`: exact launch commands that read `prompt_file`, so the
+  multi-line contract does not need to be copied out of structured output.
+- `review` and `plan`: the live review URL and authoritative source path.
+- `next`: the exact blocking command that receives the next feedback or reply.
+
+The pasted prompt drives two subcommands:
+
+- `agent next <input.mdx> --wait` blocks until the oldest unanswered
+  session-scoped request exists, then returns the request, prior conversation
+  history, the required response template, a safe ignored response-draft path,
+  and the exact publish command. Without `--wait`, it reports immediately when
+  nothing is pending.
+- `agent respond <input.mdx> <response.json>` validates that the response
+  answers the oldest pending request completely. It re-renders and lints the
+  current plan; a `changed` outcome additionally requires a changed source
+  digest and a change target present in the revised render. It then writes the
+  canonical response with trusted session metadata and tells the agent to wait
+  for the next turn.
+
+The agent command requires a live matching `review` session. It never invokes a
+model itself: the fresh coding-agent session is the model process, and the
+ignored `.big-plan/review/<plan-id>/agent/` files are the local exchange.
+Liveness uses the ignored session heartbeat rather than a network or
+process-control probe, keeping the command usable inside normal coding-agent
+sandboxes. A waiting `agent next --wait` exits when that heartbeat stops or
+expires.
+
 `guidance` returns the guidance Markdown itself rather than a structured result.
 
 ## Errors
@@ -144,6 +181,7 @@ Usage: big-plan validate <input.mdx>
 Usage: big-plan render <input.mdx> [output.html]
 Usage: big-plan compile <input.mdx> [output.json]
 Usage: big-plan review <input.mdx>
+Usage: big-plan agent <input.mdx>
 ```
 
 Any dash-prefixed token is rejected as an unknown option.
@@ -170,6 +208,6 @@ Successful validation exits `0`; operational or internal failures use `1`.
 
 ## Top-level help and version
 
-The CLI configures top-level help that lists all five commands and the derived-output defaults.
+The CLI configures top-level help that lists all six commands and the derived-output defaults.
 It also reads the package version for version output.
 If that version cannot be read from the package metadata, version reporting is left unconfigured instead of crashing the CLI.

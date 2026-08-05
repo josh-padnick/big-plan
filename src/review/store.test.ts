@@ -14,9 +14,15 @@ import {
   prepareStore,
   readActiveDraft,
   readProgress,
+  readResolvedCommentIds,
+  readRevisionSnapshot,
   reviewStoreFor,
+  sessionHeartbeatIsFresh,
   writeActiveDraft,
+  writeResolvedCommentIds,
+  writeRevisionSnapshot,
   writeSessionDescriptor,
+  writeSessionHeartbeat,
 } from "./store.js";
 
 const created: Array<string> = [];
@@ -40,11 +46,18 @@ describe("review store placement", () => {
     for (const path of [
       store.reviewDirectory,
       store.feedbackDirectory,
+      store.agentRequestDirectory,
+      store.agentResponseDirectory,
+      store.agentDraftDirectory,
+      store.agentPromptPath,
+      store.revisionDirectory,
       store.draftsPath,
       store.activeDraftPath,
       store.sentPath,
       store.progressPath,
+      store.resolvedPath,
       store.sessionPath,
+      store.heartbeatPath,
     ]) {
       expect(path.startsWith(join(directory, ".big-plan"))).toBe(true);
     }
@@ -98,6 +111,39 @@ describe("review store placement", () => {
   });
 });
 
+describe("review store revision history", () => {
+  it("should retain an immutable source snapshot by revision digest", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const revision = "1111111111111111";
+    await writeRevisionSnapshot({ store, revision, source: "# First\n" });
+    await writeRevisionSnapshot({ store, revision, source: "# Second\n" });
+    await expect(readRevisionSnapshot({ store, revision })).resolves.toBe(
+      "# First\n",
+    );
+  });
+
+  it("should persist resolved threads independently of browser storage", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeResolvedCommentIds({
+      store,
+      ids: ["aabbccdd", "11223344"],
+    });
+    await expect(
+      readResolvedCommentIds({
+        store,
+        validate: (value) =>
+          Array.isArray(value)
+            ? value.filter((entry) => typeof entry === "string")
+            : [],
+      }),
+    ).resolves.toEqual(["aabbccdd", "11223344"]);
+  });
+});
+
 describe("review store active draft", () => {
   it("should round-trip the unfinished whole-plan field without trimming", async () => {
     const { planPath } = await temporaryPlan();
@@ -132,6 +178,54 @@ describe("review store creation", () => {
     expect(await readFile(join(store.root, ".gitignore"), "utf8")).toContain(
       "*",
     );
+  });
+});
+
+describe("review store session heartbeat", () => {
+  it("should accept only a fresh running heartbeat from the matching session", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeSessionHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      running: true,
+      now: 10_000,
+    });
+    await expect(
+      sessionHeartbeatIsFresh({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 12_000,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      sessionHeartbeatIsFresh({
+        store,
+        sessionId: "bbbbbbbbbbbbbbbb",
+        now: 12_000,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      sessionHeartbeatIsFresh({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 14_000,
+      }),
+    ).resolves.toBe(false);
+    await writeSessionHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      running: false,
+      now: 14_000,
+    });
+    await expect(
+      sessionHeartbeatIsFresh({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 14_000,
+      }),
+    ).resolves.toBe(false);
   });
 });
 

@@ -65,6 +65,9 @@ export const reviewCommand = async (
       ...warnings,
       `Open ${runtime.url} in your browser to review and comment`,
       "Comments stay on this machine; Send writes a feedback package under .big-plan/feedback/",
+      `In another terminal, run \`big-plan agent ${JSON.stringify(
+        runtime.planPath,
+      )}\`, then run its returned codex or claude command`,
       "Press Ctrl+C to stop the review runtime",
     ],
   };
