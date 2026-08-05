@@ -3,7 +3,7 @@
 // keeps its revision-local fixture syntax so both sides compile compatibly.
 
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -70,16 +70,52 @@ const renderDocument = async ({ source, outputPath, stateDirectory }) => {
 const applyActions = async ({ page, actions }) => {
   for (const action of actions) {
     if (action.type === "promote-review-drafts") {
-      await page.evaluate(() => {
+      const bootstrap = await page.evaluate(() => {
         const key = Object.keys(localStorage).find((candidate) =>
           candidate.startsWith("big-plan:review:drafts:"),
         );
-        if (key === undefined) return;
+        if (key === undefined) return null;
         const state = JSON.parse(localStorage.getItem(key) ?? "{}");
-        state.sent = state.drafts ?? [];
+        const sent = state.drafts ?? [];
+        state.sent = sent;
         state.drafts = [];
         localStorage.setItem(key, JSON.stringify(state));
+        return {
+          drafts: [],
+          sent,
+          activeDraft: "",
+          composeDrafts: {},
+          threadReplies: {},
+          planChatMessages: [],
+          resolvedCommentIds: [],
+          agent: {
+            requests: [],
+            responses: [],
+            cancelledIds: [],
+            connected: false,
+            state: null,
+            updatedAtMs: 0,
+            connectionLog: [],
+          },
+          sourceRevision: "",
+        };
       });
+      if (bootstrap === null) return false;
+      await page.addInitScript((state) => {
+        const installBootstrap = () => {
+          const root = globalThis.document.documentElement;
+          if (root === null) return false;
+          root.setAttribute("data-review-session", "style-snapshot");
+          root.setAttribute("data-review-token", "style-snapshot-token");
+          root.setAttribute("data-review-bootstrap", JSON.stringify(state));
+          return true;
+        };
+        if (installBootstrap()) return;
+        const observer = new globalThis.MutationObserver(() => {
+          if (installBootstrap()) observer.disconnect();
+        });
+        observer.observe(globalThis.document, { childList: true });
+      }, bootstrap);
       await page.reload();
       continue;
     }
@@ -154,13 +190,55 @@ const captureName = ({ document, capture, viewport, theme }) =>
     .map((part) => part.replaceAll(/[^a-zA-Z0-9_-]/g, "-"))
     .join("__") + ".png";
 
+/** Waits until layout and paint have crossed two complete browser frames. */
+const settlePaint = async (page) => {
+  await page.evaluate(
+    () =>
+      new Promise((resolvePaint) => {
+        globalThis.requestAnimationFrame(() =>
+          globalThis.requestAnimationFrame(resolvePaint),
+        );
+      }),
+  );
+};
+
+/**
+ * Writes only a byte-stable frame. The exact comparison is deliberate: an
+ * unsettled animation, transition, font, or layout frame is a fixture defect,
+ * not a visual delta the history contract may smooth over.
+ */
+const captureStableTarget = async ({ page, target, path }) => {
+  await target.scrollIntoViewIfNeeded();
+  let prior;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    await settlePaint(page);
+    const current = await target.screenshot({ animations: "disabled" });
+    if (prior !== undefined && prior.equals(current)) {
+      await writeFile(path, current);
+      return;
+    }
+    prior = current;
+  }
+  throw new Error(
+    `Screenshot target "${path}" never repeated exact bytes across six settled frames.`,
+  );
+};
+
 const temporaryDirectory = await mkdtemp(
   join(tmpdir(), "big-plan-style-captures-"),
 );
 // Exact RGBA evidence requires one stable rasterizer and color space in CI.
 const browser = await chromium.launch({
   headless: true,
-  args: ["--disable-gpu", "--force-color-profile=srgb"],
+  args: [
+    "--disable-gpu",
+    // Hosted runners expose different CPU instruction sets. Skia documents
+    // this switch as its baseline layout-test path; it prevents SIMD-specific
+    // antialias rounding from changing an otherwise identical pixel by one.
+    "--disable-skia-runtime-opts",
+    "--force-color-profile=srgb",
+    "--force-device-scale-factor=1",
+  ],
 });
 
 try {
@@ -217,9 +295,16 @@ try {
                 `Screenshot selector "${capture.selector}" matched ${targetCount} elements; selectors must identify one visual surface.`,
               );
             }
-            await target.waitFor({ state: "visible" });
-            await target.screenshot({
-              animations: "disabled",
+            // A capture added later can name chrome that exists but stays
+            // dormant in an older checkout. Treat that state like an absent
+            // selector: history may skip it, while the final-head count still
+            // requires every configured capture.
+            if (!(await target.isVisible())) {
+              continue;
+            }
+            await captureStableTarget({
+              page,
+              target,
               path: join(
                 outputDirectory,
                 captureName({

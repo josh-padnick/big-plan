@@ -557,9 +557,12 @@ const validateManifest = async ({
 };
 
 /**
- * Verifies every relevant commit in the merge-base-to-HEAD range. Capture
- * configuration comes from the final harness, while fixture content stays at
- * each revision so a parent never has to parse syntax introduced by its child.
+ * Verifies every relevant commit in the merge-base-to-HEAD range. The active
+ * harness renders each pair with the configuration declared by the child
+ * commit. That keeps an approved manifest stable when a later commit adds a
+ * new capture, while still letting that config commit compare its new surface
+ * on both sides. Fixture content stays at each revision so a parent never has
+ * to parse syntax introduced by its child.
  */
 export const verifyHistory = async ({
   repoRoot,
@@ -597,6 +600,12 @@ export const verifyHistory = async ({
     [mergeBase, ...commits].map((commit) =>
       readConfigAtCommit({ repoRoot, commit, configRepoPath }),
     ),
+  );
+  const configsByCommit = new Map(
+    [mergeBase, ...commits].map((commit, index) => [
+      commit,
+      historicalConfigs[index],
+    ]),
   );
   assertCaptureCoverage({
     config,
@@ -679,17 +688,40 @@ export const verifyHistory = async ({
   const temporaryRoot = await mkdtemp(
     join(tmpdir(), "big-plan-style-history-"),
   );
-  const capturesByCommit = new Map();
+  const capturesByRevisionAndConfig = new Map();
+  const configPathsByRevision = new Map();
 
-  const captureCommit = async (commit) => {
-    const cached = capturesByCommit.get(commit);
+  const captureCommit = async ({
+    commit,
+    captureConfig,
+    configRevision,
+    enforceCompleteness = false,
+  }) => {
+    const cacheKey = `${commit}:${configRevision}`;
+    const cached = capturesByRevisionAndConfig.get(cacheKey);
     if (cached !== undefined) {
       return cached;
     }
-    const worktree = join(temporaryRoot, `worktree-${commit.slice(0, 12)}`);
+    let captureConfigPath = configPathsByRevision.get(configRevision);
+    if (captureConfigPath === undefined) {
+      captureConfigPath = join(
+        temporaryRoot,
+        `config-${configRevision.slice(0, 12)}.json`,
+      );
+      await writeFile(
+        captureConfigPath,
+        `${JSON.stringify(captureConfig, null, 2)}\n`,
+        "utf8",
+      );
+      configPathsByRevision.set(configRevision, captureConfigPath);
+    }
+    const worktree = join(
+      temporaryRoot,
+      `worktree-${commit.slice(0, 12)}-via-${configRevision.slice(0, 12)}`,
+    );
     const outputDirectory = join(
       temporaryRoot,
-      `captures-${commit.slice(0, 12)}`,
+      `captures-${commit.slice(0, 12)}-via-${configRevision.slice(0, 12)}`,
     );
     await run({
       command: "git",
@@ -709,12 +741,12 @@ export const verifyHistory = async ({
           ...process.env,
           STYLE_SNAPSHOT_CHECKOUT: worktree,
           STYLE_SNAPSHOT_OUTPUT_DIR: outputDirectory,
-          STYLE_SNAPSHOT_CONFIG: configPath,
+          STYLE_SNAPSHOT_CONFIG: captureConfigPath,
           STYLE_SNAPSHOT_HARNESS_ROOT: harnessRoot,
         },
       });
-      if (commit === head) {
-        const expectedCaptureCount = config.documents.reduce(
+      if (enforceCompleteness) {
+        const expectedCaptureCount = captureConfig.documents.reduce(
           (documentTotal, document) =>
             documentTotal +
             document.captures.reduce(
@@ -740,17 +772,31 @@ export const verifyHistory = async ({
         cwd: repoRoot,
       });
     }
-    capturesByCommit.set(commit, outputDirectory);
+    capturesByRevisionAndConfig.set(cacheKey, outputDirectory);
     return outputDirectory;
   };
 
   const results = [];
   try {
     await rm(disposableArtifactRoot, { recursive: true, force: true });
-    await captureCommit(head);
+    await captureCommit({
+      commit: head,
+      captureConfig: config,
+      configRevision: head,
+      enforceCompleteness: true,
+    });
     for (const entry of relevant) {
-      const beforeDirectory = await captureCommit(entry.parent);
-      const afterDirectory = await captureCommit(entry.commit);
+      const entryConfig = configsByCommit.get(entry.commit) ?? config;
+      const beforeDirectory = await captureCommit({
+        commit: entry.parent,
+        captureConfig: entryConfig,
+        configRevision: entry.commit,
+      });
+      const afterDirectory = await captureCommit({
+        commit: entry.commit,
+        captureConfig: entryConfig,
+        configRevision: entry.commit,
+      });
       const captures = await compareCaptureSets({
         beforeDirectory,
         afterDirectory,
