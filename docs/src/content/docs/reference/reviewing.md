@@ -93,4 +93,5 @@ Every request is therefore authorised on its own merits.
 
 A plan rendered with `big-plan render` and opened straight from the filesystem is still a full reading document, and you can still draft comments in it.
 Submitting and progress need the runtime, because they are the parts that touch disk and talk to an agent.
-Those drafts live in browser storage until a runtime adopts them, which it does the first time you open the same plan through `big-plan review`.
+Those drafts are not carried over when you later open the plan through `big-plan review`: the filesystem document and loopback runtime have separate browser-storage origins.
+Open the plan through `big-plan review` before commenting when you want drafts to persist into the runtime.
