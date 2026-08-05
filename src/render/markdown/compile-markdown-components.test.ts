@@ -27,6 +27,20 @@ const diagnosticsFor = (markdown: string) => {
 };
 
 describe("compileMarkdown Callout components", () => {
+  it("should mark authored prose without marking component-owned chrome", () => {
+    const bodyHtml = compileAndSerialize(
+      '# Plan\n\nOutside.\n\n<Callout type="note" title="Review goal">\nInside.\n</Callout>\n',
+    );
+
+    expect(bodyHtml).toContain('<p data-authored-prose="">Outside.</p>');
+    expect(bodyHtml).toContain('<p data-authored-prose="">Inside.</p>');
+    expect(bodyHtml).toContain('<aside data-callout="note"');
+    expect(bodyHtml).not.toContain(
+      '<aside data-callout="note" data-authored-prose',
+    );
+    expect(bodyHtml).not.toContain("<header data-authored-prose");
+  });
+
   it("should run downstream transforms when a callout contains fenced code", () => {
     const bodyHtml = compileAndSerialize(
       '<Callout type="warning" title="Review goal">\n### Retry state\n\n- pending\n- failed\n\n```sql\nSELECT id FROM retries;\n```\n</Callout>\n',
@@ -35,9 +49,13 @@ describe("compileMarkdown Callout components", () => {
     expect(bodyHtml).toContain('data-lucide="triangle-alert"');
     expect(bodyHtml).toContain("<span");
     expect(bodyHtml).toContain(">Review goal</span>");
-    expect(bodyHtml).toContain('<h3 id="retry-state">Retry state</h3>');
-    expect(bodyHtml).toContain("<li>pending</li>");
-    expect(bodyHtml).toContain('<code class="hljs language-sql">');
+    expect(bodyHtml).toContain(
+      '<h3 id="retry-state" data-authored-prose="">Retry state</h3>',
+    );
+    expect(bodyHtml).toContain('<li data-authored-prose="">pending</li>');
+    expect(bodyHtml).toContain(
+      '<code class="hljs language-sql" data-authored-prose="">',
+    );
     expect(bodyHtml).toContain('<span class="hljs-keyword">SELECT</span>');
     expect(bodyHtml).not.toContain("data-copy-code");
   });
@@ -72,7 +90,9 @@ describe("compileMarkdown CodeDiff components", () => {
     expect(bodyHtml).toContain('aria-label="Lines 1-2"');
     expect(bodyHtml).toContain('data-annotation-lines="1-2"');
     expect(bodyHtml).toContain('data-lucide="message-square"');
-    expect(bodyHtml).toContain("Use the <code>retry</code> metric prefix.");
+    expect(bodyHtml).toContain(
+      'Use the <code data-authored-prose="">retry</code> metric prefix.',
+    );
     expect(bodyHtml).not.toContain("hljs");
     expect(bodyHtml).not.toContain("data-copy-code");
   });
@@ -155,9 +175,17 @@ describe("compileMarkdown CodeDiff components", () => {
     const bodyHtml = compileAndSerialize(
       '<CodeDiff file="src/retry.ts">\n```diff\n@@ -1 +1 @@\n-old\n+new\n```\n<Annotation lines="1">\nReview the `retry` path.\n\n- Keep the fallback\n\n```ts\nretry();\n```\n</Annotation>\n</CodeDiff>\n',
     );
-    expect(bodyHtml).toContain("Review the <code>retry</code> path.");
-    expect(bodyHtml).toContain("<li>Keep the fallback</li>");
-    expect(bodyHtml.match(/<code class="hljs language-ts">/gu)).toHaveLength(2);
+    expect(bodyHtml).toContain(
+      'Review the <code data-authored-prose="">retry</code> path.',
+    );
+    expect(bodyHtml).toContain(
+      '<li data-authored-prose="">Keep the fallback</li>',
+    );
+    expect(
+      bodyHtml.match(
+        /<code class="hljs language-ts" data-authored-prose="">/gu,
+      ),
+    ).toHaveLength(2);
     expect(bodyHtml).not.toContain("data-copy-code");
   });
 

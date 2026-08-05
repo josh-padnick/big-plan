@@ -70,14 +70,18 @@ describe("compileMarkdown code highlighting", () => {
     const bodyHtml = compileAndSerialize(
       "```sql\nSELECT id FROM users WHERE active = true;\n```\n",
     );
-    expect(bodyHtml).toContain('<code class="hljs language-sql">');
+    expect(bodyHtml).toContain(
+      '<code class="hljs language-sql" data-authored-prose="">',
+    );
     expect(bodyHtml).toContain('<span class="hljs-keyword">SELECT</span>');
     expect(bodyHtml).toContain('<span class="hljs-keyword">FROM</span>');
   });
 
   it("should leave an undeclared code block unhighlighted", () => {
     const bodyHtml = compileAndSerialize("```\nSELECT id FROM users;\n```\n");
-    expect(bodyHtml).toContain("<code>SELECT id FROM users;\n</code></pre>");
+    expect(bodyHtml).toContain(
+      '<code data-authored-prose="">SELECT id FROM users;\n</code></pre>',
+    );
     expect(bodyHtml).not.toContain('class="hljs"');
   });
 
@@ -86,7 +90,7 @@ describe("compileMarkdown code highlighting", () => {
       "```big-plan-example\nplain & safe\n```\n",
     );
     expect(bodyHtml).toContain(
-      '<code class="hljs language-big-plan-example">plain &#x26; safe\n</code></pre>',
+      '<code class="hljs language-big-plan-example" data-authored-prose="">plain &#x26; safe\n</code></pre>',
     );
   });
 
@@ -95,7 +99,9 @@ describe("compileMarkdown code highlighting", () => {
       "```sql\nSELECT 1;\n```\n\n```\nplain block\n```\n",
     );
     // The fence itself is the panel body, so it carries the body mark.
-    expect(bodyHtml.match(/<pre data-figure-body="">/g)).toHaveLength(2);
+    expect(
+      bodyHtml.match(/<pre data-authored-prose="" data-figure-body="">/gu),
+    ).toHaveLength(2);
     // A dense sketch a reviewer must read should not be stuck at the width of
     // the reading column, so every block gets the shared maximize control.
     expect(bodyHtml.match(/data-figure-maximizable="code"/g)).toHaveLength(2);

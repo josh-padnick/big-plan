@@ -142,7 +142,7 @@ describe("compileMarkdown static MDX validation", () => {
         "# Plan\n\nA **safe** [link](https://example.com).\n",
       ),
     ).toBe(
-      '<h1 id="plan">Plan</h1>\n<p>A <strong>safe</strong> <a href="https://example.com">link</a>.</p>',
+      '<h1 id="plan" data-authored-prose="">Plan</h1>\n<p data-authored-prose="">A <strong data-authored-prose="">safe</strong> <a href="https://example.com" data-authored-prose="">link</a>.</p>',
     );
   });
 });

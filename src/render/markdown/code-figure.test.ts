@@ -16,7 +16,9 @@ describe("compileMarkdown code figures", () => {
 
     expect(bodyHtml).toContain('data-figure-maximizable="code"');
     expect(bodyHtml).toContain('data-figure-maximize=""');
-    expect(bodyHtml).toContain('<pre data-figure-body="">');
+    expect(bodyHtml).toContain(
+      '<pre data-authored-prose="" data-figure-body="">',
+    );
   });
 
   it("should ship the control dormant so no affordance acts without scripts", () => {

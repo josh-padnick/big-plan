@@ -2,6 +2,45 @@
 
 import { expect, test } from "./fixtures";
 
+test("should keep component-owned decision lists out of the prose measure", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.goto(allComponentsViewerUrl);
+
+  for (const selector of [
+    "[data-decision-rows]",
+    ".decision-brief-list",
+    ".decision-keyed-chooser",
+  ]) {
+    const list = page.locator(selector).first();
+    const geometry = await list.evaluate((element) => {
+      const parent = element.parentElement;
+      return {
+        width: element.getBoundingClientRect().width,
+        parentWidth: parent?.getBoundingClientRect().width ?? 0,
+        maxWidth: getComputedStyle(element).maxWidth,
+        itemMargins: Array.from(element.children).map(
+          (item) => getComputedStyle(item).margin,
+        ),
+      };
+    });
+
+    expect(geometry.width).toBeCloseTo(geometry.parentWidth);
+    expect(geometry.maxWidth).toBe("none");
+    expect(geometry.itemMargins).not.toContain("4px 0px");
+  }
+
+  const briefLead = page.locator("[data-decision-brief-lead]").first();
+  const briefLeadGeometry = await briefLead.evaluate((element) => ({
+    width: element.getBoundingClientRect().width,
+    parentWidth: element.parentElement?.getBoundingClientRect().width ?? 0,
+    maxWidth: getComputedStyle(element).maxWidth,
+  }));
+  expect(briefLeadGeometry.width).toBeCloseTo(briefLeadGeometry.parentWidth);
+  expect(briefLeadGeometry.maxWidth).toBe("none");
+});
+
 test("should answer and revise a compact Decision", async ({
   page,
   decisionViewerUrl,
