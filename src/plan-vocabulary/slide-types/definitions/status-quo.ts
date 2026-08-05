@@ -1,7 +1,7 @@
 // Defines the Status quo slide type and the guidance that distinguishes
 // evidence about today's reality from diagnosis or proposed change.
 
-import type { SlideTypeDefinition } from "./types.js";
+import type { SlideTypeDefinition } from "../types.js";
 
 export const STATUS_QUO_SLIDE_TYPE: SlideTypeDefinition = {
   id: "status-quo",

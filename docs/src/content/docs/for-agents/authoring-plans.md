@@ -83,7 +83,7 @@ It answers nothing about whether the plan reads well; `big-plan guidance` owns t
 Guidance is generated, not edited in place.
 
 - A new principle is authored in `assets/guidance/plan-guidance.md`, or in `src/components/<component>/<component>.guidance.md` when it belongs to one component.
-- A slide type's matching boundary and specific guidance live together in its one file under `src/plan-vocabulary/slide-types/`; the [`Slide` reference](/components/slide/#growing-the-catalog) owns the contribution path.
+- A slide type's matching boundary and specific guidance live together in its one file under `src/plan-vocabulary/slide-types/definitions/`; the [`Slide` reference](/components/slide/#growing-the-catalog) owns the contribution path.
 - `scripts/gen-guidance.mjs` embeds the principles, component guidance, and generated slide catalog into the CLI and derives a version hash from their content, which is what expires prior acknowledgments.
 - A new statically checkable rule is a module under `src/lint/rules/`, registered in `src/lint/lint-plan.ts`, and documented in [Linting rules](/reference/lint-rules/).
 

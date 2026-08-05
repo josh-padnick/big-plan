@@ -1,7 +1,7 @@
 // Defines the User journeys catalog type and its guidance for a named
 // container whose repeated entries each carry one complete human loop.
 
-import type { SlideTypeDefinition } from "./types.js";
+import type { SlideTypeDefinition } from "../types.js";
 
 export const USER_JOURNEY_SLIDE_TYPE: SlideTypeDefinition = {
   id: "user-journey",

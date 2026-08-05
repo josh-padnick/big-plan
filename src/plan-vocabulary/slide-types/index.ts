@@ -2,12 +2,12 @@
 // lookup helpers to compilation, rendering, lint, guidance generation, and
 // catalog tests.
 
-import { ACCEPTANCE_CRITERIA_SLIDE_TYPE } from "./acceptance-criteria.js";
-import { DESIRED_EXPERIENCE_SLIDE_TYPE } from "./desired-experience.js";
-import { DESIRED_OUTCOME_SLIDE_TYPE } from "./desired-outcome.js";
-import { STATUS_QUO_SLIDE_TYPE } from "./status-quo.js";
+import { ACCEPTANCE_CRITERIA_SLIDE_TYPE } from "./definitions/acceptance-criteria.js";
+import { DESIRED_EXPERIENCE_SLIDE_TYPE } from "./definitions/desired-experience.js";
+import { DESIRED_OUTCOME_SLIDE_TYPE } from "./definitions/desired-outcome.js";
+import { STATUS_QUO_SLIDE_TYPE } from "./definitions/status-quo.js";
 import type { SlideTypeDefinition, SlideTypeId } from "./types.js";
-import { USER_JOURNEY_SLIDE_TYPE } from "./user-journey.js";
+import { USER_JOURNEY_SLIDE_TYPE } from "./definitions/user-journey.js";
 
 export type {
   SlideTypeCardinality,

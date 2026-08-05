@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { validateSlideTypeCatalog } from "./catalog-validation.js";
-import { STATUS_QUO_SLIDE_TYPE } from "./status-quo.js";
+import { STATUS_QUO_SLIDE_TYPE } from "./definitions/status-quo.js";
 import type { SlideTypeDefinition } from "./types.js";
 
 const COMPONENTS = new Set(["CodeSnippet", "FileTree"]);

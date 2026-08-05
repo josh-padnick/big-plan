@@ -2,7 +2,7 @@
 // concrete payoff of non-feature work without collapsing it into completion
 // criteria or implementation detail.
 
-import type { SlideTypeDefinition } from "./types.js";
+import type { SlideTypeDefinition } from "../types.js";
 
 export const DESIRED_OUTCOME_SLIDE_TYPE: SlideTypeDefinition = {
   id: "desired-outcome",

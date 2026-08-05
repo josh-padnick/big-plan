@@ -1,7 +1,7 @@
 // Defines the Acceptance criteria slide type and its guidance for a final,
 // independently checkable verification contract.
 
-import type { SlideTypeDefinition } from "./types.js";
+import type { SlideTypeDefinition } from "../types.js";
 
 export const ACCEPTANCE_CRITERIA_SLIDE_TYPE: SlideTypeDefinition = {
   id: "acceptance-criteria",

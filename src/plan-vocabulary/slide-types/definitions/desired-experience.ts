@@ -1,7 +1,7 @@
 // Defines the Desired experience slide type and its guidance for expressing a
 // new feature through the concrete human experience it creates.
 
-import type { SlideTypeDefinition } from "./types.js";
+import type { SlideTypeDefinition } from "../types.js";
 
 export const DESIRED_EXPERIENCE_SLIDE_TYPE: SlideTypeDefinition = {
   id: "desired-experience",
