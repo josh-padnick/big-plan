@@ -1,0 +1,105 @@
+# Close the plan review loop
+
+Carry reviewer feedback through a live agent turn and show the resulting plan changes beside their comments.
+
+<QuickSummary>
+
+<Why>
+
+- Feedback is useful only when the reviewer can see how the agent answered it and what changed.
+
+</Why>
+
+<What>
+
+- Add anchored threads, the coding-agent exchange, revision snapshots, honest diffs, and grouped change tours.
+
+</What>
+
+<How>
+
+- Turn submitted feedback into request-scoped agent work.
+- Pair each response with the revision it produced.
+- Keep comments and outcomes anchored to the reviewed content.
+
+</How>
+
+</QuickSummary>
+
+<TableOfContents>
+<Entry section="Inherited foundation" gist="Slice one already owns addresses, local I/O, and persistence" />
+<Entry section="Success looks like" gist="One feedback round becomes a visible, attributable revision" />
+<Entry section="The closed loop" gist="Requests, responses, revisions, and anchors move together" />
+<Entry section="Try this slice" gist="Run the reviewer and agent in separate terminals" />
+<Entry section="Review boundaries" gist="Workflow refinement and final visual language remain later" />
+<Entry section="Acceptance criteria" gist="The independently checkable contract for slice two" />
+</TableOfContents>
+
+<Part title="Context" />
+
+## Inherited foundation
+
+- Slice one gives content stable review addresses.
+- The loopback server already persists drafts and feedback packages.
+- This slice extends that contract instead of introducing a second review channel.
+
+## Success looks like
+
+- The reviewer sends a targeted request and sees an honest waiting state.
+- A real coding-agent session claims that request and reports progress.
+- The plan refreshes after the source changes without losing the comment's context.
+- The thread shows the response and a revision diff attributable to that request.
+
+<Part title="The slice" />
+
+## The closed loop
+
+**Anchored outcomes.** Floating threads sit beside their content and keep reviewer text, agent replies, and the relevant change together.
+
+**Agent exchange.** `big-plan agent` discovers the active review session, claims one request at a time, exposes progress, and returns a structured response.
+
+**Revision truth.** Immutable source snapshots make before and after explicit; selection anchors refuse to jump to merely similar text; a grouped change tour navigates the revision as a coherent result.
+
+**Lifecycle honesty.** The UI distinguishes drafted, queued, working, answered, changed, resolved, and stale states rather than guessing from elapsed time.
+
+## Try this slice
+
+From the repository root on `fm/bp-pr54-2-agent-loop-diffs`, start the reviewer:
+
+```sh
+bun install
+bun run build
+node bin/big-plan.mjs guidance
+node bin/big-plan.mjs review .big-plan/pr54-split/02-agent-loop-and-diffs.mdx
+```
+
+In a second terminal, start the agent exchange:
+
+```sh
+node bin/big-plan.mjs agent .big-plan/pr54-split/02-agent-loop-and-diffs.mdx
+```
+
+Then submit one comment asking for a small plan-source revision and watch:
+
+1. The thread enter waiting and working states.
+2. Agent progress remain attached to the submitted request.
+3. The document refresh after the MDX changes.
+4. The response and before/after diff appear on the original anchor.
+5. The grouped change tour navigate every changed region.
+
+<Part title="Shipping & your review" />
+
+## Review boundaries
+
+- This slice proves the complete reviewer-to-agent-to-revision loop.
+- It does not include the many later interaction refinements to the Feedback and Agent tabs.
+- Cancellation, resolve-all actions, refined connection health, and one-strip lifecycle polish land in slice three.
+- Tailwind ownership rules and persistence-hardening remain deliberately outside this branch.
+
+## Acceptance criteria
+
+- `bun run build`, `bun run lint`, `bun run test`, and `bun run test:e2e` pass on this branch.
+- A submitted feedback package becomes one claimable agent request.
+- Progress and response events cannot attach to another request or session.
+- A source revision refreshes in place and preserves its anchored thread.
+- The displayed diff matches the immutable before and after source revisions.

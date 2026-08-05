@@ -1,0 +1,99 @@
+# Make plan feedback durable
+
+Review a rendered plan, comment on exact content, and keep unfinished feedback across reloads.
+
+<QuickSummary>
+
+<Why>
+
+- A reviewer must be able to answer a plan without losing work or leaving the review document.
+
+</Why>
+
+<What>
+
+- Add stable review addresses, a loopback review server, the first commenting UI, and durable reviewer state.
+
+</What>
+
+<How>
+
+- Identify every commentable block during rendering.
+- Serve the plan through a narrow authenticated local runtime.
+- Persist drafts and feedback packages beside the plan.
+
+</How>
+
+</QuickSummary>
+
+<TableOfContents>
+<Entry section="Status quo" gist="Rendered plans are readable but cannot carry feedback" />
+<Entry section="Success looks like" gist="Comments survive reload and become one agent-ready package" />
+<Entry section="The foundation" gist="Stable addresses, constrained local I/O, and durable state" />
+<Entry section="Try this slice" gist="Run the review server and exercise draft persistence" />
+<Entry section="Review boundaries" gist="Agent round-trips and advanced threads come later" />
+<Entry section="Acceptance criteria" gist="The independently checkable contract for slice one" />
+</TableOfContents>
+
+<Part title="Context" />
+
+## Status quo
+
+- `big-plan render` produces a self-contained reading document.
+- The document has no way to attach feedback to a paragraph, list, table, code range, or component.
+- A reviewer must move comments into another tool and manually explain what each comment targets.
+
+## Success looks like
+
+- Hovering or focusing content reveals a comment affordance.
+- Text and code selections retain the exact passage or line range under review.
+- Drafts survive a reload, remain editable, and submit as one package for the agent.
+- The local runtime reads and writes only the review artifacts it owns.
+
+<Part title="The slice" />
+
+## The foundation
+
+**Stable identity.** Rendering gives every commentable unit an address derived from authored structure rather than screen position, so feedback keeps meaning when layout changes.
+
+**Narrow runtime.** `big-plan review` binds only to loopback, authenticates its fixed routes with a per-session token, rejects foreign origins and hosts, and serves only a freshly rendered plan.
+
+**Durable review state.** Reviewer drafts, the active whole-plan field, sent comments, and feedback packages live under the plan's ignored `.big-plan/` directory.
+
+**Initial experience.** A Comments tray collects drafts; markers reconnect a draft to its source block; keyboard controls expose the same actions as pointer hover.
+
+## Try this slice
+
+From the repository root on `fm/bp-pr54-1-review-foundation`:
+
+```sh
+bun install
+bun run build
+node bin/big-plan.mjs guidance
+node bin/big-plan.mjs review .big-plan/pr54-split/01-review-foundation.mdx
+```
+
+Open the printed `http://127.0.0.1:<port>/` URL, then:
+
+1. Add a block comment to **The foundation**.
+2. Select prose and add a passage comment.
+3. Select lines in the command block and add a code-range comment.
+4. Reload the page and confirm all drafts remain.
+5. Edit one draft, delete another, and send the remaining feedback.
+
+<Part title="Shipping & your review" />
+
+## Review boundaries
+
+- This slice establishes the renderer, server, storage, and first commenting loop.
+- It does not connect a live coding agent or display agent-authored replies.
+- It does not yet provide floating anchored outcome threads, change tours, cancellation, or causal revision diffs.
+- Later slices refine the UI without replacing the stable-address and durable-store foundations reviewed here.
+
+## Acceptance criteria
+
+- `bun run build`, `bun run lint`, `bun run test`, and `bun run test:e2e` pass on this branch.
+- A block, selected passage, and selected code range each create a correctly targeted draft.
+- Reloading preserves every unsent draft and the unfinished whole-plan field.
+- Sending writes a JSON feedback package and Markdown brief under `.big-plan/feedback/`.
+- Stopping and restarting `big-plan review` restores the same plan's durable state.

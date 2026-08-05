@@ -1,0 +1,100 @@
+# Make commenting calm and truthful
+
+Turn the end-to-end review loop into a coherent daily workflow across comments, feedback, and agent activity.
+
+<QuickSummary>
+
+<Why>
+
+- A technically correct review loop still fails when state, actions, and ownership are hard to read.
+
+</Why>
+
+<What>
+
+- Refine the Feedback and Agent surfaces into one accessible lifecycle for drafting, sending, revising, resolving, and cancelling work.
+
+</What>
+
+<How>
+
+- Put every action beside the content or request it affects.
+- Expose connection and lifecycle state without optimistic guesses.
+- Make navigation and keyboard behavior consistent across the review.
+
+</How>
+
+</QuickSummary>
+
+<TableOfContents>
+<Entry section="Inherited loop" gist="Slices one and two already provide durable live revision review" />
+<Entry section="Success looks like" gist="The next action and current owner stay obvious" />
+<Entry section="The commenting workflow" gist="Feedback, Agent, anchors, and lifecycle form one model" />
+<Entry section="Try this slice" gist="Exercise drafting, batching, replies, cancellation, and resolution" />
+<Entry section="Review boundaries" gist="Styling architecture and crash recovery remain later" />
+<Entry section="Acceptance criteria" gist="The independently checkable contract for slice three" />
+</TableOfContents>
+
+<Part title="Context" />
+
+## Inherited loop
+
+- Slice one owns stable targets, the local server, and durable reviewer state.
+- Slice two owns the real agent exchange, revision snapshots, anchored outcomes, and change tours.
+- This slice reshapes those capabilities around the reviewer's actual sequence of decisions.
+
+## Success looks like
+
+- A comment composer appears beside the content it will affect and never shifts the reading target.
+- The Feedback tab separates drafts, queued work, active work, answers, changes, and resolved threads.
+- The Agent tab alone owns connection truth and request-scoped activity.
+- Every collapsed control communicates its state to pointer, keyboard, and assistive-technology users.
+
+<Part title="The slice" />
+
+## The commenting workflow
+
+**Drafting and batching.** Selection, whole-slide comments, slide-level actions, toolbar batching, tray ordering, and send-all behavior share one visible model.
+
+**Thread next steps.** Reply, resolve, unresolve, cancel, and quick actions stay with their thread; changed threads expose focused navigation rather than a separate task system.
+
+**Agent truth.** Waiting, working, stalled, cancelled, disconnected, and reconnected states come from request and connection facts. The Agent tab owns connection status while the toolbar shows only the minimum live signal.
+
+**Diff legibility.** Prose, code, and table revisions use representations appropriate to their content, with summaries in navigator rows and exact anchors in the reading column.
+
+## Try this slice
+
+From the repository root on `fm/bp-pr54-3-commenting-workflow`:
+
+```sh
+bun install
+bun run build
+node bin/big-plan.mjs guidance
+node bin/big-plan.mjs review .big-plan/pr54-split/03-commenting-workflow.mdx
+```
+
+Open the printed URL and inspect this sequence:
+
+1. Create block, selection, slide, and whole-plan drafts.
+2. Send one draft immediately, then batch the rest from the toolbar.
+3. Open Feedback and confirm activity order plus clear draft, queued, and working groups.
+4. Open Agent and confirm connection truth, request attribution, and cancellation.
+5. Resolve a changed thread, reopen it, and navigate its summarized changes.
+6. Repeat the core flow using only the keyboard.
+
+<Part title="Shipping & your review" />
+
+## Review boundaries
+
+- This slice completes the interaction model through commenting round twenty.
+- The existing CSS still carries presentation ownership; the Tailwind conversion is isolated in slice four.
+- Later causal-claim fixes strengthen the same request model without changing this workflow's vocabulary.
+- Atomic persistence, stale-write reconciliation, and component-specific revision lenses remain in slice five.
+
+## Acceptance criteria
+
+- `bun run build`, `bun run lint`, `bun run test`, and `bun run test:e2e` pass on this branch.
+- Every composer appears beside the content or request it affects.
+- Feedback ordering, batch actions, cancellation, and resolve state remain correct after reload.
+- Connection state has one owner and never presents queued work as active work.
+- Pointer, keyboard, focus, pressed, and accessible-name states agree for all primary controls.

@@ -1,0 +1,101 @@
+# Make review recovery complete
+
+Harden every mutable review transition and preserve typed meaning across revisions for all registered components.
+
+<QuickSummary>
+
+<Why>
+
+- Review trust depends on surviving crashes, stale tabs, rebases, and component-rich revisions without inventing state.
+
+</Why>
+
+<What>
+
+- Add atomic persistence, recovery and reconciliation, explicit browser workflow state, and component-owned revision lenses.
+
+</What>
+
+<How>
+
+- Commit mutable files atomically and recover interrupted submissions.
+- Reject stale writes and reconcile stable plan identity after rebases.
+- Let every component define its typed revision snapshot and comparison.
+
+</How>
+
+</QuickSummary>
+
+<TableOfContents>
+<Entry section="Inherited product" gist="Four slices already deliver the full styled commenting workflow" />
+<Entry section="Success looks like" gist="No crash, stale tab, or rich component corrupts review truth" />
+<Entry section="The hardening pass" gist="Repository transactions, browser actions, and typed lenses align" />
+<Entry section="Try this slice" gist="Exercise restart, concurrency, rebase, and component revisions" />
+<Entry section="Review boundaries" gist="This final slice completes PR 54 without compatibility shims" />
+<Entry section="Acceptance criteria" gist="The independently checkable contract for slice five" />
+</TableOfContents>
+
+<Part title="Context" />
+
+## Inherited product
+
+- Slices one through three establish the review server, live agent loop, and complete commenting workflow.
+- Slice four makes visual ownership and causal revision behavior mechanically explicit.
+- This slice addresses the failure modes that appear only across interruptions, concurrent tabs, rebases, and typed component changes.
+
+## Success looks like
+
+- An interrupted save cannot expose a half-written reviewer snapshot.
+- Restarting adopts the last committed review state and reconciles any browser recovery mirror.
+- A stale tab cannot overwrite newer reviewer work; it reloads and merges only the drafts it still owns.
+- Every registered component compares revisions through a lens that preserves its authored type and semantics.
+
+<Part title="The slice" />
+
+## The hardening pass
+
+**Atomic repository.** Mutable state files use same-directory temporary writes, flush, atomic replacement, and directory flush; immutable requests, responses, revisions, packages, and activity events remain append-only facts.
+
+**Submission recovery.** Feedback commit records make interrupted submission replayable, while optimistic reviewer revisions reject stale writes and preserve concurrent drafts.
+
+**Identity reconciliation.** A main-branch rebase can change plan identity without orphaning its review; the runtime recognizes and reconciles the durable lineage.
+
+**Explicit browser workflows.** Reducer-like actions own composition, submission, navigation, connection, cancellation, and recovery transitions instead of scattering state mutations through event handlers.
+
+**Typed revision lenses.** The registration contract requires all eighteen built-in components to serialize and compare their own typed data, while renderer-only instance keys remain internal.
+
+## Try this slice
+
+From the repository root on `fm/bp-pr54-5-persistence-and-revision-lenses`:
+
+```sh
+bun install
+bun run build
+node bin/big-plan.mjs guidance
+node bin/big-plan.mjs review .big-plan/pr54-split/05-persistence-and-revision-lenses.mdx
+```
+
+Review the final slice in four passes:
+
+1. Draft in two tabs, save from both, and confirm stale writes merge without losing either tab's owned draft.
+2. Stop and restart the review server, then confirm drafts, requests, responses, activity, and revisions return.
+3. Exercise cancellation and refresh while work is queued or active; confirm the next visible action remains correct.
+4. Revise examples containing every built-in component and inspect their component-shaped change summaries and anchors.
+
+<Part title="Shipping & your review" />
+
+## Review boundaries
+
+- This slice completes the exact source state of `origin/fm/bp-commenting-round3`.
+- It adds no compatibility shim: Big Plan remains pre-release and updates every call site to the clean contract.
+- Historical preview reports and evidence land with the slice that produced them; they document the tested UX rather than defining runtime behavior.
+- Earlier slices contain narrow test, selector, and generated-asset bridges so each intermediate branch remains green; this final slice reconciles those bridges back to the exact PR 54 source tree.
+
+## Acceptance criteria
+
+- `bun run build`, `bun run lint`, `bun run test`, and `bun run test:e2e` pass on this branch.
+- Atomic replacement and interrupted-feedback tests prove recovery at every mutation boundary.
+- Concurrent stale-tab tests preserve newer state and merge only valid owned drafts.
+- Browser workflow tests cover composition, submission, cancellation, navigation, reconnect, and recovery actions.
+- The revision-contract check and browser journey cover all eighteen registered component lenses.
+- `git diff origin/fm/bp-commenting-round3 fm/bp-pr54-5-persistence-and-revision-lenses` is empty and both refs resolve to the same tree object.

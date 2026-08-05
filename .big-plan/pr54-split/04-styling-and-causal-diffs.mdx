@@ -1,0 +1,98 @@
+# Lock the review UI to truthful contracts
+
+Move owned presentation into Tailwind utilities while tightening request causality, diff mapping, and repeated interaction behavior.
+
+<QuickSummary>
+
+<Why>
+
+- Review polish is sustainable only when visual ownership and revision causality are mechanically explicit.
+
+</Why>
+
+<What>
+
+- Add the styling contract, convert owned markup to utilities, and make later agent turns and diffs causally exact.
+
+</What>
+
+<How>
+
+- Enforce which styles belong in utilities and which require CSS.
+- Replay anchored interaction surfaces as browser contracts.
+- Claim revisions immutably and suppress misleading diff mappings.
+
+</How>
+
+</QuickSummary>
+
+<TableOfContents>
+<Entry section="Inherited workflow" gist="Slice three already establishes the complete commenting experience" />
+<Entry section="Success looks like" gist="Presentation stays unchanged while ownership becomes enforceable" />
+<Entry section="The contract pass" gist="Tailwind, visual history, replay, and causality reinforce one another" />
+<Entry section="Try this slice" gist="Review identical visuals and stricter request-to-revision behavior" />
+<Entry section="Review boundaries" gist="Crash recovery and all-component lenses remain final-slice work" />
+<Entry section="Acceptance criteria" gist="The independently checkable contract for slice four" />
+</TableOfContents>
+
+<Part title="Context" />
+
+## Inherited workflow
+
+- The first three slices provide the full local review, agent exchange, diff, and commenting workflow.
+- This slice deliberately preserves that visible product while clarifying who owns each style and each revision transition.
+
+## Success looks like
+
+- Owned markup carries readable Tailwind utilities at the point of use.
+- CSS remains only for generated markup, shared primitives, cross-element relationships, and document-wide behavior.
+- Visual-history checks prove the conversion is pixel-empty where declared.
+- Each agent turn claims one immutable causal revision, and diff history never presents an inexact match as current.
+
+<Part title="The slice" />
+
+## The contract pass
+
+**Style ownership.** A repository check enforces utility-first styling, explicit CSS escape-hatch rationale, layer rules, and complete static Tailwind candidates.
+
+**Visual evidence.** Style-history configuration and replay coverage protect anchored comments, lifecycle cards, toolbars, motion, branding, and responsive states across the migration.
+
+**Causal revisions.** Request claims become immutable, response resolution belongs to the exchange, and one claimed source revision advances per agent turn.
+
+**Diff correctness.** Removal anchors stay within their section, inexact mappings remain historical, and unchanged structural moves disappear from the change tour.
+
+## Try this slice
+
+From the repository root on `fm/bp-pr54-4-styling-and-causal-diffs`:
+
+```sh
+bun install
+bun run build
+node bin/big-plan.mjs guidance
+node bin/big-plan.mjs review .big-plan/pr54-split/04-styling-and-causal-diffs.mdx
+```
+
+In the browser:
+
+1. Compare the resting page, anchored composers, Feedback groups, and Agent activity with slice three.
+2. Check narrow and wide layouts, light and dark palettes, focus rings, tooltips, and working motion.
+3. Send two sequential requests and confirm each response advances only its claimed revision.
+4. Remove content within one section and confirm the removal anchor stays there.
+5. Confirm unchanged structural movement does not appear as a user-visible change.
+
+<Part title="Shipping & your review" />
+
+## Review boundaries
+
+- This slice owns the Tailwind conversion and its visual-contract tooling.
+- It includes rounds twenty-one through twenty-three because their replay and causality fixes close the migration's review contract.
+- It does not add atomic persistence, interrupted-write recovery, stale-tab merging, or post-rebase identity repair.
+- Component-owned typed revision lenses are isolated in the final slice.
+
+## Acceptance criteria
+
+- `bun run build`, `bun run lint`, `bun run test`, and `bun run test:e2e` pass on this branch.
+- Styling-contract and style-history checks accept every styling commit in the slice.
+- The Tailwind conversion's declared visual-empty commits produce no pixel changes.
+- One agent turn owns exactly one immutable claim and causal revision.
+- Diff anchors, historical mappings, and structural-move suppression match the source revisions.
