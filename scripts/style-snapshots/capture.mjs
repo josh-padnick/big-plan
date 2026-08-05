@@ -219,6 +219,17 @@ try {
               );
             }
             await target.waitFor({ state: "visible" });
+            console.error(
+              "STYLE_CAPTURE_TARGET",
+              JSON.stringify({
+                checkout,
+                document: document.name,
+                capture: capture.name,
+                viewport: viewport.name,
+                theme,
+                selector: capture.selector,
+              }),
+            );
             await captureStableTarget({
               page,
               target,
