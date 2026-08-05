@@ -1903,7 +1903,12 @@ import { createToastManager } from "./toast.js";
         ?.open === true;
     const state = el("section", {
       class:
-        "[display:grid] [gap:0.55rem] [font-size:0.75rem] [line-height:1.5] data-[tone=connected]:[padding:0.8rem] data-[tone=connected]:[border:1px_solid_var(--diff-add-c)] data-[tone=connected]:[border-radius:0.45rem] data-[tone=connected]:[background:var(--diff-add-bg)] data-[tone=connected]:[color:var(--diff-add-c)] data-[tone=offline]:[padding:0.8rem] data-[tone=offline]:[border:1px_solid_var(--callout-danger-c)] data-[tone=offline]:[border-radius:0.45rem] data-[tone=offline]:[background:var(--callout-danger-bg)] data-[tone=offline]:[color:var(--callout-danger-c)]",
+        "[display:grid] [gap:0.55rem] [font-size:0.75rem] [line-height:1.5]" +
+        (agentConnected
+          ? " [padding:0.8rem] [border:1px_solid_var(--diff-add-c)] [border-radius:0.45rem] [background:var(--diff-add-bg)] [color:var(--diff-add-c)]"
+          : runtimeOffline
+            ? " [padding:0.8rem] [border:1px_solid_var(--callout-danger-c)] [border-radius:0.45rem] [background:var(--callout-danger-bg)] [color:var(--callout-danger-c)]"
+            : ""),
       "data-review-connection-state": agentConnected
         ? "connected"
         : runtimeOffline
@@ -5756,6 +5761,15 @@ import { createToastManager } from "./toast.js";
     const block = visualAnchorForTarget(target);
     if (!block) {
       compose.removeAttribute("style");
+      compose.setAttribute("data-review-compose-centered", "");
+      compose.setAttribute("data-review-compose-placement", "centered");
+      return;
+    }
+    if (window.innerWidth < 1280) {
+      if (compose.parentElement !== surface) surface.appendChild(compose);
+      compose.removeAttribute("style");
+      compose.removeAttribute("data-review-compose-inline");
+      compose.removeAttribute("data-review-compose-floating");
       compose.setAttribute("data-review-compose-centered", "");
       compose.setAttribute("data-review-compose-placement", "centered");
       return;

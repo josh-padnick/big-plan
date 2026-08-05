@@ -11,6 +11,7 @@ import {
   nextPendingAgentRequest,
   readAgentExchange,
   validateAgentResponseDraft,
+  writeAgentRequest,
   writeAgentResponse,
 } from "../src/review/agent-exchange.js";
 import { buildRevisionChangeSet } from "../src/review/revision-change-set.js";
@@ -698,16 +699,16 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect
       .poll(() =>
         connectionState.evaluate((node) => {
-          const style = getComputedStyle(node);
-          return [
-            style.borderTopWidth,
-            style.borderRightWidth,
-            style.borderBottomWidth,
-            style.borderLeftWidth,
-          ];
+          const alert = node.querySelector("[data-review-connection-alert]");
+          const outer = getComputedStyle(node);
+          const inner = alert === null ? null : getComputedStyle(alert);
+          return {
+            outer: outer.borderTopWidth,
+            inner: inner?.borderTopWidth ?? "missing",
+          };
         }),
       )
-      .toEqual(["1px", "1px", "1px", "1px"]);
+      .toEqual({ outer: "0px", inner: "1px" });
     const history = page.locator("[data-review-connection-history]");
     await history.locator("summary").click();
     await expect(history).toHaveAttribute("open", "");
@@ -739,16 +740,17 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect
       .poll(() =>
         connectionState.evaluate((node) => {
-          const style = getComputedStyle(node);
-          return [
-            style.borderTopWidth,
-            style.borderRightWidth,
-            style.borderBottomWidth,
-            style.borderLeftWidth,
-          ];
+          const alert = node.querySelector("[data-review-connection-alert]");
+          return {
+            outer: getComputedStyle(node).borderTopWidth,
+            inner:
+              alert === null
+                ? "missing"
+                : getComputedStyle(alert).borderTopWidth,
+          };
         }),
       )
-      .toEqual(["1px", "1px", "1px", "1px"]);
+      .toEqual({ outer: "0px", inner: "1px" });
     await expect(history.locator("summary")).toContainText("Connection log");
     await expect(
       history.locator("[data-review-connection-summary]"),
@@ -1583,7 +1585,7 @@ test("should preserve and send a floating review across reload and viewport chan
     await page.locator("[data-review-row-cancel]").click();
   });
 
-  await test.step("the below-1280 drawer and inline composer preserve reading position", async () => {
+  await test.step("the below-1280 drawer and anchored composer preserve reading position", async () => {
     await page.locator("[data-review-hide]").click();
     await page.locator("#delivery").scrollIntoViewIfNeeded();
     await page.setViewportSize({ width: 1024, height: 900 });
@@ -1611,7 +1613,10 @@ test("should preserve and send a floating review across reload and viewport chan
     const heading = page.locator("[data-block-kind='heading']").last();
     await heading.click({ clickCount: 3 });
     await affordance.click();
-    await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+    await expect(compose).toHaveAttribute(
+      "data-review-compose-placement",
+      "centered",
+    );
     await expect
       .poll(() => page.evaluate(() => window.getSelection()?.isCollapsed))
       .toBe(true);
@@ -1646,11 +1651,10 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       selectedSlide.locator("[data-block-kind='heading']"),
     ).not.toHaveAttribute("data-review-active-highlight", "");
-    expect(
-      await compose.evaluate((node) =>
-        node.previousElementSibling?.hasAttribute("data-slide"),
-      ),
-    ).toBe(true);
+    await expect(compose).toHaveAttribute(
+      "data-review-compose-placement",
+      "centered",
+    );
     await expect(page.locator("[data-review-compose-save]")).toBeDisabled();
     await page.locator("[data-review-compose-input]").press("Control+Enter");
     await expect(compose).toBeVisible();
@@ -1664,7 +1668,7 @@ test("should preserve and send a floating review across reload and viewport chan
     );
   });
 
-  await test.step("a multi-block inline compose lands after its end block and outside the highlight", async () => {
+  await test.step("a multi-block compose stays anchored outside the highlight", async () => {
     const start = page.locator('[data-block-id="section/details/heading-1"]');
     const end = page.locator('[data-block-id="section/details/paragraph-1"]');
     await start.scrollIntoViewIfNeeded();
@@ -1686,17 +1690,18 @@ test("should preserve and send a floating review across reload and viewport chan
     });
     await expect(affordance).toBeVisible();
     await affordance.click();
-    await expect(compose).toHaveAttribute("data-review-compose-inline", "");
+    await expect(compose).toHaveAttribute(
+      "data-review-compose-placement",
+      "centered",
+    );
     await expect
       .poll(() =>
         page.evaluate(() => {
           const editor = document.querySelector("[data-review-compose]");
-          const last = document.querySelector(
-            '[data-block-id="section/details/paragraph-1"]',
-          );
           const ranges = CSS.highlights.get("big-plan-review-active");
           return {
-            followsEnd: editor?.previousElementSibling === last,
+            inReviewSurface:
+              editor?.parentElement?.hasAttribute("data-review-root") === true,
             intersects:
               editor !== null &&
               ranges !== undefined &&
@@ -1704,7 +1709,7 @@ test("should preserve and send a floating review across reload and viewport chan
           };
         }),
       )
-      .toEqual({ followsEnd: true, intersects: false });
+      .toEqual({ inReviewSurface: true, intersects: false });
     await page.locator("[data-review-compose-cancel]").click();
     await expect(end).toBeVisible();
   });
@@ -1921,9 +1926,9 @@ test("should preserve and send a floating review across reload and viewport chan
       await expectVisibleSpinnerMotion(
         workingCard.locator('[data-review-spinner-variant="thread-header"]'),
       );
-      await expectVisibleSpinnerMotion(
+      await expect(
         workingCard.locator('[data-review-spinner-variant="activity-update"]'),
-      );
+      ).toHaveCount(0);
       await toggle.click();
       await expectVisibleSpinnerMotion(
         page.locator(
@@ -2280,10 +2285,20 @@ test("should preserve and send a floating review across reload and viewport chan
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const questionRequest = nextPendingAgentRequest(nextExchange);
-    if (questionRequest?.kind !== "feedback") {
+    const queuedQuestionRequest = nextPendingAgentRequest(nextExchange);
+    if (queuedQuestionRequest?.kind !== "feedback") {
       throw new Error("The second serialized comment was not queued");
     }
+    const questionRequest = {
+      ...queuedQuestionRequest,
+      claimedFromRevision: deriveSourceRevision(revised),
+    };
+    await writeAgentRequest({ store, request: questionRequest });
+    nextExchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
     const queuedLabels = page.locator(
       '[data-review-outcome-group="queued"] [data-review-row-secondary]',
     );
@@ -2317,10 +2332,20 @@ test("should preserve and send a floating review across reload and viewport chan
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const outsideRequest = nextPendingAgentRequest(nextExchange);
-    if (outsideRequest?.kind !== "feedback") {
+    const queuedOutsideRequest = nextPendingAgentRequest(nextExchange);
+    if (queuedOutsideRequest?.kind !== "feedback") {
       throw new Error("The third serialized comment was not queued");
     }
+    const outsideRequest = {
+      ...queuedOutsideRequest,
+      claimedFromRevision: deriveSourceRevision(revised),
+    };
+    await writeAgentRequest({ store, request: outsideRequest });
+    nextExchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
     await writeAgentResponse({
       store,
       response: validateAgentResponseDraft({
@@ -2941,7 +2966,9 @@ test("should preserve and send a floating review across reload and viewport chan
     }
     await expect(question).toHaveAttribute("data-review-thread-expanded", "");
     await expect(
-      question.locator("[data-review-thread-minimize]"),
+      question
+        .locator("[data-review-thread-toolbar] [data-review-thread-minimize]")
+        .first(),
     ).toBeVisible();
     await expect(
       question.locator('[data-review-thread-turn="user"]'),
@@ -3741,10 +3768,13 @@ Ship the live review loop behind the explicit review command.
       trayThread.locator("[data-review-thread-resolution]"),
     ).toHaveCount(0);
     const changeActions = trayThread.locator(
-      "[data-review-change-actions]:has([data-review-thread-minimize])",
+      "[data-review-thread-next-steps] [data-review-thread-toolbar-actions]",
     );
     await expect(
-      changeActions.locator("[data-review-see-change]"),
+      trayThread.locator("[data-review-thread-next-steps]"),
+    ).toContainText("Next steps");
+    await expect(
+      trayThread.locator("[data-review-see-change]"),
     ).toContainText("See change");
     await expect(
       changeActions.locator("[data-review-thread-minimize]"),
@@ -3755,19 +3785,14 @@ Ship the live review loop behind the explicit review command.
     await expect(
       changeActions.locator("[data-review-thread-revert]"),
     ).toBeVisible();
-    const replyResolution = trayThread.locator(
-      "[data-review-reply-resolution]",
-    );
-    const replyAndResolve = replyResolution.locator(
-      "[data-review-thread-reply-resolve]",
-    );
-    await expect(replyAndResolve).toBeHidden();
+    await expect(
+      trayThread.locator("[data-review-thread-reply-resolve]"),
+    ).toHaveCount(0);
     const replyField = trayThread.locator("[data-review-thread-reply]");
     await replyField.fill("One final note before resolving.");
-    await expect(replyAndResolve).toBeVisible();
-    await expect(replyAndResolve).toHaveText("Reply & resolve");
-    await replyField.fill("");
-    await expect(replyAndResolve).toBeHidden();
+    await expect(
+      trayThread.locator("[data-review-thread-reply-send]"),
+    ).toBeEnabled();
     for (const theme of ["light", "dark"]) {
       await page.evaluate(
         (nextTheme) =>
