@@ -3,7 +3,7 @@
 // keeps its revision-local fixture syntax so both sides compile compatibly.
 
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -110,13 +110,55 @@ const captureName = ({ document, capture, viewport, theme }) =>
     .map((part) => part.replaceAll(/[^a-zA-Z0-9_-]/g, "-"))
     .join("__") + ".png";
 
+/** Waits until layout and paint have crossed two complete browser frames. */
+const settlePaint = async (page) => {
+  await page.evaluate(
+    () =>
+      new Promise((resolvePaint) => {
+        globalThis.requestAnimationFrame(() =>
+          globalThis.requestAnimationFrame(resolvePaint),
+        );
+      }),
+  );
+};
+
+/**
+ * Writes only a byte-stable frame. The exact comparison is deliberate: an
+ * unsettled animation, transition, font, or layout frame is a fixture defect,
+ * not a visual delta the history contract may smooth over.
+ */
+const captureStableTarget = async ({ page, target, path }) => {
+  await target.scrollIntoViewIfNeeded();
+  let prior;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    await settlePaint(page);
+    const current = await target.screenshot({ animations: "disabled" });
+    if (prior !== undefined && prior.equals(current)) {
+      await writeFile(path, current);
+      return;
+    }
+    prior = current;
+  }
+  throw new Error(
+    `Screenshot target "${path}" never repeated exact bytes across six settled frames.`,
+  );
+};
+
 const temporaryDirectory = await mkdtemp(
   join(tmpdir(), "big-plan-style-captures-"),
 );
 // Exact RGBA evidence requires one stable rasterizer and color space in CI.
 const browser = await chromium.launch({
   headless: true,
-  args: ["--disable-gpu", "--force-color-profile=srgb"],
+  args: [
+    "--disable-gpu",
+    // Hosted runners expose different CPU instruction sets. Skia documents
+    // this switch as its baseline layout-test path; it prevents SIMD-specific
+    // antialias rounding from changing an otherwise identical pixel by one.
+    "--disable-skia-runtime-opts",
+    "--force-color-profile=srgb",
+    "--force-device-scale-factor=1",
+  ],
 });
 
 try {
@@ -174,8 +216,9 @@ try {
               );
             }
             await target.waitFor({ state: "visible" });
-            await target.screenshot({
-              animations: "disabled",
+            await captureStableTarget({
+              page,
+              target,
               path: join(
                 outputDirectory,
                 captureName({
