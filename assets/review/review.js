@@ -35,6 +35,7 @@ import { UNDO_2_ICON } from "../../src/icons/lucide/undo-2.js";
 import { X_ICON } from "../../src/icons/lucide/x.js";
 import {
   deriveAgentIndicator,
+  deriveThreadOutcomeGroup,
   deriveThreadStatus,
   sessionQuietMs,
 } from "../../src/review/thread-status.js";
@@ -4878,12 +4879,10 @@ import { createToastManager } from "./toast.js";
     const resolved = options.resolved === true;
     const outcome = outcomeFor(comment);
     const lifecycle = outcome.status?.stage;
-    const rowState =
-      outcome.key !== "waiting"
-        ? "ready"
-        : lifecycle === "working" || lifecycle === "stalled"
-          ? "working"
-          : "queued";
+    const rowState = deriveThreadOutcomeGroup({
+      outcome: outcome.key,
+      lifecycle,
+    });
     const expanded = expandedThreadIds.has(comment.id);
     const collapse = () => {
       clearCommentLensIfOwned(comment.id);
@@ -4972,13 +4971,17 @@ import { createToastManager } from "./toast.js";
       const pendingRequest = pendingRequestForComment(comment);
       const latestOutcome = outcomeEventsFor(comment).at(-1);
       const secondary =
-        rowState === "ready"
-          ? `${outcome.label} · ${relativeCommentTime(
+        rowState === "needs-input"
+          ? `Needs your answer · ${relativeCommentTime(
               latestOutcome?.createdAt || comment.createdAt,
             )}`
-          : lifecycle === "stalled"
-            ? "Agent is quiet · check its terminal"
-            : "Agent is working · Just now";
+          : rowState === "ready"
+            ? `${outcome.label} · ${relativeCommentTime(
+                latestOutcome?.createdAt || comment.createdAt,
+              )}`
+            : lifecycle === "stalled"
+              ? "Agent is quiet · check its terminal"
+              : "Agent is working · Just now";
       children.push(
         el("p", {
           class:
@@ -5043,7 +5046,7 @@ import { createToastManager } from "./toast.js";
       }
     }
     const rowClasses =
-      "group/row mb-3 grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)] gap-[0.18rem] rounded-lg border border-[var(--edge-c)] bg-[var(--bg)] p-3 text-[0.6875rem] text-[var(--muted-c)] transition-[border-color,background-color] duration-100 hover:border-[color-mix(in_srgb,var(--muted-c)_55%,var(--edge-c))] focus-within:border-[var(--muted-c)] data-[review-row-state=working]:border-l-[3px] data-[review-row-state=working]:border-[var(--callout-note-c)] data-[review-row-state=working]:bg-[var(--callout-note-bg)] data-[review-row-state=queued]:border-l data-[review-row-state=ready]:border-l-2 data-[review-outcome=changed]:border-l-[var(--diff-add-c)] data-[review-outcome=question]:border-l-[var(--callout-warning-c)]" +
+      "group/row mb-3 grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)] gap-[0.18rem] rounded-lg border border-[var(--edge-c)] bg-[var(--bg)] p-3 text-[0.6875rem] text-[var(--muted-c)] transition-[border-color,background-color] duration-100 hover:border-[color-mix(in_srgb,var(--muted-c)_55%,var(--edge-c))] focus-within:border-[var(--muted-c)] data-[review-row-state=working]:border-l-[3px] data-[review-row-state=working]:border-[var(--callout-note-c)] data-[review-row-state=working]:bg-[var(--callout-note-bg)] data-[review-row-state=queued]:border-l data-[review-row-state=ready]:border-l-2 data-[review-row-state=needs-input]:border-l-[3px] data-[review-row-state=needs-input]:border-[var(--callout-warning-c)] data-[review-row-state=needs-input]:bg-[var(--callout-warning-bg)] data-[review-outcome=changed]:border-l-[var(--diff-add-c)] data-[review-outcome=question]:border-l-[var(--callout-warning-c)]" +
       (resolved ? " bg-[var(--surface-c)]" : "") +
       (outcome.status
         ? " data-[review-lifecycle=blocked]:border-l-[var(--callout-warning-c)]"
@@ -5514,27 +5517,44 @@ import { createToastManager } from "./toast.js";
       counts.changed + counts.question + counts.outside === 0;
     const groups = [
       {
+        key: "needs-input",
+        label: "Needs input",
+        glyph: TRIANGLE_ALERT_ICON,
+        match: (outcome) =>
+          deriveThreadOutcomeGroup({
+            outcome: outcome.key,
+            lifecycle: outcome.status?.stage,
+          }) === "needs-input",
+      },
+      {
         key: "ready",
         label: "Ready for Review",
         glyph: CHECK_ICON,
-        match: (outcome) => outcome.key !== "waiting",
+        match: (outcome) =>
+          deriveThreadOutcomeGroup({
+            outcome: outcome.key,
+            lifecycle: outcome.status?.stage,
+          }) === "ready",
       },
       {
         key: "working",
         label: "Now Working",
         spin: true,
         match: (outcome) =>
-          outcome.status?.stage === "working" ||
-          outcome.status?.stage === "stalled",
+          deriveThreadOutcomeGroup({
+            outcome: outcome.key,
+            lifecycle: outcome.status?.stage,
+          }) === "working",
       },
       {
         key: "queued",
         label: "Queued",
         glyph: HOURGLASS_ICON,
         match: (outcome) =>
-          outcome.key === "waiting" &&
-          outcome.status?.stage !== "working" &&
-          outcome.status?.stage !== "stalled",
+          deriveThreadOutcomeGroup({
+            outcome: outcome.key,
+            lifecycle: outcome.status?.stage,
+          }) === "queued",
       },
     ];
     const renderedGroups = groups
@@ -5568,10 +5588,15 @@ import { createToastManager } from "./toast.js";
             }),
           ],
         );
-        return el("section", { "data-review-outcome-group": displayKey }, [
-          heading,
-          el("ol", {}, comments.map(sentRow)),
-        ]);
+        return el(
+          "section",
+          {
+            class:
+              key === "needs-input" ? "text-[var(--callout-warning-c)]" : "",
+            "data-review-outcome-group": displayKey,
+          },
+          [heading, el("ol", {}, comments.map(sentRow))],
+        );
       })
       .filter(Boolean);
     const resolved = sent.filter((comment) =>

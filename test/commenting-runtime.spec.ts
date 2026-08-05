@@ -3072,7 +3072,17 @@ test("should preserve and send a floating review across reload and viewport chan
       await page
         .locator("[data-review-sent-list] [data-review-outcome-group] h3")
         .allTextContents(),
-    ).toEqual(["Ready for Review 3"]);
+    ).toEqual(["Needs input 1", "Ready for Review 2"]);
+    const needsInput = page.locator(
+      '[data-review-outcome-group="needs-input"] [data-review-sent-row][data-review-outcome="question"]',
+    );
+    await expect(needsInput).toHaveAttribute(
+      "data-review-row-state",
+      "needs-input",
+    );
+    await expect(
+      needsInput.locator("[data-review-row-secondary]"),
+    ).toContainText("Needs your answer");
     await expect(
       page.locator(
         '[data-review-outcome-group="ready"] [data-review-sent-row][data-review-outcome="changed"] [data-review-row-review-change]',
@@ -3634,7 +3644,7 @@ Ship the live review loop behind the explicit review command.
     await page.locator('[data-review-tab="comments"]').click();
     await page
       .locator(
-        '[data-review-outcome-group="ready"] [data-review-sent-row][data-review-outcome="question"] [data-review-row-target]',
+        '[data-review-outcome-group="needs-input"] [data-review-sent-row][data-review-outcome="question"] [data-review-row-target]',
       )
       .click();
     await expect(
