@@ -1,15 +1,10 @@
 /* CSS escape hatch: selector relationships express view, change-visibility,
    and before/after pane state. FileTreeDiff variants use stable selector
    contracts; the shared row and status styling lives with the
-   tree-hierarchy building block. */
+   tree-hierarchy building block, while renderer-owned resting surfaces stay
+   with their JSX. */
 
 @layer components {
-  article [data-file-tree-diff] {
-    background: var(--diff-content-bg);
-  }
-  article .file-tree-header {
-    background: var(--diff-header-bg);
-  }
   article .file-tree-diff-button[hidden] {
     display: none;
   }
@@ -25,9 +20,6 @@
     [data-file-tree-diff][data-tree-view="before-after"]
     [data-tree-content="before-after"] {
     display: grid;
-  }
-  article .file-tree-diff-pane-caption {
-    background: var(--diff-hunk-bg);
   }
   article [data-tree-after-variant="plain"] {
     display: none;
