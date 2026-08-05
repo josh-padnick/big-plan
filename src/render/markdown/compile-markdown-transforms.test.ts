@@ -52,7 +52,7 @@ Run | Result
 </Wireframe>
 `);
     const tables = bodyHtml.match(/<table(?:\s|>)/g) ?? [];
-    const wireframeStart = bodyHtml.indexOf('<figure class="wireframe"');
+    const wireframeStart = bodyHtml.indexOf('<figure class="wireframe ');
     expect(tables).toHaveLength(2);
     expect(wireframeStart).toBeGreaterThan(0);
     expect(bodyHtml.slice(0, wireframeStart)).toContain(

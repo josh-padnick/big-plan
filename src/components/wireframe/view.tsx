@@ -15,6 +15,10 @@ import type {
 } from "./model.js";
 import { WIREFRAME_DEVICE_PRESETS } from "./model.js";
 
+// /* off-scale */ Phase A preserves the sketch radii, device silhouettes,
+// 0.9375rem caption, and hand-drawn primitive metrics exactly. Phase B may
+// regularize ordinary chrome while keeping the authored sketch language.
+
 // Token-to-utility maps are written as literals so the stylesheet generator
 // sees every class this view can emit.
 const GAP_CLASSES: Readonly<Record<WireframeSpace, string>> = {
@@ -119,7 +123,7 @@ const WireframeElement = ({
       const conversation = conversationPartsFor(node.children);
       return (
         <section
-          className="wireframe-panel"
+          className="wireframe-panel relative"
           data-wireframe-surface={node.surface}
           {...(isMasterPane(node) ? { "data-wireframe-master": "" } : {})}
         >
@@ -676,15 +680,17 @@ const Screen = ({
     desktop && screen.children.some((child) => child.element === "AppShell");
   return (
     <section
-      className="wireframe-screen"
+      className="wireframe-screen mx-auto w-full overflow-x-auto [container-type:inline-size]"
       aria-label={`${screen.name}, ${preset.label}`}
       data-wireframe-screen={screen.id}
       data-wireframe-device={screen.device}
       {...(current ? { "data-wireframe-current": "" } : {})}
     >
-      <div className="wireframe-screen-caption">
+      <div className="wireframe-screen-caption mb-1.5 flex flex-wrap justify-between gap-2 text-xs text-muted">
         {named ? (
-          <span className="wireframe-screen-name">{screen.name}</span>
+          <span className="wireframe-screen-name font-semibold tracking-[0.02em]">
+            {screen.name}
+          </span>
         ) : (
           <span />
         )}
@@ -697,7 +703,10 @@ const Screen = ({
               : "minimum · grows with content"}
         </span>
       </div>
-      <div className="wireframe-frame" data-wireframe-device={screen.device}>
+      <div
+        className="wireframe-frame box-border w-[var(--wf-outer)] overflow-hidden [zoom:1]"
+        data-wireframe-device={screen.device}
+      >
         {desktop ? (
           <div className="wireframe-browser-bar">
             <span className="wireframe-browser-dots" aria-hidden="true" />
@@ -731,14 +740,16 @@ const Screen = ({
 
 export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
   <figure
-    className="wireframe"
+    className="wireframe my-7"
     data-wireframe={model.id}
     {...(model.screens.some((screen) => screen.device === "desktop")
       ? { "data-wireframe-desktop": "" }
       : {})}
   >
     {model.title === undefined ? null : (
-      <figcaption className="wireframe-caption">{model.title}</figcaption>
+      <figcaption className="wireframe-caption mb-2 text-[0.9375rem] font-semibold text-ink">
+        {model.title}
+      </figcaption>
     )}
     {model.screens.length < 2 ? null : (
       <nav className="wireframe-switcher" aria-label="Prototype screens">
@@ -758,7 +769,7 @@ export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
         ))}
       </nav>
     )}
-    <div className="wireframe-screens">
+    <div className="wireframe-screens flex flex-col gap-6">
       {model.screens.map((screen) => (
         <Screen
           key={screen.id}
