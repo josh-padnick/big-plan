@@ -18,6 +18,7 @@ import { buildRevisionChangeSet } from "../src/review/revision-change-set.js";
 import { renderDocument } from "../src/render/render-document.js";
 import { agentCommand } from "../src/cli/agent/command.js";
 import {
+  appendProgress,
   reviewStoreFor,
   readProgress,
   writeAgentHeartbeat,
@@ -4216,6 +4217,145 @@ test("should keep composition anchored across tray and missing-source states", a
       centeredY: true,
       stranded: false,
     });
+});
+
+test("should present one live agent activity and navigate to its conversation", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(reviewRuntimeUrl);
+  await expect(page.locator("html")).toHaveAttribute("data-review-ready", "");
+  const session = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/session", {
+      headers: {
+        "x-big-plan-review-token": root.getAttribute("data-review-token") ?? "",
+      },
+    });
+    return response.json();
+  });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("sessionId" in session) ||
+    !("planId" in session) ||
+    !("plan" in session) ||
+    typeof session.sessionId !== "string" ||
+    typeof session.planId !== "string" ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error("The activity test needs the live session identity");
+  }
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+  });
+
+  await page.locator("[data-review-toggle]").click();
+  await page.locator('[data-review-tab="agent"]').click();
+  const activity = page.locator("[data-review-current-activity]");
+  await expect(activity).toHaveAttribute(
+    "data-review-current-activity",
+    "idle",
+  );
+  await expect(activity).toContainText("No agent work in progress");
+  await expect(activity).toContainText(
+    "The agent is connected and waiting for feedback.",
+  );
+
+  await page.locator('[data-review-tab="comments"]').click();
+  await page.locator("[data-review-slide-selector]").first().click();
+  await page
+    .locator("[data-review-compose-input]")
+    .fill("Restore the three Spanish sentences to English.");
+  await page.locator("[data-review-compose-save]").click();
+  await page.locator("[data-review-sidebar-send]").click();
+  await expect(page.locator("[data-review-sent-row]")).toHaveCount(1);
+  await page.locator('[data-review-tab="agent"]').click();
+  await expect(activity).toHaveAttribute(
+    "data-review-current-activity",
+    "waiting",
+  );
+  await expect(activity).toContainText("Waiting for agent");
+
+  const exchange = await readAgentExchange({
+    store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const pending = nextPendingAgentRequest(exchange);
+  if (pending === undefined) {
+    throw new Error("The activity test did not queue its feedback request");
+  }
+  await writeAgentClaim({
+    store,
+    request: {
+      ...pending,
+      claimedFromRevision: pending.sourceRevision,
+    },
+  });
+  await appendProgress({
+    store,
+    event: {
+      sessionId: session.sessionId,
+      requestId: pending.requestId,
+      step: "Reading the request",
+      state: "live",
+      at: new Date(Date.now() - 1_000).toISOString(),
+    },
+  });
+  await appendProgress({
+    store,
+    event: {
+      sessionId: session.sessionId,
+      requestId: pending.requestId,
+      step: "Restoring the Spanish sentences to English",
+      state: "live",
+      at: new Date().toISOString(),
+    },
+  });
+
+  await expect(activity).toHaveAttribute(
+    "data-review-current-activity",
+    "working",
+    { timeout: 10_000 },
+  );
+  await expect(activity).toContainText("Responding to a comment");
+  await expect(activity).toContainText(
+    "Restoring the Spanish sentences to English",
+  );
+  await expect(activity).not.toContainText("Reading the request");
+
+  const history = page.locator("[data-review-connection-history]");
+  await history.locator("summary").click();
+  await expect(history).toHaveAttribute("open", "");
+  await appendProgress({
+    store,
+    event: {
+      sessionId: session.sessionId,
+      requestId: pending.requestId,
+      step: "Validating the restored plan",
+      state: "live",
+      at: new Date(Date.now() + 1).toISOString(),
+    },
+  });
+  await expect(activity).toContainText("Validating the restored plan", {
+    timeout: 10_000,
+  });
+  await expect(history).toHaveAttribute("open", "");
+
+  await page.locator("[data-review-current-activity-view]").click();
+  await expect(page.locator('[data-review-tab="comments"]')).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.locator("[data-review-row-expanded]")).toHaveCount(1);
 });
 
 test("should preserve footnote navigation inside a selected slide", async ({

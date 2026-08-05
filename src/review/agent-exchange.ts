@@ -4,6 +4,7 @@
 // filenames, replay rules, response completeness, or source-revision checks.
 
 import { createHash } from "node:crypto";
+import { nextPendingActivityRequest } from "./agent-activity.js";
 import type { CommentTarget, ReviewComment } from "./comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import type { RevisionPair } from "./revision-change-set.js";
@@ -891,16 +892,7 @@ export const readAgentExchange = async ({
 /** Returns the oldest request that does not yet have a validated response. */
 export const nextPendingAgentRequest = (
   snapshot: AgentExchangeSnapshot,
-): AgentRequest | undefined => {
-  const answered = new Set(
-    snapshot.responses.map((response) => response.requestId),
-  );
-  const cancelled = new Set(snapshot.cancelledIds);
-  return snapshot.requests.find(
-    (request) =>
-      !answered.has(request.requestId) && !cancelled.has(request.requestId),
-  );
-};
+): AgentRequest | undefined => nextPendingActivityRequest(snapshot);
 
 /**
  * Claims a serialized request against the source visible at pickup. Claim

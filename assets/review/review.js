@@ -38,6 +38,7 @@ import {
   deriveThreadStatus,
   sessionQuietMs,
 } from "../../src/review/thread-status.js";
+import { deriveCurrentAgentActivity } from "../../src/review/agent-activity.js";
 import { layoutAnchoredCards } from "../../src/review/anchored-layout.js";
 import {
   commentTimeLabel,
@@ -325,7 +326,6 @@ import { createToastManager } from "./toast.js";
   let agentCancelledIds = [];
   let agentConnected = false;
   let agentHeartbeatAt = 0;
-  let agentSessionState = null;
   let agentConnectionLog = [];
   let agentPlanPath = "";
   let agentCommand = "";
@@ -806,7 +806,6 @@ import { createToastManager } from "./toast.js";
   agentCancelledIds = diskState.agent.cancelledIds;
   agentConnected = diskState.agent.connected;
   agentHeartbeatAt = diskState.agent.updatedAtMs;
-  agentSessionState = diskState.agent.state;
   sourceRevision = diskState.sourceRevision;
   reviewerRevision = diskState.reviewerRevision;
   try {
@@ -1961,10 +1960,28 @@ import { createToastManager } from "./toast.js";
 
   const renderConnectionPanel = () => {
     if (!connectionPanel) return;
-    const signature = JSON.stringify({
-      connected: agentConnected,
+    observeRequests();
+    const pendingRequest = pendingRequestList()[0];
+    const activity = deriveCurrentAgentActivity({
+      snapshot: {
+        requests: agentRequests,
+        responses: agentResponses,
+        cancelledIds: agentCancelledIds,
+      },
+      progressEvents,
+      agentConnected,
       runtimeOffline,
-      state: agentSessionState,
+      now: Date.now(),
+      heartbeatAt: agentHeartbeatAt,
+      requestSeenAt:
+        pendingRequest === undefined
+          ? undefined
+          : requestSeenAt.get(pendingRequest.requestId)?.at,
+    });
+    const signature = JSON.stringify({
+      activity,
+      connected: agentConnected,
+      heartbeat: agentHeartbeatAt,
       log: agentConnectionLog,
       plan: agentPlanPath,
       command: agentCommand,
@@ -1978,84 +1995,180 @@ import { createToastManager } from "./toast.js";
     const historyWasOpen =
       connectionPanel.querySelector("[data-review-connection-history]")
         ?.open === true;
-    const state = el("section", {
+    const label = el("p", {
       class:
-        "[display:grid] [gap:0.55rem] [font-size:0.75rem] [line-height:1.5]" +
-        (agentConnected
-          ? " [padding:0.8rem] [border:1px_solid_var(--diff-add-c)] [border-radius:0.45rem] [background:var(--diff-add-bg)] [color:var(--diff-add-c)]"
-          : runtimeOffline
-            ? " [padding:0.8rem] [border:1px_solid_var(--callout-danger-c)] [border-radius:0.45rem] [background:var(--callout-danger-bg)] [color:var(--callout-danger-c)]"
-            : ""),
-      "data-review-connection-state": agentConnected
-        ? "connected"
-        : runtimeOffline
-          ? "offline"
-          : "disconnected",
-      "data-tone": agentConnected
-        ? "connected"
-        : runtimeOffline
-          ? "offline"
-          : "disconnected",
+        "mb-2 text-[0.625rem] font-bold uppercase tracking-[0.12em] text-[var(--muted-c)]",
+      text: "Current activity",
     });
-    if (agentConnected) {
-      state.append(
-        el(
-          "div",
-          {
-            class: "[display:flex] [align-items:center] [gap:0.45rem]",
-            "data-review-connection-title": true,
-          },
-          [
-            el("span", {
+    const activityCard = el("article", {
+      class:
+        "grid min-w-0 gap-2 rounded-lg border border-[var(--edge-c)] bg-[var(--surface-c)] p-3 text-xs leading-[1.45] data-[tone=working]:border-[var(--callout-note-c)] data-[tone=working]:bg-[var(--callout-note-bg)] data-[tone=warning]:border-[var(--callout-warning-c)] data-[tone=warning]:bg-[var(--callout-warning-bg)] data-[tone=danger]:border-[var(--callout-danger-c)] data-[tone=danger]:bg-[var(--callout-danger-bg)]",
+      "data-review-current-activity": activity.state,
+      "data-tone": activity.tone,
+    });
+    const activityHead = el(
+      "div",
+      { class: "flex min-w-0 items-center gap-2" },
+      [
+        activity.state === "working"
+          ? spinner("agent-current-activity")
+          : el("span", {
               class:
-                "[width:6px] [height:6px] [border-radius:999px] [background:currentColor] [box-shadow:0_0_0_2px_color-mix(in_srgb,_var(--diff-add-c)_34%,_transparent)]",
-              "data-review-connection-dot": true,
+                "size-2 shrink-0 rounded-full border-2 border-current opacity-65",
               "aria-hidden": "true",
             }),
-            el("strong", { text: "Agent session active" }),
-            el("span", {
-              class:
-                "[margin-left:auto] [font-size:0.6875rem] [font-weight:700] [text-transform:uppercase]",
-              "data-review-connection-phase": true,
-              text: agentSessionState === "working" ? "Working" : "Waiting",
-            }),
-          ],
-        ),
-        el("p", {}, [
-          document.createTextNode("Last signal "),
+        el("strong", {
+          class: "min-w-0 flex-1 text-sm text-[var(--ink-c)]",
+          "data-review-current-activity-headline": true,
+          text: activity.headline,
+        }),
+        el("span", {
+          class:
+            "rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-[0.08em]",
+          "data-review-current-activity-badge": true,
+          text: activity.state,
+        }),
+      ],
+    );
+    activityCard.appendChild(activityHead);
+    if (activity.requestId !== undefined) {
+      const request = agentRequests.find(
+        (candidate) => candidate.requestId === activity.requestId,
+      );
+      const comment =
+        request?.kind === "feedback"
+          ? request.comments[0]
+          : request?.kind === "reply"
+            ? sent.find((candidate) => candidate.id === request.commentId)
+            : undefined;
+      if (comment) {
+        activityCard.appendChild(
+          el("strong", {
+            class:
+              "text-[0.625rem] uppercase tracking-[0.08em] text-[var(--ink-c)]",
+            "data-review-current-activity-target": true,
+            text: slideTitleFor(comment.target),
+          }),
+        );
+      }
+    }
+    const supporting =
+      activity.state === "working" ? activity.latestStep : activity.supporting;
+    activityCard.appendChild(
+      appendInlineCode(
+        el("p", {
+          class: "min-w-0 text-[var(--ink-c)] [overflow-wrap:anywhere]",
+          "data-review-current-activity-step": true,
+        }),
+        supporting,
+      ),
+    );
+    const activityFooter = el("div", {
+      class:
+        "flex min-w-0 items-center gap-2 border-t border-[color-mix(in_srgb,var(--edge-c)_70%,transparent)] pt-2 text-[0.625rem] text-[var(--muted-c)]",
+    });
+    if ("updatedAtMs" in activity) {
+      activityFooter.appendChild(
+        el("span", { "data-review-current-activity-updated": true }, [
+          document.createTextNode("Updated "),
           el("span", {
-            "data-review-agent-heartbeat": true,
-            "data-review-relative-at": agentHeartbeatAt,
-            text: relativeSignal(agentHeartbeatAt),
+            "data-review-relative-at": activity.updatedAtMs,
+            text: relativeSignal(activity.updatedAtMs),
           }),
         ]),
       );
-    } else if (runtimeOffline) {
-      state.append(
-        el("strong", { text: "The review server is unreachable" }),
-        appendInlineCode(
-          el("p", {}),
-          "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
-        ),
-      );
     } else {
-      state.append(
-        el(
-          "div",
-          {
+      activityFooter.appendChild(
+        el("span", {
+          text:
+            activity.state === "idle"
+              ? "No unanswered requests"
+              : "Current queue state",
+        }),
+      );
+    }
+    if (activity.requestId !== undefined) {
+      const viewThread = el("button", {
+        class:
+          "ml-auto cursor-pointer border-0 bg-transparent p-0 text-[0.625rem] font-bold text-[var(--accent-c)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-c)] active:opacity-65",
+        type: "button",
+        "data-review-current-activity-view": true,
+        text: "View thread →",
+      });
+      viewThread.addEventListener("click", () => {
+        const request = agentRequests.find(
+          (candidate) => candidate.requestId === activity.requestId,
+        );
+        if (request?.kind === "chat") {
+          setRailOpen(true);
+          setActiveTab("chat");
+          return;
+        }
+        const commentId =
+          request?.kind === "feedback"
+            ? request.comments[0]?.id
+            : request?.kind === "reply"
+              ? request.commentId
+              : undefined;
+        const comment = sent.find((candidate) => candidate.id === commentId);
+        if (!comment) return;
+        expandedThreadIds.add(comment.id);
+        revealCommentInTray(comment);
+      });
+      activityFooter.appendChild(viewThread);
+    }
+    activityCard.appendChild(activityFooter);
+
+    const connection = el(
+      "section",
+      {
+        class:
+          "mt-3 grid gap-2 rounded-md border border-[var(--edge-c)] px-3 py-2 text-[0.6875rem] text-[var(--muted-c)]",
+        "data-review-connection-state": agentConnected
+          ? "connected"
+          : runtimeOffline
+            ? "offline"
+            : "disconnected",
+      },
+      [
+        el("div", { class: "flex min-w-0 items-center gap-2" }, [
+          el("span", {
             class:
-              "grid gap-[0.55rem] rounded-[0.45rem] border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-[var(--callout-danger-c)]",
-            "data-review-connection-alert": true,
-          },
-          [
-            el("strong", {
-              text: "No agent is connected to this review session.",
-            }),
-            el("p", {
-              text: "Your comments still save and queue here; nothing is sent until an agent reconnects.",
-            }),
-          ],
-        ),
+              "size-[6px] shrink-0 rounded-full bg-current shadow-[0_0_0_2px_color-mix(in_srgb,currentColor_34%,transparent)]",
+            "data-review-connection-dot": true,
+            "aria-hidden": "true",
+          }),
+          el("strong", {
+            class: "text-[var(--ink-c)]",
+            text: agentConnected
+              ? "Agent session connected"
+              : runtimeOffline
+                ? "Review server offline"
+                : "Agent session disconnected",
+          }),
+          ...(agentHeartbeatAt > 0
+            ? [
+                el(
+                  "span",
+                  {
+                    class: "ml-auto",
+                    "data-review-agent-heartbeat": true,
+                  },
+                  [
+                    document.createTextNode("Last signal "),
+                    el("span", {
+                      "data-review-relative-at": agentHeartbeatAt,
+                      text: relativeSignal(agentHeartbeatAt),
+                    }),
+                  ],
+                ),
+              ]
+            : []),
+        ]),
+      ],
+    );
+    if (!agentConnected && !runtimeOffline) {
+      connection.append(
         el("p", {
           text: "To reconnect this running review, paste this exact prompt into your coding agent:",
         }),
@@ -2078,7 +2191,11 @@ import { createToastManager } from "./toast.js";
     }
     const history = connectionLogView({ historyWasOpen });
     renderWithPreservedScroll(() => {
-      connectionPanel.replaceChildren(state, history);
+      connectionPanel.replaceChildren(
+        el("section", {}, [label, activityCard]),
+        connection,
+        history,
+      );
     });
   };
 
@@ -6905,7 +7022,6 @@ import { createToastManager } from "./toast.js";
     agentCancelledIds = checked.cancelledIds;
     agentConnected = checked.connected;
     agentHeartbeatAt = checked.updatedAtMs;
-    agentSessionState = checked.state;
     agentConnectionLog = checked.connectionLog;
     agentPlanPath = checked.plan;
     agentCommand = checked.agentCommand;
