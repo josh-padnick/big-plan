@@ -6790,6 +6790,8 @@ import { createToastManager } from "./toast.js";
     });
 
   sendButton.addEventListener("click", () => {
+    setRailOpen(true);
+    setActiveTab("comments");
     void submit();
   });
   sidebarSendButton.addEventListener("click", () => {

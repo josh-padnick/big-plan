@@ -1784,6 +1784,8 @@ test("should preserve and send a floating review across reload and viewport chan
         response.url().endsWith("/api/feedback") &&
         response.request().method() === "POST",
     );
+    await page.locator("[data-review-hide]").click();
+    await expect(tray).toBeHidden();
     await page.locator("[data-review-send]").click();
     const response = await responsePromise;
     expect(response.ok()).toBe(true);
@@ -1791,6 +1793,10 @@ test("should preserve and send a floating review across reload and viewport chan
       .poll(() => page.evaluate(() => window.scrollY))
       .toBeCloseTo(before, 0);
     await expect(tray).toBeVisible();
+    await expect(page.locator('[data-review-tab="comments"]')).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     await expect(
       page.locator('[data-review-outcome-group="queued"] [data-review-row]'),
     ).toHaveCount(3);
