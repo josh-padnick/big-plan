@@ -28,7 +28,7 @@
     "gen:fonts": "node scripts/gen-fonts.mjs",
     "gen:guidance": "node scripts/gen-guidance.mjs",
     "gen:review": "node scripts/gen-review-script.mjs",
-    "build": "bun run gen && tsc",
+    "build": "bun run gen && tsc && node scripts/check-component-revision-contract.mjs",
     "test": "bun run gen && vitest run && bun run test:style-history",
     "test:style-history": "node --test scripts/style-contract/*.test.mjs scripts/style-snapshots/*.test.mjs",
     "test:e2e": "playwright test",

@@ -5,6 +5,7 @@ import { type ScopedChildDefinition } from "../_authoring/contract.js";
 import { compileGraphqlOperationComponent } from "./compile.js";
 import { GraphqlOperation } from "./view.js";
 import { defineComponent } from "../_registration/define-component.js";
+import { defineRevisionAdapter } from "../_registration/revision-adapter.js";
 
 // Uses per-child message text while keeping one declarative body policy shape.
 const scopedChild = (
@@ -26,6 +27,7 @@ const scopedChild = (
 export const GRAPHQL_OPERATION_COMPONENT_DEFINITION = defineComponent({
   compile: compileGraphqlOperationComponent,
   view: GraphqlOperation,
+  revision: defineRevisionAdapter({ view: GraphqlOperation }),
   scopedChildren: {
     Argument: scopedChild("Argument"),
     Field: scopedChild("Field"),

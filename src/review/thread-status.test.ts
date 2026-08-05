@@ -3,10 +3,36 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  deriveThreadOutcomeGroup,
   deriveAgentIndicator,
   deriveThreadStatus,
   sessionQuietMs,
 } from "./thread-status.js";
+
+describe("thread outcome grouping", () => {
+  it("should keep a requested answer ahead of work ready for review", () => {
+    expect(deriveThreadOutcomeGroup({ outcome: "question" })).toBe(
+      "needs-input",
+    );
+    expect(deriveThreadOutcomeGroup({ outcome: "changed" })).toBe("ready");
+    expect(deriveThreadOutcomeGroup({ outcome: "outside" })).toBe("ready");
+  });
+
+  it("should distinguish active work from serialized queued work", () => {
+    expect(
+      deriveThreadOutcomeGroup({
+        outcome: "waiting",
+        lifecycle: "working",
+      }),
+    ).toBe("working");
+    expect(
+      deriveThreadOutcomeGroup({
+        outcome: "waiting",
+        lifecycle: "waiting",
+      }),
+    ).toBe("queued");
+  });
+});
 
 describe("deriveThreadStatus", () => {
   it("should show exactly one connection indicator for each health pair", () => {

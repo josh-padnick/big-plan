@@ -22,6 +22,21 @@ test("should follow the system color scheme without a theme control", async ({
     .locator("body")
     .evaluate((body) => getComputedStyle(body).backgroundColor);
 
+  await test.step("code blocks use a quiet GitHub-like container", async () => {
+    const codeBlock = page.locator("article pre").first();
+    await expect(codeBlock).toHaveCSS("border-top-width", "0px");
+    await expect(codeBlock).toHaveCSS("border-radius", "6px");
+    await expect
+      .poll(() =>
+        codeBlock.evaluate(
+          (node) =>
+            getComputedStyle(node).backgroundColor !==
+            getComputedStyle(document.body).backgroundColor,
+        ),
+      )
+      .toBe(true);
+  });
+
   await test.step("switching the OS preference reskins the document", async () => {
     await page.emulateMedia({ colorScheme: "dark" });
     await expect
@@ -31,6 +46,20 @@ test("should follow the system color scheme without a theme control", async ({
           .evaluate((body) => getComputedStyle(body).backgroundColor),
       )
       .not.toBe(lightBackground);
+  });
+
+  await test.step("code blocks keep their quiet contrast in dark mode", async () => {
+    const codeBlock = page.locator("article pre").first();
+    await expect(codeBlock).toHaveCSS("border-top-width", "0px");
+    await expect
+      .poll(() =>
+        codeBlock.evaluate(
+          (node) =>
+            getComputedStyle(node).backgroundColor !==
+            getComputedStyle(document.body).backgroundColor,
+        ),
+      )
+      .toBe(true);
   });
 
   await test.step("returning to light restores the original palette", async () => {

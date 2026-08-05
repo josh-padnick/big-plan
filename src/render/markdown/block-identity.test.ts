@@ -81,6 +81,25 @@ describe("block identity scopes", () => {
     ]);
   });
 
+  it("should address every nested sub-slide inside one major slide", () => {
+    const { html, blocks } = compile(
+      "## Goals and non-goals\n\n### Goals\n\n- Keep it durable.\n\n### Non-goals\n\n- Replace the processor.\n",
+    );
+    expect(blocks.map((block) => block.id)).toEqual([
+      "section/goals-and-non-goals/heading-1",
+      "section/goals/heading-1",
+      "section/goals/list-1",
+      "section/non-goals/heading-1",
+      "section/non-goals/list-1",
+    ]);
+    expect(attributesFor({ html, id: "section/goals/heading-1" })).toContain(
+      'data-block-section="Goals"',
+    );
+    expect(attributesFor({ html, id: "section/non-goals/list-1" })).toContain(
+      'data-block-section="Non-goals"',
+    );
+  });
+
   it("should number repeats of one kind within a scope in document order", () => {
     const { blocks } = compile("## One\n\nA.\n\nB.\n\nC.\n");
     expect(blocks.map((block) => block.id)).toEqual([

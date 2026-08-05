@@ -49,24 +49,24 @@ import {
   writeAgentRequest,
 } from "./agent-exchange.js";
 import {
+  commitFeedback,
+  loadDurableReview,
+  saveReviewerState,
+} from "./durable-review.js";
+import {
   agentHeartbeatIsFresh,
   appendAgentCancellation,
   appendAgentConnectionEvent,
   appendProgress,
   prepareStore,
   randomId,
-  readActiveDraft,
   readAgentConnectionEvents,
   readAgentHeartbeat,
-  readComments,
   readProgress,
-  readResolvedCommentIds,
   readRevisionSnapshot,
+  readSessionDescriptor,
   reviewStoreFor,
-  writeActiveDraft,
-  writeComments,
-  writeFeedbackPackage,
-  writeResolvedCommentIds,
+  sessionHeartbeatIsFresh,
   writeRevisionSnapshot,
   writeSessionDescriptor,
   writeSessionHeartbeat,
@@ -142,6 +142,21 @@ export type ReviewRuntime = {
   readonly store: ReviewStore;
   readonly close: () => Promise<void>;
 };
+
+export class ReviewRuntimeAlreadyRunning extends Error {
+  constructor({
+    planPath,
+    url,
+  }: {
+    readonly planPath: string;
+    readonly url?: string;
+  }) {
+    super(
+      `A live review runtime already owns ${planPath}.${url === undefined ? "" : ` Open ${url} or stop that runtime before starting another.`}`,
+    );
+    this.name = "ReviewRuntimeAlreadyRunning";
+  }
+}
 
 const constantTimeEquals = (left: string, right: string): boolean => {
   const a = Buffer.from(left, "utf8");
@@ -246,6 +261,40 @@ export const startReviewRuntime = async ({
   const token = randomBytes(32).toString("base64url");
   const store = reviewStoreFor({ planPath: resolvedPlanPath, planId });
   await prepareStore(store);
+  const previous = await readSessionDescriptor({
+    store,
+    validate: (
+      value,
+    ): { readonly sessionId: string; readonly url?: string } | undefined => {
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        Array.isArray(value) ||
+        !("sessionId" in value) ||
+        typeof value.sessionId !== "string"
+      ) {
+        return undefined;
+      }
+      return {
+        sessionId: value.sessionId,
+        ...("url" in value && typeof value.url === "string"
+          ? { url: value.url }
+          : {}),
+      };
+    },
+  });
+  if (
+    previous !== undefined &&
+    (await sessionHeartbeatIsFresh({
+      store,
+      sessionId: previous.sessionId,
+    }))
+  ) {
+    throw new ReviewRuntimeAlreadyRunning({
+      planPath: resolvedPlanPath,
+      url: previous.url,
+    });
+  }
   const initialSource = await readFile(resolvedPlanPath, "utf8");
   const initialSourceRevision = deriveSourceRevision(initialSource);
   let servedSourceRevision = initialSourceRevision;
@@ -259,11 +308,34 @@ export const startReviewRuntime = async ({
   // render still resolves after the agent revises the plan. Phase 1 does not
   // re-anchor; it simply refuses to forget what it once addressed.
   const blocks = new Map<string, BlockMapEntry>();
-  let progressSeq = 0;
   let lastConnectionState: boolean | undefined;
+  let reviewerMutationQueue = Promise.resolve();
+
+  const serializeReviewerMutation = <Result>(
+    operation: () => Promise<Result>,
+  ): Promise<Result> => {
+    const result = reviewerMutationQueue.then(operation);
+    reviewerMutationQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
 
   const validate = (value: unknown): ReadonlyArray<ReviewComment> =>
     validateComments({ value, blocks, now: new Date().toISOString() });
+  const reviewerValidators = {
+    drafts: validate,
+    activeDraft: validateActiveDraft,
+    resolvedCommentIds: validateResolvedCommentIds,
+  };
+  const durableReview = () =>
+    loadDurableReview({
+      store,
+      sessionId,
+      planId,
+      validators: reviewerValidators,
+    });
   const agentConnected = (): Promise<boolean> =>
     agentHeartbeatIsFresh({ store, sessionId });
   const agentSession = async (): Promise<Readonly<Record<string, unknown>>> => {
@@ -274,24 +346,18 @@ export const startReviewRuntime = async ({
     };
   };
 
-  const readBootstrap = async (markdown: string): Promise<string> =>
-    JSON.stringify({
-      drafts: await readComments({ path: store.draftsPath, validate }),
-      sent: await readComments({ path: store.sentPath, validate }),
-      activeDraft: await readActiveDraft({
-        path: store.activeDraftPath,
-        validate: validateActiveDraft,
-      }),
-      resolvedCommentIds: await readResolvedCommentIds({
-        store,
-        validate: validateResolvedCommentIds,
-      }),
+  const readBootstrap = async (markdown: string): Promise<string> => {
+    const durable = await durableReview();
+    return JSON.stringify({
+      ...durable.reviewer,
+      sent: durable.sent,
       agent: {
-        ...(await readAgentExchange({ store, sessionId, planId })),
+        ...durable.exchange,
         ...(await agentSession()),
       },
       sourceRevision: deriveSourceRevision(markdown),
     });
+  };
 
   const renderPlan = async (): Promise<string> => {
     const markdown = await readFile(resolvedPlanPath, "utf8");
@@ -372,20 +438,13 @@ export const startReviewRuntime = async ({
       // The document must exist before drafts can be resolved, because the
       // block map is what makes a stored target meaningful.
       await renderPlan();
+      const durable = await durableReview();
       sendJson({
         response,
         status: 200,
         value: {
-          drafts: await readComments({ path: store.draftsPath, validate }),
-          sent: await readComments({ path: store.sentPath, validate }),
-          activeDraft: await readActiveDraft({
-            path: store.activeDraftPath,
-            validate: validateActiveDraft,
-          }),
-          resolvedCommentIds: await readResolvedCommentIds({
-            store,
-            validate: validateResolvedCommentIds,
-          }),
+          ...durable.reviewer,
+          sent: durable.sent,
         },
       });
       return;
@@ -401,13 +460,44 @@ export const startReviewRuntime = async ({
       const resolvedCommentIds = validateResolvedCommentIds(
         payload.resolvedCommentIds,
       );
-      await writeComments({ path: store.draftsPath, comments: drafts });
-      await writeActiveDraft({
-        path: store.activeDraftPath,
-        value: activeDraft,
+      const expectedRevision = payload.expectedRevision;
+      if (
+        typeof expectedRevision !== "number" ||
+        !Number.isInteger(expectedRevision) ||
+        expectedRevision < 0
+      ) {
+        refuse({
+          response,
+          status: 400,
+          reason: "Draft saves require the reviewer revision they read",
+        });
+        return;
+      }
+      const saved = await serializeReviewerMutation(() =>
+        saveReviewerState({
+          store,
+          expectedRevision,
+          validators: reviewerValidators,
+          next: { drafts, activeDraft, resolvedCommentIds },
+        }),
+      );
+      if (!saved.ok) {
+        sendJson({
+          response,
+          status: 409,
+          value: { conflict: true, reviewer: saved.current },
+        });
+        return;
+      }
+      sendJson({
+        response,
+        status: 200,
+        value: {
+          drafts: drafts.length,
+          reviewer: saved.snapshot,
+          revision: saved.snapshot.revision,
+        },
       });
-      await writeResolvedCommentIds({ store, ids: resolvedCommentIds });
-      sendJson({ response, status: 200, value: { drafts: drafts.length } });
       return;
     }
     if (route.path === "/api/feedback") {
@@ -429,57 +519,66 @@ export const startReviewRuntime = async ({
         createdAt: new Date().toISOString(),
         comments,
       });
-      const written = await writeFeedbackPackage({
-        store,
-        feedback,
-        brief: renderBrief(feedback, Array.from(blocks.keys())),
-      });
       const source = await readFile(resolvedPlanPath, "utf8");
       const revision = deriveSourceRevision(source);
-      await writeRevisionSnapshot({ store, revision, source });
       const agentRequests = feedbackAgentRequests({
         feedback,
         sourceRevision: revision,
         requestIds: comments.map(() => randomId(8)),
       });
-      await Promise.all(
-        agentRequests.map((agentRequest) =>
-          writeAgentRequest({ store, request: agentRequest }),
-        ),
+      const expectedRevision = payload.expectedRevision;
+      if (
+        typeof expectedRevision !== "number" ||
+        !Number.isInteger(expectedRevision) ||
+        expectedRevision < 0
+      ) {
+        refuse({
+          response,
+          status: 400,
+          reason: "Feedback submission requires the reviewer revision it read",
+        });
+        return;
+      }
+      const committed = await serializeReviewerMutation(() =>
+        commitFeedback({
+          store,
+          expectedRevision,
+          feedback,
+          brief: renderBrief(feedback, Array.from(blocks.keys())),
+          source,
+          sourceRevision: revision,
+          requests: agentRequests,
+          submittedCommentIds: comments.map((comment) => comment.id),
+          event: {
+            eventId: randomId(8),
+            sessionId,
+            step: "Feedback package received",
+            state: "done",
+            requestId: agentRequests[0]?.requestId,
+            at: new Date().toISOString(),
+            detail: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
+          },
+          validators: reviewerValidators,
+        }),
       );
-      const alreadySent = await readComments({
-        path: store.sentPath,
-        validate,
-      });
-      await writeComments({
-        path: store.sentPath,
-        comments: [...alreadySent, ...comments],
-      });
-      await writeComments({ path: store.draftsPath, comments: [] });
-      await writeActiveDraft({ path: store.activeDraftPath, value: "" });
-      progressSeq += 1;
-      // The one event the runtime can honestly author: it has the package.
-      // Everything after this belongs to the agent that reads the channel.
-      await appendProgress({
-        store,
-        event: {
-          sessionId,
-          seq: progressSeq,
-          step: "Feedback package received",
-          state: "done",
-          requestId: agentRequests[0]?.requestId,
-          at: new Date().toISOString(),
-          detail: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
-        },
-      });
+      if (!committed.ok) {
+        sendJson({
+          response,
+          status: 409,
+          value: { conflict: true, reviewer: committed.current },
+        });
+        return;
+      }
       sendJson({
         response,
         status: 200,
         value: {
           packageId: feedback.packageId,
           comments: comments.length,
-          package: written.jsonPath,
-          brief: written.briefPath,
+          package: committed.package.jsonPath,
+          brief: committed.package.briefPath,
+          reviewer: committed.snapshot,
+          revision: committed.snapshot.revision,
           agentRequest: agentRequests[0],
           agentRequests,
           agentConnected: await agentConnected(),
@@ -570,12 +669,10 @@ export const startReviewRuntime = async ({
           at: new Date().toISOString(),
         },
       });
-      progressSeq += 1;
       await appendProgress({
         store,
         event: {
           sessionId,
-          seq: progressSeq,
           step: "Request cancelled by reviewer",
           state: "done",
           requestId,
@@ -659,12 +756,10 @@ export const startReviewRuntime = async ({
       await writeFile(resolvedPlanPath, reverted, "utf8");
       const revision = deriveSourceRevision(reverted);
       await writeRevisionSnapshot({ store, revision, source: reverted });
-      progressSeq += 1;
       await appendProgress({
         store,
         event: {
           sessionId,
-          seq: progressSeq,
           step: "Reviewer reverted a comment change",
           state: "done",
           requestId: latestResponse.requestId,
@@ -716,7 +811,7 @@ export const startReviewRuntime = async ({
           : {}),
       });
       if (agentRequest.kind === "reply") {
-        const sent = await readComments({ path: store.sentPath, validate });
+        const sent = (await durableReview()).sent;
         if (!sent.some((comment) => comment.id === agentRequest.commentId)) {
           refuse({
             response,
@@ -727,12 +822,10 @@ export const startReviewRuntime = async ({
         }
       }
       await writeAgentRequest({ store, request: agentRequest });
-      progressSeq += 1;
       await appendProgress({
         store,
         event: {
           sessionId,
-          seq: progressSeq,
           step:
             agentRequest.kind === "reply"
               ? "Reply sent to agent"
@@ -797,10 +890,6 @@ export const startReviewRuntime = async ({
       return;
     }
     const events = await readProgress({ store, sessionId });
-    progressSeq = Math.max(
-      progressSeq,
-      events.reduce((highest, event) => Math.max(highest, event.seq), 0),
-    );
     sendJson({ response, status: 200, value: { events } });
   };
 
