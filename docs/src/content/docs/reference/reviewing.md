@@ -1,6 +1,6 @@
 ---
 title: Reviewing a plan
-description: Comment on a rendered plan, collect drafts in the Comments tray, and send one feedback package back to the agent.
+description: Comment on a rendered plan and carry the review through a real local coding-agent conversation.
 ---
 
 Reading a plan is only half of a review.
@@ -18,31 +18,36 @@ Open that address, review the plan, and stop the runtime with `Ctrl+C` when you 
 A rendered plan carries a stable address for every commentable unit: each heading, paragraph, list, table, code figure, and component.
 
 - **Comment on a block.** Hover or focus a block and press the **Comment** control that appears at its right edge.
-- **Comment on a passage.** Highlight any span of text; the same control offers to comment on the selection, and the comment carries the text you highlighted.
+- **Comment on a passage.** Highlight any span of text - including a whole paragraph - and press the same **Comment** control. The highlight stays on the source, so the editor does not repeat it.
 - **Comment on lines.** Highlighting inside a code figure produces a line-range comment, the same shape an authored `Annotation` uses.
-- **Comment on the whole plan.** Type in the **Agent** panel's compose field; with no selection attached, the note applies to the plan as a whole.
+- **Discuss the whole plan.** Use the separate **Chat** tab for questions that are not anchored to one passage.
 
 Keyboard users reach the same targets without a mouse: `Alt+↓` and `Alt+↑` move a review cursor block by block and announce each one, and `Alt+C` opens a comment on the block under the cursor.
-Inside a compose card, `Escape` cancels and `Cmd/Ctrl+Enter` saves.
+Inside a compose card, **Add Comment** stages the comment for the batch, `Escape` cancels, and `Cmd/Ctrl+Enter` adds.
+Turn on **Submit right away** when new comments should go straight to the agent instead; that preference carries into every future composer until you change it.
 
-## The Comments tray
+## The Feedback sidebar
 
-Comments collect in the **Comments** tray, which opens with your first comment and hides whenever you want the reading column back.
-The sticky **Comments** control keeps the pending count and reopens the tray.
+On desktop, the editor and saved comment card float to the right of their highlighted source.
+Long comments stay compact behind an **… more** control.
+Below 1280 px, the editor moves into the plan flow instead, so it never covers the text being reviewed.
+
+The sticky **Feedback** toggle opens the complete lifecycle in the sidebar.
+After the agent responds, it shows a count only when a thread **Needs your answer**; completed activity does not become a permanent notification.
 On desktop the reading column makes room for the tray.
-Below 1280 px it becomes an overlay drawer, so opening and closing it cannot move the place you were reading.
+Below 1280 px the tray becomes an overlay drawer, so opening and closing it cannot move the place you were reading.
 
 Until you send, every comment is yours:
 
-- Each row shows the target it points at and jumps to it when clicked.
-- Repeated targets include their concrete authored label, so adjacent table rows such as `versionId` and `number` remain distinct.
-- **Edit** rewrites a comment in place; **Delete** removes it.
-- A block that carries a draft shows a conversation marker; pressing it opens that comment for editing.
+- Each row is headed by its slide number and title and jumps to the exact highlighted target when clicked.
+- **Submit Now** sends one staged comment without sending the rest of the batch.
+- **Edit** rewrites a comment in place; **Remove** opens a confirmation dialog before deleting it.
+- While reading, every commented block carries an explicit anchored comment marker; at narrow widths it reads **1 comment** (or the current count) beside the block without covering its text.
 - Drafts and the unfinished whole-plan field survive closing the tab, reloading, and reopening the plan.
 
 ## Sending feedback
 
-**Send feedback to agent** submits everything pending as one package.
+**Send all comments to agent** submits everything pending as one package.
 There is no confirmation dialog: the tray already shows the count and every comment about to leave.
 
 Sending writes two files beside the plan, under `.big-plan/feedback/`:
@@ -50,9 +55,102 @@ Sending writes two files beside the plan, under `.big-plan/feedback/`:
 - A versioned JSON package holding each comment, its target, and the session it belongs to.
 - A short Markdown brief the agent can read directly.
 
-Sent comments move to a **Sent** group, their markers fade, and the **Chat** tab begins reporting runtime progress.
-Package delivery is real.
-Until an agent round-trip is connected, the response-state examples in that tab are explicitly labelled **Simulated**.
+Sent comments remain anchored beside their highlighted source.
+Each response collapses to a one-line outcome chip: **Changed**, **Needs your answer**, or **Outside this plan**.
+Press a chip to expand the original comment, agent response, and reply box in place; press elsewhere to collapse it again.
+At narrow widths, an expanded thread moves into the document flow below its source.
+The Feedback sidebar groups the same outcomes as a compact lifecycle index.
+Clicking a row keeps the tray open, scrolls to its source, and expands the conversation inside that row.
+
+An expanded thread carries a compact icon toolbar in its top bar:
+
+- **Minimize** returns it to its one-line outcome chip.
+- **Resolve** retires a concern you no longer need to see. Resolved threads stay
+  findable and clickable in the sidebar after reload; **Unresolve** returns one
+  to its prior outcome group and restores its plan anchor.
+- **Revert** appears after a changed outcome. Its confirmation sends the same coding-agent session a request to revert all plan changes made for that thread.
+
+A **Changed** response groups contiguous changed blocks into literal places and
+lists every place attributed to that comment.
+Use **See the change** for one location or **See changes (N)** for several.
+The selected block temporarily becomes an old/new diff in the document, and a
+floating stepper moves through the places with the current slide in its
+position label. The launching control flips to **Hide changes** while the lens
+is open; that control, **Show current text**, or `Escape` exits without changing
+the authoritative plan. Older diffs say **since revised again** when their
+new side is no longer the plan's current revision.
+
+When a plan-wide Chat response advances the source revision, its agent turn
+gets the same computed change vocabulary without relying on agent-authored
+attribution. The digest says **Changed N places across M slides**, groups rows
+under slide titles, and starts the same guided lens. It expands by default for
+up to three places and stays collapsed above that. A low-similarity contiguous
+rewrite becomes one stacked **Was/Now** place instead of a noisy word diff;
+added content keeps its real rendered structure inside the lens. Chat turns
+with no rendered source change have no digest.
+
+Selection anchors never move onto merely similar text. After a revision, Big
+Plan silently re-finds the exact selected quote when it still exists. If the
+quote is gone, the highlight degrades to an outline on the changed block and
+the expanded thread preserves the original quote as context. The old side of
+**See the change** marks the reviewer's original selection. Reverting the text
+restores the precise anchor automatically.
+
+Package delivery and agent conversation are real.
+Until the coding-agent session responds, a sent thread says **With agent** and
+shows a loading indicator without inventing an outcome.
+The waiting turn shows the latest validated activity, such as the coding agent
+reviewing feedback or a plan-wide question, rather than an event-history list.
+Each waiting turn can collapse its activity, and the Chat header can hide or
+show activity for all pending turns.
+When the agent publishes its response, the chip becomes **Changed**,
+**Needs your answer**, or **Outside this plan** and the real agent message
+appears in the expanded thread.
+
+## Start the coding-agent session
+
+Keep the review runtime running, then ask Big Plan for the exact prompt bound to
+that plan and session:
+
+```sh
+npx big-plan agent plans/checkout-retry.mdx
+```
+
+Run the returned `codex` or `claude` command in the plan's repository and
+leave that session running while you review. The command reads the generated
+owner-only `prompt_file`; `agent_prompt` is also returned when you want to
+paste the contract into an already-open coding-agent session.
+The prompt tells that session to run `big-plan agent next <plan> --wait`, revise
+the authoritative MDX when appropriate, and publish each answer with
+`big-plan agent respond`.
+The same session returns to `agent next --wait` after every response, so replies
+from an expanded comment thread and questions from the Chat tab continue the
+real conversation instead of starting over.
+
+The exchange contract is deliberately filesystem-first:
+
+1. **Send** writes the human-readable brief and machine-readable feedback
+   package, then creates a session-scoped agent request.
+2. `agent next` returns the oldest unanswered request, its prior thread
+   history, a response template, a safe ignored response-draft path, and the
+   exact `agent respond` command.
+3. For each anchored comment the agent reports exactly one outcome:
+   `changed`, `question`, or `outside`. A `changed` outcome is rejected unless
+   the plan source digest changed and its `changeTarget` resolves in the revised
+   render.
+4. `agent respond` re-renders and lints the current MDX before accepting the
+   response. It fills trusted session metadata itself; the agent never mints
+   session or plan identity.
+5. The review runtime polls the validated exchange and plan-source digest.
+   Agent responses replace waiting chips immediately. A source change reloads
+   the freshly rendered document while restoring the open thread, tray tab,
+   and reading position.
+
+**See the change** jumps to the block the agent named in the revised render.
+Submitting the thread reply creates another request for the same comment and
+includes the prior turns when the coding agent runs `agent next`.
+Plan-wide Chat uses the same mechanism but remains separate from anchored
+threads.
 
 ## What the agent may do with it
 
@@ -69,11 +167,13 @@ A comment is a request the agent considers while revising, never an instruction 
 
 Everything the runtime writes sits in a `.big-plan/` directory beside the plan, created readable only by your own account and ignored by version control by default:
 
-| What                                    | Where                         |
-| --------------------------------------- | ----------------------------- |
-| Drafts, active field, and sent comments | `.big-plan/review/<plan-id>/` |
-| Feedback packages and briefs            | `.big-plan/feedback/`         |
-| The running session's descriptor        | `.big-plan/session.json`      |
+| What                                     | Where                               |
+| ---------------------------------------- | ----------------------------------- |
+| Drafts, active field, and sent comments  | `.big-plan/review/<plan-id>/`       |
+| Agent requests, responses, and drafts    | `.big-plan/review/<plan-id>/agent/` |
+| Feedback packages and briefs             | `.big-plan/feedback/`               |
+| The running session's descriptor         | `.big-plan/session.json`            |
+| The running session's liveness heartbeat | `.big-plan/session-heartbeat.json`  |
 
 Review state is namespaced by an id the renderer derives from the plan's own path, so two plans never share drafts even when they share a title.
 
@@ -88,6 +188,14 @@ Every request is therefore authorised on its own merits.
 - It sends no CORS allowance at all and refuses a foreign `Origin` outright, because CORS hides a response without stopping a write.
 - It serves only documents it renders itself from your plan source. It never serves a pre-existing `.html`, because arbitrary HTML is arbitrary script on its own origin.
 - Nothing leaves the machine. Neither the document nor the runtime makes a request to any origin but the runtime's own.
+- The coding agent is a separate local process with the explicit authority in
+  its prompt: consider untrusted reviewer feedback, edit only the named plan
+  source, and publish data through the validated exchange. Big Plan does not
+  invoke a model provider or send plan content over the network itself.
+- Agent commands verify the session through its filesystem heartbeat rather
+  than process-control or loopback probes, so ordinary coding-agent sandboxes
+  can participate. A graceful stop marks the heartbeat stopped; a crashed
+  runtime becomes stale within three seconds.
 
 ## Reading without the runtime
 

@@ -7,8 +7,14 @@ import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
+import {
+  deriveSourceRevision,
+  nextPendingAgentRequest,
+  readAgentExchange,
+} from "./agent-exchange.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
+import { writeRevisionSnapshot } from "./store.js";
 
 const PLAN = `# Review runtime plan
 
@@ -202,8 +208,13 @@ describe("review runtime feedback", () => {
       },
     ];
     expect(
-      (await call({ path: "/api/drafts", method: "PUT", body: { drafts } }))
-        .status,
+      (
+        await call({
+          path: "/api/drafts",
+          method: "PUT",
+          body: { drafts, activeDraft: "", resolvedCommentIds: [] },
+        })
+      ).status,
     ).toBe(200);
     const answer: unknown = await (await call({ path: "/api/drafts" })).json();
     expect(answer).toMatchObject({ drafts: [{ id: "aabbccdd" }] });
@@ -250,6 +261,109 @@ describe("review runtime feedback", () => {
     expect(written.some((name) => /^\d{14}-[a-f0-9]{16}\.md$/.test(name))).toBe(
       true,
     );
+    const exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    expect(nextPendingAgentRequest(exchange)).toMatchObject({
+      kind: "feedback",
+      comments: [{ id: "55667788" }],
+    });
+  });
+
+  it("should route a thread reply back into the same agent exchange", async () => {
+    const response = await call({
+      path: "/api/agent-requests",
+      method: "POST",
+      body: {
+        kind: "reply",
+        commentId: "55667788",
+        body: "Keep the lede under twelve words.",
+      },
+    });
+    expect(response.status).toBe(200);
+    const answer: unknown = await response.json();
+    expect(answer).toMatchObject({
+      request: {
+        kind: "reply",
+        commentId: "55667788",
+        body: "Keep the lede under twelve words.",
+      },
+    });
+  });
+
+  it("should expose only validated live agent exchange state", async () => {
+    const answer: unknown = await (await call({ path: "/api/agent" })).json();
+    expect(answer).toMatchObject({
+      sourceRevision: expect.stringMatching(/^[a-f0-9]{16}$/),
+      requests: [
+        { kind: "feedback" },
+        { kind: "reply", commentId: "55667788" },
+      ],
+      responses: [],
+    });
+    if (
+      typeof answer !== "object" ||
+      answer === null ||
+      !("sourceRevision" in answer)
+    ) {
+      throw new Error("The agent snapshot did not expose a source revision");
+    }
+    const acceptedRevision = answer.sourceRevision;
+    await writeFile(runtime.planPath, `${PLAN}\n<unfinished`);
+    const whileEditing: unknown = await (
+      await call({ path: "/api/agent" })
+    ).json();
+    expect(whileEditing).toMatchObject({
+      sourceRevision: acceptedRevision,
+    });
+    await writeFile(runtime.planPath, PLAN);
+  });
+
+  it("should serve a deterministic diff between retained revisions", async () => {
+    const revised = PLAN.replace(
+      "feedback does not reach the agent",
+      "feedback reaches the coding agent",
+    );
+    const from = deriveSourceRevision(PLAN);
+    const to = deriveSourceRevision(revised);
+    await writeRevisionSnapshot({
+      store: runtime.store,
+      revision: from,
+      source: PLAN,
+    });
+    await writeRevisionSnapshot({
+      store: runtime.store,
+      revision: to,
+      source: revised,
+    });
+
+    const response = await call({
+      path: `/api/revision-diff?from=${from}&to=${to}`,
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      from,
+      to,
+      locations: [
+        {
+          status: "changed",
+          oldText: "Today's reality is that feedback does not reach the agent.",
+          newText: "Today's reality is that feedback reaches the coding agent.",
+        },
+      ],
+    });
+  });
+
+  it("should reject malformed revision names at the diff boundary", async () => {
+    expect(
+      (
+        await call({
+          path: "/api/revision-diff?from=../../etc/passwd&to=1111111111111111",
+        })
+      ).status,
+    ).toBe(400);
   });
 
   it("should report having received the package on its own progress channel", async () => {
@@ -257,7 +371,13 @@ describe("review runtime feedback", () => {
       await call({ path: "/api/progress" })
     ).json();
     expect(answer).toMatchObject({
-      events: [{ sessionId: runtime.sessionId, state: "done" }],
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          sessionId: runtime.sessionId,
+          state: "done",
+          step: "Feedback package received",
+        }),
+      ]),
     });
   });
 });

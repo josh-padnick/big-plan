@@ -1,0 +1,446 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "feat(review): connect agent exchange and revision diffs [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "src/icons/lucide/message-square-text.ts",
+      "propertyDeltas": [
+        {
+          "property": "agent-response glyph",
+          "from": "absent",
+          "to": "message-square-text icon available to the review shell"
+        }
+      ]
+    },
+    {
+      "path": "src/icons/lucide/messages-square.ts",
+      "propertyDeltas": [
+        {
+          "property": "thread-group glyph",
+          "from": "absent",
+          "to": "messages-square icon available to the review shell"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "embedded review presentation",
+          "from": "foundation commenting chrome",
+          "to": "agent-loop, anchored response, and revision-diff presentation"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/block-identity.ts",
+      "propertyDeltas": [
+        {
+          "property": "revision target reconciliation",
+          "from": "foundation structural addresses",
+          "to": "addresses retain enough context for agent responses and revision mappings"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/review-script.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "embedded review runtime",
+          "from": "local draft and submission flow",
+          "to": "request-scoped agent exchange, progress, responses, revisions, and diffs"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/review.css",
+      "propertyDeltas": [
+        {
+          "property": "agent-backed review chrome",
+          "from": "foundation tray and composers",
+          "to": "connection, response, change-tour, revision, and grouped thread states"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__document__desktop__dark.png",
+      "changedPixels": 283,
+      "before": {
+        "width": 872,
+        "height": 11470,
+        "sha256": "cb3c3515d4bb3ba83f863158d651e61cc67da67c765677a0b6e188f7cd622e41"
+      },
+      "after": {
+        "width": 872,
+        "height": 11470,
+        "sha256": "6331b9319e45e47b4e6afdedba48eb652eeee7dccc75484ce1cf14dbae29115b"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture cb3c3515d4bb3ba83f863158d651e61cc67da67c765677a0b6e188f7cd622e41",
+          "to": "PR 2 agent-loop capture 6331b9319e45e47b4e6afdedba48eb652eeee7dccc75484ce1cf14dbae29115b"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__light.png",
+      "changedPixels": 283,
+      "before": {
+        "width": 872,
+        "height": 11470,
+        "sha256": "d1ae3f104acba93982444ef87597d75ae4273f395ed1b56da1081a42911e4cdb"
+      },
+      "after": {
+        "width": 872,
+        "height": 11470,
+        "sha256": "5b1585a2530fabbdf63ccc77b9046d94acbeb7789c14347f534dac42ff8b18a2"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture d1ae3f104acba93982444ef87597d75ae4273f395ed1b56da1081a42911e4cdb",
+          "to": "PR 2 agent-loop capture 5b1585a2530fabbdf63ccc77b9046d94acbeb7789c14347f534dac42ff8b18a2"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__dark.png",
+      "changedPixels": 3397,
+      "before": {
+        "width": 350,
+        "height": 14312,
+        "sha256": "3734c75caa1fd4980c45bad59e940ee24b511f687aed57ef33916c87e797e27f"
+      },
+      "after": {
+        "width": 350,
+        "height": 14312,
+        "sha256": "72944f7dbad844bf9d6b625d997122604ae356cdd7f304cb51578629c9faa846"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture 3734c75caa1fd4980c45bad59e940ee24b511f687aed57ef33916c87e797e27f",
+          "to": "PR 2 agent-loop capture 72944f7dbad844bf9d6b625d997122604ae356cdd7f304cb51578629c9faa846"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__light.png",
+      "changedPixels": 3397,
+      "before": {
+        "width": 350,
+        "height": 14312,
+        "sha256": "a165336e8e47a9639b5df86c12789dbf0fb90270b5e4eb01969eca6702254eeb"
+      },
+      "after": {
+        "width": 350,
+        "height": 14312,
+        "sha256": "b316a175d39ce95289c9d21d0920ab43ce90cf0ff57308da3cce0cd0b6d17369"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture a165336e8e47a9639b5df86c12789dbf0fb90270b5e4eb01969eca6702254eeb",
+          "to": "PR 2 agent-loop capture b316a175d39ce95289c9d21d0920ab43ce90cf0ff57308da3cce0cd0b6d17369"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__dark.png",
+      "changedPixels": 11,
+      "before": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "f9880823e24f8f7e81fa26b6cfef4c42fedd82732d7341f6075b684aca2d2697"
+      },
+      "after": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "2ea766834e4743e74fcb9c8bc6574977053ce1535417a79315abdb7a4e194cee"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture f9880823e24f8f7e81fa26b6cfef4c42fedd82732d7341f6075b684aca2d2697",
+          "to": "PR 2 agent-loop capture 2ea766834e4743e74fcb9c8bc6574977053ce1535417a79315abdb7a4e194cee"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__light.png",
+      "changedPixels": 8,
+      "before": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "cab34e22ddf574604752bb6b54a24ab21d4ba0d28bb3be2383c6c307d6e5cbee"
+      },
+      "after": {
+        "width": 1392,
+        "height": 852,
+        "sha256": "ce268d1ded6445ed4605d0b201a49cc2a91dfcb833a25e7944b9129135267cae"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture cab34e22ddf574604752bb6b54a24ab21d4ba0d28bb3be2383c6c307d6e5cbee",
+          "to": "PR 2 agent-loop capture ce268d1ded6445ed4605d0b201a49cc2a91dfcb833a25e7944b9129135267cae"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__desktop__dark.png",
+      "changedPixels": 3458,
+      "before": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "d29bd61f3068211a2c10665732bd8b72c3abe3da270bd1b4c61448fc9a7d8c9f"
+      },
+      "after": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "1a9a22771d4e04860ee9eb27b683d68b04ae29cb450afd5fe22cc92613250d08"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture d29bd61f3068211a2c10665732bd8b72c3abe3da270bd1b4c61448fc9a7d8c9f",
+          "to": "PR 2 agent-loop capture 1a9a22771d4e04860ee9eb27b683d68b04ae29cb450afd5fe22cc92613250d08"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__desktop__light.png",
+      "changedPixels": 3453,
+      "before": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "6a612c69e94de1b5036f25974aa72a48dd7da3fb583a34e67eb84a31795f4f6f"
+      },
+      "after": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "c442231a22339ffbe95812d3c35a400208ac2b8e5dd7133e3c3fb14d990963eb"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture 6a612c69e94de1b5036f25974aa72a48dd7da3fb583a34e67eb84a31795f4f6f",
+          "to": "PR 2 agent-loop capture c442231a22339ffbe95812d3c35a400208ac2b8e5dd7133e3c3fb14d990963eb"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__phone__dark.png",
+      "changedPixels": 3458,
+      "before": {
+        "width": 390,
+        "height": 44,
+        "sha256": "ff5ff3764a70986065672320adf99569dde7ad817a3963f20fb0d4cc3ae92824"
+      },
+      "after": {
+        "width": 390,
+        "height": 44,
+        "sha256": "f0abf62a07af1fc403d297ea450b1cee184bee09c720293cc41ec6467796cad8"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture ff5ff3764a70986065672320adf99569dde7ad817a3963f20fb0d4cc3ae92824",
+          "to": "PR 2 agent-loop capture f0abf62a07af1fc403d297ea450b1cee184bee09c720293cc41ec6467796cad8"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__phone__light.png",
+      "changedPixels": 3453,
+      "before": {
+        "width": 390,
+        "height": 44,
+        "sha256": "0cdeb1e84d84f279e0c07c86ff3720b1d7bc675393755522664f84b28a007c0e"
+      },
+      "after": {
+        "width": 390,
+        "height": 44,
+        "sha256": "5ef0c12110f2dae2558bd4f240a0e5a5285a0ed9c63fe6c8b54f259191710d25"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture 0cdeb1e84d84f279e0c07c86ff3720b1d7bc675393755522664f84b28a007c0e",
+          "to": "PR 2 agent-loop capture 5ef0c12110f2dae2558bd4f240a0e5a5285a0ed9c63fe6c8b54f259191710d25"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-desktop__desktop__dark.png",
+      "changedPixels": 283,
+      "before": {
+        "width": 872,
+        "height": 1281,
+        "sha256": "8add8ff48ae46e5fe4ffed3219b0115478cf523ef95f95df135372e2af272e85"
+      },
+      "after": {
+        "width": 872,
+        "height": 1281,
+        "sha256": "b6b7c789dc84110072ad131613911fed6bc962e7aebe5bfd9c44be40b146b104"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture 8add8ff48ae46e5fe4ffed3219b0115478cf523ef95f95df135372e2af272e85",
+          "to": "PR 2 agent-loop capture b6b7c789dc84110072ad131613911fed6bc962e7aebe5bfd9c44be40b146b104"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-desktop__desktop__light.png",
+      "changedPixels": 283,
+      "before": {
+        "width": 872,
+        "height": 1281,
+        "sha256": "db9c5fe95969e60177d9449efcdea372a712ed3659e8b5f0015f8817e2a9d9d3"
+      },
+      "after": {
+        "width": 872,
+        "height": 1281,
+        "sha256": "ef516abfc5faa93eadd3c6378cbc3d4c874e75b2ee0681e91aa70884aa2f84c8"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture db9c5fe95969e60177d9449efcdea372a712ed3659e8b5f0015f8817e2a9d9d3",
+          "to": "PR 2 agent-loop capture ef516abfc5faa93eadd3c6378cbc3d4c874e75b2ee0681e91aa70884aa2f84c8"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-phone__phone__dark.png",
+      "changedPixels": 3372,
+      "before": {
+        "width": 350,
+        "height": 1608,
+        "sha256": "3539907dcf55bf8c59d135d728f76b64127497780a65db4af030a8487c90f696"
+      },
+      "after": {
+        "width": 350,
+        "height": 1608,
+        "sha256": "aa37e04ea08c84944f98bb81b4e59c0393148d5ed0d4b320294ae7d18b6baa2c"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture 3539907dcf55bf8c59d135d728f76b64127497780a65db4af030a8487c90f696",
+          "to": "PR 2 agent-loop capture aa37e04ea08c84944f98bb81b4e59c0393148d5ed0d4b320294ae7d18b6baa2c"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-phone__phone__light.png",
+      "changedPixels": 3331,
+      "before": {
+        "width": 350,
+        "height": 1608,
+        "sha256": "2556521d78befcc67ac4bac8fa4eb91945debb9ca15c7dd53aa61eeff7dba546"
+      },
+      "after": {
+        "width": 350,
+        "height": 1608,
+        "sha256": "34a38d0371ebcc91cabee212b31087b99641d6385b8506478562d6587ac13c17"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture 2556521d78befcc67ac4bac8fa4eb91945debb9ca15c7dd53aa61eeff7dba546",
+          "to": "PR 2 agent-loop capture 34a38d0371ebcc91cabee212b31087b99641d6385b8506478562d6587ac13c17"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__dark.png",
+      "changedPixels": 283,
+      "before": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "56e70c0aab54f38099063d52140ed4c42d73c99f58bbc1055df770d36e33a3f1"
+      },
+      "after": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "56d4c9a73fe20f213b232a2dd8b29db1dd155d47c4e72263cdacc175446f9dc5"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture 56e70c0aab54f38099063d52140ed4c42d73c99f58bbc1055df770d36e33a3f1",
+          "to": "PR 2 agent-loop capture 56d4c9a73fe20f213b232a2dd8b29db1dd155d47c4e72263cdacc175446f9dc5"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__light.png",
+      "changedPixels": 283,
+      "before": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "7b8a397ab74457a46afa49b165111b5c65a6b37e136db3ddcca5a702ca0307b7"
+      },
+      "after": {
+        "width": 872,
+        "height": 2711,
+        "sha256": "32e06de13e2b875448125cf41996166fff254c0ff0b0fc045831f11fe201ca5b"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture 7b8a397ab74457a46afa49b165111b5c65a6b37e136db3ddcca5a702ca0307b7",
+          "to": "PR 2 agent-loop capture 32e06de13e2b875448125cf41996166fff254c0ff0b0fc045831f11fe201ca5b"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__dark.png",
+      "changedPixels": 3372,
+      "before": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "2b3b40ef5140afffcd2fc2b25d587cd7e2b0575529c0f3681ca0e6bdc9d62e14"
+      },
+      "after": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "bf338328748fb7b204329e08c3c2d294d830c5ea33248b3aad8ded4f0a6d4202"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture 2b3b40ef5140afffcd2fc2b25d587cd7e2b0575529c0f3681ca0e6bdc9d62e14",
+          "to": "PR 2 agent-loop capture bf338328748fb7b204329e08c3c2d294d830c5ea33248b3aad8ded4f0a6d4202"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__light.png",
+      "changedPixels": 3331,
+      "before": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "58ba052eb13ac74864ae48adf4d1ef4b4c71653df9ff99a9b87b58f8d4bb17c0"
+      },
+      "after": {
+        "width": 350,
+        "height": 3352,
+        "sha256": "5812acda6354ff3fb95c10c6056b900d445af54689f5f5e90de00a0d7b41b287"
+      },
+      "propertyDeltas": [
+        {
+          "property": "rendered agent-loop and revision surface pixels",
+          "from": "PR 1 capture 58ba052eb13ac74864ae48adf4d1ef4b4c71653df9ff99a9b87b58f8d4bb17c0",
+          "to": "PR 2 agent-loop capture 5812acda6354ff3fb95c10c6056b900d445af54689f5f5e90de00a0d7b41b287"
+        }
+      ]
+    }
+  ]
+}
