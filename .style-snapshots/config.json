@@ -30,6 +30,139 @@
       "source": "examples/mdx-components.mdx",
       "captures": [
         {
+          "name": "staged-batch",
+          "selector": "[data-review-rail]",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            }
+          ],
+          "actions": [
+            {
+              "type": "click",
+              "selector": "[data-review-slide-selector][aria-label=\"Comment on all content in Goals and constraints\"]"
+            },
+            {
+              "type": "fill",
+              "selector": "[data-review-compose-input]",
+              "value": "Clarify the current retry behavior."
+            },
+            {
+              "type": "click",
+              "selector": "[data-review-compose-save]"
+            },
+            {
+              "type": "click",
+              "selector": "[data-review-slide-selector][aria-label=\"Comment on all content in Review decision\"]"
+            },
+            {
+              "type": "fill",
+              "selector": "[data-review-compose-input]",
+              "value": "Make the success condition measurable."
+            },
+            {
+              "type": "click",
+              "selector": "[data-review-compose-save]"
+            },
+            {
+              "type": "click",
+              "selector": "[data-review-toggle]"
+            }
+          ]
+        },
+        {
+          "name": "expanded-thread-reply",
+          "selector": "[data-review-thread-card][data-review-thread-expanded]",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            }
+          ],
+          "actions": [
+            {
+              "type": "click",
+              "selector": "[data-review-slide-selector][aria-label=\"Comment on all content in Goals and constraints\"]"
+            },
+            {
+              "type": "fill",
+              "selector": "[data-review-compose-input]",
+              "value": "Clarify the current retry behavior."
+            },
+            {
+              "type": "click",
+              "selector": "[data-review-compose-save]"
+            },
+            {
+              "type": "promote-review-drafts"
+            },
+            {
+              "type": "click",
+              "selector": "[data-review-thread-summary-toggle]"
+            }
+          ]
+        },
+        {
+          "name": "toolbar-over-slide-selector",
+          "selector": "[data-review-toolbar]",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            }
+          ],
+          "actions": [
+            {
+              "type": "scroll-into-view",
+              "selector": "[data-review-slide-selector][aria-label=\"Comment on all content in Rollout and validation\"]"
+            }
+          ]
+        },
+        {
+          "name": "whole-slide-comment-right",
+          "selector": "[data-review-compose]",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            }
+          ],
+          "actions": [
+            {
+              "type": "click",
+              "selector": "[data-review-slide-selector][aria-label=\"Comment on all content in Goals and constraints\"]"
+            }
+          ]
+        },
+        {
+          "name": "selection-comment-affordance",
+          "selector": "[data-review-affordance]",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            }
+          ],
+          "actions": [
+            {
+              "type": "select-text",
+              "selector": "[data-block-id=\"section/goals-and-constraints/paragraph-1\"]",
+              "value": "14 catalog routes"
+            }
+          ]
+        },
+        {
           "name": "document",
           "selector": "article",
           "themes": ["light", "dark"],

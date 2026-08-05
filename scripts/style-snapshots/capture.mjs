@@ -69,6 +69,20 @@ const renderDocument = async ({ source, outputPath, stateDirectory }) => {
  */
 const applyActions = async ({ page, actions }) => {
   for (const action of actions) {
+    if (action.type === "promote-review-drafts") {
+      await page.evaluate(() => {
+        const key = Object.keys(localStorage).find((candidate) =>
+          candidate.startsWith("big-plan:review:drafts:"),
+        );
+        if (key === undefined) return;
+        const state = JSON.parse(localStorage.getItem(key) ?? "{}");
+        state.sent = state.drafts ?? [];
+        state.drafts = [];
+        localStorage.setItem(key, JSON.stringify(state));
+      });
+      await page.reload();
+      continue;
+    }
     const locator = page.locator(action.selector);
     const count = await locator.count();
     if (count === 0) {
@@ -86,8 +100,38 @@ const applyActions = async ({ page, actions }) => {
       case "focus":
         await locator.focus();
         break;
+      case "fill":
+        await locator.fill(action.value);
+        break;
       case "hover":
         await locator.hover();
+        break;
+      case "scroll-into-view":
+        await locator.scrollIntoViewIfNeeded();
+        break;
+      case "select-text":
+        await locator.evaluate((element, text) => {
+          const walker = globalThis.document.createTreeWalker(
+            element,
+            globalThis.NodeFilter.SHOW_TEXT,
+          );
+          let node = walker.nextNode();
+          while (node !== null && !node.textContent?.includes(text)) {
+            node = walker.nextNode();
+          }
+          if (node === null) {
+            throw new Error(`Selection fixture text "${text}" was not found.`);
+          }
+          const start = node.textContent?.indexOf(text) ?? -1;
+          const range = globalThis.document.createRange();
+          range.setStart(node, start);
+          range.setEnd(node, start + text.length);
+          const selection = globalThis.window.getSelection();
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+          globalThis.document.dispatchEvent(new Event("selectionchange"));
+        }, action.value);
+        await page.waitForTimeout(100);
         break;
       case "set-attribute":
         await locator.evaluate(
