@@ -321,17 +321,24 @@ export const diffRevisions = ({
   }
   for (const [oldIndex, oldBlock] of before.entries()) {
     if (usedOld.has(oldIndex)) continue;
-    const previousPair = [...pairs]
+    const sameScopePairs = pairs.filter(
+      ([candidateOld]) =>
+        before.at(candidateOld)?.section === oldBlock.section,
+    );
+    const previousPair = [...sameScopePairs]
       .filter(([candidateOld]) => candidateOld < oldIndex)
       .sort((left, right) => right[0] - left[0])[0];
-    const nextPair = [...pairs]
+    const nextPair = [...sameScopePairs]
       .filter(([candidateOld]) => candidateOld > oldIndex)
       .sort((left, right) => left[0] - right[0])[0];
     const afterBlockId =
       previousPair === undefined ? undefined : after.at(previousPair[1])?.id;
+    const fallbackNext = after.at((previousPair?.[1] ?? -1) + 1);
     const beforeBlockId =
       nextPair === undefined
-        ? after.at((previousPair?.[1] ?? -1) + 1)?.id
+        ? fallbackNext?.section === oldBlock.section
+          ? fallbackNext.id
+          : undefined
         : after.at(nextPair[1])?.id;
     locations.push({
       status: "removed",

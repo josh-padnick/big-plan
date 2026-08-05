@@ -13,16 +13,18 @@ const block = ({
   text,
   kind = "paragraph",
   parentBlockId,
+  section = "Approach",
 }: {
   readonly id: string;
   readonly text: string;
   readonly kind?: string;
   readonly parentBlockId?: string;
+  readonly section?: string;
 }) => ({
   id,
   kind,
   label: text,
-  section: "Approach",
+  section,
   text,
   markedText: text,
   ...(parentBlockId === undefined ? {} : { parentBlockId }),
@@ -171,6 +173,50 @@ describe("revision block alignment", () => {
       oldText: "Version two.",
       newText: "Version three.",
     });
+  });
+
+  it("should anchor a boundary removal to a neighbor in the same section", () => {
+    const locations = diffRevisions({
+      before: [
+        block({
+          id: "section/approach/heading-1",
+          kind: "heading",
+          text: "Approach",
+        }),
+        block({
+          id: "section/approach/paragraph-1",
+          text: "Remove at the boundary.",
+        }),
+        block({
+          id: "section/results/heading-1",
+          kind: "heading",
+          text: "Results",
+          section: "Results",
+        }),
+      ],
+      after: [
+        block({
+          id: "section/approach/heading-1",
+          kind: "heading",
+          text: "Approach",
+        }),
+        block({
+          id: "section/results/heading-1",
+          kind: "heading",
+          text: "Results",
+          section: "Results",
+        }),
+      ],
+    });
+    expect(
+      locations.find((location) => location.oldText === "Remove at the boundary."),
+    ).toMatchObject({
+      status: "removed",
+      afterBlockId: "section/approach/heading-1",
+    });
+    expect(
+      locations.find((location) => location.oldText === "Remove at the boundary."),
+    ).not.toHaveProperty("beforeBlockId");
   });
 
   it("should return every place when a large revision adds thirty scopes", () => {
