@@ -26,7 +26,7 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     });
     dataTableId = await firstDataTable.getAttribute("data-table-id");
 
-    expect(firstPlanId).toMatch(/^[a-f0-9]{32}$/);
+    expect(firstPlanId).toMatch(/^[a-f0-9]{16}$/);
     expect(dataTableId).not.toBeNull();
     await firstTable.getByRole("button", { name: "Maximize schema" }).click();
     await expect(firstTable).toHaveAttribute("data-figure-maximized", "");
@@ -50,11 +50,9 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     await expect(
       firstDataTable.locator('th[data-table-column="2"]'),
     ).toBeHidden();
-    await page.getByRole("button", { name: "Add review comment" }).click();
-    await page
-      .getByRole("textbox", { name: "Comment draft" })
-      .fill("First plan draft");
-    await page.getByRole("button", { name: "Save draft" }).click();
+    await page.locator("[data-review-slide-selector]").first().click();
+    await page.locator("[data-review-compose-input]").fill("First plan draft");
+    await page.locator("[data-review-compose-save]").click();
     await expect
       .poll(() =>
         page.evaluate(() =>
@@ -62,7 +60,7 @@ test("should scope persisted viewer state to the stamped plan identity", async (
             .filter(
               (key) =>
                 key.startsWith("big-plan:table:") ||
-                key.startsWith("big-plan:draft:") ||
+                key.startsWith("big-plan:review:drafts:") ||
                 key.startsWith("big-plan:datatable:"),
             )
             .sort(),
@@ -71,7 +69,7 @@ test("should scope persisted viewer state to the stamped plan identity", async (
       .toEqual(
         [
           `big-plan:table:${firstPlanId ?? ""}:shared.review_items`,
-          `big-plan:draft:${firstPlanId ?? ""}:document`,
+          `big-plan:review:drafts:${firstPlanId ?? ""}`,
           `big-plan:datatable:${firstPlanId ?? ""}:${dataTableId ?? ""}`,
         ].sort(),
       );
@@ -104,7 +102,7 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     const secondDataTable = page.locator("[data-data-table]").filter({
       hasText: "Shared review items",
     });
-    expect(secondPlanId).toMatch(/^[a-f0-9]{32}$/);
+    expect(secondPlanId).toMatch(/^[a-f0-9]{16}$/);
     expect(secondPlanId).not.toBe(firstPlanId);
     await expect(secondDataTable).toHaveAttribute(
       "data-table-id",
@@ -117,10 +115,10 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     await expect(
       secondDataTable.locator('th[data-table-column="2"]'),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Add review comment" }).click();
-    await expect(
-      page.getByRole("textbox", { name: "Comment draft" }),
-    ).toHaveValue("");
+    await expect(page.locator("[data-review-row-body]")).toHaveCount(0);
+    await page.locator("[data-review-slide-selector]").first().click();
+    await expect(page.locator("[data-review-compose-input]")).toHaveValue("");
+    await page.locator("[data-review-compose-cancel]").click();
 
     await secondTable.getByRole("button", { name: "Choose columns" }).click();
     await secondTable
@@ -138,10 +136,9 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     await expect(
       secondDataTable.locator('th[data-table-column="1"]'),
     ).toBeHidden();
-    await page
-      .getByRole("textbox", { name: "Comment draft" })
-      .fill("Second plan draft");
-    await page.getByRole("button", { name: "Save draft" }).click();
+    await page.locator("[data-review-slide-selector]").first().click();
+    await page.locator("[data-review-compose-input]").fill("Second plan draft");
+    await page.locator("[data-review-compose-save]").click();
     await secondSlide
       .locator(":scope > [data-collapse-header] > [data-collapse-toggle]")
       .click();
@@ -182,10 +179,9 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     await expect(
       firstDataTable.locator('th[data-table-column="1"]'),
     ).not.toHaveAttribute("hidden");
-    await page.getByRole("button", { name: "Add review comment" }).click();
-    await expect(
-      page.getByRole("textbox", { name: "Comment draft" }),
-    ).toHaveValue("First plan draft");
+    await expect(page.locator("[data-review-row-body]")).toHaveText([
+      "First plan draft",
+    ]);
   });
 });
 
@@ -221,14 +217,12 @@ for (const identity of ["absent", "empty"] as const) {
     await dataTable.getByRole("button", { name: "Choose columns" }).click();
     await dataTable.getByRole("menuitemcheckbox", { name: "Note" }).click();
     await expect(dataTable.locator('th[data-table-column="2"]')).toBeHidden();
-    await page.getByRole("button", { name: "Add review comment" }).click();
-    await page
-      .getByRole("textbox", { name: "Comment draft" })
-      .fill("Memory-only draft");
-    await page.getByRole("button", { name: "Save draft" }).click();
-    await expect(
-      page.getByRole("textbox", { name: "Comment draft" }),
-    ).toHaveValue("Memory-only draft");
+    await page.locator("[data-review-slide-selector]").first().click();
+    await page.locator("[data-review-compose-input]").fill("Memory-only draft");
+    await page.locator("[data-review-compose-save]").click();
+    await expect(page.locator("[data-review-row-body]")).toHaveText([
+      "Memory-only draft",
+    ]);
     await slide
       .locator(":scope > [data-collapse-header] > [data-collapse-toggle]")
       .click();
@@ -239,9 +233,6 @@ for (const identity of ["absent", "empty"] as const) {
     await expect(slide).not.toHaveAttribute("data-collapsed");
     await expect(table.locator(".table-schema-head-comment")).toBeVisible();
     await expect(dataTable.locator('th[data-table-column="2"]')).toBeVisible();
-    await page.getByRole("button", { name: "Add review comment" }).click();
-    await expect(
-      page.getByRole("textbox", { name: "Comment draft" }),
-    ).toHaveValue("");
+    await expect(page.locator("[data-review-row-body]")).toHaveCount(0);
   });
 }
