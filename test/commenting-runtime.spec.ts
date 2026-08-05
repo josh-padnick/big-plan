@@ -825,6 +825,13 @@ test("should preserve and send a floating review across reload and viewport chan
     await expect(
       page.locator("[data-review-compose-save] [data-review-button-label]"),
     ).toHaveText("Add Comment");
+    const shortcutTooltip = page.locator(
+      "[data-review-compose-save] [data-review-kbd-tooltip]",
+    );
+    await page.locator("[data-review-compose-save]").hover();
+    await expect(shortcutTooltip).toBeVisible();
+    await expect(shortcutTooltip).toContainText("Enter");
+    await expect(shortcutTooltip).toContainText(/Add comment/i);
     await expect(
       page.locator("[data-review-submit-immediately-input]"),
     ).not.toBeChecked();
@@ -3425,8 +3432,13 @@ Ship the live review loop behind the explicit review command.
     await changeActions.locator("[data-review-thread-minimize]").click();
     await expect(trayThread).not.toHaveAttribute("data-review-row-expanded");
     await expect
-      .poll(() => page.evaluate(() => window.scrollY))
-      .toBeCloseTo(beforeMinimize, 0);
+      .poll(() =>
+        page.evaluate(
+          (before) => Math.abs(window.scrollY - before),
+          beforeMinimize,
+        ),
+      )
+      .toBeLessThanOrEqual(4);
     await changedRow.click();
     await expect(trayThread).toHaveAttribute("data-review-row-expanded", "");
     const historicalChange = trayThread

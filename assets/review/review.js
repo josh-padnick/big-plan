@@ -182,12 +182,13 @@ import {
   const MOD_KEY_LABEL = IS_MAC ? "⌘" : "Ctrl";
 
   const attachShortcutTooltip = (button, label) => {
+    button.classList.add("group/kbd");
     button.appendChild(
       el(
         "span",
         {
           class:
-            "[position:absolute] [right:0] [bottom:calc(100%_+_0.45rem)] [z-index:60] [display:flex] [align-items:center] [gap:0.3rem] [padding:0.32rem_0.45rem] [border:1px_solid_var(--edge-c)] [border-radius:0.4rem] [background:var(--bg)] [color:var(--muted-c)] [font-size:0.6875rem] [font-weight:500] [white-space:nowrap] [box-shadow:0_6px_20px_rgb(0_0_0_/_0.14)] [opacity:0] [visibility:hidden] [transition:opacity_100ms_ease,_visibility_0s_linear_100ms] [pointer-events:none]",
+            "invisible pointer-events-none absolute right-0 bottom-[calc(100%+0.45rem)] z-60 flex items-center gap-[0.3rem] whitespace-nowrap rounded-[0.4rem] border border-edge bg-paper px-[0.45rem] py-[0.32rem] text-[0.6875rem] font-medium text-muted opacity-0 shadow-[0_6px_20px_rgb(0_0_0_/_0.14)] transition-[opacity,visibility] delay-0 duration-100 group-hover/kbd:visible group-hover/kbd:opacity-100 group-hover/kbd:delay-350 group-focus-visible/kbd:visible group-focus-visible/kbd:opacity-100 group-focus-visible/kbd:delay-350 group-disabled/kbd:hidden [&_kbd]:inline-flex [&_kbd]:h-[1.15rem] [&_kbd]:min-w-[1.15rem] [&_kbd]:items-center [&_kbd]:justify-center [&_kbd]:rounded-sm [&_kbd]:border [&_kbd]:border-edge [&_kbd]:bg-surface [&_kbd]:px-1 [&_kbd]:font-sans [&_kbd]:text-[0.625rem] [&_kbd]:font-semibold [&_kbd]:text-ink",
           "data-review-kbd-tooltip": true,
           "aria-hidden": "true",
         },
