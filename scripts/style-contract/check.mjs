@@ -1,5 +1,5 @@
 // Enforces the repository-wide CSS escape-hatch and cascade contract described
-// in AGENTS.md. This check owns the exact marker and layer syntax.
+// in ENGINEERING_PRACTICES.md. This check owns the exact marker and layer syntax.
 
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
