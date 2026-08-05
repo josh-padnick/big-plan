@@ -31,7 +31,7 @@ Everything on this page is shipped and works today.
 - Positional diagnostics that aggregate recoverable unsupported syntax, unknown components, invalid attributes, and malformed component content after MDX parses.
 - `DecisionAnalysis` components for weighty choices, rendered as keyed qualitative or weighted criteria matrices with lifecycle state, recommendations, required reversibility, optional interactive choice, and calculated totals.
 - `Callout` components for notes, tips, warnings, and dangers.
-- `CodeDiff` components with optional line numbers and change counts, a unified view, and scoped line annotations.
+- `CodeDiff` components with optional line numbers and change counts, unified and side-by-side views, and scoped line annotations.
 - `CodeSnippet` components for excerpts with optional file identity, file-absolute line numbers, and scoped annotations.
 - `DataTable` components for reference datasets with sorting, optional search, selectable and reorderable columns, grouping, and text-fit controls.
 - `DatabaseTableSchema` components for one table's schema: a psql-style columns grid with key badges, foreign keys, indexes, checks, and titled verbatim-DDL bands.
@@ -46,7 +46,7 @@ Everything on this page is shipped and works today.
 ## Output
 
 - One self-contained HTML file with styling and branding embedded.
-- One embedded viewer script (TOC scroll-spy, hover popovers, deck collapse, database-schema columns and index jumps, comment drafts, figure maximize, flow-diagram review, and wireframe navigation and scaling); content stays fully readable with scripts disabled.
+- One embedded viewer script (TOC scroll-spy, hover popovers, CodeDiff view selection, deck collapse, database-schema columns and index jumps, comment drafts, figure maximize, flow-diagram review, and wireframe navigation and scaling); content stays fully readable with scripts disabled.
 - No external requests, ever.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 
