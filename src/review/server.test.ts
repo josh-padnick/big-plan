@@ -3,7 +3,7 @@
 // the design promises, exercised against a real listening runtime.
 
 import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
-import { request as httpRequest } from "node:http";
+import { createServer, request as httpRequest, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -263,6 +263,34 @@ describe("review runtime feedback", () => {
 });
 
 describe("review runtime shutdown", () => {
+  it("should close the listening server when its session descriptor cannot be written", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-server-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    let openedServer: Server | undefined;
+
+    await expect(
+      startReviewRuntime({
+        planPath,
+        operations: {
+          createServer: (listener) => {
+            openedServer = createServer(listener);
+            return openedServer;
+          },
+          writeSessionDescriptor: async () => {
+            throw new Error("injected descriptor failure");
+          },
+        },
+      }),
+    ).rejects.toThrow("injected descriptor failure");
+
+    const wasLeaked = openedServer?.listening === true;
+    if (openedServer?.listening === true) {
+      await new Promise<void>((settle) => openedServer?.close(() => settle()));
+    }
+    expect(wasLeaked).toBe(false);
+  });
+
   it("should stop listening when the reviewer closes it", async () => {
     for (const instance of running) {
       await instance.close();

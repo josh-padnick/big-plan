@@ -55,6 +55,16 @@ import {
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
 
+type ReviewRuntimeOperations = {
+  readonly createServer: typeof createServer;
+  readonly writeSessionDescriptor: typeof writeSessionDescriptor;
+};
+
+const DEFAULT_OPERATIONS: ReviewRuntimeOperations = {
+  createServer,
+  writeSessionDescriptor,
+};
+
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 
@@ -181,8 +191,10 @@ const refuse = ({
  */
 export const startReviewRuntime = async ({
   planPath,
+  operations = DEFAULT_OPERATIONS,
 }: {
   readonly planPath: string;
+  readonly operations?: ReviewRuntimeOperations;
 }): Promise<ReviewRuntime> => {
   const resolvedPlanPath = resolve(planPath);
   const planId = derivePlanId({ planPath: resolvedPlanPath });
@@ -377,7 +389,7 @@ export const startReviewRuntime = async ({
     sendJson({ response, status: 200, value: { events } });
   };
 
-  const server: Server = createServer((request, response) => {
+  const server: Server = operations.createServer((request, response) => {
     void handle({ request, response });
   });
 
@@ -474,22 +486,29 @@ export const startReviewRuntime = async ({
     typeof address === "object" && address !== null ? address.port : 0;
   const url = `http://127.0.0.1:${port}/`;
 
-  await writeSessionDescriptor({
-    store,
-    descriptor: {
-      version: 1,
-      sessionId,
-      planId,
-      plan: resolvedPlanPath,
-      url,
-      port,
-      pid: process.pid,
-      startedAt: new Date().toISOString(),
-      // The token is here so the reviewer's own tools can reach the runtime;
-      // the file is owner-only, which is what keeps that safe.
-      token,
-    },
-  });
+  try {
+    await operations.writeSessionDescriptor({
+      store,
+      descriptor: {
+        version: 1,
+        sessionId,
+        planId,
+        plan: resolvedPlanPath,
+        url,
+        port,
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
+        // The token is here so the reviewer's own tools can reach the runtime;
+        // the file is owner-only, which is what keeps that safe.
+        token,
+      },
+    });
+  } catch (error: unknown) {
+    await new Promise<void>((settle) => {
+      server.close(() => settle());
+    });
+    throw error;
+  }
 
   return {
     url,
