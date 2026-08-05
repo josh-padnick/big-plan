@@ -95,7 +95,9 @@ describe("compileMarkdown code highlighting", () => {
       "```sql\nSELECT 1;\n```\n\n```\nplain block\n```\n",
     );
     // The fence itself is the panel body, so it carries the body mark.
-    expect(bodyHtml.match(/<pre data-figure-body="">/g)).toHaveLength(2);
+    expect(bodyHtml.match(/<pre[^>]*data-figure-body=""[^>]*>/g)).toHaveLength(
+      2,
+    );
     // A dense sketch a reviewer must read should not be stuck at the width of
     // the reading column, so every block gets the shared maximize control.
     expect(bodyHtml.match(/data-figure-maximizable="code"/g)).toHaveLength(2);
