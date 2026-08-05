@@ -1932,13 +1932,17 @@ import {
         ?.open === true;
     const state = el("section", {
       class:
-        "[display:grid] [gap:0.55rem] [padding:0.8rem] [border:1px_solid_var(--edge-c)] [border-radius:0.45rem] [font-size:0.75rem] [line-height:1.5] data-[tone=danger]:[border-color:var(--callout-danger-c)] data-[tone=danger]:[background:var(--callout-danger-bg)] data-[tone=danger]:[color:var(--callout-danger-c)] data-[tone=connected]:[border-color:var(--diff-add-c)] data-[tone=connected]:[background:var(--diff-add-bg)] data-[tone=connected]:[color:var(--diff-add-c)]",
+        "[display:grid] [gap:0.55rem] [font-size:0.75rem] [line-height:1.5] data-[tone=connected]:[padding:0.8rem] data-[tone=connected]:[border:1px_solid_var(--diff-add-c)] data-[tone=connected]:[border-radius:0.45rem] data-[tone=connected]:[background:var(--diff-add-bg)] data-[tone=connected]:[color:var(--diff-add-c)] data-[tone=offline]:[padding:0.8rem] data-[tone=offline]:[border:1px_solid_var(--callout-danger-c)] data-[tone=offline]:[border-radius:0.45rem] data-[tone=offline]:[background:var(--callout-danger-bg)] data-[tone=offline]:[color:var(--callout-danger-c)]",
       "data-review-connection-state": agentConnected
         ? "connected"
         : runtimeOffline
           ? "offline"
           : "disconnected",
-      "data-tone": agentConnected ? "connected" : "danger",
+      "data-tone": agentConnected
+        ? "connected"
+        : runtimeOffline
+          ? "offline"
+          : "disconnected",
     });
     if (agentConnected) {
       state.append(
@@ -1983,10 +1987,22 @@ import {
       );
     } else {
       state.append(
-        el("strong", { text: "No agent is connected to this review session." }),
-        el("p", {
-          text: "Your comments still save and queue here; nothing is sent until an agent reconnects.",
-        }),
+        el(
+          "div",
+          {
+            class:
+              "grid gap-[0.55rem] rounded-[0.45rem] border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-[var(--callout-danger-c)]",
+            "data-review-connection-alert": true,
+          },
+          [
+            el("strong", {
+              text: "No agent is connected to this review session.",
+            }),
+            el("p", {
+              text: "Your comments still save and queue here; nothing is sent until an agent reconnects.",
+            }),
+          ],
+        ),
         el("p", {
           text: "To reconnect this running review, paste this exact prompt into your coding agent:",
         }),
