@@ -10,6 +10,7 @@ This slice makes the review UI and revision story mechanically truthful:
 
 - a CSS ownership contract and complete Tailwind utility conversion;
 - generated embedded assets and style-history guards;
+- a capture-harness bridge that bootstraps promoted sent threads through the server-owned review state;
 - responsive review chrome, navigator, composers, and anchored cards;
 - one immutable causal revision per agent turn;
 - correct removal anchors, structural-move filtering, and honest historical mappings;
@@ -35,3 +36,5 @@ The plan focuses review on light/dark and wide/narrow visual contracts plus mult
 ## Split bridges
 
 This slice removes the temporary stylesheet exemption introduced in PR 1 and refreshes generated CSS. Its small browser-test bridge adapts duplicate responsive controls and the milestone's single activity spinner; the final slice advances that expectation with the completed activity model.
+
+It also contains the authorized, clearly labeled `fix(style-history): bootstrap promoted review threads [visual:empty]` bridge. PR 54's source harness moved a draft to browser-local `sent` state and reloaded, while the production runtime correctly accepts sent comments only from server bootstrap state. The bridge installs that validated bootstrap before reload, so the light and dark `expanded-thread-reply` captures are both produced. No production runtime behavior changes.

@@ -15,7 +15,7 @@ This slice completes review durability and typed revision truth:
 - explicit browser workflow actions for composition, submission, navigation, cancellation, reconnect, and recovery;
 - component-owned typed revision lenses for all eighteen registered components.
 
-This is the final slice; it deliberately adds no compatibility shim and reconciles the stack to #54's exact completed source tree.
+This is the final product slice; it deliberately adds no compatibility shim. It contains every change from #54's completed source tree plus the authorized capture-harness bridge inherited from #59.
 
 ## Review plan
 
@@ -34,10 +34,10 @@ The plan provides restart, concurrency, rebase, cancellation, and all-component 
 
 ## Completeness
 
-`git diff origin/fm/bp-commenting-round3 fm/bp-pr54-5-persistence-and-revision-lenses` is empty.
+The direct diff from `origin/fm/bp-commenting-round3` changes exactly one file: `scripts/style-snapshots/capture.mjs`.
 
-Both refs resolve to tree `576fd746ea4195d896e816ff1c008e6ebb94a464`, so the union of the five stacked branches contains every change in #54's completed source head and no final-tree extras.
+That diff's stable patch-id exactly matches the clearly labeled capture bridge in #59. Reverse-applying the bridge to this branch yields #54's tree `576fd746ea4195d896e816ff1c008e6ebb94a464`. Therefore the stack union minus the listed bridge equals #54 exactly.
 
 ## Split bridges
 
-This slice reconciles the early identity, selector, generated-asset, and milestone-test bridges to #54's exact final implementations and expectations.
+This slice reconciles the early identity, selector, generated-asset, visual-evidence, and milestone-test bridges to #54's final implementations and expectations. The capture bridge deliberately remains because it is required for an independently green stack.

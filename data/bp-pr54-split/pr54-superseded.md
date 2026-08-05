@@ -9,7 +9,9 @@
 > 4. #59 — Tailwind/UI contracts and causal diffs
 > 5. #60 — persistence hardening and component revision lenses
 >
-> Each replacement PR targets `main`, declares its predecessor, includes independent green evidence, and links a rendered Big Plan review document. The final branch has the same Git tree as this PR's completed source head.
+> Each replacement PR targets `main`, declares its predecessor, includes independent green evidence, and links a rendered Big Plan review document. The final branch contains every change from this PR plus one authorized capture-harness bridge in #59.
+>
+> This PR's current head is red on `style-history`: its configuration declares 34 captures, but its harness produces only 32. The missing light/dark `expanded-thread-reply` captures promote a draft only in browser-local state; after reload, the production runtime correctly reads sent comments from server bootstrap state and therefore has no thread to expand. #59 repairs the harness without changing production runtime behavior.
 
 ## Scope
 
