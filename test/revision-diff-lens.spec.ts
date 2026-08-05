@@ -9,6 +9,7 @@ import {
   derivePlanId,
   renderDocument,
 } from "../dist/render/render-document.js";
+import { COMPONENT_REGISTRY } from "../dist/components/_registration/registry.js";
 import {
   commentsFromExchange,
   deriveSourceRevision,
@@ -30,6 +31,7 @@ import {
   associationCases,
   revisionDiffCases,
 } from "./fixtures/revision-diff-cases.js";
+import { componentRevisionDiffCases } from "./fixtures/revision-component-diff-cases.js";
 
 const revisionPairFor = ({
   before,
@@ -42,7 +44,13 @@ const revisionPairFor = ({
   toRevision: deriveSourceRevision(after),
 });
 
-for (const fixture of revisionDiffCases) {
+test("component revision browser fixtures should match the exact registry", () => {
+  expect(
+    componentRevisionDiffCases.map(({ component }) => component).sort(),
+  ).toEqual(Object.keys(COMPONENT_REGISTRY).sort());
+});
+
+for (const fixture of [...revisionDiffCases, ...componentRevisionDiffCases]) {
   test(`revision lens should honor its contract for ${fixture.name}`, async ({
     page,
   }) => {
@@ -118,6 +126,20 @@ for (const fixture of revisionDiffCases) {
       expect(new Set(changeSet.places.map((place) => place.placeId)).size).toBe(
         changeSet.places.length,
       );
+      const expectedComponent =
+        "component" in fixture ? fixture.component : undefined;
+      if (expectedComponent !== undefined) {
+        const componentLocations = changeSet.places
+          .flatMap((place) => place.locations)
+          .filter(
+            (location) =>
+              location.oldSnapshot?.type === "component" &&
+              location.oldSnapshot.component === expectedComponent &&
+              location.newSnapshot?.type === "component" &&
+              location.newSnapshot.component === expectedComponent,
+          );
+        expect(componentLocations).toHaveLength(1);
+      }
       for (const place of changeSet.places) {
         expect(place.locations.length).toBeGreaterThan(0);
         for (const location of place.locations) {
@@ -185,6 +207,7 @@ for (const fixture of revisionDiffCases) {
         .evaluateAll((nodes) =>
           nodes.map((node) => node.getAttribute("data-block-id")),
         );
+      let sawExpectedComponent = expectedComponent === undefined;
       for (let index = 0; index < changeSet.places.length; index += 1) {
         if ((await digestToggle.getAttribute("aria-expanded")) === "false") {
           await digestToggle.click();
@@ -256,8 +279,70 @@ for (const fixture of revisionDiffCases) {
           );
           await expect(lens).toBeVisible();
         }
+        const isExpectedComponentPlace =
+          expectedComponent !== undefined &&
+          place?.locations.some(
+            (location) =>
+              (location.oldSnapshot?.type === "component" &&
+                location.oldSnapshot.component === expectedComponent) ||
+              (location.newSnapshot?.type === "component" &&
+                location.newSnapshot.component === expectedComponent),
+          ) === true;
+        if (isExpectedComponentPlace && "component" in fixture) {
+          sawExpectedComponent = true;
+          for (const sideName of expectedSides) {
+            const root = lens.locator(
+              `[data-review-diff-side="${sideName}"] [data-review-component-snapshot="${fixture.component}"]`,
+            );
+            await expect(root).toHaveCount(1);
+            for (const selector of fixture.structure) {
+              expect(
+                await root.evaluate(
+                  (node, value) =>
+                    node.matches(value) || node.querySelector(value) !== null,
+                  selector,
+                ),
+              ).toBe(true);
+            }
+            await expect(
+              root.locator(
+                "script, iframe, object, embed, form, input, textarea, select, button, [contenteditable], [tabindex], [id]",
+              ),
+            ).toHaveCount(0);
+            expect(
+              await root.evaluate((node) =>
+                [node, ...node.querySelectorAll("*")].some((element) =>
+                  [...element.attributes].some(({ name }) => {
+                    const lower = name.toLowerCase();
+                    return (
+                      lower.startsWith("on") ||
+                      lower === "data-component" ||
+                      lower === "data-component-instance" ||
+                      lower.includes("controls") ||
+                      lower.includes("maximize") ||
+                      lower.includes("zoom") ||
+                      lower.includes("proposal")
+                    );
+                  }),
+                ),
+              ),
+            ).toBe(false);
+          }
+          const renderedText = await lens.innerText();
+          for (const artifact of fixture.forbiddenConcatenations) {
+            expect(renderedText).not.toContain(artifact);
+          }
+          await page.setViewportSize({ width: 760, height: 900 });
+          expect(
+            await lens.evaluate(
+              (node) => node.scrollWidth <= node.clientWidth + 1,
+            ),
+          ).toBe(true);
+          await page.setViewportSize({ width: 1280, height: 900 });
+        }
         if (
-          fixture.name === "flow diagram semantic change" &&
+          (fixture.name === "flow diagram semantic change" ||
+            expectedComponent === "FlowDiagram") &&
           place?.locations.some(
             (location) => location.kind === "flow-diagram",
           ) === true
@@ -307,6 +392,7 @@ for (const fixture of revisionDiffCases) {
           ).toBe(true);
         }
       }
+      expect(sawExpectedComponent).toBe(true);
       await page.keyboard.press("Escape");
       await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
       await expect(
