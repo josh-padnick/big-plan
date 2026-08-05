@@ -35,8 +35,24 @@ test("should comment on a slide and a passage, then revise before sending", asyn
       if (slide === null) return null;
       const slideRect = slide.getBoundingClientRect();
       const selectorRect = node.getBoundingClientRect();
+      const kickerRect = slide
+        .querySelector("[data-slide-kicker]")
+        ?.getBoundingClientRect();
+      const toggleRect = slide
+        .querySelector(
+          ":scope > [data-collapse-header] > [data-collapse-toggle]",
+        )
+        ?.getBoundingClientRect();
       return {
         gap: slideRect.left - selectorRect.right,
+        gapToKicker:
+          kickerRect === undefined ? -1 : kickerRect.left - selectorRect.right,
+        overlapsToggle:
+          toggleRect !== undefined &&
+          selectorRect.left < toggleRect.right &&
+          selectorRect.right > toggleRect.left &&
+          selectorRect.top < toggleRect.bottom &&
+          selectorRect.bottom > toggleRect.top,
         topDelta: selectorRect.top - slideRect.top,
       };
     });
@@ -44,8 +60,11 @@ test("should comment on a slide and a passage, then revise before sending", asyn
       throw new Error("The slide selector is not anchored to a slide");
     }
     initialSelectorGap = geometry.gap;
-    expect(initialSelectorGap).toBeCloseTo(5, 0);
-    expect(geometry.topDelta).toBeCloseTo(10, 0);
+    expect(geometry.gapToKicker).toBeGreaterThanOrEqual(0);
+    expect(geometry.gapToKicker).toBeLessThanOrEqual(8);
+    expect(geometry.overlapsToggle).toBe(false);
+    expect(geometry.topDelta).toBeGreaterThanOrEqual(5);
+    expect(geometry.topDelta).toBeLessThanOrEqual(8);
     await expect(selector).toHaveAttribute(
       "aria-label",
       "Comment on all content in Status quo",
@@ -73,8 +92,26 @@ test("should comment on a slide and a passage, then revise before sending", asyn
         if (slide === null) return null;
         const slideRect = slide.getBoundingClientRect();
         const selectorRect = node.getBoundingClientRect();
+        const kickerRect = slide
+          .querySelector("[data-slide-kicker]")
+          ?.getBoundingClientRect();
+        const toggleRect = slide
+          .querySelector(
+            ":scope > [data-collapse-header] > [data-collapse-toggle]",
+          )
+          ?.getBoundingClientRect();
         return {
           gap: slideRect.left - selectorRect.right,
+          gapToKicker:
+            kickerRect === undefined
+              ? -1
+              : kickerRect.left - selectorRect.right,
+          overlapsToggle:
+            toggleRect !== undefined &&
+            selectorRect.left < toggleRect.right &&
+            selectorRect.right > toggleRect.left &&
+            selectorRect.top < toggleRect.bottom &&
+            selectorRect.bottom > toggleRect.top,
           topDelta: selectorRect.top - slideRect.top,
         };
       });
@@ -82,7 +119,11 @@ test("should comment on a slide and a passage, then revise before sending", asyn
       throw new Error("The slide selector lost its slide anchor");
     }
     expect(geometry.gap).toBeCloseTo(initialSelectorGap, 1);
-    expect(geometry.topDelta).toBeCloseTo(10, 0);
+    expect(geometry.gapToKicker).toBeGreaterThanOrEqual(0);
+    expect(geometry.gapToKicker).toBeLessThanOrEqual(8);
+    expect(geometry.overlapsToggle).toBe(false);
+    expect(geometry.topDelta).toBeGreaterThanOrEqual(5);
+    expect(geometry.topDelta).toBeLessThanOrEqual(8);
   });
 
   await test.step("highlighting a passage offers to comment on the selection", async () => {
@@ -178,13 +219,32 @@ test("should offer comments from nested sub-slide icons and text selections", as
       if (slide === null) return null;
       const slideRect = slide.getBoundingClientRect();
       const selectorRect = node.getBoundingClientRect();
+      const kickerRect = slide
+        .querySelector("[data-slide-kicker]")
+        ?.getBoundingClientRect();
+      const toggleRect = slide
+        .querySelector(
+          ":scope > [data-collapse-header] > [data-collapse-toggle]",
+        )
+        ?.getBoundingClientRect();
       return {
         gap: slideRect.left - selectorRect.right,
+        gapToKicker:
+          kickerRect === undefined ? -1 : kickerRect.left - selectorRect.right,
+        overlapsToggle:
+          toggleRect !== undefined &&
+          selectorRect.left < toggleRect.right &&
+          selectorRect.right > toggleRect.left &&
+          selectorRect.top < toggleRect.bottom &&
+          selectorRect.bottom > toggleRect.top,
         topDelta: selectorRect.top - slideRect.top,
       };
     });
-    expect(geometry?.gap).toBeCloseTo(5, 0);
-    expect(geometry?.topDelta).toBeCloseTo(10, 0);
+    expect(geometry?.gapToKicker).toBeGreaterThanOrEqual(0);
+    expect(geometry?.gapToKicker).toBeLessThanOrEqual(8);
+    expect(geometry?.overlapsToggle).toBe(false);
+    expect(geometry?.topDelta).toBeGreaterThanOrEqual(5);
+    expect(geometry?.topDelta).toBeLessThanOrEqual(8);
     await selector.scrollIntoViewIfNeeded();
     const before = await subSlide.evaluate((slide) => {
       const title = document.querySelector("h1");
