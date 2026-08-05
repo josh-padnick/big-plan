@@ -10,11 +10,13 @@ import {
   type AgentRequest,
 } from "./agent-exchange.js";
 import {
+  appendProgress,
   readMutableJson,
   writeFeedbackPackage,
   writeMutableJson,
   writeRevisionSnapshot,
   type ReviewStore,
+  type ProgressEvent,
 } from "./store.js";
 
 export type ReviewerStateSnapshot = {
@@ -208,6 +210,39 @@ export type CommitFeedbackResult =
     }
   | { readonly ok: false; readonly current: ReviewerStateSnapshot };
 
+export type ReviewEvent = Omit<ProgressEvent, "eventId" | "seq"> & {
+  readonly eventId: string;
+};
+
+export type CommitFeedbackCheckpoint =
+  | "feedback-package"
+  | "source-revision"
+  | "agent-requests"
+  | "reviewer-state"
+  | "review-event";
+
+/** Publishes one immutable runtime-authored activity fact. */
+export const publishReviewEvent = async ({
+  store,
+  event,
+}: {
+  readonly store: ReviewStore;
+  readonly event: ReviewEvent;
+}): Promise<void> => appendProgress({ store, event });
+
+const requestsAlreadyCommitted = ({
+  requests,
+  exchange,
+}: {
+  readonly requests: ReadonlyArray<AgentRequest>;
+  readonly exchange: AgentExchangeSnapshot;
+}): boolean => {
+  const committedIds = new Set(
+    exchange.requests.map((request) => request.requestId),
+  );
+  return requests.every((request) => committedIds.has(request.requestId));
+};
+
 /** Commits immutable feedback facts before removing submitted draft ownership. */
 export const commitFeedback = async ({
   store,
@@ -218,7 +253,9 @@ export const commitFeedback = async ({
   sourceRevision,
   requests,
   submittedCommentIds,
+  event,
   validators,
+  testingCheckpoint,
 }: {
   readonly store: ReviewStore;
   readonly expectedRevision: number;
@@ -228,30 +265,72 @@ export const commitFeedback = async ({
   readonly sourceRevision: string;
   readonly requests: ReadonlyArray<AgentRequest>;
   readonly submittedCommentIds: ReadonlyArray<string>;
+  readonly event: ReviewEvent;
   readonly validators: ReviewerValidators;
+  readonly testingCheckpoint?: (
+    checkpoint: CommitFeedbackCheckpoint,
+  ) => Promise<void>;
 }): Promise<CommitFeedbackResult> => {
+  const initial = await loadDurableReview({
+    store,
+    sessionId: feedback.sessionId,
+    planId: feedback.planId,
+    validators,
+  });
+  if (initial.reviewer.revision !== expectedRevision) {
+    const completedRetry =
+      initial.reviewer.revision === expectedRevision + 1 &&
+      requestsAlreadyCommitted({ requests, exchange: initial.exchange });
+    if (!completedRetry) {
+      return { ok: false, current: initial.reviewer };
+    }
+    const written = await writeFeedbackPackage({ store, feedback, brief });
+    await writeRevisionSnapshot({
+      store,
+      revision: sourceRevision,
+      source,
+    });
+    for (const request of requests) {
+      await writeAgentRequest({ store, request });
+    }
+    await publishReviewEvent({ store, event });
+    return { ok: true, snapshot: initial.reviewer, package: written };
+  }
+
   const written = await writeFeedbackPackage({ store, feedback, brief });
+  await testingCheckpoint?.("feedback-package");
   await writeRevisionSnapshot({
     store,
     revision: sourceRevision,
     source,
   });
+  await testingCheckpoint?.("source-revision");
   for (const request of requests) {
     await writeAgentRequest({ store, request });
   }
-  const current = await loadReviewerState({ store, validators });
+  await testingCheckpoint?.("agent-requests");
+  const current = await loadDurableReview({
+    store,
+    sessionId: feedback.sessionId,
+    planId: feedback.planId,
+    validators,
+  });
   const submitted = new Set(submittedCommentIds);
   const saved = await saveReviewerState({
     store,
     expectedRevision,
     validators,
     next: {
-      drafts: current.drafts.filter((draft) => !submitted.has(draft.id)),
+      drafts: current.reviewer.drafts.filter(
+        (draft) => !submitted.has(draft.id),
+      ),
       activeDraft: "",
-      resolvedCommentIds: current.resolvedCommentIds,
+      resolvedCommentIds: current.reviewer.resolvedCommentIds,
     },
   });
-  return saved.ok
-    ? { ok: true, snapshot: saved.snapshot, package: written }
-    : saved;
+  if (!saved.ok) return saved;
+  await testingCheckpoint?.("reviewer-state");
+  await publishReviewEvent({ store, event });
+  await testingCheckpoint?.("review-event");
+  return { ok: true, snapshot: saved.snapshot, package: written };
 };

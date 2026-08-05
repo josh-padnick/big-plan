@@ -13,10 +13,15 @@ import {
 import { validateComments } from "./comment.js";
 import type { ReviewComment } from "./comment.js";
 import {
+  commitFeedback,
   loadDurableReview,
   loadReviewerState,
   ReviewerStateCorrupt,
   saveReviewerState,
+} from "./durable-review.js";
+import type {
+  CommitFeedbackCheckpoint,
+  ReviewEvent,
 } from "./durable-review.js";
 import { buildFeedbackPackage } from "./feedback-package.js";
 import { prepareStore, reviewStoreFor } from "./store.js";
@@ -67,6 +72,42 @@ const fixture = async () => {
   return store;
 };
 
+const feedbackCommit = () => {
+  const feedback = buildFeedbackPackage({
+    sessionId: "1111111111111111",
+    packageId: "3333333333333333",
+    planId: "2222222222222222",
+    planPath: "/tmp/plan.mdx",
+    createdAt: "2026-08-04T12:00:00.000Z",
+    comments: [comment],
+  });
+  const source = "# Plan\n";
+  const sourceRevision = deriveSourceRevision(source);
+  const [request] = feedbackAgentRequests({
+    feedback,
+    sourceRevision,
+    requestIds: ["3333333333333333"],
+  });
+  if (request === undefined) {
+    throw new Error("The fixture feedback request was not created");
+  }
+  const event: ReviewEvent = {
+    eventId: "5555555555555555",
+    sessionId: feedback.sessionId,
+    step: "Feedback package received",
+    state: "done",
+    requestId: request.requestId,
+    at: "2026-08-04T12:00:01.000Z",
+  };
+  return {
+    feedback,
+    source,
+    sourceRevision,
+    requests: [request],
+    event,
+  };
+};
+
 describe("durable reviewer state", () => {
   it("should begin at revision zero when the snapshot is missing", async () => {
     const store = await fixture();
@@ -75,7 +116,7 @@ describe("durable reviewer state", () => {
     ).resolves.toMatchObject({ revision: 0, schemaVersion: 1 });
   });
 
-  it("should reject a stale save without replacing newer state", async () => {
+  it("should reject a stale save when newer reviewer state exists", async () => {
     const store = await fixture();
     const first = await saveReviewerState({
       store,
@@ -96,7 +137,7 @@ describe("durable reviewer state", () => {
     });
   });
 
-  it("should surface corrupt authoritative reviewer state", async () => {
+  it("should preserve and surface authoritative state when it is corrupt", async () => {
     const store = await fixture();
     await writeFile(store.reviewerStatePath, "{truncated");
     await expect(
@@ -109,7 +150,7 @@ describe("durable reviewer state", () => {
     ).rejects.toBeInstanceOf(ReviewerStateCorrupt);
   });
 
-  it("should derive sent ownership from immutable feedback requests", async () => {
+  it("should derive sent ownership when a feedback request is committed", async () => {
     const store = await fixture();
     await saveReviewerState({
       store,
@@ -121,22 +162,10 @@ describe("durable reviewer state", () => {
         resolvedCommentIds: [],
       },
     });
-    const feedback = buildFeedbackPackage({
-      sessionId: "1111111111111111",
-      packageId: "3333333333333333",
-      planId: "2222222222222222",
-      planPath: "/tmp/plan.mdx",
-      createdAt: "2026-08-04T12:00:00.000Z",
-      comments: [comment],
-    });
-    const [request] = feedbackAgentRequests({
-      feedback,
-      sourceRevision: deriveSourceRevision("# Plan\n"),
-      requestIds: ["3333333333333333"],
-    });
-    if (request === undefined) {
-      throw new Error("The fixture feedback request was not created");
-    }
+    const {
+      requests: [request],
+    } = feedbackCommit();
+    if (request === undefined) throw new Error("The request is required");
     await writeAgentRequest({ store, request });
 
     const durable = await loadDurableReview({
@@ -148,5 +177,80 @@ describe("durable reviewer state", () => {
 
     expect(durable.reviewer.drafts).toEqual([]);
     expect(durable.sent).toEqual([comment]);
+  });
+
+  it("should recover exact ownership when feedback commit is interrupted", async () => {
+    const checkpoints: ReadonlyArray<CommitFeedbackCheckpoint> = [
+      "feedback-package",
+      "source-revision",
+      "agent-requests",
+      "reviewer-state",
+      "review-event",
+    ];
+    for (const interruptedAt of checkpoints) {
+      const store = await fixture();
+      await saveReviewerState({
+        store,
+        expectedRevision: 0,
+        validators,
+        next: {
+          drafts: [comment],
+          activeDraft: "",
+          resolvedCommentIds: [],
+        },
+      });
+      const commit = feedbackCommit();
+      await expect(
+        commitFeedback({
+          store,
+          expectedRevision: 1,
+          ...commit,
+          brief: "# Feedback\n",
+          submittedCommentIds: [comment.id],
+          validators,
+          testingCheckpoint: async (checkpoint) => {
+            if (checkpoint === interruptedAt) {
+              throw new Error(`Interrupted after ${checkpoint}`);
+            }
+          },
+        }),
+      ).rejects.toThrow(`Interrupted after ${interruptedAt}`);
+
+      const recovered = await loadDurableReview({
+        store,
+        sessionId: commit.feedback.sessionId,
+        planId: commit.feedback.planId,
+        validators,
+      });
+      expect(
+        recovered.reviewer.drafts.filter(({ id }) => id === comment.id).length +
+          recovered.sent.filter(({ id }) => id === comment.id).length,
+      ).toBe(1);
+      expect(recovered.exchange.requests).toHaveLength(
+        checkpoints.indexOf(interruptedAt) >=
+          checkpoints.indexOf("agent-requests")
+          ? 1
+          : 0,
+      );
+
+      const retried = await commitFeedback({
+        store,
+        expectedRevision: 1,
+        ...commit,
+        brief: "# Feedback\n",
+        submittedCommentIds: [comment.id],
+        validators,
+      });
+      expect(retried.ok).toBe(true);
+      const complete = await loadDurableReview({
+        store,
+        sessionId: commit.feedback.sessionId,
+        planId: commit.feedback.planId,
+        validators,
+      });
+      expect(complete.reviewer.drafts).toEqual([]);
+      expect(complete.sent).toEqual([comment]);
+      expect(complete.exchange.requests).toHaveLength(1);
+    }
   });
 });

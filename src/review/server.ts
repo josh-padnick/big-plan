@@ -451,6 +451,15 @@ export const startReviewRuntime = async ({
         sourceRevision: revision,
         requests: agentRequests,
         submittedCommentIds: comments.map((comment) => comment.id),
+        event: {
+          eventId: randomId(8),
+          sessionId,
+          step: "Feedback package received",
+          state: "done",
+          requestId: agentRequests[0]?.requestId,
+          at: new Date().toISOString(),
+          detail: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
+        },
         validators: reviewerValidators,
       });
       if (!committed.ok) {
@@ -461,19 +470,6 @@ export const startReviewRuntime = async ({
         });
         return;
       }
-      // The one event the runtime can honestly author: it has the package.
-      // Everything after this belongs to the agent that reads the channel.
-      await appendProgress({
-        store,
-        event: {
-          sessionId,
-          step: "Feedback package received",
-          state: "done",
-          requestId: agentRequests[0]?.requestId,
-          at: new Date().toISOString(),
-          detail: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
-        },
-      });
       sendJson({
         response,
         status: 200,
