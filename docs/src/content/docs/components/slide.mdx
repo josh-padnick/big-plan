@@ -26,13 +26,13 @@ For each intended slide, use a type only when its matching rule fits; otherwise 
 
 ## The catalog
 
-| Type id               | Name                | Role                                                                        |
-| --------------------- | ------------------- | --------------------------------------------------------------------------- |
-| `status-quo`          | Status quo          | What is true today, including what already works                            |
-| `desired-experience`  | Desired experience  | The concrete lived experience introduced by a new feature                   |
-| `desired-outcome`     | Desired outcome     | The concrete payoff of a bug fix, re-architecture, or tech-debt change      |
-| `user-journey`        | User journeys       | A named container of individually named, complete human loops               |
-| `acceptance-criteria` | Acceptance criteria | Independently checkable verification                            |
+| Type id               | Name                | Role                                                                   |
+| --------------------- | ------------------- | ---------------------------------------------------------------------- |
+| `status-quo`          | Status quo          | What is true today, including what already works                       |
+| `desired-experience`  | Desired experience  | The concrete lived experience introduced by a new feature              |
+| `desired-outcome`     | Desired outcome     | The concrete payoff of a bug fix, re-architecture, or tech-debt change |
+| `user-journey`        | User journeys       | A named container of individually named, complete human loops          |
+| `acceptance-criteria` | Acceptance criteria | Independently checkable verification                                   |
 
 `desired-experience` and `desired-outcome` are mutually exclusive.
 They are light recommendations when their sharper framing fits; the canonical untyped “Success looks like” section remains valid and receives no discouraging lint.
@@ -85,14 +85,14 @@ Apply the Wireframe component's CLEAR quality bar to every mockup.
 - `type` is required and accepts only the five registered ids above.
 - `Slide` is self-closing and rejects body content.
 - The marker must be top-level and immediately followed by the h2 it describes.
-- `user-journey` additionally requires non-empty `name` and `toc` attributes; other types reject them.
-- Every `user-journey` section must contain a `Wireframe` with actual UI mockups, or a non-empty `wireframeReason` that explains why no UI was created.
+- `user-journey` additionally requires non-empty `name` and `toc` attributes and accepts an optional non-empty `wireframeReason`; other types reject all three.
+- Every `user-journey` section must contain a `Wireframe` with actual UI mockups, or a non-empty `wireframeReason` that explains why no UI was created. Carrying both is rejected, because the reason only explains an absent wireframe.
 - Singleton types may appear at most once; `user-journey` may repeat.
 - A plan may use `desired-experience` or `desired-outcome`, never both.
 - An acceptance-criteria slide with more than seven criteria must group them by a useful dimension.
 
 Unknown types and misplaced markers fail compilation with source positions.
-Objective catalog and arc violations fail lint.
+Objective catalog violations fail lint.
 No rule requires every slide to be typed.
 
 ## Growing the catalog
