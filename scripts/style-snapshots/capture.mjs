@@ -335,9 +335,12 @@ const browser = await chromium.launch({
     // this switch as its baseline layout-test path; it prevents SIMD-specific
     // antialias rounding from changing an otherwise identical pixel by one.
     "--disable-skia-runtime-opts",
-    // Chromium's deterministic compositor mode pins frame scheduling and
-    // raster work so rounded-edge antialiasing does not vary between pages.
-    "--deterministic-mode",
+    // Keep deterministic compositor stages without enabling begin-frame
+    // control, which can stall screenshots on hosted Linux runners.
+    "--run-all-compositor-stages-before-draw",
+    "--disable-threaded-animation",
+    "--disable-threaded-scrolling",
+    "--disable-checker-imaging",
     "--force-color-profile=srgb",
     "--force-device-scale-factor=1",
   ],
