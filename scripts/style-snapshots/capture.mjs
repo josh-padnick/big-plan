@@ -522,6 +522,10 @@ try {
     await rm(progressPath, { force: true });
   }
 } finally {
-  await withTimeout(browser.close(), "Closing screenshot browser", 10_000);
+  try {
+    await withTimeout(browser.close(), "Closing screenshot browser", 10_000);
+  } catch {
+    // Browser shutdown is best-effort after the capture result is complete.
+  }
   await rm(temporaryDirectory, { recursive: true, force: true });
 }
