@@ -1,6 +1,6 @@
-/* CSS escape hatch: local readability keeps the palette map and child selector
-   relationship together. Callout palette variants are colocated with the
-   component that emits the panel markup. */
+/* CSS escape hatch: selector relationships keep the token-derived palette map
+   together. The data-callout contract assigns CSS variables that the owned
+   markup consumes through utilities. */
 
 @layer components {
   article [data-callout] {
@@ -23,11 +23,5 @@
   article [data-callout="danger"] {
     --callout-accent: var(--callout-danger-c);
     --callout-bg: var(--callout-danger-bg);
-  }
-  article .callout-header {
-    color: var(--callout-accent);
-  }
-  article .callout-body > :last-child {
-    margin-bottom: 0;
   }
 }

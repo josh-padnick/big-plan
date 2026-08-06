@@ -75,6 +75,13 @@ const TOGGLE_CLASSES = [
   "focus-visible:outline-accent",
 ] as const;
 
+const HEADER_CLASSES = [
+  "plan-collapse-header",
+  "relative",
+  "min-w-0",
+  "cursor-pointer",
+] as const;
+
 // Builds the inert collapse control; the viewer script wires behavior and the
 // document stays fully readable when scripts are disabled. The chevron is the
 // catalog Lucide glyph so that pointing it right (collapsed) or down
@@ -103,7 +110,7 @@ const createCollapseHeader = (
   tagName: "div",
   properties: {
     [COLLAPSE_HEADER_ATTRIBUTE]: "",
-    className: ["plan-collapse-header"],
+    className: [...HEADER_CLASSES],
   },
   children: [
     createCollapseToggle(),

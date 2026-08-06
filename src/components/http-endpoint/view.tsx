@@ -19,6 +19,40 @@ import {
   SectionLabel,
 } from "../_shared/labeled-section/labeled-section.js";
 
+// /* off-scale */ Phase A preserves the legacy 12% and 14% token washes
+// exactly; Phase B will replace them with palette-backed theme shades.
+const METHOD_CLASSES: Readonly<Record<CompiledHttpEndpoint["method"], string>> =
+  {
+    GET: "text-[var(--callout-note-c)] [background:color-mix(in_srgb,var(--callout-note-c)_14%,transparent)]",
+    POST: "text-[var(--diff-add-c)] [background:color-mix(in_srgb,var(--diff-add-c)_14%,transparent)]",
+    PUT: "text-[var(--callout-warning-c)] [background:color-mix(in_srgb,var(--callout-warning-c)_14%,transparent)]",
+    PATCH:
+      "text-[var(--annotation-c)] [background:color-mix(in_srgb,var(--annotation-c)_14%,transparent)]",
+    DELETE:
+      "text-[var(--diff-remove-c)] [background:color-mix(in_srgb,var(--diff-remove-c)_14%,transparent)]",
+    HEAD: "text-muted [background:color-mix(in_srgb,var(--color-muted)_14%,transparent)]",
+    OPTIONS:
+      "text-muted [background:color-mix(in_srgb,var(--color-muted)_14%,transparent)]",
+  };
+
+const STATUS_CLASSES: Readonly<
+  Record<CompiledHttpResponse["statusClass"], string>
+> = {
+  informational:
+    "text-muted [background:color-mix(in_srgb,var(--color-muted)_14%,transparent)]",
+  success:
+    "text-[var(--diff-add-c)] [background:color-mix(in_srgb,var(--diff-add-c)_14%,transparent)]",
+  redirect:
+    "text-muted [background:color-mix(in_srgb,var(--color-muted)_14%,transparent)]",
+  "client-error":
+    "text-[var(--callout-warning-c)] [background:color-mix(in_srgb,var(--callout-warning-c)_14%,transparent)]",
+  "server-error":
+    "text-[var(--diff-remove-c)] [background:color-mix(in_srgb,var(--diff-remove-c)_14%,transparent)]",
+};
+
+const DEPRECATED_CLASSES =
+  "text-muted [background:color-mix(in_srgb,var(--color-muted)_14%,transparent)]";
+
 // Splits brace-delimited placeholders from the literal path without treating
 // the authored string as markup.
 const pathChildren = (path: string): ReadonlyArray<ReactNode> =>
@@ -29,7 +63,7 @@ const pathChildren = (path: string): ReadonlyArray<ReactNode> =>
       /^\{[^{}]+\}$/u.test(part) ? (
         <span
           key={index}
-          className="http-endpoint-placeholder rounded-sm px-0.5"
+          className="http-endpoint-placeholder rounded-sm bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] px-0.5 text-accent"
         >
           {part}
         </span>
@@ -181,7 +215,7 @@ const ResponseEntry = ({
         label={response.status}
         classNames={[
           "http-endpoint-status-pill",
-          `http-endpoint-status-${response.statusClass}`,
+          STATUS_CLASSES[response.statusClass],
         ]}
         dataProperties={{ "data-http-status-class": response.statusClass }}
       />
@@ -214,7 +248,7 @@ export const HttpEndpoint = ({
           label={model.method}
           classNames={[
             "http-endpoint-method-pill",
-            `http-endpoint-method-${model.method.toLowerCase()}`,
+            METHOD_CLASSES[model.method],
           ]}
         />
         <span
@@ -232,10 +266,7 @@ export const HttpEndpoint = ({
           <span className="text-sm text-muted">{model.summary}</span>
         )}
         {model.deprecated ? (
-          <BadgePill
-            label="Deprecated"
-            classNames={["http-endpoint-deprecated"]}
-          />
+          <BadgePill label="Deprecated" classNames={[DEPRECATED_CLASSES]} />
         ) : null}
       </div>
       {model.auth === undefined ? null : (

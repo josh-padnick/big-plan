@@ -30,13 +30,13 @@ export const Callout = ({ model }: { readonly model: CompiledCallout }) => {
       data-callout={model.type}
       className="callout mb-5 rounded-md border border-l-4 px-4 py-3"
     >
-      <header className="callout-header mb-2 flex items-center gap-2 font-semibold [&_svg]:size-4 [&_svg]:shrink-0">
+      <header className="callout-header mb-2 flex items-center gap-2 font-semibold text-[var(--callout-accent)] [&_svg]:size-4 [&_svg]:shrink-0">
         {lucideIconToReact({ icon: config.icon, hidden: false })}
         <span className="callout-title text-sm leading-5">
           {model.title ?? config.defaultTitle}
         </span>
       </header>
-      <div className="callout-body text-ink">
+      <div className="callout-body text-ink [&>:last-child]:mb-0">
         {hastContentToReact(model.body)}
       </div>
     </aside>

@@ -19,6 +19,10 @@ import {
 import { MAXIMIZABLE_ATTRIBUTE } from "../_model/figure-controls/figure-controls.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
+// /* off-scale */ Phase A preserves the legacy segmented-control radius,
+// compact caption padding, and switch geometry exactly. Phase B may
+// regularize them against the product scale.
+
 // Shared by the view toggles. Hover and pressed
 // colors are utilities rather than stylesheet rules because a components-layer
 // rule loses to the resting bg-surface utility, which left these controls with
@@ -101,7 +105,7 @@ const DiffHeader = ({
   readonly title: string | undefined;
   readonly entries: ReadonlyArray<TreeEntry>;
 }) => (
-  <figcaption className="file-tree-header file-tree-diff-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.65rem] py-[0.4rem] font-sans text-sm font-semibold text-ink">
+  <figcaption className="file-tree-header file-tree-diff-header flex min-w-0 items-center justify-between gap-3 border-b border-edge bg-[var(--diff-header-bg)] px-[0.65rem] py-[0.4rem] font-sans text-sm font-semibold text-ink">
     {title === undefined ? null : (
       <span className="file-tree-diff-title truncate">{title}</span>
     )}
@@ -215,7 +219,7 @@ const StatePane = ({
     aria-label={side === "before" ? "Current" : "Planned"}
     data-tree-pane={side}
   >
-    <div className="file-tree-diff-pane-caption flex min-w-0 items-center justify-between gap-2 border-b border-edge px-3 py-1.5 font-sans text-xs font-semibold text-muted">
+    <div className="file-tree-diff-pane-caption flex min-w-0 items-center justify-between gap-2 border-b border-edge bg-[var(--diff-hunk-bg)] px-3 py-1.5 font-sans text-xs font-semibold text-muted">
       {side === "before" ? "Current" : "Planned"}
       <span className="file-tree-pane-controls flex shrink-0 items-center gap-1.5">
         <TreeFoldControls tone="quiet" />
@@ -267,7 +271,7 @@ export const FileTreeDiff = ({
   readonly model: CompiledFileTreeDiff;
 }) => (
   <figure
-    className="file-tree file-tree-diff mb-5 min-w-0 overflow-hidden rounded-md border border-edge font-mono text-[0.8125rem] leading-[1.5]"
+    className="file-tree file-tree-diff mb-5 min-w-0 overflow-hidden rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-[0.8125rem] leading-[1.5]"
     data-file-tree-diff=""
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "tree" }}
     data-tree-view="combined"

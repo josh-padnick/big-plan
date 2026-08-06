@@ -1,29 +1,8 @@
 /* CSS escape hatch: selector relationships across diff states and generated
-   line-marker pseudo-elements. CodeDiff styles are colocated with
-   the component that owns the stable selectors. */
+   line-marker pseudo-elements. CodeDiff styles are colocated with the
+   component that owns the stable selectors; renderer-owned resting surfaces
+   live with their JSX. */
 @layer components {
-  article [data-code-diff] {
-    /* Content sits on its own background so red/green line tints read
-       cleanly; the tan surface stays on the header and hunk rows. */
-    background: var(--diff-content-bg);
-    max-width: 100%;
-  }
-  article .code-diff-header {
-    /* Header chrome sits one elevation step above hunk bands and two above
-       content: darker steps in light mode, lighter steps in dark mode. */
-    background: var(--diff-header-bg);
-    border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0;
-  }
-  article .code-diff-stat-add {
-    color: var(--diff-add-c);
-  }
-  article .code-diff-stat-remove {
-    color: var(--diff-remove-c);
-  }
-  article .code-diff-menu-list {
-    background: var(--diff-header-bg);
-    box-shadow: 0 6px 18px rgb(12 10 8 / 0.18);
-  }
   article .code-diff-menu-list[hidden] {
     display: none;
   }
@@ -38,9 +17,6 @@
   }
   article .code-diff-button [data-lucide="check"] {
     color: var(--color-accent);
-  }
-  article .code-diff-view {
-    border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
   }
   article [data-diff-content="unified"] {
     position: relative;
@@ -59,12 +35,6 @@
     [data-code-diff][data-diff-view="split"]
     > [data-diff-content="split"] {
     display: block;
-  }
-  article .code-diff-hunk-header {
-    /* Hunk rows are diff metadata: a borderless neutral band, GitHub
-       style, so the tint itself separates without adding more lines. */
-    background: var(--diff-hunk-bg);
-    color: var(--diff-hunk-c);
   }
   article [data-diff-pane="new"] {
     border-left: 1px solid var(--color-edge);
@@ -85,10 +55,6 @@
   }
   article .code-diff-split-line[data-line-numbers] {
     grid-template-columns: 3.25rem minmax(max-content, 1fr);
-  }
-  article .code-diff-line-number {
-    border-right: 1px solid var(--color-edge);
-    color: var(--color-muted);
   }
   article [data-annotation-anchor] {
     /* The annotation's accent bar climbs through its covered lines as a

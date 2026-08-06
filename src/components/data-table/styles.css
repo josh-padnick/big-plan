@@ -1,8 +1,9 @@
-/* CSS escape hatch: selector relationships express DataTable chrome and grid
-   geometry: the header band, the three text-fit
-   modes, sort and drag affordances on the header row, the menu surface, and
-   the grid's maximized-state edge. Colocated with the component that emits
-   them; the shared figure-controls stylesheet owns the maximized panel.
+/* CSS escape hatch: selector relationships express DataTable grid geometry:
+   the three text-fit modes, sort and drag affordances on the header row,
+   generated grouping bands, and the grid's maximized-state edge. Colocated
+   with the component that emits them; renderer-owned resting surfaces live
+   with their JSX and the shared figure-controls stylesheet owns the maximized
+   panel.
 
    FIT MODEL - the one idea the rest of this file serves.
    A grid too wide for the reading column must give something up. `wrap` keeps
@@ -13,39 +14,6 @@
    table's mode, and the narrow breakpoint wins over both. */
 
 @layer components {
-  article [data-data-table] {
-    background: var(--diff-content-bg);
-  }
-  article .data-table-header {
-    background: var(--diff-header-bg);
-    border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0;
-  }
-  /* Inline code in a cell is content, not a chip: the prose chrome would make
-     every identifier a boxed pill and shred the row rhythm. */
-  article [data-data-table] code {
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-    padding: 0;
-    font-size: 0.9em;
-  }
-
-  /* SIZING
-     A table sizes to its contents and reaches for the reading column's full
-     width only when the content needs it. Three narrow columns stretched to
-     the breakout width read as a layout accident, not a table, and the extra
-     whitespace between cells is real reading cost. `width: auto` lets the
-     table shrink-to-fit; `max-width: 100%` keeps it inside its container so
-     wide content still meets the fit rules below rather than the page. */
-  article .data-table-grid {
-    width: auto;
-    max-width: 100%;
-    min-width: 0;
-    margin: 0;
-    border-collapse: collapse;
-    font-size: 0.8125rem;
-    line-height: 1.5;
-  }
   article .data-table-grid th,
   article .data-table-grid td {
     padding: 0.35rem 0.6rem;
@@ -58,55 +26,6 @@
   }
   article .data-table-grid tbody tr:hover td {
     background: var(--surface-c);
-  }
-  article .data-table-grid td[data-table-align="right"],
-  article .data-table-grid th[data-table-align="right"] {
-    text-align: right;
-  }
-  article .data-table-grid td[data-table-align="center"],
-  article .data-table-grid th[data-table-align="center"] {
-    text-align: center;
-  }
-  article .data-table-head {
-    background: transparent;
-    padding-top: 0.3rem;
-    padding-bottom: 0.3rem;
-    color: var(--color-muted);
-    font-size: 0.625rem;
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    user-select: none;
-  }
-  article .data-table-head[data-table-sorted] {
-    color: var(--color-ink);
-  }
-
-  /* The whole header label is the sort control, so the hit target matches the
-     affordance instead of being a glyph beside it. */
-  article .data-table-sort {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    border: 0;
-    background: transparent;
-    padding: 0;
-    color: inherit;
-    font: inherit;
-    letter-spacing: inherit;
-    text-transform: inherit;
-    cursor: pointer;
-  }
-  article .data-table-sort:hover {
-    color: var(--color-ink);
-  }
-  /* The button ships disabled, so without the viewer script the header reads
-     and behaves as a plain label: no pointer, no hover shift, no glyph. */
-  article .data-table-sort:disabled,
-  article .data-table-sort:disabled:hover {
-    cursor: default;
-    color: inherit;
   }
   article .data-table-sort-glyph svg {
     width: 0.7rem;
@@ -263,10 +182,6 @@
 
   /* Menu and chrome surfaces mirror the schema figure so the two read as one
      family rather than two products. */
-  article .data-table-menu-list {
-    background: var(--diff-header-bg);
-    box-shadow: 0 6px 18px rgb(12 10 8 / 0.18);
-  }
   article .data-table-menu-list[hidden],
   article .data-table-button[hidden],
   article [data-table-fit-list][hidden],
@@ -274,19 +189,12 @@
   article .data-table-empty[hidden] {
     display: none;
   }
-  article .data-table-menu-separator {
-    background: var(--color-edge);
-  }
   article .data-table-menu-item[aria-checked="false"] [data-lucide="check"] {
     visibility: hidden;
   }
   article .data-table-menu-item:disabled {
     cursor: default;
     opacity: 0.55;
-  }
-  article .data-table-button[aria-pressed="true"] {
-    background: var(--color-edge);
-    color: var(--color-ink);
   }
   article .data-table-filter-input::-webkit-search-cancel-button {
     appearance: none;

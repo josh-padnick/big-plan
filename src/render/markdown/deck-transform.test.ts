@@ -44,7 +44,7 @@ describe("deck slide frames", () => {
     // The frame is the card; its header holds the toggle and chrome, and the
     // body is the header's SIBLING (see deck-collapse.ts invariant 1).
     expect(html).toMatch(
-      /<section data-slide[^>]*data-collapsible="slide"[^>]*><div data-collapse-header[^>]*><button[^>]*data-collapse-toggle[^>]*>.*?<\/button><div class="plan-collapse-chrome"><p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one">One<\/h2><\/div><\/div><div data-collapse-body[^>]*>\n?<p>Alpha\.<\/p>/s,
+      /<section data-slide[^>]*data-collapsible="slide"[^>]*><div data-collapse-header[^>]*><button[^>]*data-collapse-toggle[^>]*>.*?<\/button><div class="plan-collapse-chrome[^"]*"><p data-slide-kicker[^>]*>1 \/ One<\/p><h2 id="one"[^>]*>One<\/h2><\/div><\/div><div data-collapse-body[^>]*>\n?<p>Alpha\.<\/p>/s,
     );
     expect(html).not.toContain("data-collapse-chrome");
   });
@@ -148,7 +148,7 @@ What lands where.
       /data-collapsible="slide" data-collapse-id="implementation"/,
     );
     expect(html).toMatch(
-      /data-subpart[^>]*data-collapsible="slide"[^>]*><div data-collapse-header[^>]*><button[^>]*>.*?<\/button><div class="plan-collapse-chrome"><p data-slide-kicker[^>]*>1\.2 \/ Implementation<\/p><h2 id="implementation">Implementation<\/h2><\/div><\/div>/s,
+      /data-subpart[^>]*data-collapsible="slide"[^>]*><div data-collapse-header[^>]*><button[^>]*>.*?<\/button><div class="plan-collapse-chrome[^"]*"><p data-slide-kicker[^>]*>1\.2 \/ Implementation<\/p><h2 id="implementation"[^>]*>Implementation<\/h2><\/div><\/div>/s,
     );
     expect(html).toMatch(/data-collapse-body[^>]*>\n?<p>An intro line\.<\/p>/);
   });

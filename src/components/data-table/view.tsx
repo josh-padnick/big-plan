@@ -25,13 +25,17 @@ import type {
 } from "./compile.js";
 import type { TableCell } from "./parse-table-grid.js";
 
+// /* off-scale */ Phase A preserves the legacy compact grid metrics, inset
+// header radius, menu geometry, and 20% focus halo exactly. Phase B may
+// regularize them against the product scale.
+
 // The chrome rests quiet and reveals itself on hover and focus, matching the
 // figure-header button family the schema and diff captions already use.
 const BUTTON_CLASSES =
-  "data-table-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-edge hover:text-ink [&_svg]:size-3.5";
+  "data-table-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-edge hover:text-ink aria-pressed:bg-edge aria-pressed:text-ink [&_svg]:size-3.5";
 
 const MENU_LIST_CLASSES =
-  "data-table-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-40 rounded-[0.375rem] border border-edge p-1";
+  "data-table-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-40 rounded-[0.375rem] border border-edge bg-[var(--diff-header-bg)] p-1 shadow-[0_6px_18px_rgb(12_10_8_/_0.18)]";
 
 const MENU_LABEL_CLASSES =
   "data-table-menu-label px-2 pt-1 pb-[0.2rem] text-[0.625rem] font-semibold tracking-wider text-muted uppercase";
@@ -49,7 +53,12 @@ const CellContent = ({ cell }: { readonly cell: TableCell }) => (
   <>
     {cell.segments.map((segment, index) =>
       segment.kind === "code" ? (
-        <code key={index}>{segment.value}</code>
+        <code
+          key={index}
+          className="rounded-none border-0 bg-transparent p-0 text-[0.9em]"
+        >
+          {segment.value}
+        </code>
       ) : (
         <span key={index}>{segment.value}</span>
       ),
@@ -77,7 +86,7 @@ const HeaderCell = ({
 }) => (
   <th
     scope="col"
-    className="data-table-head"
+    className="data-table-head bg-transparent py-[0.3rem] text-[0.625rem] font-medium tracking-[0.06em] whitespace-nowrap text-muted uppercase select-none data-[table-sorted]:text-ink"
     data-table-column={index}
     data-table-type={column.type}
     data-table-align={column.align}
@@ -91,7 +100,7 @@ const HeaderCell = ({
         label, not a button that does nothing when pressed. */}
     <button
       type="button"
-      className="data-table-sort"
+      className="data-table-sort inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 font-[inherit] tracking-[inherit] text-[inherit] uppercase hover:text-ink disabled:cursor-default disabled:text-inherit disabled:hover:text-inherit"
       data-table-sort={index}
       disabled
     >
@@ -150,7 +159,7 @@ const ColumnsMenu = ({
         </button>
       ))}
       <div
-        className="data-table-menu-separator -mx-1 my-1 h-px"
+        className="data-table-menu-separator -mx-1 my-1 h-px bg-edge"
         role="separator"
         aria-orientation="horizontal"
       />
@@ -267,14 +276,14 @@ const FilterField = ({ id }: { readonly id: string }) => (
 /** Renders one DataTable as a figure: caption chrome over the complete grid. */
 export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
   <figure
-    className="data-table mb-5 w-fit max-w-full rounded-md border border-edge"
+    className="data-table mb-5 w-fit max-w-full rounded-md border border-edge bg-[var(--diff-content-bg)]"
     data-data-table
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "table" }}
     data-table-id={model.id}
     data-table-fit={model.fit}
     data-table-group-column={model.groupColumn}
   >
-    <figcaption className="data-table-header flex min-w-0 items-center justify-between gap-3 border-b border-edge px-[0.55rem] py-[0.3rem] max-[55.999rem]:flex-col max-[55.999rem]:items-stretch max-[55.999rem]:gap-[0.3rem]">
+    <figcaption className="data-table-header flex min-w-0 items-center justify-between gap-3 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-[0.55rem] py-[0.3rem] max-[55.999rem]:flex-col max-[55.999rem]:items-stretch max-[55.999rem]:gap-[0.3rem]">
       <span className="data-table-identity flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted">
         {lucideIconToReact({ icon: TABLE_ICON, hidden: false })}
         <span className="data-table-title min-w-0 truncate font-semibold text-ink">
@@ -303,7 +312,7 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
       data-table-scroll-container=""
       {...{ [BODY_ATTRIBUTE]: "" }}
     >
-      <table className="data-table-grid w-full">
+      <table className="data-table-grid m-0 w-full min-w-0 max-w-full border-collapse text-[0.8125rem] leading-[1.5]">
         <thead>
           <tr>
             {model.columns.map((column, index) => (
@@ -319,7 +328,7 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
                 return (
                   <td
                     key={cellIndex}
-                    className="data-table-cell"
+                    className="data-table-cell data-[table-align=center]:text-center data-[table-align=right]:text-right"
                     data-table-column={cellIndex}
                     data-table-align={column?.align ?? "left"}
                     {...(column?.fit === undefined

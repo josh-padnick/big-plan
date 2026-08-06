@@ -42,8 +42,29 @@ import {
 } from "../_model/figure-controls/figure-controls.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
+// /* off-scale */ Phase A preserves the legacy semantic washes, 0.85rem card
+// padding, connector-label offsets, and compact badge metrics exactly. Phase
+// B may regularize them against the product scale.
+
 const BADGE_CLASSES =
   "flow-diagram-badge ml-[0.4rem] inline-block rounded-full px-2 py-[0.05rem] align-[1px] text-[0.6875rem] font-semibold";
+
+const BADGE_TONE_CLASSES: Readonly<Record<"neutral" | "warning", string>> = {
+  neutral:
+    "bg-[color-mix(in_srgb,var(--ink-c)_7%,transparent)] text-[var(--muted-c)]",
+  warning:
+    "bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,transparent)] text-[var(--callout-warning-c)]",
+};
+
+const NODE_TONE_CLASSES: Readonly<
+  Record<CompiledFlowDiagramNode["tone"], string>
+> = {
+  neutral: "border-edge bg-surface",
+  source:
+    "border-[color-mix(in_srgb,var(--accent-c)_38%,var(--edge-c))] bg-[color-mix(in_srgb,var(--accent-c)_10%,transparent)]",
+  destination:
+    "border-[color-mix(in_srgb,var(--callout-note-c)_35%,var(--edge-c))] bg-[color-mix(in_srgb,var(--callout-note-c)_10%,transparent)]",
+};
 
 const LABEL_CLASSES = "block text-sm font-semibold text-ink";
 
@@ -100,7 +121,7 @@ const Node = ({
     data-flow-diagram-tone={node.tone}
     data-flow-node={node.id}
     data-flow-in-stage={stage.id}
-    className={`flow-diagram-node rounded-lg border px-[0.85rem] py-2 leading-normal${spaced ? " my-[0.275rem]" : ""}`}
+    className={`flow-diagram-node rounded-lg border px-[0.85rem] py-2 leading-normal ${NODE_TONE_CLASSES[node.tone]}${spaced ? " my-[0.275rem]" : ""}`}
     style={style}
     {...targetProps({
       kind: "node",
@@ -121,7 +142,7 @@ const Node = ({
           data-flow-diagram-badge
           data-flow-diagram-badge-tone={node.badgeTone}
           data-flow-field="badge"
-          className={BADGE_CLASSES}
+          className={`${BADGE_CLASSES} ${BADGE_TONE_CLASSES[node.badgeTone]}`}
         >
           {node.badge}
         </span>
@@ -130,7 +151,7 @@ const Node = ({
     {node.code === undefined ? null : (
       <code
         data-flow-field="code"
-        className="flow-diagram-node-code block font-mono text-xs text-muted"
+        className="flow-diagram-node-code block rounded-none border-0 bg-transparent p-0 font-mono text-xs text-muted"
       >
         {node.code}
       </code>
@@ -466,7 +487,7 @@ export const FlowDiagram = ({
   const lastStageTitle = model.stages[lastStage]?.title ?? "";
   return (
     <figure
-      className="flow-diagram mb-5 min-w-0"
+      className="flow-diagram relative mb-5 min-w-0"
       data-flow-diagram
       // The collector names the diagram it belongs to from here, not from the
       // accessible name: the shared maximize leg rewrites that label while the

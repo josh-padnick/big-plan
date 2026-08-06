@@ -14,26 +14,6 @@
    out-rank every variant rule. */
 
 @layer components {
-  /* Decision spends the shared tone colour on the whole verdict: three short
-     rows scan faster in colour, and the word and glyph carry the meaning for
-     any reader who cannot separate the hues. */
-  article .decision-verdict {
-    color: var(--matrix-tone);
-  }
-
-  article .decision-status-pill {
-    background: var(--surface-c);
-    color: var(--muted-c);
-  }
-  article .decision-status-decided {
-    background: var(--decision-pro-bg);
-    color: var(--decision-pro-c);
-  }
-  article .decision-chosen-pill {
-    background: var(--decision-pro-bg);
-    color: var(--decision-pro-c);
-  }
-
   /* The skeleton and row rules come from the shared comparison matrix; what
      is local is how narrow the label columns stay. */
   article .decision-matrix th,
@@ -55,10 +35,6 @@
      a hairline marks each transition; reading the three as one continuous
      field was the round-3 complaint. Header and surface sit too close in this
      palette to be adjacent, which is why paper separates them. */
-  article .decision-zone-rationale {
-    background: var(--surface-c);
-  }
-
   /* Column states, ordered so the later rule wins each tie: rest, hover,
      picked, settled. Cells are transparent at rest so the matrix zone's paper
      shows through and a picked column reads as tinted against it.
@@ -159,28 +135,11 @@
 
   /* --- The three approved reading depths -------------------------------- */
 
-  /* Shared: a verdict is one signal now, the word. Tone colour and the glyph
-     said the same thing twice more. */
-  article .decision-verdict {
-    color: inherit;
-  }
-
   /* A - options as rows. The title owns a larger tier with a rule beneath it;
      smaller criteria copy then reads as supporting comparison data instead
      of competing with the option name. Dimension labels still align. */
   article .decision-row + .decision-row {
     border-top: 1px solid var(--edge-c);
-  }
-  article .decision-row-head {
-    padding-bottom: 0.625rem;
-    border-bottom: 1px solid var(--edge-c);
-  }
-  article .decision-row-line {
-    display: grid;
-    grid-template-columns: minmax(0, 13.5rem) minmax(0, 1fr);
-    gap: 0 1rem;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
   }
   article .decision-row:has(.decision-radio:enabled):hover {
     background: var(--surface-c);
@@ -191,9 +150,6 @@
     box-shadow: inset 3px 0 0 var(--color-accent);
   }
   /* B - the keyed matrix, with its chooser held apart from comparison. */
-  article .decision-zone-compare {
-    background: var(--bg);
-  }
   article .decision-chooser-row > th {
     background: var(--surface-c);
     border-bottom: 1px solid var(--edge-c);
@@ -202,10 +158,6 @@
   /* The full-title rail and keyed table are intentionally
      separate surfaces. Letters carry identity into the grid without asking
      authors to coin brittle abbreviations. */
-  article .decision-keyed-chooser {
-    border-bottom: 1px solid var(--edge-c);
-    background: var(--surface-c);
-  }
   article .decision-keyed-option + .decision-keyed-option {
     border-top: 1px solid var(--edge-c);
   }
@@ -221,11 +173,6 @@
   article .decision-keyed-option[data-column-selected][data-column-settled] {
     background: var(--decision-pro-bg);
     box-shadow: inset 3px 0 0 var(--decision-pro-c);
-  }
-  article .decision-key {
-    border: 1px solid var(--edge-c);
-    background: var(--bg);
-    color: var(--color-muted);
   }
   article .decision-keyed-head .decision-radio {
     margin-top: 0;
@@ -479,10 +426,6 @@
     border-radius: 0.375rem;
     overflow: hidden;
   }
-  article .decision-zone-propose,
-  article .decision-zone-rationale {
-    background: var(--surface-c);
-  }
 
   /* The proposal field belongs to its radio, so CSS alone reveals it. This is
      what keeps the no-script promise: without the viewer script the link still
@@ -629,10 +572,6 @@
     display: flex;
     background: var(--decision-pro-bg);
   }
-  article .decision-answer-mark {
-    background: var(--decision-pro-c);
-    color: var(--bg);
-  }
 }
 
 @layer components {
@@ -644,19 +583,6 @@
     }
     article .decision-matrix {
       min-width: 34rem;
-    }
-  }
-
-  /* A row keeps its two-column scan line while the option has enough room.
-     Below phone width, stacking the verdict under its label preserves every
-     word instead of squeezing or clipping the value beside the radio gutter. */
-  @media (width < 36rem) {
-    article .decision-row-line {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 0;
-    }
-    article .decision-row-line .decision-verdict {
-      padding-left: 0.75rem;
     }
   }
 }

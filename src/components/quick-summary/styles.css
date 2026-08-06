@@ -1,8 +1,0 @@
-/* CSS escape hatch: local readability keeps the token-derived Why wash named
-   beside its semantic selector until the palette exposes that shade. */
-
-@layer components {
-  article .quick-summary-why {
-    background: color-mix(in srgb, var(--accent-c) 8%, transparent);
-  }
-}

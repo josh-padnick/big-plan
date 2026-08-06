@@ -50,11 +50,19 @@ const Radio = ({
 );
 
 const Recommended = () => (
-  <BadgePill label="Recommended" classNames={["badge-pill-quiet"]} />
+  <BadgePill
+    label="Recommended"
+    classNames={["border border-edge bg-surface text-ink"]}
+  />
 );
 
 const Chosen = () => (
-  <BadgePill label="Chosen" classNames={["decision-chosen-pill"]} />
+  <BadgePill
+    label="Chosen"
+    classNames={[
+      "decision-chosen-pill bg-[var(--decision-pro-bg)] text-[var(--decision-pro-c)]",
+    ]}
+  />
 );
 
 // The same native disclosure powers pointer hover, keyboard focus, and tap.
@@ -126,7 +134,7 @@ export const RowsLayout = ({
             className="decision-row-label min-w-0 cursor-pointer"
             htmlFor={option.id}
           >
-            <span className="decision-row-head flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="decision-row-head flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-edge pb-2.5">
               <span
                 className="text-lg leading-7 font-semibold text-ink"
                 data-option-title=""
@@ -145,11 +153,14 @@ export const RowsLayout = ({
                 return consideration === undefined
                   ? []
                   : [
-                      <span className="decision-row-line" key={row}>
+                      <span
+                        className="decision-row-line grid grid-cols-[minmax(0,13.5rem)_minmax(0,1fr)] gap-x-4 text-sm leading-5 max-[35.999rem]:grid-cols-[minmax(0,1fr)] max-[35.999rem]:gap-0"
+                        key={row}
+                      >
                         <span className="decision-row-dimension font-semibold text-ink">
                           {`${criterion.title}:`}
                         </span>
-                        <span className="decision-verdict font-normal text-ink">
+                        <span className="decision-verdict font-normal text-ink max-[35.999rem]:pl-3">
                           {consideration.verdict}
                         </span>
                       </span>,
@@ -459,7 +470,7 @@ export const MatrixLayout = ({
         ? { "data-decision-weighting": "" }
         : {})}
     >
-      <ol className="decision-keyed-chooser m-0 grid list-none gap-0 p-0">
+      <ol className="decision-keyed-chooser m-0 grid list-none gap-0 border-b border-edge bg-surface p-0">
         {model.options.map((option, index) => (
           <li
             className="decision-keyed-option"
@@ -481,7 +492,7 @@ export const MatrixLayout = ({
                   answerable={answerable}
                 />
               ) : null}
-              <span className="decision-key inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-xs font-bold">
+              <span className="decision-key inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-edge bg-paper text-xs font-bold text-muted">
                 {optionKey(index)}
               </span>
               <span
