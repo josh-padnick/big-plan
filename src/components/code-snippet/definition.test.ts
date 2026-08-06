@@ -217,6 +217,7 @@ describe("renderCodeSnippet annotations", () => {
   it("should diagnose a missing lines attribute and empty body at the annotation position", () => {
     expect(
       render({
+        attributes: { file: "src/example.ts", showLineNumbers: true },
         annotations: [annotation({ attributes: {}, children: [] })],
       }).diagnostics,
     ).toEqual([
@@ -237,6 +238,7 @@ describe("renderCodeSnippet annotations", () => {
   it("should diagnose shorthand lines and unknown Annotation attributes", () => {
     expect(
       render({
+        attributes: { file: "src/example.ts", showLineNumbers: true },
         annotations: [
           annotation({
             attributes: { lines: true, tone: "quiet" },
@@ -267,7 +269,21 @@ describe("renderCodeSnippet annotations", () => {
       line: 3,
       column: 1,
       message:
-        "CodeSnippet cannot use startLine with an Annotation unless showLineNumbers is set",
+        "CodeSnippet cannot use an Annotation unless showLineNumbers is set",
+    });
+  });
+
+  it("should diagnose an Annotation without startLine when showLineNumbers is unset", () => {
+    expect(
+      render({
+        attributes: { file: "x" },
+        annotations: [annotation({ lines: "2" })],
+      }).diagnostics,
+    ).toContainEqual({
+      line: 3,
+      column: 1,
+      message:
+        "CodeSnippet cannot use an Annotation unless showLineNumbers is set",
     });
   });
 
