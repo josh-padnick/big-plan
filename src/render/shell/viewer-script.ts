@@ -2404,7 +2404,7 @@ export const VIEWER_SCRIPT = `<script>
         if (previousOptionChoice !== null) previousOptionChoice.checked = true;
         if (proposalText !== null) proposalText.value = "";
         sync();
-        if (proposalChoice !== null) proposalChoice.focus();
+        if (proposalChoice !== null) proposalChoice.focus({ focusVisible: false });
       });
     }
 

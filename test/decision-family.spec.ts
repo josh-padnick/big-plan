@@ -171,6 +171,10 @@ test("should compare, answer, and revise a Decision", async ({
   await card.locator("[data-decision-proposal-text]").press("Escape");
   await expect(card.locator("[data-decision-proposal]")).toBeHidden();
   await expect(card.locator("[data-decision-proposal-choice]")).toBeFocused();
+  await expect(card.locator(".decision-propose-link")).toHaveCSS(
+    "box-shadow",
+    "none",
+  );
 });
 
 test("should keep long Decision verdicts inside comparison cards", async ({
@@ -268,6 +272,10 @@ test("should batch three independent QuickDecisions without comparison", async (
   await first.locator("[data-decision-proposal-text]").press("Escape");
   await expect(first.locator("[data-decision-proposal]")).toBeHidden();
   await expect(first.locator("[data-decision-proposal-choice]")).toBeFocused();
+  await expect(first.locator(".decision-propose-link")).toHaveCSS(
+    "box-shadow",
+    "none",
+  );
 });
 
 test("should audit, choose, and recalculate DecisionAnalysis", async ({
