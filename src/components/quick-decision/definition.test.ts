@@ -16,7 +16,7 @@ describe("QuickDecision", () => {
     );
 
     expect(html).toContain("decision-brief");
-    expect(html).toContain("Propose another approach");
+    expect(html).toContain("Suggest another option");
     expect(html).not.toContain("Compare all three");
   });
 

@@ -20,6 +20,25 @@
   article .table-schema-grid th,
   article .table-schema-grid td {
     padding: 0.35rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  article .table-schema-grid thead th {
+    border-bottom: 1px solid var(--edge-c);
+  }
+  article
+    .table-schema-grid
+    tbody
+    .table-schema-column-row
+    + .table-schema-column-row
+    > th,
+  article
+    .table-schema-grid
+    tbody
+    .table-schema-column-row
+    + .table-schema-column-row
+    > td {
+    border-top: 1px solid var(--edge-c);
   }
   article .table-schema-head-column {
     width: 19%;

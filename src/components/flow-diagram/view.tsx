@@ -282,7 +282,7 @@ const ViewerControls = () => (
         glyph reads as a second maximize. */}
     <button
       type="button"
-      className={`${VIEWER_CONTROL_CLASSES} gap-1.5 rounded-md border border-edge bg-paper px-2.5 font-sans text-xs font-semibold aria-pressed:border-edge-strong aria-pressed:bg-edge aria-pressed:text-ink`}
+      className={`${VIEWER_CONTROL_CLASSES} flow-diagram-fit gap-1.5 rounded-md border border-edge bg-paper px-2.5 font-sans text-xs font-semibold`}
       aria-label="Fit diagram to width"
       aria-pressed="false"
       data-tooltip="Fit diagram to width"

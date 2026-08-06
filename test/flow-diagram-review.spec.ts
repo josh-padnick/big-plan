@@ -175,8 +175,53 @@ test("should group and right-align the diagram viewer controls", async ({
     await expect
       .poll(() =>
         fit.evaluate((element) => {
+          const accent = document.createElement("span");
+          accent.style.color = "var(--accent-c)";
+          const ink = document.createElement("span");
+          ink.style.color = "var(--ink-c)";
+          const edge = document.createElement("span");
+          edge.style.backgroundColor = "var(--edge-c)";
+          const background = document.createElement("span");
+          background.style.backgroundColor = "var(--bg)";
+          document.body.append(accent, ink, edge, background);
+          const style = getComputedStyle(element);
+          const accentStyle = getComputedStyle(accent);
+          const inkStyle = getComputedStyle(ink);
+          const edgeStyle = getComputedStyle(edge);
+          const backgroundStyle = getComputedStyle(background);
+          const channels = (color: string): ReadonlyArray<string> =>
+            color.match(/\d+/gu)?.slice(0, 3) ?? [];
+          const result = {
+            isAccent: style.color === accentStyle.color,
+            isInk: style.color === inkStyle.color,
+            hasEdgeBackground:
+              channels(style.backgroundColor).join(",") ===
+              channels(edgeStyle.backgroundColor).join(","),
+            hasRestingBackground:
+              channels(style.backgroundColor).join(",") !==
+              channels(backgroundStyle.backgroundColor).join(","),
+          };
+          accent.remove();
+          ink.remove();
+          edge.remove();
+          background.remove();
+          return result;
+        }),
+      )
+      .toEqual({
+        isAccent: false,
+        isInk: false,
+        hasEdgeBackground: false,
+        hasRestingBackground: true,
+      });
+
+    await diagram.locator("[data-figure-maximize]").click();
+    await expect(diagram).toHaveAttribute("data-figure-maximized", "");
+    await expect
+      .poll(() =>
+        fit.evaluate((element) => {
           const reference = document.createElement("span");
-          reference.style.color = "var(--accent-c)";
+          reference.style.color = "var(--ink-c)";
           reference.style.backgroundColor = "var(--edge-c)";
           document.body.append(reference);
           const style = getComputedStyle(element);
@@ -184,8 +229,8 @@ test("should group and right-align the diagram viewer controls", async ({
           const channels = (color: string): ReadonlyArray<string> =>
             color.match(/\d+/gu)?.slice(0, 3) ?? [];
           const result = {
-            isAccent: style.color === referenceStyle.color,
-            hasNeutralBackground:
+            isInk: style.color === referenceStyle.color,
+            hasEdgeBackground:
               channels(style.backgroundColor).join(",") ===
               channels(referenceStyle.backgroundColor).join(","),
           };
@@ -193,7 +238,9 @@ test("should group and right-align the diagram viewer controls", async ({
           return result;
         }),
       )
-      .toEqual({ isAccent: false, hasNeutralBackground: true });
+      .toEqual({ isInk: true, hasEdgeBackground: true });
+    await diagram.locator("[data-figure-maximize]").click();
+    await expect(diagram).not.toHaveAttribute("data-figure-maximized");
   }
 
   const geometry = await toolbar.evaluate((element) => {

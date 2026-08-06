@@ -5,12 +5,19 @@
 import type { ElementContent } from "hast";
 import type {
   CompiledDecisionCard,
+  CompiledDecisionCardConsideration,
   CompiledDecisionCardOption,
+  DecisionCardTone,
 } from "../../_model/decision-card.js";
 import { ComparisonMatrix } from "../comparison-matrix/comparison-matrix.js";
 import { BadgePill } from "../badge-pill/badge-pill.js";
 import { CHEVRON_RIGHT_ICON } from "../../../icons/lucide/chevron-right.js";
+import { CHECK_ICON } from "../../../icons/lucide/check.js";
+import { CIRCLE_QUESTION_MARK_ICON } from "../../../icons/lucide/circle-question-mark.js";
+import { OCTAGON_ALERT_ICON } from "../../../icons/lucide/octagon-alert.js";
 import { STAR_ICON } from "../../../icons/lucide/star.js";
+import { TRIANGLE_ALERT_ICON } from "../../../icons/lucide/triangle-alert.js";
+import type { LucideIcon } from "../../../icons/lucide-icon.js";
 import { hastContentToReact } from "../hast-content/hast-content.js";
 import { lucideIconToReact } from "../lucide-icon/lucide-icon.js";
 
@@ -50,10 +57,12 @@ const Radio = ({
 );
 
 const Recommended = () => (
-  <BadgePill
-    label="Recommended"
-    classNames={["border border-edge bg-surface text-ink"]}
-  />
+  <span className="decision-recommended-pill inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] leading-4 font-bold uppercase">
+    <span className="inline-flex size-3 shrink-0">
+      {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
+    </span>
+    <span>{"Recommended"}</span>
+  </span>
 );
 
 const Chosen = () => (
@@ -63,6 +72,32 @@ const Chosen = () => (
       "decision-chosen-pill bg-[var(--decision-pro-bg)] text-[var(--decision-pro-c)]",
     ]}
   />
+);
+
+const VERDICT_ICONS = {
+  good: CHECK_ICON,
+  mixed: TRIANGLE_ALERT_ICON,
+  bad: OCTAGON_ALERT_ICON,
+  neutral: CIRCLE_QUESTION_MARK_ICON,
+} satisfies Record<DecisionCardTone, LucideIcon>;
+
+const Verdict = ({
+  consideration,
+}: {
+  readonly consideration: CompiledDecisionCardConsideration;
+}) => (
+  <span
+    className="decision-card-verdict inline-flex items-center gap-1.5 text-sm font-semibold"
+    data-decision-tone={consideration.tone}
+  >
+    <span className="inline-flex size-4 shrink-0">
+      {lucideIconToReact({
+        icon: VERDICT_ICONS[consideration.tone],
+        hidden: false,
+      })}
+    </span>
+    <span>{consideration.verdict}</span>
+  </span>
 );
 
 // The same native disclosure powers pointer hover, keyboard focus, and tap.
@@ -111,66 +146,80 @@ export const RowsLayout = ({
 }) => {
   const criteria = criteriaOf(model);
   return (
-    <ul
-      className="decision-rows m-0 grid list-none gap-0 p-0"
-      data-decision-rows=""
-    >
-      {model.options.map((option, index) => (
-        <li
-          className="decision-row grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 px-5 py-4"
-          key={option.id}
-          data-decision-option=""
-          data-decision-column={index}
-          {...(option.recommended ? { "data-option-recommended": "" } : {})}
-          {...(option.chosen ? { "data-option-chosen": "" } : {})}
-        >
-          <Radio
-            option={option}
-            index={index}
-            groupName={model.id}
-            answerable={answerable}
-          />
-          <label
-            className="decision-row-label min-w-0 cursor-pointer"
-            htmlFor={option.id}
+    <div className="decision-options-region px-5 py-4">
+      <div className="decision-options-heading mb-3 flex items-baseline justify-between gap-4">
+        <p className="m-0 text-sm font-semibold text-ink">
+          {"Compare the options"}
+        </p>
+        {answerable ? (
+          <p className="m-0 text-xs text-muted">{"Choose one to continue"}</p>
+        ) : null}
+      </div>
+      <ul
+        className="decision-rows m-0 grid list-none p-0"
+        data-decision-rows=""
+      >
+        {model.options.map((option, index) => (
+          <li
+            className="decision-row min-w-0"
+            key={option.id}
+            data-decision-option=""
+            data-decision-column={index}
+            {...(option.recommended ? { "data-option-recommended": "" } : {})}
+            {...(option.chosen ? { "data-option-chosen": "" } : {})}
           >
-            <span className="decision-row-head flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-edge pb-2.5">
-              <span
-                className="text-lg leading-7 font-semibold text-ink"
-                data-option-title=""
-                id={option.titleId}
-              >
-                {option.title}
+            <label
+              className="decision-option-card flex h-full min-w-0 cursor-pointer flex-col rounded-lg border border-edge bg-paper"
+              htmlFor={option.id}
+            >
+              <span className="decision-option-top flex items-start gap-3 px-4 pt-4 pb-3">
+                <Radio
+                  option={option}
+                  index={index}
+                  groupName={model.id}
+                  answerable={answerable}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="decision-row-head flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span
+                      className="text-base leading-6 font-semibold text-ink"
+                      data-option-title=""
+                      id={option.titleId}
+                    >
+                      {option.title}
+                    </span>
+                    {option.recommended ? <Recommended /> : null}
+                  </span>
+                  {option.summary === undefined ? null : (
+                    <span className="mt-1 block text-sm leading-5 text-muted">
+                      {option.summary}
+                    </span>
+                  )}
+                </span>
               </span>
-              {option.recommended ? <Recommended /> : null}
-            </span>
-            <span className="decision-row-lines mt-2 grid gap-1">
-              {option.summary === undefined ? null : (
-                <span className="text-sm text-muted">{option.summary}</span>
-              )}
-              {criteria.flatMap(({ row, criterion }) => {
-                const consideration = option.considerations[row];
-                return consideration === undefined
-                  ? []
-                  : [
-                      <span
-                        className="decision-row-line grid grid-cols-[minmax(0,13.5rem)_minmax(0,1fr)] gap-x-4 text-sm leading-5 max-[35.999rem]:grid-cols-[minmax(0,1fr)] max-[35.999rem]:gap-0"
-                        key={row}
-                      >
-                        <span className="decision-row-dimension font-semibold text-ink">
-                          {`${criterion.title}:`}
-                        </span>
-                        <span className="decision-verdict font-normal text-ink max-[35.999rem]:pl-3">
-                          {consideration.verdict}
-                        </span>
-                      </span>,
-                    ];
-              })}
-            </span>
-          </label>
-        </li>
-      ))}
-    </ul>
+              <span className="decision-row-lines mt-auto grid px-4 pb-3 pl-12">
+                {criteria.flatMap(({ row, criterion }) => {
+                  const consideration = option.considerations[row];
+                  return consideration === undefined
+                    ? []
+                    : [
+                        <span
+                          className="decision-row-line grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-t border-edge py-2.5 text-sm leading-5"
+                          key={row}
+                        >
+                          <span className="decision-row-dimension min-w-0 text-muted">
+                            {criterion.title}
+                          </span>
+                          <Verdict consideration={consideration} />
+                        </span>,
+                      ];
+                })}
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 };
 
