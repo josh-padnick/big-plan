@@ -1,28 +1,75 @@
-// Browser tests of the inert export's theme behavior: the document follows
-// the OS color-scheme preference through CSS alone and ships no theme
-// control. Render-health failures are enforced by the fixtures module.
+// Browser tests of the rendered export's appearance preferences: the document
+// follows the OS by default, supports a live explicit mode, and persists one
+// global record. Render-health failures are enforced by the fixtures module.
 
+import {
+  PREFERENCES_STORAGE_KEY,
+  serializePreferencesRecord,
+} from "../src/render/preferences.js";
 import { expect, test } from "./fixtures";
 
-test("should follow the system color scheme without a theme control", async ({
+test("should choose and persist appearance from the settings dialog", async ({
   page,
   sampleViewerUrl,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto(sampleViewerUrl);
+  await page.evaluate(
+    (key) => localStorage.removeItem(key),
+    PREFERENCES_STORAGE_KEY,
+  );
+  await page.reload();
 
-  await test.step("no theme control ships in the inert export", async () => {
+  await test.step("System is the first-run value", async () => {
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme");
     await expect(
-      page.getByRole("button", { name: /Use (?:light|dark) theme/ }),
-    ).toHaveCount(0);
-    await expect(page.locator("[data-theme-toggle]")).toHaveCount(0);
+      page.getByRole("button", { name: "Open settings" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("radio", { name: "System" })).toBeChecked();
   });
 
-  const lightBackground = await page
-    .locator("body")
-    .evaluate((body) => getComputedStyle(body).backgroundColor);
+  await test.step("Escape closes and returns focus to the gear", async () => {
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toBeHidden();
+    await expect(
+      page.getByRole("button", { name: "Open settings" }),
+    ).toBeFocused();
+  });
 
-  await test.step("switching the OS preference reskins the document", async () => {
+  await test.step("Dark applies live and persists one record", async () => {
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("radio", { name: "Dark" }).check();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) => localStorage.getItem(key),
+          PREFERENCES_STORAGE_KEY,
+        ),
+      )
+      .toBe(serializePreferencesRecord("dark"));
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  });
+
+  await test.step("System removes the override and follows the OS", async () => {
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("radio", { name: "System" }).check();
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) => localStorage.getItem(key),
+          PREFERENCES_STORAGE_KEY,
+        ),
+      )
+      .toBe(serializePreferencesRecord("system"));
+    const lightBackground = await page
+      .locator("body")
+      .evaluate((body) => getComputedStyle(body).backgroundColor);
     await page.emulateMedia({ colorScheme: "dark" });
     await expect
       .poll(() =>
@@ -33,14 +80,21 @@ test("should follow the system color scheme without a theme control", async ({
       .not.toBe(lightBackground);
   });
 
-  await test.step("returning to light restores the original palette", async () => {
-    await page.emulateMedia({ colorScheme: "light" });
-    await expect
-      .poll(() =>
-        page
-          .locator("body")
-          .evaluate((body) => getComputedStyle(body).backgroundColor),
-      )
-      .toBe(lightBackground);
+  await test.step("Tab stays inside the dialog", async () => {
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Open settings" }).click();
+    for (let index = 0; index < 8; index += 1) {
+      await page.keyboard.press("Tab");
+      await expect(page.locator("[data-preferences-dialog]")).toContainText(
+        "Appearance",
+      );
+      expect(
+        await page.evaluate(
+          () =>
+            document.activeElement?.closest("[data-preferences-dialog]") !==
+            null,
+        ),
+      ).toBe(true);
+    }
   });
 });

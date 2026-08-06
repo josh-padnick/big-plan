@@ -7,6 +7,25 @@
 
 import { FAVICON_DARK_SRC, FAVICON_LIGHT_SRC } from "./branding.generated.js";
 import { escapeHtml } from "./escape-html.js";
+import {
+  PREFERENCES_RECORD_VERSION,
+  PREFERENCES_STORAGE_KEY,
+  STORED_APPEARANCE_MODES,
+} from "./preferences.js";
+
+// Reads only the validated render-mode field before styles are parsed, so a
+// stored choice never flashes the other palette on the first frame.
+const PREFERENCES_HEAD_SCRIPT = `(() => {
+  try {
+    const raw = localStorage.getItem(${JSON.stringify(PREFERENCES_STORAGE_KEY)});
+    if (raw === null) return;
+    const record = JSON.parse(raw);
+    if (record?.version !== ${PREFERENCES_RECORD_VERSION}) return;
+    if (${JSON.stringify(STORED_APPEARANCE_MODES)}.indexOf(record.mode) !== -1) {
+      document.documentElement.setAttribute("data-theme", record.mode);
+    }
+  } catch (_) {}
+})();`;
 
 /**
  * Wraps body markup in a self-contained HTML document. Favicons and styles
@@ -38,6 +57,7 @@ export const renderPage = ({
 <title>${escapeHtml(title)}</title>
 <link rel="icon" type="image/x-icon" href="${FAVICON_LIGHT_SRC}">
 <link rel="icon" type="image/x-icon" media="(prefers-color-scheme: dark)" href="${FAVICON_DARK_SRC}">
+<script>${PREFERENCES_HEAD_SCRIPT}</script>
 <style>${styles}</style>
 </head>
 <body class="${escapeHtml(bodyClassName)}">

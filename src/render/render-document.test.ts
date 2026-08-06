@@ -162,11 +162,12 @@ The lede.
     expect(deckHtml).not.toContain("--reading-free-inline");
   });
 
-  it("should inline one stylesheet and one viewer script when rendering", () => {
+  it("should inline the stylesheet and viewer scripts when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
-    // The shell's viewer behavior is the single script; plan content can never
-    // contribute another, and nothing external is referenced.
-    expect(html.match(/<script>/g)).toHaveLength(1);
+    // The head preference bootstrap and deferred shell behavior are the only
+    // scripts; plan content can never contribute another, and nothing external
+    // is referenced.
+    expect(html.match(/<script>/g)).toHaveLength(3);
     expect(html).toContain("data-section-link");
     expect(html).not.toContain('src="http');
   });

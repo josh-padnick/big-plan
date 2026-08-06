@@ -8,7 +8,8 @@ Everything on this page is shipped and works today.
 ## Reading experience
 
 - One reading column with warm, paper-like light and dark palettes.
-- A palette that follows your OS preference through CSS alone.
+- A `Settings` dialog behind the branding bar's gear, offering `Light`, `Dark`, and `System` appearance; the choice applies immediately, is saved for every review document in this browser, and is applied before the first paint so the other palette never flashes.
+- `System` follows your OS preference, and is the value you get on a first run or when the browser refuses storage.
 - A sticky branding bar whose logo follows the active theme.
 - In-document `Maximize` controls for fenced code, code snippets and diffs, tree diffs, data tables, database schemas, and [flow diagrams](/components/flow-diagram/), with Escape restoring the reading view after any pending-feedback prompt is resolved.
 
@@ -47,7 +48,7 @@ Everything on this page is shipped and works today.
 ## Output
 
 - One self-contained HTML file with styling and branding embedded.
-- One embedded viewer script (TOC scroll-spy, hover popovers, CodeDiff and FileTreeDiff view selection, deck collapse, database-schema columns and index jumps, comment drafts, figure maximize, flow-diagram review, and wireframe navigation and scaling); content stays fully readable with scripts disabled.
+- A tiny embedded head script that applies a saved appearance before the first paint, an embedded settings script for the appearance dialog, and one embedded viewer script (TOC scroll-spy, hover popovers, CodeDiff and FileTreeDiff view selection, deck collapse, database-schema columns and index jumps, comment drafts, figure maximize, flow-diagram review, and wireframe navigation and scaling); content stays fully readable with scripts disabled.
 - No external requests, ever.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 

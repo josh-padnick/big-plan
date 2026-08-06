@@ -1,4 +1,4 @@
-// The one script a rendered document ships, carrying the viewer enhancements:
+// The deferred shell script a rendered document ships for viewer enhancements:
 // a scroll-spy that marks the section being read with aria-current on its TOC
 // links (falling back to the overview links above the first section), hover
 // popovers that float [data-info-popover] disclosures beside their triggers,

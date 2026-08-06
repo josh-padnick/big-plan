@@ -101,6 +101,14 @@ export default tseslint.config(
         imports: ["**/escape-html.js"],
         mayImport: [],
       },
+      // The persisted reviewer-preferences contract is shared by the head
+      // bootstrap in the page envelope and the shell's settings script, so it
+      // sits below both rather than inside either one.
+      preferences: {
+        files: ["src/render/preferences*.ts"],
+        imports: ["**/preferences.js"],
+        mayImport: [],
+      },
       icons: {
         files: ["src/icons/**/*.ts"],
         imports: ["**/icons/lucide-icon.js", "**/icons/lucide/**"],
@@ -158,16 +166,26 @@ export default tseslint.config(
         imports: ["**/shell/**"],
         // Script delivery reads the same figure-control vocabulary components
         // emit, so the shell consumes its model owner instead of copying it.
-        mayImport: ["escapeHtml", "icons", "components", "model"],
+        mayImport: [
+          "escapeHtml",
+          "icons",
+          "components",
+          "model",
+          "preferences",
+        ],
       },
       page: {
         files: ["src/render/page.ts"],
         imports: ["**/page.js"],
-        mayImport: ["escapeHtml"],
+        mayImport: ["escapeHtml", "preferences"],
       },
       composer: {
         files: ["src/render/*.ts"],
-        ignores: ["src/render/page.ts", "src/render/escape-html.ts"],
+        ignores: [
+          "src/render/page.ts",
+          "src/render/escape-html.ts",
+          "src/render/preferences*.ts",
+        ],
         imports: [
           "**/compile-plan-model.js",
           "**/render-document.js",
@@ -186,7 +204,7 @@ export default tseslint.config(
 
     // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
-      ["planVocabulary", "escapeHtml", "icons"],
+      ["planVocabulary", "escapeHtml", "icons", "preferences"],
       ["model", "planLint"],
       ["page", "ui"],
       ["components"],
