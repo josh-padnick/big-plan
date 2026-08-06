@@ -512,11 +512,7 @@ try {
               60_000,
             );
           } finally {
-            await withTimeout(
-              page.close(),
-              "Closing screenshot page",
-              10_000,
-            );
+            await withTimeout(page.close(), "Closing screenshot page", 10_000);
           }
         }
       }
