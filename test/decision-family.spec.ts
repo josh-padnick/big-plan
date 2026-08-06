@@ -82,10 +82,10 @@ test("should compare, answer, and revise a Decision", async ({
   await expect(card.locator("[data-decision-choice]").first()).toBeChecked();
   await expect(card.locator("[data-decision-confirm]")).toBeEnabled();
   await expect(card.locator("[data-decision-selection-summary]")).toHaveText(
-    "Selected: Embed it in the CLI",
+    "Embed it in the CLI selected.",
   );
   await expect(card.locator("[data-decision-confirm]")).toHaveText(
-    "Confirm Embed it in the CLI",
+    "Confirm choice",
   );
   await card.locator("[data-decision-confirm]").click();
   await expect(card.locator("[data-decision-answer]")).toBeVisible();
