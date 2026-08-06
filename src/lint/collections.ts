@@ -29,7 +29,7 @@ const textOf = (node: Node): string => {
  * nested inside a component belongs to that component's own presentation, so
  * it is not part of the section's own collection structure.
  */
-export const directCollectionsIn = (
+const directCollectionsIn = (
   nodes: ReadonlyArray<Node>,
 ): ReadonlyArray<List | Table> =>
   nodes.filter((node): node is List | Table => isList(node) || isTable(node));

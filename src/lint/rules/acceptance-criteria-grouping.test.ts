@@ -68,4 +68,20 @@ describe("lintPlan acceptance-criteria-grouping", () => {
       }).filter(({ ruleId }) => ruleId === "acceptance-criteria-grouping"),
     ).toEqual([]);
   });
+
+  it("should keep the general threshold on each collection of a split contract", () => {
+    const mustHave = Array.from(
+      { length: 10 },
+      (_, index) => `- Must have ${index + 1}`,
+    );
+    const niceToHave = Array.from(
+      { length: 3 },
+      (_, index) => `- Nice to have ${index + 1}`,
+    );
+    expect(
+      lintPlan({
+        markdown: `<Slide type="acceptance-criteria" />\n\n## Acceptance criteria\n\nThese checks prove the work is complete.\n\n**Must have**\n\n${mustHave.join("\n")}\n\n**Nice to have**\n\n${niceToHave.join("\n")}\n`,
+      }).map(({ ruleId }) => ruleId),
+    ).toContain("collection-grouping");
+  });
 });

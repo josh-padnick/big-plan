@@ -54,7 +54,7 @@ A `Part` marker's act name and titles nested inside a component, such as an `Opt
 `collection-grouping` requires a list past eight items, or a table past eight body rows, to be grouped.
 A list counts as grouped when its items carry nested items; a table counts as grouped when its first column repeats, which is what a grouping dimension looks like once equal values sit together.
 Splitting a long collection into several shorter labelled lists satisfies the rule the same way, because no single list then reaches the threshold.
-A criteria collection on an acceptance-criteria slide is left to `acceptance-criteria-grouping`, whose stricter seven-criterion limit already asks for the same edit.
+An acceptance-criteria slide's single criteria collection is left to `acceptance-criteria-grouping`, whose stricter seven-criterion limit already asks for the same edit; when such a slide splits its criteria across several collections, each one is checked here as usual.
 
 `table-of-contents-matches-sections` requires a `TableOfContents`'s Entry section names to repeat the document's overview forms exactly, in order, one to one.
 For most typed slides that is the catalog name; for a user journey it is the marker's `toc` form; for an untyped slide it is the h2 title.

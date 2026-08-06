@@ -25,12 +25,15 @@ const checkCollectionGrouping = ({
 }): ReadonlyArray<PlanLintFinding> => {
   const findings: Array<PlanLintFinding> = [];
 
-  // A criteria collection is already held to the stricter seven-criterion
-  // contract, so reporting it here would ask for the same edit twice.
+  // A slide's single criteria collection is already held to the stricter
+  // seven-criterion contract, so reporting it here would ask for the same edit
+  // twice. Once a slide splits its criteria across several collections the
+  // criteria rule treats them as grouped and reports nothing, so each one
+  // stays subject to the general threshold.
   const criteriaCollections = new Set<Node>(
-    acceptanceCriteriaCollections(tree).flatMap(({ collections }) => [
-      ...collections,
-    ]),
+    acceptanceCriteriaCollections(tree)
+      .filter(({ collections }) => collections.length === 1)
+      .flatMap(({ collections }) => [...collections]),
   );
 
   const visit = (node: Node): void => {
