@@ -9,6 +9,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { chromium } from "@playwright/test";
+import { PNG } from "pngjs";
 import { availableDocuments } from "./available-documents.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -159,12 +160,82 @@ const settlePaint = async (page) => {
 };
 
 /**
- * Writes only a byte-stable frame. The exact comparison is deliberate: an
- * unsettled animation, transition, font, or layout frame is a fixture defect,
- * not a visual delta the history contract may smooth over. The direct DOM
- * scroll avoids the first locator stability wait. Large targets use bounded
- * Chromium captures so the screenshot path does not repeat that wait.
+ * Captures visible target tiles, then joins them into one raster. Every clip
+ * stays inside the viewport, so Playwright does not enter the unstable
+ * element screenshot path on hosted runners.
  */
+const captureTargetFrame = async ({ page, target, path }) => {
+  await page.evaluate(() => globalThis.scrollTo(0, 0));
+  const bounds = await target.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: Math.round(rect.left + globalThis.scrollX),
+      y: Math.round(rect.top + globalThis.scrollY),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    };
+  });
+  const viewport = await page.evaluate(() => ({
+    width: globalThis.innerWidth,
+    height: globalThis.innerHeight,
+    maxScrollY:
+      globalThis.document.documentElement.scrollHeight - globalThis.innerHeight,
+  }));
+  const topInset = Math.min(100, Math.max(0, viewport.height - 1));
+  const tileHeight = Math.max(1, viewport.height - topInset - 20);
+  const output = new PNG({ width: bounds.width, height: bounds.height });
+  for (let offset = 0; offset < bounds.height; offset += tileHeight) {
+    const requestedScrollY = bounds.y + offset - topInset;
+    await page.evaluate(
+      (scrollY) => globalThis.scrollTo(0, scrollY),
+      Math.min(viewport.maxScrollY, Math.max(0, requestedScrollY)),
+    );
+    const tile = await target.evaluate(
+      (element, value) => {
+        const rect = element.getBoundingClientRect();
+        const y = rect.top + value.offset;
+        const height = Math.min(value.height, value.viewportHeight - y);
+        return {
+          x: Math.round(rect.left),
+          y: Math.round(y),
+          width: Math.round(rect.width),
+          height: Math.round(height),
+        };
+      },
+      {
+        offset,
+        height: Math.min(tileHeight, bounds.height - offset),
+        viewportHeight: viewport.height,
+      },
+    );
+    if (
+      tile.x < 0 ||
+      tile.y < 0 ||
+      tile.width !== bounds.width ||
+      tile.width <= 0 ||
+      tile.height <= 0 ||
+      tile.x + tile.width > viewport.width ||
+      tile.y + tile.height > viewport.height
+    ) {
+      throw new Error(
+        `Screenshot tile bounds ${JSON.stringify(tile)} exceed viewport ${viewport.width}x${viewport.height}.`,
+      );
+    }
+    await reportProgress("capture tile", { path, offset, tile });
+    const image = PNG.sync.read(
+      await page.screenshot({
+        animations: "disabled",
+        caret: "hide",
+        clip: tile,
+        timeout: 5_000,
+      }),
+    );
+    PNG.bitblt(image, output, 0, 0, tile.width, tile.height, 0, offset);
+  }
+  return PNG.sync.write(output);
+};
+
+/** Writes only a byte-stable frame. */
 const captureStableTarget = async ({ page, target, path }) => {
   await target.evaluate((element) => {
     element.scrollIntoView({
@@ -177,10 +248,7 @@ const captureStableTarget = async ({ page, target, path }) => {
   for (let attempt = 0; attempt < 6; attempt += 1) {
     await reportProgress("settle paint", { path, attempt });
     await settlePaint(page);
-    const current = await target.screenshot({
-      animations: "disabled",
-      timeout: 30_000,
-    });
+    const current = await captureTargetFrame({ page, target, path });
     if (prior !== undefined && prior.equals(current)) {
       await writeFile(path, current);
       return;
