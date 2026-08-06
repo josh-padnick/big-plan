@@ -19,6 +19,46 @@ test("should keep the schema index list out of the prose measure", async ({
   expect(geometry.maxWidth).toBe("none");
 });
 
+test("should left-align schema columns and separate rows", async ({
+  page,
+  tableSchemaViewerUrl,
+}) => {
+  await page.goto(tableSchemaViewerUrl);
+  const grid = page.locator(".table-schema-grid").first();
+  const alignment = await grid.locator("th, td").evaluateAll((cells) =>
+    cells.map((cell) => ({
+      textAlign: getComputedStyle(cell).textAlign,
+      verticalAlign: getComputedStyle(cell).verticalAlign,
+    })),
+  );
+
+  expect(alignment.length).toBeGreaterThan(5);
+  expect(alignment.every(({ textAlign }) => textAlign === "left")).toBe(true);
+  expect(alignment.every(({ verticalAlign }) => verticalAlign === "top")).toBe(
+    true,
+  );
+
+  const headerRule = await grid
+    .locator("thead th")
+    .first()
+    .evaluate((cell) => ({
+      width: getComputedStyle(cell).borderBottomWidth,
+      style: getComputedStyle(cell).borderBottomStyle,
+    }));
+  expect(headerRule).toEqual({ width: "1px", style: "solid" });
+
+  const rowRule = await grid
+    .locator("tbody tr")
+    .nth(1)
+    .locator("th, td")
+    .first()
+    .evaluate((cell) => ({
+      width: getComputedStyle(cell).borderTopWidth,
+      style: getComputedStyle(cell).borderTopStyle,
+    }));
+  expect(rowRule).toEqual({ width: "1px", style: "solid" });
+});
+
 test("should distinguish every callout type when the component plan renders", async ({
   page,
   componentsViewerUrl,

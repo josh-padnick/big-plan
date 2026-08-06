@@ -226,6 +226,20 @@ classes.
     margin: 0 0.2rem;
     background: color-mix(in srgb, var(--ink-c) 18%, transparent);
   }
+  /* The Fit state stays quiet in the reading column. The full toolbar can
+     carry the stronger selected fill because the maximized chrome gives that
+     contrast a stable frame. */
+  .flow-diagram:not([data-figure-maximized])
+    .flow-diagram-fit[aria-pressed="true"] {
+    border-color: var(--edge-c) !important;
+    background: color-mix(in srgb, var(--ink-c) 6%, var(--bg)) !important;
+    color: var(--muted-c) !important;
+  }
+  .flow-diagram[data-figure-maximized] .flow-diagram-fit[aria-pressed="true"] {
+    border-color: var(--edge-strong-c) !important;
+    background: var(--edge-c) !important;
+    color: var(--ink-c) !important;
+  }
 
   /* --- Selection ---------------------------------------------------------
      Selection, not hover, is the interaction model. Hovering says only "this

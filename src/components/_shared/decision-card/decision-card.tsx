@@ -18,6 +18,7 @@ import type {
   DecisionCardTone,
 } from "../../_model/decision-card.js";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
+import { PLUS_ICON } from "../../../icons/lucide/plus.js";
 import { type MatrixToneParity } from "../comparison-matrix/comparison-matrix.js";
 import { BriefLayout, MatrixLayout, RowsLayout } from "./view-layouts.js";
 import { hastContentToReact } from "../hast-content/hast-content.js";
@@ -102,11 +103,14 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
           type="radio"
           id={inputId}
           name={model.id}
-          value="Propose another approach"
+          value="Suggest another option"
           data-decision-choice=""
           data-decision-proposal-choice=""
         />
-        <span>{"Propose another approach"}</span>
+        <span className="inline-flex size-4 shrink-0" aria-hidden="true">
+          {lucideIconToReact({ icon: PLUS_ICON, hidden: false })}
+        </span>
+        <span>{"Suggest another option"}</span>
       </label>
       {/* Visibility is CSS keyed on the radio, not the hidden attribute, so
           activating the link reveals the field with the viewer script
@@ -149,10 +153,19 @@ const AnswerControls = () => (
       data-decision-footer=""
     >
       <p
-        className="m-0 mr-auto text-sm text-muted"
+        className="decision-selection-summary m-0 mr-auto flex min-w-0 items-center gap-2 text-sm text-muted"
         data-decision-selection-summary=""
+        aria-live="polite"
       >
-        {"Nothing selected yet."}
+        <span
+          className="decision-selection-mark size-4 shrink-0 text-accent"
+          aria-hidden="true"
+        >
+          {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
+        </span>
+        <span data-decision-selection-copy="">
+          {"Select an option to continue."}
+        </span>
       </p>
       <button
         className="decision-confirm"
@@ -260,6 +273,11 @@ export const DecisionCard = ({
       {...(answerable ? { "data-decision-selector": "" } : {})}
     >
       <figcaption className="decision-zone-question bg-header px-5 py-4">
+        {model.layout === "rows" ? (
+          <p className="decision-eyebrow m-0 text-xs font-bold tracking-wider text-accent uppercase">
+            {"Decision"}
+          </p>
+        ) : null}
         {answerable ? null : (
           <BadgePill
             label={statusLabel(model)}
@@ -272,7 +290,11 @@ export const DecisionCard = ({
         )}
         <p
           id={model.questionId}
-          className="mt-2 mb-0 text-lg leading-7 font-semibold text-ink first:mt-0"
+          className={`mt-2 mb-0 font-semibold text-ink first:mt-0 ${
+            model.layout === "rows"
+              ? "text-2xl leading-tight"
+              : "text-lg leading-7"
+          }`}
           data-decision-question=""
         >
           {model.question}
@@ -316,7 +338,13 @@ export const DecisionCard = ({
           </div>
         ) : null}
         {answerable ? (
-          <div className="decision-zone-propose border-t border-edge bg-surface px-5 py-3">
+          <div
+            className={
+              model.layout === "rows"
+                ? "decision-zone-propose bg-paper px-5 pb-4"
+                : "decision-zone-propose border-t border-edge bg-surface px-5 py-3"
+            }
+          >
             <ProposeLink model={model} />
           </div>
         ) : null}

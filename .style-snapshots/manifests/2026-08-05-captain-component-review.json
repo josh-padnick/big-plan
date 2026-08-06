@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "fix(components): apply captain review feedback [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "src/components/_shared/decision-card/decision-card.css",
+      "propertyDeltas": [
+        {
+          "property": "Decision option layout and state",
+          "from": "stacked rows with a flat selected treatment",
+          "to": "responsive comparison cards with distinct recommended, selected, and verdict states"
+        }
+      ]
+    },
+    {
+      "path": "src/components/_shared/decision-card/decision-card.tsx",
+      "propertyDeltas": [
+        {
+          "property": "Decision frame and action copy",
+          "from": "generic alternative and confirmation controls",
+          "to": "clear comparison, suggestion, and selection controls"
+        }
+      ]
+    },
+    {
+      "path": "src/components/_shared/decision-card/view-layouts.tsx",
+      "propertyDeltas": [
+        {
+          "property": "Long Decision option structure",
+          "from": "separate radio controls and option rows",
+          "to": "whole-card selection targets with semantic verdict icons"
+        }
+      ]
+    },
+    {
+      "path": "src/components/database-table-schema/styles.css",
+      "propertyDeltas": [
+        {
+          "property": "Schema table alignment and separators",
+          "from": "inherited cell alignment with no owned row rules",
+          "to": "explicit left and top alignment with header and row rules"
+        }
+      ]
+    },
+    {
+      "path": "src/components/flow-diagram/styles.css",
+      "propertyDeltas": [
+        {
+          "property": "Selected Fit control",
+          "from": "one strong selected state in all viewer sizes",
+          "to": "a quiet resting state and the existing strong maximized state"
+        }
+      ]
+    },
+    {
+      "path": "src/components/flow-diagram/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "Fit state ownership",
+          "from": "fixed selected color utilities on the button",
+          "to": "a Fit state class that responds to viewer size"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "Embedded component styles",
+          "from": "the PR 64 component style bundle",
+          "to": "the generated Decision, FlowDiagram, and DatabaseTableSchema styles"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/viewer-script.ts",
+      "propertyDeltas": [
+        {
+          "property": "Decision selection feedback",
+          "from": "generic confirmation text and selection summary",
+          "to": "option-specific confirmation text and live selected-option feedback"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__document__desktop__dark.png",
+      "changedPixels": 3224293,
+      "before": {
+        "width": 872,
+        "height": 11507,
+        "sha256": "af69455cf8e14e5eeaeefde7b2c3bde725df38b7d57dd465c33c59ee1ed90e7e"
+      },
+      "after": {
+        "width": 872,
+        "height": 11569,
+        "sha256": "8717d51e346db65a7ce741d0f8c0e174b6e72db92435dec39b2accf02370ce91"
+      },
+      "propertyDeltas": [
+        {
+          "property": "Component document",
+          "from": "the PR 64 dark desktop Decision and schema presentation",
+          "to": "the approved dark desktop comparison cards and restored schema rules"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__light.png",
+      "changedPixels": 3347767,
+      "before": {
+        "width": 872,
+        "height": 11507,
+        "sha256": "6d09e303dd837804374630e12ed58be201e429752bf751446008af95643174a9"
+      },
+      "after": {
+        "width": 872,
+        "height": 11569,
+        "sha256": "39424bfe3a08387b3588b840a655226151bec9277e023e7c4df982eeea46d0df"
+      },
+      "propertyDeltas": [
+        {
+          "property": "Component document",
+          "from": "the PR 64 light desktop Decision and schema presentation",
+          "to": "the approved light desktop comparison cards and restored schema rules"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__dark.png",
+      "changedPixels": 1927034,
+      "before": {
+        "width": 350,
+        "height": 14536,
+        "sha256": "bab95ef08eca71bfab33bc16b8f7fa1c0d213494adf609c39a442c3a839d0de4"
+      },
+      "after": {
+        "width": 350,
+        "height": 14622,
+        "sha256": "9859575fa550c2f18ac2830d8720a8de1e1968919a9862b7f2255ede92ef4a06"
+      },
+      "propertyDeltas": [
+        {
+          "property": "Component document",
+          "from": "the PR 64 dark phone Decision and schema presentation",
+          "to": "the approved dark phone stacked cards and restored schema rules"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__light.png",
+      "changedPixels": 1995584,
+      "before": {
+        "width": 350,
+        "height": 14536,
+        "sha256": "0bf81dea09ddff8efb801bc9a5dcbefa775dabbb012271119a4f63217fdbbf6e"
+      },
+      "after": {
+        "width": 350,
+        "height": 14622,
+        "sha256": "dd73ab6e32c3013794d1838675b94dd842e133070ebbf64fa1cf6d67645c2d40"
+      },
+      "propertyDeltas": [
+        {
+          "property": "Component document",
+          "from": "the PR 64 light phone Decision and schema presentation",
+          "to": "the approved light phone stacked cards and restored schema rules"
+        }
+      ]
+    }
+  ]
+}
