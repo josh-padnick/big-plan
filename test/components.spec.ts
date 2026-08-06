@@ -110,15 +110,30 @@ test("should preserve component content without controls when JavaScript is disa
     annotation.locator(".code-diff-annotation-body-clamped"),
   ).toHaveCount(0);
   await expect(page.locator(".code-diff-annotation-toggle")).toHaveCount(0);
+
+  const tree = page.locator("[data-file-tree-diff]").first();
+  await expect(tree.locator('[data-tree-content="combined"]')).toBeVisible();
+  await expect(tree.locator('[data-tree-content="before-after"]')).toBeHidden();
+
   const schema = page.locator("[data-database-table-schema]");
   await expect(schema.locator(".table-schema-name-table")).toHaveText(
     "refresh_jobs",
   );
   await expect(schema.locator('[data-schema-badge="pk"]')).toBeVisible();
-  const controls = page.locator(
-    "[data-diff-toggle-group], [data-diff-menu-button], [data-schema-menu-button], [data-code-diff] [data-figure-maximize], [data-database-table-schema] [data-figure-maximize]",
+  const schemaHead = schema.locator("[data-schema-grid-column]").first();
+  await expect(schemaHead).toHaveJSProperty("draggable", false);
+  await expect(schemaHead.locator("svg[hidden]")).toBeHidden();
+  const indexMarkers = schema.locator("[data-schema-indx]");
+  expect(await indexMarkers.count()).toBeGreaterThan(0);
+  await expect(schema.locator("button[data-schema-indx]")).toHaveCount(0);
+  expect(await indexMarkers.first().evaluate((marker) => marker.tagName)).toBe(
+    "SPAN",
   );
-  await expect(controls).toHaveCount(8);
+
+  const controls = page.locator(
+    "[data-diff-toggle-group], [data-tree-toggle-group], [data-diff-menu-button], [data-schema-menu-button], [data-code-diff] [data-figure-maximize], [data-database-table-schema] [data-figure-maximize]",
+  );
+  await expect(controls).toHaveCount(9);
   for (const control of await controls.all()) {
     await expect(control).toBeHidden();
   }
