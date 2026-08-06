@@ -1611,6 +1611,7 @@ export const VIEWER_SCRIPT = `<script>
     const answerTitle = own("[data-decision-answer-title]");
     const answerLead = own("[data-decision-answer-lead]");
     const summary = own("[data-decision-selection-summary]");
+    const selectionCopy = own("[data-decision-selection-copy]");
     const rationale = own("[data-decision-rationale]");
     const question = own("[data-decision-question]");
     const proposalText = own("[data-decision-proposal-text]");
@@ -1859,16 +1860,22 @@ export const VIEWER_SCRIPT = `<script>
       const index = choice === null ? null : choice.getAttribute("data-option-index");
       showPanel(index === null ? defaultIndex : index);
       paintColumn(index, false);
-      confirm.textContent = proposing ? "Submit proposal" : "Confirm choice";
+      confirm.textContent = proposing
+        ? "Send suggestion"
+        : choice === null
+          ? "Confirm choice"
+          : "Confirm " + choice.value;
       confirm.disabled =
         choice === null || (proposing && proposalValue() === "");
-      if (summary !== null) {
-        summary.textContent =
+      if (summary !== null && selectionCopy !== null) {
+        if (choice === null) summary.removeAttribute("data-selection-picked");
+        else summary.setAttribute("data-selection-picked", "");
+        selectionCopy.textContent =
           choice === null
-            ? "Nothing selected yet."
+            ? "Select an option to continue."
             : proposing
-              ? "Your own approach selected."
-              : choice.value + " selected.";
+              ? "Your suggested option is selected."
+              : "Selected: " + choice.value;
       }
     };
     decision.addEventListener("change", (event) => {

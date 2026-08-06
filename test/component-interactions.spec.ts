@@ -334,10 +334,18 @@ test("should exercise every live component affordance with browser gestures", as
     await expect(readout).toHaveText("100%");
     await fit.click();
     await expect(fit).toHaveAttribute("aria-pressed", "true");
+    const minimizedFitBackground = await fit.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
 
     const maximize = diagram.locator("[data-figure-maximize]");
     await maximize.click();
     await expect(diagram).toHaveAttribute("data-figure-maximized", "");
+    await expect(fit).toHaveAttribute("aria-pressed", "true");
+    const maximizedFitBackground = await fit.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    expect(minimizedFitBackground).not.toBe(maximizedFitBackground);
     await maximize.click();
     await expect(diagram).not.toHaveAttribute("data-figure-maximized");
 
