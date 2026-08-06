@@ -309,26 +309,31 @@ const captureTargetFrame = async ({ page, target, path }) => {
 
 /** Writes only a pixel-stable frame. */
 const captureStableTarget = async ({ page, target, path }) => {
-  await target.evaluate((element) => {
-    element.scrollIntoView({
-      behavior: "instant",
-      block: "nearest",
-      inline: "nearest",
+  for (let retry = 0; retry < 2; retry += 1) {
+    await target.evaluate((element) => {
+      element.scrollIntoView({
+        behavior: "instant",
+        block: "nearest",
+        inline: "nearest",
+      });
     });
-  });
-  let prior;
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    await reportProgress("settle paint", { path, attempt });
-    await settlePaint(page);
-    const current = await captureTargetFrame({ page, target, path });
-    if (prior !== undefined && samePixels(prior, current)) {
-      await writeFile(path, current);
-      return;
+    let prior;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await reportProgress("settle paint", { path, retry, attempt });
+      await settlePaint(page);
+      const current = await captureTargetFrame({ page, target, path });
+      if (prior !== undefined && samePixels(prior, current)) {
+        await writeFile(path, current);
+        return;
+      }
+      prior = current;
     }
-    prior = current;
+    if (retry === 0) {
+      await reportProgress("retry stable target", { path });
+    }
   }
   throw new Error(
-    `Screenshot target "${path}" never repeated exact bytes across six settled frames.`,
+    `Screenshot target "${path}" never repeated exact bytes across two six-frame capture windows.`,
   );
 };
 
