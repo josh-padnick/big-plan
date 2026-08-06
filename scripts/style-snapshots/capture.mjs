@@ -159,6 +159,27 @@ const settlePaint = async (page) => {
   }
 };
 
+/** Stops one target capture when a browser call does not return. */
+const withTimeout = async (promise, label, milliseconds) => {
+  let timeout;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () =>
+            reject(new Error(`${label} timed out after ${milliseconds}ms.`)),
+          milliseconds,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+};
+
 /** Compares rendered pixels while ignoring screencast encoder metadata. */
 const samePixels = (left, right) => {
   const leftImage = PNG.sync.read(left);
@@ -372,19 +393,20 @@ try {
               theme,
               selector: capture.selector,
             });
-            await captureStableTarget({
-              page,
-              target,
-              path: join(
-                outputDirectory,
-                captureName({
-                  document: document.name,
-                  capture: capture.name,
-                  viewport: viewport.name,
-                  theme,
-                }),
-              ),
-            });
+            const path = join(
+              outputDirectory,
+              captureName({
+                document: document.name,
+                capture: capture.name,
+                viewport: viewport.name,
+                theme,
+              }),
+            );
+            await withTimeout(
+              captureStableTarget({ page, target, path }),
+              `Screenshot target "${path}"`,
+              60_000,
+            );
           } finally {
             await page.close();
           }
