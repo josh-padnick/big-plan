@@ -1120,6 +1120,13 @@ export const VIEWER_SCRIPT = `<script>
       )
         return;
       event.preventDefault();
+      // A slide title opens a collapsed slide but does not close an open one.
+      // Kicker-only levels keep the full header toggle behavior.
+      const title = event.target.closest(".plan-slide-title");
+      if (title !== null) {
+        if (block.hasAttribute("data-collapsed")) setCollapsed(block, false);
+        return;
+      }
       toggle();
     });
   }

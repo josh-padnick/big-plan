@@ -117,18 +117,43 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
       }),
     ).toBeVisible();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await statusHost.getByRole("heading", { level: 2 }).click();
+    await expect(statusHost).not.toHaveAttribute("data-collapsed", "");
+    await expect(
+      statusHost.getByText(
+        "Inline retries couple checkout latency to processor health.",
+      ),
+    ).toBeVisible();
   });
 
-  await test.step("clicking the slide title toggles expand and collapse", async () => {
+  await test.step("slide title opens only, while kicker and chevron toggle", async () => {
     const successHost = page.locator(
       '[data-collapsible="slide"][data-collapse-id="success-looks-like"]',
     );
+    const title = successHost.getByRole("heading", { level: 2 });
+    const kicker = successHost.locator(
+      ":scope > [data-collapse-header] [data-slide-kicker]",
+    );
+    const toggle = successHost.locator(
+      ":scope > [data-collapse-header] > [data-collapse-toggle]",
+    );
     await expect(successHost).not.toHaveAttribute("data-collapsed", "");
-    await successHost.getByRole("heading", { level: 2 }).click();
+
+    await title.click();
+    await expect(successHost).not.toHaveAttribute("data-collapsed", "");
+
+    await title.click();
+    await expect(successHost).not.toHaveAttribute("data-collapsed", "");
+
+    await kicker.click();
     await expect(successHost).toHaveAttribute("data-collapsed", "");
-    await successHost
-      .locator(":scope > [data-collapse-header] [data-slide-kicker]")
-      .click();
+    await kicker.click();
+    await expect(successHost).not.toHaveAttribute("data-collapsed", "");
+
+    await toggle.click();
+    await expect(successHost).toHaveAttribute("data-collapsed", "");
+    await toggle.click();
     await expect(successHost).not.toHaveAttribute("data-collapsed", "");
   });
 
