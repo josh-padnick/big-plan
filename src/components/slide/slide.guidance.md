@@ -15,7 +15,8 @@ This plain-language discipline stays guidance because broad title lint would cre
 `user-journey` applies the same distinction one level deeper.
 Use “User journeys” as the container name, choosing a `Part` or an untyped introductory slide according to the plan's argument.
 Each typed journey then supplies a distinct `name` for its kicker and sidebar, an ultra-concise `toc` form for the overview, and a full plain-language h2 title.
-Every journey slide must also contain a `Wireframe` whose `Screen` mockups let the reviewer see and click through the actual interface states in that human loop.
-Prose can annotate what matters, but a prose-only journey is invalid; follow the Wireframe component's CLEAR guidance when drawing the mockups.
+Most journey slides should contain a `Wireframe` whose `Screen` mockups let the reviewer see and click through the actual interface states in that human loop.
+When no UI exists to show, add a non-empty `wireframeReason` attribute to the `Slide` marker that explains the choice; never leave a missing Wireframe unexplained.
+Prose can annotate what matters, and the Wireframe component's CLEAR guidance applies whenever you draw mockups.
 
 {{SLIDE_TYPE_CATALOG}}

@@ -90,6 +90,31 @@ describe("Slide component", () => {
           '<Slide type="status-quo" name="Today" toc="Now" />\n\n## Retries block checkout\n',
       }),
     ).toThrowError(MarkdownDiagnosticsError);
+    expect(() =>
+      compileMarkdown({
+        markdown:
+          '<Slide type="status-quo" wireframeReason="No interface" />\n\n## Retries block checkout\n',
+      }),
+    ).toThrowError(MarkdownDiagnosticsError);
+  });
+
+  it("should carry a journey wireframe opt-out reason in the compiled model", () => {
+    expect(
+      compilePlanModel({
+        markdown:
+          '<Slide type="user-journey" name="Running the command" toc="Run command" wireframeReason="This journey uses a terminal command and has no interface to show." />\n\n## The command reports the result\n\nProse.\n',
+        fallbackTitle: "Plan",
+      }).components,
+    ).toMatchObject([
+      {
+        component: "Slide",
+        model: {
+          type: "user-journey",
+          wireframeReason:
+            "This journey uses a terminal command and has no interface to show.",
+        },
+      },
+    ]);
   });
 
   it("should reject unknown types with the complete closed catalog", () => {

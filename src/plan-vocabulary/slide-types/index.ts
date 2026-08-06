@@ -14,7 +14,6 @@ export type {
   SlideTypeComponentPairing,
   SlideTypeDefinition,
   SlideTypeId,
-  SlideTypePlacement,
 } from "./types.js";
 
 export const SLIDE_TYPE_BY_ID: {

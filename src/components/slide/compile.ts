@@ -17,12 +17,14 @@ export type CompiledSlide = {
   readonly type?: SlideTypeId;
   readonly name?: string;
   readonly toc?: string;
+  readonly wireframeReason?: string;
 };
 
 const SLIDE_SCHEMA = {
   type: { kind: "enum", values: SLIDE_TYPE_IDS, required: true },
   name: { kind: "string", nonEmpty: true },
   toc: { kind: "string", nonEmpty: true },
+  wireframeReason: { kind: "string", nonEmpty: true },
 } satisfies ComponentAttributeSchema;
 
 /** Compiles one self-closing Slide marker into its registered type. */
@@ -63,11 +65,13 @@ export const compileSlideComponent = ({
     }
   } else if (
     validated.type !== undefined &&
-    (attributes["name"] !== undefined || attributes["toc"] !== undefined)
+    (attributes["name"] !== undefined ||
+      attributes["toc"] !== undefined ||
+      attributes["wireframeReason"] !== undefined)
   ) {
     diagnostics.add({
       message:
-        'Slide attributes "name" and "toc" belong only on user-journey markers; other types derive their name from the catalog',
+        'Slide attributes "name", "toc", and "wireframeReason" belong only on user-journey markers; other types derive their name from the catalog',
       position,
     });
   }
@@ -80,6 +84,10 @@ export const compileSlideComponent = ({
       : {}),
     ...(validated.type === "user-journey" && validated.toc !== undefined
       ? { toc: validated.toc }
+      : {}),
+    ...(validated.type === "user-journey" &&
+    validated.wireframeReason !== undefined
+      ? { wireframeReason: validated.wireframeReason }
       : {}),
   };
 };

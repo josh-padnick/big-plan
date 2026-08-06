@@ -12,7 +12,6 @@ export const DESIRED_EXPERIENCE_SLIDE_TYPE = {
       "Do not use it for a bug fix, re-architecture, or tech-debt payoff; use Desired outcome when no new user experience is being introduced.",
   },
   cardinality: "one",
-  placement: "anywhere",
   guidance: [
     "Write from the human's point of view and name what they can see, do, understand, or recover from after the change.",
     "Prefer first-person outcomes when they make the experience tangible, but keep the title in plain language rather than turning it into a slogan.",

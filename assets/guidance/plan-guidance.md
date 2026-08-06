@@ -34,12 +34,12 @@ If a section needs a second screen, it holds a second thought; split it into h3 
 Before drafting, run `big-plan guidance Slide` once for the complete slide-type catalog.
 For each intended slide, ask whether its purpose matches a defined type; when one fits, use its `Slide` marker and type-specific guidance, and when none fits, author an untyped slide under these general principles rather than forcing a match.
 For user journeys, name the container “User journeys” as either a Part or an untyped introductory slide; give every journey its own marker `name`, ultra-concise `toc` form, and full h2 claim.
-Every journey slide must contain a `Wireframe` with actual `Screen` mockups that show the interface states in the human loop; prose may explain the screens but never replace them.
+Every journey slide should contain a `Wireframe` with actual `Screen` mockups that show the interface states in the human loop; when no UI exists to show, add a non-empty `wireframeReason` attribute to the `Slide` marker and explain the opt-out. Prose may explain the screens but never replace them when a UI exists.
 Typed coverage is not a quality target.
 Group the slides with `Part` markers into about three acts - Context, The proposal, and Shipping & your review - adapting the names when this plan demands it.
 Part 1 canonically holds "Status quo" and then "Success looks like": what is true today, and the outcome-level success a sponsor would repeat.
 "Desired experience" for a new feature and "Desired outcome" for other work are light recommendations when their sharper framing fits; they do not replace or invalidate "Success looks like".
-Place the verification contract near the end and make every criterion independently checkable; "Acceptance criteria" and "Definition of done" both name it well.
+Place the verification contract near the end and make every criterion independently checkable; when it contains more than seven criteria, group them by a dimension that helps the reviewer judge them; "Acceptance criteria" and "Definition of done" both name it well.
 "Desired outcome" is not that contract - it names the outcome-level result a sponsor would repeat, which is a higher rung and belongs earlier if the plan needs it.
 Put a `TableOfContents` directly after the `QuickSummary`: one row per section, so the reviewer sees the whole argument before reading any of it.
 Within an act, order slides by the reader's questions, keep orientation ahead of detail, and cut any slide that would make the reader ask "why am I reading this now?".

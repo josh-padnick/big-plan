@@ -12,7 +12,6 @@ export const STATUS_QUO_SLIDE_TYPE = {
       "Do not use it for the root-cause diagnosis alone, a history lesson, or a disguised list of proposed changes.",
   },
   cardinality: "one",
-  placement: "anywhere",
   guidance: [
     "Lead with observable evidence and user-visible consequences, then name the constraint the proposal must address.",
     "Include what already works so the plan preserves strengths instead of presenting the current system as uniformly broken.",

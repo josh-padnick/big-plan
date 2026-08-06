@@ -13,7 +13,6 @@ export const DESIRED_OUTCOME_SLIDE_TYPE = {
       "Do not use it for a new feature's lived user experience or for the checkable verification contract at the end of the plan.",
   },
   cardinality: "one",
-  placement: "anywhere",
   guidance: [
     "State the operational or architectural result a sponsor would repeat, not the files, abstractions, or migrations used to reach it.",
     "Name the constraint removed or capability restored, and make the before-and-after difference concrete.",

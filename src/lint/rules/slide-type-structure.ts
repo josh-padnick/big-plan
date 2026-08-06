@@ -1,6 +1,6 @@
 // Implements the objective typed-slide structure rule: singleton types may
-// not repeat, the outcome pair is mutually exclusive, and a last-typed type
-// ends the typed slides. It deliberately judges no slide content.
+// not repeat, and the outcome pair is mutually exclusive. It deliberately
+// judges no slide content.
 
 import {
   SLIDE_TYPES,
@@ -59,6 +59,22 @@ const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
         });
       }
     }
+    if (section.type === "user-journey") {
+      const hasWireframe = section.components.includes("Wireframe");
+      const hasReason = (section.wireframeReason?.trim() ?? "") !== "";
+      if (!hasWireframe && !hasReason) {
+        findings.push({
+          ...positionOf(section),
+          message: `User journeys slide "${section.name}" needs a Wireframe with actual UI mockups, or a non-empty wireframeReason explaining why no UI was created`,
+        });
+      }
+      if (hasWireframe && hasReason) {
+        findings.push({
+          ...positionOf(section),
+          message: `Remove wireframeReason from User journeys slide "${section.name}" because it contains a Wireframe`,
+        });
+      }
+    }
   }
 
   const desiredExperience = typed.find(
@@ -74,20 +90,6 @@ const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
       ...positionOf(later),
       message:
         "Use either Desired experience for a new feature or Desired outcome for other work, not both",
-    });
-  }
-
-  for (const definition of SLIDE_TYPES) {
-    if (definition.placement !== "last-typed") {
-      continue;
-    }
-    typed.forEach((section, index) => {
-      if (section.type === definition.id && index < typed.length - 1) {
-        findings.push({
-          ...positionOf(section),
-          message: `${definition.name} must be the last typed slide in the plan`,
-        });
-      }
     });
   }
 

@@ -11,8 +11,6 @@ export type SlideTypeId =
 
 export type SlideTypeCardinality = "one" | "many";
 
-export type SlideTypePlacement = "anywhere" | "last-typed";
-
 export type SlideTypeComponentPairing = {
   readonly name: string;
   readonly guidance: string;
@@ -27,7 +25,6 @@ export type SlideTypeDefinition = {
     readonly notWhen: string;
   };
   readonly cardinality: SlideTypeCardinality;
-  readonly placement: SlideTypePlacement;
   readonly guidance: ReadonlyArray<string>;
   readonly components: ReadonlyArray<SlideTypeComponentPairing>;
 };

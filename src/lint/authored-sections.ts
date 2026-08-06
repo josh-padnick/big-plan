@@ -13,8 +13,10 @@ import { isNamedFlowElement, isParent, stringAttribute } from "./mdx-nodes.js";
 export type AuthoredSection = {
   readonly name: string;
   readonly toc?: string;
+  readonly wireframeReason?: string;
   readonly title: string;
   readonly components: ReadonlyArray<string>;
+  readonly content: ReadonlyArray<Node>;
   readonly line: number;
   readonly column: number;
   readonly type?: SlideTypeId;
@@ -103,11 +105,17 @@ export const collectAuthoredSections = (
             authoredType === "user-journey" && previous !== undefined
               ? stringAttribute({ node: previous, name: "toc" })
               : undefined;
+          const wireframeReason =
+            authoredType === "user-journey" && previous !== undefined
+              ? stringAttribute({ node: previous, name: "wireframeReason" })
+              : undefined;
           sections.push({
             name: journeyName ?? slideTypeFor(authoredType).name,
             ...(journeyToc === undefined ? {} : { toc: journeyToc }),
+            ...(wireframeReason === undefined ? {} : { wireframeReason }),
             title,
             components,
+            content: parent.children.slice(index + 1, sectionEnd),
             type: authoredType,
             line: child.position.start.line,
             column: child.position.start.column,
@@ -123,6 +131,7 @@ export const collectAuthoredSections = (
             name: title,
             title,
             components,
+            content: parent.children.slice(index + 1, sectionEnd),
             line: child.position.start.line,
             column: child.position.start.column,
           });

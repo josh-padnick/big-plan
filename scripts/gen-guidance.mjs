@@ -58,7 +58,7 @@ const renderSlideTypeCatalog = (types) =>
       "",
       `**Do not use it when:** ${type.match.notWhen}`,
       "",
-      `**Structure:** ${type.cardinality === "many" ? "May repeat." : "At most one per plan."}${type.placement === "last-typed" ? " It is the last typed slide." : ""}`,
+      `**Structure:** ${type.cardinality === "many" ? "May repeat." : "At most one per plan."}`,
       "",
       "**Write it well:**",
       "",

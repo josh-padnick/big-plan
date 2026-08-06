@@ -66,7 +66,7 @@ describe("guidanceCommand", () => {
       "distinct `name` for its kicker and sidebar plus an ultra-concise `toc` form",
     );
     expect(output).toContain(
-      "`Wireframe` **(required)** — Required on every journey slide",
+      "`Wireframe` — Default: draw the shortest CLEAR-compliant sequence",
     );
     expect(output).toContain("### Acceptance criteria (`acceptance-criteria`)");
     expect(output).toContain("Components that pair well");

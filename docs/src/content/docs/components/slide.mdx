@@ -21,7 +21,7 @@ Untyped slides keep the existing behavior: the h2 is both their name and title.
 ```
 
 Run `big-plan guidance Slide` once before drafting a plan.
-It returns the complete catalog in one digest: matching boundaries, writing guidance, component pairings, cardinality, and placement for every type.
+It returns the complete catalog in one digest: matching boundaries, writing guidance, component pairings, and cardinality for every type.
 For each intended slide, use a type only when its matching rule fits; otherwise use an untyped slide under the general guidance.
 
 ## The catalog
@@ -32,7 +32,7 @@ For each intended slide, use a type only when its matching rule fits; otherwise 
 | `desired-experience`  | Desired experience  | The concrete lived experience introduced by a new feature                   |
 | `desired-outcome`     | Desired outcome     | The concrete payoff of a bug fix, re-architecture, or tech-debt change      |
 | `user-journey`        | User journeys       | A named container of individually named, complete human loops               |
-| `acceptance-criteria` | Acceptance criteria | Independently checkable verification, placed after every other typed slide  |
+| `acceptance-criteria` | Acceptance criteria | Independently checkable verification                            |
 
 `desired-experience` and `desired-outcome` are mutually exclusive.
 They are light recommendations when their sharper framing fits; the canonical untyped “Success looks like” section remains valid and receives no discouraging lint.
@@ -72,12 +72,12 @@ For each journey:
 - `name` is a distinct, concrete journey name shown in the kicker and sidebar.
 - `toc` is an ultra-concise form shown in the TableOfContents.
 - The h2 is the full plain-language claim.
-- A required `Wireframe` carries the actual `Screen` mockups for the shortest path that proves the journey.
+- A default `Wireframe` carries the actual `Screen` mockups for the shortest path that proves the journey. If no UI exists to show, add a non-empty `wireframeReason` attribute to the marker.
 
 Repeat the singular `user-journey` marker for several individual journeys.
 The catalog's plural “User journeys” name belongs to the container, not every journey kicker.
 Distinct journey names and TOC forms keep repeated entries navigable.
-The Wireframe makes the journey visible and walkable; prose can annotate the screens but cannot replace them.
+The Wireframe makes a UI journey visible and walkable; prose can annotate the screens but cannot replace them when a UI exists.
 Apply the Wireframe component's CLEAR quality bar to every mockup.
 
 ## The contract
@@ -86,10 +86,10 @@ Apply the Wireframe component's CLEAR quality bar to every mockup.
 - `Slide` is self-closing and rejects body content.
 - The marker must be top-level and immediately followed by the h2 it describes.
 - `user-journey` additionally requires non-empty `name` and `toc` attributes; other types reject them.
-- Every `user-journey` section must contain a `Wireframe` with actual UI mockups.
+- Every `user-journey` section must contain a `Wireframe` with actual UI mockups, or a non-empty `wireframeReason` that explains why no UI was created.
 - Singleton types may appear at most once; `user-journey` may repeat.
 - A plan may use `desired-experience` or `desired-outcome`, never both.
-- `acceptance-criteria` must be the last typed slide.
+- An acceptance-criteria slide with more than seven criteria must group them by a useful dimension.
 
 Unknown types and misplaced markers fail compilation with source positions.
 Objective catalog and arc violations fail lint.
@@ -103,7 +103,7 @@ A one-off label is not enough.
 
 Adding a type is a normal product contribution:
 
-1. Add one file under `src/plan-vocabulary/slide-types/definitions/` with its matching boundary, counterexample, authoring guidance, component pairings, cardinality, and placement.
+1. Add one file under `src/plan-vocabulary/slide-types/definitions/` with its matching boundary, counterexample, authoring guidance, component pairings, and cardinality.
 2. Add its id to the registry and closed `Slide` attribute contract.
 3. Update the focused catalog tests, the smallest validated example, and this reference.
 4. Submit the evidence and guidance for normal Big Plan maintainer review.

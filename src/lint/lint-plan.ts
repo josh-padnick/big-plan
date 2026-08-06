@@ -6,6 +6,7 @@ import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { collectionGroupingRule } from "./rules/collection-grouping.js";
+import { acceptanceCriteriaGroupingRule } from "./rules/acceptance-criteria-grouping.js";
 import { ledeLengthRule } from "./rules/lede-length.js";
 import { ledePresenceRule } from "./rules/lede-presence.js";
 import { ledeStyleRule } from "./rules/lede-style.js";
@@ -29,6 +30,7 @@ const RULES: ReadonlyArray<PlanLintRule> = [
   ledeLengthRule,
   quickSummarySingletonRule,
   slideTypeStructureRule,
+  acceptanceCriteriaGroupingRule,
   tableOfContentsMatchesSectionsRule,
   wireframeProductCopyRule,
   slideLeadingTitleRule,

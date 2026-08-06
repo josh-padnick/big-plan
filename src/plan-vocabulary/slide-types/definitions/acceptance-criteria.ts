@@ -12,11 +12,11 @@ export const ACCEPTANCE_CRITERIA_SLIDE_TYPE = {
       "Do not use it for aspirations, desired outcomes, implementation tasks, or a restatement of the proposal.",
   },
   cardinality: "one",
-  placement: "last-typed",
   guidance: [
     "Make every criterion independently verifiable by naming an observable behavior, artifact, or boundary condition.",
     "Cover the promised experience and the important failure or degenerate cases, not only the happy path.",
     "Describe evidence of completion rather than implementation steps; a reviewer should be able to verify a criterion without inferring intent.",
+    "When there are more than seven criteria in total, group them by a dimension that helps the reviewer judge them, such as importance, lifecycle stage, owner, audience, or family.",
   ],
   components: [
     {

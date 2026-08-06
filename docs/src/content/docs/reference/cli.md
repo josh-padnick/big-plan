@@ -36,7 +36,7 @@ It deliberately prescribes principles rather than a template, so each plan keeps
 Running it also records a guidance acknowledgment for the current working directory.
 
 With a component name, `big-plan guidance <Component>` prints that component's judgment-level usage guidance instead: when to reach for it and what belongs in it.
-`big-plan guidance Slide` returns every registered slide type and its matching, authoring, component-pairing, cardinality, and placement guidance in one call for the whole plan.
+`big-plan guidance Slide` returns every registered slide type and its matching, authoring, component-pairing, and cardinality guidance in one call for the whole plan.
 The component form records no acknowledgment, and an unknown name fails with the list of components that have guidance.
 
 `validate` and `render` require a current acknowledgment and fail with a structured `GUIDANCE_REQUIRED` error until `guidance` has been run.
