@@ -13,7 +13,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 import { PNG } from "pngjs";
 import { availableDocuments } from "./available-documents.mjs";
-import { verifyHistory } from "./verify-history.mjs";
+import { verifyHistory, visualContract } from "./verify-history.mjs";
 
 const execFileAsync = promisify(execFile);
 const repositoryRoot = join(
@@ -72,6 +72,37 @@ const pngIdentity = (buffer) => {
 
 const artifactPath = ({ repoRoot, name }) =>
   join(repoRoot, "test-results", "style-history", name);
+
+test("reads visual contracts from direct and squash commit messages", () => {
+  assert.deepEqual(
+    visualContract({
+      subject: "style: move the pixel [visual:approved]",
+      body: "",
+    }),
+    {
+      kind: "approved",
+      subjects: ["style: move the pixel [visual:approved]"],
+      squashed: false,
+    },
+  );
+  assert.deepEqual(
+    visualContract({
+      subject: "Restore component interactions (#66)",
+      body: [
+        "* fix(shell): restore title [visual:approved]",
+        "* test(components): restore fallback [visual:empty]",
+      ].join("\n"),
+    }),
+    {
+      kind: "approved",
+      subjects: [
+        "fix(shell): restore title [visual:approved]",
+        "test(components): restore fallback [visual:empty]",
+      ],
+      squashed: true,
+    },
+  );
+});
 
 const createMinimalRepository = async ({
   stylingFilePatterns = ["^irrelevant\\.txt$"],

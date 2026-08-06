@@ -22,6 +22,9 @@ End each affected commit subject with one visual contract:
 - `[visual:empty]` declares that every configured screenshot remains pixel-identical.
 - `[visual:approved]` declares an intentional visual change. The commit must add exactly one manifest under `.style-snapshots/manifests/` describing every changed styling file and capture, including property deltas for each and exact pixel evidence for each capture.
 
+When GitHub squash-merges a stack, keep the visual contract suffix on each affected source commit entry in the squash body.
+The verifier reads the approved manifests that survive the squash and checks that they cover every changed capture in the final commit.
+
 Push the branch and use the `style-history` job's uploaded artifact to inspect its evidence ledger and any before, after, and pixel-diff images.
 Use that evidence to author an approved manifest, then push the commit so the isolated job can verify it exactly.
 The verifier's diagnostics own the manifest's enforced schema.
