@@ -135,16 +135,28 @@ const captureName = ({ document, capture, viewport, theme }) =>
     .map((part) => part.replaceAll(/[^a-zA-Z0-9_-]/g, "-"))
     .join("__") + ".png";
 
-/** Waits until layout and paint have crossed two complete browser frames. */
+/** Waits for two frames without hanging when hosted headless pages pause rAF. */
 const settlePaint = async (page) => {
-  await page.evaluate(
-    () =>
-      new Promise((resolvePaint) => {
-        globalThis.requestAnimationFrame(() =>
-          globalThis.requestAnimationFrame(resolvePaint),
-        );
+  let timeout;
+  try {
+    await Promise.race([
+      page.evaluate(
+        () =>
+          new Promise((resolvePaint) => {
+            globalThis.requestAnimationFrame(() =>
+              globalThis.requestAnimationFrame(resolvePaint),
+            );
+          }),
+      ),
+      new Promise((resolve) => {
+        timeout = setTimeout(resolve, 250);
       }),
-  );
+    ]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
 };
 
 /** Captures a large document rectangle in bounded raster tasks. */
@@ -226,6 +238,7 @@ const captureStableTarget = async ({ page, target, path }) => {
   try {
     let prior;
     for (let attempt = 0; attempt < 6; attempt += 1) {
+      await reportProgress("settle paint", { path, attempt });
       await settlePaint(page);
       let current;
       if (session === null) {
