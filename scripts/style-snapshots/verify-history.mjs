@@ -152,6 +152,35 @@ const parseConfig = (source) => {
   ) {
     throw new Error("Style screenshot config requires manifestDirectory.");
   }
+  if (config.animatedSurfaceExemptions !== undefined) {
+    if (
+      !Array.isArray(config.animatedSurfaceExemptions) ||
+      config.animatedSurfaceExemptions.length === 0
+    ) {
+      throw new Error(
+        "Style screenshot animatedSurfaceExemptions must be a non-empty array when present.",
+      );
+    }
+    const names = new Set();
+    for (const exemption of config.animatedSurfaceExemptions) {
+      for (const field of ["name", "selector", "reason"]) {
+        if (
+          typeof exemption[field] !== "string" ||
+          exemption[field].trim() === ""
+        ) {
+          throw new Error(
+            `Style screenshot animated-surface exemption requires a non-empty ${field}.`,
+          );
+        }
+      }
+      if (names.has(exemption.name)) {
+        throw new Error(
+          `Style screenshot animated-surface exemption name "${exemption.name}" is duplicated.`,
+        );
+      }
+      names.add(exemption.name);
+    }
+  }
   return config;
 };
 
@@ -342,7 +371,11 @@ const captureIdentity = (capture) =>
         sha256: capture.sha256,
       };
 
-/** Counts exact RGBA differences, including pixels added by dimension changes. */
+// Hosted Chromium can vary one antialias channel on rounded edges without a
+// layout or color change. Larger channel deltas remain visual differences.
+const PIXEL_CHANNEL_TOLERANCE = 1;
+
+/** Counts visual differences, including pixels added by dimension changes. */
 const comparePngs = async ({ beforePath, afterPath }) => {
   const before = beforePath === null ? null : await readCapture(beforePath);
   const after = afterPath === null ? null : await readCapture(afterPath);
@@ -363,10 +396,12 @@ const comparePngs = async ({ beforePath, afterPath }) => {
       const changed =
         beforeOffset === null ||
         afterOffset === null ||
-        before.data[beforeOffset] !== after.data[afterOffset] ||
-        before.data[beforeOffset + 1] !== after.data[afterOffset + 1] ||
-        before.data[beforeOffset + 2] !== after.data[afterOffset + 2] ||
-        before.data[beforeOffset + 3] !== after.data[afterOffset + 3];
+        before.data[beforeOffset + 3] !== after.data[afterOffset + 3] ||
+        Math.max(
+          Math.abs(before.data[beforeOffset] - after.data[afterOffset]),
+          Math.abs(before.data[beforeOffset + 1] - after.data[afterOffset + 1]),
+          Math.abs(before.data[beforeOffset + 2] - after.data[afterOffset + 2]),
+        ) > PIXEL_CHANNEL_TOLERANCE;
       const diffOffset = (y * width + x) * 4;
       if (changed) {
         changedPixels += 1;

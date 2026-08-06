@@ -10,6 +10,7 @@
 // The attribute vocabulary is owned by components/_model/figure-controls.
 
 import type { Element, Root, RootContent } from "hast";
+import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
@@ -41,10 +42,14 @@ const copyButton = (): Element => {
       className: BUTTON_CLASSES.split(" "),
       "aria-label": label,
       "data-tooltip": label,
+      "data-tooltip-delay": "1s",
       hidden: true,
       "data-copy-code": "",
     },
-    children: [lucideIconToHast({ icon: COPY_ICON })],
+    children: [
+      lucideIconToHast({ icon: COPY_ICON }),
+      lucideIconToHast({ icon: CHECK_ICON, hidden: true }),
+    ],
   };
 };
 
@@ -58,6 +63,7 @@ const maximizeButton = (): Element => {
       className: BUTTON_CLASSES.split(" "),
       "aria-label": label,
       "data-tooltip": label,
+      "data-tooltip-delay": "1s",
       hidden: true,
       [TRIGGER_ATTRIBUTE]: "",
     },

@@ -57,7 +57,7 @@ describe("compileMarkdown Callout components", () => {
       '<code class="hljs language-sql" data-authored-prose="">',
     );
     expect(bodyHtml).toContain('<span class="hljs-keyword">SELECT</span>');
-    expect(bodyHtml).toContain("data-copy-code");
+    expect(bodyHtml).toContain('data-copy-code=""');
   });
 });
 

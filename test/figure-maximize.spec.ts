@@ -163,6 +163,80 @@ test("should maximize and restore every supported figure family in both themes",
   }
 });
 
+test("should copy plain code and make figure hints wait for a linger", async ({
+  page,
+  componentsViewerUrl,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          (
+            window as typeof window & {
+              __bigPlanCopiedCode?: string;
+            }
+          ).__bigPlanCopiedCode = text;
+        },
+      },
+    });
+  });
+  await page.goto(componentsViewerUrl);
+
+  const frame = page.locator(".code-figure").first();
+  const copy = frame.locator("[data-copy-code]");
+  const maximize = frame.locator("[data-figure-maximize]");
+  const rendered = await frame.locator(":scope > pre > code").textContent();
+  const expected =
+    rendered?.endsWith("\n") === true ? rendered.slice(0, -1) : rendered;
+
+  await expect(copy).toBeVisible();
+  await expect(copy).toHaveAccessibleName("Copy code");
+  await expect(copy.locator('[data-lucide="copy"]')).toBeVisible();
+  await expect(copy.locator('[data-lucide="check"]')).toBeHidden();
+  await expect(maximize).toHaveAttribute("data-tooltip-delay", "1s");
+  await expect(copy).toHaveAttribute("data-tooltip-delay", "1s");
+
+  await maximize.hover();
+  await expect
+    .poll(
+      () =>
+        frame.evaluate((element) => {
+          const button = element.querySelector("[data-figure-maximize]");
+          return button === null
+            ? null
+            : getComputedStyle(button, "::after").opacity;
+        }),
+      { timeout: 250 },
+    )
+    .toBe("0");
+
+  await copy.click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __bigPlanCopiedCode?: string;
+            }
+          ).__bigPlanCopiedCode,
+      ),
+    )
+    .toBe(expected);
+  await expect(copy).toHaveAccessibleName("Copied code");
+  await expect(copy).toHaveAttribute("data-copy-state", "copied");
+  await expect(copy.locator('[data-lucide="copy"]')).toBeHidden();
+  await expect(copy.locator('[data-lucide="check"]')).toBeVisible();
+  await page.waitForTimeout(600);
+  await expect(copy).toHaveAttribute("data-copy-state", "copied");
+  await page.waitForTimeout(1000);
+  await expect(copy).toHaveAccessibleName("Copy code");
+  await expect(copy).not.toHaveAttribute("data-copy-state");
+  await expect(copy.locator('[data-lucide="copy"]')).toBeVisible();
+  await expect(copy.locator('[data-lucide="check"]')).toBeHidden();
+});
+
 test("should traverse disclosures and wrap within maximized figures", async ({
   page,
   componentsViewerUrl,
@@ -179,6 +253,9 @@ test("should traverse disclosures and wrap within maximized figures", async ({
     await test.step(focusCase.name, async () => {
       const frame = page.locator(focusCase.selector).first();
       const trigger = frame.locator("[data-figure-maximize]");
+      const wrapTarget = frame.getByRole("button", {
+        name: "Combined view",
+      });
       const disclosure = frame
         .locator("details[data-info-popover] > summary:visible")
         .last();
@@ -214,13 +291,142 @@ test("should traverse disclosures and wrap within maximized figures", async ({
 
       await disclosure.focus();
       await page.keyboard.press("Tab");
-      await expect(trigger).toBeFocused();
+      await expect(wrapTarget).toBeFocused();
       await page.keyboard.press("Shift+Tab");
       await expect(disclosure).toBeFocused();
 
       await trigger.click();
       await expect(frame).not.toHaveAttribute("data-figure-maximized");
     });
+  }
+});
+
+test("should expose dedicated copy controls beside CodeDiff and CodeSnippet maximize", async ({
+  page,
+  componentsViewerUrl,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          (
+            window as typeof window & {
+              __bigPlanCopiedCode?: string;
+            }
+          ).__bigPlanCopiedCode = text;
+        },
+      },
+    });
+  });
+  await page.goto(componentsViewerUrl);
+
+  for (const figureCase of [
+    {
+      selector: "[data-code-diff]",
+      source: "[data-diff-source]",
+      label: "Copy diff",
+      maximizeLabel: "Maximize diff",
+    },
+    {
+      selector: "[data-code-snippet]",
+      source: "[data-snippet-source]",
+      label: "Copy code",
+      maximizeLabel: "Maximize code",
+    },
+  ]) {
+    const figure = page.locator(figureCase.selector).first();
+    const copy = figure.locator("[data-copy-source]");
+    const maximize = figure.locator("[data-figure-maximize]");
+    const toolbar = figure.locator(".figure-action-group");
+    const expected = await figure.locator(figureCase.source).inputValue();
+
+    await expect(copy).toBeVisible();
+    await expect(copy).toBeEnabled();
+    await expect(copy).toHaveAccessibleName(figureCase.label);
+    await expect(copy).toHaveAttribute("data-tooltip-delay", "1s");
+    await expect(maximize).toHaveAttribute("data-tooltip-delay", "1s");
+    expect(
+      await figure
+        .locator(".figure-action-group > button")
+        .evaluateAll((buttons) =>
+          buttons.map((button) => button.getAttribute("aria-label")),
+        ),
+    ).toEqual([figureCase.label, figureCase.maximizeLabel]);
+    const before = await toolbar.boundingBox();
+
+    await copy.click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (
+              window as typeof window & {
+                __bigPlanCopiedCode?: string;
+              }
+            ).__bigPlanCopiedCode,
+        ),
+      )
+      .toBe(expected);
+    await expect(copy).toHaveAccessibleName(
+      figureCase.label.replace("Copy", "Copied"),
+    );
+    await expect(copy.locator('[data-lucide="copy"]')).toBeHidden();
+    await expect(copy.locator('[data-lucide="check"]')).toBeVisible();
+    const after = await toolbar.boundingBox();
+    expect(after).not.toBeNull();
+    expect(after?.x).toBe(before?.x);
+    expect(after?.width).toBe(before?.width);
+    expect(after?.height).toBe(before?.height);
+    await page.waitForTimeout(1600);
+    await expect(copy).toHaveAccessibleName(figureCase.label);
+    await expect(copy.locator('[data-lucide="copy"]')).toBeVisible();
+    await expect(copy.locator('[data-lucide="check"]')).toBeHidden();
+  }
+});
+
+test("should morph every figure copy control without shifting its toolbar", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async () => {} },
+    });
+  });
+  await page.goto(allComponentsViewerUrl);
+
+  for (const selector of [
+    ".code-figure",
+    "[data-code-diff]",
+    "[data-code-snippet]",
+    "[data-data-table]",
+    "[data-database-table-schema]",
+  ]) {
+    const figure = page.locator(selector).first();
+    const copy = figure.locator("[data-copy-code], [data-copy-source]");
+    const toolbar = figure
+      .locator(".figure-action-group, .figure-control-bar")
+      .first();
+    const before = await toolbar.boundingBox();
+
+    await figure.hover({ position: { x: 24, y: 24 } });
+    await copy.hover();
+    await copy.click();
+
+    await expect(copy).toHaveAttribute("data-copy-state", "copied");
+    await expect(copy.locator('[data-lucide="copy"]')).toBeHidden();
+    await expect(copy.locator('[data-lucide="check"]')).toBeVisible();
+    const after = await toolbar.boundingBox();
+    expect(after).not.toBeNull();
+    expect(after?.x).toBe(before?.x);
+    expect(after?.width).toBe(before?.width);
+    expect(after?.height).toBe(before?.height);
+    await page.waitForTimeout(1600);
+    await expect(copy).not.toHaveAttribute("data-copy-state");
+    await expect(copy.locator('[data-lucide="copy"]')).toBeVisible();
+    await expect(copy.locator('[data-lucide="check"]')).toBeHidden();
   }
 });
 

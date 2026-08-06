@@ -8,6 +8,20 @@ test("should review a gRPC method contract", async ({
   page,
   componentsViewerUrl,
 }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          (
+            window as typeof window & {
+              __bigPlanCopiedCode?: string;
+            }
+          ).__bigPlanCopiedCode = text;
+        },
+      },
+    });
+  });
   await page.goto(componentsViewerUrl);
   const method = page
     .locator('[data-grpc-method][data-grpc-kind="serverStreaming"]')
@@ -45,9 +59,28 @@ test("should review a gRPC method contract", async ({
     );
   });
 
-  await test.step("the proto fence exposes a live copy control", async () => {
-    await expect(method.locator("[data-copy-code]")).toHaveCount(1);
-    await expect(method.locator("[data-copy-code]")).toBeVisible();
+  await test.step("the proto fence exposes a working copy control", async () => {
+    const copy = method.locator("[data-copy-code]");
+    await expect(copy).toHaveCount(1);
+    await expect(copy).toBeVisible();
+    await expect(copy).toBeEnabled();
+    const rendered = await method.locator("pre code").first().textContent();
+    const expected =
+      rendered?.endsWith("\n") === true ? rendered.slice(0, -1) : rendered;
+    await copy.click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (
+              window as typeof window & {
+                __bigPlanCopiedCode?: string;
+              }
+            ).__bigPlanCopiedCode,
+        ),
+      )
+      .toBe(expected);
+    await expect(copy).toHaveAccessibleName("Copied code");
     await expect(method.locator("pre code").first()).toContainText(
       "rpc WatchComments",
     );
@@ -66,7 +99,6 @@ test("should review a gRPC method contract", async ({
     await expect(staticMethod.locator("pre code").first()).toContainText(
       "rpc WatchComments",
     );
-    await expect(staticMethod.locator("[data-copy-code]")).toBeHidden();
     await context.close();
   });
 });

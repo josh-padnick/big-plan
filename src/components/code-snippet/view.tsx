@@ -6,13 +6,10 @@ import type {
   CompiledCodeSnippetAnnotation,
 } from "./compile.js";
 import type { HighlightedLine } from "./split-highlighted-lines.js";
-import { COPY_ICON } from "../../icons/lucide/copy.js";
-import { ELLIPSIS_ICON } from "../../icons/lucide/ellipsis.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
-import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { AnnotationCard } from "../_shared/annotation-card/annotation-card.js";
-import { CopyFeedback } from "../_shared/copy-feedback/copy-feedback.js";
 import { FileIdentity } from "../_shared/file-identity/file-identity.js";
+import { CopyButton } from "../_shared/figure-controls/copy-button.js";
 import {
   BODY_ATTRIBUTE,
   MAXIMIZABLE_ATTRIBUTE,
@@ -21,59 +18,6 @@ import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
 // /* off-scale */ Phase A preserves the legacy header/body radii, 0.6rem
 // body padding, and annotation-rail width exactly for the zero-pixel contract.
-const MenuItemButton = ({
-  action,
-  label,
-}: {
-  readonly action: "copy-path" | "copy-code";
-  readonly label: string;
-}) => (
-  <button
-    type="button"
-    className="code-snippet-menu-item flex w-full cursor-pointer items-center gap-[0.45rem] whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-[0.3rem] text-left text-xs text-ink hover:bg-edge [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted"
-    role="menuitem"
-    tabIndex={-1}
-    {...{ [`data-snippet-${action}`]: "" }}
-  >
-    {lucideIconToReact({ icon: COPY_ICON, hidden: false })}
-    {label}
-  </button>
-);
-
-// Actions remain reserved for the live review application, while the complete
-// code and every annotation stay readable in the server-rendered figure.
-const ActionsMenu = ({ filePath }: { readonly filePath?: string }) => (
-  <span className="code-snippet-menu relative inline-flex" data-snippet-menu="">
-    <button
-      type="button"
-      className="code-snippet-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
-      aria-label="More actions"
-      aria-haspopup="menu"
-      aria-expanded="false"
-      data-tooltip="More actions"
-      hidden
-      data-snippet-menu-button=""
-      data-size="xs"
-      data-slot="button"
-      data-variant="ghost"
-    >
-      {lucideIconToReact({ icon: ELLIPSIS_ICON, hidden: false })}
-    </button>
-    <div
-      className="code-snippet-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge bg-[var(--diff-header-bg)] p-1 shadow-[0_6px_18px_rgb(12_10_8/0.18)]"
-      role="menu"
-      aria-label="Code snippet actions"
-      hidden
-      data-snippet-menu-list=""
-    >
-      {filePath === undefined ? null : (
-        <MenuItemButton action="copy-path" label="Copy path" />
-      )}
-      <MenuItemButton action="copy-code" label="Copy code" />
-    </div>
-  </span>
-);
-
 const SnippetHeader = ({ filePath }: { readonly filePath?: string }) => (
   <figcaption className="code-snippet-header flex min-w-0 items-center justify-between gap-3 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-[0.55rem] py-[0.3rem]">
     {filePath === undefined ? (
@@ -83,10 +27,11 @@ const SnippetHeader = ({ filePath }: { readonly filePath?: string }) => (
     ) : (
       <FileIdentity filePath={filePath} />
     )}
-    <span className="code-snippet-controls flex shrink-0 items-center gap-1">
-      <CopyFeedback dataAttribute="data-snippet-copy-message" />
-      <ActionsMenu {...(filePath === undefined ? {} : { filePath })} />
-      <MaximizeButton subject="code" />
+    <span className="code-snippet-controls flex shrink-0 items-center gap-2">
+      <span className="figure-action-group inline-flex items-center gap-0.5">
+        <CopyButton subject="code" />
+        <MaximizeButton subject="code" />
+      </span>
     </span>
   </figcaption>
 );

@@ -1,9 +1,7 @@
 /*
 CSS escape hatch: shared visual primitive and pseudo-element selector relationship.
-Owns the fast hover hint shared by icon-only figure controls, keyed off the
-data-tooltip attribute. Browsers hold a native title tooltip back for roughly
-a second, long enough that an icon button reads as unresponsive; this hint
-answers well inside a tenth of a second.
+Owns the hover hint shared by icon-only figure controls, keyed off the
+data-tooltip attribute. Every tooltip waits one second before it appears.
 
 The hint is decoration only. Every control carrying data-tooltip repeats the
 same words in aria-label, so assistive technology reads the name once and
@@ -36,15 +34,15 @@ loses nothing when the hint never renders.
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
-    /* The small delay keeps hints from flashing one after another while the
-       pointer sweeps across neighboring controls, and still resolves well
-       within the tenth of a second a reader reads as immediate. */
-    transition: opacity 60ms ease-out 40ms;
+    /* The resting state hides at once. The hover state below adds the linger
+       only while a reader points at the control. */
+    transition: none;
   }
 
   article [data-tooltip]:hover::after,
   article [data-tooltip]:focus-visible::after {
     opacity: 1;
+    transition: opacity 60ms ease-out 1s;
   }
 
   /* A control whose menu is open has already answered the question the hint
@@ -56,6 +54,13 @@ loses nothing when the hint never renders.
   @media (prefers-reduced-motion: reduce) {
     article [data-tooltip]::after {
       transition: none;
+    }
+
+    /* Waiting is not motion. Keep the deliberate linger when a reader turns
+       off visual transitions. */
+    article [data-tooltip]:hover::after,
+    article [data-tooltip]:focus-visible::after {
+      transition: opacity 0s linear 1s;
     }
   }
 }

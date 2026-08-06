@@ -28,8 +28,9 @@ describe("compileMarkdown code figures", () => {
   it("should ship the control dormant so no affordance acts without scripts", () => {
     const bodyHtml = compileAndSerialize("```text\nsketch\n```\n");
 
-    expect(bodyHtml).toContain('hidden data-copy-code=""');
     expect(bodyHtml).toContain('hidden data-figure-maximize=""');
+    expect(bodyHtml).toContain('hidden data-copy-code=""');
+    expect(bodyHtml).toContain('data-lucide="check" hidden');
   });
 
   it("should leave a component's own fence alone because its figure owns it", () => {

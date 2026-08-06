@@ -180,6 +180,31 @@ const withTimeout = async (promise, label, milliseconds) => {
   }
 };
 
+/** Prevents a hosted font load from holding every screenshot indefinitely. */
+const settleFonts = async (page) => {
+  let timeout;
+  try {
+    const loaded = await Promise.race([
+      page.evaluate(() => globalThis.document.fonts.ready.then(() => true)),
+      new Promise((resolve) => {
+        timeout = setTimeout(() => resolve(false), 2_000);
+      }),
+    ]);
+    if (!loaded) {
+      await page.evaluate(() => {
+        Object.defineProperty(globalThis.document.fonts, "ready", {
+          configurable: true,
+          value: Promise.resolve(globalThis.document.fonts),
+        });
+      });
+    }
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+};
+
 /** Compares rendered pixels while ignoring screencast encoder metadata. */
 const samePixels = (left, right) => {
   const leftImage = PNG.sync.read(left);
@@ -196,6 +221,7 @@ const samePixels = (left, right) => {
  * both Playwright's element screenshot wait and Chromium's clip request.
  */
 const captureTargetFrame = async ({ page, target, path }) => {
+  await settleFonts(page);
   const bounds = await target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return {
@@ -283,28 +309,98 @@ const captureTargetFrame = async ({ page, target, path }) => {
 
 /** Writes only a pixel-stable frame. */
 const captureStableTarget = async ({ page, target, path }) => {
-  await target.evaluate((element) => {
-    element.scrollIntoView({
-      behavior: "instant",
-      block: "nearest",
-      inline: "nearest",
+  for (let retry = 0; retry < 2; retry += 1) {
+    await target.evaluate((element) => {
+      element.scrollIntoView({
+        behavior: "instant",
+        block: "nearest",
+        inline: "nearest",
+      });
     });
+    let prior;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await reportProgress("settle paint", { path, retry, attempt });
+      await settlePaint(page);
+      const current = await captureTargetFrame({ page, target, path });
+      if (prior !== undefined && samePixels(prior, current)) {
+        await writeFile(path, current);
+        return;
+      }
+      prior = current;
+    }
+    if (retry === 0) {
+      await reportProgress("retry stable target", { path });
+    }
+  }
+  throw new Error(
+    `Screenshot target "${path}" never repeated exact bytes across two six-frame capture windows.`,
+  );
+};
+
+const targetClip = (target) =>
+  target.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: rect.left + globalThis.scrollX,
+      y: rect.top + globalThis.scrollY,
+      width: rect.width,
+      height: rect.height,
+    };
   });
+
+/**
+ * Masks only the named animated regions during the exact byte check. The rest
+ * of a broad target, such as an article, must still produce two equal frames.
+ * The saved frame stays unmasked so the visual ledger shows the real surface.
+ */
+const captureTargetWithAnimatedRegions = async ({
+  page,
+  target,
+  path,
+  masks,
+}) => {
+  const clip = await targetClip(target);
   let prior;
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    await reportProgress("settle paint", { path, attempt });
     await settlePaint(page);
-    const current = await captureTargetFrame({ page, target, path });
-    if (prior !== undefined && samePixels(prior, current)) {
-      await writeFile(path, current);
+    const current = await page.screenshot({
+      animations: "disabled",
+      caret: "hide",
+      clip,
+      mask: masks,
+      maskColor: "#000000",
+      timeout: 10_000,
+    });
+    if (prior !== undefined && prior.equals(current)) {
+      await settlePaint(page);
+      const frame = await page.screenshot({
+        animations: "disabled",
+        caret: "hide",
+        clip,
+        timeout: 10_000,
+      });
+      await writeFile(path, frame);
       return;
     }
     prior = current;
   }
   throw new Error(
-    `Screenshot target "${path}" never repeated exact bytes across six settled frames.`,
+    `Screenshot target "${path}" never repeated exact bytes outside its named animated regions across six settled frames.`,
   );
 };
+
+const animatedExemptionsWithin = async ({ target, exemptions }) =>
+  target.evaluate(
+    (element, candidates) =>
+      candidates
+        .filter(
+          (candidate) =>
+            element.matches(candidate.selector) ||
+            element.querySelector(candidate.selector) !== null,
+        )
+        .map(({ name, selector }) => ({ name, selector })),
+    exemptions,
+  );
 
 const temporaryDirectory = await mkdtemp(
   join(tmpdir(), "big-plan-style-captures-"),
@@ -402,15 +498,26 @@ try {
                 theme,
               }),
             );
+            const animatedExemptions = await animatedExemptionsWithin({
+              target,
+              exemptions: config.animatedSurfaceExemptions ?? [],
+            });
             await withTimeout(
-              captureStableTarget({ page, target, path }),
+              animatedExemptions.length === 0
+                ? captureStableTarget({ page, target, path })
+                : captureTargetWithAnimatedRegions({
+                    page,
+                    target,
+                    path,
+                    masks: animatedExemptions.map(({ selector }) =>
+                      page.locator(selector),
+                    ),
+                  }),
               `Screenshot target "${path}"`,
               60_000,
             );
           } finally {
-            await withTimeout(page.close(), "Page close", 5_000).catch(
-              () => {},
-            );
+            await withTimeout(page.close(), "Closing screenshot page", 10_000);
           }
         }
       }
@@ -420,6 +527,10 @@ try {
     await rm(progressPath, { force: true });
   }
 } finally {
-  await browser.close();
+  try {
+    await withTimeout(browser.close(), "Closing screenshot browser", 10_000);
+  } catch {
+    // Browser shutdown is best-effort after the capture result is complete.
+  }
   await rm(temporaryDirectory, { recursive: true, force: true });
 }

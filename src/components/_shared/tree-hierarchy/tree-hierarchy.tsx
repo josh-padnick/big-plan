@@ -32,8 +32,8 @@ export type TreeFoldTone = "standard" | "quiet";
 // with the trees; the header pair keeps standard contrast beside its
 // neighboring controls. Hover restores full contrast either way.
 const FOLD_TONE_CLASSES: Readonly<Record<TreeFoldTone, string>> = {
-  standard: "bg-surface text-muted",
-  quiet: "bg-transparent text-muted/50",
+  standard: "text-muted",
+  quiet: "text-muted/50",
 };
 
 // Statuses read the way git tooling presents them: a changed file's leading
@@ -148,7 +148,7 @@ const FoldButton = ({
 }) => (
   <button
     type="button"
-    className={`file-tree-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 p-0 transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5 ${FOLD_TONE_CLASSES[tone]}`}
+    className={`file-tree-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 transition-colors hover:bg-transparent hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5 ${FOLD_TONE_CLASSES[tone]}`}
     aria-label={label}
     data-tooltip={label}
     hidden

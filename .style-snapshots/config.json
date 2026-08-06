@@ -24,6 +24,28 @@
     "node",
     "{harnessRoot}/scripts/style-snapshots/capture.mjs"
   ],
+  "animatedSurfaceExemptions": [
+    {
+      "name": "database-schema-index-jump-flash",
+      "selector": "[data-database-table-schema] .table-schema-index-jump",
+      "reason": "Activation scrolls to the index and briefly flashes its definition."
+    },
+    {
+      "name": "database-schema-column-reorder-feedback",
+      "selector": "[data-schema-reorderable] .table-schema-head",
+      "reason": "Reorderable headers fade their grippers and render transient drag insertion feedback."
+    },
+    {
+      "name": "code-diff-view-control-feedback",
+      "selector": "[data-code-diff] [data-diff-toggle-group]:not([hidden])",
+      "reason": "The restored segmented control animates hover and focus color feedback."
+    },
+    {
+      "name": "file-tree-diff-view-control-feedback",
+      "selector": "[data-file-tree-diff] [data-tree-toggle-group]:not([hidden])",
+      "reason": "The restored segmented control animates hover and focus color feedback."
+    }
+  ],
   "documents": [
     {
       "name": "components",

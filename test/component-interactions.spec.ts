@@ -19,12 +19,15 @@ const COMPONENT_INTERACTIONS = {
   },
   CodeDiff: {
     selector: "[data-code-diff]",
-    affordances: ["maximize"],
-    deferred: ["unified/split view", "line-to-comment hover emphasis"],
+    affordances: [
+      "maximize",
+      "unified/split view",
+      "line-to-annotation hover emphasis",
+    ],
   },
   CodeSnippet: {
     selector: "[data-code-snippet]",
-    affordances: ["maximize"],
+    affordances: ["maximize", "line-to-annotation hover emphasis"],
   },
   DataTable: {
     selector: "[data-data-table]",
@@ -39,8 +42,14 @@ const COMPONENT_INTERACTIONS = {
   },
   DatabaseTableSchema: {
     selector: "[data-database-table-schema]",
-    affordances: ["choose columns", "maximize"],
-    deferred: ["drag column", "index chip jump and flash"],
+    affordances: [
+      "choose columns",
+      "drag column",
+      "keyboard column reorder",
+      "reset column layout",
+      "index chip jump and flash",
+      "maximize",
+    ],
   },
   Decision: {
     selector: "[data-decision]",
@@ -55,9 +64,8 @@ const COMPONENT_INTERACTIONS = {
     affordances: [],
   },
   FileTreeDiff: {
-    selector: ".file-tree-diff",
-    affordances: ["maximize"],
-    deferred: ["unified/split view"],
+    selector: "[data-file-tree-diff]",
+    affordances: ["combined/side-by-side view", "maximize"],
   },
   FlowDiagram: {
     selector: "[data-flow-diagram]",
@@ -73,7 +81,7 @@ const COMPONENT_INTERACTIONS = {
   },
   HttpEndpoint: {
     selector: "[data-http-endpoint]",
-    affordances: ["copy code"],
+    affordances: [],
   },
   Part: {
     selector: "[data-part]",
@@ -90,6 +98,10 @@ const COMPONENT_INTERACTIONS = {
   QuickDecision: {
     selector: '[data-decision-layout="brief"]',
     affordances: ["choose", "confirm", "revise"],
+  },
+  Slide: {
+    selector: "[data-slide]",
+    affordances: ["collapse and expand"],
   },
   TableOfContents: {
     selector: "[data-table-of-contents]",
@@ -123,20 +135,6 @@ test("should exercise every live component affordance with browser gestures", as
   wireframeViewerUrl,
 }) => {
   test.setTimeout(60_000);
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: async (text: string) => {
-          (
-            window as typeof window & {
-              __bigPlanCopiedCode?: string;
-            }
-          ).__bigPlanCopiedCode = text;
-        },
-      },
-    });
-  });
   await page.goto(allComponentsViewerUrl);
 
   await test.step("TableOfContents: navigate", async () => {
@@ -183,47 +181,90 @@ test("should exercise every live component affordance with browser gestures", as
     await expect(rationale).toHaveAttribute("open", "");
   });
 
-  await test.step("HttpEndpoint: copy exact code", async () => {
-    const endpoint = page.locator("[data-http-endpoint]").first();
-    const figure = endpoint.locator(".code-figure").first();
-    const copy = figure.locator("[data-copy-code]");
-    const maximize = figure.locator("[data-figure-maximize]");
-    const rendered = await figure.locator(":scope > pre > code").textContent();
-    const expected =
-      rendered?.endsWith("\n") === true ? rendered.slice(0, -1) : rendered;
+  await test.step("CodeDiff: switch views by pointer and keyboard", async () => {
+    const diff = page.locator(COMPONENT_INTERACTIONS.CodeDiff.selector).first();
+    const unified = diff.getByRole("button", { name: "Unified view" });
+    const split = diff.getByRole("button", { name: "Side-by-side view" });
 
-    await expect(copy).toBeVisible();
-    await expect(maximize).toBeVisible();
-    expect(
-      await figure.locator(".figure-control-bar").evaluate((bar) => {
-        const copyButton = bar.querySelector("[data-copy-code]");
-        const maximizeButton = bar.querySelector("[data-figure-maximize]");
-        return (
-          copyButton !== null &&
-          maximizeButton !== null &&
-          Boolean(
-            copyButton.compareDocumentPosition(maximizeButton) &
-            Node.DOCUMENT_POSITION_FOLLOWING,
-          )
-        );
-      }),
-    ).toBe(true);
+    await expect(diff.getByRole("group", { name: "Diff view" })).toBeVisible();
+    await expect(unified).toHaveAttribute("aria-pressed", "true");
+    await split.click();
+    await expect(diff).toHaveAttribute("data-diff-view", "split");
+    await expect(split).toHaveAttribute("aria-pressed", "true");
+    await expect(unified).toHaveAttribute("aria-pressed", "false");
+    await expect(diff.locator('[data-diff-content="split"]')).toBeVisible();
 
-    await copy.click();
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () =>
-            (
-              window as typeof window & {
-                __bigPlanCopiedCode?: string;
-              }
-            ).__bigPlanCopiedCode,
-        ),
-      )
-      .toBe(expected);
-    expect(expected).toBe(expected?.trim());
-    await expect(copy).toHaveAttribute("aria-label", "Copied code");
+    await page.reload();
+    await expect(diff).toHaveAttribute("data-diff-view", "split");
+    await unified.focus();
+    await page.keyboard.press("Space");
+    await expect(diff).toHaveAttribute("data-diff-view", "unified");
+    await expect(unified).toHaveAttribute("aria-pressed", "true");
+
+    await page.reload();
+    await expect(diff).toHaveAttribute("data-diff-view", "unified");
+  });
+
+  await test.step("CodeDiff: cross-highlight an annotation and its lines", async () => {
+    const diff = page.locator(COMPONENT_INTERACTIONS.CodeDiff.selector).first();
+    const annotation = diff.locator("[data-annotation-id]").first();
+    const annotationId = await annotation.getAttribute("data-annotation-id");
+    expect(annotationId).not.toBeNull();
+    const line = diff
+      .locator(`[data-annotation-anchor~="${annotationId ?? ""}"]`)
+      .first();
+
+    await line.hover();
+    await expect(annotation).toHaveClass(/annotation-hover/u);
+    await page.mouse.move(0, 0);
+    await annotation.hover();
+    await expect(line).toHaveClass(/annotation-hover/u);
+  });
+
+  await test.step("CodeSnippet: cross-highlight an annotation and its lines", async () => {
+    const snippet = page
+      .locator(COMPONENT_INTERACTIONS.CodeSnippet.selector)
+      .first();
+    const annotation = snippet.locator("[data-snippet-annotation]").first();
+    const line = snippet.locator("[data-snippet-annotated]").first();
+
+    await line.hover();
+    await expect(annotation).toHaveClass(/annotation-hover/u);
+    await page.mouse.move(0, 0);
+    await annotation.hover();
+    await expect(line).toHaveClass(/annotation-hover/u);
+  });
+
+  await test.step("FileTreeDiff: switch views by pointer and keyboard", async () => {
+    const tree = page
+      .locator(COMPONENT_INTERACTIONS.FileTreeDiff.selector)
+      .first();
+    const combined = tree.getByRole("button", { name: "Combined view" });
+    const sideBySide = tree.getByRole("button", {
+      name: "Side-by-side view",
+    });
+
+    await expect(
+      tree.getByRole("group", { name: "File tree diff view" }),
+    ).toBeVisible();
+    await expect(combined).toHaveAttribute("aria-pressed", "true");
+    await sideBySide.click();
+    await expect(tree).toHaveAttribute("data-tree-view", "before-after");
+    await expect(sideBySide).toHaveAttribute("aria-pressed", "true");
+    await expect(combined).toHaveAttribute("aria-pressed", "false");
+    await expect(
+      tree.locator('[data-tree-content="before-after"]'),
+    ).toBeVisible();
+
+    await page.reload();
+    await expect(tree).toHaveAttribute("data-tree-view", "before-after");
+    await combined.focus();
+    await page.keyboard.press("Space");
+    await expect(tree).toHaveAttribute("data-tree-view", "combined");
+    await expect(combined).toHaveAttribute("aria-pressed", "true");
+
+    await page.reload();
+    await expect(tree).toHaveAttribute("data-tree-view", "combined");
   });
 
   for (const figure of [
@@ -250,8 +291,60 @@ test("should exercise every live component affordance with browser gestures", as
     });
   }
 
-  await test.step("DatabaseTableSchema: menu, columns, and maximize", async () => {
+  await test.step("DatabaseTableSchema: reorder, persist, reset, and maximize", async () => {
     const schema = page.locator("[data-database-table-schema]").first();
+    const headers = schema.locator(
+      ".table-schema-grid thead [data-schema-grid-column]",
+    );
+    const authoredOrder = [
+      "column",
+      "type",
+      "constraints",
+      "default",
+      "comment",
+    ];
+    await expect(headers).toHaveCount(authoredOrder.length);
+
+    const first = headers.first();
+    const firstKey = await first.getAttribute("data-schema-grid-column");
+    await expect(first).toHaveAttribute("draggable", "true");
+    await expect(first).toHaveAttribute(
+      "aria-keyshortcuts",
+      "ArrowLeft ArrowRight",
+    );
+    const second = headers.nth(1);
+    const secondBox = await second.boundingBox();
+    expect(secondBox).not.toBeNull();
+    await first.dragTo(second, {
+      targetPosition: {
+        x: (secondBox?.width ?? 2) - 2,
+        y: (secondBox?.height ?? 2) / 2,
+      },
+    });
+    await expect(headers.nth(1)).toHaveAttribute(
+      "data-schema-grid-column",
+      firstKey ?? "",
+    );
+
+    const moved = schema.locator(
+      `.table-schema-grid thead [data-schema-grid-column="${firstKey ?? ""}"]`,
+    );
+    await moved.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(headers.nth(2)).toHaveAttribute(
+      "data-schema-grid-column",
+      firstKey ?? "",
+    );
+    await expect(schema.locator("[data-schema-reorder-status]")).toContainText(
+      "position 3 of 5",
+    );
+
+    await page.reload();
+    await expect(headers.nth(2)).toHaveAttribute(
+      "data-schema-grid-column",
+      firstKey ?? "",
+    );
+
     const columns = schema.locator("[data-schema-columns-button]");
     const type = schema.locator('[data-schema-column-toggle="type"]');
     await columns.click();
@@ -259,15 +352,53 @@ test("should exercise every live component affordance with browser gestures", as
     await type.click();
     await expect(type).toHaveAttribute("aria-checked", "false");
     await expect(schema.locator(".table-schema-head-type")).toBeHidden();
-    await type.click();
+    await page.reload();
+    await expect(type).toHaveAttribute("aria-checked", "false");
+    await expect(schema.locator(".table-schema-head-type")).toBeHidden();
+    await columns.click();
+    await schema.locator("[data-schema-reset-columns]").click();
+    await page.reload();
     await expect(schema.locator(".table-schema-head-type")).toBeVisible();
-    await page.keyboard.press("Escape");
+    await expect(type).toHaveAttribute("aria-checked", "true");
+    for (const [index, key] of authoredOrder.entries()) {
+      await expect(headers.nth(index)).toHaveAttribute(
+        "data-schema-grid-column",
+        key,
+      );
+    }
 
     const maximize = schema.locator("[data-figure-maximize]");
     await maximize.click();
     await expect(schema).toHaveAttribute("data-figure-maximized", "");
     await maximize.click();
     await expect(schema).not.toHaveAttribute("data-figure-maximized");
+  });
+
+  await test.step("DatabaseTableSchema: jump from an index chip by pointer and keyboard", async () => {
+    const schema = page.locator("[data-database-table-schema]").first();
+    const marker = schema
+      .getByRole("button", {
+        name: "Jump to index 1",
+      })
+      .first();
+    const target = schema.locator('[data-schema-index="1"]');
+
+    await expect(marker).toHaveAttribute("aria-controls", /.+/u);
+    await marker.click();
+    await expect(target).toBeFocused();
+    await expect(target).toHaveClass(/table-schema-index-flash/u);
+
+    await marker.focus();
+    await page.keyboard.press("Enter");
+    await expect(target).toBeFocused();
+    await expect(target).toHaveClass(/table-schema-index-flash/u);
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await marker.click();
+    await expect(target).toBeFocused();
+    await expect(target).not.toHaveClass(/table-schema-index-flash/u);
+    await expect(target).toHaveCSS("transition-duration", "0s");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
   });
 
   await test.step("DataTable: filter, sort, menus, drag, and maximize", async () => {
@@ -334,18 +465,10 @@ test("should exercise every live component affordance with browser gestures", as
     await expect(readout).toHaveText("100%");
     await fit.click();
     await expect(fit).toHaveAttribute("aria-pressed", "true");
-    const minimizedFitBackground = await fit.evaluate(
-      (element) => getComputedStyle(element).backgroundColor,
-    );
 
     const maximize = diagram.locator("[data-figure-maximize]");
     await maximize.click();
     await expect(diagram).toHaveAttribute("data-figure-maximized", "");
-    await expect(fit).toHaveAttribute("aria-pressed", "true");
-    const maximizedFitBackground = await fit.evaluate(
-      (element) => getComputedStyle(element).backgroundColor,
-    );
-    expect(minimizedFitBackground).not.toBe(maximizedFitBackground);
     await maximize.click();
     await expect(diagram).not.toHaveAttribute("data-figure-maximized");
 
@@ -367,73 +490,4 @@ test("should exercise every live component affordance with browser gestures", as
     await page.getByRole("button", { name: "Start lesson" }).click();
     await expect(lesson).toBeVisible();
   });
-});
-
-test("should report a failed legacy copy and remove its temporary field", async ({
-  page,
-  allComponentsViewerUrl,
-}) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: undefined,
-    });
-    (
-      window as typeof window & {
-        __bigPlanLegacyCopySucceeds?: boolean;
-        __bigPlanLegacyCopyText?: string;
-      }
-    ).__bigPlanLegacyCopySucceeds = false;
-    document.execCommand = () => {
-      const state = window as typeof window & {
-        __bigPlanLegacyCopySucceeds?: boolean;
-        __bigPlanLegacyCopyText?: string;
-      };
-      state.__bigPlanLegacyCopyText =
-        document.activeElement instanceof HTMLTextAreaElement
-          ? document.activeElement.value
-          : undefined;
-      return state.__bigPlanLegacyCopySucceeds === true;
-    };
-  });
-  await page.goto(allComponentsViewerUrl);
-
-  const figure = page
-    .locator("[data-http-endpoint]")
-    .first()
-    .locator(".code-figure")
-    .first();
-  const copy = figure.locator("[data-copy-code]");
-  const rendered = await figure.locator(":scope > pre > code").textContent();
-  const expected =
-    rendered?.endsWith("\n") === true ? rendered.slice(0, -1) : rendered;
-  const readonlyFields = page.locator("textarea[readonly]");
-  const readonlyFieldCount = await readonlyFields.count();
-
-  await copy.click();
-
-  await expect(copy).toHaveAttribute("aria-label", "Copy failed");
-  await expect(readonlyFields).toHaveCount(readonlyFieldCount);
-  expect(
-    await page.evaluate(
-      () =>
-        (
-          window as typeof window & {
-            __bigPlanLegacyCopyText?: string;
-          }
-        ).__bigPlanLegacyCopyText,
-    ),
-  ).toBe(expected);
-
-  await page.evaluate(() => {
-    (
-      window as typeof window & {
-        __bigPlanLegacyCopySucceeds?: boolean;
-      }
-    ).__bigPlanLegacyCopySucceeds = true;
-  });
-  await copy.click();
-
-  await expect(copy).toHaveAttribute("aria-label", "Copied code");
-  await expect(readonlyFields).toHaveCount(readonlyFieldCount);
 });

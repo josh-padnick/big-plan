@@ -124,6 +124,70 @@ await writeFile(join(output, "state.png"), Buffer.from(${JSON.stringify(capture.
   return { repoRoot, configPath, config, base };
 };
 
+test("should require explicit named animated-surface exemptions", async () => {
+  const { repoRoot, configPath, config, base } =
+    await createMinimalRepository();
+  try {
+    const invalidExemptions = [
+      {
+        value: [],
+        message: /must be a non-empty array/u,
+      },
+      {
+        value: [
+          {
+            name: "",
+            selector: "[data-animated]",
+            reason: "Transient feedback.",
+          },
+        ],
+        message: /requires a non-empty name/u,
+      },
+      {
+        value: [
+          {
+            name: "sample-feedback",
+            selector: "[data-first]",
+            reason: "First transient surface.",
+          },
+          {
+            name: "sample-feedback",
+            selector: "[data-second]",
+            reason: "Second transient surface.",
+          },
+        ],
+        message: /name "sample-feedback" is duplicated/u,
+      },
+    ];
+
+    for (const invalid of invalidExemptions) {
+      await writeFile(
+        configPath,
+        `${JSON.stringify(
+          { ...config, animatedSurfaceExemptions: invalid.value },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+      await assert.rejects(
+        verifyHistory({
+          repoRoot,
+          base,
+          configPath,
+          artifactRoot: artifactPath({
+            repoRoot,
+            name: "invalid-animated-surface-exemptions",
+          }),
+        }),
+        invalid.message,
+      );
+    }
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test("should stop at the commit whose screenshots exceed its visual contract", async () => {
   const repoRoot = await mkdtemp(join(tmpdir(), "style-history-test-"));
   try {

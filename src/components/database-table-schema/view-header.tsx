@@ -4,13 +4,11 @@
 
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { COLUMNS_3_COG_ICON } from "../../icons/lucide/columns-3-cog.js";
-import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { DATABASE_ICON } from "../../icons/lucide/database.js";
-import { ELLIPSIS_ICON } from "../../icons/lucide/ellipsis.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
-import { CopyFeedback } from "../_shared/copy-feedback/copy-feedback.js";
+import { CopyButton } from "../_shared/figure-controls/copy-button.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 import { MutedText } from "./view-elements.js";
 
@@ -24,7 +22,7 @@ import { MutedText } from "./view-elements.js";
 // rather than a stylesheet rule because a components-layer rule loses to the
 // resting bg-transparent utility.
 const BUTTON_CLASSES =
-  "table-schema-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+  "table-schema-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-transparent hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 // Shared by the actions and columns menus.
 const MENU_LIST_CLASSES =
   "table-schema-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge bg-[var(--diff-header-bg)] p-1 shadow-[0_6px_18px_rgb(12_10_8_/_0.18)]";
@@ -59,11 +57,11 @@ const TableIdentity = ({
 const MenuItemButton = ({
   action,
   label,
-  icon = COPY_ICON,
+  icon,
 }: {
-  readonly action: "copy-name" | "copy-source" | "reset-columns";
+  readonly action: "reset-columns";
   readonly label: string;
-  readonly icon?: LucideIcon;
+  readonly icon: LucideIcon;
 }) => (
   <button
     type="button"
@@ -75,38 +73,6 @@ const MenuItemButton = ({
     {lucideIconToReact({ icon, hidden: false })}
     {label}
   </button>
-);
-
-// Actions remain reserved for the live review application, while the complete
-// grid and every section stay readable in the server-rendered figure.
-const ActionsMenu = () => (
-  <span className="table-schema-menu relative inline-flex" data-schema-menu="">
-    <button
-      type="button"
-      className={BUTTON_CLASSES}
-      aria-label="More actions"
-      aria-haspopup="menu"
-      aria-expanded="false"
-      data-tooltip="More actions"
-      hidden
-      data-schema-menu-button=""
-      data-size="xs"
-      data-slot="button"
-      data-variant="ghost"
-    >
-      {lucideIconToReact({ icon: ELLIPSIS_ICON, hidden: false })}
-    </button>
-    <div
-      className={MENU_LIST_CLASSES}
-      role="menu"
-      aria-label="Table schema actions"
-      hidden
-      data-schema-menu-list=""
-    >
-      <MenuItemButton action="copy-name" label="Copy table name" />
-      <MenuItemButton action="copy-source" label="Copy source" />
-    </div>
-  </span>
 );
 
 // The toggleable grid columns: the name column stays out because hiding the
@@ -195,11 +161,12 @@ export const TableSchemaHeader = ({
         tableName={tableName}
         {...(schemaName === undefined ? {} : { schemaName })}
       />
-      <span className="table-schema-controls flex shrink-0 items-center gap-1">
-        <CopyFeedback dataAttribute="data-schema-copy-message" />
-        <ColumnsMenu />
-        <ActionsMenu />
-        <MaximizeButton subject="schema" />
+      <span className="table-schema-controls flex shrink-0 items-center gap-2">
+        <span className="figure-action-group inline-flex items-center gap-0.5">
+          <ColumnsMenu />
+          <CopyButton subject="schema" />
+          <MaximizeButton subject="schema" />
+        </span>
       </span>
     </span>
     {note === undefined ? null : (

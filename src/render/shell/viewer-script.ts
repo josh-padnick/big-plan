@@ -2,15 +2,15 @@
 // a scroll-spy that marks the section being read with aria-current on its TOC
 // links (falling back to the overview links above the first section), hover
 // popovers that float [data-info-popover] disclosures beside their triggers,
-// collapse toggles for deck parts, slides, and sub-slides, table-schema column
-// state, a document comment draft, DataTable sorting, filtering, text fit,
-// column layout and grouping, plain-code copying, and one maximize behavior
-// shared by every figure family, a decision matrix's column highlight,
-// rationale swap, and confirm step, wireframe screen navigation driven
-// entirely by renderer-emitted data attributes plus true-width scaling, and
-// the diagram leg in
-// ./diagram-script.ts. Plan content never
-// contributes script, and every affordance keeps a no-JS fallback.
+// annotation-to-code cross-highlighting, CodeDiff and FileTreeDiff view
+// selection, collapse toggles for deck parts, slides, and sub-slides,
+// table-schema column state and index jumps, a document comment draft,
+// DataTable sorting, filtering, text fit, column layout and grouping, and one
+// maximize behavior shared by every figure family, a decision matrix's column
+// highlight, rationale swap, and confirm step, wireframe screen navigation
+// driven entirely by renderer-emitted data attributes plus true-width scaling,
+// and the diagram leg in ./diagram-script.ts. Plan content never contributes
+// script, and every affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
@@ -114,7 +114,6 @@ export const VIEWER_SCRIPT = `<script>
   apply();
 })();
 (() => {
-  const buttons = document.querySelectorAll(".code-figure [data-copy-code]");
   const clipboardWrite = async (text) => {
     if (navigator.clipboard?.writeText !== undefined) {
       await navigator.clipboard.writeText(text);
@@ -135,32 +134,123 @@ export const VIEWER_SCRIPT = `<script>
     }
     if (!copied) throw new Error("Unable to copy code");
   };
-  for (const button of buttons) {
-    const figure = button.closest(".code-figure");
-    const code = figure?.querySelector(":scope > pre > code");
-    if (figure === null || code === null) continue;
+
+  const wireCopy = ({ button, source, label }) => {
+    let resetTimer;
+    const setCopiedState = (copied) => {
+      const copyIcon = button.querySelector('[data-lucide="copy"]');
+      const checkIcon = button.querySelector('[data-lucide="check"]');
+      if (copyIcon !== null) {
+        if (copied) copyIcon.setAttribute("hidden", "");
+        else copyIcon.removeAttribute("hidden");
+      }
+      if (checkIcon !== null) {
+        if (copied) checkIcon.removeAttribute("hidden");
+        else checkIcon.setAttribute("hidden", "");
+      }
+      if (copied) button.setAttribute("data-copy-state", "copied");
+      else button.removeAttribute("data-copy-state");
+    };
     button.hidden = false;
     button.addEventListener("click", async () => {
-      // mdast code values exclude the fence's structural final newline, while
-      // remark-rehype appends one for HTML. Remove that one byte only: the
-      // copied value stays exact without pulling in figure chrome or title
-      // whitespace, and authored indentation remains intact.
-      const rendered = code.textContent || "";
-      const source = rendered.endsWith("\\n")
-        ? rendered.slice(0, -1)
-        : rendered;
+      clearTimeout(resetTimer);
       try {
-        await clipboardWrite(source);
-        button.setAttribute("aria-label", "Copied code");
-        button.setAttribute("data-tooltip", "Copied code");
+        await clipboardWrite(
+          typeof source === "function" ? source() : source,
+        );
+        const copiedLabel = "Copied " + label.slice("Copy ".length).toLowerCase();
+        button.setAttribute("aria-label", copiedLabel);
+        button.setAttribute("data-tooltip", copiedLabel);
+        setCopiedState(true);
       } catch (_) {
         button.setAttribute("aria-label", "Copy failed");
         button.setAttribute("data-tooltip", "Copy failed");
+        setCopiedState(false);
       }
-      setTimeout(() => {
-        button.setAttribute("aria-label", "Copy code");
-        button.setAttribute("data-tooltip", "Copy code");
-      }, 1200);
+      resetTimer = setTimeout(() => {
+        button.setAttribute("aria-label", label);
+        button.setAttribute("data-tooltip", label);
+        setCopiedState(false);
+      }, 1500);
+    });
+  };
+
+  const tableToTsv = (figure) => {
+    const table = figure.querySelector("table");
+    if (table === null) return "";
+    const visible = (element) =>
+      !element.hidden && element.closest("[hidden]") === null;
+    const heads = Array.from(
+      table.querySelectorAll("thead [data-table-column]"),
+    ).filter(visible);
+    const columns = heads.map((head) =>
+      head.getAttribute("data-table-column"),
+    );
+    const value = (row, column) => {
+      const cell = Array.from(
+        row.querySelectorAll("[data-table-column]"),
+      ).find(
+        (candidate) =>
+          candidate.getAttribute("data-table-column") === column &&
+          visible(candidate),
+      );
+      return (cell?.textContent || "").trim();
+    };
+    const lines = [
+      heads
+        .map(
+          (head) =>
+            (head.querySelector("[data-table-head-label]")?.textContent ||
+              head.textContent ||
+              "")
+              .trim(),
+        )
+        .join("\\t"),
+    ];
+    for (const row of table.querySelectorAll("tbody > tr[data-table-row]")) {
+      if (!visible(row)) continue;
+      lines.push(columns.map((column) => value(row, column)).join("\\t"));
+    }
+    return lines.join("\\n");
+  };
+
+  for (const button of document.querySelectorAll(".code-figure [data-copy-code]")) {
+    const figure = button.closest(".code-figure");
+    const code = figure?.querySelector(":scope > pre > code");
+    if (figure === null || code === null) continue;
+    // Markdown code values omit the fence's structural final newline, while
+    // the HTML code element includes one. Remove that byte only so copied
+    // code matches the authored value exactly.
+    const rendered = code.textContent || "";
+    const source = rendered.endsWith("\\n")
+      ? rendered.slice(0, -1)
+      : rendered;
+    wireCopy({
+      button,
+      source,
+      label: "Copy code",
+    });
+  }
+
+  for (const button of document.querySelectorAll("[data-copy-source]")) {
+    const figure = button.closest(
+      "[data-code-diff], [data-code-snippet], [data-data-table], [data-database-table-schema]",
+    );
+    const source = figure?.querySelector(
+      "textarea[data-diff-source], textarea[data-snippet-source], textarea[data-schema-source]",
+    );
+    const isTable = figure?.matches("[data-data-table]") === true;
+    if (
+      (!isTable && !(source instanceof HTMLTextAreaElement)) ||
+      !(button instanceof HTMLButtonElement)
+    )
+      continue;
+    const label = button.getAttribute("aria-label") || "Copy code";
+    const tableSource = isTable ? () => tableToTsv(figure) : null;
+    wireCopy({
+      button,
+      source: tableSource ?? source.value,
+      label,
     });
   }
 })();
@@ -253,13 +343,167 @@ export const VIEWER_SCRIPT = `<script>
   }
 })();
 (() => {
-  const tables = Array.from(
+  // One shared enhancement links annotation cards to their covered code rows
+  // in both component families. The authored rows and cards remain complete
+  // without it; this leg changes emphasis only while the pointer relates them.
+  const linkHover = (card, targets) => {
+    const linked = Array.from(new Set([card, ...targets]));
+    const setHighlighted = (highlighted) => {
+      for (const element of linked) {
+        element.classList.toggle("annotation-hover", highlighted);
+      }
+    };
+    for (const element of linked) {
+      element.addEventListener("pointerenter", () => setHighlighted(true));
+      element.addEventListener("pointerleave", () => setHighlighted(false));
+    }
+  };
+
+  for (const diff of document.querySelectorAll("[data-code-diff]")) {
+    const lines = Array.from(
+      diff.querySelectorAll("[data-annotation-anchor]"),
+    );
+    for (const card of diff.querySelectorAll("[data-annotation-id]")) {
+      const id = card.getAttribute("data-annotation-id");
+      if (id === null || id === "") continue;
+      linkHover(
+        card,
+        lines.filter((line) =>
+          (line.getAttribute("data-annotation-anchor") || "")
+            .split(/\\s+/u)
+            .includes(id),
+        ),
+      );
+    }
+  }
+
+  for (const snippet of document.querySelectorAll("[data-code-snippet]")) {
+    const lines = Array.from(snippet.querySelectorAll("[data-snippet-line]"));
+    for (const card of snippet.querySelectorAll("[data-snippet-annotation]")) {
+      const range = /^(\\d+)(?:-(\\d+))?$/u.exec(
+        card.getAttribute("data-snippet-annotation") || "",
+      );
+      if (range === null) continue;
+      const start = Number(range[1]);
+      const end = Number(range[2] || range[1]);
+      linkHover(
+        card,
+        lines.filter((line) => {
+          const lineNumber = Number(line.getAttribute("data-snippet-line"));
+          return lineNumber >= start && lineNumber <= end;
+        }),
+      );
+    }
+  }
+})();
+(() => {
+  const diffs = Array.from(document.querySelectorAll("[data-code-diff]"));
+  if (diffs.length === 0) return;
+  const planId = document.documentElement.getAttribute("data-plan-id");
+  const storageKey =
+    planId === null || planId === ""
+      ? null
+      : "big-plan:code-diff-view:" + planId;
+  const isView = (view) => view === "unified" || view === "split";
+  let initialView = "unified";
+  if (storageKey !== null) {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (isView(stored)) initialView = stored;
+    } catch (_) {}
+  }
+  const applyView = (diff, view) => {
+    diff.setAttribute("data-diff-view", view);
+    for (const button of diff.querySelectorAll("[data-diff-set-view]")) {
+      button.setAttribute(
+        "aria-pressed",
+        button.getAttribute("data-diff-set-view") === view ? "true" : "false",
+      );
+    }
+  };
+  const persist = (view) => {
+    if (storageKey === null) return;
+    try {
+      if (view === "unified") localStorage.removeItem(storageKey);
+      else localStorage.setItem(storageKey, view);
+    } catch (_) {}
+  };
+  for (const diff of diffs) {
+    const group = diff.querySelector("[data-diff-toggle-group]");
+    if (group === null) continue;
+    applyView(diff, initialView);
+    for (const button of group.querySelectorAll("[data-diff-set-view]")) {
+      button.addEventListener("click", () => {
+        const view = button.getAttribute("data-diff-set-view");
+        if (!isView(view)) return;
+        applyView(diff, view);
+        persist(view);
+      });
+    }
+    // The segmented control becomes visible only after its state is restored
+    // and every native button has a handler.
+    group.hidden = false;
+  }
+})();
+(() => {
+  const trees = Array.from(
+    document.querySelectorAll("[data-file-tree-diff]"),
+  );
+  if (trees.length === 0) return;
+  const planId = document.documentElement.getAttribute("data-plan-id");
+  const storageKey =
+    planId === null || planId === ""
+      ? null
+      : "big-plan:file-tree-diff-view:" + planId;
+  const isView = (view) => view === "combined" || view === "before-after";
+  let initialView = "combined";
+  if (storageKey !== null) {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (isView(stored)) initialView = stored;
+    } catch (_) {}
+  }
+  const applyView = (tree, view) => {
+    tree.setAttribute("data-tree-view", view);
+    for (const button of tree.querySelectorAll("[data-tree-set-view]")) {
+      button.setAttribute(
+        "aria-pressed",
+        button.getAttribute("data-tree-set-view") === view ? "true" : "false",
+      );
+    }
+  };
+  const persist = (view) => {
+    if (storageKey === null) return;
+    try {
+      if (view === "combined") localStorage.removeItem(storageKey);
+      else localStorage.setItem(storageKey, view);
+    } catch (_) {}
+  };
+  for (const tree of trees) {
+    const group = tree.querySelector("[data-tree-toggle-group]");
+    if (group === null) continue;
+    applyView(tree, initialView);
+    for (const button of group.querySelectorAll("[data-tree-set-view]")) {
+      button.addEventListener("click", () => {
+        const view = button.getAttribute("data-tree-set-view");
+        if (!isView(view)) return;
+        applyView(tree, view);
+        persist(view);
+      });
+    }
+    // The segmented control becomes visible only after its state is restored
+    // and every native button has a handler.
+    group.hidden = false;
+  }
+})();
+(() => {
+  const figures = Array.from(
     document.querySelectorAll("[data-database-table-schema]"),
   );
-  if (tables.length === 0) return;
+  if (figures.length === 0) return;
   const planId = document.documentElement.getAttribute("data-plan-id");
-  const storageKey = (table) => {
-    const tableName = table.getAttribute("data-schema-table-name");
+  const storageKey = (figure) => {
+    const tableName = figure.getAttribute("data-schema-table-name");
     return planId === null ||
       planId === "" ||
       tableName === null ||
@@ -267,25 +511,67 @@ export const VIEWER_SCRIPT = `<script>
       ? null
       : "big-plan:table:" + planId + ":" + tableName;
   };
-  for (const table of tables) {
-    const button = table.querySelector("[data-schema-columns-button]");
-    const list = table.querySelector("[data-schema-columns-list]");
+  let activeColumnDrag = null;
+  let nextIndexTargetId = 1;
+  const indexFlashTimers = new WeakMap();
+  for (const figure of figures) {
+    const grid = figure.querySelector(".table-schema-grid");
+    const headRow = grid?.querySelector("thead tr");
+    if (grid === null || grid === undefined || headRow === null) continue;
+    const rows = Array.from(grid.querySelectorAll("tbody tr"));
+    const authoredOrder = Array.from(headRow.children)
+      .map((head) => head.getAttribute("data-schema-grid-column"))
+      .filter((column) => column !== null && column !== "");
+    const allowedColumns = new Set(authoredOrder);
+    if (
+      authoredOrder.length !== headRow.children.length ||
+      allowedColumns.size !== authoredOrder.length
+    )
+      continue;
+    const button = figure.querySelector("[data-schema-columns-button]");
+    const list = figure.querySelector("[data-schema-columns-list]");
     if (button === null || list === null) continue;
     const toggles = Array.from(
       list.querySelectorAll("[data-schema-column-toggle]"),
     );
-    const allowedColumns = new Set(
+    const toggleableColumns = new Set(
       toggles.map((toggle) =>
         toggle.getAttribute("data-schema-column-toggle"),
       ),
     );
     const hiddenColumns = new Set();
-    const applyColumn = (column, hidden) => {
-      if (!allowedColumns.has(column)) return;
+
+    const currentOrder = () =>
+      Array.from(headRow.children)
+        .map((head) => head.getAttribute("data-schema-grid-column"))
+        .filter((column) => column !== null && column !== "");
+    const persist = () => {
+      const key = storageKey(figure);
+      if (key === null) return;
+      const order = currentOrder();
+      const isAuthoredOrder = order.every(
+        (column, index) => column === authoredOrder[index],
+      );
+      try {
+        if (isAuthoredOrder && hiddenColumns.size === 0) {
+          localStorage.removeItem(key);
+        } else {
+          localStorage.setItem(
+            key,
+            JSON.stringify({
+              order,
+              hidden: order.filter((column) => hiddenColumns.has(column)),
+            }),
+          );
+        }
+      } catch (_) {}
+    };
+    const setColumnHidden = (column, hidden, save) => {
+      if (!toggleableColumns.has(column)) return;
       if (hidden) hiddenColumns.add(column);
       else hiddenColumns.delete(column);
-      for (const cell of table.querySelectorAll(
-        ".table-schema-head-" + column + ", .table-schema-cell-" + column,
+      for (const cell of figure.querySelectorAll(
+        '[data-schema-grid-column="' + column + '"]',
       )) {
         cell.hidden = hidden;
       }
@@ -298,42 +584,251 @@ export const VIEWER_SCRIPT = `<script>
         const check = toggle.querySelector('[data-lucide="check"]');
         if (check !== null) check.toggleAttribute("hidden", hidden);
       }
+      if (save !== false) persist();
     };
-    const key = storageKey(table);
-    if (key !== null) {
+    const moveColumn = (column, toIndex, save) => {
+      const order = currentOrder();
+      const fromIndex = order.indexOf(column);
+      if (
+        fromIndex === -1 ||
+        toIndex < 0 ||
+        toIndex >= order.length ||
+        fromIndex === toIndex
+      )
+        return;
+      const moveWithin = (parent) => {
+        const items = Array.from(parent.children);
+        const moving = items[fromIndex];
+        const target = items[toIndex];
+        if (moving === undefined || target === undefined) return;
+        parent.insertBefore(
+          moving,
+          fromIndex < toIndex ? target.nextSibling : target,
+        );
+      };
+      moveWithin(headRow);
+      for (const row of rows) moveWithin(row);
+      if (save !== false) persist();
+    };
+    const applyOrder = (order) => {
+      for (let toIndex = 0; toIndex < order.length; toIndex += 1) {
+        moveColumn(order[toIndex], toIndex, false);
+      }
+    };
+    const readLayout = () => {
+      const key = storageKey(figure);
+      if (key === null) return null;
       try {
         const stored = JSON.parse(localStorage.getItem(key) || "null");
-        if (stored !== null && Array.isArray(stored.hiddenColumns)) {
-          for (const column of stored.hiddenColumns) {
-            if (typeof column === "string") applyColumn(column, true);
-          }
-        }
-      } catch (_) {}
+        if (stored === null || typeof stored !== "object") return null;
+        const order = stored.order;
+        const hidden = stored.hidden;
+        if (
+          !Array.isArray(order) ||
+          order.length !== authoredOrder.length ||
+          new Set(order).size !== authoredOrder.length ||
+          !order.every(
+            (column) =>
+              typeof column === "string" && allowedColumns.has(column),
+          ) ||
+          !Array.isArray(hidden) ||
+          new Set(hidden).size !== hidden.length ||
+          !hidden.every(
+            (column) =>
+              typeof column === "string" && toggleableColumns.has(column),
+          )
+        )
+          return null;
+        return { order, hidden };
+      } catch (_) {
+        return null;
+      }
+    };
+    const stored = readLayout();
+    if (stored !== null) {
+      applyOrder(stored.order);
+      for (const column of stored.hidden) {
+        setColumnHidden(column, true, false);
+      }
     }
-    const persist = () => {
-      if (key === null) return;
-      try {
-        if (hiddenColumns.size === 0) localStorage.removeItem(key);
-        else
-          localStorage.setItem(
-            key,
-            JSON.stringify({ hiddenColumns: Array.from(hiddenColumns) }),
-          );
-      } catch (_) {}
+
+    const status = figure.querySelector("[data-schema-reorder-status]");
+    const announceMove = (column) => {
+      if (status === null) return;
+      const head = Array.from(headRow.children).find(
+        (candidate) =>
+          candidate.getAttribute("data-schema-grid-column") === column,
+      );
+      const label = (head?.textContent || column).trim();
+      status.textContent =
+        label +
+        " column moved to position " +
+        String(currentOrder().indexOf(column) + 1) +
+        " of " +
+        String(authoredOrder.length) +
+        ".";
     };
     const setMenuOpen = (open) => {
       list.hidden = !open;
       button.setAttribute("aria-expanded", open ? "true" : "false");
     };
-    button.hidden = false;
+
+    figure.setAttribute("data-schema-reorderable", "");
+    for (const head of Array.from(headRow.children)) {
+      const column = head.getAttribute("data-schema-grid-column");
+      if (column === null || column === "") continue;
+      const label = (head.textContent || column).trim();
+      head.draggable = true;
+      head.tabIndex = 0;
+      head.title = "Drag or use Left and Right arrow keys to reorder";
+      head.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight");
+      head.setAttribute(
+        "aria-label",
+        label + " column. Use Left and Right arrow keys to reorder.",
+      );
+      head
+        .querySelector('[data-lucide="grip-vertical"]')
+        ?.removeAttribute("hidden");
+      head.addEventListener("keydown", (event) => {
+        const direction =
+          event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
+        if (direction === 0) return;
+        event.preventDefault();
+        const order = currentOrder();
+        let toIndex = order.indexOf(column) + direction;
+        while (
+          toIndex >= 0 &&
+          toIndex < order.length &&
+          hiddenColumns.has(order[toIndex])
+        ) {
+          toIndex += direction;
+        }
+        moveColumn(column, toIndex);
+        head.focus();
+        announceMove(column);
+      });
+      head.addEventListener("dragstart", (event) => {
+        activeColumnDrag = { figure, column };
+        if (event.dataTransfer !== null) {
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", column);
+        }
+      });
+      let dropAfter = false;
+      const clearDrop = () => {
+        head.classList.remove("table-schema-head-drop-before");
+        head.classList.remove("table-schema-head-drop-after");
+        dropAfter = false;
+      };
+      head.addEventListener("dragover", (event) => {
+        if (
+          activeColumnDrag?.figure !== figure ||
+          activeColumnDrag.column === column
+        ) {
+          clearDrop();
+          return;
+        }
+        event.preventDefault();
+        const bounds = head.getBoundingClientRect();
+        dropAfter = event.clientX > bounds.left + bounds.width / 2;
+        head.classList.toggle("table-schema-head-drop-before", !dropAfter);
+        head.classList.toggle("table-schema-head-drop-after", dropAfter);
+      });
+      head.addEventListener("dragleave", clearDrop);
+      head.addEventListener("dragend", () => {
+        clearDrop();
+        if (activeColumnDrag?.figure === figure) activeColumnDrag = null;
+      });
+      head.addEventListener("drop", (event) => {
+        const drag = activeColumnDrag;
+        const after = dropAfter;
+        clearDrop();
+        if (
+          drag?.figure !== figure ||
+          drag.column === column ||
+          !allowedColumns.has(drag.column)
+        )
+          return;
+        event.preventDefault();
+        activeColumnDrag = null;
+        const order = currentOrder();
+        const fromIndex = order.indexOf(drag.column);
+        const targetIndex = order.indexOf(column);
+        const boundary = targetIndex + (after ? 1 : 0);
+        const insertion =
+          boundary - (fromIndex < boundary ? 1 : 0);
+        moveColumn(drag.column, insertion);
+        announceMove(drag.column);
+      });
+    }
+
+    // Index references stay inert text without scripts. Once enhanced, each
+    // becomes a native button whose controlled entry receives focus, scrolls
+    // into view, and takes the existing accent flash.
+    for (const marker of figure.querySelectorAll("[data-schema-indx]")) {
+      const position = marker.getAttribute("data-schema-indx");
+      if (position === null || position === "") continue;
+      const entry = figure.querySelector(
+        '[data-schema-index="' + position + '"]',
+      );
+      if (entry === null) continue;
+      if (entry.id === "") {
+        let targetId;
+        do {
+          targetId = "big-plan-schema-index-" + String(nextIndexTargetId);
+          nextIndexTargetId += 1;
+        } while (document.getElementById(targetId) !== null);
+        entry.id = targetId;
+      }
+      entry.tabIndex = -1;
+      const jump = document.createElement("button");
+      jump.type = "button";
+      jump.className =
+        marker.className +
+        " table-schema-index-jump focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+      jump.textContent = marker.textContent;
+      jump.setAttribute("data-schema-indx", position);
+      jump.setAttribute("aria-controls", entry.id);
+      jump.setAttribute("aria-label", "Jump to index " + position);
+      jump.title = "Jump to index " + position;
+      marker.replaceWith(jump);
+      jump.addEventListener("click", () => {
+        const reducedMotion = matchMedia(
+          "(prefers-reduced-motion: reduce)",
+        ).matches;
+        entry.scrollIntoView({
+          behavior: reducedMotion ? "auto" : "smooth",
+          block: "center",
+        });
+        entry.focus({ preventScroll: true });
+        const previousTimer = indexFlashTimers.get(entry);
+        if (previousTimer !== undefined) clearTimeout(previousTimer);
+        entry.classList.remove("table-schema-index-flash");
+        if (reducedMotion) {
+          indexFlashTimers.delete(entry);
+          return;
+        }
+        // Re-reading layout lets a repeated activation restart the transition;
+        // readers who prefer reduced motion keep the focus cue without a flash.
+        void entry.offsetWidth;
+        entry.classList.add("table-schema-index-flash");
+        indexFlashTimers.set(
+          entry,
+          setTimeout(() => {
+            entry.classList.remove("table-schema-index-flash");
+            indexFlashTimers.delete(entry);
+          }, 1600),
+        );
+      });
+    }
+
     for (const toggle of toggles) {
       toggle.removeAttribute("tabindex");
       toggle.addEventListener("click", (event) => {
         event.preventDefault();
         const column = toggle.getAttribute("data-schema-column-toggle");
         if (column === null || column === "") return;
-        applyColumn(column, !hiddenColumns.has(column));
-        persist();
+        setColumnHidden(column, !hiddenColumns.has(column));
       });
     }
     button.addEventListener("click", (event) => {
@@ -345,13 +840,17 @@ export const VIEWER_SCRIPT = `<script>
       reset.removeAttribute("tabindex");
       reset.addEventListener("click", (event) => {
         event.preventDefault();
-        for (const column of Array.from(hiddenColumns)) {
-          applyColumn(column, false);
+        applyOrder(authoredOrder);
+        for (const column of Array.from(toggleableColumns)) {
+          setColumnHidden(column, false, false);
         }
         persist();
+        if (status !== null) status.textContent = "Column layout reset.";
+        setMenuOpen(false);
+        button.focus();
       });
     }
-    table.addEventListener("keydown", (event) => {
+    figure.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !list.hidden) {
         event.bigPlanEscapeHandled = true;
         setMenuOpen(false);
@@ -361,11 +860,15 @@ export const VIEWER_SCRIPT = `<script>
     document.addEventListener("click", (event) => {
       if (
         !(event.target instanceof Node) ||
+        list.parentElement === null ||
         !list.parentElement.contains(event.target)
       ) {
         setMenuOpen(false);
       }
     });
+    // The dormant menu becomes visible only after state restoration and every
+    // reorder, visibility, persistence, and reset handler is installed.
+    button.hidden = false;
   }
 })();
 (() => {
@@ -1611,7 +2114,6 @@ export const VIEWER_SCRIPT = `<script>
     const answerTitle = own("[data-decision-answer-title]");
     const answerLead = own("[data-decision-answer-lead]");
     const summary = own("[data-decision-selection-summary]");
-    const selectionCopy = own("[data-decision-selection-copy]");
     const rationale = own("[data-decision-rationale]");
     const question = own("[data-decision-question]");
     const proposalText = own("[data-decision-proposal-text]");
@@ -1860,22 +2362,16 @@ export const VIEWER_SCRIPT = `<script>
       const index = choice === null ? null : choice.getAttribute("data-option-index");
       showPanel(index === null ? defaultIndex : index);
       paintColumn(index, false);
-      confirm.textContent = proposing
-        ? "Send suggestion"
-        : choice === null
-          ? "Confirm choice"
-          : "Confirm " + choice.value;
+      confirm.textContent = proposing ? "Submit proposal" : "Confirm choice";
       confirm.disabled =
         choice === null || (proposing && proposalValue() === "");
-      if (summary !== null && selectionCopy !== null) {
-        if (choice === null) summary.removeAttribute("data-selection-picked");
-        else summary.setAttribute("data-selection-picked", "");
-        selectionCopy.textContent =
+      if (summary !== null) {
+        summary.textContent =
           choice === null
-            ? "Select an option to continue."
+            ? "Nothing selected yet."
             : proposing
-              ? "Your suggested option is selected."
-              : "Selected: " + choice.value;
+              ? "Your own approach selected."
+              : choice.value + " selected.";
       }
     };
     decision.addEventListener("change", (event) => {

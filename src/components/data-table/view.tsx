@@ -12,6 +12,7 @@ import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { SEARCH_ICON } from "../../icons/lucide/search.js";
 import { TABLE_ICON } from "../../icons/lucide/table.js";
 import { WRAP_TEXT_ICON } from "../../icons/lucide/wrap-text.js";
+import { CopyButton } from "../_shared/figure-controls/copy-button.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 import {
   BODY_ATTRIBUTE,
@@ -32,7 +33,7 @@ import type { TableCell } from "./parse-table-grid.js";
 // The chrome rests quiet and reveals itself on hover and focus, matching the
 // figure-header button family the schema and diff captions already use.
 const BUTTON_CLASSES =
-  "data-table-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-edge hover:text-ink aria-pressed:bg-edge aria-pressed:text-ink [&_svg]:size-3.5";
+  "data-table-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-transparent hover:text-ink aria-pressed:bg-transparent aria-pressed:text-ink [&_svg]:size-3.5";
 
 const MENU_LIST_CLASSES =
   "data-table-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-40 rounded-[0.375rem] border border-edge bg-[var(--diff-header-bg)] p-1 shadow-[0_6px_18px_rgb(12_10_8_/_0.18)]";
@@ -296,12 +297,20 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
           {`${model.rows.length} rows`}
         </span>
       </span>
-      <span className="data-table-controls flex shrink-0 items-center gap-1 max-[55.999rem]:w-full">
-        {model.filter ? <FilterField id={model.id} /> : null}
-        <ColumnsMenu columns={model.columns} groupColumn={model.groupColumn} />
-        <FitMenu fit={model.fit} />
-        <ResetButton />
-        <MaximizeButton subject="table" />
+      <span className="data-table-controls flex shrink-0 items-center gap-2 max-[55.999rem]:w-full">
+        <span className="data-table-settings-group inline-flex items-center gap-1">
+          {model.filter ? <FilterField id={model.id} /> : null}
+          <ColumnsMenu
+            columns={model.columns}
+            groupColumn={model.groupColumn}
+          />
+          <FitMenu fit={model.fit} />
+          <ResetButton />
+        </span>
+        <span className="figure-action-group inline-flex items-center gap-0.5">
+          <CopyButton subject="table" />
+          <MaximizeButton subject="table" />
+        </span>
       </span>
     </figcaption>
     {/* The document-wide table transform leaves a table alone when its parent
