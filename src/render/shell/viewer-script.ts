@@ -208,7 +208,13 @@ export const VIEWER_SCRIPT = `<script>
     const source = rendered.endsWith("\\n")
       ? rendered.slice(0, -1)
       : rendered;
-    wireCopy({ button, source, label: "Copy code", feedback: null });
+    const feedback = figure.querySelector("[data-copy-message]");
+    wireCopy({
+      button,
+      source,
+      label: "Copy code",
+      feedback: feedback instanceof HTMLElement ? feedback : null,
+    });
   }
 
   for (const button of document.querySelectorAll("[data-copy-source]")) {
