@@ -78,7 +78,7 @@ The full authoring contract lives in the documentation:
 - [Features](docs/src/content/docs/intro/features.md) - the reader-facing viewer capabilities.
 - [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `skill`, `validate`, `render`, and `compile` in detail.
 
-To preview components locally, run `node bin/big-plan.mjs guidance` once, then render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`.
+To preview components locally from a source checkout, run `bun run build` first. Then run `node bin/big-plan.mjs guidance` once and render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`. The local executable reads the compiled files in `dist/`.
 To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.
 To see every DatabaseTableSchema scenario in one document, render the [table-schema showcase](examples/database-table-schema.mdx).
 Generated previews remain ignored by Git.
