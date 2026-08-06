@@ -527,6 +527,23 @@
     box-shadow: 0 0 0 3px
       color-mix(in srgb, var(--color-accent) 20%, transparent);
   }
+  /* Cancelling a proposal returns focus to the radio that opened it so the
+     next Tab continues from there, but the reader asked to leave, not to
+     re-select the escape hatch. Only the visible treatment is withheld, and
+     the marker is spent on the reader's next interaction.
+     Override invariant: quiet focus beats the visible focus treatment. */
+  article
+    .decision-propose-link:has([data-decision-focus-quiet]:focus-visible) {
+    box-shadow: none;
+  }
+  /* Override invariant: quiet focus beats the focus color, and hover still
+     beats quiet focus. */
+  article
+    .decision-propose-link:has([data-decision-focus-quiet]:focus-visible):not(
+      :hover
+    ) {
+    color: var(--color-muted);
+  }
   article .decision-proposal-input {
     padding: 0.4375rem 0.625rem;
     border: 1px solid var(--edge-c);

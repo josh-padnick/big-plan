@@ -2404,7 +2404,13 @@ export const VIEWER_SCRIPT = `<script>
         if (previousOptionChoice !== null) previousOptionChoice.checked = true;
         if (proposalText !== null) proposalText.value = "";
         sync();
-        if (proposalChoice !== null) proposalChoice.focus({ focusVisible: false });
+        if (proposalChoice !== null) {
+          proposalChoice.focus({ focusVisible: false });
+          // Install the fallback after focus: focusing fires blur on the old
+          // control, and the cleanup listener below spends quiet markers on
+          // blur by design.
+          proposalChoice.setAttribute("data-decision-focus-quiet", "");
+        }
       });
     }
 
@@ -2483,6 +2489,24 @@ export const VIEWER_SCRIPT = `<script>
       if (choice !== null) choice.focus();
     });
     sync();
+  }
+  // focusVisible is not honoured everywhere; the attribute is the fallback and
+  // is spent the moment the reader does anything else.
+  for (const type of ["keydown", "pointerdown", "blur"]) {
+    document.addEventListener(
+      type,
+      (event) => {
+        // This same Escape may just have installed the quiet marker. Leave it
+        // for the next interaction to spend.
+        if (event.type === "keydown" && event.key === "Escape") return;
+        for (const quiet of document.querySelectorAll(
+          "[data-decision-focus-quiet]",
+        )) {
+          quiet.removeAttribute("data-decision-focus-quiet");
+        }
+      },
+      true,
+    );
   }
 })();
 ${DIAGRAM_SCRIPT}

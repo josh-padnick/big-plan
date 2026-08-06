@@ -119,7 +119,12 @@ const DefinitionDisclosure = ({
   readonly kind: "criterion" | "value";
   readonly liveScore?: boolean;
 }) => {
-  if (detail.length === 0) return <span>{label}</span>;
+  if (detail.length === 0)
+    return (
+      <span {...(liveScore ? { "data-decision-score-output": "" } : {})}>
+        {label}
+      </span>
+    );
   return (
     <details
       className="decision-definition"
@@ -142,9 +147,11 @@ const DefinitionDisclosure = ({
   );
 };
 
-// The row form intentionally keeps definitions out of the reading path. It
-// is the approved compact summary: a distinct option title followed by small
-// bold criterion labels and plain values.
+// The row form stays a compact summary: a distinct option title followed by
+// small criterion labels and plain values. A criterion label carries its
+// authored definition through the same disclosure the matrix forms use, so
+// the term is explainable on hover, focus, and tap without lengthening the
+// resting card. A term without an authored definition stays plain text.
 export const RowsLayout = ({
   model,
   answerable,
