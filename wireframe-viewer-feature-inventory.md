@@ -47,9 +47,9 @@ Every promise below is authored in `src/components/wireframe/wireframe.guidance.
 | Zooming below 100% under reader control                                    | :141, :151 | Not implemented. Automatic scale only, with no control and no readout.                         |
 | Markers holding a fixed readable screen size under zoom                    | :141, :151 | Not implemented. Wireframe renders no comment or selection markers at all.                     |
 | Toolbar owning zoom, `Fit`, and maximize in stable positions               | :56, :151  | Not implemented. Wireframe renders no toolbar.                                                 |
-| Expanded screen navigation as a left vertical list with arrow-key movement | :138, :151 | Not implemented. Navigation is the inline horizontal switcher only.                            |
+| Expanded screen navigation as a left vertical list with arrow-key movement | :140, :151 | Not implemented. Navigation is the inline horizontal switcher only.                            |
 | Focus return and scroll preservation across mode changes                   | :95, :151  | Not applicable yet, because no mode change exists to preserve context across.                  |
-| Element-level commenting reserved for expanded mode                        | :143       | Not implemented. Wireframe has no comment transport.                                           |
+| Element-level commenting reserved for expanded mode                        | :142       | Not implemented. Wireframe has no comment transport.                                           |
 
 The two clusters are separable.
 Everything in the first four rows is canvas viewer work.
