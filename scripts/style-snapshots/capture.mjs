@@ -210,10 +210,6 @@ const samePixels = (left, right) => {
  * both Playwright's element screenshot wait and Chromium's clip request.
  */
 const captureTargetFrame = async ({ page, target, path, cdp }) => {
-  await page.evaluate(() =>
-    globalThis.scrollTo({ top: 0, left: 0, behavior: "instant" }),
-  );
-  await settlePaint(page);
   const bounds = await target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return {
@@ -231,33 +227,47 @@ const captureTargetFrame = async ({ page, target, path, cdp }) => {
   }));
   const topInset = Math.min(100, Math.max(0, viewport.height - 1));
   const tileHeight = Math.max(1, viewport.height - topInset - 20);
+  await target.evaluate(
+    (element, value) => {
+      let current = element;
+      while (current.parentElement !== null) {
+        const parent = current.parentElement;
+        for (const sibling of parent.children) {
+          if (sibling !== current) {
+            sibling.style.display = "none";
+          }
+        }
+        if (parent === globalThis.document.documentElement) {
+          break;
+        }
+        current = parent;
+      }
+      globalThis.document.documentElement.style.overflow = "hidden";
+      globalThis.document.body.style.overflow = "hidden";
+      globalThis.document.documentElement.style.height = "100vh";
+      globalThis.document.body.style.height = "100vh";
+      element.style.position = "fixed";
+      element.style.left = `${value.x}px`;
+      element.style.top = `${value.top}px`;
+      element.style.width = `${value.width}px`;
+      element.style.maxWidth = `${value.width}px`;
+      element.style.zIndex = "2147483647";
+    },
+    { x: bounds.x, top: topInset, width: bounds.width },
+  );
+  await settlePaint(page);
   const output = new PNG({ width: bounds.width, height: bounds.height });
   for (let offset = 0; offset < bounds.height; offset += tileHeight) {
-    const requestedScrollY = bounds.y + offset - topInset;
-    await page.evaluate(
-      (scrollY) =>
-        globalThis.scrollTo({ top: scrollY, left: 0, behavior: "instant" }),
-      Math.min(viewport.maxScrollY, Math.max(0, requestedScrollY)),
-    );
+    await target.evaluate((element, top) => {
+      element.style.top = `${top}px`;
+    }, topInset - offset);
     await settlePaint(page);
-    const tile = await target.evaluate(
-      (element, value) => {
-        const rect = element.getBoundingClientRect();
-        const y = rect.top + value.offset;
-        const height = Math.min(value.height, value.viewportHeight - y);
-        return {
-          x: Math.round(rect.left),
-          y: Math.round(y),
-          width: Math.round(rect.width),
-          height: Math.round(height),
-        };
-      },
-      {
-        offset,
-        height: Math.min(tileHeight, bounds.height - offset),
-        viewportHeight: viewport.height,
-      },
-    );
+    const tile = {
+      x: bounds.x,
+      y: topInset,
+      width: bounds.width,
+      height: Math.min(tileHeight, bounds.height - offset),
+    };
     if (
       tile.x < 0 ||
       tile.y < 0 ||
