@@ -66,7 +66,7 @@ const convertMarkdown = async ({ source, fallbackTitle }) => {
 | ----------------- | ------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `file`            | string (non-empty)       | No                 | File the excerpt belongs to; renders the header path.                                                                                      |
 | `startLine`       | string, positive integer | No (default `"1"`) | The file line the first fenced line corresponds to; the gutter and all annotation anchors use this file-absolute numbering.                 |
-| `showLineNumbers` | bare boolean             | No                 | Renders the line-number gutter; required whenever `startLine` is set, since invisible numbering would make annotation anchors unverifiable. |
+| `showLineNumbers` | bare boolean             | No                 | Keeps the line-number gutter visible while resting; without it the gutter stays hidden until the reader maximizes the snippet.              |
 
 ### Children
 
@@ -76,9 +76,9 @@ The fence may declare any language or none; supported languages receive syntax h
 Component-specific violations report positional diagnostics, including:
 
 - A non-integer `startLine`
-- `startLine` without `showLineNumbers`
 - An annotation anchor outside the snippet's range (the message includes the valid range)
 - A bare snippet with no `file`, `startLine`, `showLineNumbers`, or annotations, which is rejected with a pointer to use a plain markdown fence
+- An `Annotation` with no `showLineNumbers`: an annotation's line claim must stay verifiable without JavaScript, so a snippet that anchors a note to a file-absolute line keeps its gutter visible at rest, whether or not `startLine` is authored. An excerpt with no `Annotation` may still omit `showLineNumbers` and reveal its gutter only on maximize.
 
 ### Annotation
 

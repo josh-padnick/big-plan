@@ -163,6 +163,49 @@ test("should maximize and restore every supported figure family in both themes",
   }
 });
 
+test("should switch a plain code figure's controls from a resting hover stack to a horizontal maximized row", async ({
+  page,
+  componentsViewerUrl,
+}) => {
+  await page.goto(componentsViewerUrl);
+
+  const frame = page.locator(".code-figure").first();
+  const toolbar = frame.locator(".figure-control-bar");
+  const copy = frame.locator("[data-copy-code]");
+  const maximize = frame.locator("[data-figure-maximize]");
+
+  await frame.scrollIntoViewIfNeeded();
+  await frame.hover();
+  await expect(toolbar).toHaveCSS("flex-direction", "column");
+  const copyBoxAtRest = await copy.boundingBox();
+  const maximizeBoxAtRest = await maximize.boundingBox();
+  expect(copyBoxAtRest).not.toBeNull();
+  expect(maximizeBoxAtRest).not.toBeNull();
+  // A resting hover stack lays its controls out top to bottom.
+  expect(maximizeBoxAtRest?.y).toBeGreaterThan(copyBoxAtRest?.y ?? 0);
+  const restBackground = await copy.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  expect(restBackground).not.toBe("rgba(0, 0, 0, 0)");
+
+  await maximize.click();
+  await expect(frame).toHaveAttribute("data-figure-maximized", "");
+  await expect(toolbar).toHaveCSS("flex-direction", "row");
+  const copyBoxMaximized = await copy.boundingBox();
+  const maximizeBoxMaximized = await maximize.boundingBox();
+  expect(copyBoxMaximized).not.toBeNull();
+  expect(maximizeBoxMaximized).not.toBeNull();
+  // A maximized row lays its controls out left to right at the same height.
+  expect(maximizeBoxMaximized?.x).toBeGreaterThan(copyBoxMaximized?.x ?? 0);
+  expect(maximizeBoxMaximized?.y).toBeCloseTo(copyBoxMaximized?.y ?? 0, 0);
+  await expect(copy).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(copy).toHaveCSS("border-color", "rgba(0, 0, 0, 0)");
+
+  await maximize.click();
+  await expect(frame).not.toHaveAttribute("data-figure-maximized");
+  await expect(toolbar).toHaveCSS("flex-direction", "column");
+});
+
 test("should copy plain code and make figure hints wait for a linger", async ({
   page,
   componentsViewerUrl,

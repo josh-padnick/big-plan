@@ -147,24 +147,19 @@ describe("renderCodeSnippet attributes", () => {
         message:
           'Attribute "showLineNumbers" is a shorthand boolean; use the bare form',
       },
-      {
-        line: 3,
-        column: 1,
-        message: "CodeSnippet cannot use startLine without showLineNumbers",
-      },
     ]);
   });
 
-  it("should diagnose startLine when invisible numbering would hide its basis", () => {
-    expect(
-      render({ attributes: { file: "x", startLine: "42" } }).diagnostics,
-    ).toEqual([
-      {
-        line: 3,
-        column: 1,
-        message: "CodeSnippet cannot use startLine without showLineNumbers",
-      },
-    ]);
+  it("should number a resting-numberless snippet from its authored startLine", () => {
+    const { element, diagnostics } = render({
+      attributes: { file: "x", startLine: "42" },
+    });
+    const rendered = JSON.stringify(element);
+
+    expect(diagnostics).toEqual([]);
+    expect(rendered).not.toContain('"data-line-numbers"');
+    expect(rendered).toContain('"data-snippet-line-number":"42"');
+    expect(rendered).toContain('"data-snippet-line-number":"44"');
   });
 
   it("should diagnose unknown attributes at the block position", () => {
@@ -222,6 +217,7 @@ describe("renderCodeSnippet annotations", () => {
   it("should diagnose a missing lines attribute and empty body at the annotation position", () => {
     expect(
       render({
+        attributes: { file: "src/example.ts", showLineNumbers: true },
         annotations: [annotation({ attributes: {}, children: [] })],
       }).diagnostics,
     ).toEqual([
@@ -242,6 +238,7 @@ describe("renderCodeSnippet annotations", () => {
   it("should diagnose shorthand lines and unknown Annotation attributes", () => {
     expect(
       render({
+        attributes: { file: "src/example.ts", showLineNumbers: true },
         annotations: [
           annotation({
             attributes: { lines: true, tone: "quiet" },
@@ -260,6 +257,34 @@ describe("renderCodeSnippet annotations", () => {
         message: 'Unknown attribute "tone" on Annotation',
       },
     ]);
+  });
+
+  it("should diagnose startLine with an Annotation when showLineNumbers is unset", () => {
+    expect(
+      render({
+        attributes: { file: "x", startLine: "42" },
+        annotations: [annotation({ lines: "43" })],
+      }).diagnostics,
+    ).toContainEqual({
+      line: 3,
+      column: 1,
+      message:
+        "CodeSnippet cannot use an Annotation unless showLineNumbers is set",
+    });
+  });
+
+  it("should diagnose an Annotation without startLine when showLineNumbers is unset", () => {
+    expect(
+      render({
+        attributes: { file: "x" },
+        annotations: [annotation({ lines: "2" })],
+      }).diagnostics,
+    ).toContainEqual({
+      line: 3,
+      column: 1,
+      message:
+        "CodeSnippet cannot use an Annotation unless showLineNumbers is set",
+    });
   });
 
   it.each(["line", "42-", "41", "45", "44-43", "042", "43-43", "0"])(
@@ -329,5 +354,20 @@ describe("renderCodeSnippet annotations", () => {
     expect(rendered).toContain(`"value":${JSON.stringify(source)}`);
     expect(rendered).not.toContain('"tagName":"pre"');
     expect(rendered).not.toContain('"tagName":"code"');
+  });
+
+  it("should always render the line-number gutter markup so maximize can reveal it, even when showLineNumbers is unset", () => {
+    const source = "const one = 1;\nconst two = 2;\n";
+    const { element, diagnostics } = render({
+      attributes: { file: "src/example.ts" },
+      children: [fence({ source })],
+    });
+    const rendered = JSON.stringify(element);
+
+    expect(diagnostics).toEqual([]);
+    expect(rendered).not.toContain('"data-line-numbers"');
+    expect(rendered).toContain('"data-snippet-line-number":"1"');
+    expect(rendered).toContain('"data-snippet-line-number":"2"');
+    expect(rendered).toContain("grid-cols-[4rem_minmax(max-content,1fr)]");
   });
 });

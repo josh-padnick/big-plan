@@ -146,9 +146,10 @@ export const compileCodeSnippetComponent = ({
       position,
     });
   }
-  if (startLineValue !== undefined && showLineNumbersValue !== true) {
+  if (showLineNumbersValue !== true && scopedChildren.length > 0) {
     diagnostics.add({
-      message: "CodeSnippet cannot use startLine without showLineNumbers",
+      message:
+        "CodeSnippet cannot use an Annotation unless showLineNumbers is set",
       position,
     });
   }
