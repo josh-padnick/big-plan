@@ -139,6 +139,7 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
       ":scope > [data-collapse-header] > [data-collapse-toggle]",
     );
     await expect(successHost).not.toHaveAttribute("data-collapsed", "");
+    await expect(title).toHaveCSS("cursor", "default");
 
     await title.click();
     await expect(successHost).not.toHaveAttribute("data-collapsed", "");
@@ -148,13 +149,17 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
 
     await kicker.click();
     await expect(successHost).toHaveAttribute("data-collapsed", "");
+    await expect(title).toHaveCSS("cursor", "pointer");
     await kicker.click();
     await expect(successHost).not.toHaveAttribute("data-collapsed", "");
+    await expect(title).toHaveCSS("cursor", "default");
 
     await toggle.click();
     await expect(successHost).toHaveAttribute("data-collapsed", "");
+    await expect(title).toHaveCSS("cursor", "pointer");
     await toggle.click();
     await expect(successHost).not.toHaveAttribute("data-collapsed", "");
+    await expect(title).toHaveCSS("cursor", "default");
   });
 
   await test.step("hovering the header keeps the toggle while moving onto it", async () => {
