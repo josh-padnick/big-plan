@@ -9,6 +9,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { chromium } from "@playwright/test";
+import { PNG } from "pngjs";
 import { availableDocuments } from "./available-documents.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -146,6 +147,32 @@ const settlePaint = async (page) => {
   );
 };
 
+/** Captures a large document rectangle in bounded raster tasks. */
+const captureTiledBounds = async ({ session, bounds }) => {
+  const image = new PNG({ width: bounds.width, height: bounds.height });
+  const tileHeight = 2048;
+  for (let offset = 0; offset < bounds.height; offset += tileHeight) {
+    const height = Math.min(tileHeight, bounds.height - offset);
+    const result = await session.send("Page.captureScreenshot", {
+      format: "png",
+      captureBeyondViewport: true,
+      clip: {
+        x: bounds.x,
+        y: bounds.y + offset,
+        width: bounds.width,
+        height,
+        scale: 1,
+      },
+    });
+    const tile = PNG.sync.read(Buffer.from(result.data, "base64"));
+    if (tile.width !== bounds.width || tile.height !== height) {
+      throw new Error("Chromium returned an incorrect screenshot tile size.");
+    }
+    tile.data.copy(image.data, offset * bounds.width * 4);
+  }
+  return PNG.sync.write(image);
+};
+
 /**
  * Writes only a byte-stable frame. The exact comparison is deliberate: an
  * unsettled animation, transition, font, or layout frame is a fixture defect,
@@ -197,18 +224,15 @@ const captureStableTarget = async ({ page, target, path }) => {
           const top = Math.floor(bounds.y + scroll.y);
           const right = Math.ceil(bounds.x + scroll.x + bounds.width);
           const bottom = Math.ceil(bounds.y + scroll.y + bounds.height);
-          const result = await session.send("Page.captureScreenshot", {
-            format: "png",
-            captureBeyondViewport: true,
-            clip: {
+          current = await captureTiledBounds({
+            session,
+            bounds: {
               x: left,
               y: top,
               width: right - left,
               height: bottom - top,
-              scale: 1,
             },
           });
-          current = Buffer.from(result.data, "base64");
         }
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
