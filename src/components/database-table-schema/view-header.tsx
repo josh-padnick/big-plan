@@ -24,7 +24,7 @@ import { MutedText } from "./view-elements.js";
 // rather than a stylesheet rule because a components-layer rule loses to the
 // resting bg-transparent utility.
 const BUTTON_CLASSES =
-  "table-schema-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+  "table-schema-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-transparent hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 // Shared by the actions and columns menus.
 const MENU_LIST_CLASSES =
   "table-schema-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-36 rounded-[0.375rem] border border-edge bg-[var(--diff-header-bg)] p-1 shadow-[0_6px_18px_rgb(12_10_8_/_0.18)]";
@@ -195,11 +195,13 @@ export const TableSchemaHeader = ({
         tableName={tableName}
         {...(schemaName === undefined ? {} : { schemaName })}
       />
-      <span className="table-schema-controls flex shrink-0 items-center gap-1">
+      <span className="table-schema-controls flex shrink-0 items-center gap-2">
         <CopyFeedback dataAttribute="data-schema-copy-message" />
-        <ColumnsMenu />
-        <ActionsMenu />
-        <MaximizeButton subject="schema" />
+        <span className="figure-action-group inline-flex items-center gap-0.5">
+          <ColumnsMenu />
+          <ActionsMenu />
+          <MaximizeButton subject="schema" />
+        </span>
       </span>
     </span>
     {note === undefined ? null : (

@@ -1,8 +1,7 @@
 /*
 CSS escape hatch: shared visual primitive and pseudo-element selector relationship.
 Owns the hover hint shared by icon-only figure controls, keyed off the
-data-tooltip attribute. Controls can opt into a one-second linger with
-data-tooltip-delay.
+data-tooltip attribute. Every tooltip waits one second before it appears.
 
 The hint is decoration only. Every control carrying data-tooltip repeats the
 same words in aria-label, so assistive technology reads the name once and
@@ -35,21 +34,14 @@ loses nothing when the hint never renders.
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
-    /* The short delay keeps hints from flashing while the pointer sweeps
-       across neighboring controls. */
-    transition: opacity 60ms ease-out 40ms;
+    /* The delay keeps hints from flashing while the pointer sweeps across
+       neighboring controls. */
+    transition: opacity 60ms ease-out 1s;
   }
 
   article [data-tooltip]:hover::after,
   article [data-tooltip]:focus-visible::after {
     opacity: 1;
-  }
-
-  /* Maximize and copy need a deliberate linger because they sit on the code
-     figure chrome and are easy to trigger while the pointer moves across it. */
-  article [data-tooltip-delay]:hover::after,
-  article [data-tooltip-delay]:focus-visible::after {
-    transition-delay: 1s;
   }
 
   /* A control whose menu is open has already answered the question the hint
@@ -65,8 +57,8 @@ loses nothing when the hint never renders.
 
     /* Waiting is not motion. Keep the deliberate linger when a reader turns
        off visual transitions. */
-    article [data-tooltip-delay]:hover::after,
-    article [data-tooltip-delay]:focus-visible::after {
+    article [data-tooltip]:hover::after,
+    article [data-tooltip]:focus-visible::after {
       transition: opacity 0s linear 1s;
     }
   }

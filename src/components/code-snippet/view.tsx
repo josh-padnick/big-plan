@@ -46,7 +46,7 @@ const ActionsMenu = ({ filePath }: { readonly filePath?: string }) => (
   <span className="code-snippet-menu relative inline-flex" data-snippet-menu="">
     <button
       type="button"
-      className="code-snippet-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-surface p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
+      className="code-snippet-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-transparent hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
       aria-label="More actions"
       aria-haspopup="menu"
       aria-expanded="false"
@@ -83,10 +83,12 @@ const SnippetHeader = ({ filePath }: { readonly filePath?: string }) => (
     ) : (
       <FileIdentity filePath={filePath} />
     )}
-    <span className="code-snippet-controls flex shrink-0 items-center gap-1">
+    <span className="code-snippet-controls flex shrink-0 items-center gap-2">
       <CopyFeedback dataAttribute="data-snippet-copy-message" />
-      <ActionsMenu {...(filePath === undefined ? {} : { filePath })} />
-      <MaximizeButton subject="code" />
+      <span className="figure-action-group inline-flex items-center gap-0.5">
+        <ActionsMenu {...(filePath === undefined ? {} : { filePath })} />
+        <MaximizeButton subject="code" />
+      </span>
     </span>
   </figcaption>
 );

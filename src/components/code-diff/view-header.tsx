@@ -20,13 +20,13 @@ import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 // loses to the resting bg-surface utility, which left these controls with no
 // background feedback at all.
 const BUTTON_BASE_CLASSES =
-  "code-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-surface p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+  "code-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 text-muted transition-colors hover:bg-transparent hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 // The actions button stands on its own.
 const BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} rounded-md`;
 // Segmented buttons sit flush and round only where they meet the group's
 // outer corners, so the group needs no overflow clipping and the buttons'
 // hover hints stay visible. The end radius is the group's less its border.
-const TOGGLE_BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} first:rounded-l-[0.3125rem] last:rounded-r-[0.3125rem] aria-pressed:bg-edge aria-pressed:text-ink`;
+const TOGGLE_BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} bg-surface hover:bg-edge first:rounded-l-[0.3125rem] last:rounded-r-[0.3125rem] aria-pressed:bg-edge aria-pressed:text-ink`;
 const MENU_ITEM_CLASSES =
   "code-diff-menu-item flex w-full cursor-pointer items-center gap-[0.45rem] whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-[0.3rem] text-left text-xs text-ink hover:bg-edge [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted";
 
@@ -186,14 +186,18 @@ export const CodeDiffHeader = ({
 }) => (
   <figcaption className="code-diff-header flex min-w-0 items-center justify-between gap-3 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-[0.55rem] py-[0.3rem]">
     <FileIdentity filePath={filePath} />
-    <span className="code-diff-controls flex shrink-0 items-center gap-1">
-      {showLineCounts ? (
-        <DiffStats addedCount={addedCount} removedCount={removedCount} />
-      ) : null}
-      <ViewToggleGroup />
-      <ActionsMenu />
-      {/* Far right so maximizing and restoring live in the same corner. */}
-      <MaximizeButton subject="diff" />
+    <span className="code-diff-controls flex shrink-0 items-center gap-2">
+      <span className="code-diff-view-group inline-flex items-center gap-1">
+        {showLineCounts ? (
+          <DiffStats addedCount={addedCount} removedCount={removedCount} />
+        ) : null}
+        <ViewToggleGroup />
+      </span>
+      <span className="figure-action-group inline-flex items-center gap-0.5">
+        <ActionsMenu />
+        {/* Far right so maximizing and restoring live in the same corner. */}
+        <MaximizeButton subject="diff" />
+      </span>
     </span>
   </figcaption>
 );

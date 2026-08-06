@@ -28,11 +28,11 @@ import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 // rule loses to the resting bg-surface utility, which left these controls with
 // no background feedback at all.
 const BUTTON_BASE_CLASSES =
-  "file-tree-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-surface p-0 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+  "file-tree-diff-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 text-muted transition-colors hover:bg-transparent hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 // Segmented buttons sit flush and round only where they meet the group's
 // outer corners, so the group needs no overflow clipping and the buttons'
 // hover hints stay visible. The end radius is the group's less its border.
-const TOGGLE_BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} first:rounded-l-[0.3125rem] last:rounded-r-[0.3125rem] aria-pressed:bg-edge aria-pressed:text-ink`;
+const TOGGLE_BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} bg-surface hover:bg-edge first:rounded-l-[0.3125rem] last:rounded-r-[0.3125rem] aria-pressed:bg-edge aria-pressed:text-ink`;
 // Shared by the combined view and both state-pane bodies.
 const BODY_CLASSES = "file-tree-body overflow-x-auto px-3 py-2.5";
 
@@ -110,10 +110,14 @@ const DiffHeader = ({
       <span className="file-tree-diff-title truncate">{title}</span>
     )}
     <ChangeSummary entries={entries} />
-    <span className="file-tree-diff-controls flex shrink-0 items-center gap-1">
-      <TreeFoldControls tone="standard" />
+    <span className="file-tree-diff-controls flex shrink-0 items-center gap-2">
+      <span className="file-tree-fold-group inline-flex items-center gap-0.5">
+        <TreeFoldControls tone="standard" />
+      </span>
       <ViewToggleGroup />
-      <MaximizeButton subject="tree" />
+      <span className="figure-action-group inline-flex items-center gap-0.5">
+        <MaximizeButton subject="tree" />
+      </span>
     </span>
   </figcaption>
 );
