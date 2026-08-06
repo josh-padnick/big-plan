@@ -39,7 +39,24 @@ Every region sees the change together.
     expect(html).toContain("decision-option-card");
     expect(html).toContain('data-decision-tone="good"');
     expect(html).toContain(">Risk<");
+    expect(html).toContain('data-decision-definition="criterion"');
     expect(html).toContain('data-decision-layout="rows"');
+  });
+
+  it("should keep criterion labels plain when no detail is authored", () => {
+    const html = render(`<Decision question="Which path?">
+
+<Option title="Canary">
+<Consideration label="Risk" verdict="Low" />
+</Option>
+
+<Option title="Global">
+<Consideration label="Risk" verdict="High" />
+</Option>
+
+</Decision>`);
+
+    expect(html).not.toContain('data-decision-definition="criterion"');
   });
 
   it("should reject option prose that cannot render", () => {

@@ -139,8 +139,8 @@
      target. Equal-height cards keep the criteria near each other on a wide
      screen, while auto-fit returns the same content order as a stack when the
      reading column is narrow. Recommendation and selection stay independent:
-     a recommendation owns a quiet wash, and a selection owns the strong rim
-     and filled native radio. */
+     a recommendation owns a quiet marker, and a selection owns the strong
+     rim and filled native radio. */
   article .decision-rows {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
     grid-auto-rows: 1fr;
@@ -149,22 +149,16 @@
   article .decision-option-card {
     transition:
       border-color 150ms ease,
-      box-shadow 150ms ease,
-      transform 150ms ease;
+      box-shadow 150ms ease;
   }
-  article .decision-row[data-option-recommended] > .decision-option-card {
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--decision-pro-bg) 68%, var(--bg)) 0,
-      var(--bg) 62%
-    );
+  article .decision-option-summary {
+    color: color-mix(in srgb, var(--color-ink) 72%, var(--color-muted));
   }
   article
     .decision-row:has(.decision-radio:enabled)
     > .decision-option-card:hover {
     border-color: color-mix(in srgb, var(--color-accent) 45%, var(--edge-c));
     box-shadow: 0 0.35rem 1rem rgb(0 0 0 / 0.08);
-    transform: translateY(-1px);
   }
   article
     .decision-row:has(.decision-radio:focus-visible)
@@ -185,8 +179,9 @@
     box-shadow: inset 0 0 0 2.5px var(--bg);
   }
   article .decision-recommended-pill {
-    background: var(--decision-pro-bg);
-    color: var(--decision-pro-c);
+    border: 1px solid var(--edge-c);
+    background: var(--surface-c);
+    color: var(--color-muted);
   }
   article .decision-recommended-pill svg,
   article .decision-card-verdict svg {
@@ -219,12 +214,13 @@
     border-top: 1px solid var(--edge-c);
   }
   article .decision-keyed-option:has(.decision-radio:enabled):hover {
-    background: color-mix(in srgb, var(--color-accent) 5%, var(--surface-c));
+    box-shadow: 0 0.25rem 0.8rem rgb(0 0 0 / 0.08);
   }
   article .decision-keyed-option:has(.decision-radio:checked),
   article .decision-keyed-option[data-column-selected] {
-    background: color-mix(in srgb, var(--color-accent) 10%, var(--bg));
-    box-shadow: inset 3px 0 0 var(--color-accent);
+    box-shadow:
+      inset 3px 0 0 var(--color-accent),
+      0 0.25rem 0.8rem color-mix(in srgb, var(--color-accent) 14%, transparent);
   }
   article .decision-keyed-option[data-option-chosen],
   article .decision-keyed-option[data-column-selected][data-column-settled] {
@@ -475,15 +471,13 @@
   article .decision-brief-option + .decision-brief-option {
     border-top: 1px solid var(--edge-c);
   }
-  article .decision-brief-option[data-option-recommended] {
-    background: color-mix(in srgb, var(--decision-pro-bg) 58%, var(--bg));
-  }
   article .decision-brief-option:has(.decision-radio:enabled):hover {
-    background: color-mix(in srgb, var(--color-accent) 7%, var(--surface-c));
+    box-shadow: 0 0.25rem 0.8rem rgb(0 0 0 / 0.08);
   }
   article .decision-brief-option:has(.decision-radio:checked) {
-    background: color-mix(in srgb, var(--color-accent) 11%, var(--bg));
-    box-shadow: inset 3px 0 0 var(--color-accent);
+    box-shadow:
+      inset 3px 0 0 var(--color-accent),
+      0 0.25rem 0.8rem color-mix(in srgb, var(--color-accent) 14%, transparent);
   }
   article .decision-brief-compare-body {
     border: 1px solid var(--edge-c);
@@ -532,6 +526,23 @@
     color: var(--ink-c);
     box-shadow: 0 0 0 3px
       color-mix(in srgb, var(--color-accent) 20%, transparent);
+  }
+  /* Cancelling a proposal returns focus to the radio that opened it so the
+     next Tab continues from there, but the reader asked to leave, not to
+     re-select the escape hatch. Only the visible treatment is withheld, and
+     the marker is spent on the reader's next interaction.
+     Override invariant: quiet focus beats the visible focus treatment. */
+  article
+    .decision-propose-link:has([data-decision-focus-quiet]:focus-visible) {
+    box-shadow: none;
+  }
+  /* Override invariant: quiet focus beats the focus color, and hover still
+     beats quiet focus. */
+  article
+    .decision-propose-link:has([data-decision-focus-quiet]:focus-visible):not(
+      :hover
+    ) {
+    color: var(--color-muted);
   }
   article .decision-proposal-input {
     padding: 0.4375rem 0.625rem;

@@ -118,30 +118,40 @@ const DefinitionDisclosure = ({
   readonly detail: ReadonlyArray<ElementContent>;
   readonly kind: "criterion" | "value";
   readonly liveScore?: boolean;
-}) => (
-  <details
-    className="decision-definition"
-    data-info-popover=""
-    data-decision-definition={kind}
-  >
-    <summary
-      className="decision-definition-trigger"
-      {...(liveScore ? { "data-decision-score-output": "" } : {})}
+}) => {
+  if (detail.length === 0)
+    return (
+      <span {...(liveScore ? { "data-decision-score-output": "" } : {})}>
+        {label}
+      </span>
+    );
+  return (
+    <details
+      className="decision-definition"
+      data-info-popover=""
+      data-decision-definition={kind}
     >
-      {label}
-    </summary>
-    <div
-      className="decision-definition-body max-w-72 text-xs leading-5"
-      data-info-popover-body=""
-    >
-      {hastContentToReact(detail)}
-    </div>
-  </details>
-);
+      <summary
+        className="decision-definition-trigger"
+        {...(liveScore ? { "data-decision-score-output": "" } : {})}
+      >
+        {label}
+      </summary>
+      <div
+        className="decision-definition-body max-w-72 text-xs leading-5"
+        data-info-popover-body=""
+      >
+        {hastContentToReact(detail)}
+      </div>
+    </details>
+  );
+};
 
-// The row form intentionally keeps definitions out of the reading path. It
-// is the approved compact summary: a distinct option title followed by small
-// bold criterion labels and plain values.
+// The row form stays a compact summary: a distinct option title followed by
+// small criterion labels and plain values. A criterion label carries its
+// authored definition through the same disclosure the matrix forms use, so
+// the term is explainable on hover, focus, and tap without lengthening the
+// resting card. A term without an authored definition stays plain text.
 export const RowsLayout = ({
   model,
   answerable,
@@ -196,7 +206,7 @@ export const RowsLayout = ({
                     {option.recommended ? <Recommended /> : null}
                   </span>
                   {option.summary === undefined ? null : (
-                    <span className="mt-1 block text-sm leading-5 text-muted">
+                    <span className="decision-option-summary mt-1 block text-sm leading-5">
                       {option.summary}
                     </span>
                   )}
@@ -213,7 +223,11 @@ export const RowsLayout = ({
                           key={row}
                         >
                           <span className="decision-row-dimension min-w-0 text-muted">
-                            {criterion.title}
+                            <DefinitionDisclosure
+                              label={criterion.title}
+                              detail={criterion.detail}
+                              kind="criterion"
+                            />
                           </span>
                           <Verdict consideration={consideration} />
                         </span>,
@@ -687,7 +701,11 @@ const ReadOnlyComparison = ({
               className="decision-criterion px-4 py-2.5 text-left text-base leading-6 font-medium text-muted"
               scope="row"
             >
-              {criterion.title}
+              <DefinitionDisclosure
+                label={criterion.title}
+                detail={criterion.detail}
+                kind="criterion"
+              />
             </th>
             {model.options.map((option) => (
               <td className="decision-cell px-4 py-2.5" key={option.id}>

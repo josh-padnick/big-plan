@@ -84,7 +84,7 @@ const RationalePanel = ({
   >
     <span className="text-base font-semibold text-ink">{option.title}</span>
     {option.summary === undefined ? null : (
-      <span className="text-base text-muted">{` - ${option.summary}`}</span>
+      <span className="decision-option-summary text-base">{` - ${option.summary}`}</span>
     )}
   </div>
 );
