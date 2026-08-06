@@ -408,7 +408,9 @@ try {
               60_000,
             );
           } finally {
-            await page.close();
+            await withTimeout(page.close(), "Page close", 5_000).catch(
+              () => {},
+            );
           }
         }
       }
