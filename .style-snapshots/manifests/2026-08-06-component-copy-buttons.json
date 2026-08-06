@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "fix(figure-controls): expose component copy buttons [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "src/components/_shared/figure-controls/copy-button.tsx",
+      "propertyDeltas": [
+        {
+          "property": "copy control markup",
+          "from": "component figures have no copy control",
+          "to": "component figures render the shared copy control"
+        }
+      ]
+    },
+    {
+      "path": "src/components/code-diff/view-header.tsx",
+      "propertyDeltas": [
+        {
+          "property": "figure copy control",
+          "from": "CodeDiff owns no copy control",
+          "to": "CodeDiff renders the shared copy control"
+        }
+      ]
+    },
+    {
+      "path": "src/components/code-snippet/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "figure copy control",
+          "from": "CodeSnippet owns no copy control",
+          "to": "CodeSnippet renders the shared copy control"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "embedded figure styles",
+          "from": "previous generated figure styles",
+          "to": "generated shared figure-control styles"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/viewer-script.ts",
+      "propertyDeltas": [
+        {
+          "property": "copy interaction routing",
+          "from": "component copy controls are not handled",
+          "to": "component copy controls use shared viewer handling"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__maximized-code__desktop__dark.png",
+      "changedPixels": 101,
+      "before": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "0730a66313afa768e2bab41411aeec59be7f92fc378c6432f67e33366aeb6ece"
+      },
+      "after": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "451d5f478844fc40416de25bdd67e90a363c61050ad3b3d7e81445e2e5c08354"
+      },
+      "propertyDeltas": [
+        {
+          "property": "maximized code toolbar",
+          "from": "maximize-only toolbar",
+          "to": "maximize and copy toolbar"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__light.png",
+      "changedPixels": 101,
+      "before": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "bef5128e444bfa470d4f92d707ecb0565dd698f31cb1e121420e52bee2e5ff3f"
+      },
+      "after": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "5d6311981e8563d2b52fa3b05f35acd0e6996de6325021b7bdd2a5a80b0988de"
+      },
+      "propertyDeltas": [
+        {
+          "property": "maximized code toolbar",
+          "from": "maximize-only toolbar",
+          "to": "maximize and copy toolbar"
+        }
+      ]
+    }
+  ]
+}

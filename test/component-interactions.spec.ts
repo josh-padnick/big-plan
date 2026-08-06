@@ -39,8 +39,14 @@ const COMPONENT_INTERACTIONS = {
   },
   DatabaseTableSchema: {
     selector: "[data-database-table-schema]",
-    affordances: ["choose columns", "maximize"],
-    deferred: ["drag column", "index chip jump and flash"],
+    affordances: [
+      "choose columns",
+      "drag column",
+      "keyboard column reorder",
+      "reset column layout",
+      "maximize",
+    ],
+    deferred: ["index chip jump and flash"],
   },
   Decision: {
     selector: "[data-decision]",
@@ -223,8 +229,60 @@ test("should exercise every live component affordance with browser gestures", as
     });
   }
 
-  await test.step("DatabaseTableSchema: menu, columns, and maximize", async () => {
+  await test.step("DatabaseTableSchema: reorder, persist, reset, and maximize", async () => {
     const schema = page.locator("[data-database-table-schema]").first();
+    const headers = schema.locator(
+      ".table-schema-grid thead [data-schema-grid-column]",
+    );
+    const authoredOrder = [
+      "column",
+      "type",
+      "constraints",
+      "default",
+      "comment",
+    ];
+    await expect(headers).toHaveCount(authoredOrder.length);
+
+    const first = headers.first();
+    const firstKey = await first.getAttribute("data-schema-grid-column");
+    await expect(first).toHaveAttribute("draggable", "true");
+    await expect(first).toHaveAttribute(
+      "aria-keyshortcuts",
+      "ArrowLeft ArrowRight",
+    );
+    const second = headers.nth(1);
+    const secondBox = await second.boundingBox();
+    expect(secondBox).not.toBeNull();
+    await first.dragTo(second, {
+      targetPosition: {
+        x: (secondBox?.width ?? 2) - 2,
+        y: (secondBox?.height ?? 2) / 2,
+      },
+    });
+    await expect(headers.nth(1)).toHaveAttribute(
+      "data-schema-grid-column",
+      firstKey ?? "",
+    );
+
+    const moved = schema.locator(
+      `.table-schema-grid thead [data-schema-grid-column="${firstKey ?? ""}"]`,
+    );
+    await moved.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(headers.nth(2)).toHaveAttribute(
+      "data-schema-grid-column",
+      firstKey ?? "",
+    );
+    await expect(schema.locator("[data-schema-reorder-status]")).toContainText(
+      "position 3 of 5",
+    );
+
+    await page.reload();
+    await expect(headers.nth(2)).toHaveAttribute(
+      "data-schema-grid-column",
+      firstKey ?? "",
+    );
+
     const columns = schema.locator("[data-schema-columns-button]");
     const type = schema.locator('[data-schema-column-toggle="type"]');
     await columns.click();
@@ -232,9 +290,20 @@ test("should exercise every live component affordance with browser gestures", as
     await type.click();
     await expect(type).toHaveAttribute("aria-checked", "false");
     await expect(schema.locator(".table-schema-head-type")).toBeHidden();
-    await type.click();
+    await page.reload();
+    await expect(type).toHaveAttribute("aria-checked", "false");
+    await expect(schema.locator(".table-schema-head-type")).toBeHidden();
+    await columns.click();
+    await schema.locator("[data-schema-reset-columns]").click();
+    await page.reload();
     await expect(schema.locator(".table-schema-head-type")).toBeVisible();
-    await page.keyboard.press("Escape");
+    await expect(type).toHaveAttribute("aria-checked", "true");
+    for (const [index, key] of authoredOrder.entries()) {
+      await expect(headers.nth(index)).toHaveAttribute(
+        "data-schema-grid-column",
+        key,
+      );
+    }
 
     const maximize = schema.locator("[data-figure-maximize]");
     await maximize.click();

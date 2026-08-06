@@ -18,7 +18,7 @@ Everything on this page is shipped and works today.
 - A sticky sidebar on wide screens; a compact sticky `Sections` menu on narrow ones.
 - Section links scroll smoothly, unless you've asked your OS for reduced motion.
 - Collapse controls on Parts, slides, and sub-slides, plus document-wide expand-all and collapse-all controls in the table of contents; TOC jumps expand collapsed ancestors.
-- Collapse choices, database-schema column choices, and a document-level review-comment draft persist only for the exact source path and authored revision, so same-titled plans and distinct authored revisions never share viewer state.
+- Collapse choices, database-schema column order and visibility, and a document-level review-comment draft persist only for the exact source path and authored revision, so same-titled plans and distinct authored revisions never share viewer state.
 
 ## Code
 

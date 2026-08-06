@@ -255,13 +255,13 @@ export const VIEWER_SCRIPT = `<script>
   }
 })();
 (() => {
-  const tables = Array.from(
+  const figures = Array.from(
     document.querySelectorAll("[data-database-table-schema]"),
   );
-  if (tables.length === 0) return;
+  if (figures.length === 0) return;
   const planId = document.documentElement.getAttribute("data-plan-id");
-  const storageKey = (table) => {
-    const tableName = table.getAttribute("data-schema-table-name");
+  const storageKey = (figure) => {
+    const tableName = figure.getAttribute("data-schema-table-name");
     return planId === null ||
       planId === "" ||
       tableName === null ||
@@ -269,25 +269,65 @@ export const VIEWER_SCRIPT = `<script>
       ? null
       : "big-plan:table:" + planId + ":" + tableName;
   };
-  for (const table of tables) {
-    const button = table.querySelector("[data-schema-columns-button]");
-    const list = table.querySelector("[data-schema-columns-list]");
+  let activeColumnDrag = null;
+  for (const figure of figures) {
+    const grid = figure.querySelector(".table-schema-grid");
+    const headRow = grid?.querySelector("thead tr");
+    if (grid === null || grid === undefined || headRow === null) continue;
+    const rows = Array.from(grid.querySelectorAll("tbody tr"));
+    const authoredOrder = Array.from(headRow.children)
+      .map((head) => head.getAttribute("data-schema-grid-column"))
+      .filter((column) => column !== null && column !== "");
+    const allowedColumns = new Set(authoredOrder);
+    if (
+      authoredOrder.length !== headRow.children.length ||
+      allowedColumns.size !== authoredOrder.length
+    )
+      continue;
+    const button = figure.querySelector("[data-schema-columns-button]");
+    const list = figure.querySelector("[data-schema-columns-list]");
     if (button === null || list === null) continue;
     const toggles = Array.from(
       list.querySelectorAll("[data-schema-column-toggle]"),
     );
-    const allowedColumns = new Set(
+    const toggleableColumns = new Set(
       toggles.map((toggle) =>
         toggle.getAttribute("data-schema-column-toggle"),
       ),
     );
     const hiddenColumns = new Set();
-    const applyColumn = (column, hidden) => {
-      if (!allowedColumns.has(column)) return;
+
+    const currentOrder = () =>
+      Array.from(headRow.children)
+        .map((head) => head.getAttribute("data-schema-grid-column"))
+        .filter((column) => column !== null && column !== "");
+    const persist = () => {
+      const key = storageKey(figure);
+      if (key === null) return;
+      const order = currentOrder();
+      const isAuthoredOrder = order.every(
+        (column, index) => column === authoredOrder[index],
+      );
+      try {
+        if (isAuthoredOrder && hiddenColumns.size === 0) {
+          localStorage.removeItem(key);
+        } else {
+          localStorage.setItem(
+            key,
+            JSON.stringify({
+              order,
+              hidden: order.filter((column) => hiddenColumns.has(column)),
+            }),
+          );
+        }
+      } catch (_) {}
+    };
+    const setColumnHidden = (column, hidden, save) => {
+      if (!toggleableColumns.has(column)) return;
       if (hidden) hiddenColumns.add(column);
       else hiddenColumns.delete(column);
-      for (const cell of table.querySelectorAll(
-        ".table-schema-head-" + column + ", .table-schema-cell-" + column,
+      for (const cell of figure.querySelectorAll(
+        '[data-schema-grid-column="' + column + '"]',
       )) {
         cell.hidden = hidden;
       }
@@ -300,42 +340,191 @@ export const VIEWER_SCRIPT = `<script>
         const check = toggle.querySelector('[data-lucide="check"]');
         if (check !== null) check.toggleAttribute("hidden", hidden);
       }
+      if (save !== false) persist();
     };
-    const key = storageKey(table);
-    if (key !== null) {
+    const moveColumn = (column, toIndex, save) => {
+      const order = currentOrder();
+      const fromIndex = order.indexOf(column);
+      if (
+        fromIndex === -1 ||
+        toIndex < 0 ||
+        toIndex >= order.length ||
+        fromIndex === toIndex
+      )
+        return;
+      const moveWithin = (parent) => {
+        const items = Array.from(parent.children);
+        const moving = items[fromIndex];
+        const target = items[toIndex];
+        if (moving === undefined || target === undefined) return;
+        parent.insertBefore(
+          moving,
+          fromIndex < toIndex ? target.nextSibling : target,
+        );
+      };
+      moveWithin(headRow);
+      for (const row of rows) moveWithin(row);
+      if (save !== false) persist();
+    };
+    const applyOrder = (order) => {
+      for (let toIndex = 0; toIndex < order.length; toIndex += 1) {
+        moveColumn(order[toIndex], toIndex, false);
+      }
+    };
+    const readLayout = () => {
+      const key = storageKey(figure);
+      if (key === null) return null;
       try {
         const stored = JSON.parse(localStorage.getItem(key) || "null");
-        if (stored !== null && Array.isArray(stored.hiddenColumns)) {
-          for (const column of stored.hiddenColumns) {
-            if (typeof column === "string") applyColumn(column, true);
-          }
-        }
-      } catch (_) {}
+        if (stored === null || typeof stored !== "object") return null;
+        const order = stored.order;
+        const hidden = stored.hidden;
+        if (
+          !Array.isArray(order) ||
+          order.length !== authoredOrder.length ||
+          new Set(order).size !== authoredOrder.length ||
+          !order.every(
+            (column) =>
+              typeof column === "string" && allowedColumns.has(column),
+          ) ||
+          !Array.isArray(hidden) ||
+          new Set(hidden).size !== hidden.length ||
+          !hidden.every(
+            (column) =>
+              typeof column === "string" && toggleableColumns.has(column),
+          )
+        )
+          return null;
+        return { order, hidden };
+      } catch (_) {
+        return null;
+      }
+    };
+    const stored = readLayout();
+    if (stored !== null) {
+      applyOrder(stored.order);
+      for (const column of stored.hidden) {
+        setColumnHidden(column, true, false);
+      }
     }
-    const persist = () => {
-      if (key === null) return;
-      try {
-        if (hiddenColumns.size === 0) localStorage.removeItem(key);
-        else
-          localStorage.setItem(
-            key,
-            JSON.stringify({ hiddenColumns: Array.from(hiddenColumns) }),
-          );
-      } catch (_) {}
+
+    const status = figure.querySelector("[data-schema-reorder-status]");
+    const announceMove = (column) => {
+      if (status === null) return;
+      const head = Array.from(headRow.children).find(
+        (candidate) =>
+          candidate.getAttribute("data-schema-grid-column") === column,
+      );
+      const label = (head?.textContent || column).trim();
+      status.textContent =
+        label +
+        " column moved to position " +
+        String(currentOrder().indexOf(column) + 1) +
+        " of " +
+        String(authoredOrder.length) +
+        ".";
     };
     const setMenuOpen = (open) => {
       list.hidden = !open;
       button.setAttribute("aria-expanded", open ? "true" : "false");
     };
-    button.hidden = false;
+
+    figure.setAttribute("data-schema-reorderable", "");
+    for (const head of Array.from(headRow.children)) {
+      const column = head.getAttribute("data-schema-grid-column");
+      if (column === null || column === "") continue;
+      const label = (head.textContent || column).trim();
+      head.draggable = true;
+      head.tabIndex = 0;
+      head.title = "Drag or use Left and Right arrow keys to reorder";
+      head.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight");
+      head.setAttribute(
+        "aria-label",
+        label + " column. Use Left and Right arrow keys to reorder.",
+      );
+      head
+        .querySelector('[data-lucide="grip-vertical"]')
+        ?.removeAttribute("hidden");
+      head.addEventListener("keydown", (event) => {
+        const direction =
+          event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
+        if (direction === 0) return;
+        event.preventDefault();
+        const order = currentOrder();
+        let toIndex = order.indexOf(column) + direction;
+        while (
+          toIndex >= 0 &&
+          toIndex < order.length &&
+          hiddenColumns.has(order[toIndex])
+        ) {
+          toIndex += direction;
+        }
+        moveColumn(column, toIndex);
+        head.focus();
+        announceMove(column);
+      });
+      head.addEventListener("dragstart", (event) => {
+        activeColumnDrag = { figure, column };
+        if (event.dataTransfer !== null) {
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", column);
+        }
+      });
+      let dropAfter = false;
+      const clearDrop = () => {
+        head.classList.remove("table-schema-head-drop-before");
+        head.classList.remove("table-schema-head-drop-after");
+        dropAfter = false;
+      };
+      head.addEventListener("dragover", (event) => {
+        if (
+          activeColumnDrag?.figure !== figure ||
+          activeColumnDrag.column === column
+        ) {
+          clearDrop();
+          return;
+        }
+        event.preventDefault();
+        const bounds = head.getBoundingClientRect();
+        dropAfter = event.clientX > bounds.left + bounds.width / 2;
+        head.classList.toggle("table-schema-head-drop-before", !dropAfter);
+        head.classList.toggle("table-schema-head-drop-after", dropAfter);
+      });
+      head.addEventListener("dragleave", clearDrop);
+      head.addEventListener("dragend", () => {
+        clearDrop();
+        if (activeColumnDrag?.figure === figure) activeColumnDrag = null;
+      });
+      head.addEventListener("drop", (event) => {
+        const drag = activeColumnDrag;
+        const after = dropAfter;
+        clearDrop();
+        if (
+          drag?.figure !== figure ||
+          drag.column === column ||
+          !allowedColumns.has(drag.column)
+        )
+          return;
+        event.preventDefault();
+        activeColumnDrag = null;
+        const order = currentOrder();
+        const fromIndex = order.indexOf(drag.column);
+        const targetIndex = order.indexOf(column);
+        const boundary = targetIndex + (after ? 1 : 0);
+        const insertion =
+          boundary - (fromIndex < boundary ? 1 : 0);
+        moveColumn(drag.column, insertion);
+        announceMove(drag.column);
+      });
+    }
+
     for (const toggle of toggles) {
       toggle.removeAttribute("tabindex");
       toggle.addEventListener("click", (event) => {
         event.preventDefault();
         const column = toggle.getAttribute("data-schema-column-toggle");
         if (column === null || column === "") return;
-        applyColumn(column, !hiddenColumns.has(column));
-        persist();
+        setColumnHidden(column, !hiddenColumns.has(column));
       });
     }
     button.addEventListener("click", (event) => {
@@ -347,13 +536,15 @@ export const VIEWER_SCRIPT = `<script>
       reset.removeAttribute("tabindex");
       reset.addEventListener("click", (event) => {
         event.preventDefault();
-        for (const column of Array.from(hiddenColumns)) {
-          applyColumn(column, false);
+        applyOrder(authoredOrder);
+        for (const column of Array.from(toggleableColumns)) {
+          setColumnHidden(column, false, false);
         }
         persist();
+        if (status !== null) status.textContent = "Column layout reset.";
       });
     }
-    table.addEventListener("keydown", (event) => {
+    figure.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !list.hidden) {
         event.bigPlanEscapeHandled = true;
         setMenuOpen(false);
@@ -363,11 +554,15 @@ export const VIEWER_SCRIPT = `<script>
     document.addEventListener("click", (event) => {
       if (
         !(event.target instanceof Node) ||
+        list.parentElement === null ||
         !list.parentElement.contains(event.target)
       ) {
         setMenuOpen(false);
       }
     });
+    // The dormant menu becomes visible only after state restoration and every
+    // reorder, visibility, persistence, and reset handler is installed.
+    button.hidden = false;
   }
 })();
 (() => {
