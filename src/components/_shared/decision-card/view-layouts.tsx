@@ -87,7 +87,7 @@ const Verdict = ({
   readonly consideration: CompiledDecisionCardConsideration;
 }) => (
   <span
-    className="decision-card-verdict inline-flex items-center gap-1.5 text-sm font-semibold"
+    className="decision-card-verdict inline-flex min-w-0 max-w-full items-center gap-1.5 text-sm font-semibold"
     data-decision-tone={consideration.tone}
   >
     <span className="inline-flex size-4 shrink-0">
@@ -96,7 +96,12 @@ const Verdict = ({
         hidden: false,
       })}
     </span>
-    <span>{consideration.verdict}</span>
+    <span
+      className="min-w-0 text-right [overflow-wrap:anywhere]"
+      data-decision-verdict=""
+    >
+      {consideration.verdict}
+    </span>
   </span>
 );
 
@@ -204,7 +209,7 @@ export const RowsLayout = ({
                     ? []
                     : [
                         <span
-                          className="decision-row-line grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-t border-edge py-2.5 text-sm leading-5"
+                          className="decision-row-line grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,auto)] items-center gap-x-3 border-t border-edge py-2.5 text-sm leading-5"
                           key={row}
                         >
                           <span className="decision-row-dimension min-w-0 text-muted">

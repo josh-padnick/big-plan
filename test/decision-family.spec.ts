@@ -101,6 +101,49 @@ test("should compare, answer, and revise a Decision", async ({
   await expect(card.locator("[data-decision-proposal]")).toBeHidden();
 });
 
+test("should keep long Decision verdicts inside comparison cards", async ({
+  page,
+  decisionViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(decisionViewerUrl);
+  const card = page.locator(".decision-option-card").first();
+  const verdict = card.locator("[data-decision-verdict]").first();
+  await verdict.evaluate((element) => {
+    element.textContent =
+      "Requires-a-longer-review-before-the-team-can-approve-this-option";
+  });
+
+  const layout = await card.evaluate((element) => {
+    const verdictElement = element.querySelector("[data-decision-verdict]");
+    if (!(verdictElement instanceof HTMLElement)) {
+      throw new Error("Decision verdict is missing.");
+    }
+    const cardBounds = element.getBoundingClientRect();
+    const verdictBounds = verdictElement.getBoundingClientRect();
+    const lineHeight = Number.parseFloat(
+      getComputedStyle(verdictElement).lineHeight,
+    );
+    return {
+      cardClientWidth: element.clientWidth,
+      cardScrollWidth: element.scrollWidth,
+      cardRight: cardBounds.right,
+      documentClientWidth: document.documentElement.clientWidth,
+      documentScrollWidth: document.documentElement.scrollWidth,
+      verdictHeight: verdictBounds.height,
+      verdictRight: verdictBounds.right,
+      lineHeight,
+    };
+  });
+
+  expect(layout.cardScrollWidth).toBeLessThanOrEqual(layout.cardClientWidth);
+  expect(layout.documentScrollWidth).toBeLessThanOrEqual(
+    layout.documentClientWidth,
+  );
+  expect(layout.verdictRight).toBeLessThanOrEqual(layout.cardRight);
+  expect(layout.verdictHeight).toBeGreaterThan(layout.lineHeight);
+});
+
 test("should stack Decision option cards in the same order on a narrow screen", async ({
   page,
   decisionViewerUrl,
