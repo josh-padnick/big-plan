@@ -42,6 +42,9 @@ jobs:
     # Historical commits run on the trusted self-hosted runner for
     # same-repository pushes only. The runner trust model matches lint.
     runs-on: self-hosted
+    concurrency:
+      group: big-plan-style-history
+      cancel-in-progress: false
     permissions:
       contents: read
     steps:
