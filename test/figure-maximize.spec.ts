@@ -179,6 +179,9 @@ test("should traverse disclosures and wrap within maximized figures", async ({
     await test.step(focusCase.name, async () => {
       const frame = page.locator(focusCase.selector).first();
       const trigger = frame.locator("[data-figure-maximize]");
+      const wrapTarget = frame.getByRole("button", {
+        name: "Combined view",
+      });
       const disclosure = frame
         .locator("details[data-info-popover] > summary:visible")
         .last();
@@ -214,7 +217,7 @@ test("should traverse disclosures and wrap within maximized figures", async ({
 
       await disclosure.focus();
       await page.keyboard.press("Tab");
-      await expect(trigger).toBeFocused();
+      await expect(wrapTarget).toBeFocused();
       await page.keyboard.press("Shift+Tab");
       await expect(disclosure).toBeFocused();
 
