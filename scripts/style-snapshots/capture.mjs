@@ -306,6 +306,71 @@ const captureStableTarget = async ({ page, target, path }) => {
   );
 };
 
+const targetClip = (target) =>
+  target.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: rect.left + globalThis.scrollX,
+      y: rect.top + globalThis.scrollY,
+      width: rect.width,
+      height: rect.height,
+    };
+  });
+
+/**
+ * Masks only the named animated regions during the exact byte check. The rest
+ * of a broad target, such as an article, must still produce two equal frames.
+ * The saved frame stays unmasked so the visual ledger shows the real surface.
+ */
+const captureTargetWithAnimatedRegions = async ({
+  page,
+  target,
+  path,
+  masks,
+}) => {
+  const clip = await targetClip(target);
+  let prior;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    await settlePaint(page);
+    const current = await page.screenshot({
+      animations: "disabled",
+      caret: "hide",
+      clip,
+      mask: masks,
+      maskColor: "#000000",
+      timeout: 10_000,
+    });
+    if (prior !== undefined && prior.equals(current)) {
+      await settlePaint(page);
+      const frame = await page.screenshot({
+        animations: "disabled",
+        caret: "hide",
+        clip,
+        timeout: 10_000,
+      });
+      await writeFile(path, frame);
+      return;
+    }
+    prior = current;
+  }
+  throw new Error(
+    `Screenshot target "${path}" never repeated exact bytes outside its named animated regions across six settled frames.`,
+  );
+};
+
+const animatedExemptionsWithin = async ({ target, exemptions }) =>
+  target.evaluate(
+    (element, candidates) =>
+      candidates
+        .filter(
+          (candidate) =>
+            element.matches(candidate.selector) ||
+            element.querySelector(candidate.selector) !== null,
+        )
+        .map(({ name, selector }) => ({ name, selector })),
+    exemptions,
+  );
+
 const temporaryDirectory = await mkdtemp(
   join(tmpdir(), "big-plan-style-captures-"),
 );
@@ -402,8 +467,21 @@ try {
                 theme,
               }),
             );
+            const animatedExemptions = await animatedExemptionsWithin({
+              target,
+              exemptions: config.animatedSurfaceExemptions ?? [],
+            });
             await withTimeout(
-              captureStableTarget({ page, target, path }),
+              animatedExemptions.length === 0
+                ? captureStableTarget({ page, target, path })
+                : captureTargetWithAnimatedRegions({
+                    page,
+                    target,
+                    path,
+                    masks: animatedExemptions.map(({ selector }) =>
+                      page.locator(selector),
+                    ),
+                  }),
               `Screenshot target "${path}"`,
               60_000,
             );
