@@ -47,110 +47,45 @@ Light and dark follow the reader's OS in inert exports.
      one nested sub-slide. The extra 6.5rem covers both cards' inline padding
      and borders, so the drawing never has to escape either border. */
   --card-figure: 54.5rem;
-  --bg: #f7f5f0;
-  --ink-c: #211e1a;
-  --muted-c: #6f695c;
-  --edge-c: #e2ddd1;
+  --bg: light-dark(#f7f5f0, #1b1916);
+  --ink-c: light-dark(#211e1a, #ebe6da);
+  --muted-c: light-dark(#6f695c, #a49c8b);
+  --edge-c: light-dark(#e2ddd1, #35312a);
   /* One step of contrast above --edge-c, for a control that has to read as an
      input against the chrome band rather than as a hairline on the page. */
-  --edge-strong-c: #c9c1ae;
-  --surface-c: #efece3;
-  --accent-c: #166534;
-  --callout-note-c: #426b82;
-  --callout-note-bg: #edf2f3;
-  --callout-tip-c: #527047;
-  --callout-tip-bg: #eef2e9;
-  --callout-warning-c: #9a6a20;
-  --callout-warning-bg: #f7efe0;
-  --callout-danger-c: #a14e42;
-  --callout-danger-bg: #f6e9e5;
-  --diff-add-c: #376b49;
-  --diff-add-bg: #e8f2e9;
-  --diff-remove-c: #9a493f;
-  --diff-remove-bg: #f6e8e4;
-  --decision-pro-c: #376b49;
-  --decision-pro-bg: #e8f2e9;
-  --decision-con-c: #9a493f;
-  --decision-con-bg: #f6e8e4;
-  --annotation-c: #5965a8;
-  --annotation-bg: #e4e8f7;
-  --diff-content-bg: #ffffff;
-  --diff-hunk-bg: #f6f5f2;
-  --diff-hunk-c: #8a857c;
-  --header-bg: #ece7db;
+  --edge-strong-c: light-dark(#c9c1ae, #4f4a3f);
+  --surface-c: light-dark(#efece3, #242119);
+  --accent-c: light-dark(#166534, #82c99a);
+  --callout-note-c: light-dark(#426b82, #87b5ca);
+  --callout-note-bg: light-dark(#edf2f3, #202a2d);
+  --callout-tip-c: light-dark(#527047, #9abd89);
+  --callout-tip-bg: light-dark(#eef2e9, #242b20);
+  --callout-warning-c: light-dark(#9a6a20, #d8ad62);
+  --callout-warning-bg: light-dark(#f7efe0, #2e281d);
+  --callout-danger-c: light-dark(#a14e42, #dc8e7f);
+  --callout-danger-bg: light-dark(#f6e9e5, #30221f);
+  --diff-add-c: light-dark(#376b49, #8fc49d);
+  --diff-add-bg: light-dark(#e8f2e9, #1e2b21);
+  --diff-remove-c: light-dark(#9a493f, #df9184);
+  --diff-remove-bg: light-dark(#f6e8e4, #30211f);
+  --decision-pro-c: light-dark(#376b49, #8fc49d);
+  --decision-pro-bg: light-dark(#e8f2e9, #1e2b21);
+  --decision-con-c: light-dark(#9a493f, #df9184);
+  --decision-con-bg: light-dark(#f6e8e4, #30211f);
+  --annotation-c: light-dark(#5965a8, #aab4f0);
+  --annotation-bg: light-dark(#e4e8f7, #2a2f4e);
+  --diff-content-bg: light-dark(#ffffff, #1b1916);
+  --diff-hunk-bg: light-dark(#f6f5f2, #21201d);
+  --diff-hunk-c: light-dark(#8a857c, #8d887e);
+  --header-bg: light-dark(#ece7db, #332e24);
   --diff-header-bg: var(--header-bg);
   color-scheme: light dark;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --bg: #1b1916;
-    --ink-c: #ebe6da;
-    --muted-c: #a49c8b;
-    --edge-c: #35312a;
-    --edge-strong-c: #4f4a3f;
-    --surface-c: #242119;
-    --accent-c: #82c99a;
-    --callout-note-c: #87b5ca;
-    --callout-note-bg: #202a2d;
-    --callout-tip-c: #9abd89;
-    --callout-tip-bg: #242b20;
-    --callout-warning-c: #d8ad62;
-    --callout-warning-bg: #2e281d;
-    --callout-danger-c: #dc8e7f;
-    --callout-danger-bg: #30221f;
-    --diff-add-c: #8fc49d;
-    --diff-add-bg: #1e2b21;
-    --diff-remove-c: #df9184;
-    --diff-remove-bg: #30211f;
-    --decision-pro-c: #8fc49d;
-    --decision-pro-bg: #1e2b21;
-    --decision-con-c: #df9184;
-    --decision-con-bg: #30211f;
-    --annotation-c: #aab4f0;
-    --annotation-bg: #2a2f4e;
-    --diff-content-bg: #1b1916;
-    --diff-hunk-bg: #21201d;
-    --diff-hunk-c: #8d887e;
-    --header-bg: #332e24;
-    --diff-header-bg: var(--header-bg);
-  }
-}
-
 :root[data-theme="light"] {
   color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --bg: #1b1916;
-  --ink-c: #ebe6da;
-  --muted-c: #a49c8b;
-  --edge-c: #35312a;
-  --edge-strong-c: #4f4a3f;
-  --surface-c: #242119;
-  --accent-c: #82c99a;
-  --callout-note-c: #87b5ca;
-  --callout-note-bg: #202a2d;
-  --callout-tip-c: #9abd89;
-  --callout-tip-bg: #242b20;
-  --callout-warning-c: #d8ad62;
-  --callout-warning-bg: #2e281d;
-  --callout-danger-c: #dc8e7f;
-  --callout-danger-bg: #30221f;
-  --diff-add-c: #8fc49d;
-  --diff-add-bg: #1e2b21;
-  --diff-remove-c: #df9184;
-  --diff-remove-bg: #30211f;
-  --decision-pro-c: #8fc49d;
-  --decision-pro-bg: #1e2b21;
-  --decision-con-c: #df9184;
-  --decision-con-bg: #30211f;
-  --annotation-c: #aab4f0;
-  --annotation-bg: #2a2f4e;
-  --diff-content-bg: #1b1916;
-  --diff-hunk-bg: #21201d;
-  --diff-hunk-c: #8d887e;
-  --header-bg: #332e24;
-  --diff-header-bg: var(--header-bg);
   color-scheme: dark;
 }
 

@@ -6,47 +6,17 @@ explicit theme override while staying independent of the surrounding shell.
 */
 
 :root {
-  --syntax-keyword-c: #cf222e;
-  --syntax-entity-c: #8250df;
-  --syntax-constant-c: #0550ae;
-  --syntax-string-c: #0a3069;
-  --syntax-variable-c: #953800;
-  --syntax-comment-c: #59636e;
-  --syntax-tag-c: #116329;
-  --syntax-addition-c: #116329;
-  --syntax-addition-bg: #dafbe1;
-  --syntax-deletion-c: #82071e;
-  --syntax-deletion-bg: #ffebe9;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --syntax-keyword-c: #ff7b72;
-    --syntax-entity-c: #d2a8ff;
-    --syntax-constant-c: #79c0ff;
-    --syntax-string-c: #a5d6ff;
-    --syntax-variable-c: #ffa657;
-    --syntax-comment-c: #8b949e;
-    --syntax-tag-c: #7ee787;
-    --syntax-addition-c: #aff5b4;
-    --syntax-addition-bg: #033a16;
-    --syntax-deletion-c: #ffdcd7;
-    --syntax-deletion-bg: #67060c;
-  }
-}
-
-:root[data-theme="dark"] {
-  --syntax-keyword-c: #ff7b72;
-  --syntax-entity-c: #d2a8ff;
-  --syntax-constant-c: #79c0ff;
-  --syntax-string-c: #a5d6ff;
-  --syntax-variable-c: #ffa657;
-  --syntax-comment-c: #8b949e;
-  --syntax-tag-c: #7ee787;
-  --syntax-addition-c: #aff5b4;
-  --syntax-addition-bg: #033a16;
-  --syntax-deletion-c: #ffdcd7;
-  --syntax-deletion-bg: #67060c;
+  --syntax-keyword-c: light-dark(#cf222e, #ff7b72);
+  --syntax-entity-c: light-dark(#8250df, #d2a8ff);
+  --syntax-constant-c: light-dark(#0550ae, #79c0ff);
+  --syntax-string-c: light-dark(#0a3069, #a5d6ff);
+  --syntax-variable-c: light-dark(#953800, #ffa657);
+  --syntax-comment-c: light-dark(#59636e, #8b949e);
+  --syntax-tag-c: light-dark(#116329, #7ee787);
+  --syntax-addition-c: light-dark(#116329, #aff5b4);
+  --syntax-addition-bg: light-dark(#dafbe1, #033a16);
+  --syntax-deletion-c: light-dark(#82071e, #ffdcd7);
+  --syntax-deletion-bg: light-dark(#ffebe9, #67060c);
 }
 
 @layer components {

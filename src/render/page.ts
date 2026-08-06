@@ -8,6 +8,20 @@
 import { FAVICON_DARK_SRC, FAVICON_LIGHT_SRC } from "./branding.generated.js";
 import { escapeHtml } from "./escape-html.js";
 
+// Reads only the validated render-mode field before styles are parsed, so a
+// stored choice never flashes the other palette on the first frame.
+const PREFERENCES_HEAD_SCRIPT = `(() => {
+  try {
+    const raw = localStorage.getItem("big-plan:prefs:v1");
+    if (raw === null) return;
+    const record = JSON.parse(raw);
+    if (record?.version !== 1) return;
+    if (record.mode === "light" || record.mode === "dark") {
+      document.documentElement.setAttribute("data-theme", record.mode);
+    }
+  } catch (_) {}
+})();`;
+
 /**
  * Wraps body markup in a self-contained HTML document. Favicons and styles
  * are embedded, so callers guarantee they reference no external resources
@@ -38,6 +52,7 @@ export const renderPage = ({
 <title>${escapeHtml(title)}</title>
 <link rel="icon" type="image/x-icon" href="${FAVICON_LIGHT_SRC}">
 <link rel="icon" type="image/x-icon" media="(prefers-color-scheme: dark)" href="${FAVICON_DARK_SRC}">
+<script>${PREFERENCES_HEAD_SCRIPT}</script>
 <style>${styles}</style>
 </head>
 <body class="${escapeHtml(bodyClassName)}">
