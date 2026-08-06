@@ -35,9 +35,12 @@ Big Plan renders the paragraph directly under the title as the document's subtit
 
 `slide-type-structure` enforces only objective facts from the registered catalog.
 Singleton types may appear at most once, `desired-experience` and `desired-outcome` may not appear together, repeated user journeys must keep distinct names and TOC forms, and every user journey must contain Wireframe mockups or a non-empty `wireframeReason` explaining why no UI was created.
+The two are exclusive: a user journey that contains a Wireframe and also carries a `wireframeReason` is flagged, because the reason only explains an absent wireframe.
 It does not require any type, judge whether content matches a type, lint “Success looks like”, or enforce the plain-language title discipline.
 
-`acceptance-criteria-grouping` requires an acceptance-criteria slide with more than seven criteria to expose a grouping dimension. Nested lists, repeated first-column table groups, or separate labelled collections satisfy the rule.
+`acceptance-criteria-grouping` requires an acceptance-criteria slide with more than seven criteria to expose a grouping dimension.
+It counts only the lists and tables the slide body itself presents, so a list inside a component belongs to that component rather than to the criteria.
+Nested lists, repeated first-column table groups, or separate labelled collections satisfy the rule.
 
 `slide-leading-title` requires a slide or sub-slide to name its message before it shows anything.
 A component, fenced code block, standalone image, or table as the first block under an h2 or h3 is flagged; a sub-slide fixes it with an h4 title above the figure, and a slide with a title line or context builder.
@@ -51,6 +54,7 @@ A `Part` marker's act name and titles nested inside a component, such as an `Opt
 `collection-grouping` requires a list past eight items, or a table past eight body rows, to be grouped.
 A list counts as grouped when its items carry nested items; a table counts as grouped when its first column repeats, which is what a grouping dimension looks like once equal values sit together.
 Splitting a long collection into several shorter labelled lists satisfies the rule the same way, because no single list then reaches the threshold.
+A criteria collection on an acceptance-criteria slide is left to `acceptance-criteria-grouping`, whose stricter seven-criterion limit already asks for the same edit.
 
 `table-of-contents-matches-sections` requires a `TableOfContents`'s Entry section names to repeat the document's overview forms exactly, in order, one to one.
 For most typed slides that is the catalog name; for a user journey it is the marker's `toc` form; for an untyped slide it is the h2 title.

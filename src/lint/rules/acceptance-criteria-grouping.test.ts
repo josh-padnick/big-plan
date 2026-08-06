@@ -22,6 +22,39 @@ describe("lintPlan acceptance-criteria-grouping", () => {
     });
   });
 
+  it("should still require grouping when a component in the slide carries its own list", () => {
+    const criteria = Array.from(
+      { length: 8 },
+      (_, index) => `- Criterion ${index + 1}`,
+    );
+    const callout = `<Callout type="note" title="How to read these">\n\n- The checks are observable.\n- The checks avoid implementation steps.\n\n</Callout>`;
+    expect(
+      lintPlan({
+        markdown: `<Slide type="acceptance-criteria" />\n\n## Acceptance criteria\n\nThese checks prove the work is complete.\n\n${criteria.join("\n")}\n\n${callout}\n`,
+      }).filter(({ ruleId }) => ruleId === "acceptance-criteria-grouping"),
+    ).toEqual([
+      {
+        ruleId: "acceptance-criteria-grouping",
+        line: 3,
+        column: 1,
+        message:
+          "Group all 8 acceptance criteria by a dimension that helps the reviewer judge them; more than seven criteria must not stay flat",
+      },
+    ]);
+  });
+
+  it("should report a long flat criteria list only once", () => {
+    const criteria = Array.from(
+      { length: 9 },
+      (_, index) => `- Criterion ${index + 1}`,
+    );
+    expect(
+      lintPlan({
+        markdown: `<Slide type="acceptance-criteria" />\n\n## Acceptance criteria\n\nThese checks prove the work is complete.\n\n${criteria.join("\n")}\n`,
+      }).filter(({ ruleId }) => ruleId === "collection-grouping"),
+    ).toEqual([]);
+  });
+
   it("should allow more than seven criteria in grouped lists", () => {
     const criteria = [
       "- **Experience** - what the user can do.\n  - The first experience works.\n  - The second experience works.",

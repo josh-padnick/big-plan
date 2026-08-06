@@ -2,10 +2,7 @@
 // not repeat, and the outcome pair is mutually exclusive. It deliberately
 // judges no slide content.
 
-import {
-  SLIDE_TYPES,
-  slideTypeFor,
-} from "../../plan-vocabulary/slide-types/index.js";
+import { SLIDE_TYPES } from "../../plan-vocabulary/slide-types/index.js";
 import { collectAuthoredSections } from "../authored-sections.js";
 import type { PlanLintFinding, PlanLintRule } from "../types.js";
 
@@ -46,18 +43,6 @@ const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
   for (const section of typed) {
     if (section.type === undefined) {
       continue;
-    }
-    const definition = slideTypeFor(section.type);
-    for (const component of definition.components) {
-      if (
-        component.required === true &&
-        !section.components.includes(component.name)
-      ) {
-        findings.push({
-          ...positionOf(section),
-          message: `${definition.name} slide "${section.name}" must contain a ${component.name} with actual UI mockups`,
-        });
-      }
     }
     if (section.type === "user-journey") {
       const hasWireframe = section.components.includes("Wireframe");

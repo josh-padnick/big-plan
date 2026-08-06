@@ -14,7 +14,6 @@ export type SlideTypeCardinality = "one" | "many";
 export type SlideTypeComponentPairing = {
   readonly name: string;
   readonly guidance: string;
-  readonly required?: boolean;
 };
 
 export type SlideTypeDefinition = {

@@ -2,52 +2,20 @@
 // list or table hides structure the author already knows, so a long collection
 // must be grouped by a dimension that helps the reviewer judge it.
 
-import type { InlineCode, List, Table, Text } from "mdast";
-import type { Node, Parent } from "unist";
+import type { Node } from "unist";
+import {
+  acceptanceCriteriaCollections,
+  isGroupedList,
+  isGroupedTable,
+  isList,
+  isTable,
+} from "../collections.js";
+import { isParent } from "../mdx-nodes.js";
 import type { PlanLintFinding, PlanLintRule } from "../types.js";
 
 // Seven items is the point where a reader stops holding the whole collection
 // at once; the rule fires past eight so a borderline list is left alone.
 const MAXIMUM_UNGROUPED_ITEMS = 8;
-
-const isParent = (node: Node): node is Parent => "children" in node;
-
-const isText = (node: Node): node is Text => node.type === "text";
-
-const isInlineCode = (node: Node): node is InlineCode =>
-  node.type === "inlineCode";
-
-const isList = (node: Node): node is List => node.type === "list";
-
-const isTable = (node: Node): node is Table => node.type === "table";
-
-const textOf = (node: Node): string => {
-  if (isText(node) || isInlineCode(node)) {
-    return node.value;
-  }
-  return isParent(node) ? node.children.map(textOf).join("") : "";
-};
-
-// A list is grouped when its items carry their own nested items, which is the
-// shape a bulleted legend over sub-items produces. An author who instead
-// splits the collection into several short labelled lists never reaches the
-// threshold on any one of them.
-const isGroupedList = (list: List): boolean =>
-  list.children.some(
-    (item) => isParent(item) && item.children.some((child) => isList(child)),
-  );
-
-// A table is grouped when its first column repeats, which is what a grouping
-// dimension looks like once equal values sit together.
-const isGroupedTable = (table: Table): boolean => {
-  const rows = table.children.slice(1);
-  const keys = rows.map((row) =>
-    isParent(row) && row.children[0] !== undefined
-      ? textOf(row.children[0]).trim().toLowerCase()
-      : "",
-  );
-  return new Set(keys).size < keys.length;
-};
 
 const checkCollectionGrouping = ({
   tree,
@@ -57,8 +25,16 @@ const checkCollectionGrouping = ({
 }): ReadonlyArray<PlanLintFinding> => {
   const findings: Array<PlanLintFinding> = [];
 
+  // A criteria collection is already held to the stricter seven-criterion
+  // contract, so reporting it here would ask for the same edit twice.
+  const criteriaCollections = new Set<Node>(
+    acceptanceCriteriaCollections(tree).flatMap(({ collections }) => [
+      ...collections,
+    ]),
+  );
+
   const visit = (node: Node): void => {
-    if (node.position !== undefined) {
+    if (node.position !== undefined && !criteriaCollections.has(node)) {
       if (
         isList(node) &&
         node.children.length > MAXIMUM_UNGROUPED_ITEMS &&

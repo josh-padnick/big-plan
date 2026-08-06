@@ -67,8 +67,7 @@ const renderSlideTypeCatalog = (types) =>
       "**Components that pair well:**",
       "",
       ...type.components.map(
-        (component) =>
-          `- \`${component.name}\`${component.required === true ? " **(required)**" : ""} — ${component.guidance}`,
+        (component) => `- \`${component.name}\` — ${component.guidance}`,
       ),
       "",
     ]),
