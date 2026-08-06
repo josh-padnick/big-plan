@@ -45,11 +45,12 @@ const RELEVANCE_FLOOR = {
 };
 
 /** Runs a command and returns trimmed stdout with a useful failure boundary. */
-const run = async ({ command, args, cwd, env = process.env }) => {
+const run = async ({ command, args, cwd, env = process.env, timeout }) => {
   const { stdout } = await execFileAsync(command, args, {
     cwd,
     env,
     maxBuffer: 50 * 1024 * 1024,
+    timeout,
   });
   return stdout.trim();
 };
@@ -705,6 +706,7 @@ export const verifyHistory = async ({
         command: command[0],
         args: command.slice(1),
         cwd: harnessRoot,
+        timeout: 3 * 60 * 1000,
         env: {
           ...process.env,
           STYLE_SNAPSHOT_CHECKOUT: worktree,
