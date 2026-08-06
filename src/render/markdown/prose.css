@@ -1,10 +1,10 @@
 /*
 CSS escape hatch: generated markup.
-Element-scoped styles for the plain markdown elements the transform emits.
-Markdown-generated markup carries no class attributes for utilities to
-target, so the reading column is styled with element selectors scoped to
-<article>, using the same design tokens as the shell's utility classes.
-Enhanced markup with emitted classes (syntax tokens and typed components)
+Element-scoped styles for plain Markdown elements carrying the
+data-authored-prose provenance marker. The renderer adds that marker before
+registered components materialize their own markup, so authored prose keeps
+its reading treatment inside or outside a component while component chrome
+never inherits these rules accidentally. Enhanced markup with emitted classes
 is styled by its owning module, not here.
 */
 
@@ -22,61 +22,81 @@ is styled by its owning module, not here.
      Anything that reads like a passage joins it: a callout and a quick
      summary are prose wearing chrome, and a code block is read line by line
      the same way. Tables are the one breakout left. */
-  article :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6, pre),
-  article .callout,
-  article [data-quick-summary] {
+  article
+    :is(
+      p,
+      ul,
+      ol,
+      dl,
+      blockquote,
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6,
+      pre
+    )[data-authored-prose] {
     /* One width, and the same one for a bare paragraph as for a block
        wearing chrome, so their edges line up down the column rather than a
        callout sitting inset from the prose beside it. */
     max-width: var(--measure);
   }
   article
-    :is(td, th, .wireframe)
-    :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6, pre) {
+    :is(td, th)[data-authored-prose]
+    :is(
+      p,
+      ul,
+      ol,
+      dl,
+      blockquote,
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6,
+      pre
+    )[data-authored-prose] {
     max-width: none;
   }
 
-  article h1,
-  article h2,
-  article h3,
-  article h4,
-  article h5,
-  article h6 {
+  article :is(h1, h2, h3, h4, h5, h6)[data-authored-prose] {
     line-height: 1.3;
     font-weight: 600;
     margin: 2.25em 0 0.6em;
   }
-  article h1 {
+  article h1[data-authored-prose] {
     font-size: 2.5rem;
     line-height: 1.15;
     margin-top: 0;
     border-bottom: 1px solid var(--color-edge);
     padding-bottom: 0.3em;
   }
-  article h2 {
+  article h2[data-authored-prose] {
     font-size: 2rem;
     border-bottom: 1px solid var(--color-edge);
     padding-bottom: 0.3em;
   }
-  article h3 {
+  article h3[data-authored-prose] {
     font-size: 1.5rem;
   }
-  article h4 {
+  article h4[data-authored-prose] {
     font-size: 1.25rem;
   }
-  article h5 {
+  article h5[data-authored-prose] {
     font-size: 1.0625rem;
   }
 
   /* The paragraph directly under the title is the plan's lede; it reads as
      the document's subtitle, and the title's rule moves beneath it so the
      pair forms one masthead. */
-  article h1:has(+ p) {
+  article h1[data-authored-prose]:has(+ p[data-authored-prose]) {
     border-bottom: none;
     padding-bottom: 0;
     margin-bottom: 0.3rem;
   }
-  article h1 + p {
+  article h1[data-authored-prose] + p[data-authored-prose] {
     font-size: 1.25rem;
     line-height: 1.5;
     color: var(--color-muted);
@@ -84,50 +104,50 @@ is styled by its owning module, not here.
     padding-bottom: 0.75em;
     margin-bottom: 1.5em;
   }
-  article h6 {
+  article h6[data-authored-prose] {
     font-size: 0.875rem;
     color: var(--color-muted);
   }
 
-  article p {
+  article p[data-authored-prose] {
     margin: 0 0 1em;
   }
 
-  article a {
+  article a[data-authored-prose] {
     color: var(--color-accent);
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
   }
 
-  article del {
+  article del[data-authored-prose] {
     color: var(--color-muted);
   }
 
-  article hr {
+  article hr[data-authored-prose] {
     border: 0;
     border-top: 1px solid var(--color-edge);
     margin: 2.5rem 0;
   }
 
-  article img {
+  article img[data-authored-prose] {
     max-width: 100%;
     height: auto;
   }
 
-  article code,
-  article kbd,
-  article samp {
+  article code[data-authored-prose],
+  article kbd[data-authored-prose],
+  article samp[data-authored-prose] {
     font-family: var(--font-mono);
     font-size: 0.875em;
   }
-  article code {
+  article code[data-authored-prose] {
     background: var(--color-surface);
     border: 1px solid var(--color-edge);
     border-radius: 4px;
     padding: 0.1em 0.35em;
   }
-  article pre {
+  article pre[data-authored-prose] {
     background: var(--color-surface);
     border: 1px solid var(--color-edge);
     border-radius: 6px;
@@ -136,66 +156,74 @@ is styled by its owning module, not here.
     line-height: 1.55;
     margin: 0 0 1.25em;
   }
-  article pre code {
+  article pre[data-authored-prose] code[data-authored-prose] {
     background: none;
     border: 0;
     padding: 0;
   }
 
-  article blockquote {
+  article blockquote[data-authored-prose] {
     margin: 0 0 1em;
     padding: 0.25em 0 0.25em 1.25em;
     border-left: 3px solid var(--color-edge);
     color: var(--color-muted);
   }
-  article blockquote > :last-child {
+  article blockquote[data-authored-prose] > :last-child {
     margin-bottom: 0;
   }
 
   /* Preflight strips list markers, so markdown lists restore them, rotating
      the marker scheme at each nesting depth for both list kinds. */
-  article ul {
+  article ul[data-authored-prose] {
     list-style-type: disc;
   }
-  article ul ul {
+  article ul[data-authored-prose] ul[data-authored-prose] {
     list-style-type: circle;
   }
-  article ul ul ul {
+  article
+    ul[data-authored-prose]
+    ul[data-authored-prose]
+    ul[data-authored-prose] {
     list-style-type: square;
   }
-  article ol {
+  article ol[data-authored-prose] {
     list-style-type: decimal;
   }
-  article ol ol {
+  article ol[data-authored-prose] ol[data-authored-prose] {
     list-style-type: lower-alpha;
   }
-  article ol ol ol {
+  article
+    ol[data-authored-prose]
+    ol[data-authored-prose]
+    ol[data-authored-prose] {
     list-style-type: lower-roman;
   }
-  article ul,
-  article ol {
+  article ul[data-authored-prose],
+  article ol[data-authored-prose] {
     margin: 0 0 1em;
     padding-left: 1.75em;
   }
-  article li {
+  article li[data-authored-prose] {
     margin: 0.25em 0;
   }
-  article li > ul,
-  article li > ol {
+  article li[data-authored-prose] > ul[data-authored-prose],
+  article li[data-authored-prose] > ol[data-authored-prose] {
     margin-bottom: 0;
   }
 
-  article ul.contains-task-list {
+  article ul.contains-task-list[data-authored-prose] {
     list-style: none;
     padding-left: 0.5em;
   }
   /* Hanging indent: the item reserves a gutter and the checkbox sits inside
      it absolutely, so wrapped lines align with the text, not the checkbox. */
-  article .task-list-item {
+  article .task-list-item[data-authored-prose] {
     position: relative;
     padding-left: 1.5em;
   }
-  article .task-list-item input[type="checkbox"] {
+  article
+    .task-list-item[data-authored-prose]
+    input[type="checkbox"][data-authored-prose] {
     accent-color: var(--color-accent);
     position: absolute;
     left: 0;
@@ -206,29 +234,35 @@ is styled by its owning module, not here.
      one to fill the column spreads three cells across the page and makes them
      harder to compare, not easier. A table wider than the space still runs to
      its natural width and scrolls inside its container. */
-  article table {
+  article table[data-authored-prose] {
     border-collapse: collapse;
     width: max-content;
     font-size: 0.9375rem;
   }
-  article th,
-  article td {
+  article th[data-authored-prose],
+  article td[data-authored-prose] {
     border-bottom: 1px solid var(--color-edge);
     padding: 0.5rem 0.9rem;
     text-align: left;
     vertical-align: top;
   }
-  article th {
+  article th[data-authored-prose] {
     background: var(--color-surface);
     font-weight: 600;
   }
-  article tbody tr:last-child th,
-  article tbody tr:last-child td {
+  article
+    tbody[data-authored-prose]
+    tr[data-authored-prose]:last-child
+    th[data-authored-prose],
+  article
+    tbody[data-authored-prose]
+    tr[data-authored-prose]:last-child
+    td[data-authored-prose] {
     border-bottom: 0;
   }
 
   /* The footnotes section, as emitted by remark-rehype for GFM footnotes. */
-  article section.footnotes {
+  article section.footnotes[data-authored-prose] {
     margin-top: 3rem;
     border-top: 1px solid var(--color-edge);
     padding-top: 1rem;
@@ -237,7 +271,7 @@ is styled by its owning module, not here.
   }
   /* The section's label, styled like the TOC's "Contents" eyebrow rather
      than a prose heading; it stays out of the TOC by id. */
-  article .footnotes-heading {
+  article .footnotes-heading[data-authored-prose] {
     margin: 0 0 0.75rem;
     border-bottom: 0;
     padding-bottom: 0;

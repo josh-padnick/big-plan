@@ -1,5 +1,5 @@
-// Tests the code-figure transform: which fences gain the shared maximize
-// control, and which are left alone because a component's figure owns them.
+// Tests the code-figure transform: which fences gain the shared copy/maximize
+// controls, and which are left alone because a component's figure owns them.
 
 import { describe, expect, it } from "vitest";
 import { compileMarkdown } from "./compile-markdown.js";
@@ -15,13 +15,20 @@ describe("compileMarkdown code figures", () => {
     const bodyHtml = compileAndSerialize("```text\nsketch\n```\n");
 
     expect(bodyHtml).toContain('data-figure-maximizable="code"');
+    expect(bodyHtml).toContain('data-copy-code=""');
     expect(bodyHtml).toContain('data-figure-maximize=""');
-    expect(bodyHtml).toContain('<pre data-figure-body="">');
+    expect(bodyHtml.indexOf('data-copy-code=""')).toBeLessThan(
+      bodyHtml.indexOf('data-figure-maximize=""'),
+    );
+    expect(bodyHtml).toContain(
+      '<pre data-authored-prose="" data-figure-body="">',
+    );
   });
 
   it("should ship the control dormant so no affordance acts without scripts", () => {
     const bodyHtml = compileAndSerialize("```text\nsketch\n```\n");
 
+    expect(bodyHtml).toContain('hidden data-copy-code=""');
     expect(bodyHtml).toContain('hidden data-figure-maximize=""');
   });
 

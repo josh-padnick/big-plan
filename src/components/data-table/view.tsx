@@ -55,7 +55,7 @@ const CellContent = ({ cell }: { readonly cell: TableCell }) => (
       segment.kind === "code" ? (
         <code
           key={index}
-          className="rounded-none border-0 bg-transparent p-0 text-[0.9em]"
+          className="rounded-none border-0 bg-transparent p-0 font-mono text-[0.9em]"
         >
           {segment.value}
         </code>

@@ -23,6 +23,7 @@ import { completeOutlinePlaceholders } from "./component-pipeline/outline-placeh
 import type { DeferredOutlinePresentations } from "./component-pipeline/outline-placeholder.js";
 import { rehypeDeckTransform } from "./deck-transform.js";
 import type { MutableDocumentOutline } from "./deck-transform.js";
+import { rehypeMarkAuthoredProse } from "./mark-authored-prose.js";
 import { remarkValidateComponents } from "./component-pipeline/validate-authoring.js";
 import type { SlideTypeId } from "../../plan-vocabulary/slide-types/index.js";
 
@@ -309,6 +310,10 @@ const compileMarkdownTree = ({
     })
     .use(rehypeSlug)
     .use(rehypeCollectMetadata, { metadata })
+    // Markdown exists before React-rendered component chrome. Marking it at
+    // this boundary lets prose CSS follow authored provenance rather than
+    // matching every semantic element a component happens to render.
+    .use(rehypeMarkAuthoredProse)
     .use(rehypeRenderComponents, {
       diagnostics,
       ...(models === undefined ? {} : { models }),

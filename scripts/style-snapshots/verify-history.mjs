@@ -21,6 +21,7 @@ import { promisify } from "node:util";
 import { PNG } from "pngjs";
 
 const execFileAsync = promisify(execFile);
+const CAPTURE_TIMEOUT_MS = 10 * 60 * 1000;
 
 const RELEVANCE_FLOOR = {
   fixturePaths: ["examples/mdx-components.mdx", "examples/deck.mdx"],
@@ -45,11 +46,12 @@ const RELEVANCE_FLOOR = {
 };
 
 /** Runs a command and returns trimmed stdout with a useful failure boundary. */
-const run = async ({ command, args, cwd, env = process.env }) => {
+const run = async ({ command, args, cwd, env = process.env, timeout }) => {
   const { stdout } = await execFileAsync(command, args, {
     cwd,
     env,
     maxBuffer: 50 * 1024 * 1024,
+    timeout,
   });
   return stdout.trim();
 };
@@ -373,6 +375,27 @@ const captureEvidence = ({ capture, changedPixels, before, after }) => ({
   after: normalizeIdentity(after),
 });
 
+/** Accepts only the exact raster identities listed by an approved manifest. */
+const identityMatches = (expected, actual) => {
+  if (expected === null || actual === null) {
+    return expected === actual;
+  }
+  return (
+    expected.width === actual.width &&
+    expected.height === actual.height &&
+    [expected.sha256, ...(expected.sha256Alternates ?? [])].includes(
+      actual.sha256,
+    )
+  );
+};
+
+/** Compares approved evidence while allowing listed exact raster variants. */
+const captureEvidenceMatches = (expected, actual) =>
+  expected.capture === actual.capture &&
+  expected.changedPixels === actual.changedPixels &&
+  identityMatches(expected.before, actual.before) &&
+  identityMatches(expected.after, actual.after);
+
 /** Writes one durable machine-readable evidence ledger per relevant commit. */
 const writeEvidenceLedger = async ({ artifactDirectory, entry, captures }) => {
   await mkdir(artifactDirectory, { recursive: true });
@@ -519,16 +542,33 @@ const validateManifest = async ({
     );
   }
 
-  const isIdentity = (value) =>
-    value === null ||
-    (typeof value === "object" &&
-      value !== null &&
-      Number.isInteger(value.width) &&
-      value.width > 0 &&
-      Number.isInteger(value.height) &&
-      value.height > 0 &&
-      typeof value.sha256 === "string" &&
-      /^[0-9a-f]{64}$/.test(value.sha256));
+  const isSha256 = (value) =>
+    typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+  const isIdentity = (value) => {
+    if (value === null) {
+      return true;
+    }
+    if (
+      typeof value !== "object" ||
+      !Number.isInteger(value.width) ||
+      value.width <= 0 ||
+      !Number.isInteger(value.height) ||
+      value.height <= 0 ||
+      !isSha256(value.sha256)
+    ) {
+      return false;
+    }
+    if (value.sha256Alternates === undefined) {
+      return true;
+    }
+    return (
+      Array.isArray(value.sha256Alternates) &&
+      value.sha256Alternates.length > 0 &&
+      value.sha256Alternates.every(isSha256) &&
+      new Set([value.sha256, ...value.sha256Alternates]).size ===
+        value.sha256Alternates.length + 1
+    );
+  };
   for (const entry of manifest.captureChanges) {
     if (
       typeof entry.capture !== "string" ||
@@ -538,18 +578,24 @@ const validateManifest = async ({
       !isIdentity(entry.after)
     ) {
       throw new Error(
-        `${subject}: every captureChanges entry requires capture, exact changedPixels, and before/after dimensions and SHA-256 hashes.`,
+        `${subject}: every captureChanges entry requires capture, exact changedPixels, and before/after dimensions and exact SHA-256 hashes. Optional SHA-256 alternatives must be unique.`,
       );
     }
   }
 
-  const expectedCaptures = manifest.captureChanges
-    .map(captureEvidence)
-    .sort((left, right) => left.capture.localeCompare(right.capture));
+  const expectedCaptures = manifest.captureChanges.sort((left, right) =>
+    left.capture.localeCompare(right.capture),
+  );
   const actualCaptures = changes
     .map(captureEvidence)
     .sort((left, right) => left.capture.localeCompare(right.capture));
-  if (JSON.stringify(expectedCaptures) !== JSON.stringify(actualCaptures)) {
+  if (
+    expectedCaptures.length !== actualCaptures.length ||
+    expectedCaptures.some(
+      (expected, index) =>
+        !captureEvidenceMatches(expected, actualCaptures[index]),
+    )
+  ) {
     throw new Error(
       `${subject}: exact capture evidence does not match the approved manifest.`,
     );
@@ -705,6 +751,7 @@ export const verifyHistory = async ({
         command: command[0],
         args: command.slice(1),
         cwd: harnessRoot,
+        timeout: CAPTURE_TIMEOUT_MS,
         env: {
           ...process.env,
           STYLE_SNAPSHOT_CHECKOUT: worktree,

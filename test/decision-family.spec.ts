@@ -2,7 +2,53 @@
 
 import { expect, test } from "./fixtures";
 
-test("should answer and revise a compact Decision", async ({
+test("should keep component-owned decision lists out of the prose measure", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.goto(allComponentsViewerUrl);
+
+  for (const selector of [
+    "[data-decision-rows]",
+    ".decision-brief-list",
+    ".decision-keyed-chooser",
+  ]) {
+    const list = page.locator(selector).first();
+    const geometry = await list.evaluate((element) => {
+      const parent = element.parentElement;
+      const parentStyle =
+        parent === null ? null : window.getComputedStyle(parent);
+      return {
+        width: element.getBoundingClientRect().width,
+        parentWidth: parent?.getBoundingClientRect().width ?? 0,
+        parentPadding:
+          Number.parseFloat(parentStyle?.paddingLeft ?? "0") +
+          Number.parseFloat(parentStyle?.paddingRight ?? "0"),
+        maxWidth: getComputedStyle(element).maxWidth,
+        itemMargins: Array.from(element.children).map(
+          (item) => getComputedStyle(item).margin,
+        ),
+      };
+    });
+
+    expect(geometry.width).toBeCloseTo(
+      geometry.parentWidth - geometry.parentPadding,
+    );
+    expect(geometry.maxWidth).toBe("none");
+    expect(geometry.itemMargins).not.toContain("4px 0px");
+  }
+
+  const briefLead = page.locator("[data-decision-brief-lead]").first();
+  const briefLeadGeometry = await briefLead.evaluate((element) => ({
+    width: element.getBoundingClientRect().width,
+    parentWidth: element.parentElement?.getBoundingClientRect().width ?? 0,
+    maxWidth: getComputedStyle(element).maxWidth,
+  }));
+  expect(briefLeadGeometry.width).toBeCloseTo(briefLeadGeometry.parentWidth);
+  expect(briefLeadGeometry.maxWidth).toBe("none");
+});
+
+test("should compare, answer, and revise a Decision", async ({
   page,
   decisionViewerUrl,
 }) => {
@@ -10,9 +56,37 @@ test("should answer and revise a compact Decision", async ({
   const card = page.locator("[data-decision-selector]").first();
   await expect(card.locator("[data-decision-rows]")).toBeVisible();
   await expect(card.locator(".decision-row")).toHaveCount(2);
+  await expect(card.locator(".decision-card-verdict")).toHaveCount(4);
 
-  await card.locator("[data-decision-choice]").first().check();
+  const options = card.locator(".decision-row");
+  const [firstBox, secondBox] = await Promise.all([
+    options.nth(0).boundingBox(),
+    options.nth(1).boundingBox(),
+  ]);
+  expect(firstBox?.y).toBeCloseTo(secondBox?.y ?? 0);
+  expect(firstBox?.x).toBeLessThan(secondBox?.x ?? 0);
+
+  const [recommendedBackground, otherBackground] = await Promise.all([
+    options
+      .nth(0)
+      .locator(".decision-option-card")
+      .evaluate((element) => getComputedStyle(element).backgroundImage),
+    options
+      .nth(1)
+      .locator(".decision-option-card")
+      .evaluate((element) => getComputedStyle(element).backgroundImage),
+  ]);
+  expect(recommendedBackground).not.toBe(otherBackground);
+
+  await options.nth(0).locator(".decision-option-card").click();
+  await expect(card.locator("[data-decision-choice]").first()).toBeChecked();
   await expect(card.locator("[data-decision-confirm]")).toBeEnabled();
+  await expect(card.locator("[data-decision-selection-summary]")).toHaveText(
+    "Selected: Embed it in the CLI",
+  );
+  await expect(card.locator("[data-decision-confirm]")).toHaveText(
+    "Confirm Embed it in the CLI",
+  );
   await card.locator("[data-decision-confirm]").click();
   await expect(card.locator("[data-decision-answer]")).toBeVisible();
   await card.locator("[data-decision-change]").click();
@@ -27,6 +101,65 @@ test("should answer and revise a compact Decision", async ({
   await expect(card.locator("[data-decision-proposal]")).toBeHidden();
 });
 
+test("should keep long Decision verdicts inside comparison cards", async ({
+  page,
+  decisionViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(decisionViewerUrl);
+  const card = page.locator(".decision-option-card").first();
+  const verdict = card.locator("[data-decision-verdict]").first();
+  await verdict.evaluate((element) => {
+    element.textContent =
+      "Requires-a-longer-review-before-the-team-can-approve-this-option";
+  });
+
+  const layout = await card.evaluate((element) => {
+    const verdictElement = element.querySelector("[data-decision-verdict]");
+    if (!(verdictElement instanceof HTMLElement)) {
+      throw new Error("Decision verdict is missing.");
+    }
+    const cardBounds = element.getBoundingClientRect();
+    const verdictBounds = verdictElement.getBoundingClientRect();
+    const lineHeight = Number.parseFloat(
+      getComputedStyle(verdictElement).lineHeight,
+    );
+    return {
+      cardClientWidth: element.clientWidth,
+      cardScrollWidth: element.scrollWidth,
+      cardRight: cardBounds.right,
+      documentClientWidth: document.documentElement.clientWidth,
+      documentScrollWidth: document.documentElement.scrollWidth,
+      verdictHeight: verdictBounds.height,
+      verdictRight: verdictBounds.right,
+      lineHeight,
+    };
+  });
+
+  expect(layout.cardScrollWidth).toBeLessThanOrEqual(layout.cardClientWidth);
+  expect(layout.documentScrollWidth).toBeLessThanOrEqual(
+    layout.documentClientWidth,
+  );
+  expect(layout.verdictRight).toBeLessThanOrEqual(layout.cardRight);
+  expect(layout.verdictHeight).toBeGreaterThan(layout.lineHeight);
+});
+
+test("should stack Decision option cards in the same order on a narrow screen", async ({
+  page,
+  decisionViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(decisionViewerUrl);
+  const options = page.locator("[data-decision-selector] .decision-row");
+  const [firstBox, secondBox] = await Promise.all([
+    options.nth(0).boundingBox(),
+    options.nth(1).boundingBox(),
+  ]);
+
+  expect(firstBox?.x).toBeCloseTo(secondBox?.x ?? 0);
+  expect(firstBox?.y).toBeLessThan(secondBox?.y ?? 0);
+});
+
 test("should batch three independent QuickDecisions without comparison", async ({
   page,
   quickDecisionViewerUrl,
@@ -37,6 +170,16 @@ test("should batch three independent QuickDecisions without comparison", async (
   await expect(cards.locator(".decision-brief-compare")).toHaveCount(0);
 
   const first = cards.first();
+  const briefOptions = first.locator(".decision-brief-option");
+  const [recommendedBackground, otherBackground] = await Promise.all([
+    briefOptions
+      .nth(0)
+      .evaluate((element) => getComputedStyle(element).backgroundColor),
+    briefOptions
+      .nth(1)
+      .evaluate((element) => getComputedStyle(element).backgroundColor),
+  ]);
+  expect(recommendedBackground).not.toBe(otherBackground);
   await first.locator("[data-decision-choice]").first().check();
   await first.locator("[data-decision-confirm]").click();
   await expect(first.locator("[data-decision-answer]")).toBeVisible();

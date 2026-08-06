@@ -135,19 +135,76 @@
 
   /* --- The three approved reading depths -------------------------------- */
 
-  /* A - options as rows. The title owns a larger tier with a rule beneath it;
-     smaller criteria copy then reads as supporting comparison data instead
-     of competing with the option name. Dimension labels still align. */
-  article .decision-row + .decision-row {
-    border-top: 1px solid var(--edge-c);
+  /* A - the long Decision is a comparison surface. Each option is one large
+     target. Equal-height cards keep the criteria near each other on a wide
+     screen, while auto-fit returns the same content order as a stack when the
+     reading column is narrow. Recommendation and selection stay independent:
+     a recommendation owns a quiet wash, and a selection owns the strong rim
+     and filled native radio. */
+  article .decision-rows {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+    grid-auto-rows: 1fr;
+    gap: 0.75rem;
   }
-  article .decision-row:has(.decision-radio:enabled):hover {
-    background: var(--surface-c);
+  article .decision-option-card {
+    transition:
+      border-color 150ms ease,
+      box-shadow 150ms ease,
+      transform 150ms ease;
   }
-  article .decision-row:has(.decision-radio:checked),
-  article .decision-brief-option:has(.decision-radio:checked) {
-    background: color-mix(in srgb, var(--color-accent) 10%, var(--bg));
-    box-shadow: inset 3px 0 0 var(--color-accent);
+  article .decision-row[data-option-recommended] > .decision-option-card {
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--decision-pro-bg) 68%, var(--bg)) 0,
+      var(--bg) 62%
+    );
+  }
+  article
+    .decision-row:has(.decision-radio:enabled)
+    > .decision-option-card:hover {
+    border-color: color-mix(in srgb, var(--color-accent) 45%, var(--edge-c));
+    box-shadow: 0 0.35rem 1rem rgb(0 0 0 / 0.08);
+    transform: translateY(-1px);
+  }
+  article
+    .decision-row:has(.decision-radio:focus-visible)
+    > .decision-option-card {
+    outline: 3px solid color-mix(in srgb, var(--color-accent) 24%, transparent);
+    outline-offset: 2px;
+  }
+  article .decision-row:has(.decision-radio:checked) > .decision-option-card {
+    border-color: var(--color-accent);
+    box-shadow:
+      0 0 0 2px var(--color-accent),
+      0 0.4rem 1.1rem color-mix(in srgb, var(--color-accent) 11%, transparent);
+  }
+  article .decision-row .decision-radio:focus-visible {
+    box-shadow: none;
+  }
+  article .decision-row .decision-radio:checked:focus-visible {
+    box-shadow: inset 0 0 0 2.5px var(--bg);
+  }
+  article .decision-recommended-pill {
+    background: var(--decision-pro-bg);
+    color: var(--decision-pro-c);
+  }
+  article .decision-recommended-pill svg,
+  article .decision-card-verdict svg {
+    width: 100%;
+    height: 100%;
+    stroke-width: 2.4;
+  }
+  article .decision-card-verdict[data-decision-tone="good"] {
+    color: var(--decision-pro-c);
+  }
+  article .decision-card-verdict[data-decision-tone="mixed"] {
+    color: var(--callout-warning-c);
+  }
+  article .decision-card-verdict[data-decision-tone="bad"] {
+    color: var(--decision-con-c);
+  }
+  article .decision-card-verdict[data-decision-tone="neutral"] {
+    color: var(--color-muted);
   }
   /* B - the keyed matrix, with its chooser held apart from comparison. */
   article .decision-chooser-row > th {
@@ -418,8 +475,15 @@
   article .decision-brief-option + .decision-brief-option {
     border-top: 1px solid var(--edge-c);
   }
+  article .decision-brief-option[data-option-recommended] {
+    background: color-mix(in srgb, var(--decision-pro-bg) 58%, var(--bg));
+  }
   article .decision-brief-option:has(.decision-radio:enabled):hover {
-    background: var(--surface-c);
+    background: color-mix(in srgb, var(--color-accent) 7%, var(--surface-c));
+  }
+  article .decision-brief-option:has(.decision-radio:checked) {
+    background: color-mix(in srgb, var(--color-accent) 11%, var(--bg));
+    box-shadow: inset 3px 0 0 var(--color-accent);
   }
   article .decision-brief-compare-body {
     border: 1px solid var(--edge-c);
@@ -440,17 +504,17 @@
   article .decision-propose-link {
     display: inline-flex;
     align-items: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
     cursor: pointer;
     color: var(--color-muted);
     font-size: 0.8125rem;
     font-weight: 600;
-    text-decoration: underline;
-    text-decoration-color: color-mix(
-      in srgb,
-      var(--color-muted) 45%,
-      transparent
-    );
-    text-underline-offset: 3px;
+    text-decoration: none;
+  }
+  article .decision-propose-link svg {
+    width: 100%;
+    height: 100%;
   }
   article .decision-propose-link:hover {
     color: var(--ink-c);
@@ -524,7 +588,8 @@
   article .decision-confirm {
     display: inline-flex;
     align-items: center;
-    padding: 0.375rem 0.875rem;
+    min-height: 2.75rem;
+    padding: 0.5rem 1rem;
     border: 0;
     border-radius: 0.375rem;
     cursor: pointer;
@@ -572,6 +637,22 @@
     display: flex;
     background: var(--decision-pro-bg);
   }
+  article .decision-footer {
+    background: color-mix(in srgb, var(--surface-c) 50%, var(--bg));
+  }
+  article .decision-selection-mark {
+    display: none;
+  }
+  article
+    .decision-selection-summary[data-selection-picked]
+    .decision-selection-mark {
+    display: inline-flex;
+  }
+  article
+    .decision-selection-summary[data-selection-picked]
+    [data-decision-selection-copy] {
+    color: var(--color-ink);
+  }
 }
 
 @layer components {
@@ -583,6 +664,24 @@
     }
     article .decision-matrix {
       min-width: 34rem;
+    }
+  }
+  @media (width < 36rem) {
+    article .decision-options-heading {
+      display: block;
+    }
+    article .decision-options-heading > :last-child {
+      margin-top: 0.25rem;
+    }
+    article .decision-row-lines {
+      padding-left: 3rem;
+    }
+    article .decision-footer {
+      display: grid;
+      justify-items: stretch;
+    }
+    article .decision-footer .decision-confirm {
+      width: 100%;
     }
   }
 }

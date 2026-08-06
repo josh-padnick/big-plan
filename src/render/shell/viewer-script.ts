@@ -4,10 +4,11 @@
 // popovers that float [data-info-popover] disclosures beside their triggers,
 // collapse toggles for deck parts, slides, and sub-slides, table-schema column
 // state, a document comment draft, DataTable sorting, filtering, text fit,
-// column layout and grouping, and one maximize behavior shared by every figure
-// family, a decision matrix's column highlight, rationale swap, and confirm
-// step, wireframe screen navigation driven entirely by renderer-emitted data
-// attributes plus true-width scaling, and the diagram leg in
+// column layout and grouping, plain-code copying, and one maximize behavior
+// shared by every figure family, a decision matrix's column highlight,
+// rationale swap, and confirm step, wireframe screen navigation driven
+// entirely by renderer-emitted data attributes plus true-width scaling, and
+// the diagram leg in
 // ./diagram-script.ts. Plan content never
 // contributes script, and every affordance keeps a no-JS fallback.
 //
@@ -111,6 +112,57 @@ export const VIEWER_SCRIPT = `<script>
   addEventListener("scroll", schedule, { passive: true });
   addEventListener("resize", schedule, { passive: true });
   apply();
+})();
+(() => {
+  const buttons = document.querySelectorAll(".code-figure [data-copy-code]");
+  const clipboardWrite = async (text) => {
+    if (navigator.clipboard?.writeText !== undefined) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    const fallback = document.createElement("textarea");
+    fallback.value = text;
+    fallback.setAttribute("readonly", "");
+    fallback.style.position = "fixed";
+    fallback.style.opacity = "0";
+    document.body.append(fallback);
+    fallback.select();
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } finally {
+      fallback.remove();
+    }
+    if (!copied) throw new Error("Unable to copy code");
+  };
+  for (const button of buttons) {
+    const figure = button.closest(".code-figure");
+    const code = figure?.querySelector(":scope > pre > code");
+    if (figure === null || code === null) continue;
+    button.hidden = false;
+    button.addEventListener("click", async () => {
+      // mdast code values exclude the fence's structural final newline, while
+      // remark-rehype appends one for HTML. Remove that one byte only: the
+      // copied value stays exact without pulling in figure chrome or title
+      // whitespace, and authored indentation remains intact.
+      const rendered = code.textContent || "";
+      const source = rendered.endsWith("\\n")
+        ? rendered.slice(0, -1)
+        : rendered;
+      try {
+        await clipboardWrite(source);
+        button.setAttribute("aria-label", "Copied code");
+        button.setAttribute("data-tooltip", "Copied code");
+      } catch (_) {
+        button.setAttribute("aria-label", "Copy failed");
+        button.setAttribute("data-tooltip", "Copy failed");
+      }
+      setTimeout(() => {
+        button.setAttribute("aria-label", "Copy code");
+        button.setAttribute("data-tooltip", "Copy code");
+      }, 1200);
+    });
+  }
 })();
 (() => {
   const infos = document.querySelectorAll("details[data-info-popover]");
@@ -1559,6 +1611,7 @@ export const VIEWER_SCRIPT = `<script>
     const answerTitle = own("[data-decision-answer-title]");
     const answerLead = own("[data-decision-answer-lead]");
     const summary = own("[data-decision-selection-summary]");
+    const selectionCopy = own("[data-decision-selection-copy]");
     const rationale = own("[data-decision-rationale]");
     const question = own("[data-decision-question]");
     const proposalText = own("[data-decision-proposal-text]");
@@ -1807,16 +1860,22 @@ export const VIEWER_SCRIPT = `<script>
       const index = choice === null ? null : choice.getAttribute("data-option-index");
       showPanel(index === null ? defaultIndex : index);
       paintColumn(index, false);
-      confirm.textContent = proposing ? "Submit proposal" : "Confirm choice";
+      confirm.textContent = proposing
+        ? "Send suggestion"
+        : choice === null
+          ? "Confirm choice"
+          : "Confirm " + choice.value;
       confirm.disabled =
         choice === null || (proposing && proposalValue() === "");
-      if (summary !== null) {
-        summary.textContent =
+      if (summary !== null && selectionCopy !== null) {
+        if (choice === null) summary.removeAttribute("data-selection-picked");
+        else summary.setAttribute("data-selection-picked", "");
+        selectionCopy.textContent =
           choice === null
-            ? "Nothing selected yet."
+            ? "Select an option to continue."
             : proposing
-              ? "Your own approach selected."
-              : choice.value + " selected.";
+              ? "Your suggested option is selected."
+              : "Selected: " + choice.value;
       }
     };
     decision.addEventListener("change", (event) => {

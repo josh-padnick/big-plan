@@ -1,4 +1,4 @@
-// Tests Decision's compact authoring contract and shared answer presentation.
+// Tests Decision's comparison-card contract and shared answer presentation.
 
 import { describe, expect, it } from "vitest";
 import {
@@ -10,7 +10,7 @@ const render = (markdown: string): string =>
   renderDocument({ markdown, fallbackTitle: "Decision" }).html;
 
 describe("Decision", () => {
-  it("should render option-local considerations as compact rows", () => {
+  it("should render option-local considerations as comparison cards", () => {
     const html = render(`<Decision question="Which path?">
 
 <Option title="Canary" recommended summary="Start narrow.">
@@ -36,7 +36,9 @@ Every region sees the change together.
 </Decision>`);
 
     expect(html).toContain("decision-rows");
-    expect(html).toContain("Risk:");
+    expect(html).toContain("decision-option-card");
+    expect(html).toContain('data-decision-tone="good"');
+    expect(html).toContain(">Risk<");
     expect(html).toContain('data-decision-layout="rows"');
   });
 

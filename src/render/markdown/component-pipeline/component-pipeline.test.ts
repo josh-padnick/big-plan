@@ -358,7 +358,9 @@ describe("scoped child dispatch", () => {
     });
     const html = serializeHtml({ root });
     expect(html).toContain('data-annotation-lines="1"');
-    expect(html).toContain("Use <strong>bounded</strong> retries.");
+    expect(html).toContain(
+      'Use <strong data-authored-prose="">bounded</strong> retries.',
+    );
   });
 
   it("should not dispatch a scoped name nested below a direct child", () => {

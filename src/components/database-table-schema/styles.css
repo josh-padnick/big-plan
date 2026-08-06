@@ -1,21 +1,8 @@
 /* CSS escape hatch: selector relationships define the dense equal-height grid
-   and override generated prose-table markup: plain in-figure code, grid and
-   band edge relationships, generated tabs, column controls, index jumps, and
-   menu state. Renderer-owned resting surfaces live with their JSX. */
+   and its band edges, generated tabs, column controls, index jumps, and menu
+   state. Renderer-owned resting surfaces live with their JSX. */
 
 @layer components {
-  /* SQL fragments read as code, not chips: the prose inline-code chrome is
-     figure chrome here, so it comes off inside the component. */
-  article [data-database-table-schema] code {
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-    padding: 0;
-    /* SQL fragments wrap as whole units between constraint runs, never
-       inside an expression; the grid's scroll container absorbs overflow in
-       the grid, and each Indexes-band definition line scrolls on its own. */
-    white-space: nowrap;
-  }
   /* Row-scope name cells opt back out of the prose header treatment; the
      column-head row keeps a quiet muted-label look that guides alignment
      without competing with the table identity above it. */
@@ -33,6 +20,25 @@
   article .table-schema-grid th,
   article .table-schema-grid td {
     padding: 0.35rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  article .table-schema-grid thead th {
+    border-bottom: 1px solid var(--edge-c);
+  }
+  article
+    .table-schema-grid
+    tbody
+    .table-schema-column-row
+    + .table-schema-column-row
+    > th,
+  article
+    .table-schema-grid
+    tbody
+    .table-schema-column-row
+    + .table-schema-column-row
+    > td {
+    border-top: 1px solid var(--edge-c);
   }
   article .table-schema-head-column {
     width: 19%;
@@ -122,10 +128,8 @@
     color: var(--color-ink);
     box-shadow: inset 0 -2px 0 var(--color-accent);
   }
-  /* Verbatim DDL reads as a plain code sheet on the band tint: the prose
-     block chrome stays, but the band supplies the surface. The figure-wide
-     nowrap rule serves the grid's inline SQL fragments; a DDL fence is real
-     multi-line source, so it restores pre-formatting and scrolls in place. */
+  /* Verbatim authored DDL keeps prose block chrome on the band tint. It is
+     real multi-line source, so it scrolls in place. */
   article .table-schema-ddl-body pre {
     margin-bottom: 0;
     overflow-x: auto;

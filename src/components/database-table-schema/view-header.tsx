@@ -12,6 +12,7 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { CopyFeedback } from "../_shared/copy-feedback/copy-feedback.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
+import { MutedText } from "./view-elements.js";
 
 // /* off-scale */ Phase A preserves the legacy inset header radius, compact
 // caption/menu geometry, and menu shadow exactly. Phase B may regularize them
@@ -46,9 +47,7 @@ const TableIdentity = ({
     {lucideIconToReact({ icon: DATABASE_ICON, hidden: false })}
     <span className="table-schema-name min-w-0 truncate">
       {schemaName === undefined ? null : (
-        <span className="table-schema-name-schema text-muted">
-          {schemaName}
-        </span>
+        <MutedText variant="schemaName">{schemaName}</MutedText>
       )}
       <span className="table-schema-name-table font-semibold text-ink">
         {tableName}
@@ -204,12 +203,9 @@ export const TableSchemaHeader = ({
       </span>
     </span>
     {note === undefined ? null : (
-      <span
-        className="table-schema-note block pb-[0.15rem] text-xs text-muted"
-        data-schema-table-note=""
-      >
+      <MutedText variant="headerNote" data-schema-table-note="">
         {note}
-      </span>
+      </MutedText>
     )}
   </figcaption>
 );
