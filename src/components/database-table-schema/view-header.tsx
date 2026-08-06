@@ -4,13 +4,12 @@
 
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { COLUMNS_3_COG_ICON } from "../../icons/lucide/columns-3-cog.js";
-import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { DATABASE_ICON } from "../../icons/lucide/database.js";
-import { ELLIPSIS_ICON } from "../../icons/lucide/ellipsis.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { CopyFeedback } from "../_shared/copy-feedback/copy-feedback.js";
+import { CopyButton } from "../_shared/figure-controls/copy-button.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 import { MutedText } from "./view-elements.js";
 
@@ -59,11 +58,11 @@ const TableIdentity = ({
 const MenuItemButton = ({
   action,
   label,
-  icon = COPY_ICON,
+  icon,
 }: {
-  readonly action: "copy-name" | "copy-source" | "reset-columns";
+  readonly action: "reset-columns";
   readonly label: string;
-  readonly icon?: LucideIcon;
+  readonly icon: LucideIcon;
 }) => (
   <button
     type="button"
@@ -75,38 +74,6 @@ const MenuItemButton = ({
     {lucideIconToReact({ icon, hidden: false })}
     {label}
   </button>
-);
-
-// Actions remain reserved for the live review application, while the complete
-// grid and every section stay readable in the server-rendered figure.
-const ActionsMenu = () => (
-  <span className="table-schema-menu relative inline-flex" data-schema-menu="">
-    <button
-      type="button"
-      className={BUTTON_CLASSES}
-      aria-label="More actions"
-      aria-haspopup="menu"
-      aria-expanded="false"
-      data-tooltip="More actions"
-      hidden
-      data-schema-menu-button=""
-      data-size="xs"
-      data-slot="button"
-      data-variant="ghost"
-    >
-      {lucideIconToReact({ icon: ELLIPSIS_ICON, hidden: false })}
-    </button>
-    <div
-      className={MENU_LIST_CLASSES}
-      role="menu"
-      aria-label="Table schema actions"
-      hidden
-      data-schema-menu-list=""
-    >
-      <MenuItemButton action="copy-name" label="Copy table name" />
-      <MenuItemButton action="copy-source" label="Copy source" />
-    </div>
-  </span>
 );
 
 // The toggleable grid columns: the name column stays out because hiding the
@@ -199,7 +166,7 @@ export const TableSchemaHeader = ({
         <CopyFeedback dataAttribute="data-schema-copy-message" />
         <span className="figure-action-group inline-flex items-center gap-0.5">
           <ColumnsMenu />
-          <ActionsMenu />
+          <CopyButton subject="schema" />
           <MaximizeButton subject="schema" />
         </span>
       </span>

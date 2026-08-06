@@ -10,9 +10,16 @@ const BUTTON_CLASSES =
 export const CopyButton = ({
   subject,
 }: {
-  readonly subject: "code" | "diff";
+  readonly subject: "code" | "diff" | "schema" | "table";
 }) => {
-  const label = subject === "diff" ? "Copy diff" : "Copy code";
+  const label =
+    subject === "diff"
+      ? "Copy diff"
+      : subject === "schema"
+        ? "Copy schema"
+        : subject === "table"
+          ? "Copy table"
+          : "Copy code";
   return (
     <button
       type="button"

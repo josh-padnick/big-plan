@@ -34,14 +34,15 @@ loses nothing when the hint never renders.
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
-    /* The delay keeps hints from flashing while the pointer sweeps across
-       neighboring controls. */
-    transition: opacity 60ms ease-out 1s;
+    /* The resting state hides at once. The hover state below adds the linger
+       only while a reader points at the control. */
+    transition: none;
   }
 
   article [data-tooltip]:hover::after,
   article [data-tooltip]:focus-visible::after {
     opacity: 1;
+    transition: opacity 60ms ease-out 1s;
   }
 
   /* A control whose menu is open has already answered the question the hint

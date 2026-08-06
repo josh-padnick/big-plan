@@ -120,8 +120,8 @@ export const CodeDiffHeader = ({
 }) => (
   <figcaption className="code-diff-header flex min-w-0 items-center justify-between gap-3 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-[0.55rem] py-[0.3rem]">
     <FileIdentity filePath={filePath} />
-    <span className="code-diff-controls flex shrink-0 items-center gap-2">
-      <span className="code-diff-view-group inline-flex items-center gap-1">
+    <span className="code-diff-controls flex shrink-0 items-center gap-3">
+      <span className="code-diff-view-group inline-flex items-center gap-2">
         {showLineCounts ? (
           <DiffStats addedCount={addedCount} removedCount={removedCount} />
         ) : null}

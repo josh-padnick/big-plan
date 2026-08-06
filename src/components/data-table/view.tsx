@@ -12,6 +12,8 @@ import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { SEARCH_ICON } from "../../icons/lucide/search.js";
 import { TABLE_ICON } from "../../icons/lucide/table.js";
 import { WRAP_TEXT_ICON } from "../../icons/lucide/wrap-text.js";
+import { CopyFeedback } from "../_shared/copy-feedback/copy-feedback.js";
+import { CopyButton } from "../_shared/figure-controls/copy-button.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 import {
   BODY_ATTRIBUTE,
@@ -307,6 +309,8 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
           <ResetButton />
         </span>
         <span className="figure-action-group inline-flex items-center gap-0.5">
+          <CopyFeedback dataAttribute="data-table-copy-message" />
+          <CopyButton subject="table" />
           <MaximizeButton subject="table" />
         </span>
       </span>

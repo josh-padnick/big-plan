@@ -139,7 +139,9 @@ export const VIEWER_SCRIPT = `<script>
     button.hidden = false;
     button.addEventListener("click", async () => {
       try {
-        await clipboardWrite(source);
+        await clipboardWrite(
+          typeof source === "function" ? source() : source,
+        );
         const copiedLabel = "Copied " + label.slice("Copy ".length).toLowerCase();
         button.setAttribute("aria-label", copiedLabel);
         button.setAttribute("data-tooltip", copiedLabel);
@@ -154,6 +156,45 @@ export const VIEWER_SCRIPT = `<script>
         if (feedback !== null) feedback.hidden = true;
       }, 1200);
     });
+  };
+
+  const tableToTsv = (figure) => {
+    const table = figure.querySelector("table");
+    if (table === null) return "";
+    const visible = (element) =>
+      !element.hidden && element.closest("[hidden]") === null;
+    const heads = Array.from(
+      table.querySelectorAll("thead [data-table-column]"),
+    ).filter(visible);
+    const columns = heads.map((head) =>
+      head.getAttribute("data-table-column"),
+    );
+    const value = (row, column) => {
+      const cell = Array.from(
+        row.querySelectorAll("[data-table-column]"),
+      ).find(
+        (candidate) =>
+          candidate.getAttribute("data-table-column") === column &&
+          visible(candidate),
+      );
+      return (cell?.textContent || "").trim();
+    };
+    const lines = [
+      heads
+        .map(
+          (head) =>
+            (head.querySelector("[data-table-head-label]")?.textContent ||
+              head.textContent ||
+              "")
+              .trim(),
+        )
+        .join("\\t"),
+    ];
+    for (const row of table.querySelectorAll("tbody > tr[data-table-row]")) {
+      if (!visible(row)) continue;
+      lines.push(columns.map((column) => value(row, column)).join("\\t"));
+    }
+    return lines.join("\\n");
   };
 
   for (const button of document.querySelectorAll(".code-figure [data-copy-code]")) {
@@ -171,22 +212,26 @@ export const VIEWER_SCRIPT = `<script>
   }
 
   for (const button of document.querySelectorAll("[data-copy-source]")) {
-    const figure = button.closest("[data-code-diff], [data-code-snippet]");
-    const source = figure?.querySelector(
-      "textarea[data-diff-source], textarea[data-snippet-source]",
+    const figure = button.closest(
+      "[data-code-diff], [data-code-snippet], [data-data-table], [data-database-table-schema]",
     );
+    const source = figure?.querySelector(
+      "textarea[data-diff-source], textarea[data-snippet-source], textarea[data-schema-source]",
+    );
+    const isTable = figure?.matches("[data-data-table]") === true;
     if (
-      !(source instanceof HTMLTextAreaElement) ||
+      (!isTable && !(source instanceof HTMLTextAreaElement)) ||
       !(button instanceof HTMLButtonElement)
     )
       continue;
     const label = button.getAttribute("aria-label") || "Copy code";
     const feedback = figure?.querySelector(
-      "[data-diff-copy-message], [data-snippet-copy-message]",
+      "[data-diff-copy-message], [data-snippet-copy-message], [data-table-copy-message], [data-schema-copy-message]",
     );
+    const tableSource = isTable ? () => tableToTsv(figure) : null;
     wireCopy({
       button,
-      source: source.value,
+      source: tableSource ?? source.value,
       label,
       feedback: feedback instanceof HTMLElement ? feedback : null,
     });
@@ -784,6 +829,8 @@ export const VIEWER_SCRIPT = `<script>
         }
         persist();
         if (status !== null) status.textContent = "Column layout reset.";
+        setMenuOpen(false);
+        button.focus();
       });
     }
     figure.addEventListener("keydown", (event) => {
