@@ -257,6 +257,20 @@ describe("renderCodeSnippet annotations", () => {
     ]);
   });
 
+  it("should diagnose startLine with an Annotation when showLineNumbers is unset", () => {
+    expect(
+      render({
+        attributes: { file: "x", startLine: "42" },
+        annotations: [annotation({ lines: "43" })],
+      }).diagnostics,
+    ).toContainEqual({
+      line: 3,
+      column: 1,
+      message:
+        "CodeSnippet cannot use startLine with an Annotation unless showLineNumbers is set",
+    });
+  });
+
   it.each(["line", "42-", "41", "45", "44-43", "042", "43-43", "0"])(
     "should diagnose malformed, non-canonical, out-of-range, or non-ascending range %s",
     (lines) => {

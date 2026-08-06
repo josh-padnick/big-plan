@@ -78,6 +78,7 @@ Component-specific violations report positional diagnostics, including:
 - A non-integer `startLine`
 - An annotation anchor outside the snippet's range (the message includes the valid range)
 - A bare snippet with no `file`, `startLine`, `showLineNumbers`, or annotations, which is rejected with a pointer to use a plain markdown fence
+- `startLine` paired with an `Annotation` but no `showLineNumbers`: an annotation's line claim must stay verifiable without JavaScript, so a snippet that anchors a note to a file-absolute line keeps its gutter visible at rest. A `startLine` excerpt with no `Annotation` may still omit `showLineNumbers` and reveal its gutter only on maximize.
 
 ### Annotation
 
