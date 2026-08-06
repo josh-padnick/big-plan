@@ -159,41 +159,6 @@ const settlePaint = async (page) => {
   }
 };
 
-/** Captures one viewport frame without the stalled screenshot command. */
-const captureViewport = async ({ cdp, path }) => {
-  let timeout;
-  let frameHandler;
-  const frame = new Promise((resolve, reject) => {
-    frameHandler = (event) => {
-      cdp
-        .send("Page.screencastFrameAck", { sessionId: event.sessionId })
-        .catch(() => {});
-      resolve(Buffer.from(event.data, "base64"));
-    };
-    cdp.on("Page.screencastFrame", frameHandler);
-    timeout = setTimeout(
-      () => reject(new Error(`Viewport frame timed out for "${path}".`)),
-      10_000,
-    );
-  });
-  try {
-    await cdp.send("Page.startScreencast", {
-      format: "png",
-      quality: 100,
-      everyNthFrame: 1,
-    });
-    return await frame;
-  } finally {
-    if (timeout !== undefined) {
-      clearTimeout(timeout);
-    }
-    if (frameHandler !== undefined) {
-      cdp.off("Page.screencastFrame", frameHandler);
-    }
-    await cdp.send("Page.stopScreencast").catch(() => {});
-  }
-};
-
 /** Compares rendered pixels while ignoring screencast encoder metadata. */
 const samePixels = (left, right) => {
   const leftImage = PNG.sync.read(left);
@@ -209,7 +174,7 @@ const samePixels = (left, right) => {
  * Captures the visible viewport, then crops target tiles in Node. This avoids
  * both Playwright's element screenshot wait and Chromium's clip request.
  */
-const captureTargetFrame = async ({ page, target, path, cdp }) => {
+const captureTargetFrame = async ({ page, target, path }) => {
   const bounds = await target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return {
@@ -282,24 +247,21 @@ const captureTargetFrame = async ({ page, target, path, cdp }) => {
       );
     }
     await reportProgress("capture tile", { path, offset, tile });
-    const image = PNG.sync.read(await captureViewport({ cdp, path }));
-    PNG.bitblt(
-      image,
-      output,
-      tile.x,
-      tile.y,
-      tile.width,
-      tile.height,
-      0,
-      offset,
+    const image = PNG.sync.read(
+      await page.screenshot({
+        animations: "disabled",
+        caret: "hide",
+        clip: tile,
+        timeout: 10_000,
+      }),
     );
+    PNG.bitblt(image, output, 0, 0, tile.width, tile.height, 0, offset);
   }
   return PNG.sync.write(output);
 };
 
 /** Writes only a pixel-stable frame. */
 const captureStableTarget = async ({ page, target, path }) => {
-  const cdp = await page.context().newCDPSession(page);
   await target.evaluate((element) => {
     element.scrollIntoView({
       behavior: "instant",
@@ -311,7 +273,7 @@ const captureStableTarget = async ({ page, target, path }) => {
   for (let attempt = 0; attempt < 6; attempt += 1) {
     await reportProgress("settle paint", { path, attempt });
     await settlePaint(page);
-    const current = await captureTargetFrame({ page, target, path, cdp });
+    const current = await captureTargetFrame({ page, target, path });
     if (prior !== undefined && samePixels(prior, current)) {
       await writeFile(path, current);
       return;
