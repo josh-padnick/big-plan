@@ -7,7 +7,8 @@ dark palettes, live-application theme overrides, layout breakpoint, and
 page-level rules.
 It imports prose, syntax-token, and component styles colocated with the
 modules that emit their markup.
-Light and dark follow the reader's OS in inert exports.
+Palettes are `light-dark()` token pairs, so the reader's OS decides until a
+saved appearance preference pins `data-theme` on the root element.
 */
 
 /* Ordinary escape-hatch CSS yields to local utilities; exceptional state
