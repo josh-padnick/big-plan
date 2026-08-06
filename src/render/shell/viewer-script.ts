@@ -114,6 +114,56 @@ export const VIEWER_SCRIPT = `<script>
   apply();
 })();
 (() => {
+  const buttons = document.querySelectorAll(".code-figure [data-copy-code]");
+  const clipboardWrite = async (text) => {
+    if (navigator.clipboard?.writeText !== undefined) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    const fallback = document.createElement("textarea");
+    fallback.value = text;
+    fallback.setAttribute("readonly", "");
+    fallback.style.position = "fixed";
+    fallback.style.opacity = "0";
+    document.body.append(fallback);
+    fallback.select();
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } finally {
+      fallback.remove();
+    }
+    if (!copied) throw new Error("Unable to copy code");
+  };
+  for (const button of buttons) {
+    const figure = button.closest(".code-figure");
+    const code = figure?.querySelector(":scope > pre > code");
+    if (figure === null || code === null) continue;
+    button.hidden = false;
+    button.addEventListener("click", async () => {
+      // Markdown code values omit the fence's structural final newline, while
+      // the HTML code element includes one. Remove that byte only so copied
+      // code matches the authored value exactly.
+      const rendered = code.textContent || "";
+      const source = rendered.endsWith("\\n")
+        ? rendered.slice(0, -1)
+        : rendered;
+      try {
+        await clipboardWrite(source);
+        button.setAttribute("aria-label", "Copied code");
+        button.setAttribute("data-tooltip", "Copied code");
+      } catch (_) {
+        button.setAttribute("aria-label", "Copy failed");
+        button.setAttribute("data-tooltip", "Copy failed");
+      }
+      setTimeout(() => {
+        button.setAttribute("aria-label", "Copy code");
+        button.setAttribute("data-tooltip", "Copy code");
+      }, 1200);
+    });
+  }
+})();
+(() => {
   const infos = document.querySelectorAll("details[data-info-popover]");
   for (const info of infos) {
     const summary = info.querySelector("summary");

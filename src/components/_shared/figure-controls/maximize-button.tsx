@@ -40,6 +40,7 @@ export const MaximizeButton = ({
       className={`${BUTTON_CLASSES} ${BUTTON_SIZE_CLASSES[size]}`}
       aria-label={label}
       data-tooltip={label}
+      data-tooltip-delay="1s"
       hidden
       {...{ [TRIGGER_ATTRIBUTE]: "" }}
     >

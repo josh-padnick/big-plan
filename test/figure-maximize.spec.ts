@@ -163,6 +163,68 @@ test("should maximize and restore every supported figure family in both themes",
   }
 });
 
+test("should copy plain code and make figure hints wait for a linger", async ({
+  page,
+  componentsViewerUrl,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          (
+            window as typeof window & {
+              __bigPlanCopiedCode?: string;
+            }
+          ).__bigPlanCopiedCode = text;
+        },
+      },
+    });
+  });
+  await page.goto(componentsViewerUrl);
+
+  const frame = page.locator(".code-figure").first();
+  const copy = frame.locator("[data-copy-code]");
+  const maximize = frame.locator("[data-figure-maximize]");
+  const rendered = await frame.locator(":scope > pre > code").textContent();
+  const expected =
+    rendered?.endsWith("\n") === true ? rendered.slice(0, -1) : rendered;
+
+  await expect(copy).toBeVisible();
+  await expect(copy).toHaveAccessibleName("Copy code");
+  await expect(maximize).toHaveAttribute("data-tooltip-delay", "1s");
+  await expect(copy).toHaveAttribute("data-tooltip-delay", "1s");
+
+  await maximize.hover();
+  await expect
+    .poll(
+      () =>
+        frame.evaluate((element) => {
+          const button = element.querySelector("[data-figure-maximize]");
+          return button === null
+            ? null
+            : getComputedStyle(button, "::after").opacity;
+        }),
+      { timeout: 250 },
+    )
+    .toBe("0");
+
+  await copy.click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __bigPlanCopiedCode?: string;
+            }
+          ).__bigPlanCopiedCode,
+      ),
+    )
+    .toBe(expected);
+  await expect(copy).toHaveAccessibleName("Copied code");
+});
+
 test("should traverse disclosures and wrap within maximized figures", async ({
   page,
   componentsViewerUrl,
