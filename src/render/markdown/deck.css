@@ -92,7 +92,7 @@ stability follow from the layout instead of from hand-tuned insets.
     [data-collapsible]:not([data-collapsed])
     > [data-collapse-header]
     .plan-slide-title {
-    cursor: default;
+    cursor: text;
   }
 
   /*
