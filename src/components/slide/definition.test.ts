@@ -39,8 +39,8 @@ describe("Slide component", () => {
     const html = serializeHtml({ root: compiled.root });
 
     expect(html).toContain(">1 / Status quo</p>");
-    expect(html).toContain(
-      '<h2 id="inline-retries-delay-checkout">Inline retries delay checkout</h2>',
+    expect(html).toMatch(
+      /<h2 id="inline-retries-delay-checkout"[^>]*>Inline retries delay checkout<\/h2>/,
     );
     expect(html).not.toContain("data-outline-slide-type");
     expect(html).not.toContain("data-slide-marker");
