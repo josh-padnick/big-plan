@@ -148,27 +148,50 @@ const settlePaint = async (page) => {
 };
 
 /** Captures a large document rectangle in bounded raster tasks. */
-const captureTiledBounds = async ({ session, bounds }) => {
+const captureTiledBounds = async ({ session, bounds, path }) => {
   const image = new PNG({ width: bounds.width, height: bounds.height });
   const tileHeight = 2048;
   for (let offset = 0; offset < bounds.height; offset += tileHeight) {
     const height = Math.min(tileHeight, bounds.height - offset);
-    const result = await session.send("Page.captureScreenshot", {
-      format: "png",
-      captureBeyondViewport: true,
-      clip: {
-        x: bounds.x,
-        y: bounds.y + offset,
-        width: bounds.width,
-        height,
-        scale: 1,
-      },
+    await reportProgress("capture tile", {
+      path,
+      x: bounds.x,
+      y: bounds.y + offset,
+      width: bounds.width,
+      height,
     });
-    const tile = PNG.sync.read(Buffer.from(result.data, "base64"));
-    if (tile.width !== bounds.width || tile.height !== height) {
-      throw new Error("Chromium returned an incorrect screenshot tile size.");
+    let timeout;
+    try {
+      const result = await Promise.race([
+        session.send("Page.captureScreenshot", {
+          format: "png",
+          captureBeyondViewport: true,
+          clip: {
+            x: bounds.x,
+            y: bounds.y + offset,
+            width: bounds.width,
+            height,
+            scale: 1,
+          },
+        }),
+        new Promise((_, reject) => {
+          timeout = setTimeout(
+            () =>
+              reject(new Error(`Chromium capture timed out for "${path}".`)),
+            30_000,
+          );
+        }),
+      ]);
+      const tile = PNG.sync.read(Buffer.from(result.data, "base64"));
+      if (tile.width !== bounds.width || tile.height !== height) {
+        throw new Error("Chromium returned an incorrect screenshot tile size.");
+      }
+      tile.data.copy(image.data, offset * bounds.width * 4);
+    } finally {
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+      }
     }
-    tile.data.copy(image.data, offset * bounds.width * 4);
   }
   return PNG.sync.write(image);
 };
@@ -225,6 +248,7 @@ const captureStableTarget = async ({ page, target, path }) => {
         const bottom = Math.ceil(bounds.y + scroll.y + bounds.height);
         current = await captureTiledBounds({
           session,
+          path,
           bounds: {
             x: left,
             y: top,
