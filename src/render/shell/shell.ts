@@ -205,7 +205,7 @@ const renderPreferencesDialog = (): string =>
 </div>
 <button class="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-close aria-label="Close settings">${lucideIconToHtml({ icon: X_ICON, className: "size-4" })}</button>
 </div>
-<div class="mt-6 border-t border-edge pt-5" data-preferences-row>
+<div class="mt-6 border-t border-edge pt-5">
 <h3 class="m-0 text-sm font-semibold" id="big-plan-appearance-label">Appearance</h3>
 <p class="mt-1 text-sm leading-normal text-muted">Choose how Big Plan looks.</p>
 <fieldset class="mt-4 grid min-w-0 grid-cols-1 gap-2.5 border-0 p-0 min-[32rem]:grid-cols-3" aria-labelledby="big-plan-appearance-label" role="radiogroup">
@@ -214,7 +214,7 @@ ${renderPreferenceOption({ mode: "light", title: "Light", description: "Always l
 ${renderPreferenceOption({ mode: "dark", title: "Dark", description: "Always dark", icon: MOON_ICON })}
 ${renderPreferenceOption({ mode: "system", title: "System", description: "Match device", icon: MONITOR_ICON })}
 </fieldset>
-<p class="mt-4 flex items-center gap-2 text-xs leading-normal text-muted" data-preferences-guidance>${lucideIconToHtml({ icon: CHECK_ICON, className: "size-3.5 shrink-0 text-accent" })}<span>Changes apply immediately and are saved automatically.</span></p>
+<p class="mt-4 flex items-center gap-2 text-xs leading-normal text-muted">${lucideIconToHtml({ icon: CHECK_ICON, className: "size-3.5 shrink-0 text-accent" })}<span>Changes apply immediately and are saved automatically.</span></p>
 </div>
 </section>
 </div>`;
@@ -222,7 +222,7 @@ ${renderPreferenceOption({ mode: "system", title: "System", description: "Match 
 // The right side of the branding bar is one action group shared by Comment
 // and Settings, keeping both controls reachable without a menu layer.
 const renderHeaderActions = (): string =>
-  `<div class="ml-auto flex items-center gap-1" data-header-actions>
+  `<div class="ml-auto flex items-center gap-1">
 ${renderCommentDraftControl()}
 ${renderPreferencesControl()}
 </div>`;

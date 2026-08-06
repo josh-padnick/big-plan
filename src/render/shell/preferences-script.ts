@@ -1,7 +1,10 @@
 // Owns the deferred browser behavior for the settings dialog: live appearance
 // changes, guarded persistence, focus isolation, and keyboard escape routes.
 
-import { PREFERENCES_STORAGE_KEY } from "./preferences.js";
+import {
+  PREFERENCES_RECORD_VERSION,
+  PREFERENCES_STORAGE_KEY,
+} from "../preferences.js";
 
 export const PREFERENCES_SCRIPT = `<script>
 (() => {
@@ -21,7 +24,8 @@ export const PREFERENCES_SCRIPT = `<script>
   )
     return;
 
-  const key = "${PREFERENCES_STORAGE_KEY}";
+  const key = ${JSON.stringify(PREFERENCES_STORAGE_KEY)};
+  const version = ${PREFERENCES_RECORD_VERSION};
   let isolatedElements = [];
   let open = false;
 
@@ -29,7 +33,7 @@ export const PREFERENCES_SCRIPT = `<script>
     try {
       localStorage.setItem(
         key,
-        JSON.stringify(mode === "system" ? { version: 1 } : { version: 1, mode }),
+        JSON.stringify(mode === "system" ? { version } : { version, mode }),
       );
     } catch (_) {}
   };
@@ -41,9 +45,10 @@ export const PREFERENCES_SCRIPT = `<script>
 
   const syncControls = (mode) => {
     for (const candidate of modes) {
-      const selected = candidate.getAttribute("data-preference-mode") === mode;
-      candidate.setAttribute("aria-checked", selected ? "true" : "false");
-      if (candidate instanceof HTMLInputElement) candidate.checked = selected;
+      if (candidate instanceof HTMLInputElement) {
+        candidate.checked =
+          candidate.getAttribute("data-preference-mode") === mode;
+      }
     }
   };
 
@@ -88,7 +93,8 @@ export const PREFERENCES_SCRIPT = `<script>
     if (open) {
       isolate();
       const selected = modes.find(
-        (candidate) => candidate.getAttribute("aria-checked") === "true",
+        (candidate) =>
+          candidate instanceof HTMLInputElement && candidate.checked,
       );
       (selected || closeButton).focus();
     } else {

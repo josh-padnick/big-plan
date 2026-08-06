@@ -7,16 +7,21 @@
 
 import { FAVICON_DARK_SRC, FAVICON_LIGHT_SRC } from "./branding.generated.js";
 import { escapeHtml } from "./escape-html.js";
+import {
+  PREFERENCES_RECORD_VERSION,
+  PREFERENCES_STORAGE_KEY,
+  STORED_APPEARANCE_MODES,
+} from "./preferences.js";
 
 // Reads only the validated render-mode field before styles are parsed, so a
 // stored choice never flashes the other palette on the first frame.
 const PREFERENCES_HEAD_SCRIPT = `(() => {
   try {
-    const raw = localStorage.getItem("big-plan:prefs:v1");
+    const raw = localStorage.getItem(${JSON.stringify(PREFERENCES_STORAGE_KEY)});
     if (raw === null) return;
     const record = JSON.parse(raw);
-    if (record?.version !== 1) return;
-    if (record.mode === "light" || record.mode === "dark") {
+    if (record?.version !== ${PREFERENCES_RECORD_VERSION}) return;
+    if (${JSON.stringify(STORED_APPEARANCE_MODES)}.indexOf(record.mode) !== -1) {
       document.documentElement.setAttribute("data-theme", record.mode);
     }
   } catch (_) {}

@@ -8,7 +8,8 @@ Everything on this page is shipped and works today.
 ## Reading experience
 
 - One reading column with warm, paper-like light and dark palettes.
-- A palette that follows your OS preference through CSS alone.
+- A `Settings` dialog behind the branding bar's gear, offering `Light`, `Dark`, and `System` appearance; the choice applies immediately, is saved for every review document in this browser, and is applied before the first paint so the other palette never flashes.
+- `System` follows your OS preference, and is the value you get on a first run or when the browser refuses storage.
 - A sticky branding bar whose logo follows the active theme.
 - In-document `Maximize` controls for fenced code, code snippets and diffs, tree diffs, data tables, database schemas, and [flow diagrams](/components/flow-diagram/), with Escape restoring the reading view after any pending-feedback prompt is resolved.
 

@@ -2,6 +2,10 @@
 // follows the OS by default, supports a live explicit mode, and persists one
 // global record. Render-health failures are enforced by the fixtures module.
 
+import {
+  PREFERENCES_STORAGE_KEY,
+  serializePreferencesRecord,
+} from "../src/render/preferences.js";
 import { expect, test } from "./fixtures";
 
 test("should choose and persist appearance from the settings dialog", async ({
@@ -10,7 +14,10 @@ test("should choose and persist appearance from the settings dialog", async ({
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto(sampleViewerUrl);
-  await page.evaluate(() => localStorage.removeItem("big-plan:prefs:v1"));
+  await page.evaluate(
+    (key) => localStorage.removeItem(key),
+    PREFERENCES_STORAGE_KEY,
+  );
   await page.reload();
 
   await test.step("System is the first-run value", async () => {
@@ -37,9 +44,12 @@ test("should choose and persist appearance from the settings dialog", async ({
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect
       .poll(() =>
-        page.evaluate(() => localStorage.getItem("big-plan:prefs:v1")),
+        page.evaluate(
+          (key) => localStorage.getItem(key),
+          PREFERENCES_STORAGE_KEY,
+        ),
       )
-      .toBe('{"version":1,"mode":"dark"}');
+      .toBe(serializePreferencesRecord("dark"));
     await expect(page.getByRole("dialog")).toBeVisible();
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -51,9 +61,12 @@ test("should choose and persist appearance from the settings dialog", async ({
     await expect(page.locator("html")).not.toHaveAttribute("data-theme");
     await expect
       .poll(() =>
-        page.evaluate(() => localStorage.getItem("big-plan:prefs:v1")),
+        page.evaluate(
+          (key) => localStorage.getItem(key),
+          PREFERENCES_STORAGE_KEY,
+        ),
       )
-      .toBe('{"version":1}');
+      .toBe(serializePreferencesRecord("system"));
     const lightBackground = await page
       .locator("body")
       .evaluate((body) => getComputedStyle(body).backgroundColor);
