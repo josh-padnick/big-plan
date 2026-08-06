@@ -8,6 +8,10 @@ This is evidence for a branch-retirement decision; it does not propose merging t
 Audit date: 2026-08-05  
 Main audited: `origin/main` at `980df22dccb8005ee62a14169482ba93f6c02d49`
 
+**Retirement path.** This is a temporary planning artifact under the AGENTS.md documentation map, not a maintained document.
+Once its recovery tracks are filed as GitHub issues, delete this file and let the issues carry the work.
+The preserved remote refs, not this snapshot, are what must survive.
+
 ## Preservation
 
 Each branch was pushed without rebasing, merging, squashing, amending, or modifying its worktree. A direct `git ls-remote --heads origin` read after each push returned:

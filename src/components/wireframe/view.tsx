@@ -236,7 +236,7 @@ const WireframeElement = ({
       );
     case "PageHeader":
       return (
-        <header className="wireframe-page-header flex flex-wrap items-center gap-3">
+        <header className="wireframe-page-header flex w-full flex-wrap items-center justify-between gap-3">
           <div className="wireframe-page-header-text flex flex-col gap-1">
             {/* State belongs beside what it describes. In the action group it
                 reads as one more button. */}
@@ -254,7 +254,7 @@ const WireframeElement = ({
               </p>
             )}
           </div>
-          <div className="wireframe-page-header-actions flex flex-wrap gap-2">
+          <div className="wireframe-page-header-actions ml-auto flex flex-wrap gap-2">
             <WireframeElements nodes={node.children} />
           </div>
         </header>

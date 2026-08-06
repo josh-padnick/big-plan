@@ -310,3 +310,42 @@ test("should keep a short phone artboard native and content-safe", async ({
   expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(720);
   expect(await artboard.evaluate((node) => node.offsetWidth)).toBe(390);
 });
+
+test("should keep short page-header actions at the trailing edge", async ({
+  page,
+  wireframeFormFactorsViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(wireframeFormFactorsViewerUrl);
+
+  await page
+    .getByRole("navigation", { name: "Prototype screens" })
+    .first()
+    .getByRole("button", { name: "Desktop · Inbox" })
+    .click();
+
+  const header = page.locator(
+    '[data-wireframe-screen="d-inbox"] .wireframe-page-header',
+  );
+  const geometry = await header.evaluate((node) => {
+    const text = node.querySelector(".wireframe-page-header-text");
+    const actions = node.querySelector(".wireframe-page-header-actions");
+    if (!(text instanceof HTMLElement) || !(actions instanceof HTMLElement)) {
+      throw new Error("page header is missing its text or actions group");
+    }
+    const headerBox = node.getBoundingClientRect();
+    const textBox = text.getBoundingClientRect();
+    const actionsBox = actions.getBoundingClientRect();
+    return {
+      headerRight: headerBox.right,
+      textRight: textBox.right,
+      actionsLeft: actionsBox.left,
+      actionsRight: actionsBox.right,
+      justifyContent: getComputedStyle(node).justifyContent,
+    };
+  });
+
+  expect(geometry.justifyContent).toBe("space-between");
+  expect(geometry.actionsLeft).toBeGreaterThan(geometry.textRight);
+  expect(geometry.actionsRight).toBeCloseTo(geometry.headerRight, 1);
+});
