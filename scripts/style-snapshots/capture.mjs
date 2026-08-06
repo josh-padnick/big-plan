@@ -164,7 +164,7 @@ const settlePaint = async (page) => {
  * stays inside the viewport, so Playwright does not enter the unstable
  * element screenshot path on hosted runners.
  */
-const captureTargetFrame = async ({ page, target, path, cdp }) => {
+const captureTargetFrame = async ({ page, target, path }) => {
   await page.evaluate(() => globalThis.scrollTo(0, 0));
   const bounds = await target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
@@ -222,28 +222,16 @@ const captureTargetFrame = async ({ page, target, path, cdp }) => {
       );
     }
     await reportProgress("capture tile", { path, offset, tile });
-    let timeout;
-    const imageData = await Promise.race([
-      cdp
-        .send("Page.captureScreenshot", {
-          format: "png",
-          captureBeyondViewport: false,
-          clip: { ...tile, scale: 1 },
-        })
-        .then(({ data }) => Buffer.from(data, "base64")),
-      new Promise((_, reject) => {
-        timeout = setTimeout(
-          () =>
-            reject(new Error(`Visible tile capture timed out for "${path}".`)),
-          5_000,
-        );
+    const image = PNG.sync.read(
+      await page.screenshot({
+        animations: "disabled",
+        caret: "hide",
+        clip: tile,
+        // Hosted runners can load embedded fonts slowly. Keep this bounded,
+        // but allow the page screenshot to finish its font wait.
+        timeout: 30_000,
       }),
-    ]).finally(() => {
-      if (timeout !== undefined) {
-        clearTimeout(timeout);
-      }
-    });
-    const image = PNG.sync.read(imageData);
+    );
     PNG.bitblt(image, output, 0, 0, tile.width, tile.height, 0, offset);
   }
   return PNG.sync.write(output);
@@ -251,7 +239,6 @@ const captureTargetFrame = async ({ page, target, path, cdp }) => {
 
 /** Writes only a byte-stable frame. */
 const captureStableTarget = async ({ page, target, path }) => {
-  const cdp = await page.context().newCDPSession(page);
   await target.evaluate((element) => {
     element.scrollIntoView({
       behavior: "instant",
@@ -263,7 +250,7 @@ const captureStableTarget = async ({ page, target, path }) => {
   for (let attempt = 0; attempt < 6; attempt += 1) {
     await reportProgress("settle paint", { path, attempt });
     await settlePaint(page);
-    const current = await captureTargetFrame({ page, target, path, cdp });
+    const current = await captureTargetFrame({ page, target, path });
     if (prior !== undefined && prior.equals(current)) {
       await writeFile(path, current);
       return;
