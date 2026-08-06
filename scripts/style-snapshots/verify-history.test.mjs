@@ -339,6 +339,33 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
       captureChanges: [
         {
           ...approvedManifest.captureChanges[0],
+          after: {
+            ...pngIdentity(colors.green),
+            sha256Alternates: [pngIdentity(colors.blue).sha256],
+          },
+        },
+      ],
+    });
+    await git({ repoRoot, arguments_: ["add", manifestPath] });
+    await git({
+      repoRoot,
+      arguments_: ["commit", "--amend", "--no-edit"],
+    });
+    await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "alternate-approved-raster",
+      }),
+    });
+
+    await writeManifest({
+      ...approvedManifest,
+      captureChanges: [
+        {
+          ...approvedManifest.captureChanges[0],
           after: pngIdentity(colors.green),
         },
       ],
