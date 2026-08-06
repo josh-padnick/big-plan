@@ -5,7 +5,7 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { chromium } from "@playwright/test";
@@ -15,6 +15,7 @@ const execFileAsync = promisify(execFile);
 const checkout = process.env["STYLE_SNAPSHOT_CHECKOUT"];
 const outputDirectory = process.env["STYLE_SNAPSHOT_OUTPUT_DIR"];
 const configPath = process.env["STYLE_SNAPSHOT_CONFIG"];
+const harnessRoot = process.env["STYLE_SNAPSHOT_HARNESS_ROOT"];
 
 if (
   checkout === undefined ||
@@ -27,6 +28,29 @@ if (
 }
 
 const config = JSON.parse(await readFile(configPath, "utf8"));
+const progressPath =
+  harnessRoot === undefined
+    ? null
+    : join(
+        harnessRoot,
+        "test-results",
+        "style-history",
+        "progress",
+        `${basename(checkout)}.json`,
+      );
+
+/** Keeps the last isolated capture phase when the child process stalls. */
+const reportProgress = async (phase, detail = {}) => {
+  if (progressPath === null) {
+    return;
+  }
+  await mkdir(dirname(progressPath), { recursive: true });
+  await writeFile(
+    progressPath,
+    `${JSON.stringify({ checkout, phase, ...detail }, null, 2)}\n`,
+    "utf8",
+  );
+};
 
 /** Prepares one historical checkout before any of its documents are rendered. */
 const prepareCheckout = async () => {
@@ -126,8 +150,8 @@ const settlePaint = async (page) => {
  * Writes only a byte-stable frame. The exact comparison is deliberate: an
  * unsettled animation, transition, font, or layout frame is a fixture defect,
  * not a visual delta the history contract may smooth over. The direct DOM
- * scroll avoids Playwright's locator stability wait, which can deadlock while
- * a large target is still settling.
+ * scroll avoids the first locator stability wait. A target that spans two
+ * viewports uses the same Chromium bounds capture without repeating that wait.
  */
 const captureStableTarget = async ({ page, target, path }) => {
   await target.evaluate((element) => {
@@ -137,15 +161,71 @@ const captureStableTarget = async ({ page, target, path }) => {
       inline: "nearest",
     });
   });
-  let prior;
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    await settlePaint(page);
-    const current = await target.screenshot({ animations: "disabled" });
-    if (prior !== undefined && prior.equals(current)) {
-      await writeFile(path, current);
-      return;
+  const initialBounds = await target.boundingBox();
+  const viewport = page.viewportSize();
+  if (initialBounds === null || viewport === null) {
+    throw new Error(`Screenshot target "${path}" has no visible bounds.`);
+  }
+  const captureDirectly =
+    initialBounds.width >= viewport.width * 2 ||
+    initialBounds.height >= viewport.height * 2;
+  const session = captureDirectly
+    ? await page.context().newCDPSession(page)
+    : null;
+
+  try {
+    let prior;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await settlePaint(page);
+      let current;
+      try {
+        if (session === null) {
+          current = await target.screenshot({
+            animations: "disabled",
+            timeout: 30_000,
+          });
+        } else {
+          const bounds = await target.boundingBox();
+          if (bounds === null) {
+            throw new Error("The target has no visible bounds.");
+          }
+          const scroll = await page.evaluate(() => ({
+            x: globalThis.scrollX,
+            y: globalThis.scrollY,
+          }));
+          const left = Math.floor(bounds.x + scroll.x);
+          const top = Math.floor(bounds.y + scroll.y);
+          const right = Math.ceil(bounds.x + scroll.x + bounds.width);
+          const bottom = Math.ceil(bounds.y + scroll.y + bounds.height);
+          const result = await session.send("Page.captureScreenshot", {
+            format: "png",
+            captureBeyondViewport: true,
+            clip: {
+              x: left,
+              y: top,
+              width: right - left,
+              height: bottom - top,
+              scale: 1,
+            },
+          });
+          current = Buffer.from(result.data, "base64");
+        }
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`Screenshot target "${path}" failed: ${detail}`, {
+          cause: error,
+        });
+      }
+      if (prior !== undefined && prior.equals(current)) {
+        await writeFile(path, current);
+        return;
+      }
+      prior = current;
     }
-    prior = current;
+  } finally {
+    if (session !== null) {
+      await session.detach();
+    }
   }
   throw new Error(
     `Screenshot target "${path}" never repeated exact bytes across six settled frames.`,
@@ -174,6 +254,7 @@ const browser = await chromium.launch({
 
 try {
   await mkdir(outputDirectory, { recursive: true });
+  await reportProgress("prepare checkout");
   await prepareCheckout();
 
   const documents = await availableDocuments({
@@ -185,6 +266,7 @@ try {
     const htmlPath = join(documentDirectory, `${document.name}.html`);
     const stateDirectory = join(documentDirectory, "state");
     await mkdir(dirname(htmlPath), { recursive: true });
+    await reportProgress("render document", { document: document.name });
     await renderDocument({
       source: document.source,
       outputPath: htmlPath,
@@ -227,6 +309,13 @@ try {
               );
             }
             await target.waitFor({ state: "visible" });
+            await reportProgress("capture target", {
+              document: document.name,
+              capture: capture.name,
+              viewport: viewport.name,
+              theme,
+              selector: capture.selector,
+            });
             await captureStableTarget({
               page,
               target,
@@ -246,6 +335,9 @@ try {
         }
       }
     }
+  }
+  if (progressPath !== null) {
+    await rm(progressPath, { force: true });
   }
 } finally {
   await browser.close();
