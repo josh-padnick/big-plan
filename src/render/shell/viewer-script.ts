@@ -114,7 +114,6 @@ export const VIEWER_SCRIPT = `<script>
   apply();
 })();
 (() => {
-  const buttons = document.querySelectorAll(".code-figure [data-copy-code]");
   const clipboardWrite = async (text) => {
     if (navigator.clipboard?.writeText !== undefined) {
       await navigator.clipboard.writeText(text);
@@ -135,31 +134,61 @@ export const VIEWER_SCRIPT = `<script>
     }
     if (!copied) throw new Error("Unable to copy code");
   };
-  for (const button of buttons) {
-    const figure = button.closest(".code-figure");
-    const code = figure?.querySelector(":scope > pre > code");
-    if (figure === null || code === null) continue;
+
+  const wireCopy = ({ button, source, label, feedback }) => {
     button.hidden = false;
     button.addEventListener("click", async () => {
-      // Markdown code values omit the fence's structural final newline, while
-      // the HTML code element includes one. Remove that byte only so copied
-      // code matches the authored value exactly.
-      const rendered = code.textContent || "";
-      const source = rendered.endsWith("\\n")
-        ? rendered.slice(0, -1)
-        : rendered;
       try {
         await clipboardWrite(source);
-        button.setAttribute("aria-label", "Copied code");
-        button.setAttribute("data-tooltip", "Copied code");
+        const copiedLabel = "Copied " + label.slice("Copy ".length).toLowerCase();
+        button.setAttribute("aria-label", copiedLabel);
+        button.setAttribute("data-tooltip", copiedLabel);
+        if (feedback !== null) feedback.hidden = false;
       } catch (_) {
         button.setAttribute("aria-label", "Copy failed");
         button.setAttribute("data-tooltip", "Copy failed");
       }
       setTimeout(() => {
-        button.setAttribute("aria-label", "Copy code");
-        button.setAttribute("data-tooltip", "Copy code");
+        button.setAttribute("aria-label", label);
+        button.setAttribute("data-tooltip", label);
+        if (feedback !== null) feedback.hidden = true;
       }, 1200);
+    });
+  };
+
+  for (const button of document.querySelectorAll(".code-figure [data-copy-code]")) {
+    const figure = button.closest(".code-figure");
+    const code = figure?.querySelector(":scope > pre > code");
+    if (figure === null || code === null) continue;
+    // Markdown code values omit the fence's structural final newline, while
+    // the HTML code element includes one. Remove that byte only so copied
+    // code matches the authored value exactly.
+    const rendered = code.textContent || "";
+    const source = rendered.endsWith("\\n")
+      ? rendered.slice(0, -1)
+      : rendered;
+    wireCopy({ button, source, label: "Copy code", feedback: null });
+  }
+
+  for (const button of document.querySelectorAll("[data-copy-source]")) {
+    const figure = button.closest("[data-code-diff], [data-code-snippet]");
+    const source = figure?.querySelector(
+      "textarea[data-diff-source], textarea[data-snippet-source]",
+    );
+    if (
+      !(source instanceof HTMLTextAreaElement) ||
+      !(button instanceof HTMLButtonElement)
+    )
+      continue;
+    const label = button.getAttribute("aria-label") || "Copy code";
+    const feedback = figure?.querySelector(
+      "[data-diff-copy-message], [data-snippet-copy-message]",
+    );
+    wireCopy({
+      button,
+      source: source.value,
+      label,
+      feedback: feedback instanceof HTMLElement ? feedback : null,
     });
   }
 })();

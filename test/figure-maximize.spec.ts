@@ -289,6 +289,77 @@ test("should traverse disclosures and wrap within maximized figures", async ({
   }
 });
 
+test("should expose dedicated copy controls beside CodeDiff and CodeSnippet maximize", async ({
+  page,
+  componentsViewerUrl,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          (
+            window as typeof window & {
+              __bigPlanCopiedCode?: string;
+            }
+          ).__bigPlanCopiedCode = text;
+        },
+      },
+    });
+  });
+  await page.goto(componentsViewerUrl);
+
+  for (const figureCase of [
+    {
+      selector: "[data-code-diff]",
+      source: "[data-diff-source]",
+      label: "Copy diff",
+      maximizeLabel: "Maximize diff",
+    },
+    {
+      selector: "[data-code-snippet]",
+      source: "[data-snippet-source]",
+      label: "Copy code",
+      maximizeLabel: "Maximize code",
+    },
+  ]) {
+    const figure = page.locator(figureCase.selector).first();
+    const copy = figure.locator("[data-copy-source]");
+    const maximize = figure.locator("[data-figure-maximize]");
+    const expected = await figure.locator(figureCase.source).inputValue();
+
+    await expect(copy).toBeVisible();
+    await expect(copy).toBeEnabled();
+    await expect(copy).toHaveAccessibleName(figureCase.label);
+    await expect(copy).toHaveAttribute("data-tooltip-delay", "1s");
+    await expect(maximize).toHaveAttribute("data-tooltip-delay", "1s");
+    expect(
+      await figure
+        .locator(".figure-action-group > button")
+        .evaluateAll((buttons) =>
+          buttons.map((button) => button.getAttribute("aria-label")),
+        ),
+    ).toEqual([figureCase.label, figureCase.maximizeLabel]);
+
+    await copy.click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (
+              window as typeof window & {
+                __bigPlanCopiedCode?: string;
+              }
+            ).__bigPlanCopiedCode,
+        ),
+      )
+      .toBe(expected);
+    await expect(copy).toHaveAccessibleName(
+      figureCase.label.replace("Copy", "Copied"),
+    );
+  }
+});
+
 test("should keep figure content visible and controls dormant without JavaScript", async ({
   browser,
   componentsViewerUrl,
