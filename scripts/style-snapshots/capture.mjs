@@ -9,7 +9,6 @@ import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { chromium } from "@playwright/test";
-import { PNG } from "pngjs";
 import { availableDocuments } from "./available-documents.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -159,55 +158,6 @@ const settlePaint = async (page) => {
   }
 };
 
-/** Captures a large document rectangle in bounded raster tasks. */
-const captureTiledBounds = async ({ session, bounds, path }) => {
-  const image = new PNG({ width: bounds.width, height: bounds.height });
-  const tileHeight = 2048;
-  for (let offset = 0; offset < bounds.height; offset += tileHeight) {
-    const height = Math.min(tileHeight, bounds.height - offset);
-    await reportProgress("capture tile", {
-      path,
-      x: bounds.x,
-      y: bounds.y + offset,
-      width: bounds.width,
-      height,
-    });
-    let timeout;
-    try {
-      const result = await Promise.race([
-        session.send("Page.captureScreenshot", {
-          format: "png",
-          captureBeyondViewport: true,
-          clip: {
-            x: bounds.x,
-            y: bounds.y + offset,
-            width: bounds.width,
-            height,
-            scale: 1,
-          },
-        }),
-        new Promise((_, reject) => {
-          timeout = setTimeout(
-            () =>
-              reject(new Error(`Chromium capture timed out for "${path}".`)),
-            30_000,
-          );
-        }),
-      ]);
-      const tile = PNG.sync.read(Buffer.from(result.data, "base64"));
-      if (tile.width !== bounds.width || tile.height !== height) {
-        throw new Error("Chromium returned an incorrect screenshot tile size.");
-      }
-      tile.data.copy(image.data, offset * bounds.width * 4);
-    } finally {
-      if (timeout !== undefined) {
-        clearTimeout(timeout);
-      }
-    }
-  }
-  return PNG.sync.write(image);
-};
-
 /**
  * Writes only a byte-stable frame. The exact comparison is deliberate: an
  * unsettled animation, transition, font, or layout frame is a fixture defect,
@@ -223,63 +173,19 @@ const captureStableTarget = async ({ page, target, path }) => {
       inline: "nearest",
     });
   });
-  const initialBounds = await target.boundingBox();
-  const viewport = page.viewportSize();
-  if (initialBounds === null || viewport === null) {
-    throw new Error(`Screenshot target "${path}" has no visible bounds.`);
-  }
-  const captureDirectly =
-    initialBounds.width >= viewport.width * 2 ||
-    initialBounds.height >= viewport.height * 2;
-  const session = captureDirectly
-    ? await page.context().newCDPSession(page)
-    : null;
-
-  try {
-    let prior;
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      await reportProgress("settle paint", { path, attempt });
-      await settlePaint(page);
-      let current;
-      if (session === null) {
-        current = await target.screenshot({
-          animations: "disabled",
-          timeout: 30_000,
-        });
-      } else {
-        const bounds = await target.boundingBox();
-        if (bounds === null) {
-          throw new Error(`Screenshot target "${path}" has no visible bounds.`);
-        }
-        const scroll = await page.evaluate(() => ({
-          x: globalThis.scrollX,
-          y: globalThis.scrollY,
-        }));
-        const left = Math.floor(bounds.x + scroll.x);
-        const top = Math.floor(bounds.y + scroll.y);
-        const right = Math.ceil(bounds.x + scroll.x + bounds.width);
-        const bottom = Math.ceil(bounds.y + scroll.y + bounds.height);
-        current = await captureTiledBounds({
-          session,
-          path,
-          bounds: {
-            x: left,
-            y: top,
-            width: right - left,
-            height: bottom - top,
-          },
-        });
-      }
-      if (prior !== undefined && prior.equals(current)) {
-        await writeFile(path, current);
-        return;
-      }
-      prior = current;
+  let prior;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    await reportProgress("settle paint", { path, attempt });
+    await settlePaint(page);
+    const current = await target.screenshot({
+      animations: "disabled",
+      timeout: 30_000,
+    });
+    if (prior !== undefined && prior.equals(current)) {
+      await writeFile(path, current);
+      return;
     }
-  } finally {
-    if (session !== null) {
-      await session.detach();
-    }
+    prior = current;
   }
   throw new Error(
     `Screenshot target "${path}" never repeated exact bytes across six settled frames.`,
