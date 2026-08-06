@@ -81,6 +81,19 @@ stability follow from the layout instead of from hand-tuned insets.
   article .plan-collapse-chrome > :last-child {
     margin-bottom: 0;
   }
+  article
+    [data-collapsible][data-collapsed]
+    > [data-collapse-header]
+    .plan-slide-title {
+    cursor: pointer;
+  }
+  /* An open slide title is a heading, not a collapse control. */
+  article
+    [data-collapsible]:not([data-collapsed])
+    > [data-collapse-header]
+    .plan-slide-title {
+    cursor: text;
+  }
 
   /*
     THE TOGGLE
