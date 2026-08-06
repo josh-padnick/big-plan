@@ -330,4 +330,19 @@ describe("renderCodeSnippet annotations", () => {
     expect(rendered).not.toContain('"tagName":"pre"');
     expect(rendered).not.toContain('"tagName":"code"');
   });
+
+  it("should always render the line-number gutter markup so maximize can reveal it, even when showLineNumbers is unset", () => {
+    const source = "const one = 1;\nconst two = 2;\n";
+    const { element, diagnostics } = render({
+      attributes: { file: "src/example.ts" },
+      children: [fence({ source })],
+    });
+    const rendered = JSON.stringify(element);
+
+    expect(diagnostics).toEqual([]);
+    expect(rendered).not.toContain('"data-line-numbers"');
+    expect(rendered).toContain('"data-snippet-line-number":"1"');
+    expect(rendered).toContain('"data-snippet-line-number":"2"');
+    expect(rendered).toContain("grid-cols-[4rem_minmax(max-content,1fr)]");
+  });
 });

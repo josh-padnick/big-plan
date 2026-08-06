@@ -39,23 +39,17 @@ const SnippetHeader = ({ filePath }: { readonly filePath?: string }) => (
 const CodeLine = ({
   line,
   lineNumber,
-  showLineNumbers,
   annotated,
 }: {
   readonly line: HighlightedLine;
   readonly lineNumber: number;
-  readonly showLineNumbers: boolean;
   // Space-separated "start"/"end" range-boundary tokens ("middle" between
   // them) so the static utility variants can cap the vertical range rail;
   // undefined on unannotated rows.
   readonly annotated: string | undefined;
 }) => (
   <div
-    className={`code-snippet-line grid min-w-max whitespace-pre ${
-      showLineNumbers
-        ? "grid-cols-[4rem_minmax(max-content,1fr)]"
-        : "grid-cols-[minmax(max-content,1fr)]"
-    } ${
+    className={`code-snippet-line grid min-w-max grid-cols-[4rem_minmax(max-content,1fr)] whitespace-pre ${
       annotated === undefined
         ? ""
         : "relative bg-[color-mix(in_srgb,var(--annotation-c)_8%,transparent)] before:absolute before:inset-y-0 before:left-0 before:w-[0.1875rem] before:bg-[var(--annotation-c)] before:content-[''] [&.annotation-hover]:bg-[color-mix(in_srgb,var(--annotation-c)_16%,transparent)]"
@@ -67,15 +61,13 @@ const CodeLine = ({
       ? {}
       : { "data-snippet-annotated": annotated })}
   >
-    {showLineNumbers ? (
-      <span
-        className="code-snippet-line-number select-none border-r border-edge px-[0.65rem] text-right text-muted"
-        aria-hidden="true"
-        data-snippet-line-number={lineNumber}
-      >
-        {String(lineNumber)}
-      </span>
-    ) : null}
+    <span
+      className="code-snippet-line-number select-none border-r border-edge px-[0.65rem] text-right text-muted"
+      aria-hidden="true"
+      data-snippet-line-number={lineNumber}
+    >
+      {String(lineNumber)}
+    </span>
     <span className="code-snippet-line-content inline-block min-w-full px-[1rem]">
       {hastContentToReact(line)}
     </span>
@@ -102,11 +94,10 @@ const annotationCard = (annotation: CompiledCodeSnippetAnnotation) => (
 const SnippetRows = ({
   highlightedLines,
   startLine,
-  showLineNumbers,
   annotations,
 }: Pick<
   CompiledCodeSnippet,
-  "highlightedLines" | "startLine" | "showLineNumbers" | "annotations"
+  "highlightedLines" | "startLine" | "annotations"
 >) => {
   const coversLine = (lineNumber: number): boolean =>
     annotations.some(
@@ -126,7 +117,6 @@ const SnippetRows = ({
             key={`line-${lineNumber}`}
             line={line}
             lineNumber={lineNumber}
-            showLineNumbers={showLineNumbers}
             annotated={
               coversLine(lineNumber)
                 ? boundaries.length === 0
@@ -168,7 +158,6 @@ export const CodeSnippet = ({
       <SnippetRows
         highlightedLines={model.highlightedLines}
         startLine={model.startLine}
-        showLineNumbers={model.showLineNumbers}
         annotations={model.annotations}
       />
     </div>

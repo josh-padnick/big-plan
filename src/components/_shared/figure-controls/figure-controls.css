@@ -145,4 +145,19 @@
     border-radius: 0;
     background: transparent;
   }
+  /* CodeSnippet always renders its number rail so promotion can reveal it
+     without a script reflowing markup; collapse it back to one column only
+     while resting without the authored showLineNumbers attribute.
+     Override invariant: the resting collapsed rail beats CodeLine's base grid. */
+  article
+    [data-code-snippet]:not([data-line-numbers]):not([data-figure-maximized])
+    .code-snippet-line {
+    grid-template-columns: minmax(max-content, 1fr);
+  }
+  /* Override invariant: the resting hidden number beats CodeLine's base column. */
+  article
+    [data-code-snippet]:not([data-line-numbers]):not([data-figure-maximized])
+    .code-snippet-line-number {
+    display: none;
+  }
 }
