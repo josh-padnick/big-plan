@@ -1366,6 +1366,8 @@ marks and a plan diff never jitters.
   }
 
   .wireframe-page-header {
+    width: 100%;
+    justify-content: space-between;
     padding-bottom: 0.5rem;
     border-bottom: 2px solid var(--wf-stroke-soft);
   }
@@ -1375,6 +1377,11 @@ marks and a plan diff never jitters.
   }
   .wireframe-page-header-actions:empty {
     display: none;
+  }
+  /* Keep actions at the trailing edge even when wrapping creates a line with
+     no sibling to justify against. The component owns this alignment. */
+  .wireframe-page-header-actions {
+    margin-inline-start: auto;
   }
 
   .wireframe-nav-item {
