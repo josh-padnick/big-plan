@@ -58,6 +58,14 @@ test("should compare, answer, and revise a Decision", async ({
   await expect(card.locator(".decision-row")).toHaveCount(2);
   await expect(card.locator(".decision-card-verdict")).toHaveCount(4);
 
+  const criterion = card.locator(".decision-row-dimension").first();
+  const criterionDefinition = criterion.locator(
+    '[data-decision-definition="criterion"]',
+  );
+  await expect(criterionDefinition).toHaveCount(1);
+  await criterionDefinition.locator("summary").hover();
+  await expect(criterionDefinition).toHaveAttribute("open", "");
+
   const options = card.locator(".decision-row");
   const [firstBox, secondBox] = await Promise.all([
     options.nth(0).boundingBox(),
@@ -108,6 +116,27 @@ test("should compare, answer, and revise a Decision", async ({
     recommendationColors.proColor,
   );
 
+  const summaryColor = await options
+    .nth(0)
+    .locator(".decision-option-summary")
+    .evaluate((element) => {
+      const mutedProbe = document.createElement("span");
+      mutedProbe.style.color = "var(--color-muted)";
+      const inkProbe = document.createElement("span");
+      inkProbe.style.color = "var(--color-ink)";
+      document.body.append(mutedProbe, inkProbe);
+      const result = {
+        summary: getComputedStyle(element).color,
+        muted: getComputedStyle(mutedProbe).color,
+        ink: getComputedStyle(inkProbe).color,
+      };
+      mutedProbe.remove();
+      inkProbe.remove();
+      return result;
+    });
+  expect(summaryColor.summary).not.toBe(summaryColor.muted);
+  expect(summaryColor.summary).not.toBe(summaryColor.ink);
+
   const firstOptionCard = options.nth(0).locator(".decision-option-card");
   await firstOptionCard.hover();
   await expect(firstOptionCard).toHaveCSS("transform", "none");
@@ -134,6 +163,14 @@ test("should compare, answer, and revise a Decision", async ({
   await expect(card.locator("[data-decision-confirm]")).toBeEnabled();
   await card.locator("[data-decision-proposal-cancel]").click();
   await expect(card.locator("[data-decision-proposal]")).toBeHidden();
+
+  await card.locator(".decision-propose-link").click();
+  await card
+    .locator("[data-decision-proposal-text]")
+    .fill("Publish a signed standalone archive.");
+  await card.locator("[data-decision-proposal-text]").press("Escape");
+  await expect(card.locator("[data-decision-proposal]")).toBeHidden();
+  await expect(card.locator("[data-decision-proposal-choice]")).toBeFocused();
 });
 
 test("should keep long Decision verdicts inside comparison cards", async ({
@@ -223,6 +260,14 @@ test("should batch three independent QuickDecisions without comparison", async (
   await expect(first.locator("[data-decision-answer]")).toBeVisible();
   await first.locator("[data-decision-change]").click();
   await expect(first.locator("[data-decision-footer]")).toBeVisible();
+
+  await first.locator(".decision-propose-link").click();
+  await first
+    .locator("[data-decision-proposal-text]")
+    .fill("Keep the current rollout path.");
+  await first.locator("[data-decision-proposal-text]").press("Escape");
+  await expect(first.locator("[data-decision-proposal]")).toBeHidden();
+  await expect(first.locator("[data-decision-proposal-choice]")).toBeFocused();
 });
 
 test("should audit, choose, and recalculate DecisionAnalysis", async ({

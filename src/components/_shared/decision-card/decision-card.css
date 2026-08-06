@@ -151,6 +151,9 @@
       border-color 150ms ease,
       box-shadow 150ms ease;
   }
+  article .decision-option-summary {
+    color: color-mix(in srgb, var(--color-ink) 72%, var(--color-muted));
+  }
   article
     .decision-row:has(.decision-radio:enabled)
     > .decision-option-card:hover {
