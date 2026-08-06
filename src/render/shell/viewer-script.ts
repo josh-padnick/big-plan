@@ -2,15 +2,14 @@
 // a scroll-spy that marks the section being read with aria-current on its TOC
 // links (falling back to the overview links above the first section), hover
 // popovers that float [data-info-popover] disclosures beside their triggers,
-// collapse toggles for deck parts, slides, and sub-slides, table-schema column
-// state, a document comment draft, DataTable sorting, filtering, text fit,
-// column layout and grouping, plain-code copying, and one maximize behavior
-// shared by every figure family, a decision matrix's column highlight,
-// rationale swap, and confirm step, wireframe screen navigation driven
-// entirely by renderer-emitted data attributes plus true-width scaling, and
-// the diagram leg in
-// ./diagram-script.ts. Plan content never
-// contributes script, and every affordance keeps a no-JS fallback.
+// annotation-to-code cross-highlighting, collapse toggles for deck parts,
+// slides, and sub-slides, table-schema column state, a document comment draft,
+// DataTable sorting, filtering, text fit, column layout and grouping, and one
+// maximize behavior shared by every figure family, a decision matrix's column
+// highlight, rationale swap, and confirm step, wireframe screen navigation
+// driven entirely by renderer-emitted data attributes plus true-width scaling,
+// and the diagram leg in ./diagram-script.ts. Plan content never contributes
+// script, and every affordance keeps a no-JS fallback.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
@@ -114,57 +113,6 @@ export const VIEWER_SCRIPT = `<script>
   apply();
 })();
 (() => {
-  const buttons = document.querySelectorAll(".code-figure [data-copy-code]");
-  const clipboardWrite = async (text) => {
-    if (navigator.clipboard?.writeText !== undefined) {
-      await navigator.clipboard.writeText(text);
-      return;
-    }
-    const fallback = document.createElement("textarea");
-    fallback.value = text;
-    fallback.setAttribute("readonly", "");
-    fallback.style.position = "fixed";
-    fallback.style.opacity = "0";
-    document.body.append(fallback);
-    fallback.select();
-    let copied = false;
-    try {
-      copied = document.execCommand("copy");
-    } finally {
-      fallback.remove();
-    }
-    if (!copied) throw new Error("Unable to copy code");
-  };
-  for (const button of buttons) {
-    const figure = button.closest(".code-figure");
-    const code = figure?.querySelector(":scope > pre > code");
-    if (figure === null || code === null) continue;
-    button.hidden = false;
-    button.addEventListener("click", async () => {
-      // mdast code values exclude the fence's structural final newline, while
-      // remark-rehype appends one for HTML. Remove that one byte only: the
-      // copied value stays exact without pulling in figure chrome or title
-      // whitespace, and authored indentation remains intact.
-      const rendered = code.textContent || "";
-      const source = rendered.endsWith("\\n")
-        ? rendered.slice(0, -1)
-        : rendered;
-      try {
-        await clipboardWrite(source);
-        button.setAttribute("aria-label", "Copied code");
-        button.setAttribute("data-tooltip", "Copied code");
-      } catch (_) {
-        button.setAttribute("aria-label", "Copy failed");
-        button.setAttribute("data-tooltip", "Copy failed");
-      }
-      setTimeout(() => {
-        button.setAttribute("aria-label", "Copy code");
-        button.setAttribute("data-tooltip", "Copy code");
-      }, 1200);
-    });
-  }
-})();
-(() => {
   const infos = document.querySelectorAll("details[data-info-popover]");
   for (const info of infos) {
     const summary = info.querySelector("summary");
@@ -250,6 +198,60 @@ export const VIEWER_SCRIPT = `<script>
       },
       { capture: true, passive: true },
     );
+  }
+})();
+(() => {
+  // One shared enhancement links annotation cards to their covered code rows
+  // in both component families. The authored rows and cards remain complete
+  // without it; this leg changes emphasis only while the pointer relates them.
+  const linkHover = (card, targets) => {
+    const linked = Array.from(new Set([card, ...targets]));
+    const setHighlighted = (highlighted) => {
+      for (const element of linked) {
+        element.classList.toggle("annotation-hover", highlighted);
+      }
+    };
+    for (const element of linked) {
+      element.addEventListener("pointerenter", () => setHighlighted(true));
+      element.addEventListener("pointerleave", () => setHighlighted(false));
+    }
+  };
+
+  for (const diff of document.querySelectorAll("[data-code-diff]")) {
+    const lines = Array.from(
+      diff.querySelectorAll("[data-annotation-anchor]"),
+    );
+    for (const card of diff.querySelectorAll("[data-annotation-id]")) {
+      const id = card.getAttribute("data-annotation-id");
+      if (id === null || id === "") continue;
+      linkHover(
+        card,
+        lines.filter((line) =>
+          (line.getAttribute("data-annotation-anchor") || "")
+            .split(/\\s+/u)
+            .includes(id),
+        ),
+      );
+    }
+  }
+
+  for (const snippet of document.querySelectorAll("[data-code-snippet]")) {
+    const lines = Array.from(snippet.querySelectorAll("[data-snippet-line]"));
+    for (const card of snippet.querySelectorAll("[data-snippet-annotation]")) {
+      const range = /^(\\d+)(?:-(\\d+))?$/u.exec(
+        card.getAttribute("data-snippet-annotation") || "",
+      );
+      if (range === null) continue;
+      const start = Number(range[1]);
+      const end = Number(range[2] || range[1]);
+      linkHover(
+        card,
+        lines.filter((line) => {
+          const lineNumber = Number(line.getAttribute("data-snippet-line"));
+          return lineNumber >= start && lineNumber <= end;
+        }),
+      );
+    }
   }
 })();
 (() => {
@@ -1611,7 +1613,6 @@ export const VIEWER_SCRIPT = `<script>
     const answerTitle = own("[data-decision-answer-title]");
     const answerLead = own("[data-decision-answer-lead]");
     const summary = own("[data-decision-selection-summary]");
-    const selectionCopy = own("[data-decision-selection-copy]");
     const rationale = own("[data-decision-rationale]");
     const question = own("[data-decision-question]");
     const proposalText = own("[data-decision-proposal-text]");
@@ -1860,22 +1861,16 @@ export const VIEWER_SCRIPT = `<script>
       const index = choice === null ? null : choice.getAttribute("data-option-index");
       showPanel(index === null ? defaultIndex : index);
       paintColumn(index, false);
-      confirm.textContent = proposing
-        ? "Send suggestion"
-        : choice === null
-          ? "Confirm choice"
-          : "Confirm " + choice.value;
+      confirm.textContent = proposing ? "Submit proposal" : "Confirm choice";
       confirm.disabled =
         choice === null || (proposing && proposalValue() === "");
-      if (summary !== null && selectionCopy !== null) {
-        if (choice === null) summary.removeAttribute("data-selection-picked");
-        else summary.setAttribute("data-selection-picked", "");
-        selectionCopy.textContent =
+      if (summary !== null) {
+        summary.textContent =
           choice === null
-            ? "Select an option to continue."
+            ? "Nothing selected yet."
             : proposing
-              ? "Your suggested option is selected."
-              : "Selected: " + choice.value;
+              ? "Your own approach selected."
+              : choice.value + " selected.";
       }
     };
     decision.addEventListener("change", (event) => {

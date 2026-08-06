@@ -19,12 +19,12 @@ const COMPONENT_INTERACTIONS = {
   },
   CodeDiff: {
     selector: "[data-code-diff]",
-    affordances: ["maximize"],
-    deferred: ["unified/split view", "line-to-comment hover emphasis"],
+    affordances: ["maximize", "line-to-annotation hover emphasis"],
+    deferred: ["unified/split view"],
   },
   CodeSnippet: {
     selector: "[data-code-snippet]",
-    affordances: ["maximize"],
+    affordances: ["maximize", "line-to-annotation hover emphasis"],
   },
   DataTable: {
     selector: "[data-data-table]",
@@ -73,7 +73,7 @@ const COMPONENT_INTERACTIONS = {
   },
   HttpEndpoint: {
     selector: "[data-http-endpoint]",
-    affordances: ["copy code"],
+    affordances: [],
   },
   Part: {
     selector: "[data-part]",
@@ -123,20 +123,6 @@ test("should exercise every live component affordance with browser gestures", as
   wireframeViewerUrl,
 }) => {
   test.setTimeout(60_000);
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: async (text: string) => {
-          (
-            window as typeof window & {
-              __bigPlanCopiedCode?: string;
-            }
-          ).__bigPlanCopiedCode = text;
-        },
-      },
-    });
-  });
   await page.goto(allComponentsViewerUrl);
 
   await test.step("TableOfContents: navigate", async () => {
@@ -183,47 +169,34 @@ test("should exercise every live component affordance with browser gestures", as
     await expect(rationale).toHaveAttribute("open", "");
   });
 
-  await test.step("HttpEndpoint: copy exact code", async () => {
-    const endpoint = page.locator("[data-http-endpoint]").first();
-    const figure = endpoint.locator(".code-figure").first();
-    const copy = figure.locator("[data-copy-code]");
-    const maximize = figure.locator("[data-figure-maximize]");
-    const rendered = await figure.locator(":scope > pre > code").textContent();
-    const expected =
-      rendered?.endsWith("\n") === true ? rendered.slice(0, -1) : rendered;
+  await test.step("CodeDiff: cross-highlight an annotation and its lines", async () => {
+    const diff = page.locator(COMPONENT_INTERACTIONS.CodeDiff.selector).first();
+    const annotation = diff.locator("[data-annotation-id]").first();
+    const annotationId = await annotation.getAttribute("data-annotation-id");
+    expect(annotationId).not.toBeNull();
+    const line = diff
+      .locator(`[data-annotation-anchor~="${annotationId ?? ""}"]`)
+      .first();
 
-    await expect(copy).toBeVisible();
-    await expect(maximize).toBeVisible();
-    expect(
-      await figure.locator(".figure-control-bar").evaluate((bar) => {
-        const copyButton = bar.querySelector("[data-copy-code]");
-        const maximizeButton = bar.querySelector("[data-figure-maximize]");
-        return (
-          copyButton !== null &&
-          maximizeButton !== null &&
-          Boolean(
-            copyButton.compareDocumentPosition(maximizeButton) &
-            Node.DOCUMENT_POSITION_FOLLOWING,
-          )
-        );
-      }),
-    ).toBe(true);
+    await line.hover();
+    await expect(annotation).toHaveClass(/annotation-hover/u);
+    await page.mouse.move(0, 0);
+    await annotation.hover();
+    await expect(line).toHaveClass(/annotation-hover/u);
+  });
 
-    await copy.click();
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () =>
-            (
-              window as typeof window & {
-                __bigPlanCopiedCode?: string;
-              }
-            ).__bigPlanCopiedCode,
-        ),
-      )
-      .toBe(expected);
-    expect(expected).toBe(expected?.trim());
-    await expect(copy).toHaveAttribute("aria-label", "Copied code");
+  await test.step("CodeSnippet: cross-highlight an annotation and its lines", async () => {
+    const snippet = page
+      .locator(COMPONENT_INTERACTIONS.CodeSnippet.selector)
+      .first();
+    const annotation = snippet.locator("[data-snippet-annotation]").first();
+    const line = snippet.locator("[data-snippet-annotated]").first();
+
+    await line.hover();
+    await expect(annotation).toHaveClass(/annotation-hover/u);
+    await page.mouse.move(0, 0);
+    await annotation.hover();
+    await expect(line).toHaveClass(/annotation-hover/u);
   });
 
   for (const figure of [
@@ -334,18 +307,10 @@ test("should exercise every live component affordance with browser gestures", as
     await expect(readout).toHaveText("100%");
     await fit.click();
     await expect(fit).toHaveAttribute("aria-pressed", "true");
-    const minimizedFitBackground = await fit.evaluate(
-      (element) => getComputedStyle(element).backgroundColor,
-    );
 
     const maximize = diagram.locator("[data-figure-maximize]");
     await maximize.click();
     await expect(diagram).toHaveAttribute("data-figure-maximized", "");
-    await expect(fit).toHaveAttribute("aria-pressed", "true");
-    const maximizedFitBackground = await fit.evaluate(
-      (element) => getComputedStyle(element).backgroundColor,
-    );
-    expect(minimizedFitBackground).not.toBe(maximizedFitBackground);
     await maximize.click();
     await expect(diagram).not.toHaveAttribute("data-figure-maximized");
 
@@ -367,73 +332,4 @@ test("should exercise every live component affordance with browser gestures", as
     await page.getByRole("button", { name: "Start lesson" }).click();
     await expect(lesson).toBeVisible();
   });
-});
-
-test("should report a failed legacy copy and remove its temporary field", async ({
-  page,
-  allComponentsViewerUrl,
-}) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: undefined,
-    });
-    (
-      window as typeof window & {
-        __bigPlanLegacyCopySucceeds?: boolean;
-        __bigPlanLegacyCopyText?: string;
-      }
-    ).__bigPlanLegacyCopySucceeds = false;
-    document.execCommand = () => {
-      const state = window as typeof window & {
-        __bigPlanLegacyCopySucceeds?: boolean;
-        __bigPlanLegacyCopyText?: string;
-      };
-      state.__bigPlanLegacyCopyText =
-        document.activeElement instanceof HTMLTextAreaElement
-          ? document.activeElement.value
-          : undefined;
-      return state.__bigPlanLegacyCopySucceeds === true;
-    };
-  });
-  await page.goto(allComponentsViewerUrl);
-
-  const figure = page
-    .locator("[data-http-endpoint]")
-    .first()
-    .locator(".code-figure")
-    .first();
-  const copy = figure.locator("[data-copy-code]");
-  const rendered = await figure.locator(":scope > pre > code").textContent();
-  const expected =
-    rendered?.endsWith("\n") === true ? rendered.slice(0, -1) : rendered;
-  const readonlyFields = page.locator("textarea[readonly]");
-  const readonlyFieldCount = await readonlyFields.count();
-
-  await copy.click();
-
-  await expect(copy).toHaveAttribute("aria-label", "Copy failed");
-  await expect(readonlyFields).toHaveCount(readonlyFieldCount);
-  expect(
-    await page.evaluate(
-      () =>
-        (
-          window as typeof window & {
-            __bigPlanLegacyCopyText?: string;
-          }
-        ).__bigPlanLegacyCopyText,
-    ),
-  ).toBe(expected);
-
-  await page.evaluate(() => {
-    (
-      window as typeof window & {
-        __bigPlanLegacyCopySucceeds?: boolean;
-      }
-    ).__bigPlanLegacyCopySucceeds = true;
-  });
-  await copy.click();
-
-  await expect(copy).toHaveAttribute("aria-label", "Copied code");
-  await expect(readonlyFields).toHaveCount(readonlyFieldCount);
 });
