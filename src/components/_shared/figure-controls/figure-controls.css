@@ -131,13 +131,25 @@
   }
   /* Promoted, the code bar stops floating over the code and becomes a real
        band, because a maximized block is being read rather than skimmed past.
+       It flows in a row, like the header band every other maximized figure
+       family already uses, instead of the resting hover stack's column.
        Override invariant: promoted code chrome beats resting absolute positioning. */
   article .code-figure[data-figure-maximized] > .figure-control-bar {
     position: static;
     opacity: 1;
+    flex-direction: row;
     border-bottom: 1px solid var(--edge-c);
     background: var(--diff-header-bg);
     padding: 0.3rem 0.5rem;
+  }
+  /* The resting hover stack keeps its filled chip so a floating icon reads
+       against arbitrary code beneath it; a promoted control sits on its own
+       solid header band instead, so the chip becomes redundant, and dropping
+       it matches the transparent controls every other maximized header uses.
+       Override invariant: promoted code-figure buttons beat their resting chip. */
+  article .code-figure[data-figure-maximized] .figure-control {
+    border-color: transparent;
+    background-color: transparent;
   }
   /* Override invariant: promoted code content beats its resting frame decoration. */
   article .code-figure[data-figure-maximized] > pre {
