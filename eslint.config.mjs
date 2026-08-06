@@ -54,6 +54,13 @@ export default tseslint.config(
     // A layer: where its files live, which import specifiers reach it, and
     // what it MAY import. Everything else known to the model is banned.
     const LAYERS = {
+      // Guidance-bearing slide vocabulary is the shared bottom tier consumed
+      // by model compilation, lint, component registration, and rendering.
+      planVocabulary: {
+        files: ["src/plan-vocabulary/**/*.ts"],
+        imports: ["**/plan-vocabulary/**"],
+        mayImport: [],
+      },
       // Framework-free component compilers, authoring contracts, diagnostics,
       // and pure parsers stay at the bottom tier even though the file tree
       // co-locates them with the views and definitions that share their
@@ -87,7 +94,7 @@ export default tseslint.config(
           "**/components/wireframe/catalog.js",
           "**/components/wireframe/model.js",
         ],
-        mayImport: [],
+        mayImport: ["planVocabulary"],
       },
       escapeHtml: {
         files: ["src/render/escape-html.ts"],
@@ -104,7 +111,7 @@ export default tseslint.config(
       planLint: {
         files: ["src/lint/**/*.ts"],
         imports: ["**/lint/**"],
-        mayImport: [],
+        mayImport: ["planVocabulary"],
       },
       // React views and their never-authorable shared building blocks consume
       // compiled models without owning static serialization.
@@ -130,7 +137,7 @@ export default tseslint.config(
           "**/components/*/definition.js",
           "**/render/markdown/component-pipeline/**",
         ],
-        mayImport: ["icons", "model", "ui"],
+        mayImport: ["icons", "model", "planVocabulary", "ui"],
       },
       markdown: {
         files: ["src/render/markdown/**/*.ts"],
@@ -144,7 +151,7 @@ export default tseslint.config(
         // controls, the code-figure transform draws the maximize control - and
         // a glyph either drew itself would be locally defined icon data, which
         // the icons layer exists to prevent.
-        mayImport: ["components", "icons", "model"],
+        mayImport: ["components", "icons", "model", "planVocabulary"],
       },
       shell: {
         files: ["src/render/shell/**/*.ts"],
@@ -179,7 +186,8 @@ export default tseslint.config(
 
     // Bottom to top; a layer's grants must point strictly downward.
     const TIERS = [
-      ["model", "escapeHtml", "icons", "planLint"],
+      ["planVocabulary", "escapeHtml", "icons"],
+      ["model", "planLint"],
       ["page", "ui"],
       ["components"],
       ["markdown", "shell"],

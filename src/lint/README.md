@@ -46,12 +46,16 @@ diagnostic formatting in
 | ----------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `lint-plan.ts`    | Public deep-module interface. It parses the source once, runs the ordered rule registry, and attaches rule IDs.  |
 | `types.ts`        | Private rule and finding contracts plus the public diagnostic shape.                                             |
+| root-level module | Support shared by more than one rule, such as tree reading or derived authored structure. One concern per file.  |
 | `rules/`          | One focused module per authoring rule.                                                                           |
 | `rules/*.test.ts` | Colocated tests exercise the public interface, source positions, diagnostic order, and conservative near misses. |
 
-`src/lint` is an independent bottom-tier layer in `eslint.config.mjs`.
-It must stay framework-free and may not import the renderer, components, or
-CLI.
+A rule owns whatever only it needs; move a helper to a root-level module only
+once a second rule needs the same behavior.
+
+`src/lint` is an independent framework-free layer in `eslint.config.mjs`.
+It may consume the lower `src/plan-vocabulary/` data tier, but it may not
+import the renderer, components, or CLI.
 The CLI may call its public interface, but lint never calls upward.
 
 ## Rule contract

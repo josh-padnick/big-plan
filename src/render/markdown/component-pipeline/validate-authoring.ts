@@ -144,6 +144,21 @@ const validateRegisteredComponentMarkdown = ({
     if (suppressRegisteredComponents) {
       continue;
     }
+    // Placement is authored structure, so every command sees the same
+    // diagnostic here; delivery drops a nested body before the document-wide
+    // transforms could observe it.
+    if (node.type !== "root") {
+      const childDefinition = definitionFor({
+        name: child.type === "mdxJsxFlowElement" ? child.name : null,
+        registry,
+      });
+      if (childDefinition?.topLevelOnly !== undefined) {
+        diagnostics.add({
+          message: childDefinition.topLevelOnly,
+          position: child.position,
+        });
+      }
+    }
     validateRegisteredComponentMarkdown({ node: child, diagnostics, registry });
   }
 };

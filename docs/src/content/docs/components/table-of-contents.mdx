@@ -3,7 +3,7 @@ title: TableOfContents
 description: The plan in one look - one linked row per section, each carrying the section's one-line gist.
 ---
 
-`TableOfContents` shows the whole argument before the reader commits to any of it: one row per section, each row a link carrying the section title and its one-line gist.
+`TableOfContents` shows the whole argument before the reader commits to any of it: one row per section, each row a link carrying the section name and its one-line gist.
 Big Plan completes the overview at render time with slide numbers, section links, and group headers derived from the plan's [Part](/components/part/) dividers, so the author writes only the entries.
 
 ## When to use it
@@ -24,7 +24,7 @@ Skip it only in a very short plan whose sidebar navigation already tells the who
 ## The contract
 
 - At least one self-closing `Entry`, each with required non-empty `section` and `gist` attributes; loose body content is rejected.
-- `section` must repeat the document's h2 titles exactly, in order, one to one, enforced by the `table-of-contents-matches-sections` linting rule.
+- `section` must repeat each section's overview form exactly, in order, one to one: the catalog name for most typed [Slide](/components/slide/) instances, a user journey's ultra-concise `toc` attribute, or the h2 title for an untyped slide. The `table-of-contents-matches-sections` linting rule enforces the match.
 - No attributes on `TableOfContents` itself.
 
 Each violation fails `validate` and `render` with a positional diagnostic.

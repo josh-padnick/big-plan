@@ -37,12 +37,12 @@ const renderCompiledDocument = ({
   // headers link to the divider band itself.
   const nav = sections.map((section) => {
     if (section.part === undefined) {
-      return { id: section.id, label: section.text };
+      return { id: section.id, label: section.name };
     }
     const partId = partIds[section.part.number - 1];
     return {
       id: section.id,
-      label: section.text,
+      label: section.name,
       part: {
         ...section.part,
         ...(partId === undefined || partId === "" ? {} : { id: partId }),

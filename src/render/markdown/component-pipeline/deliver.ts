@@ -47,6 +47,7 @@ type ComponentDelivery =
       readonly kind: "model";
       readonly collected: Array<CollectedComponentModel>;
       readonly adapt: ReactHastAdapter;
+      readonly deferOutline?: DeferredOutlinePresentations;
     };
 
 const isMdxNodeType = (type: string): boolean => type.startsWith("mdx");
@@ -187,19 +188,26 @@ const renderFlowElement = ({
       model: compiled.model,
     });
   }
-  if (delivery.kind === "model") {
-    return materializeModel
-      ? delivery.adapt(compiled.presentation())
-      : undefined;
-  }
   // An outline-aware component defers its presentation behind a placeholder
-  // until the deck transform has computed the document outline.
-  if (compiled.outline !== undefined && delivery.deferOutline !== undefined) {
+  // until the deck transform has computed the document outline. A model being
+  // materialized inside a parent's body never reaches the document tree, so
+  // it presents against the empty outline instead of leaking a placeholder.
+  if (
+    compiled.outline !== undefined &&
+    delivery.deferOutline !== undefined &&
+    !materializeModel
+  ) {
     delivery.deferOutline.push(compiled.outline.present);
     return createOutlinePlaceholder({
       index: delivery.deferOutline.length - 1,
       marker: compiled.outline.marker,
+      ...(node.position === undefined ? {} : { position: node.position }),
     });
+  }
+  if (delivery.kind === "model") {
+    return materializeModel
+      ? delivery.adapt(compiled.presentation())
+      : undefined;
   }
   const rendered = delivery.adapt(compiled.presentation());
   if (rendered !== undefined) {
@@ -371,7 +379,12 @@ export const rehypeRenderComponents =
                 : { collected: collectModels }),
               ...(deferOutline === undefined ? {} : { deferOutline }),
             }
-          : { kind: "model", collected: models, adapt },
+          : {
+              kind: "model",
+              collected: models,
+              adapt,
+              ...(deferOutline === undefined ? {} : { deferOutline }),
+            },
     });
     reportSurvivors({ parent: tree, diagnostics });
   };

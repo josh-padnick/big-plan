@@ -24,6 +24,7 @@ import type { DeferredOutlinePresentations } from "./component-pipeline/outline-
 import { rehypeDeckTransform } from "./deck-transform.js";
 import type { MutableDocumentOutline } from "./deck-transform.js";
 import { remarkValidateComponents } from "./component-pipeline/validate-authoring.js";
+import type { SlideTypeId } from "../../plan-vocabulary/slide-types/index.js";
 
 export type SectionPart = {
   readonly number: number;
@@ -32,7 +33,10 @@ export type SectionPart = {
 
 export type Section = {
   readonly id: string;
-  readonly text: string;
+  readonly name: string;
+  readonly toc?: string;
+  readonly title: string;
+  readonly type?: SlideTypeId;
   readonly part?: SectionPart;
 };
 
@@ -67,10 +71,6 @@ export class MarkdownDiagnosticsError extends Error {
   }
 }
 
-// remark-rehype emits the GFM footnotes block with this heading id; it is a
-// screen-reader label, not an authored section, so it stays out of the TOC.
-const FOOTNOTE_LABEL_ID = "footnote-label";
-
 // Flattens a heading to plain text so TOC entries keep their visible words
 // but drop inline markup such as code spans or emphasis.
 type MdxJsxFlowElement = Extract<
@@ -79,6 +79,10 @@ type MdxJsxFlowElement = Extract<
 >;
 
 type StructuredParent = Root | Element | MdxJsxFlowElement;
+
+// remark-rehype emits the GFM footnotes block with this heading id; it is a
+// screen-reader label, not an authored section, so it stays out of the model.
+const FOOTNOTE_LABEL_ID = "footnote-label";
 
 const textOf = (node: StructuredParent): string => {
   let text = "";
@@ -170,9 +174,8 @@ const findTitle = (node: StructuredParent): string | undefined => {
   return undefined;
 };
 
-// Reads the static string value of one authored attribute on a not-yet
-// compiled component node; expression-valued attributes are rejected later by
-// component delivery, so they read as absent here.
+// Reads one static string value from a not-yet-compiled component marker so
+// the pre-delivery metadata walk can preserve Part membership.
 const staticAttribute = ({
   node,
   name,
@@ -188,20 +191,22 @@ const staticAttribute = ({
   return undefined;
 };
 
-// Carries the part a document-order walk is currently inside, so every
-// section collected after a Part marker knows the act it belongs to.
+type MetadataSection = {
+  readonly id: string;
+  readonly title: string;
+  readonly part?: SectionPart;
+};
+
 type PartTracker = {
   part: SectionPart | undefined;
   count: number;
 };
 
-// Gathers every slugged h2 in document order, at any nesting depth, so
-// sections inside containers such as blockquotes still reach the TOC. Part
-// markers still ride the tree untranslated here, so the same walk assigns
-// each section its act.
+// Gathers every authored slugged h2 before component model delivery can
+// remove a parent body, preserving nested headings and their source order.
 const collectSections = (
   node: StructuredParent,
-  sections: Array<Section>,
+  sections: Array<MetadataSection>,
   tracker: PartTracker,
 ): void => {
   for (const child of node.children) {
@@ -221,7 +226,7 @@ const collectSections = (
       ) {
         sections.push({
           id,
-          text: textOf(child),
+          title: textOf(child),
           ...(tracker.part === undefined ? {} : { part: tracker.part }),
         });
       }
@@ -234,7 +239,7 @@ const collectSections = (
 
 type MarkdownMetadata = {
   title: string | undefined;
-  readonly sections: Array<Section>;
+  readonly sections: Array<MetadataSection>;
 };
 
 // Captures authored headings after slugging but before model delivery removes
@@ -315,7 +320,7 @@ const compileMarkdownTree = ({
     .use(rehypeHighlight)
     .use(rehypeWrapTables)
     .use(rehypeCodeFigures)
-    .use(rehypeDeckTransform, { outline })
+    .use(rehypeDeckTransform, { outline, diagnostics })
     .use(() => (tree: Root) => {
       completeOutlinePlaceholders({
         tree,
@@ -341,10 +346,30 @@ const compileMarkdownTree = ({
 
   const elementIds: Array<string> = [];
   collectElementIds(tree, elementIds);
+  const outlinedById = new Map(
+    outline.sections.map((section) => [section.id, section]),
+  );
 
   return {
     root: tree,
-    sections: metadata.sections,
+    sections: metadata.sections.map((section) => {
+      const outlined = outlinedById.get(section.id);
+      return outlined === undefined
+        ? {
+            id: section.id,
+            name: section.title,
+            title: section.title,
+            ...(section.part === undefined ? {} : { part: section.part }),
+          }
+        : {
+            id: section.id,
+            name: outlined.name,
+            title: outlined.title,
+            ...(outlined.toc === undefined ? {} : { toc: outlined.toc }),
+            ...(outlined.type === undefined ? {} : { type: outlined.type }),
+            ...(section.part === undefined ? {} : { part: section.part }),
+          };
+    }),
     elementIds,
     title: metadata.title,
     partIds: outline.parts.map((part) => part.id ?? ""),

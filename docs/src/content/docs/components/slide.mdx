@@ -1,0 +1,112 @@
+---
+title: Slide
+description: The self-closing type marker that connects a recurring slide role to its specific authoring guidance and structural name.
+---
+
+`Slide` applies one type from Big Plan's closed, guidance-bearing catalog to the h2 immediately after it.
+Most types supply the reusable structural name shown in the kicker, [TableOfContents](/components/table-of-contents/), and sidebar navigation; user journeys supply their deeper naming forms on the marker.
+The h2 remains the large, plan-specific title.
+
+The marker itself emits no HTML.
+Untyped slides keep the existing behavior: the h2 is both their name and title.
+
+## Authoring
+
+```mdx
+<Slide type="status-quo" />
+
+## Inline retries delay checkout
+
+...
+```
+
+Run `big-plan guidance Slide` once before drafting a plan.
+It returns the complete catalog in one digest: matching boundaries, writing guidance, component pairings, and cardinality for every type.
+For each intended slide, use a type only when its matching rule fits; otherwise use an untyped slide under the general guidance.
+
+## The catalog
+
+| Type id               | Name                | Role                                                                   |
+| --------------------- | ------------------- | ---------------------------------------------------------------------- |
+| `status-quo`          | Status quo          | What is true today, including what already works                       |
+| `desired-experience`  | Desired experience  | The concrete lived experience introduced by a new feature              |
+| `desired-outcome`     | Desired outcome     | The concrete payoff of a bug fix, re-architecture, or tech-debt change |
+| `user-journey`        | User journeys       | A named container of individually named, complete human loops          |
+| `acceptance-criteria` | Acceptance criteria | Independently checkable verification                                   |
+
+`desired-experience` and `desired-outcome` are mutually exclusive.
+They are light recommendations when their sharper framing fits; the canonical untyped “Success looks like” section remains valid and receives no discouraging lint.
+
+## Names and titles
+
+A typed slide's name and title are distinct concepts.
+For most types the catalog name is stable across plans; the h2 title states this plan's message.
+Normally make the title distinct and write it in plain language with concrete nouns and active verbs, omitting evaluative adjectives, superlatives, slogans, and abstract noun stacks.
+Big Plan does not lint that judgment because broad language checks would create false positives, and an identical name and title remains structurally valid when a distinct title would be strained.
+
+### User journeys
+
+User journeys add one deeper name/title layer.
+Name the container “User journeys,” but choose the container presentation that fits the plan: either a Part or an untyped introductory slide.
+Big Plan deliberately supports both.
+
+```mdx
+<Part title="User journeys" />
+
+<Slide type="user-journey" name="Drafting a status slide" toc="Draft status" />
+
+## An agent turns evidence into a status slide
+
+<Wireframe id="draft-status" initialScreen="evidence">
+  <Screen id="evidence" name="Gather evidence" device="desktop">
+    ...
+  </Screen>
+  <Screen id="preview" name="Review status slide" device="desktop">
+    ...
+  </Screen>
+</Wireframe>
+```
+
+For each journey:
+
+- `name` is a distinct, concrete journey name shown in the kicker and sidebar.
+- `toc` is an ultra-concise form shown in the TableOfContents.
+- The h2 is the full plain-language claim.
+- A default `Wireframe` carries the actual `Screen` mockups for the shortest path that proves the journey. If no UI exists to show, add a non-empty `wireframeReason` attribute to the marker.
+
+Repeat the singular `user-journey` marker for several individual journeys.
+The catalog's plural “User journeys” name belongs to the container, not every journey kicker.
+Distinct journey names and TOC forms keep repeated entries navigable.
+The Wireframe makes a UI journey visible and walkable; prose can annotate the screens but cannot replace them when a UI exists.
+Apply the Wireframe component's CLEAR quality bar to every mockup.
+
+## The contract
+
+- `type` is required and accepts only the five registered ids above.
+- `Slide` is self-closing and rejects body content.
+- The marker must be top-level and immediately followed by the h2 it describes.
+- `user-journey` additionally requires non-empty `name` and `toc` attributes and accepts an optional non-empty `wireframeReason`; other types reject all three.
+- Every `user-journey` section must contain a `Wireframe` with actual UI mockups, or a non-empty `wireframeReason` that explains why no UI was created. Carrying both is rejected, because the reason only explains an absent wireframe.
+- Singleton types may appear at most once; `user-journey` may repeat.
+- A plan may use `desired-experience` or `desired-outcome`, never both.
+- An acceptance-criteria slide with more than seven criteria must group them by a useful dimension.
+
+Unknown types and misplaced markers fail compilation with source positions.
+Objective catalog violations fail lint.
+No rule requires every slide to be typed.
+
+## Growing the catalog
+
+The catalog is closed but intentionally grows over time.
+A new type is justified when the same untyped slide purpose recurs across plans and agents need materially different guidance to author it well.
+A one-off label is not enough.
+
+Adding a type is a normal product contribution:
+
+1. Add one file under `src/plan-vocabulary/slide-types/definitions/` with its matching boundary, counterexample, authoring guidance, component pairings, and cardinality.
+2. Add its id to the registry and closed `Slide` attribute contract.
+3. Update the focused catalog tests, the smallest validated example, and this reference.
+4. Submit the evidence and guidance for normal Big Plan maintainer review.
+
+Until a type is accepted, authors use untyped slides rather than defining local types.
+A future captain-approved agent proposal flow may package evidence for maintainer review, but it will not mutate the installed catalog or create runtime custom types.

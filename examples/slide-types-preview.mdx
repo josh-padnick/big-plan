@@ -1,0 +1,354 @@
+# Slide types turn labels into writing help
+
+This preview shows how catalog names, plan-specific titles, and type guidance work together in one review document.
+
+<QuickSummary>
+
+<Why>
+
+- Agents need concrete writing help for slide roles that recur across plans.
+
+</Why>
+
+<What>
+
+- Connect typed slides to role-specific guidance while keeping each heading free to state the plan's message.
+
+</What>
+
+<How>
+
+- Derive navigation names from a closed catalog.
+- Keep plain-language titles in authored h2 headings.
+- Apply each type's guidance only when its matching rule fits.
+
+</How>
+
+</QuickSummary>
+
+<TableOfContents>
+<Entry section="Status quo" gist="Agents repeatedly reconstruct the craft behind common slide roles" />
+<Entry section="Success looks like" gist="One catalog lookup improves the plan without forcing every slide into a type" />
+<Entry section="Desired experience" gist="The author matches intent, follows specific guidance, and falls back honestly" />
+<Entry section="Draft status" gist="One agent turns current-state evidence into a focused status slide" />
+<Entry section="Read structure" gist="One reviewer moves from structural names to plan-specific claims" />
+<Entry section="Acceptance criteria" gist="Observable checks prove the catalog changes authoring and rendering" />
+</TableOfContents>
+
+<Part title="Context" />
+
+<Slide type="status-quo" />
+
+## Agents rebuild common slide roles from scratch
+
+Two plans can contain the same conceptual slide under unrelated headings.
+The renderer can present both, but general guidance cannot reliably teach the different craft of a status slide, a human journey, and a verification contract.
+
+The existing heading model still works well: an h2 gives every slide a readable headline, stable anchor, and collapsible section.
+The missing piece is a stable hook for advice that belongs to one recurring role.
+
+<Callout type="note" title="Status quo guidance applied">
+
+- Start with observable authoring behavior and its consequence.
+- Preserve what already works in the heading model.
+- Keep the symptom of repeated invention distinct from the missing type hook.
+
+</Callout>
+
+## Success looks like
+
+- An agent reads the complete catalog once, then applies the matching guidance throughout the authoring pass.
+- A typed slide carries a stable structural name and a plan-specific title.
+- A slide that does not fit the catalog remains naturally untyped.
+
+<Part title="The authoring experience" />
+
+<Slide type="desired-experience" />
+
+## Agents match a slide before they draft it
+
+As an agent, I state what the next slide must help the reviewer understand or decide.
+I compare that intent with the catalog's matching boundaries.
+When a type fits, I follow its writing advice and component pairings; when none fits, I use the general guidance without inventing a local label.
+
+<Callout type="note" title="Desired experience guidance applied">
+
+- Describe what the author can see, decide, and do.
+- Keep the experience separate from registry and renderer mechanics.
+- Use first-person language where it makes the change tangible.
+
+</Callout>
+
+<Part title="User journeys" />
+
+<Slide type="user-journey" name="Drafting a status slide" toc="Draft status" />
+
+## An agent turns evidence into a status slide
+
+The author moves from captured evidence to a rendered status slide.
+
+<Wireframe
+  id="status-slide-journey"
+  title="From evidence to a status slide"
+  initialScreen="evidence"
+>
+  <Screen
+    id="evidence"
+    name="Gather evidence"
+    device="desktop"
+    url="/plans/retry-queue/status"
+  >
+    <AppShell>
+      <Sidebar brand="Big Plan" mode="Authoring">
+        <Nav label="Plan">
+          <NavItem label="Outline" active />
+          <NavItem label="Slide guidance" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="What is true today?"
+          description="Record evidence before proposing a change."
+        />
+        <Center measure="prose">
+          <Stack gap="md">
+            <TextField
+              label="Observed behavior"
+              value="Retries add eight seconds to checkout"
+            />
+            <TextArea
+              label="What already works"
+              value="Payment capture succeeds without manual operator work"
+            />
+            <Button
+              label="Build status slide"
+              emphasis="primary"
+              navigateTo="status-preview"
+            />
+          </Stack>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="status-preview"
+    name="Review status slide"
+    device="desktop"
+    url="/plans/retry-queue/status/preview"
+  >
+    <AppShell>
+      <Sidebar brand="Big Plan" mode="Authoring">
+        <Nav label="Plan">
+          <NavItem label="Outline" active />
+          <NavItem label="Slide guidance" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="Review the status slide"
+          description="Keep the evidence and the existing strength visible."
+        />
+        <Center measure="prose">
+          <Stack gap="md">
+            <Badge label="Status quo" tone="info" />
+            <Heading text="Retries block checkout" />
+            <Text text="Observed: retries add eight seconds to checkout." />
+            <Text
+              text="Keep: payment capture succeeds without manual operator work."
+              role="helper"
+            />
+            <Row justify="between">
+              <Button
+                label="Back to evidence"
+                emphasis="tertiary"
+                navigateTo="evidence"
+              />
+              <Button
+                label="Keep slide"
+                emphasis="primary"
+                navigateTo="status-kept"
+              />
+            </Row>
+          </Stack>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="status-kept"
+    name="Status slide ready"
+    device="desktop"
+    url="/plans/retry-queue/status/ready"
+  >
+    <AppShell>
+      <Sidebar brand="Big Plan" mode="Authoring">
+        <Nav label="Plan">
+          <NavItem label="Outline" active />
+          <NavItem label="Slide guidance" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="Status slide is ready"
+          description="The evidence and existing strength stay together."
+        />
+        <Center measure="prose">
+          <Stack gap="md">
+            <Badge label="Saved" tone="success" />
+            <Heading text="Retries block checkout" />
+            <Text text="Status quo · Ready for plan review" role="helper" />
+            <Button
+              label="Edit status slide"
+              emphasis="primary"
+              navigateTo="status-preview"
+            />
+          </Stack>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+</Wireframe>
+
+1. The agent writes the intent: establish what is true before the proposal changes anything.
+2. The agent matches that intent to `status-quo`.
+3. The agent gathers observable evidence and records what already works.
+4. The agent writes a concrete title and checks that the content does not drift into proposed changes.
+5. The reviewer sees “Status quo” in navigation and reads the plan-specific claim in the heading.
+
+<Callout type="note" title="User journeys guidance applied">
+
+This slide follows one person through one complete goal, including the review response that closes the loop.
+It does not substitute a service pipeline for human actions.
+“User journeys” names this Part container, “Drafting a status slide” names this journey, and “Draft status” is its ultra-concise overview form.
+
+</Callout>
+
+<Slide type="user-journey" name="Reading names and titles" toc="Read structure" />
+
+## A reviewer scans names and reads titles
+
+The reviewer moves from a compressed overview label to the full journey claim.
+
+<Wireframe
+  id="review-plan-journey"
+  title="From overview label to full claim"
+  initialScreen="overview"
+>
+  <Screen
+    id="overview"
+    name="Plan overview"
+    device="desktop"
+    url="/reviews/slide-types"
+  >
+    <AppShell>
+      <Sidebar brand="Big Plan" mode="Plan review">
+        <Nav label="Contents">
+          <NavItem label="Status quo" />
+          <NavItem label="Desired experience" />
+          <NavItem label="Drafting a status slide" />
+          <NavItem label="Reading names and titles" />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="Slide types turn labels into writing help"
+          description="Scan the plan before opening a slide."
+        />
+        <Center measure="wide">
+          <Panel title="The plan in one look">
+            <List>
+              <ListItem
+                label="1.1  Status quo"
+                meta="Agents rebuild common slide roles from scratch"
+              />
+              <ListItem
+                label="3.1  Draft status"
+                meta="One agent turns evidence into a focused status slide"
+              />
+              <ListItem
+                label="3.2  Read structure"
+                meta="One reviewer moves from names to the full claim"
+                navigateTo="journey-slide"
+              />
+            </List>
+          </Panel>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="journey-slide"
+    name="Journey slide"
+    device="desktop"
+    url="/reviews/slide-types#reviewer-journey"
+  >
+    <AppShell>
+      <Sidebar brand="Big Plan" mode="Plan review">
+        <Nav label="Contents">
+          <NavItem label="Status quo" />
+          <NavItem label="Desired experience" />
+          <NavItem label="Drafting a status slide" />
+          <NavItem label="Reading names and titles" active />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="A reviewer scans names and reads titles"
+          description="The full claim stays attached to its distinct journey name."
+        />
+        <Center measure="prose">
+          <Stack gap="md">
+            <Badge label="3.2 / Reading names and titles" tone="info" />
+            <Panel title="User journeys" surface="filled">
+              <Text
+                text="The container groups the human loops without repeating one generic name on every slide."
+              />
+            </Panel>
+            <Button
+              label="Back to plan overview"
+              emphasis="primary"
+              navigateTo="overview"
+            />
+          </Stack>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+</Wireframe>
+
+1. The reviewer opens the plan and scans stable names in the sidebar.
+2. “Desired experience” signals the role of a slide before the reviewer opens it.
+3. The title “Agents match a slide before they draft it” states the concrete message of this plan.
+4. The reviewer collapses the slide, follows the next distinct journey name, and keeps the argument's structure in view.
+5. The acceptance contract gives the reviewer a final place to verify the design.
+
+<Callout type="note" title="User journeys guidance applied">
+
+Repeating the singular type creates several complete journeys.
+Each slide keeps one person, one goal, and one closing response.
+This preview uses a Part for the “User journeys” container; an author may instead use an untyped introductory slide when that reads better.
+
+</Callout>
+
+<Part title="Verification" />
+
+<Slide type="acceptance-criteria" />
+
+## Generated plans expose each type's writing contract
+
+- One `big-plan guidance Slide` call returns all five type records, including matching boundaries, writing advice, component pairings, and cardinality.
+- Most typed slides render the catalog name in their kicker and navigation; user journeys render their marker name there, and all preserve the authored h2 as the title.
+- Two `user-journey` markers render with distinct journey names, ultra-concise overview forms, and full h2 claims under a “User journeys” container.
+- “Success looks like” remains an untyped, canonical section and produces no lint finding.
+- A title with strained marketing language remains a guidance concern rather than a blocking language diagnostic.
+- The rendered document remains readable and interactive in light and dark color schemes.
+
+<Callout type="note" title="Acceptance criteria guidance applied">
+
+Every item names an observable command result, rendered behavior, or lint boundary.
+The list verifies completion without prescribing implementation steps.
+
+</Callout>

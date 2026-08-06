@@ -47,6 +47,13 @@ A plan is prose plus components, nothing else.
 That keeps every plan greppable and diffable, which the review workflow depends on, and it means the renderer never has to run code an agent wrote.
 The full contract lives in [Authoring plans](/for-agents/authoring-plans/) and [Linting rules](/reference/lint-rules/).
 
+## Slide vocabulary is shared data
+
+Recurring slide roles live in a framework-free catalog below component compilation, lint, and rendering.
+Each type owns its stable id and name together with the matching boundary, authoring guidance, component pairings, and cardinality that give the type value.
+The [`Slide`](/components/slide/) compiler validates an authored marker against that catalog, the deck transform derives structural names from it, lint reads only its objective facts, and guidance generation returns the same records to agents.
+One file per type keeps catalog growth an ordinary reviewed contribution rather than a new architecture decision.
+
 ## Each component supports both output modes
 
 The [built-in components](/components/) come from a closed registry.

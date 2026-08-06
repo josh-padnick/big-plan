@@ -1,5 +1,5 @@
 // Renders a compiled TableOfContents as "The plan in one look": stacked rows of
-// section title over gist, each row one link to its section. Row numbers,
+// structural section name over gist, each row one link to its section. Row numbers,
 // hrefs, and part group headers are document-order knowledge read from the
 // completed document outline: rows map to the outline's sections in document
 // order, a group header precedes the first row of every part, and a row
@@ -67,7 +67,7 @@ export const TableOfContents = ({
               >
                 {section?.number}
               </span>
-              {/* The title turns accent through a group variant; a stylesheet rule
+              {/* The name turns accent through a group variant; a stylesheet rule
                   on this span would lose to its own text-ink utility. */}
               <span className="table-of-contents-name block text-[0.9375rem] font-semibold text-ink group-hover:text-accent">
                 {entry.section}

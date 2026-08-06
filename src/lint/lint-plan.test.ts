@@ -382,7 +382,7 @@ describe("lintPlan table-of-contents-matches-sections", () => {
   const plan = (overview: string): string =>
     `# T\n\nLede.\n\n${overview}\n## Status quo\n\nA.\n\n## The design\n\nB.\n`;
 
-  it("should accept a TableOfContents whose entries repeat every section title in order", () => {
+  it("should accept a TableOfContents whose entries repeat every section name in order", () => {
     expect(
       lintPlan({
         markdown: plan(
@@ -405,9 +405,27 @@ describe("lintPlan table-of-contents-matches-sections", () => {
         line: 5,
         column: 1,
         message:
-          'TableOfContents entry 2 says "Design" but section 2 is titled "The design"; list every section title exactly, in document order',
+          'TableOfContents entry 2 says "Design" but section 2 is named "The design"; list every section name exactly, in document order',
       },
     ]);
+  });
+
+  it("should compare a typed slide against its catalog name rather than its h2 title", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '# T\n\nLede.\n\n<TableOfContents>\n<Entry section="Status quo" gist="Today" />\n</TableOfContents>\n\n<Slide type="status-quo" />\n\n## Inline retries delay checkout\n\nA.\n',
+      }),
+    ).toEqual([]);
+  });
+
+  it("should compare a user journey against its ultra-concise TOC form", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '# T\n\nLede.\n\n<TableOfContents>\n<Entry section="Draft status" gist="One journey" />\n</TableOfContents>\n\n<Slide type="user-journey" name="Drafting a status slide" toc="Draft status" />\n\n## An agent turns evidence into a status slide\n\nA.\n\n<Wireframe id="draft"><Screen id="evidence" name="Evidence" device="desktop" /></Wireframe>\n',
+      }),
+    ).toEqual([]);
   });
 
   it("should report entries in the wrong order as pairwise mismatches", () => {

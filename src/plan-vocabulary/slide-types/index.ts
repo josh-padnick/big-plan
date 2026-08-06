@@ -1,0 +1,42 @@
+// Assembles the ordered, closed slide-type catalog and exposes its stable
+// lookup helpers to compilation, rendering, lint, guidance generation, and
+// catalog tests.
+
+import { ACCEPTANCE_CRITERIA_SLIDE_TYPE } from "./definitions/acceptance-criteria.js";
+import { DESIRED_EXPERIENCE_SLIDE_TYPE } from "./definitions/desired-experience.js";
+import { DESIRED_OUTCOME_SLIDE_TYPE } from "./definitions/desired-outcome.js";
+import { STATUS_QUO_SLIDE_TYPE } from "./definitions/status-quo.js";
+import type { SlideTypeDefinition, SlideTypeId } from "./types.js";
+import { USER_JOURNEY_SLIDE_TYPE } from "./definitions/user-journey.js";
+
+export type {
+  SlideTypeCardinality,
+  SlideTypeComponentPairing,
+  SlideTypeDefinition,
+  SlideTypeId,
+} from "./types.js";
+
+export const SLIDE_TYPE_BY_ID: {
+  readonly [Id in SlideTypeId]: SlideTypeDefinition & { readonly id: Id };
+} = {
+  "status-quo": STATUS_QUO_SLIDE_TYPE,
+  "desired-experience": DESIRED_EXPERIENCE_SLIDE_TYPE,
+  "desired-outcome": DESIRED_OUTCOME_SLIDE_TYPE,
+  "user-journey": USER_JOURNEY_SLIDE_TYPE,
+  "acceptance-criteria": ACCEPTANCE_CRITERIA_SLIDE_TYPE,
+};
+
+export const SLIDE_TYPES: ReadonlyArray<SlideTypeDefinition> =
+  Object.values(SLIDE_TYPE_BY_ID);
+
+export const SLIDE_TYPE_IDS: ReadonlyArray<SlideTypeId> = SLIDE_TYPES.map(
+  ({ id }) => id,
+);
+
+/** Reports whether a static component attribute names a registered type. */
+export const isSlideTypeId = (value: string): value is SlideTypeId =>
+  Object.hasOwn(SLIDE_TYPE_BY_ID, value);
+
+/** Returns the one guidance-bearing definition for a registered type id. */
+export const slideTypeFor = (id: SlideTypeId): SlideTypeDefinition =>
+  SLIDE_TYPE_BY_ID[id];

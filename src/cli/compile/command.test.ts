@@ -67,6 +67,13 @@ describe("compileCommand", () => {
     const parsed: unknown = JSON.parse(serialized);
     expect(parsed).toMatchObject({
       title: "Rollout plan",
+      sections: [
+        {
+          id: "question",
+          name: "Question",
+          title: "Question",
+        },
+      ],
       components: [
         {
           component: "QuickDecision",
