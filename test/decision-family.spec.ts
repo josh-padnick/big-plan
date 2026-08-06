@@ -66,17 +66,52 @@ test("should compare, answer, and revise a Decision", async ({
   expect(firstBox?.y).toBeCloseTo(secondBox?.y ?? 0);
   expect(firstBox?.x).toBeLessThan(secondBox?.x ?? 0);
 
-  const [recommendedBackground, otherBackground] = await Promise.all([
+  const [recommendedCardStyle, otherCardStyle] = await Promise.all([
     options
       .nth(0)
       .locator(".decision-option-card")
-      .evaluate((element) => getComputedStyle(element).backgroundImage),
+      .evaluate((element) => ({
+        backgroundImage: getComputedStyle(element).backgroundImage,
+      })),
     options
       .nth(1)
       .locator(".decision-option-card")
-      .evaluate((element) => getComputedStyle(element).backgroundImage),
+      .evaluate((element) => ({
+        backgroundImage: getComputedStyle(element).backgroundImage,
+      })),
   ]);
-  expect(recommendedBackground).not.toBe(otherBackground);
+  expect(recommendedCardStyle).toEqual(otherCardStyle);
+
+  const recommendationColors = await options
+    .nth(0)
+    .locator(".decision-recommended-pill")
+    .evaluate((element) => {
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = "var(--decision-pro-bg)";
+      probe.style.color = "var(--decision-pro-c)";
+      document.body.append(probe);
+      const proStyle = getComputedStyle(probe);
+      const pillStyle = getComputedStyle(element);
+      const result = {
+        pillBackground: pillStyle.backgroundColor,
+        pillColor: pillStyle.color,
+        proBackground: proStyle.backgroundColor,
+        proColor: proStyle.color,
+      };
+      probe.remove();
+      return result;
+    });
+  expect(recommendationColors.pillBackground).not.toBe(
+    recommendationColors.proBackground,
+  );
+  expect(recommendationColors.pillColor).not.toBe(
+    recommendationColors.proColor,
+  );
+
+  const firstOptionCard = options.nth(0).locator(".decision-option-card");
+  await firstOptionCard.hover();
+  await expect(firstOptionCard).toHaveCSS("transform", "none");
+  await expect(firstOptionCard).not.toHaveCSS("box-shadow", "none");
 
   await options.nth(0).locator(".decision-option-card").click();
   await expect(card.locator("[data-decision-choice]").first()).toBeChecked();
@@ -171,16 +206,19 @@ test("should batch three independent QuickDecisions without comparison", async (
 
   const first = cards.first();
   const briefOptions = first.locator(".decision-brief-option");
-  const [recommendedBackground, otherBackground] = await Promise.all([
-    briefOptions
-      .nth(0)
-      .evaluate((element) => getComputedStyle(element).backgroundColor),
-    briefOptions
-      .nth(1)
-      .evaluate((element) => getComputedStyle(element).backgroundColor),
+  const [recommendedOptionStyle, otherOptionStyle] = await Promise.all([
+    briefOptions.nth(0).evaluate((element) => ({
+      backgroundColor: getComputedStyle(element).backgroundColor,
+    })),
+    briefOptions.nth(1).evaluate((element) => ({
+      backgroundColor: getComputedStyle(element).backgroundColor,
+    })),
   ]);
-  expect(recommendedBackground).not.toBe(otherBackground);
+  expect(recommendedOptionStyle).toEqual(otherOptionStyle);
+  await briefOptions.first().hover();
+  await expect(briefOptions.first()).not.toHaveCSS("box-shadow", "none");
   await first.locator("[data-decision-choice]").first().check();
+  await expect(briefOptions.first()).not.toHaveCSS("box-shadow", "none");
   await first.locator("[data-decision-confirm]").click();
   await expect(first.locator("[data-decision-answer]")).toBeVisible();
   await first.locator("[data-decision-change]").click();
