@@ -40,6 +40,7 @@ const renderThroughCli = async ({
 
 type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
+  readonly codeSnippetSyntaxMaximizeViewerUrl: string;
   readonly allComponentsViewerUrl: string;
   readonly componentsViewerUrl: string;
   readonly apiEndpointsViewerUrl: string;
@@ -89,6 +90,22 @@ retry();
 </Annotation>
 
 </CodeDiff>
+`;
+
+// A CodeSnippet with no showLineNumbers attribute, so the fixture proves the
+// number rail stays hidden at rest and appears only once maximized. The
+// TypeScript fence keeps a keyword, a type name, and a string in view so the
+// same document verifies token-level syntax highlighting.
+const CODE_SNIPPET_SYNTAX_MAXIMIZE_MDX = `# Code snippet syntax and maximize
+
+<CodeSnippet file="src/review/plan.ts">
+
+\`\`\`ts
+export const summarize = (title: string): string =>
+  "Reviewing " + title;
+\`\`\`
+
+</CodeSnippet>
 `;
 
 // Two Decisions, one inside the other's context, so the specs can prove an
@@ -235,6 +252,20 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const inputPath = join(outputDir, "annotation-code.mdx");
       const outputPath = join(outputDir, "annotation-code.html");
       await writeFile(inputPath, ANNOTATION_CODE_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  codeSnippetSyntaxMaximizeViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-code-snippet-syntax-maximize-"),
+      );
+      const inputPath = join(outputDir, "code-snippet-syntax-maximize.mdx");
+      const outputPath = join(outputDir, "code-snippet-syntax-maximize.html");
+      await writeFile(inputPath, CODE_SNIPPET_SYNTAX_MAXIMIZE_MDX, "utf8");
       await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
