@@ -210,6 +210,65 @@ test("should group and right-align the diagram viewer controls", async ({
   await expect(fit).toHaveAttribute("aria-pressed", "true");
 });
 
+test("should keep populated viewer toolbar actions reachable at narrow widths", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const toolbar = diagram.locator("[data-flow-controls]");
+  const node = diagram.locator('[data-flow-node="authored"]');
+  const maximize = diagram.locator("[data-figure-maximize]");
+
+  await node.click();
+  await diagram.locator('[data-flow-action="comment"]').click();
+  await diagram
+    .locator(".flow-diagram-compose textarea")
+    .fill("Keep every toolbar action reachable.");
+  await diagram
+    .locator('.flow-diagram-compose button[data-variant="primary"]')
+    .click();
+
+  await expect(toolbar.locator(":scope > .flow-collector-add")).toBeVisible();
+  await expect(maximize).toBeVisible();
+  const reachability = await toolbar.evaluate((element) => {
+    const toolbarRect = element.getBoundingClientRect();
+    const controls = Array.from(element.querySelectorAll("button"))
+      .filter((control) => control.offsetParent !== null)
+      .map((control) => {
+        const rect = control.getBoundingClientRect();
+        return {
+          bottom: rect.bottom,
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+        };
+      });
+    return {
+      controls,
+      toolbar: {
+        bottom: toolbarRect.bottom,
+        left: toolbarRect.left,
+        right: toolbarRect.right,
+        top: toolbarRect.top,
+      },
+      hasHorizontalOverflow: element.scrollWidth > element.clientWidth,
+    };
+  });
+  expect(reachability.hasHorizontalOverflow).toBe(false);
+  for (const control of reachability.controls) {
+    expect(control.left).toBeGreaterThanOrEqual(reachability.toolbar.left);
+    expect(control.right).toBeLessThanOrEqual(reachability.toolbar.right);
+    expect(control.top).toBeGreaterThanOrEqual(reachability.toolbar.top);
+    expect(control.bottom).toBeLessThanOrEqual(reachability.toolbar.bottom);
+  }
+
+  await maximize.click();
+  await expect(diagram).toHaveAttribute("data-figure-maximized", "");
+});
+
 test("should preserve a panned canvas when feedback repaints it", async ({
   page,
   flowDiagramViewerUrl,

@@ -189,6 +189,12 @@ classes.
     opacity: 0;
     pointer-events: none;
   }
+  /* Feedback inserts a long handoff action before the authored groups. Let the
+     toolbar earn a second row in narrow reading columns so every action stays
+     visible and focus rings remain unclipped. */
+  .flow-diagram[data-flow-has-feedback] > .flow-diagram-controls {
+    flex-wrap: wrap;
+  }
   /* A canvas the reader has zoomed keeps its controls on screen. Fading them
      out left someone zoomed in with no way back and no sign of where they
      were - which is what the captain hit in the maximized view. */
