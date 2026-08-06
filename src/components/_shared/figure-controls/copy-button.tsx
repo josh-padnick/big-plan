@@ -2,6 +2,7 @@
 // The viewer script wires the dormant button to the figure's hidden source.
 
 import { COPY_ICON } from "../../../icons/lucide/copy.js";
+import { CHECK_ICON } from "../../../icons/lucide/check.js";
 import { lucideIconToReact } from "../lucide-icon/lucide-icon.js";
 
 const BUTTON_CLASSES =
@@ -31,6 +32,7 @@ export const CopyButton = ({
       data-copy-source=""
     >
       {lucideIconToReact({ icon: COPY_ICON, hidden: false })}
+      {lucideIconToReact({ icon: CHECK_ICON, hidden: true })}
     </button>
   );
 };

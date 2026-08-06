@@ -8,7 +8,6 @@ import type {
 import type { HighlightedLine } from "./split-highlighted-lines.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { AnnotationCard } from "../_shared/annotation-card/annotation-card.js";
-import { CopyFeedback } from "../_shared/copy-feedback/copy-feedback.js";
 import { FileIdentity } from "../_shared/file-identity/file-identity.js";
 import { CopyButton } from "../_shared/figure-controls/copy-button.js";
 import {
@@ -29,7 +28,6 @@ const SnippetHeader = ({ filePath }: { readonly filePath?: string }) => (
       <FileIdentity filePath={filePath} />
     )}
     <span className="code-snippet-controls flex shrink-0 items-center gap-2">
-      <CopyFeedback dataAttribute="data-snippet-copy-message" />
       <span className="figure-action-group inline-flex items-center gap-0.5">
         <CopyButton subject="code" />
         <MaximizeButton subject="code" />

@@ -19,6 +19,13 @@
 /* This late layer outranks the resting Tailwind utilities on the shared
    button. See the DataTable focus rules for the same chrome vocabulary. */
 @layer bp-state {
+  /* The copied state keeps the fixed icon box and uses the success token in
+     both the light and dark palettes.
+     Override invariant: copied success state beats the resting control color. */
+  article [data-copy-state="copied"] {
+    color: var(--accent-c);
+  }
+
   /* A pointer reader who never saw a focus ring should not be handed one when
      Escape returns focus to the trigger. Focus still lands, so the next Tab
      continues from here; only the visible treatment is withheld, and the

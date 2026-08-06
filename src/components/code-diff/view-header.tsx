@@ -8,7 +8,6 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { FileIdentity } from "../_shared/file-identity/file-identity.js";
 import { CopyButton } from "../_shared/figure-controls/copy-button.js";
-import { CopyFeedback } from "../_shared/copy-feedback/copy-feedback.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
 // /* off-scale */ Phase A preserves the legacy inset header radius, 0.55rem
@@ -128,7 +127,6 @@ export const CodeDiffHeader = ({
         <ViewToggleGroup />
       </span>
       <span className="figure-action-group inline-flex items-center gap-0.5">
-        <CopyFeedback dataAttribute="data-diff-copy-message" />
         <CopyButton subject="diff" />
         {/* Far right so maximizing and restoring live in the same corner. */}
         <MaximizeButton subject="diff" />

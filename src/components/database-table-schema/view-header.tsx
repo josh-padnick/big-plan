@@ -8,7 +8,6 @@ import { DATABASE_ICON } from "../../icons/lucide/database.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
-import { CopyFeedback } from "../_shared/copy-feedback/copy-feedback.js";
 import { CopyButton } from "../_shared/figure-controls/copy-button.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 import { MutedText } from "./view-elements.js";
@@ -163,7 +162,6 @@ export const TableSchemaHeader = ({
         {...(schemaName === undefined ? {} : { schemaName })}
       />
       <span className="table-schema-controls flex shrink-0 items-center gap-2">
-        <CopyFeedback dataAttribute="data-schema-copy-message" />
         <span className="figure-action-group inline-flex items-center gap-0.5">
           <ColumnsMenu />
           <CopyButton subject="schema" />

@@ -135,9 +135,25 @@ export const VIEWER_SCRIPT = `<script>
     if (!copied) throw new Error("Unable to copy code");
   };
 
-  const wireCopy = ({ button, source, label, feedback }) => {
+  const wireCopy = ({ button, source, label }) => {
+    let resetTimer;
+    const setCopiedState = (copied) => {
+      const copyIcon = button.querySelector('[data-lucide="copy"]');
+      const checkIcon = button.querySelector('[data-lucide="check"]');
+      if (copyIcon !== null) {
+        if (copied) copyIcon.setAttribute("hidden", "");
+        else copyIcon.removeAttribute("hidden");
+      }
+      if (checkIcon !== null) {
+        if (copied) checkIcon.removeAttribute("hidden");
+        else checkIcon.setAttribute("hidden", "");
+      }
+      if (copied) button.setAttribute("data-copy-state", "copied");
+      else button.removeAttribute("data-copy-state");
+    };
     button.hidden = false;
     button.addEventListener("click", async () => {
+      clearTimeout(resetTimer);
       try {
         await clipboardWrite(
           typeof source === "function" ? source() : source,
@@ -145,16 +161,17 @@ export const VIEWER_SCRIPT = `<script>
         const copiedLabel = "Copied " + label.slice("Copy ".length).toLowerCase();
         button.setAttribute("aria-label", copiedLabel);
         button.setAttribute("data-tooltip", copiedLabel);
-        if (feedback !== null) feedback.hidden = false;
+        setCopiedState(true);
       } catch (_) {
         button.setAttribute("aria-label", "Copy failed");
         button.setAttribute("data-tooltip", "Copy failed");
+        setCopiedState(false);
       }
-      setTimeout(() => {
+      resetTimer = setTimeout(() => {
         button.setAttribute("aria-label", label);
         button.setAttribute("data-tooltip", label);
-        if (feedback !== null) feedback.hidden = true;
-      }, 1200);
+        setCopiedState(false);
+      }, 1500);
     });
   };
 
@@ -208,12 +225,10 @@ export const VIEWER_SCRIPT = `<script>
     const source = rendered.endsWith("\\n")
       ? rendered.slice(0, -1)
       : rendered;
-    const feedback = figure.querySelector("[data-copy-message]");
     wireCopy({
       button,
       source,
       label: "Copy code",
-      feedback: feedback instanceof HTMLElement ? feedback : null,
     });
   }
 
@@ -231,15 +246,11 @@ export const VIEWER_SCRIPT = `<script>
     )
       continue;
     const label = button.getAttribute("aria-label") || "Copy code";
-    const feedback = figure?.querySelector(
-      "[data-diff-copy-message], [data-snippet-copy-message], [data-table-copy-message], [data-schema-copy-message]",
-    );
     const tableSource = isTable ? () => tableToTsv(figure) : null;
     wireCopy({
       button,
       source: tableSource ?? source.value,
       label,
-      feedback: feedback instanceof HTMLElement ? feedback : null,
     });
   }
 })();

@@ -17,6 +17,8 @@ describe("compileMarkdown code figures", () => {
     expect(bodyHtml).toContain('data-figure-maximizable="code"');
     expect(bodyHtml).toContain('data-figure-maximize=""');
     expect(bodyHtml).toContain('data-copy-code=""');
+    expect(bodyHtml).toContain('data-lucide="check" hidden');
+    expect(bodyHtml).not.toContain("Copied!");
     expect(bodyHtml).toContain('<pre data-figure-body="">');
   });
 
@@ -25,6 +27,7 @@ describe("compileMarkdown code figures", () => {
 
     expect(bodyHtml).toContain('hidden data-figure-maximize=""');
     expect(bodyHtml).toContain('hidden data-copy-code=""');
+    expect(bodyHtml).toContain('data-lucide="check" hidden');
   });
 
   it("should leave a component's own fence alone because its figure owns it", () => {
