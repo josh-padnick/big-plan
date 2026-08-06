@@ -45,6 +45,7 @@ jobs:
     container: mcr.microsoft.com/playwright:v1.61.1-noble
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,6 +59,39 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      - name: Resolve the reviewed commit range
+        id: style-base
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            if (context.ref === "refs/heads/main") {
+              return context.payload.before;
+            }
+
+            const branch = context.ref.replace("refs/heads/", "");
+            const pullRequests = await github.paginate(
+              github.rest.pulls.list,
+              {
+                ...context.repo,
+                state: "open",
+                head: `${context.repo.owner}:${branch}`,
+                per_page: 100,
+              },
+            );
+            const exactMatches = pullRequests.filter(
+              (pullRequest) =>
+                pullRequest.head.ref === branch &&
+                pullRequest.head.repo?.full_name ===
+                  `${context.repo.owner}/${context.repo.repo}`,
+            );
+
+            if (exactMatches.length > 1) {
+              throw new Error(
+                "The head branch has more than one open pull request. Style history needs one review base.",
+              );
+            }
+            return exactMatches[0]?.base.sha ?? "origin/main";
       - name: Styling commits must match their visual contract
         env:
           # Checkout's host-side safe-directory setting is not visible inside
@@ -65,7 +99,7 @@ jobs:
           GIT_CONFIG_COUNT: 1
           GIT_CONFIG_KEY_0: safe.directory
           GIT_CONFIG_VALUE_0: ${{ github.workspace }}
-          STYLE_HISTORY_BASE: ${{ github.ref == 'refs/heads/main' && github.event.before || 'origin/main' }}
+          STYLE_HISTORY_BASE: ${{ steps.style-base.outputs.result }}
         run: bun run verify:style-history -- --base "$STYLE_HISTORY_BASE"
       - name: Upload styling history evidence
         if: always()
