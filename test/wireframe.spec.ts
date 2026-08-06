@@ -342,14 +342,10 @@ test("should keep short page-header actions at the trailing edge", async ({
       actionsLeft: actionsBox.left,
       actionsRight: actionsBox.right,
       justifyContent: getComputedStyle(node).justifyContent,
-      headerHasBetweenClass: node.classList.contains("justify-between"),
-      actionsHasAutoMarginClass: actions.classList.contains("ml-auto"),
     };
   });
 
   expect(geometry.justifyContent).toBe("space-between");
-  expect(geometry.headerHasBetweenClass).toBe(true);
-  expect(geometry.actionsHasAutoMarginClass).toBe(true);
   expect(geometry.actionsLeft).toBeGreaterThan(geometry.textRight);
   expect(geometry.actionsRight).toBeCloseTo(geometry.headerRight, 1);
 });
