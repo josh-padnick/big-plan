@@ -21,6 +21,7 @@ import { promisify } from "node:util";
 import { PNG } from "pngjs";
 
 const execFileAsync = promisify(execFile);
+const CAPTURE_TIMEOUT_MS = 10 * 60 * 1000;
 
 const RELEVANCE_FLOOR = {
   fixturePaths: ["examples/mdx-components.mdx", "examples/deck.mdx"],
@@ -706,7 +707,7 @@ export const verifyHistory = async ({
         command: command[0],
         args: command.slice(1),
         cwd: harnessRoot,
-        timeout: 3 * 60 * 1000,
+        timeout: CAPTURE_TIMEOUT_MS,
         env: {
           ...process.env,
           STYLE_SNAPSHOT_CHECKOUT: worktree,
