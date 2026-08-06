@@ -512,8 +512,10 @@ try {
               60_000,
             );
           } finally {
-            await withTimeout(page.close(), "Page close", 5_000).catch(
-              () => {},
+            await withTimeout(
+              page.close(),
+              "Closing screenshot page",
+              10_000,
             );
           }
         }
@@ -524,6 +526,6 @@ try {
     await rm(progressPath, { force: true });
   }
 } finally {
-  await browser.close();
+  await withTimeout(browser.close(), "Closing screenshot browser", 10_000);
   await rm(temporaryDirectory, { recursive: true, force: true });
 }
