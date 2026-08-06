@@ -5,7 +5,7 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { chromium } from "@playwright/test";
@@ -16,6 +16,7 @@ const execFileAsync = promisify(execFile);
 const checkout = process.env["STYLE_SNAPSHOT_CHECKOUT"];
 const outputDirectory = process.env["STYLE_SNAPSHOT_OUTPUT_DIR"];
 const configPath = process.env["STYLE_SNAPSHOT_CONFIG"];
+const harnessRoot = process.env["STYLE_SNAPSHOT_HARNESS_ROOT"];
 
 if (
   checkout === undefined ||
@@ -28,6 +29,29 @@ if (
 }
 
 const config = JSON.parse(await readFile(configPath, "utf8"));
+const progressPath =
+  harnessRoot === undefined
+    ? null
+    : join(
+        harnessRoot,
+        "test-results",
+        "style-history",
+        "progress",
+        `${basename(checkout)}.json`,
+      );
+
+/** Keeps the last isolated capture phase when the child process stalls. */
+const reportProgress = async (phase, detail = {}) => {
+  if (progressPath === null) {
+    return;
+  }
+  await mkdir(dirname(progressPath), { recursive: true });
+  await writeFile(
+    progressPath,
+    `${JSON.stringify({ checkout, phase, ...detail }, null, 2)}\n`,
+    "utf8",
+  );
+};
 
 /** Prepares one historical checkout before any of its documents are rendered. */
 const prepareCheckout = async () => {
@@ -247,6 +271,7 @@ const browser = await chromium.launch({
 
 try {
   await mkdir(outputDirectory, { recursive: true });
+  await reportProgress("prepare checkout");
   await prepareCheckout();
 
   const documents = await availableDocuments({
@@ -258,6 +283,7 @@ try {
     const htmlPath = join(documentDirectory, `${document.name}.html`);
     const stateDirectory = join(documentDirectory, "state");
     await mkdir(dirname(htmlPath), { recursive: true });
+    await reportProgress("render document", { document: document.name });
     await renderDocument({
       source: document.source,
       outputPath: htmlPath,
@@ -300,6 +326,13 @@ try {
               );
             }
             await target.waitFor({ state: "visible" });
+            await reportProgress("capture target", {
+              document: document.name,
+              capture: capture.name,
+              viewport: viewport.name,
+              theme,
+              selector: capture.selector,
+            });
             await captureStableTarget({
               page,
               target,
@@ -319,6 +352,9 @@ try {
         }
       }
     }
+  }
+  if (progressPath !== null) {
+    await rm(progressPath, { force: true });
   }
 } finally {
   await browser.close();
