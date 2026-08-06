@@ -67,6 +67,31 @@ marks and a plan diff never jitters.
     color: inherit;
   }
 
+  /* The always-present toolbar row: an optional title on the left, the
+     shared maximize control on the right. The row exists even without a
+     title so the control still has a stable home; MaximizeButton itself
+     ships hidden until the viewer script reveals it. */
+  .wireframe-header {
+    margin-bottom: 0.5rem;
+  }
+  .wireframe[data-figure-maximized] > .wireframe-header {
+    flex: none;
+  }
+
+  /* The screens live beside the switcher rather than under it, so the same
+     nav that switches screens inline can become the guidance-required
+     expanded left rail with a CSS-only reflow instead of a second, duplicate
+     control. */
+  .wireframe-content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .wireframe-content > .wireframe-screens {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
   /* The switcher only means something once a script can act on it, so it
      stays hidden in an inert document where every screen is already shown. */
   .wireframe-switcher {
@@ -93,6 +118,50 @@ marks and a plan diff never jitters.
     border-color: var(--wf-stroke);
     color: var(--color-ink);
     font-weight: 600;
+  }
+
+  /* Maximized: the switcher becomes the vertical screen rail the guidance
+     requires, sitting left of the active screen; arrow keys (wired in the
+     viewer script) sequence through it. Only layout and paint change - the
+     nav keeps its existing click wiring and aria-current state. */
+  .wireframe[data-figure-maximized] .wireframe-content {
+    flex-direction: row;
+    gap: 1.5rem;
+  }
+  .wireframe[data-figure-maximized] .wireframe-switcher {
+    flex: none;
+    flex-direction: column;
+    align-self: flex-start;
+    position: sticky;
+    top: 0;
+    width: 13rem;
+    max-height: calc(100vh - 9rem);
+    margin-bottom: 0;
+    padding-right: 1.25rem;
+    border-right: 1px solid var(--edge-c);
+    overflow-y: auto;
+  }
+  .wireframe[data-figure-maximized] .wireframe-switch {
+    display: block;
+    width: 100%;
+    border: 0;
+    border-left: 3px solid transparent;
+    border-radius: 0;
+    padding: 0.45rem 0.75rem;
+    text-align: left;
+  }
+  .wireframe[data-figure-maximized] .wireframe-switch[aria-current="true"] {
+    border-left-color: var(--wf-stroke);
+    background: var(--wf-fill);
+  }
+  .wireframe[data-figure-maximized]
+    .wireframe-screen[data-wireframe-device="desktop"],
+  .wireframe[data-figure-maximized]
+    .wireframe-screen[data-wireframe-device="tablet"] {
+    /* Desktop and tablet screens cap their painted width to the ordinary
+       review column at rest; a maximized panel has room to show them
+       meaningfully bigger, up to their true device width. */
+    max-width: 100%;
   }
 
   [data-wireframe-interactive] .wireframe-screen:not([data-wireframe-current]) {

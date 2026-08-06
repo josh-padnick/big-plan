@@ -952,10 +952,23 @@ export const VIEWER_SCRIPT = `<script>
       root.querySelectorAll("[data-wireframe-screen]"),
     );
     if (screens.length === 0) continue;
+    const screenIds = screens.map((screen) =>
+      screen.getAttribute("data-wireframe-screen"),
+    );
     // Fit while every screen still participates in layout. Marking the root
     // interactive then narrows it to one screen; without this script the
     // complete storyboard remains readable, with true-width frames scrolling.
     for (const screen of screens) fit(screen);
+    // Maximizing (or restoring) changes the width available to the active
+    // frame without firing a window resize event, and the expanded rail
+    // narrows it further still. Observing the screen's own box catches every
+    // one of those reflows instead of hand-wiring each transition.
+    if ("ResizeObserver" in window) {
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) fit(entry.target);
+      });
+      for (const screen of screens) observer.observe(screen);
+    }
     root.setAttribute("data-wireframe-interactive", "");
     const show = (id) => {
       let current = null;
@@ -978,8 +991,39 @@ export const VIEWER_SCRIPT = `<script>
           : null;
       if (trigger === null || !root.contains(trigger)) return;
       const id = trigger.getAttribute("data-wireframe-navigate");
-      if (screens.some((screen) => screen.getAttribute("data-wireframe-screen") === id))
-        show(id);
+      if (screenIds.includes(id)) show(id);
+    });
+    // Maximized mode draws the switcher as a left rail; arrow keys sequence
+    // through it wherever focus sits inside the maximized figure, matching
+    // the guidance requirement without forcing a reader to first tab onto a
+    // specific rail button.
+    root.addEventListener("keydown", (event) => {
+      if (!root.hasAttribute("data-figure-maximized")) return;
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        event.target instanceof HTMLSelectElement
+      )
+        return;
+      const currentId = screens
+        .find((screen) => screen.hasAttribute("data-wireframe-current"))
+        ?.getAttribute("data-wireframe-screen");
+      const index = screenIds.indexOf(currentId);
+      if (index === -1) return;
+      const nextIndex =
+        event.key === "ArrowDown"
+          ? Math.min(screenIds.length - 1, index + 1)
+          : Math.max(0, index - 1);
+      if (nextIndex === index) return;
+      event.preventDefault();
+      const nextId = screenIds[nextIndex];
+      show(nextId);
+      root
+        .querySelector(
+          '.wireframe-switcher [data-wireframe-navigate="' + nextId + '"]',
+        )
+        ?.focus();
     });
   }
   addEventListener("resize", () => {

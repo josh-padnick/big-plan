@@ -14,6 +14,11 @@ import type {
   WireframeSpace,
 } from "./model.js";
 import { WIREFRAME_DEVICE_PRESETS } from "./model.js";
+import {
+  BODY_ATTRIBUTE,
+  MAXIMIZABLE_ATTRIBUTE,
+} from "../_model/figure-controls/figure-controls.js";
+import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 
 // /* off-scale */ Phase A preserves the sketch radii, device silhouettes,
 // 0.9375rem caption, and hand-drawn primitive metrics exactly. Phase B may
@@ -742,42 +747,50 @@ export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
   <figure
     className="wireframe my-7"
     data-wireframe={model.id}
+    {...{ [MAXIMIZABLE_ATTRIBUTE]: "wireframe" }}
     {...(model.screens.some((screen) => screen.device === "desktop")
       ? { "data-wireframe-desktop": "" }
       : {})}
   >
-    {model.title === undefined ? null : (
-      <figcaption className="wireframe-caption mb-2 text-[0.9375rem] font-semibold text-ink">
-        {model.title}
-      </figcaption>
-    )}
-    {model.screens.length < 2 ? null : (
-      <nav className="wireframe-switcher" aria-label="Prototype screens">
+    <div className="wireframe-header flex w-full flex-wrap items-center gap-3">
+      {model.title === undefined ? null : (
+        <figcaption className="wireframe-caption text-[0.9375rem] font-semibold text-ink">
+          {model.title}
+        </figcaption>
+      )}
+      <div className="figure-control-bar wireframe-toolbar ml-auto flex shrink-0 items-center gap-2">
+        <MaximizeButton subject="wireframe" />
+      </div>
+    </div>
+    <div className="wireframe-content" {...{ [BODY_ATTRIBUTE]: "" }}>
+      {model.screens.length < 2 ? null : (
+        <nav className="wireframe-switcher" aria-label="Prototype screens">
+          {model.screens.map((screen) => (
+            <button
+              key={screen.id}
+              type="button"
+              className="wireframe-switch"
+              data-wireframe-navigate={screen.id}
+              data-wireframe-switch=""
+              {...(screen.id === model.initialScreenId
+                ? { "aria-current": "true" }
+                : {})}
+            >
+              {screen.name}
+            </button>
+          ))}
+        </nav>
+      )}
+      <div className="wireframe-screens flex flex-col gap-6">
         {model.screens.map((screen) => (
-          <button
+          <Screen
             key={screen.id}
-            type="button"
-            className="wireframe-switch"
-            data-wireframe-navigate={screen.id}
-            data-wireframe-switch=""
-            {...(screen.id === model.initialScreenId
-              ? { "aria-current": "true" }
-              : {})}
-          >
-            {screen.name}
-          </button>
+            screen={screen}
+            current={screen.id === model.initialScreenId}
+            named={model.screens.length > 1}
+          />
         ))}
-      </nav>
-    )}
-    <div className="wireframe-screens flex flex-col gap-6">
-      {model.screens.map((screen) => (
-        <Screen
-          key={screen.id}
-          screen={screen}
-          current={screen.id === model.initialScreenId}
-          named={model.screens.length > 1}
-        />
-      ))}
+      </div>
     </div>
   </figure>
 );
