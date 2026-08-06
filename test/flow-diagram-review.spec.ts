@@ -148,6 +148,127 @@ test("should leave toolbar keyboard activation to the focused control", async ({
   await expect(readout).not.toHaveText(before ?? "");
 });
 
+test("should group and right-align the diagram viewer controls", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const toolbar = diagram.locator("[data-flow-controls]");
+  const viewControls = diagram.locator("[data-flow-zoom-controls]");
+  const fit = diagram.getByRole("button", { name: "Fit diagram to width" });
+  const reset = diagram.getByRole("button", { name: "Reset zoom to 100%" });
+  const readout = diagram.locator("[data-flow-zoom-readout]");
+
+  await diagram.hover();
+  await expect(viewControls).toBeVisible();
+  await expect(
+    diagram.getByRole("group", { name: "Diagram zoom" }),
+  ).toBeVisible();
+  await expect(fit).toHaveAttribute("aria-pressed", "true");
+
+  const geometry = await toolbar.evaluate((element) => {
+    const controls = element.querySelector("[data-flow-zoom-controls]");
+    const maximize = element.querySelector("[data-figure-maximize]");
+    const buttons = Array.from(
+      element.querySelectorAll<HTMLButtonElement>(
+        "[data-flow-zoom], [data-figure-maximize]",
+      ),
+    );
+    if (controls === null || maximize === null) return null;
+    const toolbarRect = element.getBoundingClientRect();
+    const controlsRect = controls.getBoundingClientRect();
+    const maximizeRect = maximize.getBoundingClientRect();
+    return {
+      controlsLeft: controlsRect.left,
+      toolbarCenter: toolbarRect.left + toolbarRect.width / 2,
+      rightInset: toolbarRect.right - maximizeRect.right,
+      targets: buttons.map((button) => {
+        const rect = button.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      }),
+    };
+  });
+  expect(geometry).not.toBeNull();
+  expect(geometry?.controlsLeft).toBeGreaterThan(geometry?.toolbarCenter ?? 0);
+  expect(geometry?.rightInset).toBeCloseTo(0);
+  for (const target of geometry?.targets ?? []) {
+    expect(target.width).toBeGreaterThanOrEqual(36);
+    expect(target.height).toBe(36);
+  }
+
+  await diagram.getByRole("button", { name: "Zoom out" }).click();
+  await expect(fit).toHaveAttribute("aria-pressed", "false");
+  await expect(readout).not.toHaveText("100%");
+
+  await reset.click();
+  await expect(readout).toHaveText("100%");
+  await expect(fit).toHaveAttribute("aria-pressed", "false");
+
+  await fit.click();
+  await expect(fit).toHaveAttribute("aria-pressed", "true");
+});
+
+test("should keep populated viewer toolbar actions reachable at narrow widths", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const toolbar = diagram.locator("[data-flow-controls]");
+  const node = diagram.locator('[data-flow-node="authored"]');
+  const maximize = diagram.locator("[data-figure-maximize]");
+
+  await node.click();
+  await diagram.locator('[data-flow-action="comment"]').click();
+  await diagram
+    .locator(".flow-diagram-compose textarea")
+    .fill("Keep every toolbar action reachable.");
+  await diagram
+    .locator('.flow-diagram-compose button[data-variant="primary"]')
+    .click();
+
+  await expect(toolbar.locator(":scope > .flow-collector-add")).toBeVisible();
+  await expect(maximize).toBeVisible();
+  const reachability = await toolbar.evaluate((element) => {
+    const toolbarRect = element.getBoundingClientRect();
+    const controls = Array.from(element.querySelectorAll("button"))
+      .filter((control) => control.offsetParent !== null)
+      .map((control) => {
+        const rect = control.getBoundingClientRect();
+        return {
+          bottom: rect.bottom,
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+        };
+      });
+    return {
+      controls,
+      toolbar: {
+        bottom: toolbarRect.bottom,
+        left: toolbarRect.left,
+        right: toolbarRect.right,
+        top: toolbarRect.top,
+      },
+      hasHorizontalOverflow: element.scrollWidth > element.clientWidth,
+    };
+  });
+  expect(reachability.hasHorizontalOverflow).toBe(false);
+  for (const control of reachability.controls) {
+    expect(control.left).toBeGreaterThanOrEqual(reachability.toolbar.left);
+    expect(control.right).toBeLessThanOrEqual(reachability.toolbar.right);
+    expect(control.top).toBeGreaterThanOrEqual(reachability.toolbar.top);
+    expect(control.bottom).toBeLessThanOrEqual(reachability.toolbar.bottom);
+  }
+
+  await maximize.click();
+  await expect(diagram).toHaveAttribute("data-figure-maximized", "");
+});
+
 test("should preserve a panned canvas when feedback repaints it", async ({
   page,
   flowDiagramViewerUrl,

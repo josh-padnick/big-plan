@@ -183,11 +183,17 @@ classes.
      heading the moment the pointer arrives is worse than 24 pixels of quiet
      space that never moves. Nothing is drawn in the band at rest. */
   .flow-diagram > .flow-diagram-controls {
-    min-height: 1.5rem;
+    min-height: 2.25rem;
     padding: 0 0 0.15rem;
     gap: 0.25rem;
     opacity: 0;
     pointer-events: none;
+  }
+  /* Feedback inserts a long handoff action before the authored groups. Let the
+     toolbar earn a second row in narrow reading columns so every action stays
+     visible and focus rings remain unclipped. */
+  .flow-diagram[data-flow-has-feedback] > .flow-diagram-controls {
+    flex-wrap: wrap;
   }
   /* A canvas the reader has zoomed keeps its controls on screen. Fading them
      out left someone zoomed in with no way back and no sign of where they
@@ -221,7 +227,7 @@ classes.
   }
   .flow-diagram-toolbar-sep {
     width: 1px;
-    height: 0.85rem;
+    height: 1.25rem;
     flex: none;
     margin: 0 0.2rem;
     background: color-mix(in srgb, var(--ink-c) 18%, transparent);
