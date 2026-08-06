@@ -83,6 +83,10 @@ const COMPONENT_INTERACTIONS = {
     selector: "[data-quick-summary]",
     affordances: [],
   },
+  Slide: {
+    selector: '[data-slide-type="desired-experience"]',
+    affordances: [],
+  },
   QuickDecision: {
     selector: '[data-decision-layout="brief"]',
     affordances: ["choose", "confirm", "revise"],
