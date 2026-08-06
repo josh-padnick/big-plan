@@ -99,6 +99,10 @@ const COMPONENT_INTERACTIONS = {
     selector: '[data-decision-layout="brief"]',
     affordances: ["choose", "confirm", "revise"],
   },
+  Slide: {
+    selector: "[data-slide]",
+    affordances: ["collapse and expand"],
+  },
   TableOfContents: {
     selector: "[data-table-of-contents]",
     affordances: ["navigate"],
