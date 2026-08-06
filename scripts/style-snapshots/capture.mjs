@@ -159,12 +159,61 @@ const settlePaint = async (page) => {
   }
 };
 
+/** Captures one viewport frame without the stalled screenshot command. */
+const captureViewport = async ({ cdp, path }) => {
+  let timeout;
+  let frameHandler;
+  const frame = new Promise((resolve, reject) => {
+    frameHandler = (event) => {
+      cdp
+        .send("Page.screencastFrameAck", { sessionId: event.sessionId })
+        .catch(() => {});
+      resolve(Buffer.from(event.data, "base64"));
+    };
+    cdp.on("Page.screencastFrame", frameHandler);
+    timeout = setTimeout(
+      () => reject(new Error(`Viewport frame timed out for "${path}".`)),
+      10_000,
+    );
+  });
+  try {
+    await cdp.send("Page.startScreencast", {
+      format: "png",
+      quality: 100,
+      everyNthFrame: 1,
+    });
+    return await frame;
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+    if (frameHandler !== undefined) {
+      cdp.off("Page.screencastFrame", frameHandler);
+    }
+    await cdp.send("Page.stopScreencast").catch(() => {});
+  }
+};
+
+/** Compares rendered pixels while ignoring screencast encoder metadata. */
+const samePixels = (left, right) => {
+  const leftImage = PNG.sync.read(left);
+  const rightImage = PNG.sync.read(right);
+  return (
+    leftImage.width === rightImage.width &&
+    leftImage.height === rightImage.height &&
+    leftImage.data.equals(rightImage.data)
+  );
+};
+
 /**
  * Captures the visible viewport, then crops target tiles in Node. This avoids
  * both Playwright's element screenshot wait and Chromium's clip request.
  */
 const captureTargetFrame = async ({ page, target, path, cdp }) => {
-  await page.evaluate(() => globalThis.scrollTo(0, 0));
+  await page.evaluate(() =>
+    globalThis.scrollTo({ top: 0, left: 0, behavior: "instant" }),
+  );
+  await settlePaint(page);
   const bounds = await target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return {
@@ -186,9 +235,11 @@ const captureTargetFrame = async ({ page, target, path, cdp }) => {
   for (let offset = 0; offset < bounds.height; offset += tileHeight) {
     const requestedScrollY = bounds.y + offset - topInset;
     await page.evaluate(
-      (scrollY) => globalThis.scrollTo(0, scrollY),
+      (scrollY) =>
+        globalThis.scrollTo({ top: scrollY, left: 0, behavior: "instant" }),
       Math.min(viewport.maxScrollY, Math.max(0, requestedScrollY)),
     );
+    await settlePaint(page);
     const tile = await target.evaluate(
       (element, value) => {
         const rect = element.getBoundingClientRect();
@@ -221,24 +272,7 @@ const captureTargetFrame = async ({ page, target, path, cdp }) => {
       );
     }
     await reportProgress("capture tile", { path, offset, tile });
-    let timeout;
-    const result = await Promise.race([
-      cdp.send("Page.captureScreenshot", {
-        format: "png",
-        captureBeyondViewport: false,
-      }),
-      new Promise((_, reject) => {
-        timeout = setTimeout(
-          () => reject(new Error(`Viewport capture timed out for "${path}".`)),
-          30_000,
-        );
-      }),
-    ]).finally(() => {
-      if (timeout !== undefined) {
-        clearTimeout(timeout);
-      }
-    });
-    const image = PNG.sync.read(Buffer.from(result.data, "base64"));
+    const image = PNG.sync.read(await captureViewport({ cdp, path }));
     PNG.bitblt(
       image,
       output,
@@ -253,7 +287,7 @@ const captureTargetFrame = async ({ page, target, path, cdp }) => {
   return PNG.sync.write(output);
 };
 
-/** Writes only a byte-stable frame. */
+/** Writes only a pixel-stable frame. */
 const captureStableTarget = async ({ page, target, path }) => {
   const cdp = await page.context().newCDPSession(page);
   await target.evaluate((element) => {
@@ -268,7 +302,7 @@ const captureStableTarget = async ({ page, target, path }) => {
     await reportProgress("settle paint", { path, attempt });
     await settlePaint(page);
     const current = await captureTargetFrame({ page, target, path, cdp });
-    if (prior !== undefined && prior.equals(current)) {
+    if (prior !== undefined && samePixels(prior, current)) {
       await writeFile(path, current);
       return;
     }
