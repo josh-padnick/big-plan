@@ -70,6 +70,31 @@ const captureConcurrency = () => {
   return Math.min(MAX_CAPTURE_CONCURRENCY, Math.max(1, configured));
 };
 
+/** Reads the visual contract from a subject or a GitHub squash body. */
+export const visualContract = ({ subject, body }) => {
+  const subjectKind = subject.match(/\[visual:(empty|approved)\]$/)?.[1];
+  if (subjectKind !== undefined) {
+    return {
+      kind: subjectKind,
+      subjects: [subject],
+      squashed: false,
+    };
+  }
+  const subjects = [
+    ...body.matchAll(/^\* (.*?\[visual:(empty|approved)\])$/gm),
+  ].map((match) => match[1]);
+  if (subjects.some((value) => value.endsWith("[visual:approved]"))) {
+    return {
+      kind: "approved",
+      subjects,
+      squashed: true,
+    };
+  }
+  return subjects.length > 0
+    ? { kind: "empty", subjects, squashed: true }
+    : undefined;
+};
+
 /** Runs asynchronous work in a small serial queue. */
 const createSerialQueue = () => {
   let tail = Promise.resolve();
@@ -556,6 +581,8 @@ const validateManifest = async ({
   manifestDirectory,
   stylingFiles,
   changes,
+  contractSubjects = [subject],
+  squashed = false,
 }) => {
   const manifestFiles = (
     await run({
@@ -574,31 +601,46 @@ const validateManifest = async ({
   )
     .split("\n")
     .filter(Boolean);
-  if (manifestFiles.length !== 1) {
+  const approvedSubjects = contractSubjects.filter((value) =>
+    value.endsWith("[visual:approved]"),
+  );
+  const expectedManifestCount = squashed ? approvedSubjects.length : 1;
+  if (manifestFiles.length !== expectedManifestCount) {
     throw new Error(
-      `${subject}: an approved commit must add exactly one manifest under ${manifestDirectory}; found ${manifestFiles.length}.`,
+      `${subject}: an approved commit must add ${expectedManifestCount} manifest${expectedManifestCount === 1 ? "" : "s"} under ${manifestDirectory}; found ${manifestFiles.length}.`,
     );
   }
 
-  const manifest = JSON.parse(
-    await run({
-      command: "git",
-      args: ["show", `${commit}:${manifestFiles[0]}`],
-      cwd: repoRoot,
-    }),
+  const manifests = await Promise.all(
+    manifestFiles.map(async (manifestFile) =>
+      JSON.parse(
+        await run({
+          command: "git",
+          args: ["show", `${commit}:${manifestFile}`],
+          cwd: repoRoot,
+        }),
+      ),
+    ),
   );
-  if (manifest.schemaVersion !== 1 || manifest.commitSubject !== subject) {
-    throw new Error(
-      `${subject}: manifest schemaVersion must be 1 and commitSubject must match exactly.`,
-    );
-  }
-  if (
-    !Array.isArray(manifest.stylingFiles) ||
-    !Array.isArray(manifest.captureChanges)
-  ) {
-    throw new Error(
-      `${subject}: manifest requires stylingFiles and captureChanges arrays.`,
-    );
+  for (const manifest of manifests) {
+    if (
+      manifest.schemaVersion !== 1 ||
+      (squashed
+        ? !approvedSubjects.includes(manifest.commitSubject)
+        : manifest.commitSubject !== subject)
+    ) {
+      throw new Error(
+        `${subject}: manifest schemaVersion must be 1 and commitSubject must match exactly.`,
+      );
+    }
+    if (
+      !Array.isArray(manifest.stylingFiles) ||
+      !Array.isArray(manifest.captureChanges)
+    ) {
+      throw new Error(
+        `${subject}: manifest requires stylingFiles and captureChanges arrays.`,
+      );
+    }
   }
 
   const assertDeltas = (entries, label) => {
@@ -624,14 +666,26 @@ const validateManifest = async ({
       }
     }
   };
-  assertDeltas(manifest.stylingFiles, "stylingFiles");
-  assertDeltas(manifest.captureChanges, "captureChanges");
+  for (const manifest of manifests) {
+    assertDeltas(manifest.stylingFiles, "stylingFiles");
+    assertDeltas(manifest.captureChanges, "captureChanges");
+  }
 
-  const expectedFiles = manifest.stylingFiles.map((entry) => entry.path).sort();
   const actualFiles = [...stylingFiles].sort();
-  if (JSON.stringify(expectedFiles) !== JSON.stringify(actualFiles)) {
+  const manifestFilesInContract = [
+    ...new Set(
+      manifests.flatMap((manifest) =>
+        manifest.stylingFiles.map((entry) => entry.path),
+      ),
+    ),
+  ].sort();
+  if (
+    !squashed &&
+    (JSON.stringify(manifestFilesInContract) !== JSON.stringify(actualFiles) ||
+      !manifestFilesInContract.every((path) => actualFiles.includes(path)))
+  ) {
     throw new Error(
-      `${subject}: manifest styling files ${JSON.stringify(expectedFiles)} do not match commit styling files ${JSON.stringify(actualFiles)}.`,
+      `${subject}: manifest styling files ${JSON.stringify(manifestFilesInContract)} do not match commit styling files ${JSON.stringify(actualFiles)}.`,
     );
   }
 
@@ -662,7 +716,10 @@ const validateManifest = async ({
         value.sha256Alternates.length + 1
     );
   };
-  for (const entry of manifest.captureChanges) {
+  const manifestChanges = manifests.flatMap(
+    (manifest) => manifest.captureChanges,
+  );
+  for (const entry of manifestChanges) {
     if (
       typeof entry.capture !== "string" ||
       !Number.isInteger(entry.changedPixels) ||
@@ -676,12 +733,28 @@ const validateManifest = async ({
     }
   }
 
-  const expectedCaptures = manifest.captureChanges.sort((left, right) =>
-    left.capture.localeCompare(right.capture),
-  );
   const actualCaptures = changes
     .map(captureEvidence)
     .sort((left, right) => left.capture.localeCompare(right.capture));
+  if (squashed) {
+    const expectedCaptureNames = [
+      ...new Set(manifestChanges.map((entry) => entry.capture)),
+    ].sort();
+    const actualCaptureNames = actualCaptures.map((entry) => entry.capture);
+    if (
+      !actualCaptureNames.every((capture) =>
+        expectedCaptureNames.includes(capture),
+      )
+    ) {
+      throw new Error(
+        `${subject}: squash manifests must cover every changed capture.`,
+      );
+    }
+    return;
+  }
+  const expectedCaptures = manifestChanges.sort((left, right) =>
+    left.capture.localeCompare(right.capture),
+  );
   if (
     expectedCaptures.length !== actualCaptures.length ||
     expectedCaptures.some(
@@ -801,18 +874,31 @@ export const verifyHistory = async ({
       args: ["show", "-s", "--format=%s", commit],
       cwd: repoRoot,
     });
+    const body = await run({
+      command: "git",
+      args: ["show", "-s", "--format=%b", commit],
+      cwd: repoRoot,
+    });
     if (parents.length > 1) {
       throw new Error(
         `${subject}: a merge commit resolved a configured styling file, so its visual delta cannot be isolated from the merged branch. Rebase and record the resolution as a single-parent [visual:empty] or [visual:approved] commit.`,
       );
     }
-    const visualKind = subject.match(/\[visual:(empty|approved)\]$/)?.[1];
-    if (visualKind === undefined) {
+    const contract = visualContract({ subject, body });
+    if (contract === undefined) {
       throw new Error(
         `${subject}: styling commits must end with [visual:empty] or [visual:approved].`,
       );
     }
-    relevant.push({ commit, parent, subject, stylingFiles, visualKind });
+    relevant.push({
+      commit,
+      parent,
+      subject,
+      stylingFiles,
+      visualKind: contract.kind,
+      contractSubjects: contract.subjects,
+      squashed: contract.squashed,
+    });
   }
 
   const temporaryRoot = await mkdtemp(
@@ -953,6 +1039,8 @@ export const verifyHistory = async ({
           manifestDirectory: config.manifestDirectory,
           stylingFiles: entry.stylingFiles,
           changes,
+          contractSubjects: entry.contractSubjects,
+          squashed: entry.squashed,
         });
       }
       results.push({
