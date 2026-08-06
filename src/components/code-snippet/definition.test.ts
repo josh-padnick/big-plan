@@ -147,24 +147,19 @@ describe("renderCodeSnippet attributes", () => {
         message:
           'Attribute "showLineNumbers" is a shorthand boolean; use the bare form',
       },
-      {
-        line: 3,
-        column: 1,
-        message: "CodeSnippet cannot use startLine without showLineNumbers",
-      },
     ]);
   });
 
-  it("should diagnose startLine when invisible numbering would hide its basis", () => {
-    expect(
-      render({ attributes: { file: "x", startLine: "42" } }).diagnostics,
-    ).toEqual([
-      {
-        line: 3,
-        column: 1,
-        message: "CodeSnippet cannot use startLine without showLineNumbers",
-      },
-    ]);
+  it("should number a resting-numberless snippet from its authored startLine", () => {
+    const { element, diagnostics } = render({
+      attributes: { file: "x", startLine: "42" },
+    });
+    const rendered = JSON.stringify(element);
+
+    expect(diagnostics).toEqual([]);
+    expect(rendered).not.toContain('"data-line-numbers"');
+    expect(rendered).toContain('"data-snippet-line-number":"42"');
+    expect(rendered).toContain('"data-snippet-line-number":"44"');
   });
 
   it("should diagnose unknown attributes at the block position", () => {

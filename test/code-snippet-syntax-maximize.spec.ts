@@ -1,6 +1,7 @@
 // Browser journey for CodeSnippet's two captain-feedback fixes: the number
-// rail reveals only while maximized when showLineNumbers is unset, and
-// declared-language tokens carry real color in both themes.
+// rail reveals only while maximized when showLineNumbers is unset, carrying
+// the authored file-absolute numbering, and declared-language tokens carry
+// real color in both themes.
 
 import { expect, test } from "./fixtures";
 
@@ -21,7 +22,7 @@ test("should reveal line numbers only while maximized and keep them highlighted"
   await trigger.click();
   await expect(frame).toHaveAttribute("data-figure-maximized", "");
   await expect(numberRail).toBeVisible();
-  await expect(numberRail).toHaveText("1");
+  await expect(numberRail).toHaveText("42");
 
   await trigger.click();
   await expect(frame).not.toHaveAttribute("data-figure-maximized");

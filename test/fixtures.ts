@@ -98,7 +98,7 @@ retry();
 // same document verifies token-level syntax highlighting.
 const CODE_SNIPPET_SYNTAX_MAXIMIZE_MDX = `# Code snippet syntax and maximize
 
-<CodeSnippet file="src/review/plan.ts">
+<CodeSnippet file="src/review/plan.ts" startLine="42">
 
 \`\`\`ts
 export const summarize = (title: string): string =>

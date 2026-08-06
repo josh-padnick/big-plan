@@ -146,12 +146,6 @@ export const compileCodeSnippetComponent = ({
       position,
     });
   }
-  if (startLineValue !== undefined && showLineNumbersValue !== true) {
-    diagnostics.add({
-      message: "CodeSnippet cannot use startLine without showLineNumbers",
-      position,
-    });
-  }
 
   const fence = singleAuthoredFence({ children });
   if (fence === undefined) {
