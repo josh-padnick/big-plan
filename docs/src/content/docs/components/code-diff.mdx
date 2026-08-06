@@ -10,6 +10,8 @@ import annotationDark from "../../../assets/components/annotation-card-dark.png"
 `CodeDiff` shows a proposed change to one file the way a code review tool would: removed lines tinted red, added lines tinted green, under a header naming the file.
 
 The plan author pastes ordinary `git diff` output for that file into the component, and the reader gets a unified diff with optional line numbers, change counts, and anchored notes.
+With the viewer script active, a pressed-state segmented control switches between unified and side-by-side views and remembers the choice for this exact plan revision.
+With scripts disabled, the complete unified view remains readable and no dormant control appears.
 
 ## How it looks
 
